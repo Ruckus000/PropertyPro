@@ -31,14 +31,14 @@ export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
           Contact
         </h2>
         {!hasManagement && !hasBoard ? (
-          <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
+          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
             Contact information will be posted here soon.
           </p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {hasManagement && data.management && (
               <section
-                className="rounded-md border border-default bg-surface-card p-5"
+                className="rounded-md border border-edge bg-surface-card p-5"
                 aria-label="Management contact"
               >
                 <h3 className="text-lg font-medium text-content">Management</h3>
@@ -80,7 +80,7 @@ export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
             )}
             {hasBoard && (
               <section
-                className="rounded-md border border-default bg-surface-card p-5"
+                className="rounded-md border border-edge bg-surface-card p-5"
                 aria-label="Board roster"
               >
                 <h3 className="text-lg font-medium text-content">Board</h3>

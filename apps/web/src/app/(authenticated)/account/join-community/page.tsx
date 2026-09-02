@@ -17,7 +17,7 @@ export default function JoinCommunityPage() {
     <PageBody width="prose">
       <div>
         <h1 className="text-2xl font-semibold">Join Another Community</h1>
-        <p className="text-sm text-muted-foreground mt-2">
+        <p className="text-sm text-content-secondary mt-2">
           Search for your community and submit a request to be added as an owner or tenant.
           A community admin will review your request.
         </p>

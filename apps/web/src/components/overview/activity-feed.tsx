@@ -20,7 +20,7 @@ const TYPE_COLORS: Record<ActivityItem['type'], string> = {
 export function ActivityFeed({ items }: { items: ActivityItem[] }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-md border border-default bg-surface-card p-5">
+      <div className="rounded-md border border-edge bg-surface-card p-5">
         <h3 className="text-base font-semibold mb-4">Recent Activity</h3>
         <EmptyState
           size="sm"
@@ -32,13 +32,13 @@ export function ActivityFeed({ items }: { items: ActivityItem[] }) {
   }
 
   return (
-    <div className="rounded-md border border-default bg-surface-card p-5">
+    <div className="rounded-md border border-edge bg-surface-card p-5">
       <h3 className="text-base font-semibold mb-4">Recent Activity</h3>
       <ul className="space-y-3">
         {items.slice(0, 20).map((item) => (
           <li
             key={item.id}
-            className="flex items-start gap-3 border-b border-default pb-3 last:border-b-0 last:pb-0"
+            className="flex items-start gap-3 border-b border-edge pb-3 last:border-b-0 last:pb-0"
           >
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[item.type]}`}

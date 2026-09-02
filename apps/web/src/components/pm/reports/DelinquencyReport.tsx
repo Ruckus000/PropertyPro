@@ -186,7 +186,7 @@ export function DelinquencyReport({ filters, enabled }: DelinquencyReportProps) 
               ))}
               {tableData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="h-24 text-center text-content-secondary">
                     No delinquency data available.
                   </TableCell>
                 </TableRow>

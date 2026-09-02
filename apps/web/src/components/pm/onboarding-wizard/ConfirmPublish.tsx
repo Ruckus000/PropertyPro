@@ -134,7 +134,7 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
     <section
       aria-labelledby="wizard-step-5-heading"
       data-testid="confirm-publish"
-      className="rounded-md border border-default bg-surface-card p-6 shadow-e0"
+      className="rounded-md border border-edge bg-surface-card p-6 shadow-e0"
     >
       <div className="mb-4">
         <p className="text-xs font-medium uppercase tracking-wide text-content-secondary">
@@ -152,14 +152,14 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
       {blocksQ.isLoading ? (
         <p
           data-testid="confirm-publish-loading"
-          className="rounded-md border border-default bg-surface-subtle p-3 text-sm text-content-secondary"
+          className="rounded-md border border-edge bg-surface-subtle p-3 text-sm text-content-secondary"
         >
           Loading block list…
         </p>
       ) : summary.length === 0 ? (
         <p
           data-testid="confirm-publish-empty"
-          className="rounded-md border border-dashed border-default bg-surface-subtle p-3 text-sm text-content-secondary"
+          className="rounded-md border border-dashed border-edge bg-surface-subtle p-3 text-sm text-content-secondary"
         >
           No blocks configured yet. Add content in previous steps to publish.
         </p>
@@ -169,7 +169,7 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
             <li
               key={`${s.blockOrder}-${s.blockType}`}
               data-testid={`confirm-row-${s.blockType}`}
-              className="flex items-center justify-between gap-3 rounded-md border border-default bg-surface-card px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-card px-3 py-2"
             >
               <span className="flex items-center gap-2 text-sm font-medium text-content">
                 <span

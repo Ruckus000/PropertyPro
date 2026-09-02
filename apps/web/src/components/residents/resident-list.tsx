@@ -61,8 +61,8 @@ function ResidentRow({ resident, onResendInvite }: ResidentRowProps) {
           aria-label={`Resend invitation to ${resident.fullName ?? resident.email ?? 'resident'}`}
           className={cn(
             'inline-flex min-h-[44px] items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors md:min-h-[36px]',
-            inviteStatus === 'idle' && 'border-border-default bg-surface-card text-content hover:bg-surface-muted',
-            inviteStatus === 'sending' && 'cursor-not-allowed border-border-default bg-surface-card text-content-secondary',
+            inviteStatus === 'idle' && 'border-edge bg-surface-card text-content hover:bg-surface-muted',
+            inviteStatus === 'sending' && 'cursor-not-allowed border-edge bg-surface-card text-content-secondary',
             inviteStatus === 'sent' && 'cursor-default border-transparent bg-surface-muted text-content-secondary',
             inviteStatus === 'error' && 'border-status-danger bg-surface-card text-status-danger',
           )}

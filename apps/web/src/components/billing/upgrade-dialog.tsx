@@ -175,7 +175,7 @@ export function UpgradeDialog({
                   <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--interactive-primary)]/12 text-[var(--interactive-primary)]">
                     <Check size={12} strokeWidth={2.5} aria-hidden="true" />
                   </span>
-                  <span className="text-content-primary">{benefit}</span>
+                  <span className="text-content">{benefit}</span>
                 </li>
               ))}
             </ul>
@@ -246,10 +246,10 @@ function PlanCard({
         </p>
         {isRecommended && <PlanBadge variant="pro" tone="light" />}
       </div>
-      <p className="mt-2 text-base font-semibold text-content-primary">{displayName}</p>
+      <p className="mt-2 text-base font-semibold text-content">{displayName}</p>
       {priceUsd != null ? (
         <p className="text-sm text-content-secondary">
-          <span className="font-medium text-content-primary">${priceUsd}</span> / month
+          <span className="font-medium text-content">${priceUsd}</span> / month
         </p>
       ) : (
         <p className="text-sm text-content-tertiary">—</p>

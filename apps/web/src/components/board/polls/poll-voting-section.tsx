@@ -94,7 +94,7 @@ export function PollVotingSection({
                   checked={checked}
                   disabled={inputDisabled}
                   onChange={(e) => toggleOption(option, e.target.checked)}
-                  className="h-4 w-4 accent-interactive-primary"
+                  className="h-4 w-4 accent-interactive"
                 />
               ) : (
                 <Checkbox

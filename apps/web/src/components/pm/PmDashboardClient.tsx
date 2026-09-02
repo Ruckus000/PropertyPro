@@ -131,7 +131,7 @@ export function PmDashboardClient() {
               type="button"
               onClick={() => setIsAddModalOpen(true)}
               disabled={!billingGroupId}
-              className="inline-flex items-center gap-1.5 rounded-md bg-interactive-primary px-3 py-2 text-sm font-semibold text-white hover:bg-interactive-primary-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md bg-interactive px-3 py-2 text-sm font-semibold text-white hover:bg-interactive-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add Community

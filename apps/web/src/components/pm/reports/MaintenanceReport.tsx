@@ -173,7 +173,7 @@ export function MaintenanceReport({ filters, enabled }: MaintenanceReportProps) 
               ))}
               {tableData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="h-24 text-center text-content-secondary">
                     No maintenance data available.
                   </TableCell>
                 </TableRow>

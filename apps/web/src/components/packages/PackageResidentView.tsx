@@ -47,8 +47,8 @@ function PackageCard({ pkg }: { pkg: PackageListItem }) {
   return (
     <Card>
       <CardContent className="flex items-start gap-4 p-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <Package className="h-5 w-5 text-muted-foreground" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-muted">
+          <Package className="h-5 w-5 text-content-secondary" />
         </div>
         <div className="flex-1 space-y-1">
           <div className="flex items-center justify-between">
@@ -56,11 +56,11 @@ function PackageCard({ pkg }: { pkg: PackageListItem }) {
             <StatusBadge status={pkg.status} />
           </div>
           {pkg.trackingNumber && (
-            <p className="text-xs font-mono text-muted-foreground">
+            <p className="text-xs font-mono text-content-secondary">
               {pkg.trackingNumber}
             </p>
           )}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-content-secondary">
             Received {formatDatetime(pkg.createdAt)}
           </p>
         </div>
@@ -93,7 +93,7 @@ export function PackageResidentView({ communityId }: PackageResidentViewProps) {
           <CardTitle className="text-base">My Packages</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-content-secondary">
             No pending packages. You will be notified when a package arrives.
           </p>
         </CardContent>

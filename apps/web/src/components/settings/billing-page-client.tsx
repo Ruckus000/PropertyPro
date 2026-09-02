@@ -69,14 +69,14 @@ function getStatusDisplay(status: string | null): StatusDisplay {
 
 // ── Variant class mapping using semantic tokens ──
 
-const NEUTRAL_CLASSES = { text: 'text-content-secondary', bg: 'bg-surface-secondary', border: 'border-edge' } as const;
+const NEUTRAL_CLASSES = { text: 'text-content-secondary', bg: 'bg-surface-muted', border: 'border-edge' } as const;
 
 const VARIANT_CLASSES: Record<string, { text: string; bg: string; border: string }> = {
   success: { text: 'text-status-success', bg: 'bg-status-success-subtle', border: 'border-status-success-border' },
   warning: { text: 'text-status-warning', bg: 'bg-status-warning-subtle', border: 'border-status-warning-border' },
   danger: { text: 'text-status-danger', bg: 'bg-status-danger-subtle', border: 'border-status-danger-border' },
   info: { text: 'text-status-info', bg: 'bg-status-info-subtle', border: 'border-status-info-border' },
-  neutral: { text: 'text-content-secondary', bg: 'bg-surface-secondary', border: 'border-edge' },
+  neutral: { text: 'text-content-secondary', bg: 'bg-surface-muted', border: 'border-edge' },
 };
 
 // ── Read-only notice (R3-03) ──
@@ -313,7 +313,7 @@ export function BillingPageClient({
                     type="button"
                     onClick={openPortal}
                     disabled={portalPending}
-                    className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-[10px] border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Manage Subscription
                     <ExternalLink size={14} aria-hidden="true" />
@@ -419,11 +419,11 @@ function QuickLink({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex w-full items-start gap-3 rounded-[10px] border border-edge p-4 text-left transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex w-full items-start gap-3 rounded-[10px] border border-edge p-4 text-left transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
     >
       <Icon size={18} className="mt-0.5 shrink-0 text-content-secondary" aria-hidden="true" />
       <div>
-        <p className="text-sm font-medium text-content-primary">{label}</p>
+        <p className="text-sm font-medium text-content">{label}</p>
         <p className="mt-0.5 text-xs text-content-secondary">{description}</p>
       </div>
     </button>

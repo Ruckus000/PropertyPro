@@ -71,7 +71,7 @@ export function ExportJobCard({ communityId }: ExportJobCardProps) {
 
   return (
     <div className="rounded-md border border-edge bg-surface-card p-5">
-      <h3 className="text-base font-semibold text-content-primary">
+      <h3 className="text-base font-semibold text-content">
         Full archive
       </h3>
       <p className="mt-1 text-sm text-content-secondary">
@@ -95,7 +95,7 @@ export function ExportJobCard({ communityId }: ExportJobCardProps) {
             type="button"
             onClick={handleCancel}
             disabled={cancelJob.isPending}
-            className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-content-primary hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 disabled:opacity-50"
+            className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-content hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -215,7 +215,7 @@ function PartDownloads({
               type="button"
               onClick={() => handleDownload(part.partIndex)}
               disabled={download.isPending}
-              className="rounded-md border border-edge px-3 py-1.5 text-sm font-medium text-content-primary hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 disabled:opacity-50"
+              className="rounded-md border border-edge px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 disabled:opacity-50"
             >
               Download part {part.partIndex + 1}
             </button>

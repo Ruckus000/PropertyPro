@@ -37,7 +37,7 @@ export function JoinRequestForm({
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Join {communityName}</h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-content-secondary mt-1">
           Provide your unit details so the community admin can verify your request.
         </p>
       </div>
@@ -52,7 +52,7 @@ export function JoinRequestForm({
 
       <div>
         <label htmlFor="unit-identifier" className="block text-sm font-medium mb-2">
-          Unit identifier <span className="text-destructive">*</span>
+          Unit identifier <span className="text-status-danger">*</span>
         </label>
         <Input
           id="unit-identifier"
@@ -65,11 +65,11 @@ export function JoinRequestForm({
 
       <div>
         <label htmlFor="resident-type" className="block text-sm font-medium mb-2">
-          I am a(n) <span className="text-destructive">*</span>
+          I am a(n) <span className="text-status-danger">*</span>
         </label>
         <select
           id="resident-type"
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-10 w-full rounded-md border border-edge bg-transparent px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           value={residentType}
           onChange={(e) => setResidentType(e.target.value as 'owner' | 'tenant')}
         >

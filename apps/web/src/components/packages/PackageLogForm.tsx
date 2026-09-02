@@ -151,7 +151,7 @@ export function PackageLogForm({
           <div className="space-y-2">
             <Label htmlFor="pkg-tracking">
               Tracking #{' '}
-              <span className="text-muted-foreground text-xs">(optional)</span>
+              <span className="text-content-secondary text-xs">(optional)</span>
             </Label>
             <Input
               id="pkg-tracking"

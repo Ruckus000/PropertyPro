@@ -60,7 +60,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-border bg-surface-card p-5">
+    <section className="rounded-md border border-edge bg-surface-card p-5">
       <div className="flex items-start gap-3">
         <Icon className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden />
         <div className="min-w-0 flex-1">
@@ -231,7 +231,7 @@ function RootSection({
 
       {open && (
         <div
-          className="mt-4 space-y-4 rounded-md border border-border p-4"
+          className="mt-4 space-y-4 rounded-md border border-edge p-4"
           data-testid="transfer-root-modal"
         >
           <AlertBanner
@@ -360,7 +360,7 @@ function PropertyManagersSection({
               <li
                 key={pm.userId}
                 data-testid={`pm-row-${pm.userId}`}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-edge p-3"
               >
                 <p className="min-w-0 truncate text-sm font-medium text-content">
                   {pm.fullName}
@@ -459,7 +459,7 @@ function MembersSection({
             <li
               key={member.userId}
               data-testid={`member-row-${member.userId}`}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-edge p-3"
             >
               <p className="min-w-0 truncate text-sm font-medium text-content">
                 {member.fullName}
@@ -600,7 +600,7 @@ function BoardSection({
               <li
                 key={member.userId}
                 data-testid={`board-row-${member.userId}`}
-                className="rounded-md border border-border p-3"
+                className="rounded-md border border-edge p-3"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="min-w-0 truncate text-sm font-medium text-content">

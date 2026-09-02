@@ -80,7 +80,7 @@ export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip
     <section
       aria-labelledby="wizard-step-1-heading"
       data-testid="layout-chooser"
-      className="rounded-md border border-default bg-surface-card p-6 shadow-e0"
+      className="rounded-md border border-edge bg-surface-card p-6 shadow-e0"
     >
       <div className="mb-4">
         <p className="text-xs font-medium uppercase tracking-wide text-content-secondary">
@@ -105,7 +105,7 @@ export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip
               className={`relative cursor-pointer rounded-md border p-4 transition-colors ${
                 isSelected
                   ? 'border-interactive bg-interactive-subtle ring-2 ring-interactive'
-                  : 'border-default bg-surface-card hover:border-interactive-hover'
+                  : 'border-edge bg-surface-card hover:border-interactive-hover'
               }`}
             >
               <input
@@ -147,7 +147,7 @@ export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip
         </button>
         <div className="flex items-center gap-3">
           {outcome && (
-            <span role="alert" className="text-sm text-danger">
+            <span role="alert" className="text-sm text-status-danger">
               {outcome}
             </span>
           )}

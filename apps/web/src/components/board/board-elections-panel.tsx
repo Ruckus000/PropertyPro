@@ -169,7 +169,7 @@ function ElectionCard({
 
   return (
     <article
-      className={cn('cursor-pointer rounded-xl border border-edge bg-surface-card p-5 transition-colors hover:border-interactive-primary')}
+      className={cn('cursor-pointer rounded-xl border border-edge bg-surface-card p-5 transition-colors hover:border-interactive')}
       onClick={() => setExpanded((current) => !current)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {

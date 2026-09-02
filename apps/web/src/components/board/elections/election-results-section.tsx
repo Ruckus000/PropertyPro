@@ -60,7 +60,7 @@ export function ElectionResultsSection({
               </div>
               <div className="h-2 rounded-full bg-surface-muted">
                 <div
-                  className="h-2 rounded-sm bg-interactive-primary transition-[width]"
+                  className="h-2 rounded-sm bg-interactive transition-[width]"
                   style={{ width: `${percentage}%` }}
                 />
               </div>

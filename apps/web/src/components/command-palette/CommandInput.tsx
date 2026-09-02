@@ -33,7 +33,7 @@ export const CommandInput = forwardRef<HTMLInputElement, CommandInputProps>(
           placeholder="Search pages, actions..."
           className={cn(
             'flex-1 border-0 bg-transparent px-3 py-4 text-sm outline-none',
-            'placeholder:text-content-disabled text-content-primary',
+            'placeholder:text-content-disabled text-content',
           )}
         />
         <kbd

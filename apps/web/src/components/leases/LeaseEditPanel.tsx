@@ -78,19 +78,19 @@ export function LeaseEditPanel({
           {/* Read-only fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Unit</p>
+              <p className="text-sm font-medium text-content-secondary">Unit</p>
               <p className="text-sm">{lease.unitNumber ?? `Unit ${lease.unitId}`}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Resident</p>
+              <p className="text-sm font-medium text-content-secondary">Resident</p>
               <p className="text-sm">{lease.residentName ?? '—'}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Start Date</p>
+              <p className="text-sm font-medium text-content-secondary">Start Date</p>
               <p className="text-sm">{formatLeaseDate(lease.startDate)}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <p className="text-sm font-medium text-content-secondary">Status</p>
               <p className="text-sm capitalize">{lease.status}</p>
             </div>
           </div>
@@ -107,7 +107,7 @@ export function LeaseEditPanel({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-content-secondary">
                 Clear for month-to-month
               </p>
             </div>
@@ -161,11 +161,11 @@ export function LeaseEditPanel({
                         <span className="font-medium">
                           {formatLeaseDate(chainLease.startDate)}
                         </span>
-                        <span className="text-muted-foreground mx-1">&rarr;</span>
+                        <span className="text-content-secondary mx-1">&rarr;</span>
                         <span>{formatLeaseDate(chainLease.endDate)}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">
+                        <span className="text-content-secondary">
                           {formatRentDisplay(chainLease.rentAmount)}
                         </span>
                         <Badge

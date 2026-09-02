@@ -102,7 +102,7 @@ export function ConnectStatus({ communityId }: { communityId: number }) {
         <button
           onClick={handleConnect}
           disabled={onboardMutation.isPending}
-          className="mt-4 rounded-md bg-status-warning px-4 py-2 text-sm font-medium text-content-inverse hover:bg-status-warning-hover disabled:opacity-50"
+          className="mt-4 rounded-md bg-status-warning px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 disabled:opacity-50"
         >
           {onboardMutation.isPending ? 'Redirecting...' : 'Resume Setup'}
         </button>

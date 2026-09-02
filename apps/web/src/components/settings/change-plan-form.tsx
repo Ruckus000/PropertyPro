@@ -193,7 +193,7 @@ export function ChangePlanForm({
       {/* Plan cards */}
       {offeredPlans.length === 0 ? (
         <div className="rounded-[10px] border border-edge bg-surface-card p-8 text-center">
-          <p className="text-base font-medium text-content-primary">
+          <p className="text-base font-medium text-content">
             You&apos;re already on the highest plan available for your community.
           </p>
           <p className="mt-2 text-sm text-content-secondary">
@@ -224,7 +224,7 @@ export function ChangePlanForm({
                 aria-pressed={isSelected}
               >
                 {isCurrent && (
-                  <span className="absolute right-3 top-3 rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-medium text-content-secondary">
+                  <span className="absolute right-3 top-3 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
                     Current
                   </span>
                 )}
@@ -233,8 +233,8 @@ export function ChangePlanForm({
                     <Check size={12} className="text-white" aria-hidden="true" />
                   </div>
                 )}
-                <div className="text-lg font-semibold text-content-primary">{plan.label}</div>
-                <div className="mt-1 text-2xl font-bold text-content-primary">
+                <div className="text-lg font-semibold text-content">{plan.label}</div>
+                <div className="mt-1 text-2xl font-bold text-content">
                   {formatPrice(plan.monthlyPriceUsd, interval)}
                 </div>
                 <p className="mt-2 text-sm text-content-secondary">{plan.description}</p>
@@ -280,8 +280,8 @@ export function ChangePlanForm({
               <div className="space-y-2 pt-2">
                 <p>
                   {isNewSubscription ? "You're subscribing to " : "You'll be moved to "}
-                  <strong className="text-content-primary">{selected?.label}</strong> at{' '}
-                  <strong className="text-content-primary">{selected ? formatPrice(selected.monthlyPriceUsd, interval) : ''}</strong>{' '}
+                  <strong className="text-content">{selected?.label}</strong> at{' '}
+                  <strong className="text-content">{selected ? formatPrice(selected.monthlyPriceUsd, interval) : ''}</strong>{' '}
                   ({interval === 'year' ? 'billed annually' : 'billed monthly'}).
                 </p>
                 {isNewSubscription ? (

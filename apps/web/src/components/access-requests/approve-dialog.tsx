@@ -130,7 +130,7 @@ export function ApproveDialog({
                 onClick={() => handleOpenChange(false)}
                 disabled={mutation.isPending}
                 className={cn(
-                  'inline-flex min-h-[40px] items-center rounded-md border border-border-default px-4',
+                  'inline-flex min-h-[40px] items-center rounded-md border border-edge px-4',
                   'text-sm font-medium text-content hover:bg-surface-muted',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                   'disabled:cursor-not-allowed disabled:opacity-50',

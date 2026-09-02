@@ -100,7 +100,7 @@ export function ToolTabs({ active, onSelect, proToolAccess, panelId }: ToolTabsP
               'relative flex min-w-20 flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-md)] px-1 pb-1.5 pt-2 text-xs font-medium leading-tight transition-colors duration-quick',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               isActive
-                ? 'bg-interactive-subtle font-semibold text-brand'
+                ? 'bg-interactive-subtle font-semibold text-content-brand'
                 : 'text-content-secondary hover:bg-surface-hover',
             )}
           >

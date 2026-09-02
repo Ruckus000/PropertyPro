@@ -64,8 +64,8 @@ function getAvailableActions(
 
 const VARIANT_STYLES: Record<string, string> = {
   primary: 'bg-interactive text-content-inverse hover:bg-interactive-hover',
-  danger: 'bg-status-danger text-content-inverse hover:bg-status-danger-hover',
-  success: 'bg-status-success text-content-inverse hover:bg-status-success-hover',
+  danger: 'bg-status-danger text-content-inverse hover:opacity-90',
+  success: 'bg-status-success text-content-inverse hover:opacity-90',
   secondary: 'border border-edge-strong bg-surface-card text-content-secondary hover:bg-surface-hover',
 };
 

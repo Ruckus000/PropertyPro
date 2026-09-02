@@ -160,7 +160,7 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
               </button>
               <Link
                 href={`/dashboard/import-residents?communityId=${communityId}`}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
               >
                 <Upload size={16} aria-hidden="true" />
                 Import CSV
@@ -190,7 +190,7 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
         <div className="flex items-center gap-2">
           <Link
             href={`/dashboard/import-residents?communityId=${communityId}`}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
           >
             <Upload size={16} aria-hidden="true" />
             Import CSV

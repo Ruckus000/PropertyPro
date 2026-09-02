@@ -54,7 +54,7 @@ export function PaymentsBlock(props: BlockRendererProps) {
 
   return (
     <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={headingId}>
-      <div className="mx-auto max-w-3xl rounded-md border border-default bg-surface-card p-8 text-center">
+      <div className="mx-auto max-w-3xl rounded-md border border-edge bg-surface-card p-8 text-center">
         <h2 id={headingId} className="font-heading text-2xl font-semibold text-content">
           {content.heading ?? DEFAULT_HEADING}
         </h2>
