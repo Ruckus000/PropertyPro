@@ -151,7 +151,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
           maxLength={72}
           value={password}
           onChange={(e) => handlePasswordChange(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus"
           placeholder="Min. 8 characters with mixed case, number & symbol"
           disabled={loading}
           aria-describedby="invite-password-strength"
@@ -175,7 +175,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
           required
           value={confirmPassword}
           onChange={(e) => handleConfirmPasswordChange(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus"
           placeholder="Re-enter your password"
           disabled={loading}
         />

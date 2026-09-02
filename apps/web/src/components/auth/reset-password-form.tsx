@@ -171,7 +171,7 @@ export function ResetPasswordForm() {
                 autoComplete="off"
                 value={manualToken}
                 onChange={(e) => handleManualTokenChange(e.target.value)}
-                className="w-full rounded-md border border-edge-strong px-3 py-2 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+                className="w-full rounded-md border border-edge-strong px-3 py-2 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus"
                 placeholder="Paste your token here"
                 disabled={manualTokenLoading}
               />
@@ -266,7 +266,7 @@ export function ResetPasswordForm() {
           maxLength={72}
           value={password}
           onChange={(e) => handlePasswordChange(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus"
           placeholder="At least 8 characters"
           disabled={loading}
           aria-describedby="reset-password-strength"
@@ -290,7 +290,7 @@ export function ResetPasswordForm() {
           required
           value={confirmPassword}
           onChange={(e) => handleConfirmPasswordChange(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus"
           placeholder="Re-enter your new password"
           disabled={loading}
         />
