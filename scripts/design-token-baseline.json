@@ -106,15 +106,12 @@
     "bare-focus-ring": 3
   },
   "apps/web/src/components/auth/forgot-password-form.tsx": {
-    "slash-opacity-semantic": 1,
     "bare-focus-ring": 3
   },
   "apps/web/src/components/auth/reset-password-form.tsx": {
-    "slash-opacity-semantic": 3,
     "bare-focus-ring": 9
   },
   "apps/web/src/components/auth/set-password-form.tsx": {
-    "slash-opacity-semantic": 2,
     "bare-focus-ring": 6
   },
   "apps/web/src/components/command-palette/CommandItem.tsx": {
