@@ -3,6 +3,7 @@
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatBytes } from '@/lib/utils/format-bytes';
 
 export type ExtractionStatus = 'pending' | 'completed' | 'failed' | 'not_applicable' | 'skipped';
 
@@ -39,12 +40,6 @@ interface DocumentListProps {
   onUploadRequest?: () => void;
   /** Retry the underlying fetch when the list fails to load. */
   onRetry?: () => void;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 function formatDate(dateStr: string): string {
@@ -192,7 +187,7 @@ export function DocumentList({
                 <ExtractionStatusBadge status={doc.extractionStatus} />
               </div>
               <p className="truncate text-sm text-content-tertiary">
-                {doc.fileName} &middot; {formatFileSize(doc.fileSize)} &middot;{' '}
+                {doc.fileName} &middot; {formatBytes(doc.fileSize)} &middot;{' '}
                 {formatDate(doc.createdAt)}
               </p>
             </div>
