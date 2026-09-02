@@ -1,0 +1,604 @@
+{
+  "pkg": "@propertypro/design-system",
+  "globalName": "PropertyPro",
+  "shape": "package",
+  "srcDir": "../..",
+  "tsconfig": "../../apps/web/tsconfig.json",
+  "buildCmd": "./.design-sync/build.sh",
+  "cssEntry": "generated.css",
+  "tokensGlob": "../../packages/ui/src/styles/tokens.css",
+  "extraFonts": [
+    "../fonts.css"
+  ],
+  "componentSrcMap": {
+    "Badge": "../../packages/ui/src/components/Badge.tsx",
+    "Box": "../../packages/ui/src/primitives/Box.tsx",
+    "Button": "../../apps/web/src/components/ui/button.tsx",
+    "Caption": "../../packages/ui/src/primitives/Text.tsx",
+    "Card": "../../apps/web/src/components/ui/card.tsx",
+    "Center": "../../packages/ui/src/primitives/Stack.tsx",
+    "Code": "../../packages/ui/src/primitives/Text.tsx",
+    "HStack": "../../packages/ui/src/primitives/Stack.tsx",
+    "Heading": "../../packages/ui/src/primitives/Text.tsx",
+    "UiLabel": "../../packages/ui/src/primitives/Text.tsx",
+    "NavRail": "../../packages/ui/src/components/NavRail.tsx",
+    "Paragraph": "../../packages/ui/src/primitives/Text.tsx",
+    "PhoneFrame": "../../packages/ui/src/components/PhoneFrame.tsx",
+    "PlanBadge": "../../packages/ui/src/components/PlanBadge.tsx",
+    "PriorityBadge": "../../packages/ui/src/components/Badge.tsx",
+    "Spacer": "../../packages/ui/src/primitives/Stack.tsx",
+    "Stack": "../../packages/ui/src/primitives/Stack.tsx",
+    "UiStatusBadge": "../../packages/ui/src/components/Badge.tsx",
+    "Text": "../../packages/ui/src/primitives/Text.tsx",
+    "VStack": "../../packages/ui/src/primitives/Stack.tsx",
+    "AlertDialog": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogAction": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogCancel": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogContent": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogDescription": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogFooter": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogHeader": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogOverlay": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogPortal": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogTitle": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "AlertDialogTrigger": "../../apps/web/src/components/ui/alert-dialog.tsx",
+    "ShadcnBadge": "../../apps/web/src/components/ui/badge.tsx",
+    "CardContent": "../../apps/web/src/components/ui/card.tsx",
+    "CardDescription": "../../apps/web/src/components/ui/card.tsx",
+    "CardFooter": "../../apps/web/src/components/ui/card.tsx",
+    "CardHeader": "../../apps/web/src/components/ui/card.tsx",
+    "CardTitle": "../../apps/web/src/components/ui/card.tsx",
+    "ChartContainer": "../../apps/web/src/components/ui/chart.tsx",
+    "ChartLegend": "../../apps/web/src/components/ui/chart.tsx",
+    "ChartLegendContent": "../../apps/web/src/components/ui/chart.tsx",
+    "ChartStyle": "../../apps/web/src/components/ui/chart.tsx",
+    "ChartTooltip": "../../apps/web/src/components/ui/chart.tsx",
+    "ChartTooltipContent": "../../apps/web/src/components/ui/chart.tsx",
+    "Checkbox": "../../apps/web/src/components/ui/checkbox.tsx",
+    "Command": "../../apps/web/src/components/ui/command.tsx",
+    "CommandDialog": "../../apps/web/src/components/ui/command.tsx",
+    "CommandEmpty": "../../apps/web/src/components/ui/command.tsx",
+    "CommandGroup": "../../apps/web/src/components/ui/command.tsx",
+    "CommandInput": "../../apps/web/src/components/ui/command.tsx",
+    "CommandItem": "../../apps/web/src/components/ui/command.tsx",
+    "CommandList": "../../apps/web/src/components/ui/command.tsx",
+    "CommandSeparator": "../../apps/web/src/components/ui/command.tsx",
+    "CommandShortcut": "../../apps/web/src/components/ui/command.tsx",
+    "Dialog": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogClose": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogContent": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogDescription": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogFooter": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogHeader": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogOverlay": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogPortal": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogTitle": "../../apps/web/src/components/ui/dialog.tsx",
+    "DialogTrigger": "../../apps/web/src/components/ui/dialog.tsx",
+    "DropdownMenu": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuCheckboxItem": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuContent": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuGroup": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuItem": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuLabel": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuPortal": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuRadioGroup": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuRadioItem": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuSeparator": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuShortcut": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuSub": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuSubContent": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuSubTrigger": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "DropdownMenuTrigger": "../../apps/web/src/components/ui/dropdown-menu.tsx",
+    "HelpTooltip": "../../apps/web/src/components/ui/help-tooltip.tsx",
+    "Input": "../../apps/web/src/components/ui/input.tsx",
+    "Label": "../../apps/web/src/components/ui/label.tsx",
+    "Popover": "../../apps/web/src/components/ui/popover.tsx",
+    "PopoverAnchor": "../../apps/web/src/components/ui/popover.tsx",
+    "PopoverContent": "../../apps/web/src/components/ui/popover.tsx",
+    "PopoverTrigger": "../../apps/web/src/components/ui/popover.tsx",
+    "Select": "../../apps/web/src/components/ui/select.tsx",
+    "SelectContent": "../../apps/web/src/components/ui/select.tsx",
+    "SelectGroup": "../../apps/web/src/components/ui/select.tsx",
+    "SelectItem": "../../apps/web/src/components/ui/select.tsx",
+    "SelectLabel": "../../apps/web/src/components/ui/select.tsx",
+    "SelectScrollDownButton": "../../apps/web/src/components/ui/select.tsx",
+    "SelectScrollUpButton": "../../apps/web/src/components/ui/select.tsx",
+    "SelectSeparator": "../../apps/web/src/components/ui/select.tsx",
+    "SelectTrigger": "../../apps/web/src/components/ui/select.tsx",
+    "SelectValue": "../../apps/web/src/components/ui/select.tsx",
+    "Separator": "../../apps/web/src/components/ui/separator.tsx",
+    "Sheet": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetClose": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetContent": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetDescription": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetFooter": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetHeader": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetOverlay": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetPortal": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetTitle": "../../apps/web/src/components/ui/sheet.tsx",
+    "SheetTrigger": "../../apps/web/src/components/ui/sheet.tsx",
+    "Skeleton": "../../apps/web/src/components/ui/skeleton.tsx",
+    "Switch": "../../apps/web/src/components/ui/switch.tsx",
+    "Table": "../../apps/web/src/components/ui/table.tsx",
+    "TableBody": "../../apps/web/src/components/ui/table.tsx",
+    "TableCaption": "../../apps/web/src/components/ui/table.tsx",
+    "TableCell": "../../apps/web/src/components/ui/table.tsx",
+    "TableFooter": "../../apps/web/src/components/ui/table.tsx",
+    "TableHead": "../../apps/web/src/components/ui/table.tsx",
+    "TableHeader": "../../apps/web/src/components/ui/table.tsx",
+    "TableRow": "../../apps/web/src/components/ui/table.tsx",
+    "Tabs": "../../apps/web/src/components/ui/tabs.tsx",
+    "TabsContent": "../../apps/web/src/components/ui/tabs.tsx",
+    "TabsList": "../../apps/web/src/components/ui/tabs.tsx",
+    "TabsTrigger": "../../apps/web/src/components/ui/tabs.tsx",
+    "Textarea": "../../apps/web/src/components/ui/textarea.tsx",
+    "Tooltip": "../../apps/web/src/components/ui/tooltip.tsx",
+    "TooltipContent": "../../apps/web/src/components/ui/tooltip.tsx",
+    "TooltipProvider": "../../apps/web/src/components/ui/tooltip.tsx",
+    "TooltipTrigger": "../../apps/web/src/components/ui/tooltip.tsx",
+    "ResidentSearchCombobox": "../../apps/web/src/components/shared/ResidentSearchCombobox.tsx",
+    "UnitSearchCombobox": "../../apps/web/src/components/shared/UnitSearchCombobox.tsx",
+    "UserSearchCombobox": "../../apps/web/src/components/shared/UserSearchCombobox.tsx",
+    "AlertBanner": "../../apps/web/src/components/shared/alert-banner.tsx",
+    "BulkActionBar": "../../apps/web/src/components/shared/bulk-action-bar.tsx",
+    "ChartEmptyState": "../../apps/web/src/components/shared/chart-empty-state.tsx",
+    "ChartSkeleton": "../../apps/web/src/components/shared/chart-skeleton.tsx",
+    "ChecklistStepper": "../../apps/web/src/components/shared/checklist-stepper.tsx",
+    "CsvExportButton": "../../apps/web/src/components/shared/csv-export-button.tsx",
+    "DataTableColumnHeader": "../../apps/web/src/components/shared/data-table-column-header.tsx",
+    "DataTablePagination": "../../apps/web/src/components/shared/data-table-pagination.tsx",
+    "DataTable": "../../apps/web/src/components/shared/data-table.tsx",
+    "EmptyState": "../../apps/web/src/components/shared/empty-state.tsx",
+    "KpiCard": "../../apps/web/src/components/shared/kpi-card.tsx",
+    "PageBody": "../../apps/web/src/components/shared/page-body.tsx",
+    "PageHeaderHelpButton": "../../apps/web/src/components/shared/page-header-help-button.tsx",
+    "PageHeader": "../../apps/web/src/components/shared/page-header.tsx",
+    "QuickFilterTabs": "../../apps/web/src/components/shared/quick-filter-tabs.tsx",
+    "SlideOverPanel": "../../apps/web/src/components/shared/slide-over-panel.tsx",
+    "StatusBadge": "../../apps/web/src/components/shared/status-badge.tsx",
+    "StatusDot": "../../apps/web/src/components/shared/status-badge.tsx",
+    "PageContainer": "../../apps/web/src/components/layout/page-container.tsx"
+  },
+  "overrides": {
+    "Dialog": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogOverlay": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogPortal": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogClose": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogHeader": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogFooter": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogTitle": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DialogDescription": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogOverlay": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogPortal": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogAction": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogCancel": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogHeader": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogFooter": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogTitle": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "AlertDialogDescription": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "Sheet": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetOverlay": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetPortal": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetClose": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetHeader": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetFooter": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetTitle": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SheetDescription": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "Popover": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "PopoverContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "PopoverTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "PopoverAnchor": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "Tooltip": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "TooltipContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "TooltipTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "TooltipProvider": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "HelpTooltip": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenu": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuItem": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuCheckboxItem": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuRadioItem": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuRadioGroup": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuLabel": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuSeparator": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuShortcut": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuGroup": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuPortal": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuSub": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuSubContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DropdownMenuSubTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "Select": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectContent": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectTrigger": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectItem": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectGroup": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectLabel": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectSeparator": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectValue": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectScrollUpButton": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SelectScrollDownButton": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "Command": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandDialog": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandInput": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandList": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandEmpty": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandGroup": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandItem": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandSeparator": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "CommandShortcut": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "SlideOverPanel": {
+      "cardMode": "single",
+      "viewport": "900x620"
+    },
+    "DataTable": {
+      "cardMode": "column"
+    },
+    "Table": {
+      "cardMode": "column"
+    },
+    "TableBody": {
+      "cardMode": "column"
+    },
+    "TableRow": {
+      "cardMode": "column"
+    },
+    "TableCell": {
+      "cardMode": "column"
+    },
+    "TableHead": {
+      "cardMode": "column"
+    },
+    "TableHeader": {
+      "cardMode": "column"
+    },
+    "TableFooter": {
+      "cardMode": "column"
+    },
+    "TableCaption": {
+      "cardMode": "column"
+    },
+    "DataTablePagination": {
+      "cardMode": "column"
+    },
+    "DataTableColumnHeader": {
+      "cardMode": "column"
+    },
+    "ChartContainer": {
+      "cardMode": "column"
+    },
+    "ChartLegendContent": {
+      "cardMode": "column"
+    },
+    "ChartTooltipContent": {
+      "cardMode": "column"
+    },
+    "NavRail": {
+      "cardMode": "column"
+    },
+    "BulkActionBar": {
+      "cardMode": "single",
+      "primaryStory": "DocumentsSelected",
+      "viewport": "900x620"
+    },
+    "PageHeaderHelpButton": {
+      "cardMode": "column"
+    },
+    "ChecklistStepper": {
+      "cardMode": "column"
+    },
+    "QuickFilterTabs": {
+      "cardMode": "column"
+    },
+    "VStack": {
+      "cardMode": "column"
+    },
+    "ChartSkeleton": {
+      "cardMode": "column"
+    },
+    "KpiCard": {
+      "cardMode": "column"
+    },
+    "PageHeader": {
+      "cardMode": "column"
+    },
+    "ResidentSearchCombobox": {
+      "cardMode": "column"
+    },
+    "CardFooter": {
+      "cardMode": "column"
+    },
+    "ChartLegend": {
+      "cardMode": "column"
+    },
+    "ChartStyle": {
+      "cardMode": "column"
+    },
+    "Skeleton": {
+      "cardMode": "column"
+    },
+    "Tabs": {
+      "cardMode": "column"
+    },
+    "TabsContent": {
+      "cardMode": "column"
+    },
+    "TabsList": {
+      "cardMode": "column"
+    },
+    "TabsTrigger": {
+      "cardMode": "column"
+    },
+    "Box": {
+      "cardMode": "column"
+    },
+    "Caption": {
+      "cardMode": "column"
+    },
+    "Center": {
+      "cardMode": "column"
+    },
+    "Code": {
+      "cardMode": "column"
+    },
+    "HStack": {
+      "cardMode": "column"
+    },
+    "Heading": {
+      "cardMode": "column"
+    },
+    "PageContainer": {
+      "cardMode": "column"
+    },
+    "Paragraph": {
+      "cardMode": "column"
+    },
+    "PhoneFrame": {
+      "cardMode": "column"
+    },
+    "Spacer": {
+      "cardMode": "column"
+    },
+    "Stack": {
+      "cardMode": "column"
+    },
+    "Text": {
+      "cardMode": "column"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md",
+  "dtsPropsFor": {
+    "EmptyState": "  /** Use a preset from EMPTY_STATE_CONFIGS. Mutually exclusive with title/icon/description. */\n  preset?: EmptyStateKey;\n  /** Primary message (encouraging, action-oriented). REQUIRED unless `preset` is given. */\n  title?: string;\n  /** Icon component, or an icon key string such as 'file-text' | 'shield-check'. */\n  icon?: LucideIcon | EmptyStateIconKey;\n  /** Additional context rendered below the title. */\n  description?: string;\n  /** Optional action (usually a Button). Required if the preset defines an actionLabel. */\n  action?: React.ReactNode;\n  size?: \"sm\" | \"md\" | \"lg\";\n  className?: string;\n  style?: React.CSSProperties;\n  children?: React.ReactNode;",
+    "NavRail": "  /** Flat item list. `sections` takes precedence when both are given. */\n  items?: { id: string; label: string; icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>; badge?: number | null; badgeVariant?: StatusVariant; href?: string; children?: { id: string; label: string; href: string; badge?: number | null }[]; ariaHasPopup?: 'dialog'; trailingBadge?: React.ReactNode }[];\n  /** Section-based nav structure (preferred). A null label omits the header. */\n  sections?: { label: string | null; items: { id: string; label: string; icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>; badge?: number | null; badgeVariant?: StatusVariant; href?: string; children?: { id: string; label: string; href: string; badge?: number | null }[]; ariaHasPopup?: 'dialog'; trailingBadge?: React.ReactNode }[] }[];\n  /** id of the currently active item. */\n  activeView: string;\n  onViewChange: (viewId: string) => void;\n  /** Expanded (labels visible) vs collapsed (icons only). */\n  expanded: boolean;\n  onToggle?: () => void;\n  /** Render function for items that have `href`, so the host can supply its router link. */\n  renderLink?: (props: { href: string; className?: string; children?: React.ReactNode }) => React.ReactNode;\n  /** Content rendered above the nav items (e.g. brand/logo). */\n  header?: React.ReactNode;\n  className?: string;"
+  },
+  "projectId": "2957e1c6-b8ff-4c83-8f98-7ff0079fe283"
+}
