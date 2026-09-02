@@ -12,6 +12,29 @@
 
 ---
 
+> **Corrections applied during execution (2026-09-02).** This plan was executed via
+> subagent-driven development and was wrong in the places below. The code and the PR body
+> are authoritative; the task text under each heading is not.
+> - **T3:** `useUpsertContentBlock` is NOT in `editor-context.tsx` — import it from
+>   `@/hooks/use-content-blocks`. It takes `communityId` as its hook argument; the mutate
+>   payload is `{ blockType, blockOrder, content }`.
+> - **T4:** the "shift each later section down" model is wrong. Reorder is an ARRAY-MOVE
+>   (`moveWithin`), `moveTo` early-returns on an unoccupied target, and upserting onto an
+>   occupied order REPLACES. Append to `nextContentSlot`, then move by `(slot, blockType)`
+>   once the refetch delivers the row. `toOrder` names the next OCCUPIED neighbour, never
+>   `sourceOrder + 1` (slots are sparse; the server rejects an unoccupied target).
+> - **T5:** `collectBlockAssetPaths` returns `{ field, value }[]`, not `{ path }`. Use the
+>   WHOLE-SITE `useContentBlocks`, not the page-narrowed context `blocks`. The spec's Image
+>   inspector entry point was NOT built — `ImageForm` has no upload to sit beside.
+> - **T6:** there is no `SITE_ASSETS_QUOTA_BYTES`; the quota is per-community and NULLABLE
+>   (`getSiteAssetsQuotaBytes`). GET and PATCH SHARE `siteSettingsResponse`, and the update
+>   hook writes the PATCH response into the cache — `storage` must come from BOTH verbs.
+> - **T7:** `assertPathsScopedToCommunity(communityId, paths)` — `communityId` FIRST. The
+>   revert-check must go through the ROUTE; a direct-call unit test cannot redden when a
+>   caller is removed.
+> - Review found four bugs no task anticipated (hidden lost on edit; telemetry/render split
+>   unpinned; duplicate re-entrancy; audit after a post-write read). See the PR body.
+
 ## Background the engineer needs
 
 **The draft/tombstone model.** `site_blocks.deleted_at` is not a "deleted" flag in the usual sense — it is how publishing works. Publishing retires the previous published row through it, and tombstone drafts are soft-deleted so their slot ends empty. **Never add a new meaning to `deleted_at`.** This is why `hidden` lives in `content`.
