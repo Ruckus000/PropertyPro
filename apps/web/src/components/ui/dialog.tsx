@@ -260,7 +260,7 @@ const DialogContent = React.forwardRef<
         : undefined
 
     const commonHandleClasses =
-      "absolute z-10 hidden touch-none select-none text-content-tertiary transition-colors hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus md:block"
+      "absolute z-10 hidden touch-none select-none text-content-tertiary transition-colors hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ring-offset-surface-card focus-visible:ring-offset-2 md:block"
 
     return (
       <DialogPortal>
@@ -272,7 +272,7 @@ const DialogContent = React.forwardRef<
           {...props}
         >
           {children}
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-surface-card transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-surface-hover data-[state=open]:text-content-secondary">
+          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-surface-card transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-surface-hover data-[state=open]:text-content-secondary">
             <X className="h-4 w-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>

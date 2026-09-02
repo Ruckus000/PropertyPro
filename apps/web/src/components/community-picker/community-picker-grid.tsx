@@ -55,7 +55,7 @@ export function CommunityPickerGrid({ communities, returnTo = null }: CommunityP
         <li key={community.communityId}>
           <a
             href={buildHref(community.communityId)}
-            className="block rounded-md border border-edge bg-surface-card p-5 shadow-e0 transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="block rounded-md border border-edge bg-surface-card p-5 shadow-e0 transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             aria-label={`Open ${community.communityName}`}
           >
             <div className="flex items-start justify-between gap-2">

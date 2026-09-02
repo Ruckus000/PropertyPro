@@ -39,7 +39,7 @@ function CommunityCard({ community }: { community: PortfolioCommunity }) {
         'group block rounded-md border border-edge bg-surface-card p-5',
         'shadow-e0 transition-all duration-quick',
         'hover:border-edge-strong hover:shadow-e1',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -116,7 +116,7 @@ function AddCommunityCard() {
         'border-2 border-dashed border-edge bg-transparent p-5',
         'min-h-[180px] transition-all duration-quick',
         'hover:border-interactive hover:bg-surface-subtle',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
       )}
     >
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-interactive-subtle">
@@ -167,7 +167,7 @@ function EmptyPortfolio() {
           'inline-flex items-center gap-2 rounded-md px-4 py-2',
           'bg-interactive text-sm font-semibold text-white',
           'hover:bg-interactive-hover',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2',
         )}
       >
         <Plus className="h-4 w-4" aria-hidden="true" />

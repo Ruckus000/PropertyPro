@@ -2,8 +2,47 @@
   "apps/admin/src/app/api/admin/demos/preview/route.ts": {
     "raw-hex": 3
   },
+  "apps/admin/src/app/auth/login/page.tsx": {
+    "bare-focus-ring": 6
+  },
   "apps/admin/src/app/demo/new/page.tsx": {
     "raw-hex": 3
+  },
+  "apps/admin/src/app/error.tsx": {
+    "bare-focus-ring": 8
+  },
+  "apps/admin/src/app/not-found.tsx": {
+    "bare-focus-ring": 4
+  },
+  "apps/admin/src/components/clients/ClientPortfolio.tsx": {
+    "bare-focus-ring": 12
+  },
+  "apps/admin/src/components/clients/CommunityAccess.tsx": {
+    "bare-focus-ring": 18
+  },
+  "apps/admin/src/components/clients/CommunityMembers.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/admin/src/components/clients/CommunitySettingsEditor.tsx": {
+    "bare-focus-ring": 24
+  },
+  "apps/admin/src/components/clients/CommunityWebsiteEditor.tsx": {
+    "bare-focus-ring": 6
+  },
+  "apps/admin/src/components/clients/StartSessionDialog.tsx": {
+    "bare-focus-ring": 9
+  },
+  "apps/admin/src/components/deletion-requests/DeletionRequestsDashboard.tsx": {
+    "bare-focus-ring": 9
+  },
+  "apps/admin/src/components/demo/BrandingFormFields.tsx": {
+    "bare-focus-ring": 6
+  },
+  "apps/admin/src/components/demo/CommunityEditSection.tsx": {
+    "bare-focus-ring": 15
+  },
+  "apps/admin/src/components/demo/ConvertDemoDialog.tsx": {
+    "bare-focus-ring": 9
   },
   "apps/admin/src/components/demo/DemoEditDrawer.tsx": {
     "raw-hex": 3
@@ -21,13 +60,25 @@
     "arbitrary-font": 2,
     "raw-hex": 3
   },
+  "apps/admin/src/components/demo/ProspectEditSection.tsx": {
+    "bare-focus-ring": 9
+  },
   "apps/admin/src/components/demo/ReviewStep.tsx": {
     "arbitrary-font": 7,
     "raw-hex": 2,
     "arbitrary-color": 2
   },
+  "apps/admin/src/components/settings/PlatformSettings.tsx": {
+    "bare-focus-ring": 3
+  },
   "apps/admin/src/components/Sidebar.tsx": {
     "raw-palette": 15
+  },
+  "apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx": {
+    "bare-focus-ring": 12
   },
   "apps/web/src/app/(authenticated)/select-community/page.tsx": {
     "raw-palette": 4
@@ -36,14 +87,86 @@
     "raw-hex": 53,
     "raw-color-fn": 20
   },
+  "apps/web/src/app/demo/[slug]/upgrade/upgrade-form.tsx": {
+    "bare-focus-ring": 6
+  },
   "apps/web/src/app/layout.tsx": {
     "raw-palette": 2
   },
   "apps/web/src/app/mobile/page.tsx": {
     "raw-hex": 3
   },
+  "apps/web/src/app/sign/[submissionExternalId]/[slug]/page.tsx": {
+    "bare-focus-ring": 4
+  },
+  "apps/web/src/components/access-requests/approve-dialog.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/audit/AuditFilters.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/auth/forgot-password-form.tsx": {
+    "slash-opacity-semantic": 1,
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/auth/reset-password-form.tsx": {
+    "slash-opacity-semantic": 3,
+    "bare-focus-ring": 9
+  },
+  "apps/web/src/components/auth/set-password-form.tsx": {
+    "slash-opacity-semantic": 2,
+    "bare-focus-ring": 6
+  },
   "apps/web/src/components/command-palette/CommandItem.tsx": {
     "raw-palette": 6
+  },
+  "apps/web/src/components/compliance/link-document-modal.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/compliance/upload-document-modal.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/contracts/BidTracker.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/contracts/ContractForm.tsx": {
+    "bare-focus-ring": 10
+  },
+  "apps/web/src/components/documents/document-upload-area.tsx": {
+    "bare-focus-ring": 4
+  },
+  "apps/web/src/components/esign/new-submission-form.tsx": {
+    "bare-focus-ring": 18
+  },
+  "apps/web/src/components/esign/signature-capture.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/finance/assessment-manager.tsx": {
+    "bare-focus-ring": 43
+  },
+  "apps/web/src/components/finance/ledger-table.tsx": {
+    "bare-focus-ring": 12
+  },
+  "apps/web/src/components/finance/payment-portal.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/help/help-docs-modal.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/maintenance/AssignmentModal.tsx": {
+    "bare-focus-ring": 2
+  },
+  "apps/web/src/components/maintenance/CommentThread.tsx": {
+    "bare-focus-ring": 2
+  },
+  "apps/web/src/components/maintenance/StatusUpdateForm.tsx": {
+    "bare-focus-ring": 8
+  },
+  "apps/web/src/components/maintenance/SubmitForm.tsx": {
+    "bare-focus-ring": 12
+  },
+  "apps/web/src/components/meetings/meeting-form.tsx": {
+    "bare-focus-ring": 10
   },
   "apps/web/src/components/mobile/FeatureCard.tsx": {
     "raw-palette": 41,
@@ -93,15 +216,59 @@
   },
   "apps/web/src/components/mobile/MobileSecurityContent.tsx": {
     "raw-palette": 23,
-    "arbitrary-font": 10
+    "arbitrary-font": 10,
+    "bare-focus-ring": 3
   },
   "apps/web/src/components/mobile/MobileSettingsContent.tsx": {
     "raw-palette": 31,
-    "arbitrary-font": 11
+    "arbitrary-font": 11,
+    "bare-focus-ring": 3
   },
   "apps/web/src/components/mobile/TenantDashboardMockup.tsx": {
     "raw-palette": 18,
     "arbitrary-font": 10
+  },
+  "apps/web/src/components/pm/BrandingForm.tsx": {
+    "bare-focus-ring": 18
+  },
+  "apps/web/src/components/pm/BulkAnnouncementDialog.tsx": {
+    "bare-focus-ring": 6
+  },
+  "apps/web/src/components/pm/BulkDocumentDialog.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/pm/CommunityFilters.tsx": {
+    "bare-focus-ring": 6
+  },
+  "apps/web/src/components/pm/CommunitySwitcher.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/pm/portfolio/PortfolioTemplatesManager.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/pm/reports/ReportFilters.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/settings/account-settings-client.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/violations/ArcDecisionForm.tsx": {
+    "bare-focus-ring": 3
+  },
+  "apps/web/src/components/violations/ArcSubmissionForm.tsx": {
+    "bare-focus-ring": 21
+  },
+  "apps/web/src/components/violations/StaffViolationReportForm.tsx": {
+    "bare-focus-ring": 12
+  },
+  "apps/web/src/components/violations/ViolationReportForm.tsx": {
+    "bare-focus-ring": 9
+  },
+  "apps/web/src/components/violations/ViolationsAdminInbox.tsx": {
+    "bare-focus-ring": 12
+  },
+  "apps/web/src/components/violations/ViolationStatusTransition.tsx": {
+    "bare-focus-ring": 12
   },
   "apps/web/src/lib/documents/render-authored-html.ts": {
     "raw-hex": 23
