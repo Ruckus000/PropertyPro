@@ -16,8 +16,10 @@ body {
 
 /* Page titles use the "Florida Modern" display serif (Fraunces — loaded in
    app/layout.tsx as --font-display) to echo the marketing landing page. Covers
-   every page-level h1 (PageHeader + standalone) from one place; body, data,
-   tables, and section headings stay on Inter. Marketing h1s keep their own font
+   every page-level h1 from one place; body, data, tables, and section headings
+   stay on Inter. PageHeader's h1 is visually hidden (see the page-title decision
+   in .claude/rules/design.md), so this is seen only on pages that still render
+   a standalone visible h1. Marketing h1s keep their own font
    via higher-specificity .mk-* classes; any single h1 can opt out with a
    `font-sans` utility. */
 h1 {

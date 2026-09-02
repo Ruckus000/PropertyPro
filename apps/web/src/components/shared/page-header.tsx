@@ -1,32 +1,42 @@
+'use client';
+
 /**
- * PageHeader — Standardized page header with title, description, and actions.
+ * PageHeader — the page's toolbar, with a visually-hidden title.
  *
- * Renders the page-level h1 heading. Used at the top of content areas
- * below AppTopBar to establish page identity and provide actions.
+ * Decision transferred from the PropertyPro design prototype (2026-09-02): no
+ * painted page titles or descriptions — the rail already says which page you
+ * are on, and the breadcrumb leaf names it. What paints is a toolbar: left-slot
+ * `children`, then `actions` and Help pushed to the right edge. When none of
+ * those exist, nothing paints — no empty band above the content.
  *
- * The per-page Help button is auto-rendered in the actions row (after any
- * page-specific actions) so it sits inline with the page's primary action
- * buttons rather than colliding with them. The AppShell-level fallback
- * Help button hides itself via CSS `group-has-[data-page-header]:hidden`
- * when this component is present — so routes that DON'T use PageHeader
- * still get a Help button from the shell.
+ * The <h1> is still rendered, `sr-only`: it names the page for assistive tech,
+ * it is what shell-breadcrumbs.tsx reads for the leaf label
+ * (`[data-page-header] h1`), and it satisfies `guard:breadcrumbs`.
+ * `description` is accepted so call sites keep compiling, and is not rendered.
  *
- * Pages can suppress the inline Help button via `hideHelpButton` (e.g.
- * legitimate edge case: a future page that wants no help affordance at
- * all). Doing so does NOT make the shell-level button reappear — the
- * data-page-header signal is the source of truth.
+ * The per-page Help button rides in the toolbar after any page-specific
+ * actions. The AppShell-level fallback Help button hides itself via CSS
+ * `group-has-[data-page-header]:hidden` when this component is present — so
+ * routes that DON'T use PageHeader still get a Help button from the shell.
+ * Pages can suppress the inline button via `hideHelpButton`; doing so does NOT
+ * make the shell-level button reappear — the data-page-header signal is the
+ * source of truth.
  */
 
 import * as React from "react";
-import { PageHeaderHelpButton } from "./page-header-help-button";
+import { PageHeaderHelpButton, useHelpButtonAvailable } from "./page-header-help-button";
 import { cn } from "@/lib/utils";
 
 interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Page title — rendered as h1 */
+  /** Page title — rendered as the page <h1>, visually hidden. */
   title: string;
-  /** Subtitle or description text */
+  /**
+   * @deprecated Not rendered. Page descriptions are not painted (see the
+   * page-title decision in .claude/rules/design.md). Accepted so existing
+   * call sites compile; remove at the call site when you touch it.
+   */
   description?: React.ReactNode;
-  /** Action buttons (right-aligned on desktop) */
+  /** Action buttons — right edge of the toolbar. */
   actions?: React.ReactNode;
   /** Suppress the auto-rendered Help button. Rare; default false. */
   hideHelpButton?: boolean;
@@ -34,43 +44,39 @@ interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function PageHeader({
   title,
-  description,
+  description: _description,
   actions,
   hideHelpButton = false,
   className,
   children,
   ...props
 }: PageHeaderProps) {
-  const showHelp = !hideHelpButton;
-  const showActionsRow = Boolean(actions) || showHelp;
+  const helpAvailable = useHelpButtonAvailable();
+  const showHelp = !hideHelpButton && helpAvailable;
+  const showRight = Boolean(actions) || showHelp;
+  const showToolbar = Boolean(children) || showRight;
 
   return (
     <div
       data-page-header="true"
-      className={cn("flex flex-col gap-2 pb-6", className)}
+      className={cn("flex flex-col", showToolbar && "pb-6", className)}
       {...props}
     >
-      {/* Breadcrumbs are rendered globally by the app shell
-          (components/layout/shell-breadcrumbs.tsx), derived from the URL + this
-          header's <h1> title — PageHeader no longer takes a breadcrumb slot. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-content">
-            {title}
-          </h1>
-          {description && (
-            <p className="text-sm text-content-secondary">{description}</p>
-          )}
-          {children}
-        </div>
+      <h1 className="sr-only">{title}</h1>
 
-        {showActionsRow && (
-          <div className="flex shrink-0 items-center gap-2">
-            {actions}
-            {showHelp && <PageHeaderHelpButton />}
-          </div>
-        )}
-      </div>
+      {showToolbar && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {children && (
+            <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+          )}
+          {showRight && (
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {actions}
+              {showHelp && <PageHeaderHelpButton />}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
