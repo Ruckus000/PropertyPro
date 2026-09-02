@@ -4,11 +4,14 @@
  * rows at render time.
  */
 import { z } from 'zod';
+import { hiddenSchema } from './types';
 
 export const contactBlockSchema = z
   .object({
     showBoard: z.boolean().default(true),
     showManagement: z.boolean().default(true),
+    /** Hidden from visitors; still visible and editable in the editor. */
+    hidden: hiddenSchema.optional(),
   })
   .strict();
 

@@ -3,7 +3,7 @@
  * non-expired announcements from the announcements table at render time.
  */
 import { z } from 'zod';
-import { emptyTextSchema, sorLimitSchema } from './types';
+import { emptyTextSchema, hiddenSchema, sorLimitSchema } from './types';
 
 export const announcementsBlockSchema = z
   .object({
@@ -11,6 +11,8 @@ export const announcementsBlockSchema = z
     timeWindowDays: z.number().int().min(1).max(365).default(30),
     /** Replaces the renderer's built-in empty copy when there are no rows. */
     emptyText: emptyTextSchema.optional(),
+    /** Hidden from visitors; still visible and editable in the editor. */
+    hidden: hiddenSchema.optional(),
   })
   .strict();
 

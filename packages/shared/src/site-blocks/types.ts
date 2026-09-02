@@ -102,6 +102,22 @@ export type BlockVariant = (typeof BLOCK_VARIANTS)[number];
 export const blockVariantSchema = z.enum(BLOCK_VARIANTS);
 
 /**
+ * Hidden from visitors while kept in the editor — for seasonal sections a PM
+ * wants back later.
+ *
+ * `z.literal(true)` not `z.boolean()`: absence is the only way to say "visible",
+ * so there is exactly one representation of each state and no `hidden: false`
+ * rows to reason about. Same shape as `imageBlockSchema.decorative`.
+ *
+ * NOT on `heroBlockSchema` — the hero is the welcome region, and a site whose
+ * first screen is missing reads as broken rather than as edited.
+ *
+ * This is CONTENT, so it drafts and publishes like any other edit; the
+ * draft/tombstone machinery is untouched.
+ */
+export const hiddenSchema = z.literal(true);
+
+/**
  * PM-authored replacement for a system-of-record block's built-in empty copy.
  *
  * Only meaningful on blocks that CAN render empty — the SoR types, whose rows

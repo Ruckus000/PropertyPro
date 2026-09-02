@@ -24,7 +24,7 @@
  * Reusing it rather than writing a second URL validator is the point.
  */
 import { z } from 'zod';
-import { ctaTargetSchema } from './types';
+import { ctaTargetSchema, hiddenSchema } from './types';
 
 export const paymentsBlockSchema = z
   .object({
@@ -37,6 +37,8 @@ export const paymentsBlockSchema = z
      * current slug and silently break every payments block on a rename.
      */
     ctaTarget: ctaTargetSchema.optional(),
+    /** Hidden from visitors; still visible and editable in the editor. */
+    hidden: hiddenSchema.optional(),
   })
   .strict();
 
