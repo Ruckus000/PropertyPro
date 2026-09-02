@@ -5,6 +5,7 @@ import { ActivityFeed } from '@/components/overview/activity-feed';
 import { UpcomingEvents } from '@/components/overview/upcoming-events';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { PageHeader } from '@/components/shared/page-header';
 import { useOverview } from '@/hooks/use-overview';
 
 export function OverviewClient() {
@@ -13,10 +14,7 @@ export function OverviewClient() {
   if (isLoading) {
     return (
       <div className="space-y-6 p-6">
-        <div>
-          <h1 className="text-2xl font-semibold">Overview</h1>
-          <p className="mt-1 text-sm text-secondary">Loading your properties&hellip;</p>
-        </div>
+        <PageHeader title="Overview" />
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Skeleton className="h-96" />
           <Skeleton className="h-96" />
@@ -39,12 +37,7 @@ export function OverviewClient() {
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Overview</h1>
-        <p className="mt-1 text-sm text-secondary">
-          All your communities at a glance.
-        </p>
-      </div>
+      <PageHeader title="Overview" />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="space-y-4" aria-labelledby="properties-heading">
           <h2 id="properties-heading" className="text-lg font-semibold">

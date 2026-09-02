@@ -4,6 +4,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { ChecklistListPage } from '@/components/move-checklists/ChecklistListPage';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -36,12 +37,7 @@ export default async function MoveInOutPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasLeaseTracking" communityId={communityId}>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">Move In/Out</h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          Manage move-in and move-out checklists for apartment units
-        </p>
-      </div>
+      <PageHeader title="Move In/Out" />
       <ChecklistListPage communityId={communityId} />
     </FeatureGate>
   );

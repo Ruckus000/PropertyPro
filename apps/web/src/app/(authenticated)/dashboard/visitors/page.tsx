@@ -18,6 +18,7 @@ import { getUnitLabelMap } from '@/lib/services/units-lookup';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
 import { VisitorResidentView } from '@/components/visitors/VisitorResidentView';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -63,16 +64,7 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasVisitorLogging" communityId={communityId}>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">
-          {isStaff ? 'Visitor Management' : 'My Visitors'}
-        </h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          {isStaff
-            ? 'Register visitors, manage check-ins and check-outs.'
-            : 'Register guests and view your active visitor passes.'}
-        </p>
-      </div>
+      <PageHeader title={isStaff ? 'Visitor Management' : 'My Visitors'} />
 
       {isStaff ? (
         <VisitorStaffView communityId={communityId} />

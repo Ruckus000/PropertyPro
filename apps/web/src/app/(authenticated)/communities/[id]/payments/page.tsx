@@ -7,6 +7,7 @@ import { FeatureGate } from '@/components/billing/feature-gate';
 import { PaymentPortal } from '@/components/finance/payment-portal';
 import { AdminPaymentsTabs } from './_components/AdminPaymentsTabs';
 import { listActorUnitIds } from '@/lib/units/actor-units';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -27,7 +28,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   if (!Number.isFinite(communityId) || communityId <= 0) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-content">Payments</h1>
+        <PageHeader title="Payments" />
         <p className="mt-2 text-sm text-status-danger">Invalid community ID</p>
       </div>
     );

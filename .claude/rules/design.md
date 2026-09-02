@@ -195,9 +195,13 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   `sr-only` — it still names the page for the breadcrumb leaf, assistive tech and
   `guard:breadcrumbs` — and `description` is accepted but not rendered. What
   paints is a toolbar: left-slot `children`, then `actions` and Help at the right
-  edge; when none of those exist, nothing paints (no empty band). Pages that
-  still render a literal visible `<h1>` are the migration backlog, not a second
-  convention.
+  edge; when none of those exist, nothing paints (no empty band).
+  `pnpm guard:page-header` fails on any literal `<h1>` in the authenticated app
+  (every `(authenticated)/**/*.tsx` plus the page-shell components it lists), so
+  a page cannot quietly paint a title the rest of the app no longer has. Escape
+  hatch `// page-header:exempt — <reason>`, reserved for outcome headlines that
+  ARE the content (`payments/success`) and rail-less orientation pages
+  (`select-community`).
 - Parent-crumb labels are derived from route segments in
   `apps/web/src/lib/breadcrumbs/segment-labels.ts`. Section labels that map to a
   sidebar nav item are pulled from `nav-config.ts` by id (single source — a

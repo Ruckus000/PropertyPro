@@ -10,6 +10,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { ResidentsPageClient } from '@/components/residents/residents-page-client';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -29,7 +30,7 @@ export default async function ResidentsPage({ searchParams }: PageProps) {
   if (!context.communityId) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-content">Residents</h1>
+        <PageHeader title="Residents" />
         <p className="mt-2 text-sm text-content-secondary">
           Add a valid <code className="rounded bg-surface-muted px-1">communityId</code> query parameter to view residents.
         </p>
@@ -44,7 +45,7 @@ export default async function ResidentsPage({ searchParams }: PageProps) {
   if (!membership.isAdmin) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-content">Residents</h1>
+        <PageHeader title="Residents" />
         <p className="mt-2 text-sm text-content-secondary">
           You do not have permission to manage residents.
         </p>

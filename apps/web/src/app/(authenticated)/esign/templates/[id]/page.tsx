@@ -13,6 +13,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { FeatureGate } from '@/components/billing/feature-gate';
+import { PageHeader } from '@/components/shared/page-header';
 import { TemplateDetailClient } from './template-detail-client';
 
 interface PageProps {
@@ -37,9 +38,7 @@ export default async function EsignTemplateDetailPage({
   if (!context.communityId || isNaN(templateId)) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          Template Detail
-        </h1>
+        <PageHeader title="Template Detail" />
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
           Invalid template ID or missing community context.
         </p>

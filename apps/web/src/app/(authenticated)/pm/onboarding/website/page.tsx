@@ -19,6 +19,7 @@ import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor
 import { WelcomeMessageEditor } from '@/components/pm/onboarding-wizard/WelcomeMessageEditor';
 import { ConfirmPublish } from '@/components/pm/onboarding-wizard/ConfirmPublish';
 import { PageBody } from '@/components/shared/page-body';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -57,22 +58,15 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
 
   return (
     <PageBody width="content" spacing="none">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-content">Customize your community site</h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          Five quick steps. You can come back anytime — your site stays live with default
-          settings until you publish changes.
-          {community && (
-            <>
-              {' '}Current URL:{' '}
-              <code className="rounded bg-surface-muted px-1 py-0.5 text-xs">
-                {community.slug}.getpropertypro.com
-              </code>
-              .
-            </>
-          )}
+      <PageHeader title="Customize your community site" />
+      {community && (
+        <p className="mb-6 text-sm text-content-secondary">
+          Current URL:{' '}
+          <code className="rounded bg-surface-muted px-1 py-0.5 text-xs">
+            {community.slug}.getpropertypro.com
+          </code>
         </p>
-      </div>
+      )}
 
       <WizardLayoutThemePreview
         communityId={communityId}

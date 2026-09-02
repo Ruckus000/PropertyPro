@@ -191,6 +191,7 @@ pnpm --filter @propertypro/web test:e2e:prod
 
 # Other guards (run individually; all bundled into `pnpm lint`)
 pnpm guard:breadcrumbs          # Breadcrumb coverage
+pnpm guard:page-header          # PageHeader owns every page <h1>; no literal <h1> in the authenticated app
 pnpm guard:tenant-scope         # tenantScope contract well-formedness
 pnpm guard:legacy-roles         # Legacy-role vocabulary floor
 pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only baseline)

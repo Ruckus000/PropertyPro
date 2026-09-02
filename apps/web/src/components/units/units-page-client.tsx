@@ -10,6 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface UnitsPageClientProps {
   communityId: number;
@@ -118,9 +119,7 @@ export function UnitsPageClient({ communityId, communityType, canWrite }: UnitsP
   if (units && units.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-content">Units</h1>
-        </div>
+        <PageHeader title="Units" />
         <EmptyState
           icon="building"
           title="No units yet"
@@ -137,10 +136,7 @@ export function UnitsPageClient({ communityId, communityType, canWrite }: UnitsP
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-content">Units</h1>
-        {addUnitButton}
-      </div>
+      <PageHeader title="Units" actions={addUnitButton} />
 
       <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
         <table className="w-full text-sm">

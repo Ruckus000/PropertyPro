@@ -11,6 +11,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { SubmissionList } from '@/components/esign/submission-list';
 import { FeatureGate } from '@/components/billing/feature-gate';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -47,9 +48,7 @@ export default async function EsignSubmissionsPage({ searchParams }: PageProps) 
   return (
     <FeatureGate feature="hasEsign" communityId={communityId}>
     <div>
-      <h1 className="mb-6 text-2xl font-semibold text-[var(--text-primary)]">
-        E-Sign Submissions
-      </h1>
+      <PageHeader title="E-Sign Submissions" />
       <SubmissionList communityId={communityId} />
     </div>
     </FeatureGate>

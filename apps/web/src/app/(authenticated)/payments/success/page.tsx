@@ -1,3 +1,4 @@
+// page-header:exempt — outcome page: its <h1>s are the result headline ("Payment received"), which IS the content, not page chrome.
 /**
  * Stripe payment return page.
  *

@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { ExportButton } from '@/components/settings/export-button';
 import { ExportJobCard } from '@/components/settings/export-job-card';
+import { PageHeader } from '@/components/shared/page-header';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -34,7 +35,7 @@ export default async function ExportPage({
   if (!context.communityId) {
     return (
       <>
-        <h1 className="mb-4 text-xl font-semibold">Data Export</h1>
+        <PageHeader title="Data Export" />
         <p className="text-sm text-content-secondary">
           Provide a <code>communityId</code> to export community data.
         </p>
@@ -55,7 +56,7 @@ export default async function ExportPage({
   if (!canExport) {
     return (
       <>
-        <h1 className="mb-2 text-xl font-semibold">Data Export</h1>
+        <PageHeader title="Data Export" />
         <p className="text-sm text-content-secondary">
           Exporting the community record set is available to property managers and
           board members. If you need a copy of your own records, ask your
@@ -67,7 +68,7 @@ export default async function ExportPage({
 
   return (
     <>
-      <h1 className="mb-2 text-xl font-semibold">Data Export</h1>
+      <PageHeader title="Data Export" />
       <p className="mb-6 text-sm text-content-secondary">
         You can export your community&apos;s records at any time, including after a
         subscription has lapsed. Two options: a quick spreadsheet-style export, or

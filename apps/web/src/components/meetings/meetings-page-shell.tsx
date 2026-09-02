@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PageHeader } from '@/components/shared/page-header';
 import { MonthGrid } from '@/components/calendar/month-grid';
 import { DayDetailPanel } from '@/components/calendar/day-detail-panel';
 import { MeetingDetailModal } from '@/components/calendar/meeting-detail-modal';
@@ -27,8 +28,8 @@ interface MeetingsPageShellProps {
 
 export function MeetingsPageShell({
   communityId,
-  userId,
-  role,
+  userId: _userId,
+  role: _role,
   timezone,
   communityType,
   canWrite,
@@ -60,34 +61,11 @@ export function MeetingsPageShell({
 
   return (
     <div className="space-y-6">
-      <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
-        <CardContent className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-2">
-            {/*
-              This is the page title and must stay an <h1>. The route renders no
-              other heading, so as a <div> the page had NO h1 at all — which
-              breaks the rule in .claude/rules/design.md that every
-              authenticated page expose a page-title <h1> for the shell
-              breadcrumb's leaf label, and left assistive tech with no document
-              outline for the route. `guard:breadcrumbs` did not catch it
-              because its glob only covers `[param]`/`new`/`edit` pages.
-              Classes are unchanged, so the visual is identical.
-            */}
-            <h1 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-              Meetings & Calendar
-            </h1>
-            <div className="text-2xl font-semibold text-[var(--text-primary)]">
-              Stay ahead of meetings, votes, and assessment due dates.
-            </div>
-            <div className="text-sm text-[var(--text-secondary)]">
-              Signed in as {role} ({userId.slice(0, 8)}). Calendar timezone: {timezone}.
-            </div>
-          </div>
-          {canWrite ? (
-            <Button onClick={() => setShowCreateForm(true)}>Create Meeting</Button>
-          ) : null}
-        </CardContent>
-      </Card>
+      <PageHeader
+        title="Meetings & Calendar"
+        actions={canWrite ? <Button onClick={() => setShowCreateForm(true)}>Create Meeting</Button> : undefined}
+      />
+      <p className="text-sm text-[var(--text-secondary)]">Calendar timezone: {timezone}.</p>
 
       {eventsQuery.isError ? (
         <AlertBanner

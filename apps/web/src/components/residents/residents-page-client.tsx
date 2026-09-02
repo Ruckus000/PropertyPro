@@ -10,6 +10,7 @@ import { ResidentList } from '@/components/residents/resident-list';
 import { ResidentForm, type ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { PageHeader } from '@/components/shared/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AccessRequestList } from '@/components/access-requests/access-request-list';
 import {
@@ -120,7 +121,7 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
   if (isError) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold text-content">Residents</h1>
+        <PageHeader title="Residents" />
         <AlertBanner
           status="danger"
           title="We couldn't load residents"
@@ -143,9 +144,7 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
   if (residents && residents.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-content">Residents</h1>
-        </div>
+        <PageHeader title="Residents" />
         <EmptyState
           preset="no_residents"
           action={
@@ -185,26 +184,28 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
   /* ── Success state ── */
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-content">Residents</h1>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/dashboard/import-residents?communityId=${communityId}`}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
-          >
-            <Upload size={16} aria-hidden="true" />
-            Import CSV
-          </Link>
-          <button
-            type="button"
-            onClick={() => setDialogOpen(true)}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
-          >
-            <UserPlus size={16} aria-hidden="true" />
-            Add Resident
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Residents"
+        actions={
+          <>
+            <Link
+              href={`/dashboard/import-residents?communityId=${communityId}`}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+            >
+              <Upload size={16} aria-hidden="true" />
+              Import CSV
+            </Link>
+            <button
+              type="button"
+              onClick={() => setDialogOpen(true)}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
+            >
+              <UserPlus size={16} aria-hidden="true" />
+              Add Resident
+            </button>
+          </>
+        }
+      />
 
       {invitationWarning && (
         <AlertBanner

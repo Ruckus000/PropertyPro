@@ -15,6 +15,7 @@ import { DocumentViewer } from './document-viewer';
 import { DocumentVersionHistory } from './document-version-history';
 import { DocumentCategoryFilter } from './document-category-filter';
 import { DocumentSearch } from './document-search';
+import { PageHeader } from '@/components/shared/page-header';
 import type { UploadDocumentResult } from '@/hooks/use-document-upload';
 
 interface DocumentLibraryProps {
@@ -87,66 +88,63 @@ export function DocumentLibrary({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-content">Documents</h1>
-          <p className="mt-1 text-sm text-content-secondary">
-            Manage and view community documents
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={() => setSearchMode(!searchMode)}
-            className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
-              searchMode
-                ? 'border-interactive bg-interactive-subtle text-interactive'
-                : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
-            }`}
-          >
-            {searchMode ? 'Hide Search' : 'Search'}
-          </button>
-          {canUpload && hasEsign && (
-            <Link
-              href={`/esign?communityId=${communityId}`}
-              className="flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-hover sm:px-4"
-            >
-              <PenTool size={16} aria-hidden />
-              E-Sign
-            </Link>
-          )}
-          {canUpload && (
-            <Link
-              href={`/communities/${communityId}/documents/author/new`}
-              className="inline-flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive sm:px-4"
-            >
-              <FilePlus2 size={16} aria-hidden="true" />
-              Author Document
-            </Link>
-          )}
-          {canUpload && (
+      <PageHeader
+        title="Documents"
+        actions={
+          <>
             <button
               type="button"
-              onClick={() => {
-                if (showUpload) {
-                  setShowUpload(false);
-                  return;
-                }
-                openUploadPanel();
-              }}
-              aria-expanded={showUpload}
-              aria-label={showUpload ? 'Close upload panel' : 'Open upload panel'}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
-                showUpload
-                  ? 'bg-surface-muted text-content'
-                  : 'bg-interactive text-white hover:bg-interactive-hover'
+              onClick={() => setSearchMode(!searchMode)}
+              className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+                searchMode
+                  ? 'border-interactive bg-interactive-subtle text-interactive'
+                  : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
               }`}
             >
-              {showUpload ? 'Cancel' : 'Upload Document'}
+              {searchMode ? 'Hide Search' : 'Search'}
             </button>
-          )}
-        </div>
-      </div>
+            {canUpload && hasEsign && (
+              <Link
+                href={`/esign?communityId=${communityId}`}
+                className="flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-hover sm:px-4"
+              >
+                <PenTool size={16} aria-hidden />
+                E-Sign
+              </Link>
+            )}
+            {canUpload && (
+              <Link
+                href={`/communities/${communityId}/documents/author/new`}
+                className="inline-flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive sm:px-4"
+              >
+                <FilePlus2 size={16} aria-hidden="true" />
+                Author Document
+              </Link>
+            )}
+            {canUpload && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (showUpload) {
+                    setShowUpload(false);
+                    return;
+                  }
+                  openUploadPanel();
+                }}
+                aria-expanded={showUpload}
+                aria-label={showUpload ? 'Close upload panel' : 'Open upload panel'}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+                  showUpload
+                    ? 'bg-surface-muted text-content'
+                    : 'bg-interactive text-white hover:bg-interactive-hover'
+                }`}
+              >
+                {showUpload ? 'Cancel' : 'Upload Document'}
+              </button>
+            )}
+          </>
+        }
+      />
 
       {showUpload && canUpload && (
         <div className="rounded-md border border-edge bg-surface-card p-6">

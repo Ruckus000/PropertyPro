@@ -25,6 +25,7 @@ import { ViolationReportForm } from '@/components/violations/ViolationReportForm
 import { StaffViolationReportForm } from '@/components/violations/StaffViolationReportForm';
 import { ViolationCard } from '@/components/violations/ViolationCard';
 import { FeatureGate } from '@/components/billing/feature-gate';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -70,12 +71,7 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
   return (
     <FeatureGate feature="hasViolations" communityId={communityId}>
     <div className="mx-auto max-w-3xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">Report a Violation</h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          Report a community concern such as noise, parking, or property violations.
-        </p>
-      </div>
+      <PageHeader title="Report a Violation" />
 
       {mode === 'resident' && (
         <ViolationReportForm

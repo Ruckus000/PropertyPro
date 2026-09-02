@@ -12,6 +12,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { FeatureGate } from '@/components/billing/feature-gate';
+import { PageHeader } from '@/components/shared/page-header';
 import { EsignTemplatesListClient } from './templates-list-client';
 
 interface PageProps {
@@ -32,9 +33,7 @@ export default async function EsignTemplatesPage({ searchParams }: PageProps) {
   if (!context.communityId) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          E-Sign Templates
-        </h1>
+        <PageHeader title="E-Sign Templates" />
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
           Add a valid{' '}
           <code className="rounded bg-[var(--surface-subtle)] px-1">

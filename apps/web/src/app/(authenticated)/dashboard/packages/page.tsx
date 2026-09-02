@@ -14,6 +14,7 @@ import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { PackageStaffView } from '@/components/packages/PackageStaffView';
 import { PackageResidentView } from '@/components/packages/PackageResidentView';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -47,16 +48,7 @@ export default async function PackagesPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasPackageLogging" communityId={communityId}>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">
-          {isStaff ? 'Package Logging' : 'My Packages'}
-        </h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          {isStaff
-            ? 'Log incoming packages and track pickups for residents.'
-            : 'View your pending and recent package deliveries.'}
-        </p>
-      </div>
+      <PageHeader title={isStaff ? 'Package Logging' : 'My Packages'} />
 
       {isStaff ? (
         <PackageStaffView communityId={communityId} />
