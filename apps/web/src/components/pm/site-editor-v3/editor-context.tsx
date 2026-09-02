@@ -284,6 +284,17 @@ export function SiteEditorProvider({
       delete next.hidden;
       if (hidden) next.hidden = true;
 
+      // KNOWN WINDOW, deliberately left open. `useUpsertContentBlock`
+      // invalidates on success with no optimistic cache write (unlike
+      // `useReorderBlocks`, which has an `onMutate`), so between this PATCH and
+      // the refetch landing the cached content still carries the OLD flag. If
+      // the inspector is open on this same section and the PM types inside that
+      // window, `use-block-form`'s preserved-key splice re-applies the stale
+      // value and the toggle appears to undo itself. Self-evidencing rather
+      // than silent — the badge and the eye icon read from the same stale cache,
+      // so they flip back too. Closing it means giving this mutation an
+      // optimistic write, which touches the change model and the publish diff;
+      // that is a larger change than the bug warrants pre-launch.
       upsert.mutate({ blockType, blockOrder: block.blockOrder, content: next });
     },
     [blocks, upsert],
