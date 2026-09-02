@@ -40,6 +40,13 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
       move: moveMock,
       moveTo: moveToMock,
       isMoving: state.isMoving,
+      // Not asserted here — the hide/duplicate contract lives in
+      // `__tests__/pm/site-editor-v3/section-list-hide.test.tsx`. Present so a
+      // contributor who extends this file and clicks one of those buttons gets
+      // their own assertion failing, not a confusing `undefined is not a
+      // function` from a member the component destructures.
+      toggleHidden: vi.fn(),
+      duplicate: vi.fn(),
     };
   },
 }));
