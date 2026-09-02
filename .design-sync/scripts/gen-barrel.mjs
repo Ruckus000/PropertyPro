@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-const ROOT = '/Users/jphilistin/Documents/Coding/PropertyPro';
+import { ROOT } from './repo-root.mjs';
 const app = JSON.parse(readFileSync(ROOT + '/.design-sync/.app-exports.json', 'utf8'));
 const ui  = JSON.parse(readFileSync(ROOT + '/.design-sync/.ui-exports.json', 'utf8'));
 

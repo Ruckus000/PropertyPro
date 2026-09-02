@@ -2,7 +2,7 @@ import { Project, SyntaxKind } from 'ts-morph';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-const ROOT = '/Users/jphilistin/Documents/Coding/PropertyPro';
+import { ROOT } from './repo-root.mjs';
 const project = new Project({
   tsConfigFilePath: join(ROOT, 'apps/web/tsconfig.json'),
   skipAddingFilesFromTsConfig: true,

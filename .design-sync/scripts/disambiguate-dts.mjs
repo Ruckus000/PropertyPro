@@ -10,7 +10,8 @@
 // dist/ is generated (gitignored) and rebuilt by cfg.buildCmd, so this is a
 // deterministic post-emit step, never a hand edit.
 import { Project } from 'ts-morph';
-const DIST = '/Users/jphilistin/Documents/Coding/PropertyPro/.design-sync/entry/dist';
+import { ROOT } from './repo-root.mjs';
+const DIST = `${ROOT}/.design-sync/entry/dist`;
 
 // [file, declaredName, newName, why]
 const RENAMES = [

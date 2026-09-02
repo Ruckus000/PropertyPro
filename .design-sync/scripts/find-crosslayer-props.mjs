@@ -4,7 +4,7 @@
 // earlier duplicate check could not see.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-const ROOT='/Users/jphilistin/Documents/Coding/PropertyPro';
+import { ROOT } from './repo-root.mjs';
 const DIST=join(ROOT,'.design-sync/entry/dist');
 const cfg=JSON.parse(readFileSync(ROOT+'/.design-sync/config.json','utf8'));
 function walk(d,acc=[]){let es;try{es=readdirSync(d)}catch{return acc}

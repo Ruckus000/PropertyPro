@@ -4,7 +4,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const ROOT = '/Users/jphilistin/Documents/Coding/PropertyPro';
+import { ROOT } from './repo-root.mjs';
 const CSS = readFileSync(join(ROOT, '.design-sync/entry/generated.css'), 'utf8');
 const args = process.argv.slice(2);
 const previewMode = args.includes('--previews');

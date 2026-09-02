@@ -4,10 +4,15 @@
 // unstyled. So enumerate the whole vocabulary into a file that Tailwind scans,
 // making the shipped CSS cover the design language rather than today's usage.
 import { createRequire } from 'node:module';
+import { at } from './repo-root.mjs';
 import { writeFileSync } from 'node:fs';
-const require = createRequire('/Users/jphilistin/Documents/Coding/PropertyPro/apps/web/');
-const jiti = require('/Users/jphilistin/Documents/Coding/PropertyPro/node_modules/.pnpm/jiti@1.21.7/node_modules/jiti')(import.meta.url);
-const cfg = jiti('/Users/jphilistin/Documents/Coding/PropertyPro/apps/web/tailwind.config.ts').default;
+// Resolve jiti as tailwindcss's OWN dependency rather than by store path.
+// The previous form hardcoded node_modules/.pnpm/jiti@1.21.7/... — pinned to
+// both the path AND the version, so any jiti bump broke the build silently.
+const reqWeb = createRequire(at('apps/web/'));
+const reqTailwind = createRequire(reqWeb.resolve('tailwindcss/package.json'));
+const jiti = reqTailwind('jiti')(import.meta.url);
+const cfg = jiti(at('apps/web/tailwind.config.ts')).default;
 const colors = cfg.theme.extend.colors;
 
 const out = new Set();
@@ -77,6 +82,6 @@ for (const bp of ['sm:','md:','lg:','xl:']) for (const c of ['flex','grid','hidd
 for (const s of ['hover:','focus:','focus-visible:','disabled:','group-hover:']) for (const c of ['underline','opacity-100','opacity-70','shadow-md','shadow-lg','cursor-pointer','ring-2','border'])
   push(`${s}${c}`);
 
-writeFileSync('/Users/jphilistin/Documents/Coding/PropertyPro/.design-sync/vocabulary.txt',
+writeFileSync(at('.design-sync/vocabulary.txt'),
   [...out].sort().join('\n') + '\n');
 console.error(`vocabulary: ${out.size} class tokens`);

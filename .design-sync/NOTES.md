@@ -395,6 +395,41 @@ The 5 outstanding cells are documented blocks, not sync defects:
   feature that ships disabled. Cards show real placement with a caption naming
   the gate.
 
+## Two review findings, resolved 2026-09-02
+
+**`projectId` in `config.json` is committed deliberately.** It is the claude.ai/design
+destination (`2957e1c6-…`) and it is what makes a re-sync fetch the verification anchor
+from the right project without asking. It is an opaque resource identifier, not a
+credential: reads and writes are gated by account auth, and `list_projects` only returns
+projects the caller can write to — so a contributor who is not the owner gets an
+authorization error, not access. The trade is that the destination is visible to anyone
+with repo read access. Judged acceptable; the alternative (an untracked local override)
+would break the one-command re-sync this whole directory exists to enable.
+
+> If this repo ever gains contributors who should sync to their *own* project, the fix is
+> to let an env var override the pinned id — not to remove the pin.
+
+**Absolute paths are gone from the scripts.** All ten previously hardcoded
+`/Users/jphilistin/Documents/Coding/PropertyPro`, which broke the tooling in every other
+clone, worktree and CI checkout. They now import `ROOT` from
+`.design-sync/scripts/repo-root.mjs`, which walks up from its own `import.meta.url` to the
+directory owning `pnpm-workspace.yaml`.
+
+Deliberately **not** `process.cwd()` or `argv`: the root decides where every other script
+reads and writes, so deriving it from caller-controlled input would turn a wrong cwd into
+writes outside the repo. Walking up from the script's own location is deterministic and
+caller-independent — it keeps the safety property the hardcoded path had, without the
+brittleness. It resolves correctly from BOTH homes (committed at `.design-sync/scripts/`,
+run from `.ds-sync/`) and throws a named error rather than guessing if no workspace file is
+found above it.
+
+`gen-vocabulary.mjs` had a second instance of the same class: it resolved jiti through
+`node_modules/.pnpm/jiti@1.21.7/…`, pinned to both the path **and** the version, so a jiti
+bump would have broken the vocabulary build. It now resolves jiti as tailwindcss's own
+dependency.
+
+---
+
 ## Re-sync risks — what can silently go stale
 
 1. **Everything under `.design-sync/entry/dist/` is generated AND gitignored**,

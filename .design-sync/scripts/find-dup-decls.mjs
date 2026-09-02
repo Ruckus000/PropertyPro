@@ -2,7 +2,7 @@
 // name. >1 == ambiguous == prop extraction can pick the wrong layer.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-const ROOT='/Users/jphilistin/Documents/Coding/PropertyPro';
+import { ROOT } from './repo-root.mjs';
 const DIST=join(ROOT,'.design-sync/entry/dist');
 function walk(d,acc=[]){let es;try{es=readdirSync(d)}catch{return acc}
   for(const e of es){ if(e==='node_modules')continue;   // symlink to apps/web/node_modules

@@ -3,9 +3,12 @@
 **Opened:** 2026-09-01, from the pre-launch audit.
 **Scope:** things that must be true before real Florida associations are onboarded.
 
-Every item here is **environment, DNS, or a dashboard action** — none is a code change.
+Items **1–5 are environment, DNS, or a dashboard action** — none is a code change.
 The code is in good shape: 25/25 guards, ~12,155 unit tests green, clean production build
 of both apps as of `aabf9727`.
+
+Items **6–7 are the exception**: two Website Editor feature gaps promoted to blockers on
+2026-09-02. They are code, not config, and they are sequenced last for that reason.
 
 The through-line is that all of these fail **silently**. None crashes anything; each
 degrades or no-ops while dashboards stay green. That is why they need a checklist rather
@@ -174,6 +177,68 @@ Point an uptime monitor at it: 200 `healthy` / 200 `degraded` / 503 `unhealthy`.
 traffic. Add `/api/health` on both apps for plain liveness.
 
 **Expect `degraded` on the first run** until item 2 is done. That is the probe working.
+
+---
+
+## Feature blockers — Website Editor
+
+Promoted from the *Website Editor Feature Gap Audit* (25 July 2026) on 2026-09-02, after
+reconciling that audit against `main`. Its three P0 gaps and all five UX-audit risks are
+already shipped; these two P1s are the ones judged to matter before real associations
+onboard. Unlike items 1–5, these are engineering work.
+
+---
+
+## 6. Publishing the site notifies nobody
+
+**Status:** verified 2026-09-02 · **Owner:** engineering · **Source:** gap audit G-05
+
+A publish updates the public site and tells no one. Residents do not poll a website. The
+platform already holds the resident roster and a working email channel — DKIM and SPF are
+live (items 3–4 are about the *inbound* address) — so the missing piece is one opt-in step
+on the publish sheet, not a notification system.
+
+Why this outranks its P1 label: the product is sold against a statutory clock, and the
+clock is about residents *being informed*. A §718 notice posted where nobody looks meets
+the letter and misses the point. The first association to notice will notice during a real
+notice.
+
+Scope: an "Email residents about this update" checkbox with an editable one-line summary,
+offered when the publish includes an announcement. Not a newsletter product.
+
+**Verify (absent today):**
+
+```bash
+grep -rn "notifyResidents" apps/web/src | grep -vi package
+```
+
+Returns nothing. Note the filter: the only `notifyResidents*` symbol in the tree is
+`notifyResidentsOfPackage` in `lib/services/package-visitor-service.ts`, which is package
+delivery and unrelated. An unfiltered grep reads as a false positive and scores this done.
+
+---
+
+## 7. Nothing can be scheduled; only urgent notices expire
+
+**Status:** verified 2026-09-02 · **Owner:** engineering · **Source:** gap audit G-07
+
+Half shipped, and the missing half is the half on a statutory clock. Urgent notices carry
+an `expiresAt` — it shipped alongside the mobile fast path — so a pool-closure notice can
+take itself down. But there is **no scheduled publish and no announcement expiry**: meeting
+materials that must appear a fixed number of days before a meeting depend on someone
+remembering, and every seasonal notice is removed by hand.
+
+Scope: per-publish "go live at…", and per-announcement expiry — the authoring-side
+complement to the time-window filtering the public feed sections already perform.
+
+**Verify:**
+
+```bash
+# expiry exists — for urgent notices only
+grep -n "expiresAt" apps/web/src/app/api/v1/pm/site/urgent-notice/contract.ts
+# scheduled publishing exists nowhere
+grep -rlE "scheduledPublishAt|goLiveAt" apps/web/src
+```
 
 ---
 

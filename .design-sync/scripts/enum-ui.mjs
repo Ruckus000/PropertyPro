@@ -1,5 +1,5 @@
 import { Project, SyntaxKind } from 'ts-morph';
-const ROOT='/Users/jphilistin/Documents/Coding/PropertyPro';
+import { ROOT } from './repo-root.mjs';
 const p=new Project({tsConfigFilePath:ROOT+'/packages/ui/tsconfig.json',skipAddingFilesFromTsConfig:true,skipFileDependencyResolution:true});
 const sf=p.addSourceFileAtPath(ROOT+'/packages/ui/src/index.ts');
 const names=[];

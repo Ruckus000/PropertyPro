@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-const DIST='/Users/jphilistin/Documents/Coding/PropertyPro/.design-sync/entry/dist';
+import { ROOT } from './repo-root.mjs';
+const DIST = `${ROOT}/.design-sync/entry/dist`;
 function walk(d,acc=[]){let es;try{es=readdirSync(d)}catch{return acc}
   for(const e of es){ if(e==='node_modules')continue;
   const p=join(d,e); let st;try{st=statSync(p)}catch{continue}
