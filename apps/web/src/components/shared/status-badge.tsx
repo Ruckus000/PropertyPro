@@ -80,10 +80,7 @@ export function StatusBadge({
         {...props}
       >
         <span
-          className={cn(
-            "inline-block h-2 w-2 rounded-full",
-            classes.text.replace("text-", "bg-")
-          )}
+          className={cn("inline-block h-2 w-2 rounded-full", classes.dot)}
         />
       </span>
     );
@@ -112,6 +109,12 @@ export function StatusBadge({
 }
 
 // ── Convenience: StatusDot for inline indicators ──
+//
+// The dot class comes from getStatusClasses().dot, not from rewriting the text
+// class with `.replace("text-", "bg-")`. That rewrite happened at RUNTIME, so
+// the resulting class existed in no source file, Tailwind never emitted it, and
+// the dot was invisible for every variant no other file spelled out statically
+// (`owner`, `board`). See packages/ui/src/constants/status.ts.
 
 export function StatusDot({
   variant,
@@ -124,11 +127,7 @@ export function StatusDot({
   const classes = getStatusClasses(variant);
   return (
     <span
-      className={cn(
-        "inline-block h-2 w-2 rounded-full",
-        classes.text.replace("text-", "bg-"),
-        className
-      )}
+      className={cn("inline-block h-2 w-2 rounded-full", classes.dot, className)}
       aria-hidden="true"
       {...props}
     />

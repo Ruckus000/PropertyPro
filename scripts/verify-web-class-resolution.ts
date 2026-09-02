@@ -58,10 +58,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import ts from 'typescript';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_REL = 'apps/web/src';
-const srcRoot = path.join(repoRoot, SRC_REL);
+// Both roots that apps/web/tailwind.config.ts lists in `content`. packages/ui
+// compiles into the web stylesheet, so a class it references that resolves to
+// nothing renders as no style in web exactly like one written in apps/web —
+// and apps/admin's guard scans only apps/admin/src, so nothing covered it.
+// That is where `getStatusClasses` built its classes by interpolation.
+const SRC_RELS = ['apps/web/src', 'packages/ui/src'] as const;
+const SRC_REL = SRC_RELS.join(' + ');
+const srcRoots = SRC_RELS.map((rel) => path.join(repoRoot, rel));
 
 /** Utility prefixes whose value is a colour from `theme.colors`. */
 const COLOUR_PREFIXES = [
@@ -86,10 +93,12 @@ function fail(msg: string): never {
   process.exit(2);
 }
 
-if (!fs.existsSync(srcRoot)) {
-  fail(
-    `Search root '${SRC_REL}' does not exist — refusing to report success from a tree this guard cannot search.`,
-  );
+for (const [i, root] of srcRoots.entries()) {
+  if (!fs.existsSync(root)) {
+    fail(
+      `Search root '${SRC_RELS[i]}' does not exist — refusing to report success from a tree this guard cannot search.`,
+    );
+  }
 }
 
 /** Recursively collect .ts/.tsx under a root. */
@@ -111,7 +120,7 @@ function collectSources(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-const sources = collectSources(srcRoot);
+const sources = srcRoots.flatMap((root) => collectSources(root));
 if (sources.length === 0) {
   fail(`No .ts/.tsx files under ${SRC_REL} — the source layout moved.`);
 }
@@ -127,33 +136,200 @@ function stripVariants(token: string): string {
   return out.replace(/^[!-]/, '');
 }
 
-// candidate base utility -> files referencing it
-const candidates = new Map<string, Set<string>>();
-const STRING_LITERAL = /(["'`])((?:[^"'`\\\n]|\\.)*)\1/g;
+/**
+ * CSS VALUES that collide with the colour-utility SHAPE. `boxSizing:
+ * "border-box"` is a style-object value, not a class, but `border-box` matches
+ * `BASE_UTILITY` and Tailwind emits nothing for it (the class is `box-border`).
+ */
+const NOT_A_CLASS = new Set(['border-box']);
 
-for (const file of sources) {
-  const src = fs.readFileSync(file, 'utf8');
-  for (const match of src.matchAll(STRING_LITERAL)) {
-    const body = match[2];
-    if (!/[a-z]-[a-z]/.test(body)) continue;
+/** Helpers that take class strings as arguments. */
+const CLASS_CALLS = new Set(['cn', 'cva', 'clsx', 'cx', 'twMerge', 'twJoin', 'classNames']);
+
+/**
+ * Identifiers that hold class strings — `sizeClasses`, `getStatusClasses`. The
+ * `(?![a-z])` is load-bearing: without it `classifyRequest()` reads as
+ * class-holding.
+ */
+const CLASS_IDENT_RE = /[Cc]lass(?:es|Name|Names)?(?![a-z])/;
+
+/** Last identifier of a callee, so `cn(…)` and `utils.cn(…)` both yield "cn". */
+function calleeName(expr: ts.Expression): string | null {
+  let current: ts.Expression = expr;
+  while (ts.isParenthesizedExpression(current) || ts.isNonNullExpression(current)) {
+    current = current.expression;
+  }
+  if (ts.isIdentifier(current)) return current.text;
+  if (ts.isPropertyAccessExpression(current)) return current.name.text;
+  return null;
+}
+
+/** Does this node open a region whose strings are class strings? */
+function opensClassContext(node: ts.Node): boolean {
+  if (ts.isJsxAttribute(node)) {
+    const name = ts.isIdentifier(node.name) ? node.name.text : null;
+    return name === 'className' || name === 'class';
+  }
+  if (ts.isCallExpression(node)) {
+    const callee = calleeName(node.expression);
+    return callee !== null && CLASS_CALLS.has(callee);
+  }
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+    return CLASS_IDENT_RE.test(node.name.text);
+  }
+  if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+    return CLASS_IDENT_RE.test(node.name.text);
+  }
+  return false;
+}
+
+export interface ExtractedClasses {
+  /** Base colour utilities, variants and slash-opacity already stripped. */
+  tokens: string[];
+  /** Class names assembled at runtime, which Tailwind can never emit. */
+  dynamic: Array<{ line: number; snippet: string; kind: string }>;
+  /** `sourceFile.parseDiagnostics.length`, or -1 if the detector is unavailable. */
+  syntaxErrors: number;
+}
+
+/**
+ * Pull colour-utility candidates out of one source file.
+ *
+ * Uses the TypeScript parser rather than a regex over the raw text. A regex
+ * matching quote-delimited runs cannot tell a string from a comment, a REGEX
+ * LITERAL, or JSX TEXT. Measured against the regex this replaces: it collected
+ * classes named inside COMMENTS as if they were referenced, and it missed four
+ * real ones (`bg-no-repeat`, `fill-content-secondary`, `fill-surface-muted`,
+ * `stroke-edge`). Its damage from a stray quote was bounded to one line, since
+ * the pattern excluded newlines — parsing removes the bound as a concern
+ * entirely, and is what lets the runtime-construction check below distinguish
+ * a class context from an element id.
+ *
+ * Exported so scripts/__tests__/verify-web-class-resolution.test.ts can drive
+ * it with synthetic sources, per the findViolationsInSource precedent in
+ * verify-shared-side-effects.ts.
+ */
+export function extractClasses(fileName: string, source: string): ExtractedClasses {
+  // ScriptKind.TSX is what makes `<div>` JSX rather than a type assertion, and
+  // what lets the scanner tell a regex literal from a division.
+  const scriptKind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind);
+
+  const tokens: string[] = [];
+  const dynamic: ExtractedClasses['dynamic'] = [];
+  const lineOf = (pos: number) => sf.getLineAndCharacterOfPosition(pos).line + 1;
+
+  const addFrom = (body: string) => {
+    if (!/[a-z]-[a-z]/.test(body)) return;
     for (const raw of body.split(/\s+/)) {
       // Drop slash-opacity: that failure mode belongs to guard:design-tokens.
       // Checking the family alone still catches an undefined family.
       const token = stripVariants(raw).replace(/\/\d+$/, '');
-      if (!BASE_UTILITY.test(token)) continue;
-      let set = candidates.get(token);
-      if (!set) candidates.set(token, (set = new Set()));
-      set.add(path.relative(repoRoot, file));
+      if (!BASE_UTILITY.test(token) || NOT_A_CLASS.has(token)) continue;
+      tokens.push(token);
     }
+  };
+
+  const visit = (node: ts.Node, inClassContext: boolean): void => {
+    const nowInClass = inClassContext || opensClassContext(node);
+
+    if (ts.isStringLiteralLike(node)) {
+      addFrom(node.text);
+    } else if (ts.isTemplateExpression(node)) {
+      // A fragment touching `${` is a PREFIX, never a whole class:
+      // `bg-status-${v}` contributes "bg-status-", which Tailwind never emits
+      // whichever branch runs. Report the construction site instead.
+      // Only inside a class context. A template literal is far more often an
+      // element id or a URL than a class name — `const headingId =
+      // \`text-heading-${blockOrder}\`` matches the colour-utility SHAPE
+      // exactly and is not a class at all. The token scan below needs no such
+      // restriction, because a token still has to RESOLVE to count.
+      const head = node.head.text;
+      const prefix = head.split(/\s+/).pop() ?? '';
+      if (nowInClass && /-$/.test(prefix) && BASE_UTILITY.test(prefix.slice(0, -1) + '-x')) {
+        dynamic.push({ line: lineOf(node.getStart(sf)), snippet: `${prefix}\${…}`, kind: 'interpolated-class' });
+      } else {
+        addFrom(head);
+      }
+      for (const span of node.templateSpans) addFrom(span.literal.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'replace' &&
+      node.arguments.length > 0
+    ) {
+      // `classes.text.replace("text-", "bg-")` rewrites a utility PREFIX at
+      // runtime; the result exists in no source file, so Tailwind never sees it.
+      const arg = node.arguments[0];
+      if (ts.isStringLiteralLike(arg) && /^[a-z][a-zA-Z0-9]*-$/.test(arg.text)) {
+        dynamic.push({
+          line: lineOf(node.getStart(sf)),
+          snippet: `.replace("${arg.text}", …)`,
+          kind: 'replace-on-class-string',
+        });
+      }
+    }
+    ts.forEachChild(node, (child) => visit(child, nowInClass));
+  };
+  visit(sf, false);
+
+  const diagnostics = (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics;
+  return { tokens, dynamic, syntaxErrors: Array.isArray(diagnostics) ? diagnostics.length : -1 };
+}
+
+/**
+ * Prove the parse-failure detector actually detects. `parseDiagnostics` is a TS
+ * INTERNAL: if a version bump renamed it, every file would read as clean and
+ * this guard would vouch for a tree it never parsed.
+ */
+export function parserSelfTest(): boolean {
+  const broken = extractClasses('selftest.tsx', 'const a = <div className="bg-surface-card">;');
+  const clean = extractClasses('selftest.tsx', 'const a = <div className="bg-surface-card" />;');
+  return broken.syntaxErrors > 0 && clean.syntaxErrors === 0;
+}
+
+if (!parserSelfTest()) {
+  fail(
+    'The TypeScript parse-failure detector is broken: a deliberately malformed source reported no ' +
+      'syntax errors. `sourceFile.parseDiagnostics` is a TS internal and this version may have ' +
+      'moved it. Every unparseable file would silently contribute zero classes.',
+  );
+}
+
+// candidate base utility -> files referencing it
+const candidates = new Map<string, Set<string>>();
+const runtimeBuilt: Array<{ file: string; line: number; snippet: string; kind: string }> = [];
+const unparsed: string[] = [];
+
+for (const file of sources) {
+  const rel = path.relative(repoRoot, file);
+  const { tokens, dynamic, syntaxErrors } = extractClasses(file, fs.readFileSync(file, 'utf8'));
+  if (syntaxErrors !== 0) {
+    unparsed.push(`${rel} (${syntaxErrors === -1 ? 'detector unavailable' : `${syntaxErrors} syntax error(s)`})`);
+    continue;
   }
+  for (const token of tokens) {
+    let set = candidates.get(token);
+    if (!set) candidates.set(token, (set = new Set()));
+    set.add(rel);
+  }
+  for (const d of dynamic) runtimeBuilt.push({ ...d, file: rel });
+}
+
+if (unparsed.length > 0) {
+  fail(
+    `${unparsed.length} file(s) failed to parse, so they contributed zero classes — which is ` +
+      `indistinguishable from a file that legitimately has none:\n   ${unparsed.slice(0, 10).join('\n   ')}`,
+  );
 }
 
 const referenced = [...candidates.keys()].sort();
 
-// Zero is never a clean result: apps/web references ~180 colour utilities.
-// Zero means the extractor, the source root, or the class conventions moved,
-// and every downstream check would pass vacuously.
-const MIN_EXPECTED = 100;
+// Zero is never a clean result: the two roots reference ~244 colour utilities
+// (~190 in apps/web, ~108 in packages/ui, overlapping). Zero -- or a collapse --
+// means the extractor, a source root, or the class conventions moved, and every
+// downstream check would pass vacuously.
+const MIN_EXPECTED = 200;
 if (referenced.length < MIN_EXPECTED) {
   fail(
     `Only ${referenced.length} colour utilities found in ${SRC_REL} (expected >= ${MIN_EXPECTED}).\n` +
@@ -209,9 +385,22 @@ const run = async () => {
   const missing = referenced.filter((c) => !emits(c));
 
   console.log(`colour utilities referenced in ${SRC_REL}: ${referenced.length} (resolved: ${resolved.length})`);
+  console.log(`class names built at runtime: ${runtimeBuilt.length}`);
+
+  if (runtimeBuilt.length > 0) {
+    // Distinct from an unresolved class: the name may be perfectly valid, but
+    // Tailwind's scanner reads source TEXT, so a name assembled at runtime is
+    // never a candidate and never emits. `StatusDot` hit both at once -- it
+    // derived its dot class with `.replace("text-", "bg-")` while the config
+    // also lacked `owner`/`board`, so 5 of 8 variants rendered no colour.
+    console.error(`\n❌ ${runtimeBuilt.length} class name(s) are assembled at runtime and can never be emitted:\n`);
+    for (const d of runtimeBuilt) console.error(`   ${d.file}:${d.line}  ${d.snippet}  (${d.kind})`);
+    console.error('\nWrite the full class names out statically -- a literal map keyed by variant.\n');
+  }
 
   if (missing.length === 0) {
-    console.log('✅ all emit CSS');
+    if (runtimeBuilt.length > 0) process.exit(1);
+    console.log('✅ all emit CSS, none built at runtime');
     return;
   }
 
@@ -232,6 +421,10 @@ const run = async () => {
   process.exit(1);
 };
 
-run().catch((err) => {
-  fail(`Guard could not complete: ${err?.stack ?? err}`);
-});
+// ESM main-detection (POSIX only -- matches the other guards). Importing this
+// module from a unit test must not scan the tree or exit the runner.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  run().catch((err) => {
+    fail(`Guard could not complete: ${err?.stack ?? err}`);
+  });
+}

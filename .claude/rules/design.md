@@ -69,6 +69,17 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - Escape hatch: `// design-tokens:exempt — <reason>` on the offending line
   (email-template hex, chart/canvas internals).
 - Renamed/moved files must arrive clean or update the baseline in the same PR.
+- `pnpm guard:class-resolution` answers the question `guard:design-tokens`
+  structurally cannot: does the class you wrote resolve to any CSS at all?
+  Tailwind emits nothing for an undefined class rather than erroring, so
+  `bg-input`, `text-muted-foreground` and `bg-status-owner` all rendered as no
+  style with every check green. It compiles `apps/web/tailwind.config.ts` (no
+  build needed) and fails on classes that produce no rule, plus class names
+  assembled at runtime, which the scanner can never see. It scans
+  `apps/web/src` **and** `packages/ui/src`. **A new semantic class must exist in
+  the config's `theme.colors`, not just in `tokens.css`** — that gap is what
+  made `text-status-owner` / `text-status-board` invisible in web while
+  `apps/admin/tailwind.config.ts` already declared them.
 - Intentionally-literal files kept frozen in the baseline (do not drain):
   `apps/web/src/app/(marketing)/marketing-theme.css` (marketing palette),
   `apps/web/src/lib/documents/render-authored-html.ts` (authored-doc export styling),

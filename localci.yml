@@ -52,6 +52,9 @@ suite:
     export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
     pnpm --filter '@propertypro/shared' --filter '@propertypro/ui' --filter '@propertypro/email' --filter '@propertypro/theme' --filter '@propertypro/db' --filter '@propertypro/api-contract' --filter '@propertypro/tokens' test
     pnpm --filter '@propertypro/admin' test
+    # scripts/ is not a workspace package, so --filter cannot reach it; mirrors
+    # the "Run scripts unit tests" step in ci.yml.
+    pnpm exec vitest run --project scripts
 
   # The production build and the checks that ride on it. SUPABASE_SERVICE_ROLE_KEY
   # is deliberately NOT set, matching ci.yml: createAdminClient() throws without

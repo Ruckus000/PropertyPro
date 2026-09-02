@@ -29,6 +29,12 @@
  * after any batch that introduces semantic classes, and after any edit to
  * apps/admin/tailwind.config.ts.
  *
+ * The apps/web counterpart is scripts/verify-web-class-resolution.ts. It answers
+ * the same question WITHOUT a build — it compiles Tailwind from the web app's
+ * own config instead of grepping build output — which is what lets it run in
+ * `pnpm lint`, where CI never builds. Porting that approach here would let this
+ * guard join lint too.
+ *
  * Exit codes:
  *   0 — every referenced class emits CSS
  *   1 — at least one class emits nothing
