@@ -55,7 +55,7 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
         accessorKey: 'ownerName',
         header: 'Owner / Resident',
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-content-secondary">
             {row.original.ownerName ?? '-'}
           </span>
         ),
@@ -85,7 +85,7 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
               Yes
             </Badge>
           ) : (
-            <span className="text-xs text-muted-foreground">No</span>
+            <span className="text-xs text-content-secondary">No</span>
           ),
       },
       {
@@ -119,14 +119,14 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
                         },
                       });
                     }}
-                    className="rounded-md bg-interactive-primary px-2.5 py-1 text-xs font-medium text-white hover:bg-interactive-primary-hover disabled:opacity-50"
+                    className="rounded-md bg-interactive px-2.5 py-1 text-xs font-medium text-white hover:bg-interactive-hover disabled:opacity-50"
                   >
                     Confirm waive
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmUnitId(null)}
-                    className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent"
+                    className="rounded-md border border-edge bg-surface-card px-2.5 py-1 text-xs font-medium hover:bg-accent"
                   >
                     Cancel
                   </button>
@@ -140,8 +140,8 @@ export function DelinquencyTable({ communityId }: DelinquencyTableProps) {
                     setConfirmUnitId(unitId);
                   }}
                   className={cn(
-                    'rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium',
-                    'hover:bg-accent hover:text-accent-foreground disabled:opacity-50',
+                    'rounded-md border border-edge bg-surface-card px-2.5 py-1 text-xs font-medium',
+                    'hover:bg-accent hover:text-content disabled:opacity-50',
                   )}
                 >
                   Waive Late Fees

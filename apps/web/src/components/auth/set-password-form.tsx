@@ -151,7 +151,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
           maxLength={72}
           value={password}
           onChange={(e) => handlePasswordChange(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus"
           placeholder="Min. 8 characters with mixed case, number & symbol"
           disabled={loading}
           aria-describedby="invite-password-strength"
@@ -175,7 +175,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
           required
           value={confirmPassword}
           onChange={(e) => handleConfirmPasswordChange(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-2 focus:ring-focus"
           placeholder="Re-enter your password"
           disabled={loading}
         />
@@ -218,7 +218,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-focus/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-focus disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? 'Setting up...' : 'Set password and join'}
       </button>

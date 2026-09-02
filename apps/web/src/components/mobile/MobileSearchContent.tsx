@@ -250,7 +250,7 @@ function MobileResultItem({ item, onSelect }: MobileResultItemProps) {
       </div>
       <span className={cn(
         'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
-        item.category === 'action' ? 'bg-interactive-primary/10 text-interactive-primary' :
+        item.category === 'action' ? 'bg-interactive-subtle text-interactive' :
         item.category === 'setting' ? 'bg-surface-muted text-content-tertiary' :
         'bg-surface-muted text-content-tertiary',
       )}>

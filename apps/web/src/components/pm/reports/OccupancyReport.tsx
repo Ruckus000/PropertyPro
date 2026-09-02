@@ -167,7 +167,7 @@ export function OccupancyReport({ filters, enabled }: OccupancyReportProps) {
               ))}
               {tableData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-content-secondary">
                     No occupancy data available.
                   </TableCell>
                 </TableRow>

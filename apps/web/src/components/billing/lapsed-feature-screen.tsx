@@ -53,14 +53,14 @@ export function LapsedFeatureScreen({
     <div className="rounded-md border border-edge bg-surface-card p-6 sm:p-8">
       <div className="mx-auto flex max-w-xl flex-col items-center gap-4 py-8 text-center">
         <span
-          className="flex size-12 items-center justify-center rounded-full bg-surface-secondary text-content-secondary"
+          className="flex size-12 items-center justify-center rounded-full bg-surface-muted text-content-secondary"
           aria-hidden="true"
         >
           <Lock size={22} />
         </span>
 
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold text-content-primary">
+          <h1 className="text-2xl font-semibold text-content">
             {copy.displayName} is paused
           </h1>
           <p className="text-base text-content-secondary">

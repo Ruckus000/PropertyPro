@@ -73,7 +73,7 @@ export function LockedFeatureScreen({
                 </span>
               )}
             </div>
-            <h1 className="text-2xl font-semibold text-content-primary sm:text-3xl">
+            <h1 className="text-2xl font-semibold text-content sm:text-3xl">
               {copy.displayName}
             </h1>
             <p className="text-base text-content-secondary">{copy.tagline}</p>
@@ -85,7 +85,7 @@ export function LockedFeatureScreen({
                 <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--interactive-primary)]/12 text-[var(--interactive-primary)]">
                   <Check size={12} strokeWidth={2.5} aria-hidden="true" />
                 </span>
-                <span className="text-content-primary">{benefit}</span>
+                <span className="text-content">{benefit}</span>
               </li>
             ))}
           </ul>

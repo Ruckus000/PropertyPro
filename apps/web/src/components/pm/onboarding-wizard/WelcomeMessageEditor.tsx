@@ -87,7 +87,7 @@ export function WelcomeMessageEditor({
     <section
       aria-labelledby="wizard-step-4-heading"
       data-testid="welcome-message-editor"
-      className="rounded-md border border-default bg-surface-card p-6 shadow-e0"
+      className="rounded-md border border-edge bg-surface-card p-6 shadow-e0"
     >
       <div className="mb-4">
         <p className="text-xs font-medium uppercase tracking-wide text-content-secondary">
@@ -122,7 +122,7 @@ export function WelcomeMessageEditor({
           aria-describedby="wizard-welcome-counter wizard-welcome-help"
           aria-invalid={overHard ? 'true' : undefined}
           className={`w-full rounded-md border bg-surface-card px-3 py-2 text-base text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive ${
-            overHard ? 'border-error' : 'border-default'
+            overHard ? 'border-edge-error' : 'border-edge'
           }`}
         />
         <div className="flex items-center justify-between gap-2 text-xs">
@@ -134,7 +134,7 @@ export function WelcomeMessageEditor({
             data-testid="wizard-welcome-counter"
             className={`tabular-nums ${
               overHard
-                ? 'text-error font-medium'
+                ? 'text-status-danger font-medium'
                 : overSoft
                   ? 'text-warning-strong font-medium'
                   : 'text-content-secondary'
@@ -156,7 +156,7 @@ export function WelcomeMessageEditor({
         </button>
         <div className="flex items-center gap-3">
           {outcome && (
-            <span role="alert" className="text-sm text-error">
+            <span role="alert" className="text-sm text-status-danger">
               {outcome}
             </span>
           )}

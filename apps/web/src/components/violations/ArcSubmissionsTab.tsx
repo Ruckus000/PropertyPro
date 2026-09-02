@@ -40,7 +40,7 @@ function buildColumns(
       accessorKey: 'projectType',
       header: 'Project Type',
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-content-secondary">
           {row.original.projectType}
         </span>
       ),
@@ -49,7 +49,7 @@ function buildColumns(
       accessorKey: 'unitId',
       header: 'Unit',
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-content-secondary">
           Unit #{row.original.unitId}
         </span>
       ),
@@ -73,7 +73,7 @@ function buildColumns(
       accessorKey: 'createdAt',
       header: 'Submitted',
       cell: ({ row }) => (
-        <span className="whitespace-nowrap text-sm text-muted-foreground">
+        <span className="whitespace-nowrap text-sm text-content-secondary">
           {formatDate(row.original.createdAt)}
         </span>
       ),
@@ -88,7 +88,7 @@ function buildColumns(
             e.stopPropagation();
             onReview(row.original);
           }}
-          className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
+          className="rounded-md border border-edge bg-surface-card px-2.5 py-1 text-xs font-medium hover:bg-accent hover:text-content"
         >
           Review
         </button>
@@ -208,7 +208,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
     <div className="space-y-6">
       {/* Status */}
       <div>
-        <h4 className="text-sm font-medium text-muted-foreground">Status</h4>
+        <h4 className="text-sm font-medium text-content-secondary">Status</h4>
         <Badge
           variant="outline"
           className={cn('mt-1 capitalize', STATUS_BADGE_CLASSES[submission.status])}
@@ -219,14 +219,14 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
 
       {/* Description */}
       <div>
-        <h4 className="text-sm font-medium text-muted-foreground">Description</h4>
+        <h4 className="text-sm font-medium text-content-secondary">Description</h4>
         <p className="mt-1 text-sm whitespace-pre-wrap">{submission.description}</p>
       </div>
 
       {/* Dates */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground">
+          <h4 className="text-sm font-medium text-content-secondary">
             Est. Start Date
           </h4>
           <p className="mt-1 text-sm">
@@ -236,7 +236,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
           </p>
         </div>
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground">
+          <h4 className="text-sm font-medium text-content-secondary">
             Est. Completion
           </h4>
           <p className="mt-1 text-sm">
@@ -255,7 +255,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
       */}
       {submission.ruleReference && (
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground">
+          <h4 className="text-sm font-medium text-content-secondary">
             {submission.status === 'denied' ? 'Rule or covenant relied on' : 'Rule reference'}
           </h4>
           <p className="mt-1 text-sm whitespace-pre-wrap">
@@ -267,7 +267,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
       {/* Review Notes */}
       {submission.reviewNotes && (
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground">
+          <h4 className="text-sm font-medium text-content-secondary">
             Review Notes
           </h4>
           <p className="mt-1 text-sm whitespace-pre-wrap">
@@ -279,7 +279,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
       {/* Decision */}
       {submission.decidedAt && (
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground">
+          <h4 className="text-sm font-medium text-content-secondary">
             Decided
           </h4>
           <p className="mt-1 text-sm">
@@ -290,7 +290,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
 
       {/* Submitted */}
       <div>
-        <h4 className="text-sm font-medium text-muted-foreground">
+        <h4 className="text-sm font-medium text-content-secondary">
           Submitted
         </h4>
         <p className="mt-1 text-sm">{formatDate(submission.createdAt)}</p>

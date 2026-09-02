@@ -51,7 +51,7 @@ export function PollResultsSection({
             </span>
           </div>
           <div className="h-2 rounded-full bg-surface-muted">
-            <div className="h-2 rounded-sm bg-interactive-primary" style={{ width: `${option.percentage}%` }} />
+            <div className="h-2 rounded-sm bg-interactive" style={{ width: `${option.percentage}%` }} />
           </div>
         </div>
       ))}

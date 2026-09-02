@@ -93,7 +93,7 @@ export function getLeaseColumns(
       header: 'Resident',
       cell: ({ row }) => {
         if (row.original.kind === 'vacant') {
-          return <span className="text-sm text-muted-foreground">—</span>;
+          return <span className="text-sm text-content-secondary">—</span>;
         }
         const { lease } = row.original;
         return (
@@ -124,7 +124,7 @@ export function getLeaseColumns(
       header: () => <div className="text-right">Monthly Rent</div>,
       cell: ({ row }) => {
         if (row.original.kind === 'vacant') {
-          return <div className="text-right text-muted-foreground">—</div>;
+          return <div className="text-right text-content-secondary">—</div>;
         }
         return (
           <div className="text-right">
@@ -197,7 +197,7 @@ export function getLeaseColumns(
               {canTerminate && (
                 <DropdownMenuItem
                   onClick={() => actions.onTerminate(lease)}
-                  className="text-destructive"
+                  className="text-status-danger"
                 >
                   Terminate
                 </DropdownMenuItem>

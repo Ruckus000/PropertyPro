@@ -57,7 +57,7 @@ export function Sable({ community, theme, blocks, footer, nav, page }: LayoutPro
   const heroHeading = page && !page.isHome ? page.name : community.name;
 
   return (
-    <div className="min-h-screen bg-surface font-body text-content">
+    <div className="min-h-screen bg-surface-page font-body text-content">
       <PublicSiteHeader theme={toHeaderTheme(community, theme)} nav={nav} />
       <main id="main-content">
         {!hasHeroBlock(ordered) && <EmptyStateHero heading={heroHeading} />}

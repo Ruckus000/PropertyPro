@@ -169,9 +169,9 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
 
   /* ── Success ── */
   return (
-    <div className="overflow-hidden rounded-md border border-border-default">
+    <div className="overflow-hidden rounded-md border border-edge">
       {/* Table header */}
-      <div className="hidden grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 border-b border-border-default bg-surface-muted px-4 py-3 md:grid">
+      <div className="hidden grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 border-b border-edge bg-surface-muted px-4 py-3 md:grid">
         <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Name</span>
         <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Email</span>
         <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Claimed Unit</span>
@@ -181,7 +181,7 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
       </div>
 
       {/* Rows */}
-      <ul role="list" className="divide-y divide-border-default">
+      <ul role="list" className="divide-y divide-edge">
         {requests.map((request) => (
           <li key={request.id} className="px-4 py-4">
             {/* Mobile layout */}

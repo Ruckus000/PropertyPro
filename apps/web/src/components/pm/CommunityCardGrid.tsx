@@ -115,14 +115,14 @@ function AddCommunityCard() {
         'flex flex-col items-center justify-center gap-2 rounded-md',
         'border-2 border-dashed border-edge bg-transparent p-5',
         'min-h-[180px] transition-all duration-quick',
-        'hover:border-interactive-primary hover:bg-surface-subtle',
+        'hover:border-interactive hover:bg-surface-subtle',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-focus',
       )}
     >
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-interactive-subtle">
-        <Plus className="h-5 w-5 text-interactive-primary" aria-hidden="true" />
+        <Plus className="h-5 w-5 text-interactive" aria-hidden="true" />
       </div>
-      <span className="text-sm font-semibold text-interactive-primary">Add Community</span>
+      <span className="text-sm font-semibold text-interactive">Add Community</span>
       <span className="text-xs text-content-secondary">Set up a new association</span>
     </Link>
   );
@@ -165,8 +165,8 @@ function EmptyPortfolio() {
         href="/pm/dashboard/communities/new"
         className={cn(
           'inline-flex items-center gap-2 rounded-md px-4 py-2',
-          'bg-interactive-primary text-sm font-semibold text-white',
-          'hover:bg-interactive-primary-hover',
+          'bg-interactive text-sm font-semibold text-white',
+          'hover:bg-interactive-hover',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2',
         )}
       >

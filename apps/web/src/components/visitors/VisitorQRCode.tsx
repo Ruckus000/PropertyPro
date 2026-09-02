@@ -60,9 +60,9 @@ export function VisitorQRCode({
             dangerouslySetInnerHTML={{ __html: svgString }}
           />
         ) : (
-          <div className="h-[200px] w-[200px] animate-pulse rounded-md bg-muted" />
+          <div className="h-[200px] w-[200px] animate-pulse rounded-md bg-surface-muted" />
         )}
-        <p className="mt-2 text-center font-mono text-sm text-muted-foreground">{passCode}</p>
+        <p className="mt-2 text-center font-mono text-sm text-content-secondary">{passCode}</p>
       </PopoverContent>
     </Popover>
   );

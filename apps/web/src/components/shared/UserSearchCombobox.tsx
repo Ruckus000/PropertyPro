@@ -147,7 +147,7 @@ export function UserSearchCombobox({
                     aria-live="polite"
                     aria-busy="true"
                   >
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                    <Loader2 className="h-4 w-4 animate-spin text-content-secondary" aria-hidden="true" />
                     <span className="sr-only">Loading users&hellip;</span>
                   </div>
                 )}
@@ -177,7 +177,7 @@ export function UserSearchCombobox({
                         <div>
                           <p className="text-sm font-medium">{r.title}</p>
                           {r.subtitle ? (
-                            <p className="text-xs text-muted-foreground">{r.subtitle}</p>
+                            <p className="text-xs text-content-secondary">{r.subtitle}</p>
                           ) : null}
                         </div>
                       </CommandItem>

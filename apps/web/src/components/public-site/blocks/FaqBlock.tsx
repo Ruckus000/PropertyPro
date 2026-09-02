@@ -38,7 +38,7 @@ export function FaqBlock(props: BlockRendererProps) {
         )}
         <div className="space-y-3">
           {content.items.map((item, i) => (
-            <details key={i} className="group rounded-md border border-default bg-surface-card">
+            <details key={i} className="group rounded-md border border-edge bg-surface-card">
               <summary className="cursor-pointer px-4 py-3 font-medium text-content marker:text-content-secondary">
                 {item.question}
               </summary>

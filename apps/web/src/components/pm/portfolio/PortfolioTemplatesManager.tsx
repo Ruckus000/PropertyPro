@@ -33,10 +33,10 @@ interface Props {
 const PRIMARY_BTN =
   'inline-flex items-center rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse disabled:opacity-50 hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
 const SECONDARY_BTN =
-  'inline-flex items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content disabled:opacity-50 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
+  'inline-flex items-center rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content disabled:opacity-50 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
 const INPUT =
-  'w-full rounded-sm border border-default bg-surface-card px-3 py-2 text-base text-content focus:outline-none focus:ring-2 focus:ring-interactive';
-const SECTION = 'rounded-md border border-default bg-surface-card p-6 shadow-e0';
+  'w-full rounded-sm border border-edge bg-surface-card px-3 py-2 text-base text-content focus:outline-none focus:ring-2 focus:ring-interactive';
+const SECTION = 'rounded-md border border-edge bg-surface-card p-6 shadow-e0';
 
 function InlineAlert({ children }: { children: React.ReactNode }) {
   return (
@@ -189,7 +189,7 @@ function ManagerBody({ communities }: { communities: CommunityOption[] }) {
         )}
 
         {templatesQuery.data && templatesQuery.data.length > 0 && (
-          <ul data-testid="templates-list" className="mt-4 divide-y divide-default">
+          <ul data-testid="templates-list" className="mt-4 divide-y divide-edge">
             {templatesQuery.data.map((t) => (
               <li key={t.id} className="py-3">
                 <div className="flex items-center justify-between gap-3">
@@ -257,7 +257,7 @@ function ManagerBody({ communities }: { communities: CommunityOption[] }) {
 
                 {/* Apply panel for this template */}
                 {applyId === t.id && (
-                  <div data-testid="apply-panel" className="mt-3 rounded-md border border-default bg-surface p-4">
+                  <div data-testid="apply-panel" className="mt-3 rounded-md border border-edge bg-surface-card p-4">
                     <h3 className="text-sm font-medium text-content">
                       Apply &ldquo;{t.name}&rdquo; to communities
                     </h3>

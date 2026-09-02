@@ -182,13 +182,13 @@ export function HeroImageField({
       </div>
 
       {fileError && (
-        <p role="alert" data-testid="hero-image-file-error" className="text-sm text-error">
+        <p role="alert" data-testid="hero-image-file-error" className="text-sm text-status-danger">
           {fileError}
         </p>
       )}
 
       {fileUrl && (
-        <div className="rounded-md border border-default p-2">
+        <div className="rounded-md border border-edge p-2">
           <ReactCrop crop={crop} onChange={(c) => setCrop(c)} aspect={16 / 9}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img ref={previewImgRef} src={fileUrl} alt="" className="max-w-full" />
@@ -200,7 +200,7 @@ export function HeroImageField({
       {file && (
         <div className="space-y-1">
           <label htmlFor="wizard-hero-alt" className="block text-sm font-medium text-content">
-            Image alt text <span className="text-error">*</span>
+            Image alt text <span className="text-status-danger">*</span>
           </label>
           <input
             id="wizard-hero-alt"
@@ -211,7 +211,7 @@ export function HeroImageField({
             onChange={(e) => setAltText(e.target.value)}
             required
             aria-invalid={altMissing ? 'true' : undefined}
-            className="block w-full rounded-sm border border-default px-3 py-2 text-base text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+            className="block w-full rounded-sm border border-edge px-3 py-2 text-base text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
           />
           <p className="text-xs text-content-secondary">
             Describe the image for screen readers (required).
@@ -220,7 +220,7 @@ export function HeroImageField({
       )}
 
       {serverError && (
-        <p role="alert" data-testid="hero-image-server-error" className="text-sm text-error">
+        <p role="alert" data-testid="hero-image-server-error" className="text-sm text-status-danger">
           {serverError}
         </p>
       )}

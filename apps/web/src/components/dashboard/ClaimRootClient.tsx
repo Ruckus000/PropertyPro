@@ -143,7 +143,7 @@ export function ClaimRootClient() {
                 <li
                   key={community.id}
                   data-testid={`rootless-community-${community.id}`}
-                  className="rounded-md border border-border p-4"
+                  className="rounded-md border border-edge p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -189,7 +189,7 @@ function DisputeCard({ communityName, isPending, result, isError, errorMessage, 
   return (
     <div
       data-testid="dispute-card"
-      className="rounded-md border border-border bg-surface-card p-5"
+      className="rounded-md border border-edge bg-surface-card p-5"
     >
       <div className="flex items-start gap-3">
         <ShieldQuestion className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />

@@ -92,13 +92,46 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   > legitimately literal.
   >
   > **After any batch, and after ANY edit to `apps/admin/tailwind.config.ts`,
-  > run `node scripts/verify-admin-semantic-css.cjs`** (needs a build first). It
+  > run `pnpm guard:semantic-css:admin`** (needs a build first). It
   > asserts every semantic class referenced in admin source actually emits CSS —
   > a failure mode `guard:design-tokens` cannot see, because it only checks that
   > raw classes are gone, not that the replacement resolves. An unrecognised
   > class emits no rule and renders as no style, silently. It caught exactly
   > that twice: `bg-status-owner-subtle` (admin's config mirrored web's status
-  > family, which omits `owner`/`board`) and `bg-surface-card/30`.
+  > family, which omitted `owner`/`board`) and `bg-surface-card/30`.
+  >
+  > **`pnpm guard:semantic-css:web` covers `apps/web/src` + `packages/ui/src`.**
+  > It exists because web had no counterpart, and the first run found **34 dead
+  > classes across 252 references** — `border-default` (45), `text-muted-foreground`
+  > (64) and the rest of the stock shadcn vocabulary among them.
+  >
+  > **Its vocabulary is DERIVED, not hardcoded** — colour families from the app's
+  > own `tailwind.config.ts`, custom-property roots from `tokens.css` (plus a
+  > "prefix fold" so `--border-default` catches the class `border-default`), and
+  > the fixed shadcn list. A hardcoded family list always lags the next invented
+  > name; that is exactly how the 252 accumulated unseen. A derived vocabulary can
+  > silently SHRINK instead, so the script asserts sentinel members from all three
+  > sources and refuses (exit 2) if any is missing.
+  >
+  > **The admin denominator moved 39 → 80** when the vocabulary became derived.
+  > That is not breakage: admin's `theme.colors` is closed, so deriving from it
+  > legitimately admits 41 more valid raw-ramp candidates (`bg-coral-600`, …).
+  > Missing is still 0, and nothing was lost from the old set.
+  >
+  > **Both guards need a production build.** In a worktree with no `.env.local`
+  > — do NOT symlink the main checkout's, it points at production Postgres, a
+  > production Supabase service-role key and a live Resend key — use CI's own
+  > stub values (`ci.yml` perf-check). `DATABASE_URL` is the only variable that
+  > throws at module load, and postgres-js never dials at import, so an
+  > unreachable URL is sufficient:
+  >
+  > ```bash
+  > DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub \
+  > DIRECT_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub \
+  > NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co \
+  > NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder \
+  > pnpm --filter @propertypro/web build
+  > ```
   >
   > The sidebar is a genuine gap, not leftover work —
   > the token layer is single-theme light and its whole dark vocabulary is

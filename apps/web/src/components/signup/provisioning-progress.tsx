@@ -173,10 +173,10 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
       <main className="mx-auto max-w-lg px-6 py-16">
         <div
           role="alert"
-          className="rounded-[10px] border border-border bg-status-danger-subtle border-l-4 border-l-status-danger-border p-4"
+          className="rounded-[10px] border border-edge bg-status-danger-subtle border-l-4 border-l-status-danger-border p-4"
         >
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-status-danger-fg" aria-hidden="true" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-status-danger" aria-hidden="true" />
             <div>
               <p className="text-base text-content">
                 Something went wrong setting up your portal. Our team has been notified — we&apos;ll
@@ -220,7 +220,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
       <main className="mx-auto max-w-lg px-6 py-16">
         <div
           role="status"
-          className="rounded-[10px] border border-border bg-status-warning-subtle border-l-4 border-l-status-warning-border p-4"
+          className="rounded-[10px] border border-edge bg-status-warning-subtle border-l-4 border-l-status-warning-border p-4"
         >
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-status-warning" aria-hidden="true" />
@@ -258,7 +258,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
 
   return (
     <main className="mx-auto max-w-lg px-6 py-16">
-      <div className="rounded-[10px] border border-border bg-surface-card p-6">
+      <div className="rounded-[10px] border border-edge bg-surface-card p-6">
         <h1 className="text-2xl font-bold tracking-tight text-content">
           Setting up your community
         </h1>
@@ -283,7 +283,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
               >
                 {isCompleted && (
                   <CheckCircle2
-                    className="h-5 w-5 shrink-0 text-status-success-fg"
+                    className="h-5 w-5 shrink-0 text-status-success"
                     aria-hidden="true"
                   />
                 )}

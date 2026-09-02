@@ -154,7 +154,7 @@ export function ReportFilters({ communities }: ReportFiltersProps) {
             </DropdownMenuCheckboxItem>
           ))}
           {communities.length === 0 && (
-            <p className="px-2 py-1.5 text-sm text-muted-foreground">
+            <p className="px-2 py-1.5 text-sm text-content-secondary">
               No communities available
             </p>
           )}
@@ -165,7 +165,7 @@ export function ReportFilters({ communities }: ReportFiltersProps) {
       <select
         value={datePreset}
         onChange={(e) => setDatePreset(e.target.value)}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+        className="h-9 rounded-md border border-edge bg-surface-card px-3 text-sm shadow-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
         aria-label="Date range"
       >
         {DATE_PRESETS.map((p) => (

@@ -62,14 +62,14 @@ export function CommunitySearch({ onSelect }: CommunitySearchProps) {
 
       {query.trim().length >= 2 && (
         <div className="space-y-2">
-          {isLoading && <p className="text-sm text-muted-foreground">Searching…</p>}
+          {isLoading && <p className="text-sm text-content-secondary">Searching…</p>}
           {isError && (
-            <p className="text-sm text-destructive">
+            <p className="text-sm text-status-danger">
               We couldn&apos;t load search results. Please try again.
             </p>
           )}
           {!isLoading && !isError && results.length === 0 && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-content-secondary">
               No communities found. Try a different search.
             </p>
           )}
@@ -78,13 +78,13 @@ export function CommunitySearch({ onSelect }: CommunitySearchProps) {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{c.name}</p>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-sm text-content-secondary mt-1">
                     {[c.city, c.state].filter(Boolean).join(', ') || 'Location not listed'}
                   </p>
                   <div className="flex items-center gap-2 mt-2">
                     <Badge variant="outline">{c.communityType}</Badge>
                     {c.memberCount > 0 && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-content-secondary">
                         {c.memberCount}+ members
                       </span>
                     )}

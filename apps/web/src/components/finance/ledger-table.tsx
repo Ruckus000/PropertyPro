@@ -51,7 +51,7 @@ const columns: ColumnDef<LedgerEntry, unknown>[] = [
     accessorKey: 'createdAt',
     header: 'Date',
     cell: ({ row }) => (
-      <span className="whitespace-nowrap text-sm text-muted-foreground">
+      <span className="whitespace-nowrap text-sm text-content-secondary">
         {formatDate(row.original.createdAt)}
       </span>
     ),
@@ -87,7 +87,7 @@ const columns: ColumnDef<LedgerEntry, unknown>[] = [
     accessorKey: 'unitId',
     header: 'Unit',
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
+      <span className="text-sm text-content-secondary">
         {row.original.unitLabel
           ? row.original.unitLabel
           : row.original.unitId
@@ -159,7 +159,7 @@ export function LedgerTable({ communityId }: LedgerTableProps) {
         <select
           value={entryType}
           onChange={(e) => setEntryType(e.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          className="h-9 rounded-md border border-edge bg-surface-card px-3 text-sm ring-offset-surface-card focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2"
         >
           {ENTRY_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -173,15 +173,15 @@ export function LedgerTable({ communityId }: LedgerTableProps) {
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
           aria-label="Start date"
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          className="h-9 rounded-md border border-edge bg-surface-card px-3 text-sm ring-offset-surface-card focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2"
         />
-        <span className="text-sm text-muted-foreground">to</span>
+        <span className="text-sm text-content-secondary">to</span>
         <input
           type="date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
           aria-label="End date"
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          className="h-9 rounded-md border border-edge bg-surface-card px-3 text-sm ring-offset-surface-card focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2"
         />
 
         <div className="ml-auto">

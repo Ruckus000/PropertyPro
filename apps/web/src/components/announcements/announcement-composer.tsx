@@ -29,7 +29,7 @@ const Editor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="rounded-md border border-edge bg-surface px-3 py-3 text-sm text-content-secondary">
+      <div className="rounded-md border border-edge bg-surface-card px-3 py-3 text-sm text-content-secondary">
         Loading editor…
       </div>
     ),

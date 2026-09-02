@@ -29,13 +29,13 @@ export function DocumentsBlockView({ content, blockId, data, community }: Docume
           Documents
         </h2>
         {data.length === 0 ? (
-          <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
+          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
             {content?.emptyText ?? "No documents available."}
           </p>
         ) : (
           <ul className="space-y-3">
             {data.map((doc) => (
-              <li key={doc.id} className="rounded-md border border-default bg-surface-card p-4">
+              <li key={doc.id} className="rounded-md border border-edge bg-surface-card p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-medium text-content truncate">{doc.title}</p>
@@ -58,7 +58,7 @@ export function DocumentsBlockView({ content, blockId, data, community }: Docume
                   </div>
                   <a
                     href={`/api/v1/documents/${doc.id}/download?communityId=${community.id}&attachment=true`}
-                    className="shrink-0 inline-flex items-center rounded-md border border-default px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+                    className="shrink-0 inline-flex items-center rounded-md border border-edge px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
                     aria-label={`Download ${doc.title}`}
                   >
                     Download

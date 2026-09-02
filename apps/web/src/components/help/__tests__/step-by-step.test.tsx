@@ -23,6 +23,9 @@ describe('StepByStep', () => {
         <Step title="Two">b</Step>
       </StepByStep>,
     );
+    // Guards against the dead class specifically, not whatever it was renamed
+    // to: `bg-border-default` names a key the Tailwind config never declared, so
+    // it emits zero CSS and the rail disappears. The rail uses `bg-edge`.
     expect(out).not.toContain('bg-border-default');
     expect(out).toContain('bg-edge');
   });

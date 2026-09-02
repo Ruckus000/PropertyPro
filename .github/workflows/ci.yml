@@ -343,6 +343,18 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Runs here because it needs a production build, and this is the only job
+      # that produces one — `pnpm build` above builds BOTH apps, so both
+      # stylesheets are on disk. Asserts every colour utility class referenced in
+      # source actually EMITS CSS. A class naming a key the Tailwind config does
+      # not declare is not an error: it emits no rule and the element renders
+      # with no colour, which `guard:design-tokens` structurally cannot see. That
+      # is how 252 dead references accumulated in apps/web unnoticed.
+      - name: Verify semantic CSS emits (both apps)
+        run: |
+          pnpm guard:semantic-css:admin
+          pnpm guard:semantic-css:web
+
       - name: Save Next.js build cache
         # Only main writes. See the restore step above for why.
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -44,7 +44,7 @@ function Swatch({ color, label }: { color?: string; label: string }) {
     <span
       aria-label={`${label} ${color}`}
       title={`${label}: ${color}`}
-      className="inline-block h-5 w-5 rounded border border-default"
+      className="inline-block h-5 w-5 rounded border border-edge"
       style={{ backgroundColor: color }}
     />
   );
@@ -86,7 +86,7 @@ export function PresetChooser({
       <section
         aria-labelledby="wizard-step-2-heading"
         data-testid="preset-chooser"
-        className="rounded-md border border-default bg-surface-card p-6 shadow-e0"
+        className="rounded-md border border-edge bg-surface-card p-6 shadow-e0"
       >
         <h2 id="wizard-step-2-heading" className="text-xl font-semibold text-content">
           Choose a color & font preset
@@ -111,7 +111,7 @@ export function PresetChooser({
     <section
       aria-labelledby="wizard-step-2-heading"
       data-testid="preset-chooser"
-      className="rounded-md border border-default bg-surface-card p-6 shadow-e0"
+      className="rounded-md border border-edge bg-surface-card p-6 shadow-e0"
     >
       <div className="mb-4">
         <p className="text-xs font-medium uppercase tracking-wide text-content-secondary">
@@ -136,7 +136,7 @@ export function PresetChooser({
               className={`relative cursor-pointer rounded-md border p-4 transition-colors ${
                 isSelected
                   ? 'border-interactive bg-interactive-subtle ring-2 ring-interactive'
-                  : 'border-default bg-surface-card hover:border-interactive-hover'
+                  : 'border-edge bg-surface-card hover:border-interactive-hover'
               }`}
             >
               <input

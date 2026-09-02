@@ -8,6 +8,11 @@
  * alone and reports, so unmapped classes surface rather than being silently
  * approximated.
  *
+ * DO NOT run this over test files. It rewrites any matching string, including
+ * ASSERTIONS — it silently turned `expect(out).not.toContain('bg-border-default')`
+ * into a check for a different, widely-used class, repurposing a deliberate
+ * regression guard while keeping it green. Exclude `__tests__` and `*.test.*`.
+ *
  *   node scripts/admin-token-codemod.mjs <path...>        # apply
  *   node scripts/admin-token-codemod.mjs --dry <path...>  # report only
  *
@@ -36,7 +41,9 @@ import fs from 'node:fs';
 
 // Ordered longest-prefix-first so `bg-gray-50` is never matched by a rule for
 // `bg-gray-500`. Word boundaries are enforced by the regex builder below.
-const MAP = {
+const RAW_CLASS_ADMIN = /\b(?:bg|text|border|ring|divide|placeholder|from|via|to|fill|stroke|outline|decoration|accent|caret|shadow)-(?:gray|blue|red|green|yellow|amber|purple|violet|emerald|rose|orange|sky|pink|slate|zinc|neutral|stone|lime|teal|cyan|indigo|fuchsia)-\d{2,3}\b/g;
+
+const ADMIN_PALETTE_MAP = {
   // ── Text (light surfaces) ──
   'text-gray-900': 'text-content',
   'text-gray-800': 'text-content',
@@ -98,6 +105,75 @@ const MAP = {
 };
 
 /**
+ * apps/web — dead semantic classes → the class that actually exists.
+ *
+ * These are NOT raw-palette classes. Every key here is a class that emits ZERO
+ * CSS: it names a key `apps/web/tailwind.config.ts` does not declare, so
+ * Tailwind generates no rule and the element renders with no colour. Two
+ * dialects, one mismatch:
+ *
+ *   - the CSS custom-property name written where a Tailwind key was needed
+ *     (`--border-default` is the token, but the class is `border-edge`);
+ *   - stock shadcn names, which this config never declared and globals.css
+ *     never defined.
+ *
+ * Deliberately ABSENT because they need a per-call-site decision, not a
+ * mapping — do these by hand and read the surrounding markup first:
+ *   `bg-surface`            page background vs card background
+ *   `bg-surface-secondary`  solid chip vs hover state
+ *   `ring-offset-background` drop it, or offset against a real surface
+ */
+const WEB_SEMANTIC_MAP = {
+  // ── Token name used as a class name ──
+  'border-border-default': 'border-edge',
+  'divide-border-default': 'divide-edge',
+  'bg-border-default': 'bg-surface-muted',
+  'border-border': 'border-edge',
+  'border-default': 'border-edge',
+  'divide-default': 'divide-edge',
+  'text-content-primary': 'text-content',
+  'accent-interactive-primary': 'accent-interactive',
+  // `bg-interactive-primary/10` is skipped by the `/` lookahead below and must
+  // be fixed by hand to `bg-interactive-subtle` — slash-opacity on a bare
+  // var() emits nothing either.
+  'bg-interactive-primary-hover': 'bg-interactive-hover',
+  'bg-interactive-primary': 'bg-interactive',
+  'text-interactive-primary': 'text-interactive',
+  'border-interactive-primary': 'border-interactive',
+  'ring-interactive-primary': 'ring-focus',
+  'text-status-danger-fg': 'text-status-danger',
+  'text-status-success-fg': 'text-status-success',
+  'text-brand': 'text-content-brand',
+  'bg-surface-input': 'bg-surface-card',
+  'border-error': 'border-edge-error',
+  'text-error': 'text-status-danger',
+
+  // ── No darker status token exists, and no --red-800/--green-800/--amber-800
+  //    primitive to build one from. Written `hover:bg-status-danger-hover`, so
+  //    the rewrite lands as `hover:opacity-90` and restores hover feedback
+  //    without inventing a palette entry.
+  'bg-status-danger-hover': 'opacity-90',
+  'bg-status-success-hover': 'opacity-90',
+  'bg-status-warning-hover': 'opacity-90',
+
+  // ── Stock shadcn vocabulary ──
+  'text-muted-foreground': 'text-content-secondary',
+  'text-accent-foreground': 'text-content',
+  'text-destructive': 'text-status-danger',
+  'bg-background': 'bg-surface-card',
+  'bg-muted': 'bg-surface-muted',
+  'bg-input': 'bg-surface-card',
+  'border-input': 'border-edge',
+  'border-ring': 'border-edge-focus',
+  'ring-ring': 'ring-focus',
+};
+
+const MAPS = {
+  'admin-palette': { map: ADMIN_PALETTE_MAP, leftovers: RAW_CLASS_ADMIN },
+  'web-semantic': { map: WEB_SEMANTIC_MAP, leftovers: null },
+};
+
+/**
  * Classes we deliberately DO NOT map, with the reason. Reported per file so a
  * reviewer sees what the codemod declined rather than assuming full coverage.
  */
@@ -106,18 +182,33 @@ const UNMAPPED_REASONS = [
   [/\b(bg|text|border)-(purple|violet|rose|orange|sky|pink|emerald)-\d+\b/, 'no status role assigned; needs a human call'],
 ];
 
-const RAW_CLASS = /\b(?:bg|text|border|ring|divide|placeholder|from|via|to|fill|stroke|outline|decoration|accent|caret|shadow)-(?:gray|blue|red|green|yellow|amber|purple|violet|emerald|rose|orange|sky|pink|slate|zinc|neutral|stone|lime|teal|cyan|indigo|fuchsia)-\d{2,3}\b/g;
+
 
 const args = process.argv.slice(2);
 const dry = args.includes('--dry');
+const mapArg = args.find((a) => a.startsWith('--map='));
+const mapName = mapArg ? mapArg.slice('--map='.length) : 'admin-palette';
 const files = args.filter((a) => !a.startsWith('--'));
 
-if (files.length === 0) {
-  console.error('usage: admin-token-codemod.mjs [--dry] <path...>');
+if (!MAPS[mapName]) {
+  console.error(
+    `unknown --map='${mapName}'. Available: ${Object.keys(MAPS).join(', ')}`,
+  );
   process.exit(1);
 }
 
-// Longest key first: `text-gray-500` must win over any shorter prefix.
+if (files.length === 0) {
+  console.error(
+    'usage: admin-token-codemod.mjs [--dry] [--map=admin-palette|web-semantic] <path...>',
+  );
+  process.exit(1);
+}
+
+const MAP = MAPS[mapName].map;
+const RAW_CLASS = MAPS[mapName].leftovers;
+
+// Longest key first: `border-default` must never be matched by a rule for
+// `border-border-default`, and `text-gray-500` must win over any shorter prefix.
 const keys = Object.keys(MAP).sort((a, b) => b.length - a.length);
 
 let totalChanged = 0;
@@ -146,7 +237,7 @@ for (const file of files) {
   if (src !== before) totalChanged += 1;
   if (!dry && src !== before) fs.writeFileSync(file, src);
 
-  const remaining = [...(src.match(RAW_CLASS) ?? [])];
+  const remaining = RAW_CLASS ? [...(src.match(RAW_CLASS) ?? [])] : [];
   if (remaining.length > 0) {
     leftovers.set(file, remaining);
   }

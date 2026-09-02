@@ -230,7 +230,7 @@ function UploadStep({
   return (
     <div className="space-y-6">
       {/* Instructions */}
-      <div className="rounded-md border border-border-default bg-surface-card p-5">
+      <div className="rounded-md border border-edge bg-surface-card p-5">
         <div className="flex items-start gap-3">
           <FileSpreadsheet size={20} className="mt-0.5 shrink-0 text-content-secondary" aria-hidden="true" />
           <div className="space-y-2">
@@ -262,7 +262,7 @@ function UploadStep({
           'flex flex-col items-center justify-center gap-4 rounded-md border-2 border-dashed p-12 transition-colors',
           dragOver
             ? 'border-interactive bg-interactive-subtle'
-            : 'border-border-default bg-surface-card',
+            : 'border-edge bg-surface-card',
           isLoading && 'pointer-events-none opacity-60',
         )}
       >
@@ -402,10 +402,10 @@ function PreviewStep({
       </div>
 
       {/* Preview table */}
-      <div className="overflow-x-auto rounded-md border border-border-default">
+      <div className="overflow-x-auto rounded-md border border-edge">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-border-default bg-surface-muted">
+            <tr className="border-b border-edge bg-surface-muted">
               <th className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary">
                 Status
               </th>
@@ -431,7 +431,7 @@ function PreviewStep({
               <tr
                 key={row.rowNumber}
                 className={cn(
-                  'h-[52px] border-b border-border-default last:border-b-0',
+                  'h-[52px] border-b border-edge last:border-b-0',
                   row.status === 'error' && 'bg-status-danger-bg',
                 )}
               >
@@ -464,7 +464,7 @@ function PreviewStep({
 
       {/* Error details */}
       {errors.length > 0 && (
-        <div className="rounded-md border border-border-default bg-surface-card p-4">
+        <div className="rounded-md border border-edge bg-surface-card p-4">
           <div className="flex items-center gap-2 pb-3">
             <AlertTriangle size={16} className="text-status-warning" aria-hidden="true" />
             <span className="text-sm font-medium text-content">Row errors</span>
@@ -492,7 +492,7 @@ function PreviewStep({
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
         >
           Cancel
         </button>
@@ -530,7 +530,7 @@ function ResultsStep({ result, communityId, onImportMore }: ResultsStepProps) {
       )}
 
       {result.errors.length > 0 && (
-        <div className="rounded-md border border-border-default bg-surface-card p-4">
+        <div className="rounded-md border border-edge bg-surface-card p-4">
           <ul className="space-y-1">
             {result.errors.map((err, i) => (
               <li key={i} className="text-sm text-content-secondary">
@@ -561,7 +561,7 @@ function ResultsStep({ result, communityId, onImportMore }: ResultsStepProps) {
         <button
           type="button"
           onClick={onImportMore}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
         >
           Import More
         </button>
