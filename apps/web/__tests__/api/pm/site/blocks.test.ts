@@ -504,6 +504,87 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
   });
 
+  /**
+   * The photo picker ("Choose from your photos") is what makes a HERO-kind path
+   * reachable here. `placedPhotos` offers the hero's imagery — `photos[].path`
+   * and the legacy `heroImagePath`, both `{id}/hero/…` — as candidates for
+   * image and gallery blocks, and `AddImageFlow` / `GalleryImagesField` write
+   * the chosen path straight into `imagePath` through this route.
+   * `imagePathSchema` accepts `hero` alongside `content`, so the kind segment
+   * is not what stops a foreign hero photo; only the tenancy check does.
+   *
+   * These are the revert-check for `assertPathsScopedToCommunity` on this
+   * route: comment out the call in route.ts and the two 400s below become
+   * 200s while the in-tenant control stays green. The helper's own unit tests
+   * cannot show that — removing one caller leaves them untouched.
+   */
+  it('400s an image block whose imagePath is a hero photo from another community', async () => {
+    const body = {
+      ...VALID_IMAGE_BODY,
+      content: { imagePath: '8/hero/pool.jpg', altText: 'Their pool' },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({
+          message: 'imagePath must reference this community',
+          details: expect.objectContaining({
+            fields: [
+              expect.objectContaining({
+                field: 'imagePath',
+                message: expect.stringContaining('Path must start with "42/"'),
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s a gallery block when a chosen photo is a hero photo from another community', async () => {
+    // Index 1 on purpose: the gallery field appends chosen photos behind the
+    // ones already in the list, so a foreign pick never lands at index 0.
+    const body = {
+      communityId: 42,
+      blockType: 'gallery',
+      blockOrder: 10,
+      content: {
+        images: [
+          { imagePath: '42/content/ours.webp', altText: 'Ours' },
+          { imagePath: '8/hero/pool.jpg', altText: 'Their pool' },
+        ],
+      },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({
+          message: 'images.1.imagePath must reference this community',
+        }),
+      }),
+    );
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('200s an image block that reuses a hero photo from this community', async () => {
+    // The control for the two cases above — same kind, in-tenant. Proves the
+    // 400s come from the tenancy check and not from the schema refusing `hero`.
+    const body = {
+      ...VALID_IMAGE_BODY,
+      content: { imagePath: '42/hero/pool.jpg', altText: 'Our pool, reused' },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: { imagePath: '42/hero/pool.jpg', altText: 'Our pool, reused' },
+      }),
+    );
+  });
+
   it('403s a faq block when the plan lacks hasSitePolishBlocks (but has hasSiteEditor)', async () => {
     requirePlanFeatureMock.mockImplementation((_id: number, key: string) =>
       key === 'hasSitePolishBlocks'
