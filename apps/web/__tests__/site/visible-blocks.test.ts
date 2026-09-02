@@ -30,4 +30,12 @@ describe('visibleBlocks', () => {
     const out = visibleBlocks([block(1, { body: 'a', hidden: false })]);
     expect(out).toHaveLength(1);
   });
+
+  it('does not treat a non-boolean truthy hidden value as hidden', () => {
+    // Content can reach here unvalidated — data repairs write raw SQL that
+    // bypasses hiddenSchema. A truthy check would fail OPEN: the PM asked to
+    // hide the section and it would stay visible, silently.
+    const out = visibleBlocks([block(1, { body: 'a', hidden: 'yes' })]);
+    expect(out).toHaveLength(1);
+  });
 });
