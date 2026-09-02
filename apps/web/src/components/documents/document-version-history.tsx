@@ -5,18 +5,13 @@ import type { DocumentListItem } from './document-list';
 import { DocumentViewerModal } from './DocumentViewerModal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDocumentVersions, type DocumentVersionItem } from '@/hooks/use-documents';
+import { formatBytes } from '@/lib/utils/format-bytes';
 
 interface DocumentVersionHistoryProps {
   communityId: number;
   document: DocumentListItem;
   onClose?: () => void;
   onSelectVersion?: (version: DocumentVersionItem) => void;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 function formatDate(dateStr: string): string {
@@ -128,7 +123,7 @@ export function DocumentVersionHistory({
                     )}
                   </div>
                   <p className="text-sm text-content-tertiary">
-                    {version.fileName} &middot; {formatFileSize(version.fileSize)}
+                    {version.fileName} &middot; {formatBytes(version.fileSize)}
                   </p>
                   <p className="text-xs text-content-disabled">{formatDate(version.createdAt)}</p>
                 </div>

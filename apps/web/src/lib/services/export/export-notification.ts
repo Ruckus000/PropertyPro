@@ -32,6 +32,7 @@ import { eq } from '@propertypro/db/filters';
 // AUTHZ: export-ready notification — single-row lookup of the job's own requester + community.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { CommunityExportReadyEmail, sendEmail } from '@propertypro/email';
+import { formatBytes } from '@/lib/utils/format-bytes';
 
 /** How many individual warnings to enumerate before collapsing the rest. */
 const MAX_LISTED_WARNINGS = 5;
@@ -80,15 +81,6 @@ export function summarizeWarnings(manifest: ExportJobManifest): string[] {
   }
 
   return lines;
-}
-
-/** Binary-prefix size, one decimal place. `0 B` for a missing/zero total. */
-export function formatBytes(bytes: number | null | undefined): string {
-  if (!bytes || bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** exponent;
-  return `${exponent === 0 ? value : value.toFixed(1)} ${units[exponent]}`;
 }
 
 /**
