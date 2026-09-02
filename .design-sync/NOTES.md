@@ -430,6 +430,44 @@ dependency.
 
 ---
 
+## A render hash proves the MARKUP didn't move, not that the pixels didn't
+
+Hit for real on 2026-09-02, re-syncing after #1002 fixed the zero-CSS colour classes.
+
+`resync.mjs` reported **147 unchanged, 0 changed, 0 pendingGrade** — i.e. re-grade
+nothing. That was wrong in effect, though correct by its own contract:
+
+- `renderHashes` are computed from each card's **HTML**. `Switch.html` was
+  byte-identical before and after the fix.
+- The entire visual change arrived through **`styleSha`** — the compiled stylesheet.
+- Grades follow sources by design, and *"styling, bundle, and pipeline churn never
+  invalidate"*. Generally right. But when the upstream change **is** a styling change,
+  that rule hides exactly the thing you need to look at.
+
+Following the verdict literally would have left `Switch`'s three cells marked
+`needs-work` while the cards were visibly correct — the component had been broken in
+production, and the previews were faithfully rendering the breakage.
+
+**Rule: after any upstream CSS, token or Tailwind-config change, spot-check the affected
+components visually. Do not trust `changed: 0`.**
+
+```bash
+node .ds-sync/package-capture.mjs --out ./ds-bundle \
+  --components Switch --spot-check-components Switch
+# then READ ds-bundle/_screenshots/review/<group>__<Name>.png
+```
+
+Cheap tell that a styling-only change landed: `styleSha` moved while the component's
+`renderHashes` entry did not. Compare the fresh `ds-bundle/_ds_sync.json` against
+`.design-sync/.cache/remote-sync.json` — that diff is two lines of Python and it names
+the components worth eyeballing.
+
+Corollary worth keeping: the upload partition stayed correctly tiny (12 files, not 747)
+because `sourceHashes` DID move for `Switch.prompt.md`, plus bundle/styling/aux. The
+anchor is good at "what must I ship"; it is not an oracle for "what must I re-look at".
+
+---
+
 ## Re-sync risks — what can silently go stale
 
 1. **Everything under `.design-sync/entry/dist/` is generated AND gitignored**,
