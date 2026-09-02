@@ -120,16 +120,16 @@ pnpm --filter @propertypro/web test:e2e:prod
 > `localhost` regardless of `--hostname`, so mixing the two silently drops the
 > session (see the eighth addendum).
 >
-> **CI now runs 32 of the suite's 45 test blocks, across two jobs.** (45 is from
+> **CI now runs 32 of the suite's 45 test blocks, across two runners.** (45 is from
 > `playwright test --list` per config — 35 default + 4 pdfjs + 6 tenant. Do not
 > count with `grep -c 'test('`; that is how an earlier note said 43.)
 >
-> 1. `perf-check` runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
+> 1. The **localci suite's build step** (`pnpm build` → `test:e2e:prod` →
+>    `perf:check`) runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
 >    (10 blocks) in one `test:e2e:prod` invocation. Those three are exactly the
->    ones needing no DB, no Auth and no seed, which is what lets them run in a
->    job whose `DATABASE_URL` points at a stub that was never started. This is
->    also the only job that exercises a PRODUCTION build — do not fold it into
->    the one below.
+>    ones needing no DB, no Auth and no seed, which is what lets them run against
+>    a stub `DATABASE_URL` that was never started. This is also the only place
+>    that exercises a PRODUCTION build — do not fold it into the one below.
 > 2. **`.github/workflows/e2e.yml`** runs the 28 blocks in
 >    `apps/web/e2e/ci-safe-specs.json` via `playwright.ci.config.ts`, against a
 >    real Supabase stack (`supabase start` in `.supabase-ci/`, migrations,
@@ -184,10 +184,10 @@ pnpm --filter @propertypro/web test:e2e:prod
 > are **cleared, never inherited** — overriding only the id is what previously
 > showed the admin's identity over the impersonated user's data.
 >
-> **Adding a spec to `perf-check` requires proving it passes against a
-> PRODUCTION build with an UNREACHABLE database.** Passing under `pnpm test:e2e`
-> proves nothing about that job — that command runs a dev server against a real
-> database, differing on both axes.
+> **Adding a spec to the localci suite's `test:e2e:prod` step requires proving it
+> passes against a PRODUCTION build with an UNREACHABLE database.** Passing under
+> `pnpm test:e2e` proves nothing about that step — that command runs a dev server
+> against a real database, differing on both axes.
 
 # Other guards (run individually; all bundled into `pnpm lint`)
 pnpm guard:breadcrumbs          # Breadcrumb coverage
@@ -261,13 +261,44 @@ pnpm guard:class-resolution     # Every colour utility class in apps/web/src mus
 > `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,
 > `plan:verify:*`, `help:*`, and E2E variants).
 
-**CI:** 6 parallel jobs per PR — lint (includes DB access guard), typecheck, unit
-tests, no-mock-guard, migration-ordering, perf-check — plus a `Build` gate that
-runs after perf-check. **`perf-check` owns the only production build**; it has to,
-because the bundle-size budget and the PDF.js smoke test read the build output
-from disk. `Build` does not build: it exists because it is a required status
-check, and it asserts `needs.perf-check.result == 'success'` so that a *skipped*
-perf-check fails it rather than silently satisfying branch protection.
+**CI:** the lint / typecheck / unit / build / perf gate runs through **localci**
+(the `localci` CLI), NOT GitHub Actions. `.github/workflows/ci.yml` is
+`disabled_manually` and that is deliberate — #976 moved CI off GitHub when Actions
+minutes ran out (last ci.yml run: 2026-08-24). Two phases, wired as a pre-push hook:
+
+- **`gate`** — blocking, before the push completes: `pnpm lint` (includes the DB
+  access guard and the rest of the `guard:*` set), `pnpm typecheck`,
+  `./scripts/verify-css-var-migration.sh`.
+- **`suite`** — detached after the push, 8 steps: no-mock guard →
+  migration-ordering → `reset:demo` + `seed:demo` (resolve-only, against a stub
+  `DATABASE_URL`) → `apps/web` vitest with coverage → the package suites + admin
+  tests → then **`pnpm build` + `test:e2e:prod` + `pnpm perf:check`**. That last
+  step owns **the only production build**, and with it the bundle-size budget and
+  the PDF.js smoke test, which read build output from disk. It reports back to
+  GitHub as the `localci/suite` check.
+
+Run history is in `~/.localci/runs/<project>/<run>/`, and `status.json` lists every
+step's exact command and exit code. **Read it before claiming what did or did not
+run** — an absent GitHub `perf-check` on a PR is not a coverage gap, and the
+production build is not missing. Do not propose re-enabling ci.yml (see below).
+
+Still on GitHub Actions, independently of localci: Integration Tests, E2E, Branch
+Freshness Guard, Scoped DB Access Guard.
+
+Two consequences worth knowing:
+
+- `deploy.yml` used to trigger on `workflow_run: [CI]`, and a disabled workflow
+  never completes — so #978 moved it to `push: [main]`. **Re-enabling ci.yml means
+  reverting that trigger, or every merge deploys twice.**
+- The gate is per-machine. A contributor without localci gets no
+  lint/typecheck/unit/build/perf gate server-side; `localci hooks` installs a
+  global dispatcher, but that too is per-machine.
+
+Two traps: the suite runs against the **working tree**, not the pushed commit, so
+editing or rebasing while it runs fails the run on your own half-written files;
+and suites serialize across every registered project, so `suite running in the
+background` on push can mean *queued* — confirm with `localci runs` and check the
+run's `status.json` `commit` matches.
 
 Unit tests are split into two vitest projects — `node` (~505 files) and `jsdom`
 (~285) — because constructing a JSDOM per file dominated the job. See
