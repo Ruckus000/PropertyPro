@@ -58,7 +58,7 @@ export function DenyDialog({ requestId, requestName, onSuccess }: DenyDialogProp
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-border-default px-3 py-2',
+          'inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-edge px-3 py-2',
           'text-sm font-medium text-content hover:bg-surface-muted',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
           'md:min-h-[36px]',
@@ -118,7 +118,7 @@ export function DenyDialog({ requestId, requestName, onSuccess }: DenyDialogProp
                 onClick={() => handleOpenChange(false)}
                 disabled={mutation.isPending}
                 className={cn(
-                  'inline-flex min-h-[40px] items-center rounded-md border border-border-default px-4',
+                  'inline-flex min-h-[40px] items-center rounded-md border border-edge px-4',
                   'text-sm font-medium text-content hover:bg-surface-muted',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                   'disabled:cursor-not-allowed disabled:opacity-50',

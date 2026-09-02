@@ -268,7 +268,7 @@ export function VisitorRegistrationForm({
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-sm">Vehicle Information</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-content-secondary">
                   Add vehicle details for faster gate validation.
                 </p>
               </div>

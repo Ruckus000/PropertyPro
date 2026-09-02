@@ -252,7 +252,7 @@ export function AuthorEditorClient({
           value={title}
           onChange={(e) => onTitleChange(e.target.value)}
           placeholder="Untitled"
-          className="mt-1 w-full rounded-md border border-edge bg-surface px-3 py-2 text-base font-medium text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+          className="mt-1 w-full rounded-md border border-edge bg-surface-card px-3 py-2 text-base font-medium text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
         />
       </div>
 

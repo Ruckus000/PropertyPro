@@ -54,7 +54,7 @@ export function BoardForumPanel({ communityId }: BoardForumPanelProps) {
             <Link
               key={thread.id}
               href={`/communities/${communityId}/board/forum/${thread.id}`}
-              className={cn('block rounded-xl border border-edge bg-surface-card p-5 transition-colors hover:border-interactive-primary')}
+              className={cn('block rounded-xl border border-edge bg-surface-card p-5 transition-colors hover:border-interactive')}
             >
               <article className="flex items-start justify-between gap-3">
                 <div className="space-y-2">

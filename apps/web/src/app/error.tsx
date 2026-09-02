@@ -67,7 +67,7 @@ export default function RootError({ error, reset }: RootErrorProps) {
             from auth state + host above; `/` is the safe default. */}
         <a
           href={homeHref}
-          className="inline-flex rounded-md border border-border-default px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover"
+          className="inline-flex rounded-md border border-edge px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover"
         >
           Go home
         </a>

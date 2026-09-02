@@ -14,7 +14,7 @@ function scoreStatus(score: number): 'compliant' | 'pending' | 'overdue' {
 export function PropertyCards({ cards }: { cards: CommunityCard[] }) {
   if (cards.length === 0) {
     return (
-      <div className="rounded-md border border-default bg-surface-card p-6">
+      <div className="rounded-md border border-edge bg-surface-card p-6">
         <p className="text-sm text-secondary">
           You don&rsquo;t belong to any communities yet.
         </p>
@@ -27,7 +27,7 @@ export function PropertyCards({ cards }: { cards: CommunityCard[] }) {
       {cards.map((card) => (
         <li
           key={card.communityId}
-          className="rounded-md border border-default bg-surface-card p-5"
+          className="rounded-md border border-edge bg-surface-card p-5"
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">

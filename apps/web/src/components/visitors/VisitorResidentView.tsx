@@ -114,29 +114,29 @@ function VisitorCard({
   return (
     <Card>
       <CardContent className="flex items-start gap-4 p-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <UserCheck className="h-5 w-5 text-muted-foreground" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-muted">
+          <UserCheck className="h-5 w-5 text-content-secondary" />
         </div>
         <div className="flex-1 space-y-1">
           <div className="flex items-center justify-between">
             <p className="font-medium text-sm">{visitor.visitorName}</p>
             <VisitorStatusBadge visitor={visitor} />
           </div>
-          <p className="text-xs text-muted-foreground">{visitor.purpose}</p>
+          <p className="text-xs text-content-secondary">{visitor.purpose}</p>
           <div className="flex flex-wrap gap-2 pt-1">
             <Badge variant="outline">{guestTypeLabel(visitor.guestType)}</Badge>
             {visitor.passCode ? <VisitorQRCode passCode={visitor.passCode} /> : null}
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-content-secondary">
             Expected: {formatDatetime(visitor.expectedArrival)}
           </p>
           {visitor.validUntil ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-content-secondary">
               Valid Until: {formatDatetime(visitor.validUntil)}
             </p>
           ) : null}
           {formatVehicle(visitor) ? (
-            <p className="text-xs text-muted-foreground">Vehicle: {formatVehicle(visitor)}</p>
+            <p className="text-xs text-content-secondary">Vehicle: {formatVehicle(visitor)}</p>
           ) : null}
           <div className="flex flex-wrap gap-2 pt-2">
             <Button
@@ -214,7 +214,7 @@ export function VisitorResidentView({
             <CardTitle className="text-base">No Visitors In This View</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-content-secondary">
               Register a visitor to generate a pass for your guests.
             </p>
           </CardContent>

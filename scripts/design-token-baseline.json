@@ -89,8 +89,7 @@
     "arbitrary-font": 10
   },
   "apps/web/src/components/mobile/MobileSearchContent.tsx": {
-    "arbitrary-font": 1,
-    "slash-opacity-semantic": 1
+    "arbitrary-font": 1
   },
   "apps/web/src/components/mobile/MobileSecurityContent.tsx": {
     "raw-palette": 23,

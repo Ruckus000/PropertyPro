@@ -119,7 +119,7 @@ export function UnitSearchCombobox({
                 aria-live="polite"
                 aria-busy="true"
               >
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                <Loader2 className="h-4 w-4 animate-spin text-content-secondary" aria-hidden="true" />
                 <span className="sr-only">Loading units...</span>
               </div>
             )}
@@ -144,7 +144,7 @@ export function UnitSearchCombobox({
                     <div>
                       <p className="text-sm font-medium">{r.label}</p>
                       {(r.building || r.floor != null) ? (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-content-secondary">
                           {[r.building, r.floor != null ? `Floor ${r.floor}` : null]
                             .filter(Boolean)
                             .join(' · ')}

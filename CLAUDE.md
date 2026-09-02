@@ -196,6 +196,7 @@ pnpm guard:legacy-roles         # Legacy-role vocabulary floor
 pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only baseline)
 pnpm guard:page-padding         # Page gutter single-sourced in the shell; no per-page px / nested <main>
 pnpm guard:token-coverage       # Every referenced var(--*) must be defined
+pnpm guard:class-resolution     # Every colour utility class in apps/web/src must emit CSS
 ```
 
 > **Design tokens (`guard:design-tokens`):** bans raw hex, raw Tailwind palette
@@ -209,6 +210,24 @@ pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 > `scripts/design-token-baseline.json` (shrink-only); new files must be clean;
 > escape hatch `// design-tokens:exempt — <reason>`. Full rules in
 > `.claude/rules/design.md`.
+
+> **Class resolution (`guard:class-resolution`):** Tailwind does not error on a
+> class it does not recognise — it emits **no rule**, and the element renders with
+> no colour. `guard:design-tokens` cannot see this (it checks that RAW palette
+> classes are gone, not that the replacement resolves), and `guard:token-coverage`
+> cannot either (a class name never reaches a `var(--x)` if Tailwind drops it
+> first). This guard compiles Tailwind via postcss against
+> `apps/web/tailwind.config.ts` — **no `next build` needed**, ~0.7s — and asserts
+> every colour utility referenced in `apps/web/src` emits CSS. Two shapes it
+> catches: **shadcn orphans** (`bg-background`, `text-muted-foreground`,
+> `border-input`, `ring-ring` — upstream assumes a `background`/`input`/`ring`
+> vocabulary this repo never defined) and **semantic near-misses**, where the CSS
+> VAR name is written as the CLASS name (the var is `--interactive-primary`; the
+> class is `bg-interactive`). It checks the **base** utility with variants
+> stripped, and deliberately ignores slash-opacity so that stays owned by
+> `guard:design-tokens`. Tri-state exit: 0 clean / 1 violations / 2 could-not-check.
+> Note a class emitting CSS still does not prove the control is *visible* — see
+> `apps/web/__tests__/accessibility/switch-contrast.test.ts`.
 
 > **Page padding (`guard:page-padding`):** the authenticated page gutter (horizontal
 > `px`, vertical `py`, and centred max-width) is single-sourced in **one** place —

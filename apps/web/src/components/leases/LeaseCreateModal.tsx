@@ -125,7 +125,7 @@ export function LeaseCreateModal({
               value={residentId}
               onChange={(id) => setResidentId(id)}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-content-secondary">
               Resident not listed?{' '}
               <a
                 href={`/dashboard/residents?communityId=${communityId}`}
@@ -149,7 +149,7 @@ export function LeaseCreateModal({
             </div>
             <div className="space-y-2">
               <Label htmlFor="lease-end">
-                End Date <span className="text-muted-foreground text-xs">(optional)</span>
+                End Date <span className="text-content-secondary text-xs">(optional)</span>
               </Label>
               <Input
                 id="lease-end"
@@ -157,7 +157,7 @@ export function LeaseCreateModal({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-content-secondary">
                 Leave blank for month-to-month
               </p>
             </div>
@@ -165,7 +165,7 @@ export function LeaseCreateModal({
 
           <div className="space-y-2">
             <Label htmlFor="lease-rent">
-              Monthly Rent ($) <span className="text-muted-foreground text-xs">(optional)</span>
+              Monthly Rent ($) <span className="text-content-secondary text-xs">(optional)</span>
             </Label>
             <Input
               id="lease-rent"

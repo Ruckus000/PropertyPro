@@ -59,13 +59,13 @@ export function AnnouncementsBlockView({
           Announcements
         </h2>
         {data.length === 0 ? (
-          <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
+          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
             {content?.emptyText ?? "No announcements yet."}
           </p>
         ) : (
           <ul className="space-y-4">
             {data.map((item) => (
-              <li key={item.id} className="rounded-md border border-default bg-surface-card p-5">
+              <li key={item.id} className="rounded-md border border-edge bg-surface-card p-5">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="text-lg font-medium text-content">
                     {item.isPinned && (

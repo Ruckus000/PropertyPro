@@ -5,13 +5,29 @@ import * as SwitchPrimitives from "@radix-ui/react-switch"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Track colours are deliberately NOT drawn from the `sand` surface ramp.
+ *
+ * The unchecked track has to stay distinguishable from both the page behind it
+ * and the thumb sitting on it (WCAG 1.4.11 Non-text Contrast, 3:1). Every sand
+ * token fails that: the lightest sensible pair, `bg-surface-muted` (#F6EFE6)
+ * under a `surface-card` thumb (#FFFEFC), is 1.13:1, and even `--border-strong`
+ * (#E3D8C9) only reaches 1.34:1 against `--surface-page`. That is the bug this
+ * component shipped with — an off switch nobody could see.
+ *
+ * `content-tertiary` (--gray-500) is the neutral ramp's mid-tone and is the
+ * closest thing the token layer offers to a UI-chrome grey: 4.8:1 against the
+ * thumb, 4.6:1 against the page. Checked state uses `interactive` (coral-600),
+ * matching Checkbox, at 4.5:1 against the thumb. State is conveyed by thumb
+ * position as well as colour, so the control does not rely on hue alone.
+ */
 const Switch = React.forwardRef<
   React.ElementRef<typeof SwitchPrimitives.Root>,
   React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
 >(({ className, ...props }, ref) => (
   <SwitchPrimitives.Root
     className={cn(
-      "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
+      "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors duration-quick focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-interactive data-[state=unchecked]:bg-content-tertiary",
       className
     )}
     {...props}
@@ -19,7 +35,7 @@ const Switch = React.forwardRef<
   >
     <SwitchPrimitives.Thumb
       className={cn(
-        "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-sm ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0"
+        "pointer-events-none block h-4 w-4 rounded-full bg-surface-card shadow-sm ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0"
       )}
     />
   </SwitchPrimitives.Root>

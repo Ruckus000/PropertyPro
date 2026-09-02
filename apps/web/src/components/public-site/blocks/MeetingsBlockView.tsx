@@ -45,13 +45,13 @@ export function MeetingsBlockView({ content, blockId, data, community }: Meeting
           Upcoming Meetings
         </h2>
         {data.length === 0 ? (
-          <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
+          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
             {content?.emptyText ?? "No upcoming meetings."}
           </p>
         ) : (
           <ul className="space-y-4">
             {data.map((meeting) => (
-              <li key={meeting.id} className="rounded-md border border-default bg-surface-card p-5">
+              <li key={meeting.id} className="rounded-md border border-edge bg-surface-card p-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0">
                     <h3 className="text-lg font-medium text-content">{meeting.title}</h3>

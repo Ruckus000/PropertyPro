@@ -95,7 +95,7 @@ export function IdentityEditor({
     <section
       aria-labelledby="wizard-step-3-heading"
       data-testid="identity-editor"
-      className="rounded-md border border-default bg-surface-card p-6 shadow-e0"
+      className="rounded-md border border-edge bg-surface-card p-6 shadow-e0"
     >
       <div className="mb-4">
         <p className="text-xs font-medium uppercase tracking-wide text-content-secondary">
@@ -111,7 +111,7 @@ export function IdentityEditor({
 
       <div className="mb-4 space-y-1">
         <label htmlFor="wizard-community-name" className="block text-sm font-medium text-content">
-          Community name <span className="text-error">*</span>
+          Community name <span className="text-status-danger">*</span>
         </label>
         <input
           id="wizard-community-name"
@@ -124,7 +124,7 @@ export function IdentityEditor({
           aria-invalid={nameEmpty || nameTooLong ? 'true' : undefined}
           aria-describedby="wizard-community-name-help"
           className={`w-full rounded-md border bg-surface-card px-3 py-2 text-base text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive ${
-            nameEmpty || nameTooLong ? 'border-error' : 'border-default'
+            nameEmpty || nameTooLong ? 'border-edge-error' : 'border-edge'
           }`}
         />
         <p id="wizard-community-name-help" className="text-xs text-content-secondary">
@@ -150,7 +150,7 @@ export function IdentityEditor({
           aria-describedby="wizard-tagline-counter wizard-tagline-help"
           aria-invalid={overHard ? 'true' : undefined}
           className={`w-full rounded-md border bg-surface-card px-3 py-2 text-base text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive ${
-            overHard ? 'border-error' : 'border-default'
+            overHard ? 'border-edge-error' : 'border-edge'
           }`}
         />
         <div className="flex items-center justify-between gap-2 text-xs">
@@ -162,9 +162,9 @@ export function IdentityEditor({
             data-testid="wizard-tagline-counter"
             className={`tabular-nums ${
               overHard
-                ? 'text-error font-medium'
+                ? 'text-status-danger font-medium'
                 : overSoft
-                  ? 'text-warning-strong font-medium'
+                  ? 'text-status-warning font-medium'
                   : 'text-content-secondary'
             }`}
             aria-live="polite"
@@ -174,11 +174,11 @@ export function IdentityEditor({
         </div>
       </div>
 
-      <div className="mt-6 border-t border-default pt-4">
+      <div className="mt-6 border-t border-edge pt-4">
         <HeroImageField communityId={communityId} fallbackHeadline={heroFallbackHeadline} />
       </div>
 
-      <p className="mt-4 rounded-md border border-default bg-surface-subtle p-3 text-xs text-content-secondary">
+      <p className="mt-4 rounded-md border border-edge bg-surface-subtle p-3 text-xs text-content-secondary">
         <strong className="font-medium text-content">Logo:</strong> coming next. It rides on the
         branding upload flow and lands in a follow-up update.
       </p>
@@ -193,7 +193,7 @@ export function IdentityEditor({
         </button>
         <div className="flex items-center gap-3">
           {outcome && (
-            <span role="alert" className="text-sm text-error">
+            <span role="alert" className="text-sm text-status-danger">
               {outcome}
             </span>
           )}

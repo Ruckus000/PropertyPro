@@ -552,7 +552,7 @@ export function CommandPalette({
                               onMouseEnter={() => setActiveIndex(viewAllIdx)}
                               className={cn(
                                 'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs',
-                                'font-medium text-interactive-primary transition-colors',
+                                'font-medium text-interactive transition-colors',
                                 activeIndex === viewAllIdx && 'bg-surface-muted',
                               )}
                             >

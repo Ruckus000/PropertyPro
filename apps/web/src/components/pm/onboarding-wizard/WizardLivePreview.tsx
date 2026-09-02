@@ -26,9 +26,9 @@ export function WizardLivePreview({ communityId, layoutId, presetSlug }: Props) 
   return (
     <div
       data-testid="wizard-live-preview"
-      className="overflow-hidden rounded-md border border-default bg-surface-card shadow-e0"
+      className="overflow-hidden rounded-md border border-edge bg-surface-card shadow-e0"
     >
-      <div className="border-b border-default bg-surface-muted px-3 py-2 text-xs font-medium text-content-secondary">
+      <div className="border-b border-edge bg-surface-muted px-3 py-2 text-xs font-medium text-content-secondary">
         Live preview
       </div>
       <iframe

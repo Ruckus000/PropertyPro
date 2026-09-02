@@ -342,7 +342,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
                 role="status"
                 aria-live="polite"
                 data-testid="preview-banner"
-                className="border-b border-warning bg-warning-subtle px-4 py-2 text-center text-sm font-medium text-warning-strong"
+                className="border-b border-status-warning-border bg-status-warning-subtle px-4 py-2 text-center text-sm font-medium text-status-warning"
               >
                 Preview mode — showing unpublished drafts. Visitors see the last published version.
               </div>

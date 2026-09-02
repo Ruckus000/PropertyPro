@@ -31,7 +31,7 @@ export function AmenitiesBlock(props: BlockRendererProps) {
         )}
         <ul className="grid gap-4 sm:grid-cols-2">
           {content.items.map((item, i) => (
-            <li key={i} className="rounded-md border border-default bg-surface-card p-5">
+            <li key={i} className="rounded-md border border-edge bg-surface-card p-5">
               <p className="font-medium text-content">{item.name}</p>
               {item.description && (
                 <p className="mt-1 text-sm text-content-secondary">{item.description}</p>

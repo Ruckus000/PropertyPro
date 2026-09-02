@@ -78,7 +78,7 @@ export function AdminReviewList() {
               <p className="font-medium">{r.unitIdentifier}</p>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Badge variant="outline">{r.residentType}</Badge>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-content-secondary">
                   Submitted {new Date(r.createdAt).toLocaleDateString()}
                 </span>
               </div>
@@ -114,7 +114,7 @@ export function AdminReviewList() {
               </label>
               <textarea
                 id={`deny-notes-${r.id}`}
-                className="w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full min-h-[72px] rounded-md border border-edge bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 placeholder="e.g. Unit number doesn't match our records. Please provide your lease or closing document."
                 value={denyNotes}
                 onChange={(e) => setDenyNotes(e.target.value)}

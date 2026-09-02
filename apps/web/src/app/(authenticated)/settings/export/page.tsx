@@ -82,7 +82,7 @@ export default async function ExportPage({
           includes the document FILES and does not truncate.
         */}
         <div className="rounded-md border border-edge bg-surface-card p-5">
-          <h2 className="text-base font-semibold text-content-primary">
+          <h2 className="text-base font-semibold text-content">
             Quick CSV export
           </h2>
           <p className="mb-4 mt-1 text-sm text-content-secondary">

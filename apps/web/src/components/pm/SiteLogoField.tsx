@@ -97,7 +97,7 @@ export function SiteLogoField({ onChange, initialUrl, cropToFile = cropImageToFi
         </div>
       ) : null}
       {error ? (
-        <p role="alert" className="mt-1 text-sm text-danger">
+        <p role="alert" className="mt-1 text-sm text-status-danger">
           {error}
         </p>
       ) : null}

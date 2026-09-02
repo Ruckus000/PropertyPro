@@ -34,6 +34,7 @@ const GUARDS = [
   'guard:legacy-roles',
   'guard:token-coverage',
   'guard:design-tokens',
+  'guard:class-resolution',
   'guard:page-padding',
   'guard:page-state-copy',
   'guard:audit-log-trigger-overrides',

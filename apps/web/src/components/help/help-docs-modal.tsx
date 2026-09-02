@@ -113,7 +113,7 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
               placeholder="Search help…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 w-full rounded-[var(--radius-sm)] border border-edge bg-surface-input pl-8 pr-3 text-sm text-content placeholder:text-content-tertiary focus:border-interactive-primary focus:outline-none focus:ring-1 focus:ring-interactive-primary"
+              className="h-8 w-full rounded-[var(--radius-sm)] border border-edge bg-surface-muted pl-8 pr-3 text-sm text-content placeholder:text-content-tertiary focus:border-interactive focus:outline-none focus:ring-1 focus:ring-interactive"
               aria-label="Search help articles"
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus={showSearch}

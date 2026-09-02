@@ -6,7 +6,7 @@ import type { UpcomingEvent } from '@/lib/queries/cross-community.types';
 export function UpcomingEvents({ events }: { events: UpcomingEvent[] }) {
   if (events.length === 0) {
     return (
-      <div className="rounded-md border border-default bg-surface-card p-5">
+      <div className="rounded-md border border-edge bg-surface-card p-5">
         <h3 className="text-base font-semibold mb-4">Upcoming</h3>
         <EmptyState
           size="sm"
@@ -18,7 +18,7 @@ export function UpcomingEvents({ events }: { events: UpcomingEvent[] }) {
   }
 
   return (
-    <div className="rounded-md border border-default bg-surface-card p-5">
+    <div className="rounded-md border border-edge bg-surface-card p-5">
       <h3 className="text-base font-semibold mb-4">Upcoming</h3>
       <ul className="space-y-3">
         {events.map((event) => {

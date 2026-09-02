@@ -110,7 +110,7 @@ export function LeaseRenewalDialog({
           <div className="space-y-2">
             <Label htmlFor="renewal-end">
               New End Date{' '}
-              <span className="text-muted-foreground text-xs">(optional)</span>
+              <span className="text-content-secondary text-xs">(optional)</span>
             </Label>
             <Input
               id="renewal-end"
@@ -118,7 +118,7 @@ export function LeaseRenewalDialog({
               value={newEndDate}
               onChange={(e) => setNewEndDate(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-content-secondary">
               Leave blank for month-to-month
             </p>
           </div>
