@@ -9,7 +9,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useReorderBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import {
+  useReorderBlocks,
+  useUpsertContentBlock,
+  type SiteBlockSummary,
+  type UpsertContentBlockInput,
+} from '@/hooks/use-content-blocks';
+import { BLOCK_TYPES } from '@propertypro/shared';
 import {
   useCanvasSelection,
   type CanvasSelection,
@@ -61,9 +67,37 @@ export interface SiteEditorContextValue {
   /** Move to an absolute slot — the drag-and-drop drop target. */
   moveTo: (blockId: number, toOrder: number) => void;
   isMoving: boolean;
+
+  /**
+   * Show or hide a section from visitors. Second arg is the NEXT state.
+   *
+   * Hiding writes `hidden: true` into the block's own content through the
+   * ordinary upsert, so it drafts, diffs and publishes like any other edit
+   * rather than needing a column and a second write path.
+   */
+  toggleHidden: (blockId: number, hidden: boolean) => void;
+  /** Copy a section into the slot below it. */
+  duplicate: (blockId: number) => void;
 }
 
 const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
+
+type UpsertBlockType = UpsertContentBlockInput['blockType'];
+
+/**
+ * Narrow a row's `blockType` (typed `string`, because the server may send a
+ * type this build has no label for) to something the upsert contract accepts.
+ *
+ * Returns null for anything the PM must not rewrite through this path: the
+ * `hero`, which has its own endpoint, and the `tombstone` sentinel, which is
+ * not in `BLOCK_TYPES` at all and would 400.
+ */
+function upsertableBlockType(blockType: string): UpsertBlockType | null {
+  if (blockType === 'hero') return null;
+  return (BLOCK_TYPES as readonly string[]).includes(blockType)
+    ? (blockType as UpsertBlockType)
+    : null;
+}
 
 export interface SiteEditorProviderProps {
   communityId: number;
@@ -141,6 +175,10 @@ export function SiteEditorProvider({
     movableSections,
   } = useCanvasSelection(blocks);
   const reorder = useReorderBlocks(communityId);
+  // No `pageId` override on the calls below: a toggle acts on the section the
+  // PM is looking at, which is on the selected page — exactly the hook's
+  // default (D-WRITE).
+  const upsert = useUpsertContentBlock(communityId);
   const [announcement, setAnnouncement] = useState('');
 
   const select = useCallback(
@@ -229,6 +267,38 @@ export function SiteEditorProvider({
     [announceMove, indexOf, movableSections, reorder],
   );
 
+  const toggleHidden = useCallback(
+    (blockId: number, hidden: boolean) => {
+      // Resolved from `blocks`, not `movableSections`, so the guard below is
+      // the one that actually runs — `movableSections` has already dropped the
+      // hero and every tombstone.
+      const block = blocks.find((b) => b.id === blockId);
+      if (!block) return;
+      const blockType = upsertableBlockType(block.blockType);
+      if (blockType === null) return;
+
+      // `hidden` is `z.literal(true).optional()` in every block schema, so
+      // ABSENCE is the only way to say "visible" — writing `hidden: false`
+      // would fail validation. Unhiding therefore deletes the key.
+      const next = { ...((block.content ?? {}) as Record<string, unknown>) };
+      delete next.hidden;
+      if (hidden) next.hidden = true;
+
+      upsert.mutate({ blockType, blockOrder: block.blockOrder, content: next });
+    },
+    [blocks, upsert],
+  );
+
+  /*
+   * TODO(site-editor utilities, task 4): duplication proper.
+   *
+   * The control is wired here rather than in the next change so the section
+   * list ships as one coherent row of actions, but the copy-into-the-next-slot
+   * planning (which slot is free, what shifts) lands with `planDuplicate`. Until
+   * then this is inert BY DESIGN and must not reach a release branch as-is.
+   */
+  const duplicate = useCallback((_blockId: number) => {}, []);
+
   const value = useMemo<SiteEditorContextValue>(
     () => ({
       blocks,
@@ -242,6 +312,8 @@ export function SiteEditorProvider({
       move,
       moveTo,
       isMoving: reorder.isPending,
+      toggleHidden,
+      duplicate,
     }),
     [
       blocks,
@@ -255,6 +327,8 @@ export function SiteEditorProvider({
       move,
       moveTo,
       reorder.isPending,
+      toggleHidden,
+      duplicate,
     ],
   );
 

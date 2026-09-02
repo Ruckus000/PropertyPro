@@ -17,11 +17,15 @@ import {
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 const reorderMutate = vi.hoisted(() => vi.fn());
+const upsertMutate = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
   // FloatControls reads the published side to decide whether a removal is
   // staged or immediate; a factory missing it yields `undefined` at call time.
   usePublishedBlocks: () => ({ data: [] }),
   useReorderBlocks: () => ({ mutate: reorderMutate, isPending: false }),
+  // `toggleHidden` writes through the ordinary upsert; a factory missing this
+  // throws at module load and reddens every test in this file.
+  useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
 }));
 
 /** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
@@ -149,5 +153,63 @@ describe('SiteEditorProvider', () => {
   it('exposes exactly one live region for both surfaces', () => {
     renderProvider();
     expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+});
+
+describe('SiteEditorProvider — toggleHidden', () => {
+  it('writes hidden: true into the block’s existing content', () => {
+    renderProvider([
+      block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+      block({ id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Rules' } }),
+    ]);
+
+    act(() => api.toggleHidden(2, true));
+
+    expect(upsertMutate).toHaveBeenCalledWith({
+      blockType: 'text',
+      blockOrder: 2,
+      content: { body: 'Rules', hidden: true },
+    });
+  });
+
+  it('REMOVES the key when unhiding rather than writing hidden: false', () => {
+    // `hidden` is `z.literal(true).optional()` in every block schema, so
+    // absence is the only encoding of "visible" — a literal `false` 400s.
+    renderProvider([
+      block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+      block({ id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Rules', hidden: true } }),
+    ]);
+
+    act(() => api.toggleHidden(2, false));
+
+    const [payload] = upsertMutate.mock.calls[0] as [{ content: Record<string, unknown> }];
+    expect(payload.content).toEqual({ body: 'Rules' });
+    expect('hidden' in payload.content).toBe(false);
+  });
+
+  it('does not mutate the block’s content in place', () => {
+    const content = { body: 'Rules' };
+    renderProvider([block({ id: 2, blockType: 'text', blockOrder: 2, content })]);
+
+    act(() => api.toggleHidden(2, true));
+    expect(content).toEqual({ body: 'Rules' });
+  });
+
+  it('refuses the hero, which has its own endpoint', () => {
+    renderProvider();
+    act(() => api.toggleHidden(1, true));
+    expect(upsertMutate).not.toHaveBeenCalled();
+  });
+
+  it('refuses a tombstone, which the upsert contract’s enum rejects', () => {
+    renderProvider([block({ id: 2, blockType: 'tombstone', blockOrder: 2 })]);
+    act(() => api.toggleHidden(2, true));
+    expect(upsertMutate).not.toHaveBeenCalled();
+  });
+
+  it('ignores an unknown block id', () => {
+    renderProvider();
+    act(() => api.toggleHidden(999, true));
+    expect(upsertMutate).not.toHaveBeenCalled();
   });
 });
