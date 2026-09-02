@@ -395,6 +395,52 @@ The 5 outstanding cells are documented blocks, not sync defects:
   feature that ships disabled. Cards show real placement with a caption naming
   the gate.
 
+## The three PropertyPro design projects — read before touching `projectId`
+
+There are THREE claude.ai/design projects for this product, and on 2026-09-02 a
+whole session was spent building tooling against the wrong one, twice. Map first.
+
+| id | name | type | link to this repo |
+|---|---|---|---|
+| `2957e1c6-b8ff-4c83-8f98-7ff0079fe283` | PropertyPro **Code** Design System | design-system | **code → design.** The `projectId` pinned in `config.json`; `resync.mjs` pushes the 147 generated components here. Disposable — `build.sh` regenerates it. |
+| `da1d4969-74dd-47ed-89dc-b64070d178de` | PropertyPro Design System | design-system | none. Hand-authored: brand tokens (current coral/sand — its `SKILL.md` prose still says `#2563EB`, the CSS does not), 13 foundation cards, `ui_kits/web_app/`, `website-editor-redesign/` history. Last edit 2026-07-26. |
+| `cfb3dadd-9b1c-4c8b-90bf-73514b499ba0` | **PropertyPro** | **regular project** | **code → design, via Claude Design's own GitHub link** to `Ruckus000/PropertyPro` `main`. The full prototype (`PropertyPro App.html` + `pp-*.js`), Landing v1–v7, Signup variants, Dashboard directions. **This is where design work actually happens.** |
+
+**The trap that caused it:** `DesignSync list_projects` returns ONLY
+`PROJECT_TYPE_DESIGN_SYSTEM` projects. `cfb3dadd` is a regular project, so it
+never appears — and it is the only one that matters. `get_project` by id works
+for any type. `updatedAt` exists only in `list_projects`, so there is no
+timestamp at all for a regular project; do not design around one.
+
+**The design → code worklist already exists.** `cfb3dadd/github.md` is written by
+the design side on every sync (eight since 2026-08-22, human-triggered — the
+Monday cluster is a working session, not a cron). It carries a **Screen map**
+(each prototype screen → the repo files it was built from), **Still not built**
+(in design, not in code) and **Shipped surfaces this project has not drawn** (in
+code, not in design). Its `CLAUDE.md` says "build screens from the real repo
+source, never from memory". To answer "what design work is not in code yet",
+read *Still not built*. A hashing/ledger tool (`design-pull.mjs`) was built to
+answer the same question, then discarded the same day: it reported *that* a file
+changed, where `github.md` already says *what is missing and why*.
+
+**`pp-*.js` is a design artifact, not code.** It is vanilla JS that MIRRORS the
+React app (its rail is derived from `nav-config.ts`, its gates from
+`PLAN_FEATURES`). Read it as a spec for the screen it draws; never sync it into
+the repo. A landing page becomes React by someone rewriting it, not by a copy.
+
+**Do not re-point `projectId` at either other project.** The push regenerates
+`_ds_manifest.json` (the pane's card index) from the code components and
+overwrites root `styles.css`, `README.md`, `_ds_bundle.js` and
+`_adherence.oxlintrc.json` — all of which exist in `da1d4969` too. The `@dsCard`
+markers would rebuild its 15 cards, but it would also flood a curated pane with
+147 generated ones and put an automated writer inside a hand-edited project.
+Nothing you want lives on the push side; leave it where it is.
+
+Two techniques worth keeping from the discarded tool: a `get_file` result too
+large to inline is persisted to a tool-results file on disk and can be hashed
+byte-for-byte with no transcription; and `list_files` alone (no contents) is
+enough to detect a NEW file. Neither is needed while `github.md` is maintained.
+
 ## Two review findings, resolved 2026-09-02
 
 **`projectId` in `config.json` is committed deliberately.** It is the claude.ai/design
