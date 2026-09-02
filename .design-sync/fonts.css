@@ -1,0 +1,39 @@
+/* Brand faces for the design-sync export.
+ *
+ * The app loads these through next/font/local (apps/web/src/app/layout.tsx),
+ * which GENERATES the @font-face rules at build time - so there is no rule in
+ * the repo for the converter to scrape, and [FONT_MISSING] fires without this
+ * file. These declarations mirror what next/font emits: variable faces,
+ * weight 100-900, display:swap, bound to the same CSS variables the token
+ * layer references (--font-sans / --font-display).
+ *
+ * JetBrains Mono (--font-mono) is deliberately ABSENT: it is not vendored in
+ * the repo and --font-mono is never defined, so production falls back to
+ * system mono. Shipping it here would make the Code primitive render BETTER
+ * than production, which is not fidelity.
+ */
+@font-face {
+  font-family: 'Inter';
+  src: url('../apps/web/src/app/fonts/inter-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../apps/web/src/app/fonts/fraunces-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../apps/web/src/app/fonts/fraunces-latin-var-italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+}

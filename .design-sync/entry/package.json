@@ -1,0 +1,10 @@
+{
+  "name": "@propertypro/design-system",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Code-truth design system barrel for claude.ai/design export.",
+  "types": "./dist/index.d.ts",
+  "module": "./index.ts",
+  "main": "./index.ts"
+}

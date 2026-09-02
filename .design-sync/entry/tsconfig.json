@@ -1,0 +1,21 @@
+{
+  "extends": "../../apps/web/tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../../apps/web",
+    "rootDir": "../..",
+    "outDir": "./dist",
+    "declaration": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "incremental": false,
+    "noEmitOnError": false,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "typeRoots": ["../../apps/web/node_modules/@types", "../../node_modules/@types"],
+    "types": ["react", "react-dom", "node"]
+  },
+  "include": ["index.ts", "process-shim.ts"],
+  "exclude": []
+}

@@ -1,0 +1,217 @@
+{
+  "apps/web/src/components/ui/alert-dialog.tsx": [
+    "AlertDialog",
+    "AlertDialogAction",
+    "AlertDialogCancel",
+    "AlertDialogContent",
+    "AlertDialogDescription",
+    "AlertDialogFooter",
+    "AlertDialogHeader",
+    "AlertDialogOverlay",
+    "AlertDialogPortal",
+    "AlertDialogTitle",
+    "AlertDialogTrigger"
+  ],
+  "apps/web/src/components/ui/badge.tsx": [
+    "Badge"
+  ],
+  "apps/web/src/components/ui/button.tsx": [
+    "Button"
+  ],
+  "apps/web/src/components/ui/card.tsx": [
+    "Card",
+    "CardContent",
+    "CardDescription",
+    "CardFooter",
+    "CardHeader",
+    "CardTitle"
+  ],
+  "apps/web/src/components/ui/chart.tsx": [
+    "ChartContainer",
+    "ChartLegend",
+    "ChartLegendContent",
+    "ChartStyle",
+    "ChartTooltip",
+    "ChartTooltipContent"
+  ],
+  "apps/web/src/components/ui/checkbox.tsx": [
+    "Checkbox"
+  ],
+  "apps/web/src/components/ui/command.tsx": [
+    "Command",
+    "CommandDialog",
+    "CommandEmpty",
+    "CommandGroup",
+    "CommandInput",
+    "CommandItem",
+    "CommandList",
+    "CommandSeparator",
+    "CommandShortcut"
+  ],
+  "apps/web/src/components/ui/dialog.tsx": [
+    "Dialog",
+    "DialogClose",
+    "DialogContent",
+    "DialogDescription",
+    "DialogFooter",
+    "DialogHeader",
+    "DialogOverlay",
+    "DialogPortal",
+    "DialogTitle",
+    "DialogTrigger"
+  ],
+  "apps/web/src/components/ui/dropdown-menu.tsx": [
+    "DropdownMenu",
+    "DropdownMenuCheckboxItem",
+    "DropdownMenuContent",
+    "DropdownMenuGroup",
+    "DropdownMenuItem",
+    "DropdownMenuLabel",
+    "DropdownMenuPortal",
+    "DropdownMenuRadioGroup",
+    "DropdownMenuRadioItem",
+    "DropdownMenuSeparator",
+    "DropdownMenuShortcut",
+    "DropdownMenuSub",
+    "DropdownMenuSubContent",
+    "DropdownMenuSubTrigger",
+    "DropdownMenuTrigger"
+  ],
+  "apps/web/src/components/ui/help-tooltip.tsx": [
+    "HelpTooltip"
+  ],
+  "apps/web/src/components/ui/input.tsx": [
+    "Input"
+  ],
+  "apps/web/src/components/ui/label.tsx": [
+    "Label"
+  ],
+  "apps/web/src/components/ui/popover.tsx": [
+    "Popover",
+    "PopoverAnchor",
+    "PopoverContent",
+    "PopoverTrigger"
+  ],
+  "apps/web/src/components/ui/select.tsx": [
+    "Select",
+    "SelectContent",
+    "SelectGroup",
+    "SelectItem",
+    "SelectLabel",
+    "SelectScrollDownButton",
+    "SelectScrollUpButton",
+    "SelectSeparator",
+    "SelectTrigger",
+    "SelectValue"
+  ],
+  "apps/web/src/components/ui/separator.tsx": [
+    "Separator"
+  ],
+  "apps/web/src/components/ui/sheet.tsx": [
+    "Sheet",
+    "SheetClose",
+    "SheetContent",
+    "SheetDescription",
+    "SheetFooter",
+    "SheetHeader",
+    "SheetOverlay",
+    "SheetPortal",
+    "SheetTitle",
+    "SheetTrigger"
+  ],
+  "apps/web/src/components/ui/skeleton.tsx": [
+    "Skeleton"
+  ],
+  "apps/web/src/components/ui/switch.tsx": [
+    "Switch"
+  ],
+  "apps/web/src/components/ui/table.tsx": [
+    "Table",
+    "TableBody",
+    "TableCaption",
+    "TableCell",
+    "TableFooter",
+    "TableHead",
+    "TableHeader",
+    "TableRow"
+  ],
+  "apps/web/src/components/ui/tabs.tsx": [
+    "Tabs",
+    "TabsContent",
+    "TabsList",
+    "TabsTrigger"
+  ],
+  "apps/web/src/components/ui/textarea.tsx": [
+    "Textarea"
+  ],
+  "apps/web/src/components/ui/tooltip.tsx": [
+    "Tooltip",
+    "TooltipContent",
+    "TooltipProvider",
+    "TooltipTrigger"
+  ],
+  "apps/web/src/components/shared/ResidentSearchCombobox.tsx": [
+    "ResidentSearchCombobox"
+  ],
+  "apps/web/src/components/shared/UnitSearchCombobox.tsx": [
+    "UnitSearchCombobox"
+  ],
+  "apps/web/src/components/shared/UserSearchCombobox.tsx": [
+    "UserSearchCombobox"
+  ],
+  "apps/web/src/components/shared/alert-banner.tsx": [
+    "AlertBanner"
+  ],
+  "apps/web/src/components/shared/bulk-action-bar.tsx": [
+    "BulkActionBar"
+  ],
+  "apps/web/src/components/shared/chart-empty-state.tsx": [
+    "ChartEmptyState"
+  ],
+  "apps/web/src/components/shared/chart-skeleton.tsx": [
+    "ChartSkeleton"
+  ],
+  "apps/web/src/components/shared/checklist-stepper.tsx": [
+    "ChecklistStepper"
+  ],
+  "apps/web/src/components/shared/csv-export-button.tsx": [
+    "CsvExportButton"
+  ],
+  "apps/web/src/components/shared/data-table-column-header.tsx": [
+    "DataTableColumnHeader"
+  ],
+  "apps/web/src/components/shared/data-table-pagination.tsx": [
+    "DataTablePagination"
+  ],
+  "apps/web/src/components/shared/data-table.tsx": [
+    "DataTable"
+  ],
+  "apps/web/src/components/shared/empty-state.tsx": [
+    "EmptyState"
+  ],
+  "apps/web/src/components/shared/kpi-card.tsx": [
+    "KpiCard"
+  ],
+  "apps/web/src/components/shared/page-body.tsx": [
+    "PageBody"
+  ],
+  "apps/web/src/components/shared/page-header-help-button.tsx": [
+    "PageHeaderHelpButton"
+  ],
+  "apps/web/src/components/shared/page-header.tsx": [
+    "PageHeader"
+  ],
+  "apps/web/src/components/shared/quick-filter-tabs.tsx": [
+    "QuickFilterTabs"
+  ],
+  "apps/web/src/components/shared/slide-over-panel.tsx": [
+    "SlideOverPanel"
+  ],
+  "apps/web/src/components/shared/status-badge.tsx": [
+    "StatusBadge",
+    "StatusDot"
+  ],
+  "apps/web/src/components/layout/page-container.tsx": [
+    "PageContainer"
+  ]
+}
