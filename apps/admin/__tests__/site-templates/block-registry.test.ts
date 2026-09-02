@@ -8,7 +8,7 @@ import {
 } from '../../src/lib/site-templates/block-registry';
 
 describe('describeBlockFields', () => {
-  it('introspects a plain object schema (text): required body, optional heading and variant', () => {
+  it('introspects a plain object schema (text): required body; optional heading, variant and hidden', () => {
     const fields = describeBlockFields(textBlockSchema);
     expect(fields).toEqual(
       expect.arrayContaining([
@@ -16,9 +16,13 @@ describe('describeBlockFields', () => {
         { name: 'body', type: 'string', optional: false, nullable: false },
         // Phase 9 layout variant — an enum, so it also covers the enum tag.
         { name: 'variant', type: 'enum', optional: true, nullable: false },
+        // Site-editor "hide from visitors" flag — z.literal(true).optional(), so
+        // absence is the only representation of visible. Editor-managed, but it
+        // IS part of the content schema, and this view documents the schema.
+        { name: 'hidden', type: 'literal', optional: true, nullable: false },
       ]),
     );
-    expect(fields).toHaveLength(3);
+    expect(fields).toHaveLength(4);
   });
 
   it('reads .shape through .strict().refine() wrappers (hero)', () => {
