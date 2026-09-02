@@ -44,6 +44,28 @@ describe('collectBlockAssetPaths', () => {
     ]);
   });
 
+  it('returns the BASE path for a legacy suffixed heroImagePath', () => {
+    // A hero the v3 inspector has not migrated to `photos` — every newly
+    // onboarded community — stores `heroImagePath` as the already-suffixed
+    // 1600w variant (`HeroImageField` passes `result.variant1600Path` as
+    // `legacyPath`). Every other consumer of hero imagery strips it
+    // (`resolveHeroPhotos`, the canvas, the public renderer). This one must
+    // too: the picker appends `.800w.webp` for its thumbnail and the public
+    // renderer appends `.1600w.webp` again if the path is written back.
+    expect(
+      collectBlockAssetPaths('hero', { heroImagePath: '42/hero/legacy.jpg.1600w.webp' }),
+    ).toEqual([{ field: 'heroImagePath', value: '42/hero/legacy.jpg' }]);
+  });
+
+  it('strips in the hero branch only — image and gallery paths are stored base already', () => {
+    // Same scope as `resolveHeroPhotos`. The strip is a no-op without a
+    // suffix (the modern-shape case above stays green), and it must not
+    // start rewriting image/gallery paths, whose convention was always base.
+    expect(
+      collectBlockAssetPaths('image', { imagePath: '42/content/a.jpg.1600w.webp' }),
+    ).toEqual([{ field: 'imagePath', value: '42/content/a.jpg.1600w.webp' }]);
+  });
+
   it('returns nothing for block types that carry no asset paths', () => {
     expect(collectBlockAssetPaths('text', { body: 'hi' })).toEqual([]);
     expect(collectBlockAssetPaths('payments', { ctaTarget: 'https://x.test' })).toEqual([]);
@@ -145,6 +167,15 @@ describe('assertPathsScopedToCommunity', () => {
         ],
       });
     }
+  });
+
+  it('still rejects a foreign legacy hero path — the strip touches the suffix, not the tenant segment', () => {
+    expect(() =>
+      assertPathsScopedToCommunity(
+        42,
+        collectBlockAssetPaths('hero', { heroImagePath: '999/hero/legacy.jpg.1600w.webp' }),
+      ),
+    ).toThrow('heroImagePath must reference this community');
   });
 
   it('reports the FIRST offending path when several are foreign', () => {

@@ -28,6 +28,7 @@
  * existing tests assert both the outer message and the inner per-field
  * message, including the `…` (U+2026) and the 32-character truncation.
  */
+import { stripVariantSuffix } from '@propertypro/shared';
 import { ValidationError } from '@/lib/api/errors';
 
 export interface ScopedPath {
@@ -98,7 +99,14 @@ export function collectBlockAssetPaths(blockType: string, content: unknown): Sco
       const paths: ScopedPath[] = [];
       const heroImagePath = record['heroImagePath'];
       if (typeof heroImagePath === 'string') {
-        paths.push({ field: 'heroImagePath', value: heroImagePath });
+        // The legacy shape stores the already-suffixed 1600w variant
+        // (`HeroImageField` passes `result.variant1600Path` as `legacyPath`),
+        // where every other stored path is a base path. Strip it here, as
+        // `resolveHeroPhotos` does, so a consumer that appends a render
+        // suffix — the photo picker — cannot produce `x.jpg.1600w.webp.800w.webp`
+        // or write a double-suffixed path back. A no-op on base paths, and
+        // the tenant segment this file exists to check is untouched.
+        paths.push({ field: 'heroImagePath', value: stripVariantSuffix(heroImagePath) });
       }
       const photos = record['photos'];
       if (Array.isArray(photos)) {

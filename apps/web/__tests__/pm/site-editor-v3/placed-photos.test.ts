@@ -87,6 +87,47 @@ describe('placedPhotos', () => {
     ]);
   });
 
+  it('offers a legacy hero image by its BASE path, not the stored 1600w variant', () => {
+    // A hero the v3 inspector has not yet migrated to `photos` — every newly
+    // onboarded community — stores `heroImagePath` already suffixed. The
+    // picker appends `.800w.webp` for its thumbnail and the public renderer
+    // appends `.1600w.webp` on the published site, so a verbatim path renders
+    // `x.jpg.1600w.webp.800w.webp` here and publishes a double suffix if
+    // picked (`imagePathSchema` allows dots, so the write would not refuse it).
+    const legacy = [
+      {
+        blockType: 'hero',
+        blockOrder: 1,
+        content: {
+          headline: 'Welcome',
+          heroImagePath: '1/hero/x.jpg.1600w.webp',
+          heroImageAlt: 'X',
+        },
+      },
+    ];
+    expect(placedPhotos(legacy).map((p) => p.path)).toEqual(['1/hero/x.jpg']);
+  });
+
+  it('dedupes a hero carrying both shapes for the same image to one candidate', () => {
+    // `heroBlockSchema` refuses both at once, but a row written before that
+    // rule can still hold them. After the strip they are one path, and the
+    // picker keys on path — so one candidate, counted as one section.
+    const both = [
+      {
+        blockType: 'hero',
+        blockOrder: 1,
+        content: {
+          headline: 'Welcome',
+          heroImagePath: '1/hero/x.jpg.1600w.webp',
+          photos: [{ path: '1/hero/x.jpg', alt: 'X' }],
+        },
+      },
+    ];
+    expect(placedPhotos(both)).toEqual([
+      expect.objectContaining({ path: '1/hero/x.jpg', useCount: 1 }),
+    ]);
+  });
+
   it('returns nothing when no block references a photo', () => {
     expect(placedPhotos([blocks[2]!])).toEqual([]);
   });
