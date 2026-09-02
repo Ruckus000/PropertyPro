@@ -395,6 +395,53 @@ describe('SiteEditorProvider — duplicate', () => {
     expect(reorderMutate).not.toHaveBeenCalled();
   });
 
+  it('refuses a second duplicate while the first write is still in flight', async () => {
+    // The collision this prevents: `useUpsertContentBlock` only INVALIDATES on
+    // success — it writes nothing optimistically — so until the refetch lands
+    // `blocks` still has no copy and a second call computes the SAME slot.
+    // `upsertPublishedBlock` soft-deletes whatever occupies
+    // (pageId, blockOrder, isDraft) before inserting, so the second write would
+    // replace the first. Both PATCHes return 200, so nothing would surface it.
+    let settleWrite: () => void = () => {};
+    upsertMutateAsync.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          settleWrite = () => resolve();
+        }),
+    );
+    renderProvider(PAGE);
+
+    await act(async () => {
+      api.duplicate(3);
+    });
+    expect(api.isDuplicating).toBe(true);
+
+    await act(async () => {
+      api.duplicate(2);
+    });
+    expect(upsertMutateAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleWrite();
+    });
+    expect(api.isDuplicating).toBe(false);
+  });
+
+  it('releases the guard when the write fails, so the PM can retry', async () => {
+    upsertMutateAsync.mockRejectedValueOnce(new Error('nope'));
+    renderProvider(PAGE);
+
+    await act(async () => {
+      api.duplicate(3);
+    });
+    expect(api.isDuplicating).toBe(false);
+
+    await act(async () => {
+      api.duplicate(3);
+    });
+    expect(upsertMutateAsync).toHaveBeenCalledTimes(2);
+  });
+
   it('clears a previous failure when a duplicate succeeds', async () => {
     upsertMutateAsync.mockRejectedValueOnce(new Error('Section limit reached'));
     renderProvider(PAGE);

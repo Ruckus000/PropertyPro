@@ -91,6 +91,7 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
     toggleHidden,
     duplicate,
     duplicateError,
+    isDuplicating,
   } = useSiteEditor();
   const [drag, setDrag] = useState<DragState | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -319,8 +320,19 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
                   <EyeOff className="h-4 w-4" aria-hidden="true" />
                 )}
               </button>
+              {/*
+                Disabled across the whole list while any duplicate's write is in
+                flight, not just on the row that started it: the hazard is slot
+                ALLOCATION, and a second duplicate of a DIFFERENT section
+                computes the same free slot from the same not-yet-refetched list.
+                `AddPanel` disables its entire catalog on `upsert.isPending` for
+                exactly this. `ROW_ACTION_CLASS` already carries the row
+                cluster's disabled treatment, so this matches the chevrons; the
+                `aria-label` is unconditional, so the name survives.
+              */}
               <button
                 type="button"
+                disabled={isDuplicating}
                 onClick={() => duplicate(section.id)}
                 aria-label={`Duplicate ${label} section`}
                 className={ROW_ACTION_CLASS}

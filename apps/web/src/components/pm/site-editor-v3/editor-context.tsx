@@ -41,9 +41,18 @@ export interface SiteEditorContextValue {
    * opens the Inspector on a block whose write `assertSlotFreeAcrossPages`
    * rejects, because the write hooks carry the selected page's id (D-WRITE).
    *
-   * The whole-site list still exists for the callers that need it — the publish
-   * diff and the slot allocator (D-C3) — which read `useContentBlocks`
-   * directly rather than going through this context.
+   * The whole-site list still exists for the caller that needs it — the publish
+   * diff (D-C2) — which reads `useContentBlocks` directly rather than going
+   * through this context.
+   *
+   * The slot allocator is NOT such a caller any more. Migration 0048 dropped
+   * the community-wide unique index, so slots are per page and `nextContentSlot`
+   * wants a page-scoped list — this one. `AddPanel` still calls
+   * `useContentBlocks` itself, but for a different reason that survives: this
+   * context collapses `undefined` to `[]`, which makes "still loading"
+   * indistinguishable from "empty page", and the next slot for an empty page is
+   * 2. `duplicate` below is safe on this list regardless, because a section it
+   * can duplicate had to be IN the list to be named.
    */
   blocks: readonly SiteBlockSummary[];
   /** Reorderable sections, slot-ordered, hero and tombstones excluded. */
@@ -99,6 +108,16 @@ export interface SiteEditorContextValue {
    * `AddPanel` surfaces its own full-site and write failures.
    */
   duplicateError: string | null;
+  /**
+   * A duplicate's write is in flight — the Duplicate controls must be disabled,
+   * exactly as `AddPanel` disables its catalog on `upsert.isPending`.
+   *
+   * Named for the sibling `isMoving` (`reorder.isPending`), but deliberately
+   * NOT `upsert.isPending`: this provider's one upsert mutation now serves both
+   * `toggleHidden` and `duplicate`, and a hide writes to a slot it already
+   * knows. Only slot ALLOCATION can collide, so only duplication gates on this.
+   */
+  isDuplicating: boolean;
 }
 
 const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
@@ -205,6 +224,17 @@ export function SiteEditorProvider({
   const [announcement, setAnnouncement] = useState('');
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [pendingCopy, setPendingCopy] = useState<PendingCopy | null>(null);
+  /*
+   * The re-entrancy guard, kept in BOTH a ref and state on purpose.
+   *
+   * The ref is the correctness half and the state is only the rendering half.
+   * Two `duplicate()` calls in one tick — a double click, or a held Enter —
+   * both close over the same pre-update `isDuplicating`, so a state-only guard
+   * reads `false` twice and lets both writes through. The ref is assigned
+   * synchronously and is already `true` for the second call.
+   */
+  const duplicateInFlight = useRef(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
 
   const select = useCallback(
     (blockId: number) => {
@@ -365,6 +395,11 @@ export function SiteEditorProvider({
    */
   const duplicate = useCallback(
     (blockId: number) => {
+      // Nothing at all while a write is in flight — not even an error. The PM
+      // asked for the same thing twice; refusing quietly is the answer, and
+      // `isDuplicating` has already disabled the control that got them here.
+      if (duplicateInFlight.current) return;
+
       // Resolved from `blocks`, not `movableSections`: the hero and tombstone
       // refusals inside `planDuplicate` are the guard that actually runs, and
       // `movableSections` has already dropped both.
@@ -384,6 +419,8 @@ export function SiteEditorProvider({
 
       const toOrder = reorderTargetForCopy(movableSections, source.blockOrder, slot);
 
+      duplicateInFlight.current = true;
+      setIsDuplicating(true);
       void upsert
         .mutateAsync({ blockType: plan.blockType, blockOrder: slot, content: plan.content })
         .then(() => {
@@ -397,6 +434,23 @@ export function SiteEditorProvider({
           setDuplicateError(
             cause instanceof Error ? cause.message : DUPLICATE_FAILED_MESSAGE,
           );
+        })
+        .finally(() => {
+          // Released here and NOT held until `pendingCopy` clears, which was the
+          // other candidate. Two reasons, and the second is decisive:
+          //
+          //  1. It buys almost nothing. `onSuccess` awaits its own
+          //     `invalidateQueries`, and that promise resolves only once the
+          //     active blocks query has REFETCHED — so the cache already holds
+          //     the copy when this runs. What remains is the single React render
+          //     that delivers it to `blocks`, which no human click can land in.
+          //  2. It could wedge the button. `pendingCopy` clears only when a row
+          //     matching (slot, blockType) appears; if a concurrent write took
+          //     that slot it never does, and Duplicate would stay dead for the
+          //     life of this provider instance. Trading a sub-frame race for a
+          //     permanently broken control is the wrong direction.
+          duplicateInFlight.current = false;
+          setIsDuplicating(false);
         });
     },
     [blocks, movableSections, upsert],
@@ -443,6 +497,7 @@ export function SiteEditorProvider({
       toggleHidden,
       duplicate,
       duplicateError,
+      isDuplicating,
     }),
     [
       blocks,
@@ -459,6 +514,7 @@ export function SiteEditorProvider({
       toggleHidden,
       duplicate,
       duplicateError,
+      isDuplicating,
     ],
   );
 

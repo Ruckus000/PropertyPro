@@ -19,7 +19,10 @@ import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 const toggleHidden = vi.fn();
 const duplicate = vi.fn();
 /** Mutable so one test can put the provider into its refused-duplicate state. */
-const state = vi.hoisted(() => ({ duplicateError: null as string | null }));
+const state = vi.hoisted(() => ({
+  duplicateError: null as string | null,
+  isDuplicating: false,
+}));
 
 const sections = [
   { id: 1, blockType: 'text', blockOrder: 0, content: { body: 'Welcome' } },
@@ -38,6 +41,7 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
     toggleHidden,
     duplicate,
     duplicateError: state.duplicateError,
+    isDuplicating: state.isDuplicating,
   }),
 }));
 
@@ -46,6 +50,7 @@ describe('SectionList hide affordance', () => {
     toggleHidden.mockClear();
     duplicate.mockClear();
     state.duplicateError = null;
+    state.isDuplicating = false;
   });
 
   it('labels a hidden section as hidden', () => {
@@ -79,6 +84,23 @@ describe('SectionList hide affordance', () => {
     state.duplicateError = 'This page is full — it already has the maximum of 98 sections.';
     render(<SectionList />);
     expect(screen.getByRole('alert')).toHaveTextContent(/page is full/i);
+  });
+
+  it('disables Duplicate while a duplicate is in flight, keeping its name', () => {
+    // Two clicks during the write would compute the same free slot, and the
+    // second would REPLACE the first copy — the hazard `AddPanel` disables its
+    // own trigger for. Querying BY NAME is half the assertion: the disabled
+    // state must not swallow the accessible name.
+    state.isDuplicating = true;
+    render(<SectionList />);
+    const [first] = screen.getAllByRole('button', { name: /^duplicate .* section$/i });
+    expect(first).toBeDisabled();
+  });
+
+  it('leaves Duplicate enabled when no duplicate is in flight', () => {
+    render(<SectionList />);
+    const [first] = screen.getAllByRole('button', { name: /^duplicate .* section$/i });
+    expect(first).toBeEnabled();
   });
 
   it('renders no alert when nothing has been refused', () => {
