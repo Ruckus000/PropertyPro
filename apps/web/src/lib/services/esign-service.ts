@@ -61,7 +61,15 @@ export interface EsignSubmissionRecord {
   [key: string]: unknown;
   id: number;
   communityId: number;
-  templateId: number;
+  /** Null for a one-off send, which carries its own schema and PDF. */
+  templateId: number | null;
+  /**
+   * The field layout this request was SENT with. Null on rows written before
+   * migration 0063, which fall back to their template.
+   */
+  fieldsSchema: EsignFieldsSchema | null;
+  /** The PDF this request was sent with. Null falls back to the template's. */
+  sourceDocumentPath: string | null;
   externalId: string;
   status: string;
   signingOrder: string;
@@ -290,11 +298,14 @@ function fieldValueIsPresent(
 
 function validateSignedValuesForSigner(
   signer: Pick<EsignSignerRecord, 'role'>,
-  template: Pick<EsignTemplateRecord, 'fieldsSchema'>,
+  /**
+   * The layout the request was SENT with, resolved by `getSignerContext`.
+   * Validating against the template as it stands now would reject a signer
+   * whose fields were edited away after they were sent the link.
+   */
+  fieldsSchema: EsignFieldsSchema | null,
   signedValues: SubmitSignatureInput['signedValues'],
 ): void {
-  const fieldsSchema = template.fieldsSchema;
-
   if (!fieldsSchema) {
     throw new BadRequestError('Template has no field definitions');
   }
@@ -376,6 +387,8 @@ function mapSubmissionRow(row: AnyRow): EsignSubmissionRecord {
     id: row.id,
     communityId: row.community_id,
     templateId: row.template_id,
+    fieldsSchema: row.fields_schema ?? null,
+    sourceDocumentPath: row.source_document_path ?? null,
     externalId: row.external_id,
     status: row.status,
     signingOrder: row.signing_order ?? 'parallel',
@@ -624,6 +637,11 @@ export async function createSubmission(
   const subRows = await scoped.insert(esignSubmissions, {
     communityId,
     templateId: input.templateId,
+    // Capture what this request is being sent with. The signing page reads the
+    // snapshot, so a later template edit cannot change the document under the
+    // people signing it.
+    fieldsSchema,
+    sourceDocumentPath: template.sourceDocumentPath,
     externalId: submissionExternalId,
     status: 'pending',
     signingOrder: input.signingOrder,
@@ -672,7 +690,9 @@ export async function createSubmission(
       .limit(1);
     const communityName = (communityRows?.[0] as { name?: string } | undefined)?.name ?? 'PropertyPro';
 
-    const documentName = submission.messageSubject ?? template.name;
+    // A one-off send has no template, so its subject line is the document name.
+  const documentName =
+    submission.messageSubject ?? template?.name ?? 'Document for signature';
 
     for (const signer of signerRecords) {
       try {
@@ -836,7 +856,7 @@ export async function listMyPendingSigners(
     const sub = subsById.get(subId);
     if (!sub) continue; // submission was filtered out (expired/cancelled/deleted)
 
-    const template = templatesById.get(sub.templateId);
+    const template = sub.templateId != null ? templatesById.get(sub.templateId) : undefined;
     results.push({
       signerId: signer['id'] as number,
       signerStatus: signer['status'] as string,
@@ -986,7 +1006,10 @@ export async function sendReminder(
 
   const signer = signerRows[0] as EsignSignerRecord;
   const { submission, signers } = await getSubmission(communityId, submissionId);
-  const template = await getTemplate(communityId, submission.templateId);
+  const template =
+    submission.templateId != null
+      ? await getTemplate(communityId, submission.templateId)
+      : null;
 
   if (signer.status !== 'pending' && signer.status !== 'opened') {
     throw new UnprocessableEntityError('Can only send reminders to pending or opened signers');
@@ -1029,7 +1052,9 @@ export async function sendReminder(
   const community = (communityRows?.[0] ?? null) as
     | { name?: string | null; timezone?: string | null }
     | null;
-  const documentName = submission.messageSubject ?? template.name;
+  // A one-off send has no template, so its subject line is the document name.
+  const documentName =
+    submission.messageSubject ?? template?.name ?? 'Document for signature';
   const signingUrl = buildSigningUrl(submission.externalId, signer.slug);
   const reminderNumber = signer.reminderCount + 1;
 
@@ -1090,7 +1115,16 @@ export async function getSignerContext(
 ): Promise<{
   signer: EsignSignerRecord;
   submission: EsignSubmissionRecord;
-  template: EsignTemplateRecord;
+  /** Null for a one-off send, which has no template. */
+  template: EsignTemplateRecord | null;
+  /**
+   * The layout this request was sent with — the submission's own snapshot,
+   * falling back to the template for rows written before migration 0063.
+   * Resolved once here so every signing-time consumer agrees.
+   */
+  fieldsSchema: EsignFieldsSchema | null;
+  /** The PDF this request was sent with, resolved the same way. */
+  sourceDocumentPath: string | null;
   isWaiting: boolean;
   waitingFor: string | null;
 }> {
@@ -1133,17 +1167,34 @@ export async function getSignerContext(
     throw new NotFoundError('Invalid or expired signing link');
   }
 
-  const tplRows = await db
-    .select()
-    .from(esignTemplates)
-    .where(and(eq(esignTemplates.id, submission.templateId), isNull(esignTemplates.deletedAt)))
-    .limit(1);
+  const tplRows =
+    submission.templateId != null
+      ? await db
+          .select()
+          .from(esignTemplates)
+          .where(
+            and(
+              eq(esignTemplates.id, submission.templateId),
+              isNull(esignTemplates.deletedAt),
+            ),
+          )
+          .limit(1)
+      : [];
 
-  if (tplRows.length === 0) {
+  const template =
+    tplRows.length > 0 ? { ...(tplRows[0] as EsignTemplateRecord) } : null;
+
+  // Prefer what the request was sent with; fall back to the template only for
+  // rows written before the snapshot existed.
+  const fieldsSchema = submission.fieldsSchema ?? template?.fieldsSchema ?? null;
+  const sourceDocumentPath =
+    submission.sourceDocumentPath ?? template?.sourceDocumentPath ?? null;
+
+  // A link with nothing to render: no snapshot, and the template it pointed at
+  // is gone. Signing cannot proceed, and saying so beats a blank document.
+  if (!fieldsSchema) {
     throw new NotFoundError('Template not found');
   }
-
-  const template = { ...(tplRows[0] as EsignTemplateRecord) };
 
   // Check sequential signing
   let isWaiting = false;
@@ -1202,7 +1253,15 @@ export async function getSignerContext(
     signer.status = 'opened';
   }
 
-  return { signer, submission, template, isWaiting, waitingFor };
+  return {
+    signer,
+    submission,
+    template,
+    fieldsSchema,
+    sourceDocumentPath,
+    isWaiting,
+    waitingFor,
+  };
 }
 
 function assertSignerContextCanAct(
@@ -1241,9 +1300,9 @@ export async function submitSignature(
     expectedSubmissionExternalId,
   );
   assertSignerContextCanAct(context);
-  const { signer, template } = context;
+  const { signer, fieldsSchema } = context;
 
-  validateSignedValuesForSigner(signer, template, input.signedValues);
+  validateSignedValuesForSigner(signer, fieldsSchema, input.signedValues);
 
   const scoped = createScopedClient(signer.communityId);
 
@@ -1436,14 +1495,24 @@ async function checkAndCompleteSubmission(
     return { status: 'pending' };
   }
 
-  const tplRows = await scoped.selectFrom(
-    esignTemplates,
-    {},
-    eq(esignTemplates.id, sub.templateId as number),
-  );
+  // Flatten against what the request was SENT with. This used to re-read the
+  // template live, minutes to days after the signer saw the fields, so a
+  // template edited in between produced a signed PDF whose boxes did not match
+  // the document anyone actually signed.
+  const templateId = sub.templateId as number | null;
+  const tplRows =
+    templateId != null
+      ? await scoped.selectFrom(esignTemplates, {}, eq(esignTemplates.id, templateId))
+      : [];
 
   const tpl = tplRows[0] as EsignTemplateRecord | undefined;
-  if (!tpl || !tpl.fieldsSchema || !hasRenderableSourceDocument(tpl)) {
+  const finalSchema =
+    (sub.fieldsSchema as EsignFieldsSchema | null) ?? tpl?.fieldsSchema ?? null;
+  const finalSourcePath =
+    (sub.sourceDocumentPath as string | null) ?? tpl?.sourceDocumentPath ?? null;
+  const documentName = (sub.messageSubject as string | null) ?? tpl?.name ?? 'document';
+
+  if (!finalSchema || !finalSourcePath || finalSourcePath.trim().length === 0) {
     const message =
       'The signed document could not be finalized because the source PDF is unavailable.';
 
@@ -1472,14 +1541,10 @@ async function checkAndCompleteSubmission(
       };
     });
 
-    const pdfBytes = await flattenSignedPdf(
-      tpl.sourceDocumentPath!,
-      signers,
-      tpl.fieldsSchema,
-    );
+    const pdfBytes = await flattenSignedPdf(finalSourcePath, signers, finalSchema);
 
     const hash = computeDocumentHash(pdfBytes);
-    const safeName = tpl.name.replace(/[^a-zA-Z0-9-_]/g, '_');
+    const safeName = documentName.replace(/[^a-zA-Z0-9-_]/g, '_');
     const storagePath = await uploadSignedDocument(communityId, submissionId, pdfBytes, `${safeName}_signed.pdf`);
 
     await scoped.update(

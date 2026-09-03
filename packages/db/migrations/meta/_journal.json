@@ -428,6 +428,13 @@
       "when": 1786414111600,
       "tag": "0062_secret_ballot",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1788457812986,
+      "tag": "0063_esign_submission_snapshot",
+      "breakpoints": true
     }
   ]
 }

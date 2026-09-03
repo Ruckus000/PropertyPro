@@ -28,10 +28,17 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     const data = await getSubmission(communityId, params.id);
-    const template = await getTemplate(communityId, data.submission.templateId);
+    // A one-off send has no template; it carries its own source PDF.
+    const template =
+      data.submission.templateId != null
+        ? await getTemplate(communityId, data.submission.templateId)
+        : null;
 
     const previewPath =
-      data.submission.signedDocumentPath ?? template.sourceDocumentPath ?? null;
+      data.submission.signedDocumentPath ??
+      data.submission.sourceDocumentPath ??
+      template?.sourceDocumentPath ??
+      null;
 
     let previewPdfUrl: string | null = null;
     if (previewPath) {

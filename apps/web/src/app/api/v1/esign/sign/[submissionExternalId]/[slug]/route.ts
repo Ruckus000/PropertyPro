@@ -22,16 +22,21 @@ export const GET = withErrorHandler(
       params.submissionExternalId,
     );
 
-    const signerFields = signerContext.template.fieldsSchema?.fields.filter(
+    // Read the layout the request was SENT with, which `getSignerContext`
+    // resolves from the submission's snapshot and falls back to the template
+    // only for rows written before migration 0063. Reading the template live
+    // here is what let a mid-flight template edit change this signer's
+    // document.
+    const signerFields = signerContext.fieldsSchema?.fields.filter(
       (f) => f.signerRole === signerContext.signer.role,
     ) ?? [];
 
     let pdfUrl: string | null = null;
-    if (signerContext.template.sourceDocumentPath) {
+    if (signerContext.sourceDocumentPath) {
       try {
         pdfUrl = await createPresignedDownloadUrl(
           'documents',
-          signerContext.template.sourceDocumentPath,
+          signerContext.sourceDocumentPath,
         );
       } catch {
         pdfUrl = null;
@@ -56,8 +61,13 @@ export const GET = withErrorHandler(
         expiresAt: signerContext.submission.expiresAt,
       },
       template: {
-        name: signerContext.template.name,
-        description: signerContext.template.description,
+        // A one-off send has no template, so the subject line names the
+        // document instead. The signer should never be shown a blank title.
+        name:
+          signerContext.template?.name ??
+          signerContext.submission.messageSubject ??
+          'Document for signature',
+        description: signerContext.template?.description ?? null,
       },
       pdfUrl,
       fields: signerFields,

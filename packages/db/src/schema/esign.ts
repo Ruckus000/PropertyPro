@@ -68,9 +68,28 @@ export const esignSubmissions = pgTable(
     communityId: bigint('community_id', { mode: 'number' })
       .notNull()
       .references(() => communities.id, { onDelete: 'cascade' }),
-    templateId: bigint('template_id', { mode: 'number' })
-      .notNull()
-      .references(() => esignTemplates.id, { onDelete: 'restrict' }),
+    /**
+     * Nullable since 0063: a one-off send has no template. It carries its own
+     * `fieldsSchema` and `sourceDocumentPath` instead.
+     */
+    templateId: bigint('template_id', { mode: 'number' }).references(
+      () => esignTemplates.id,
+      { onDelete: 'restrict' },
+    ),
+    /**
+     * The field layout this request was SENT with, captured at create time.
+     *
+     * Without it the public signing route reads the template live on every
+     * open, so editing a template changes the document under the people
+     * signing it, and two signers on one request can be served different
+     * fields. NULL means the row predates 0063 and falls back to its template.
+     */
+    fieldsSchema: jsonb('fields_schema'),
+    /**
+     * The PDF this request was sent with. Falls back to the template's when
+     * NULL; required for a request that has no template.
+     */
+    sourceDocumentPath: text('source_document_path'),
     docusealSubmissionId: integer('docuseal_submission_id'),
     externalId: text('external_id').notNull().unique(),
     status: text('status').notNull().default('pending'),

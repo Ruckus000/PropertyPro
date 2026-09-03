@@ -210,6 +210,14 @@ describe('E-Sign Routes', () => {
             ],
           },
         },
+        sourceDocumentPath: 'communities/1/esign/template.pdf',
+        fieldsSchema: {
+          version: 1,
+          signerRoles: ['signer'],
+          fields: [
+            { id: 'f1', type: 'signature', signerRole: 'signer', page: 0, x: 10, y: 20, width: 30, height: 5, required: true },
+          ],
+        },
         isWaiting: false,
         waitingFor: null,
       });
@@ -246,6 +254,8 @@ describe('E-Sign Routes', () => {
             version: 1, signerRoles: ['signer'], fields: [],
           },
         },
+        sourceDocumentPath: null,
+        fieldsSchema: { version: 1, signerRoles: ['signer'], fields: [] },
         isWaiting: false,
         waitingFor: null,
       });
@@ -281,6 +291,16 @@ describe('E-Sign Routes', () => {
               { id: 'f3', type: 'text', signerRole: 'signer', page: 0, x: 10, y: 70, width: 30, height: 5, required: true },
             ],
           },
+        },
+        sourceDocumentPath: null,
+        fieldsSchema: {
+          version: 1,
+          signerRoles: ['signer', 'witness'],
+          fields: [
+            { id: 'f1', type: 'signature', signerRole: 'signer', page: 0, x: 10, y: 20, width: 30, height: 5, required: true },
+            { id: 'f2', type: 'signature', signerRole: 'witness', page: 0, x: 10, y: 50, width: 30, height: 5, required: true },
+            { id: 'f3', type: 'text', signerRole: 'signer', page: 0, x: 10, y: 70, width: 30, height: 5, required: true },
+          ],
         },
         isWaiting: false,
         waitingFor: null,

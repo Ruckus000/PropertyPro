@@ -1491,4 +1491,141 @@ describe('E-Sign Full Lifecycle', () => {
       expect(afterRevoke.hasActiveConsent).toBe(false);
     });
   });
+  // -------------------------------------------------------------------------
+  // A request keeps the fields it was SENT with (migration 0063).
+  //
+  // Before the snapshot, a submission stored only `template_id` and the public
+  // signing route read `template.fields_schema` live on EVERY open. Editing a
+  // template therefore changed the document under the people signing it, and
+  // two signers on one request could be served different fields.
+  // -------------------------------------------------------------------------
+  describe('Field schema snapshot', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      logAuditEventMock.mockResolvedValue(undefined);
+    });
+
+    it('captures the template layout onto the request at send time', async () => {
+      const schema = validFieldsSchema();
+      const scoped = makeScopedMock();
+      scoped.selectFrom = vi.fn(async () => [
+        {
+          id: 3,
+          communityId: 1,
+          fieldsSchema: schema,
+          sourceDocumentPath: 'communities/1/esign-templates/proxy.pdf',
+          status: 'active',
+        },
+      ]);
+      const inserted: Record<string, unknown>[] = [];
+      scoped.insert = vi.fn(async (_table: unknown, values: unknown) => {
+        inserted.push(values as Record<string, unknown>);
+        return [{ id: 10, communityId: 1, externalId: 'sub-ext' }];
+      });
+      createScopedClientMock.mockReturnValue(scoped);
+
+      await createSubmission(1, 'user-1', {
+        templateId: 3,
+        signers: [{ email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 }],
+        signingOrder: 'parallel',
+        sendEmail: false,
+      });
+
+      const submissionInsert = inserted[0]!;
+      expect(submissionInsert.fieldsSchema).toEqual(schema);
+      expect(submissionInsert.sourceDocumentPath).toBe(
+        'communities/1/esign-templates/proxy.pdf',
+      );
+    });
+
+    it('serves the snapshot, not the template as it stands now', async () => {
+      // The manager edited the template after sending. The signer must still
+      // see what they were sent.
+      const sentWith = validFieldsSchema();
+      const editedSince = twoRoleFieldsSchema();
+
+      createUnscopedClientMock.mockReturnValue(
+        makeUnscopedSignerContextMock({
+          signerRow: makeReminderSigner({ submissionId: 10, slug: 'slug-1' }),
+          submissionRow: makeReminderSubmission({
+            id: 10,
+            fieldsSchema: sentWith,
+            sourceDocumentPath: 'communities/1/esign-templates/as-sent.pdf',
+          }),
+          templateRow: makeReminderTemplate({ fieldsSchema: editedSince }),
+        }),
+      );
+
+      const context = await getSignerContext('slug-1');
+
+      expect(context.fieldsSchema).toEqual(sentWith);
+      expect(context.fieldsSchema).not.toEqual(editedSince);
+      expect(context.sourceDocumentPath).toBe(
+        'communities/1/esign-templates/as-sent.pdf',
+      );
+    });
+
+    it('falls back to the template for a request sent before the snapshot existed', async () => {
+      // Every row that predates migration 0063 reads NULL and must keep working.
+      const templateSchema = validFieldsSchema();
+
+      createUnscopedClientMock.mockReturnValue(
+        makeUnscopedSignerContextMock({
+          signerRow: makeReminderSigner({ submissionId: 10, slug: 'slug-1' }),
+          submissionRow: makeReminderSubmission({
+            id: 10,
+            fieldsSchema: null,
+            sourceDocumentPath: null,
+          }),
+          templateRow: makeReminderTemplate({ fieldsSchema: templateSchema }),
+        }),
+      );
+
+      const context = await getSignerContext('slug-1');
+
+      expect(context.fieldsSchema).toEqual(templateSchema);
+      expect(context.sourceDocumentPath).toBe(
+        'communities/1/esign-templates/proxy.pdf',
+      );
+    });
+
+    it('resolves a request that has no template at all', async () => {
+      // A one-off send: uploaded, addressed, sent, with no template created.
+      const ownSchema = validFieldsSchema();
+
+      createUnscopedClientMock.mockReturnValue(
+        makeUnscopedSignerContextMock({
+          signerRow: makeReminderSigner({ submissionId: 10, slug: 'slug-1' }),
+          submissionRow: makeReminderSubmission({
+            id: 10,
+            templateId: null,
+            fieldsSchema: ownSchema,
+            sourceDocumentPath: 'communities/1/esign-templates/one-off.pdf',
+          }),
+          templateRow: null,
+        }),
+      );
+
+      const context = await getSignerContext('slug-1');
+
+      expect(context.template).toBeNull();
+      expect(context.fieldsSchema).toEqual(ownSchema);
+      expect(context.sourceDocumentPath).toBe(
+        'communities/1/esign-templates/one-off.pdf',
+      );
+    });
+
+    it('still refuses a link whose template is gone and which carries no snapshot', async () => {
+      // Nothing to serve: no snapshot, and the template it pointed at is gone.
+      createUnscopedClientMock.mockReturnValue(
+        makeUnscopedSignerContextMock({
+          signerRow: makeReminderSigner({ submissionId: 10, slug: 'slug-1' }),
+          submissionRow: makeReminderSubmission({ id: 10, fieldsSchema: null }),
+          templateRow: null,
+        }),
+      );
+
+      await expect(getSignerContext('slug-1')).rejects.toThrow(/not found/i);
+    });
+  });
 });
