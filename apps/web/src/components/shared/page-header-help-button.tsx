@@ -24,6 +24,17 @@ import { useHelpWidgetOptional } from '@/components/help/help-widget-provider';
 const HELP_DOCS_MODAL_ENABLED =
   process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true';
 
+/**
+ * Whether <PageHeaderHelpButton/> would render anything. PageHeader uses this
+ * to decide whether its toolbar row exists at all: with the page title no
+ * longer painted, a page with no actions and no Help would otherwise show an
+ * empty band above its content.
+ */
+export function useHelpButtonAvailable(): boolean {
+  const widget = useHelpWidgetOptional();
+  return Boolean(widget) && HELP_DOCS_MODAL_ENABLED;
+}
+
 export function PageHeaderHelpButton() {
   const widget = useHelpWidgetOptional();
   if (!widget) return null;
