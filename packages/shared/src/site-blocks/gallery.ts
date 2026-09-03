@@ -8,7 +8,7 @@
  * public-site performance budget.
  */
 import { z } from 'zod';
-import { altTextSchema, imagePathSchema } from './types';
+import { altTextSchema, hiddenSchema, imagePathSchema } from './types';
 
 export const galleryImageSchema = z
   .object({
@@ -34,6 +34,8 @@ export const galleryBlockSchema = z
   .object({
     heading: z.string().min(1).max(120).optional(),
     images: z.array(galleryImageSchema).min(1).max(24),
+    /** Hidden from visitors; still visible and editable in the editor. */
+    hidden: hiddenSchema.optional(),
   })
   .strict();
 

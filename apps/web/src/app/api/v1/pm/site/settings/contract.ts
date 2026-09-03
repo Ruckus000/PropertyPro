@@ -49,9 +49,30 @@ const siteFooterSchema = z.object({
   showStatutoryLine: z.boolean(),
 });
 
+/**
+ * Read-only. Deliberately NOT reachable through the PATCH body — that object is
+ * `.strict()` precisely to stop a caller reaching sibling branding keys such as
+ * `assetsBytesUsed`. Reading the community's own usage is a different thing.
+ *
+ * On BOTH the GET and PATCH responses (they share `siteSettingsResponse`), and
+ * required: `useUpdateSiteSettings` writes the PATCH response straight into the
+ * query cache, so a GET-only field would vanish from the meter after every
+ * save. Required rather than optional so the runner's response validation is a
+ * canary for a route that forgets it — a loud 500, not a silently blank meter.
+ *
+ * `quotaBytes` is null when the plan sets no limit (fail-open, see
+ * `@/lib/site-assets/quota`). It is never 0: a plan without storage is
+ * expressed as null, so a consumer can divide by it without a guard.
+ */
+const siteStorageSchema = z.object({
+  assetsBytesUsed: z.number().int().nonnegative(),
+  quotaBytes: z.number().int().positive().nullable(),
+});
+
 const siteSettingsResponse = z.object({
   settings: siteSettingsSchema,
   footer: siteFooterSchema,
+  storage: siteStorageSchema,
 });
 
 export const siteSettingsGetContract = defineRoute({

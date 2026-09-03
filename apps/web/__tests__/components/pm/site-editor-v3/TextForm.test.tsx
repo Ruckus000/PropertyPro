@@ -195,3 +195,26 @@ describe('TextForm — unmount', () => {
     );
   });
 });
+
+describe('TextForm — a hidden section stays hidden through an edit', () => {
+  it('carries hidden: true through the real form, not just the hook', async () => {
+    // The end of the chain the hook-level suite starts
+    // (`use-block-form-preserved-keys.test.tsx`): `toCanonical` here really
+    // does rebuild content as a fresh literal, and the PATCH route really does
+    // replace content wholesale — so without preservation this write is what
+    // silently republishes a section the PM hid.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderForm({ body: 'No divng.', hidden: true });
+
+    await user.clear(screen.getByLabelText(/Body/));
+    await user.type(screen.getByLabelText(/Body/), 'No diving.');
+    await settleAutosave();
+
+    expect(upsertMock).toHaveBeenLastCalledWith({
+      blockType: 'text',
+      blockOrder: 3,
+      content: { body: 'No diving.', hidden: true },
+    });
+  });
+});

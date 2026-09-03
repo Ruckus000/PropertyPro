@@ -42,3 +42,19 @@ Documentation index for the block types that compose a community's public site. 
 8. Document this block at `docs/design-system/blocks/<type>.md`.
 
 The `registry-completeness.test.ts` at `packages/shared/__tests__/site-blocks/` ensures step 3 is not skipped.
+
+## Cross-cutting content fields
+
+Two optional fields sit on block content schemas across types and are **not** listed in
+the per-block field tables above, which document each type's own fields:
+
+| Field     | On                                              | Shape                      | Meaning |
+|-----------|-------------------------------------------------|----------------------------|---------|
+| `variant` | text, image, faq, amenities, gallery, payments   | enum, optional             | Phase 9 layout variant. Omitted when `standard`, so two identical-looking sections do not differ by key. |
+| `hidden`  | every type **except `hero`**                    | `z.literal(true)`, optional | Hidden from visitors, still shown and editable in the site editor. `true` or absent — never `false` — so absence is the only representation of visible. Filtered at the two public render paths by `apps/web/src/lib/site/visible-blocks.ts`; the editor API keeps returning hidden blocks. The hero is the welcome region and cannot be hidden. |
+
+Both are **content**: they draft and publish like any other edit, and every schema is
+`.strict()`, so a writer that rebuilds content from a partial view will drop them — see
+`inspector/use-block-form.ts` (`PRESERVED_CONTENT_KEYS`) for why `hidden` is preserved
+centrally across inspector saves. The admin block registry (`apps/admin/src/lib/site-templates/block-registry.ts`)
+introspects the live schema and lists them.

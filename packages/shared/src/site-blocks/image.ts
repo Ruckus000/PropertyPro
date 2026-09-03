@@ -3,7 +3,7 @@
  * Path must conform to the {community_id}/{kind}/... Supabase Storage layout.
  */
 import { z } from 'zod';
-import { altTextSchema, blockVariantSchema, imagePathSchema } from './types';
+import { altTextSchema, blockVariantSchema, hiddenSchema, imagePathSchema } from './types';
 
 export const imageBlockSchema = z
   .object({
@@ -13,6 +13,8 @@ export const imageBlockSchema = z
     caption: z.string().min(1).max(200).optional(),
     /** Absent means `standard` — see blockVariantSchema. */
     variant: blockVariantSchema.optional(),
+    /** Hidden from visitors; still visible and editable in the editor. */
+    hidden: hiddenSchema.optional(),
   })
   .strict()
   .refine(

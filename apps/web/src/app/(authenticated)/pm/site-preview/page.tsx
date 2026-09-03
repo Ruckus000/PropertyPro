@@ -25,6 +25,7 @@ import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+import { visibleBlocks } from '@/lib/site/visible-blocks';
 import { getLayout } from '@/components/public-site/layouts/registry';
 import {
   resolvePreviewLayoutId,
@@ -102,10 +103,12 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   // preview has to show what the public site will show, and an unfiltered read
   // would interleave a second page's sections into it.
   const homePageId = await reader.getHomePageId();
-  const blocks = await reader.listSiteBlocks({
-    includeDrafts: true,
-    ...(homePageId === null ? {} : { pageId: homePageId }),
-  });
+  const blocks = visibleBlocks(
+    await reader.listSiteBlocks({
+      includeDrafts: true,
+      ...(homePageId === null ? {} : { pageId: homePageId }),
+    }),
+  );
 
   return (
     <>

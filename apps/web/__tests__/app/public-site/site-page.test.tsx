@@ -10,6 +10,7 @@ const {
   resolveRedirectMock,
   listNavPagesMock,
   headersGetMock,
+  reportDegradedBlocksMock,
 } = vi.hoisted(() => ({
   getCommunityPublicInfoMock: vi.fn(),
   getBrandingForCommunityMock: vi.fn(),
@@ -24,6 +25,10 @@ const {
   resolveRedirectMock: vi.fn(),
   listNavPagesMock: vi.fn(),
   headersGetMock: vi.fn(),
+  // Spy on render-health telemetry so a test can assert WHICH list it was
+  // handed — the raw read or the hidden-filtered one — without touching the
+  // real Sentry transport or blockSchemaRegistry.
+  reportDegradedBlocksMock: vi.fn(),
 }));
 
 // Mock the headers module (Next 15 dynamic API)
@@ -84,6 +89,12 @@ vi.mock('@propertypro/theme', () => ({
 // Mock html-sanitizer passthrough
 vi.mock('@/lib/utils/html-sanitizer', () => ({
   sanitizeHtml: (html: string) => html,
+}));
+
+// Spy on render-health telemetry (see reportDegradedBlocksMock above) instead
+// of letting the real implementation run against @sentry/nextjs.
+vi.mock('@/lib/telemetry/site-block-render', () => ({
+  reportDegradedBlocks: reportDegradedBlocksMock,
 }));
 
 import PublicSitePage, { generateMetadata } from '@/app/public-site/[[...slug]]/page';
@@ -156,6 +167,50 @@ describe('PublicSitePage (layout-registry path)', () => {
     getHomePageIdMock.mockResolvedValueOnce(null);
     await PublicSitePage({ params: Promise.resolve({}) });
     expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: false });
+  });
+
+  it('omits a hidden block from render while still reporting it to render-health telemetry', async () => {
+    // A malformed block that is ALSO hidden must still be caught by
+    // reportDegradedBlocks: it silently vanishes from this same
+    // statutory-transparency page the instant a PM unhides it. That only
+    // holds if telemetry sees the RAW read, not the render path's
+    // hidden-filtered list — this pins that ordering.
+    listSiteBlocksMock.mockResolvedValue([
+      {
+        id: 1,
+        blockType: 'text',
+        blockOrder: 1,
+        content: { body: 'Visible section body.' },
+        isDraft: false,
+        publishedAt: null,
+        pageId: 1,
+      },
+      {
+        id: 2,
+        blockType: 'text',
+        blockOrder: 2,
+        content: { heading: 'Hidden Section Heading', body: 'Hidden body.', hidden: true },
+        isDraft: false,
+        publishedAt: null,
+        pageId: 1,
+      },
+    ]);
+
+    const ui = await PublicSitePage({ params: Promise.resolve({}) });
+    const { container } = render(ui as React.ReactElement);
+
+    // Half 1: the hidden section never reaches the rendered output.
+    expect(container.textContent).toContain('Visible section body.');
+    expect(container.textContent).not.toContain('Hidden Section Heading');
+
+    // Half 2: telemetry still saw BOTH blocks. If reportDegradedBlocks were
+    // fed the filtered (render) list instead of the raw read, this count
+    // would drop to 1 and the hidden block's id would be missing.
+    expect(reportDegradedBlocksMock).toHaveBeenCalledTimes(1);
+    const [reportedBlocks] = reportDegradedBlocksMock.mock.calls[0] as [
+      Array<{ id: number }>,
+    ];
+    expect(reportedBlocks.map((b) => b.id)).toEqual([1, 2]);
   });
 
   it('builds metadata via buildCommunityMetadata using the helper', async () => {

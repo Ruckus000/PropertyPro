@@ -60,6 +60,8 @@ vi.mock('@/hooks/use-site-settings', () => ({
     data: {
       settings: { seoTitle: null, seoDescription: null, searchIndexing: true, favicon: null },
       footer: { associationName: null, note: null, showStatutoryLine: false },
+      // With a quota, so the storage meter's progressbar is inside the audit.
+      storage: { assetsBytesUsed: 250 * 1024 * 1024, quotaBytes: 500 * 1024 * 1024 },
     },
   }),
   useUpdateSiteSettings: () => ({ mutate: vi.fn(), isPending: false }),

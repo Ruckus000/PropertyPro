@@ -88,6 +88,20 @@ export interface SiteFooterSettings {
   showStatutoryLine: boolean;
 }
 
+/**
+ * Photo storage against the plan's quota.
+ *
+ * Read-only from the editor's point of view: the counter is charged by the
+ * upload finalize routes (`@/lib/site-assets/quota`) and is unreachable through
+ * the settings PATCH. `quotaBytes` is null when the plan sets no limit — the
+ * same fail-open rule the upload gate applies — and a consumer must then show
+ * usage alone rather than invent a denominator.
+ */
+export interface SiteStorage {
+  assetsBytesUsed: number;
+  quotaBytes: number | null;
+}
+
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   seoTitle: null,
   seoDescription: null,

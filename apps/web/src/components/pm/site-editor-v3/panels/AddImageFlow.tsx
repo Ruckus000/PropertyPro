@@ -1,20 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowLeft, Images, Upload, type LucideIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useImageUpload } from '@/hooks/use-image-upload';
-import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
+import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import {
   CONTENT_MAX_BYTES,
   DECORATIVE_PLACEHOLDER_ALT,
   validateImageFile,
 } from '@/lib/site-assets/client-image';
+import { placedPhotos } from '@/lib/site-editor/placed-photos';
 import type { AddCatalogEntry } from './add-catalog';
+import { PhotoPicker } from './PhotoPicker';
 
 const ALT_MAX = 200;
+
+/** Where the section's photo comes from. */
+type PhotoSource = 'upload' | 'existing';
+
+const SOURCE_OPTIONS: readonly { value: PhotoSource; label: string; icon: LucideIcon }[] = [
+  { value: 'upload', label: 'Upload a photo', icon: Upload },
+  { value: 'existing', label: 'Choose from your photos', icon: Images },
+];
 
 export interface AddImageFlowProps {
   communityId: number;
@@ -38,12 +49,13 @@ export interface AddImageFlowProps {
 }
 
 /**
- * Add an Image or Gallery section — the two types that need a file first.
+ * Add an Image or Gallery section — the two types that need a photo first.
  *
  * `imageBlockSchema.imagePath` and each `galleryBlockSchema.images[].imagePath`
- * must be a real `{communityId}/content/...` storage path, so unlike every
- * other type there is no valid content to seed and no way to create the section
- * and fill it in afterwards. The upload has to come first.
+ * must be a real `{communityId}/{kind}/...` storage path, so unlike every other
+ * type there is no valid content to seed and no way to create the section and
+ * fill it in afterwards. The photo has to come first — uploaded, or chosen from
+ * the ones already on the site.
  *
  * **Alt text is collected before the upload, not after.**
  * `/api/v1/site/images/finalize` requires `altText: min(1)`, so an
@@ -55,6 +67,28 @@ export interface AddImageFlowProps {
  * state, so "Try again" retries only the write. Otherwise a transient failure
  * would charge the community's storage quota a second time and orphan the first
  * set of bytes.
+ *
+ * **Choosing an existing photo skips the upload pipeline entirely.** Presign,
+ * PUT and finalize exist to store and transform NEW bytes; everything finalize
+ * does — write the two WebP variants, delete the raw upload, increment the
+ * quota, audit-log the creation — is about bytes that did not exist before. A
+ * photo already on the site has its variants, has been charged, and has its
+ * audit row. The only thing the new section needs is the path, which goes
+ * through the same block upsert as an upload does, where
+ * `assertPathsScopedToCommunity` checks it again. Alt text is still collected
+ * here, for THIS placement: it is contextual to use, so the source section's
+ * alt is not carried over.
+ *
+ * The candidate list is the WHOLE-SITE block list from `useContentBlocks` —
+ * same query key as the rest of the editor, so no extra request — not the
+ * editor context's page-narrowed `blocks`. "Photos already in your sections"
+ * means every section on every page — draft and hidden ones included, which
+ * is why the copy says "sections" and not "site": a draft is not on the site
+ * yet, and `guard:page-state-copy` refuses copy that claims otherwise.
+ *
+ * The write uses whichever source is ACTIVE at submit. Switching sources does
+ * not clear the other one's state, so a PM can flip over to check what is on
+ * the site and flip back without losing the file they picked.
  */
 export function AddImageFlow({
   communityId,
@@ -66,8 +100,12 @@ export function AddImageFlow({
 }: AddImageFlowProps) {
   const upload = useImageUpload({ communityId });
   const upsert = useUpsertContentBlock(communityId);
+  const { data: siteBlocks } = useContentBlocks(communityId);
+  const photos = useMemo(() => placedPhotos(siteBlocks ?? []), [siteBlocks]);
 
+  const [source, setSource] = useState<PhotoSource>('upload');
   const [file, setFile] = useState<File | null>(null);
+  const [chosenPath, setChosenPath] = useState<string | null>(null);
   const [alt, setAlt] = useState('');
   const [decorative, setDecorative] = useState(false);
   const [rejected, setRejected] = useState<string | null>(null);
@@ -82,8 +120,12 @@ export function AddImageFlow({
 
   const described = decorative || alt.trim().length > 0;
   const busy = upload.isPending || upsert.isPending;
-  const canSubmit =
-    blockOrder !== null && (uploadedPath !== null || file !== null) && described && !busy;
+  // The path the block will reference, when it is already known: a chosen
+  // photo is settled the moment it is picked; an upload is settled once
+  // finalize returns. Either way, a settled path means submit writes only.
+  const settledPath = source === 'existing' ? chosenPath : uploadedPath;
+  const hasPhoto = settledPath !== null || (source === 'upload' && file !== null);
+  const canSubmit = blockOrder !== null && hasPhoto && described && !busy;
 
   /**
    * Block content for the finalized path.
@@ -104,9 +146,12 @@ export function AddImageFlow({
     if (blockOrder === null) return;
     setError(null);
     try {
-      let imagePath = uploadedPath;
+      let imagePath = settledPath;
       if (imagePath === null) {
-        if (file === null) return;
+        // Only an upload can be unsettled here — an existing photo has no
+        // "not yet uploaded" state, so no presign, PUT, or finalize runs for
+        // it, and the storage quota does not move.
+        if (source !== 'upload' || file === null) return;
         const result = await upload.mutateAsync({
           file,
           kind: 'content',
@@ -149,6 +194,11 @@ export function AddImageFlow({
     setUploadedPath(null);
   };
 
+  const choose = (path: string) => {
+    setError(null);
+    setChosenPath(path);
+  };
+
   return (
     <div className="space-y-4">
       <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
@@ -165,21 +215,71 @@ export function AddImageFlow({
         </p>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor={fileId} className="text-xs">
-          Photo
-        </Label>
-        <Input
-          id={fileId}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={busy}
-          onChange={(event) => pick(event.target.files?.[0] ?? null)}
-        />
-        {rejected !== null && (
-          <p className="text-xs text-status-danger">{rejected}</p>
-        )}
+      {/* A pair of toggle buttons, not `ui/tabs`: Radix labels each tabpanel
+          by its trigger, which would make the upload region a second element
+          labelled "…photo" beside the file input's own "Photo" label. This is
+          the directory's existing toggle shape (PagesPanel's "Show in
+          navigation"): `aria-pressed` for AT, and the pressed segment's raised
+          surface plus a distinct icon for everyone else. Not named
+          "Photo source" for the same reason — the group name would collide
+          with the file input's label too. */}
+      <div
+        role="group"
+        aria-label="Image source"
+        className="grid grid-cols-2 gap-1 rounded-lg bg-surface-muted p-1"
+      >
+        {SOURCE_OPTIONS.map(({ value, label, icon: Icon }) => {
+          const pressed = source === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={pressed}
+              disabled={busy}
+              onClick={() => {
+                setSource(value);
+                setError(null);
+              }}
+              className={cn(
+                'inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-center text-sm font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2',
+                'disabled:pointer-events-none disabled:opacity-50',
+                pressed
+                  ? 'bg-surface-card text-content shadow'
+                  : 'text-content-secondary hover:text-content',
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {label}
+            </button>
+          );
+        })}
       </div>
+
+      {source === 'upload' ? (
+        <div className="space-y-1.5">
+          <Label htmlFor={fileId} className="text-xs">
+            Photo
+          </Label>
+          <Input
+            id={fileId}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={busy}
+            onChange={(event) => pick(event.target.files?.[0] ?? null)}
+          />
+          {rejected !== null && (
+            <p className="text-xs text-status-danger">{rejected}</p>
+          )}
+        </div>
+      ) : (
+        <PhotoPicker
+          photos={photos}
+          selectedPath={chosenPath}
+          disabled={busy}
+          onSelect={choose}
+        />
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor={altId} className="text-xs">
@@ -223,7 +323,7 @@ export function AddImageFlow({
           ? 'Uploading…'
           : upsert.isPending
             ? 'Adding…'
-            : uploadedPath !== null && error !== null
+            : settledPath !== null && error !== null
               ? 'Try again'
               : `Add ${entry.label} section`}
       </Button>

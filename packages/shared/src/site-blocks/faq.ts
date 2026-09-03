@@ -5,6 +5,7 @@
  * (same discipline as the text block).
  */
 import { z } from 'zod';
+import { hiddenSchema } from './types';
 
 export const faqItemSchema = z
   .object({
@@ -17,6 +18,8 @@ export const faqBlockSchema = z
   .object({
     heading: z.string().min(1).max(120).optional(),
     items: z.array(faqItemSchema).min(1).max(30),
+    /** Hidden from visitors; still visible and editable in the editor. */
+    hidden: hiddenSchema.optional(),
   })
   .strict();
 

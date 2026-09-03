@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
-import { ChevronDown, ChevronUp, GripVertical, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -9,6 +9,10 @@ import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
 
 const KEYBOARD_HINT_ID = 'site-editor-section-reorder-hint';
+
+/** The row's square icon buttons, so the new actions cannot drift from the chevrons. */
+const ROW_ACTION_CLASS =
+  'flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-content-tertiary hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled disabled:hover:bg-transparent';
 
 interface DragState {
   blockId: number;
@@ -76,8 +80,19 @@ export interface SectionListProps {
  * away that row's ability to move *down*.
  */
 export function SectionList({ className, onAddSection }: SectionListProps) {
-  const { movableSections, isSelected, select, canMove, move, moveTo, isMoving } =
-    useSiteEditor();
+  const {
+    movableSections,
+    isSelected,
+    select,
+    canMove,
+    move,
+    moveTo,
+    isMoving,
+    toggleHidden,
+    duplicate,
+    duplicateError,
+    isDuplicating,
+  } = useSiteEditor();
   const [drag, setDrag] = useState<DragState | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -166,6 +181,20 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
 
   return (
     <div className={className}>
+      {/*
+        Duplicate's only visible failure channel. Both refusals it carries — a
+        page with no free slot, and a rejected write — leave this list looking
+        untouched, so without a rendered message the button reads as broken.
+        Placed above the list rather than on the row: the copy would have gone
+        to the bottom of the page, not next to its source, and the message is
+        about the page's capacity, not that one row. Mirrors how `AddPanel`
+        reports the same two conditions.
+      */}
+      {duplicateError ? (
+        <p role="alert" className="mb-2 text-sm text-status-danger">
+          {duplicateError}
+        </p>
+      ) : null}
       <p id={KEYBOARD_HINT_ID} className="sr-only">
         Press Arrow Up or Arrow Down to move this section one position. Press Home to move
         it to the top, or End to move it to the bottom.
@@ -177,6 +206,12 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
           const canUp = canMove(section.id, 'up');
           const canDown = canMove(section.id, 'down');
           const isDragging = drag?.blockId === section.id;
+          // `hidden` is `z.literal(true).optional()`, so only an exact `true`
+          // counts — absence is the sole way content says "visible".
+          const isHidden =
+            typeof section.content === 'object' &&
+            section.content !== null &&
+            (section.content as { hidden?: unknown }).hidden === true;
           // The dragged row would land on this slot: draw the seam on the side
           // it is travelling from, so the line reads as "it goes here".
           const showIndicator = drag !== null && overIndex === index && !isDragging;
@@ -240,6 +275,11 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
                     Draft
                   </span>
                 )}
+                {isHidden && (
+                  <span className="shrink-0 rounded-full bg-surface-muted px-1.5 py-0.5 text-xs font-medium text-content-tertiary">
+                    Hidden
+                  </span>
+                )}
               </button>
 
               <button
@@ -247,7 +287,7 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
                 disabled={!canUp}
                 onClick={() => move(section.id, 'up')}
                 aria-label={`Move ${label} section up`}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-content-tertiary hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled disabled:hover:bg-transparent"
+                className={ROW_ACTION_CLASS}
               >
                 <ChevronUp className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -256,9 +296,48 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
                 disabled={!canDown}
                 onClick={() => move(section.id, 'down')}
                 aria-label={`Move ${label} section down`}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-content-tertiary hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled disabled:hover:bg-transparent"
+                className={ROW_ACTION_CLASS}
               >
                 <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+
+              {/*
+                No hero guard here: `movableSections` has already excluded the
+                hero (and every tombstone), so a guard on this row would be
+                unreachable and would imply the list can contain one. The real
+                guard is in `toggleHidden`, which resolves from the unfiltered
+                `blocks`.
+              */}
+              <button
+                type="button"
+                onClick={() => toggleHidden(section.id, !isHidden)}
+                aria-label={`${isHidden ? 'Show' : 'Hide'} ${label} section`}
+                className={ROW_ACTION_CLASS}
+              >
+                {isHidden ? (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+              {/*
+                Disabled across the whole list while any duplicate's write is in
+                flight, not just on the row that started it: the hazard is slot
+                ALLOCATION, and a second duplicate of a DIFFERENT section
+                computes the same free slot from the same not-yet-refetched list.
+                `AddPanel` disables its entire catalog on `upsert.isPending` for
+                exactly this. `ROW_ACTION_CLASS` already carries the row
+                cluster's disabled treatment, so this matches the chevrons; the
+                `aria-label` is unconditional, so the name survives.
+              */}
+              <button
+                type="button"
+                disabled={isDuplicating}
+                onClick={() => duplicate(section.id)}
+                aria-label={`Duplicate ${label} section`}
+                className={ROW_ACTION_CLASS}
+              >
+                <Copy className="h-4 w-4" aria-hidden="true" />
               </button>
             </li>
           );

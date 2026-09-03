@@ -26,11 +26,22 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
-import type { SiteFooterSettings, SiteSettings } from '@/lib/site-editor/site-settings';
+import type {
+  SiteFooterSettings,
+  SiteSettings,
+  SiteStorage,
+} from '@/lib/site-editor/site-settings';
 
 export interface SiteSettingsRecord {
   settings: SiteSettings;
   footer: SiteFooterSettings;
+  /**
+   * Read-only, and REQUIRED — the server puts it on both the GET and the PATCH
+   * response, because `useUpdateSiteSettings` below replaces the cached record
+   * with the PATCH response. Optional here would let the meter silently blank
+   * after a save.
+   */
+  storage: SiteStorage;
 }
 
 /**
@@ -131,11 +142,15 @@ export function useUploadFavicon(communityId: number) {
       return finalized;
     },
     onSuccess: (favicon) => {
-      // Finalize wrote branding server-side; mirror it locally rather than
-      // refetching the whole record for one field.
+      // Finalize wrote branding server-side; mirror the favicon locally so it
+      // shows at once rather than after a round trip...
       qc.setQueryData<SiteSettingsRecord>(siteSettingsQueryKey(communityId), (prev) =>
         prev ? { ...prev, settings: { ...prev.settings, favicon } } : prev,
       );
+      // ...but finalize also charged the quota, and the record carries
+      // `storage`. Refetch in the background so the meter catches up — with
+      // the provider's staleTime, nothing else would for a minute.
+      void qc.invalidateQueries({ queryKey: siteSettingsQueryKey(communityId) });
     },
   });
 }

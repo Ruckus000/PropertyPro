@@ -19,15 +19,33 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createUnscopedClientMock, logAuditEventMock, communitiesTable } = vi.hoisted(() => ({
+const {
+  createUnscopedClientMock,
+  logAuditEventMock,
+  communitiesTable,
+  resolveUsageMock,
+  getQuotaMock,
+  captureMessageMock,
+} = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   communitiesTable: { id: 'communities.id', branding: 'communities.branding' },
+  resolveUsageMock: vi.fn(),
+  getQuotaMock: vi.fn(),
+  captureMessageMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
+// The storage helpers are a boundary with their own suite. Left real, the plan
+// lookup would run through the stub below and eat an entry from the
+// before/after queue, which is not what any test here is about.
+vi.mock('@/lib/site-assets/quota', () => ({
+  getSiteAssetsQuotaBytes: getQuotaMock,
+  resolveAssetsBytesUsed: resolveUsageMock,
+}));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock }));
 vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
   logAuditEvent: logAuditEventMock,
@@ -98,9 +116,190 @@ function stubDb(rows: Record<string, unknown>[]) {
   return db;
 }
 
+const QUOTA = 524288000;
+
+/** Faithful stand-in for the pure resolver: the counter when it is a number, else 0. */
+function usageOf(rawBranding: unknown): number {
+  const value = (rawBranding as { assetsBytesUsed?: unknown } | null)?.assetsBytesUsed;
+  return typeof value === 'number' ? value : 0;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   logAuditEventMock.mockResolvedValue(undefined);
+  resolveUsageMock.mockImplementation(usageOf);
+  getQuotaMock.mockResolvedValue(QUOTA);
+});
+
+describe('storage — read-only usage against the plan quota', () => {
+  it('resolves usage from the branding it already read, and the quota from the plan', async () => {
+    stubDb([{ branding: { assetsBytesUsed: 2048 } }]);
+    const result = await getSiteSettings(COMMUNITY_ID);
+    expect(result.storage).toEqual({ assetsBytesUsed: 2048, quotaBytes: QUOTA });
+    // The blob THIS module read — not a second read of the row.
+    expect(resolveUsageMock).toHaveBeenCalledWith({ assetsBytesUsed: 2048 });
+    expect(getQuotaMock).toHaveBeenCalledWith(COMMUNITY_ID);
+  });
+
+  it('passes a null quota through — no plan limit is a real state, not 0', async () => {
+    stubDb([{ branding: {} }]);
+    getQuotaMock.mockResolvedValue(null);
+    const result = await getSiteSettings(COMMUNITY_ID);
+    expect(result.storage).toEqual({ assetsBytesUsed: 0, quotaBytes: null });
+  });
+
+  // The plan lookup is the one read here that is not the branding row, and it
+  // only draws a bar. It must not take the settings read down with it — but it
+  // must not fail silently either.
+  it('degrades to a null quota, with a Sentry warning, when the plan lookup fails', async () => {
+    stubDb([{ branding: { assetsBytesUsed: 2048 } }]);
+    getQuotaMock.mockRejectedValue(new Error('plan lookup down'));
+
+    const result = await getSiteSettings(COMMUNITY_ID);
+
+    expect(result.storage).toEqual({ assetsBytesUsed: 2048, quotaBytes: null });
+    expect(result.settings.searchIndexing).toBe(true);
+    expect(captureMessageMock).toHaveBeenCalledWith('site_settings_storage_quota_failure', {
+      level: 'warning',
+      extra: { communityId: COMMUNITY_ID, error: 'plan lookup down' },
+    });
+  });
+
+  // The route returns this straight to the client, which caches it AS the
+  // record. Drop it here and the meter blanks after every save — and the
+  // route test cannot see that, because it mocks this module.
+  it('updateSiteSettings returns the storage numbers too', async () => {
+    stubDb([{ branding: {} }]);
+    const result = await updateSiteSettings({
+      communityId: COMMUNITY_ID,
+      actorUserId: ACTOR,
+      seoTitle: 'Title',
+    });
+    expect(result.storage).toEqual({ assetsBytesUsed: 0, quotaBytes: QUOTA });
+  });
+
+  // The before-snapshot the audit log needs has no use for the plan lookup.
+  it('reads the plan once per update, not for the audit snapshot', async () => {
+    stubDb([{ branding: {} }]);
+    await updateSiteSettings({ communityId: COMMUNITY_ID, actorUserId: ACTOR, seoTitle: 'T' });
+    expect(getQuotaMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('the favicon writers never touch storage — they return no record', async () => {
+    const favicon = { icon32Path: '42/favicon/a.png', appleTouch180Path: '42/favicon/b.png' };
+    stubDb([{ branding: {} }]);
+    await setSiteFavicon({ communityId: COMMUNITY_ID, actorUserId: ACTOR, favicon });
+    await clearSiteFavicon({ communityId: COMMUNITY_ID, actorUserId: ACTOR });
+    expect(getQuotaMock).not.toHaveBeenCalled();
+    expect(resolveUsageMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateSiteSettings — the audit entry never depends on a post-write read', () => {
+  // `mergeBranding` is a standalone statement, not a transaction: once it
+  // returns, the change is on the public site. Whatever fails AFTER it must
+  // not cost the audit trail — a committed change with no entry is the state
+  // the log exists to make impossible.
+  it('audits a committed write even when the read-back fails', async () => {
+    const db = stubDb([{ branding: {} }]);
+    const realSelect = db.select;
+    let selects = 0;
+    db.select = () => {
+      selects += 1;
+      // 1st select = the before snapshot; 2nd = the response read-back.
+      if (selects === 2) throw new Error('read-back failed');
+      return realSelect();
+    };
+
+    await expect(
+      updateSiteSettings({ communityId: COMMUNITY_ID, actorUserId: ACTOR, seoTitle: 'Committed' }),
+    ).rejects.toThrow('read-back failed');
+
+    // The write landed...
+    expect(executedPatches).toEqual([{ seoTitle: 'Committed' }]);
+    // ...and it has its trail, with the values the write produced.
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock.mock.calls[0]?.[0]).toMatchObject({
+      action: 'site_settings_updated',
+      oldValues: {
+        siteSettings: { seoTitle: null, seoDescription: null, searchIndexing: true, favicon: null },
+      },
+      newValues: {
+        siteSettings: {
+          seoTitle: 'Committed',
+          seoDescription: null,
+          searchIndexing: true,
+          favicon: null,
+        },
+      },
+    });
+  });
+
+  // Built from the snapshot and the normalised patch, not read back — and
+  // identical to what a read-back would return: the merge is a jsonb `||` on
+  // exactly these keys, and the resolver returns normalised text unchanged.
+  it('newValues is the before-snapshot overlaid with the normalised patch', async () => {
+    stubDb([
+      {
+        branding: {
+          siteSettings: { seoTitle: 'Old', searchIndexing: false },
+          siteFooter: { note: 'Managed by Acme' },
+        },
+      },
+    ]);
+
+    await updateSiteSettings({
+      communityId: COMMUNITY_ID,
+      actorUserId: ACTOR,
+      seoTitle: '  New   title ',
+      showStatutoryLine: true,
+    });
+
+    const [settingsEntry, footerEntry] = logAuditEventMock.mock.calls.map(
+      (c) => c[0] as Record<string, unknown>,
+    );
+    expect(settingsEntry).toMatchObject({
+      oldValues: {
+        siteSettings: { seoTitle: 'Old', seoDescription: null, searchIndexing: false, favicon: null },
+      },
+      newValues: {
+        siteSettings: {
+          seoTitle: 'New title',
+          seoDescription: null,
+          searchIndexing: false,
+          favicon: null,
+        },
+      },
+    });
+    expect(footerEntry).toMatchObject({
+      oldValues: {
+        siteFooter: { associationName: null, note: 'Managed by Acme', showStatutoryLine: false },
+      },
+      newValues: {
+        siteFooter: { associationName: null, note: 'Managed by Acme', showStatutoryLine: true },
+      },
+    });
+  });
+
+  it('a quota failure after the write neither loses the audit nor fails the save', async () => {
+    // Before-state, then the read-back state.
+    stubDb([{ branding: {} }, { branding: { siteSettings: { seoTitle: 'Title' } } }]);
+    getQuotaMock.mockRejectedValue(new Error('plan lookup down'));
+
+    const result = await updateSiteSettings({
+      communityId: COMMUNITY_ID,
+      actorUserId: ACTOR,
+      seoTitle: 'Title',
+    });
+
+    expect(result.settings.seoTitle).toBe('Title');
+    expect(result.storage).toEqual({ assetsBytesUsed: 0, quotaBytes: null });
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(captureMessageMock).toHaveBeenCalledWith(
+      'site_settings_storage_quota_failure',
+      expect.objectContaining({ level: 'warning' }),
+    );
+  });
 });
 
 describe('getSiteSettings', () => {

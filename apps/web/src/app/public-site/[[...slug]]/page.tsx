@@ -16,6 +16,7 @@ import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { getLayout } from '@/components/public-site/layouts/registry';
 import { hasRenderer } from '@/components/public-site/blocks/registry';
 import { reportDegradedBlocks } from '@/lib/telemetry/site-block-render';
+import { visibleBlocks } from '@/lib/site/visible-blocks';
 import {
   getPublicCommunityScopedReader,
   type PublicNavPage,
@@ -294,7 +295,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
     // all (0046's backfill skipped it because it has no site content), in which
     // case the unfiltered read is the correct pre-11b behaviour — and it can only
     // happen on the home path, since a named slug had to resolve to a page row.
-    const blocks = await reader.listSiteBlocks({
+    const allBlocks = await reader.listSiteBlocks({
       includeDrafts: isPreview,
       ...(pageId === null ? {} : { pageId }),
     });
@@ -310,12 +311,22 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
     // right granularity — a degraded section belongs to the page it renders on —
     // but it means the throttle key varies by page, and a community with several
     // broken pages can emit one warning per page per hour rather than one total.
+    //
+    // Reported on the UNFILTERED list, deliberately: a hidden section can be
+    // both malformed and hidden, and it will silently vanish from this same
+    // statutory-transparency page the moment a PM unhides it. Hiding it from
+    // telemetry now would just delay discovery to that later, unwitnessed
+    // moment. A merely-hidden (not malformed) block never trips this check —
+    // findDegradedBlocks only flags a failed schema parse or a missing
+    // renderer, neither of which `hidden: true` triggers.
     if (!isPreview) {
-      reportDegradedBlocks(blocks, hasRenderer, {
+      reportDegradedBlocks(allBlocks, hasRenderer, {
         communityId: community.id,
         communitySlug: community.slug,
       });
     }
+    // Only the render path drops hidden sections — telemetry above sees every one.
+    const blocks = visibleBlocks(allBlocks);
     return (
       <>
         {fontLinks.map((href) => (

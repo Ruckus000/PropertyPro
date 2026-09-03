@@ -3,7 +3,7 @@
  * Sanitization-free by construction.
  */
 import { z } from 'zod';
-import { blockVariantSchema } from './types';
+import { blockVariantSchema, hiddenSchema } from './types';
 
 export const textBlockSchema = z
   .object({
@@ -11,6 +11,8 @@ export const textBlockSchema = z
     body: z.string().min(1).max(2000),
     /** Absent means `standard` — see blockVariantSchema. */
     variant: blockVariantSchema.optional(),
+    /** Hidden from visitors; still visible and editable in the editor. */
+    hidden: hiddenSchema.optional(),
   })
   .strict();
 

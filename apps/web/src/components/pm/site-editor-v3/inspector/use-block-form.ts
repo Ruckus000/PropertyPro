@@ -28,6 +28,71 @@ export interface UseBlockFormOptions<TDraft> {
   save: (content: unknown) => Promise<void>;
 }
 
+/**
+ * Content keys the FORMS do not own, carried across every form save.
+ *
+ * Two facts make this necessary, and neither is local to any one form:
+ *
+ *  1. The PATCH route REPLACES a block's content outright — `blocks/route.ts`
+ *     writes `content: parse.data` with no server-side merge.
+ *  2. Seven of the ten inspector forms build their canonical payload as a fresh
+ *     object literal (`TextForm`, `ImageForm`, `FaqForm`, `ContactForm`,
+ *     `AmenitiesForm`, `PaymentsForm`, `GalleryForm`). Anything they do not
+ *     re-emit is therefore destroyed by the next edit. `SorEmptyTextForm` is the
+ *     lone survivor, and only because it happens to spread `...draft.rest`.
+ *
+ * So a key set OUTSIDE the forms needs a home, and this is it. `hidden` is set
+ * by the section list's eye toggle; without this, hiding a section and later
+ * fixing a typo in it silently republishes the section — via a debounced
+ * autosave the PM never confirmed, with no toast and nothing left to notice,
+ * because `hiddenSchema` is `z.literal(true)` and absence IS "visible".
+ *
+ * Deliberately a NAMED LIST rather than a single `hidden` special case. The
+ * hazard is structural — it belongs to "content is replaced wholesale", not to
+ * this one flag — so the next editor-managed key needs an obvious home rather
+ * than a second ad-hoc rescue. It is a list of one today.
+ *
+ * Values are carried through VERBATIM. Carrying through is this mechanism's
+ * whole contract; quietly rewriting a value the PM did not touch is the bug
+ * class being fixed here, not the remedy for it.
+ */
+const PRESERVED_CONTENT_KEYS = ['hidden'] as const;
+
+function preservedKeysOf(content: unknown): Record<string, unknown> {
+  if (typeof content !== 'object' || content === null) return {};
+  const source = content as Record<string, unknown>;
+  const kept: Record<string, unknown> = {};
+  for (const key of PRESERVED_CONTENT_KEYS) {
+    if (source[key] !== undefined) kept[key] = source[key];
+  }
+  return kept;
+}
+
+/**
+ * Splice the preserved keys back into a canonical projection.
+ *
+ * `null` passes straight through: `toCanonical` returns it to mean "not valid
+ * enough to save yet", and turning that into an object would make an incomplete
+ * block saveable. A key the projection already carries wins — a form that
+ * genuinely round-trips one owns it.
+ */
+function withPreservedKeys(
+  canonical: unknown | null,
+  preserved: Record<string, unknown>,
+): unknown | null {
+  if (canonical === null || typeof canonical !== 'object' || Array.isArray(canonical)) {
+    return canonical;
+  }
+  const projected = canonical as Record<string, unknown>;
+  let next: Record<string, unknown> | null = null;
+  for (const [key, value] of Object.entries(preserved)) {
+    if (projected[key] !== undefined) continue;
+    next ??= { ...projected };
+    next[key] = value;
+  }
+  return next ?? canonical;
+}
+
 export interface UseBlockFormResult<TDraft> {
   draft: TDraft;
   setDraft: (next: TDraft | ((prev: TDraft) => TDraft)) => void;
@@ -96,7 +161,16 @@ export function useBlockForm<TDraft>({
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  const canonical = useMemo(() => toCanonical(draft), [draft, toCanonical]);
+  // Both `canonical` and the baseline below are projected through the SAME
+  // preserved keys, so they cancel out of the dirty comparison. Applying it to
+  // `canonical` alone would make every hidden block compare unequal to its own
+  // baseline — permanently "dirty", so a discard or another tab's edit would
+  // never be adopted.
+  const preserved = useMemo(() => preservedKeysOf(content), [content]);
+  const canonical = useMemo(
+    () => withPreservedKeys(toCanonical(draft), preserved),
+    [draft, toCanonical, preserved],
+  );
 
   // Reconcile during render rather than in an effect: an effect runs after
   // paint, which would show the PM one frame of content we are about to
@@ -114,7 +188,10 @@ export function useBlockForm<TDraft>({
     // `variant: 'standard'`) drops it. Those blocks read as permanently dirty
     // and would never adopt a foreign change.
     const baselineDraft = toDraftRef.current(synced.content);
-    const baselineCanonical = toCanonicalRef.current(baselineDraft);
+    const baselineCanonical = withPreservedKeys(
+      toCanonicalRef.current(baselineDraft),
+      preserved,
+    );
     const isClean =
       canonical === null || baselineCanonical === null
         ? // One side is unsaveable, and `stableStringify(null)` is 'null' on

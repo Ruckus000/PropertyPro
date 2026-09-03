@@ -216,10 +216,10 @@ export const FIRST_CONTENT_SLOT = 2;
 export const LAST_CONTENT_SLOT = 99;
 
 /**
- * The slot a new section should take, or null when every slot in the COMMUNITY
- * is taken.
+ * The slot a new section should take, or null when every slot on the PAGE it
+ * was given is taken.
  *
- * **Must be given every block row, tombstones included, from EVERY page.**
+ * **Must be given every block row of ONE page, tombstones included.**
  *
  * Two independent reasons, and confusing them is how this goes wrong:
  *
@@ -230,13 +230,23 @@ export const LAST_CONTENT_SLOT = 99;
  *     `useContentBlocks` output and not `movableSections`, which filters
  *     tombstones out.
  *
- *  2. *Every page* (Phase 11b-3, D-C3). `block_order` is unique across the whole
- *     community until 11c drops the 3-column index, so a caller that narrowed
- *     the list to the selected page first would compute `max(this page) + 1` —
- *     a slot another page is very likely already holding. Scanning every page is
- *     precisely what makes the answer free. Do NOT "fix" a cross-page slot
- *     collision by page-filtering this input; that is the cause, not the cure.
- *     `AddPanel.test.tsx` pins this with a named regression case.
+ *  2. *One page* — and this reason is the INVERSE of what it was through 11b.
+ *     Until migration 0048, `block_order` was unique community-wide
+ *     (`site_blocks_community_order_draft_partial`), so narrowing to the
+ *     selected page computed `max(this page) + 1`, very likely a slot another
+ *     page already held, and the write failed the unique index. 0048 DROPPED
+ *     that index; uniqueness is now `(community_id, page_id, block_order,
+ *     is_draft)` and two pages may legally hold the same slot. Spanning every
+ *     page is therefore wrong in the opposite direction — it skips past other
+ *     pages' numbers and runs this page into the 99 ceiling long before it has
+ *     used its own 98 positions. Callers narrow with `blocksForPage` first
+ *     (`AddPanel`, and `duplicate` in `editor-context`). The function itself
+ *     never changed; what changed is the list it is given.
+ *
+ *     Do NOT "fix" a cross-page slot collision by widening this input back to
+ *     every page — post-0048 there is no such collision to fix.
+ *     `add-catalog.test.ts` and `AddPanel.test.tsx` each pin the inversion with
+ *     a named case.
  *
  * Appends at `max + 1` rather than filling the first gap: reorders re-stamp the
  * existing sparse slot sequence, so gaps persist indefinitely, and filling one

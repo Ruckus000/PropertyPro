@@ -57,6 +57,8 @@ vi.mock('@propertypro/shared', () => ({
 
 import {
   getCommunitySiteAssetsUsage,
+  getSiteAssetsQuotaBytes,
+  resolveAssetsBytesUsed,
   assertWithinQuota,
   incrementAssetsUsage,
   decrementAssetsUsage,
@@ -79,6 +81,53 @@ describe('getCommunitySiteAssetsUsage', () => {
   it('returns 0 when assetsBytesUsed is unset', async () => {
     getBrandingMock.mockResolvedValueOnce({ primaryColor: '#fff' });
     expect(await getCommunitySiteAssetsUsage(42)).toBe(0);
+  });
+});
+
+// The pure read side of the counter, for callers that already hold the
+// branding blob. Mirrors `COALESCE(..., 0)` in the atomic UPDATE.
+describe('resolveAssetsBytesUsed', () => {
+  it('returns the stored counter', () => {
+    expect(resolveAssetsBytesUsed({ assetsBytesUsed: 12345 })).toBe(12345);
+  });
+
+  it.each([
+    ['null branding', null],
+    ['an empty object', {}],
+    ['a non-object blob', 'not an object'],
+    ['a non-numeric counter', { assetsBytesUsed: '12345' }],
+  ])('returns 0 for %s', (_label, raw) => {
+    expect(resolveAssetsBytesUsed(raw)).toBe(0);
+  });
+});
+
+// Exported for the settings record's storage meter. The contract the meter
+// relies on is the null: "no limit", never 0, so a consumer shows usage alone
+// rather than dividing by a denominator that does not exist.
+describe('getSiteAssetsQuotaBytes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    limitMock.mockResolvedValue([{ subscriptionPlan: 'professional' }]);
+    resolvePlanIdMock.mockReturnValue('professional');
+  });
+
+  it("returns the plan's quota in bytes", async () => {
+    expect(await getSiteAssetsQuotaBytes(42)).toBe(500 * 1024 * 1024);
+  });
+
+  it('returns null — not 0 — for a community with no plan', async () => {
+    limitMock.mockResolvedValueOnce([{ subscriptionPlan: null }]);
+    expect(await getSiteAssetsQuotaBytes(42)).toBeNull();
+  });
+
+  it('returns null for an unrecognised plan', async () => {
+    resolvePlanIdMock.mockReturnValueOnce(null);
+    expect(await getSiteAssetsQuotaBytes(42)).toBeNull();
+  });
+
+  it('returns null for a community row that does not exist', async () => {
+    limitMock.mockResolvedValueOnce([]);
+    expect(await getSiteAssetsQuotaBytes(42)).toBeNull();
   });
 });
 

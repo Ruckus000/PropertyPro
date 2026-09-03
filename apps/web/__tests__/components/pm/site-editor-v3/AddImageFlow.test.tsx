@@ -6,6 +6,11 @@
  * write — is what the assertions here pin down, along with the two ways it
  * goes wrong: describing after the upload (finalize 400s and strands bytes),
  * and retrying a failed write by re-uploading (double-charges the quota).
+ *
+ * The "choose from your photos" path is the deliberate exception: a photo
+ * already on the site is reused by PATH, so no presign, PUT, or finalize
+ * runs — which is the only reason "no quota change" is true. That absence is
+ * asserted, not assumed.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -16,6 +21,9 @@ import { DECORATIVE_PLACEHOLDER_ALT } from '@/lib/site-assets/client-image';
 
 const uploadMutateAsync = vi.hoisted(() => vi.fn());
 const upsertMutateAsync = vi.hoisted(() => vi.fn());
+// What `useContentBlocks` returns — the whole-site block list the picker
+// derives its candidates from. Reset per test.
+const siteBlocks = vi.hoisted(() => ({ current: [] as unknown[] }));
 
 vi.mock('@/hooks/use-image-upload', () => ({
   useImageUpload: () => ({ mutateAsync: uploadMutateAsync, isPending: false }),
@@ -23,7 +31,12 @@ vi.mock('@/hooks/use-image-upload', () => ({
 
 // Complete factory, per this directory's convention.
 vi.mock('@/hooks/use-content-blocks', () => ({
-  useContentBlocks: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
+  useContentBlocks: () => ({
+    data: siteBlocks.current,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   usePublishedBlocks: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
   useSitePublishToken: () => ({ data: null, isPending: false, isError: false, refetch: vi.fn() }),
   useUpsertContentBlock: () => ({
@@ -62,6 +75,7 @@ function renderFlow(entry = IMAGE_ENTRY, blockOrder: number | null = 4) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  siteBlocks.current = [];
   uploadMutateAsync.mockResolvedValue({
     storagePath: '7/content/pool.jpg',
     variant1600Path: '7/content/pool.jpg.1600w.webp',
@@ -231,5 +245,133 @@ describe('AddImageFlow', () => {
     renderFlow();
     await userEvent.click(screen.getByRole('button', { name: /All sections/i }));
     expect(onCancel).toHaveBeenCalled();
+  });
+
+  // ---- Choose from your photos ------------------------------------------
+
+  const POOL = '7/content/3f2a9c1e-7b4d-4e8a-9f0c-1d2e3f4a5b6c-pool.jpg';
+  const STRIP = '7/hero/9b1c2d3e-4f5a-4b6c-8d7e-0f1a2b3c4d5e-strip.jpg';
+
+  /** A site with one hero photo and one image section, on the whole-site list. */
+  function placeSitePhotos() {
+    siteBlocks.current = [
+      {
+        id: 1,
+        pageId: 1,
+        blockType: 'hero',
+        blockOrder: 1,
+        content: { headline: 'Welcome', photos: [{ path: STRIP, alt: 'The strip' }] },
+        isDraft: false,
+        publishedAt: null,
+      },
+      {
+        id: 2,
+        pageId: 1,
+        blockType: 'image',
+        blockOrder: 2,
+        content: { imagePath: POOL, altText: 'The pool' },
+        isDraft: false,
+        publishedAt: null,
+      },
+    ];
+  }
+
+  async function chooseFromYourPhotos() {
+    await userEvent.click(screen.getByRole('button', { name: /Choose from your photos/i }));
+  }
+
+  it('writes a chosen photo by path, with NO upload', async () => {
+    placeSitePhotos();
+    renderFlow();
+    await chooseFromYourPhotos();
+
+    // The hero's photo is offered alongside the image section's.
+    expect(screen.getByRole('button', { name: /Use strip\.jpg/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Use pool\.jpg/i }));
+    await userEvent.type(screen.getByLabelText(/Alt text/i), 'The pool, from the deck');
+    await userEvent.click(screen.getByRole('button', { name: /Add Image section/i }));
+
+    await waitFor(() =>
+      expect(upsertMutateAsync).toHaveBeenCalledWith({
+        blockType: 'image',
+        blockOrder: 4,
+        content: { imagePath: POOL, altText: 'The pool, from the deck' },
+      }),
+    );
+    // `onAdded` fires after the upsert RESOLVES, one microtask past the call
+    // the waitFor above returned on.
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(4, IMAGE_ENTRY));
+    // The assertion that makes "no quota change" true: nothing new is stored,
+    // so presign, PUT and finalize never run.
+    expect(uploadMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('still asks for alt text for the new placement — it is not carried over', async () => {
+    placeSitePhotos();
+    renderFlow();
+    await chooseFromYourPhotos();
+
+    const submit = screen.getByRole('button', { name: /Add Image section/i });
+    expect(submit).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /Use pool\.jpg/i }));
+    // Chosen, and marked as such — but the source section's "The pool" is not
+    // prefilled: alt is contextual to where the photo is used.
+    expect(screen.getByRole('button', { name: /Use pool\.jpg/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByLabelText(/Alt text/i)).toHaveValue('');
+    expect(submit).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText(/Alt text/i), 'Pool');
+    expect(submit).toBeEnabled();
+  });
+
+  it('wraps a chosen photo in an images array for a gallery', async () => {
+    placeSitePhotos();
+    renderFlow(GALLERY_ENTRY);
+    await chooseFromYourPhotos();
+    await userEvent.click(screen.getByRole('button', { name: /Use pool\.jpg/i }));
+    await userEvent.type(screen.getByLabelText(/Alt text/i), 'Pool');
+    await userEvent.click(screen.getByRole('button', { name: /Add Gallery section/i }));
+
+    await waitFor(() =>
+      expect(upsertMutateAsync).toHaveBeenCalledWith({
+        blockType: 'gallery',
+        blockOrder: 4,
+        content: { images: [{ imagePath: POOL, altText: 'Pool' }] },
+      }),
+    );
+    expect(uploadMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('writes from the source that is ACTIVE at submit, not the last one touched', async () => {
+    // Switching tabs keeps the other tab's state, so a PM can look at what is
+    // on the site and come back to their file. That means both a chosen photo
+    // and a picked file can be held at once; the active tab decides.
+    placeSitePhotos();
+    renderFlow();
+    await chooseFromYourPhotos();
+    await userEvent.click(screen.getByRole('button', { name: /Use pool\.jpg/i }));
+
+    await userEvent.click(screen.getByRole('button', { name: /Upload a photo/i }));
+    await userEvent.upload(screen.getByLabelText(/Photo/i), file('deck.jpg'));
+    await userEvent.type(screen.getByLabelText(/Alt text/i), 'The deck');
+    await userEvent.click(screen.getByRole('button', { name: /Add Image section/i }));
+
+    await waitFor(() => expect(uploadMutateAsync).toHaveBeenCalledTimes(1));
+    expect(upsertMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: { imagePath: '7/content/pool.jpg', altText: 'The deck' },
+      }),
+    );
+  });
+
+  it('says so when the site has no photos to choose from', async () => {
+    renderFlow();
+    await chooseFromYourPhotos();
+    expect(screen.getByText(/No photos in your sections yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Use /i })).not.toBeInTheDocument();
   });
 });

@@ -35,6 +35,8 @@ import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { listSitePages, type SitePageRecord } from '@/lib/services/site-pages-service';
+import { loadSiteQuotaBytes } from '@/lib/services/site-settings-service';
+import { resolveAssetsBytesUsed } from '@/lib/site-assets/quota';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
 import {
   resolveFooterSettings,
@@ -127,6 +129,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     canvasContext,
     branding,
     onboardingCompletedAt,
+    siteQuotaBytes,
   ] = await Promise.all([
     getEffectiveFeaturesForPage(communityId, membership.communityType),
     // Only for the signed-in user's display name. Everything community-scoped
@@ -143,6 +146,16 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // same reason the legacy editor read it: `branding.layoutId` being unset was
     // a substitute heuristic and got this wrong.
     getSiteOnboardingCompletedAt(communityId),
+    // The Site panel's storage meter. Usage is resolved from the same cached
+    // `branding` read as the settings below — no extra query — but the quota
+    // needs the plan, and that IS a lookup of its own. Through the service's
+    // degrading helper, not the raw lookup: a hiccup there leaves the meter
+    // usage-only rather than taking the whole editor down for a manager who
+    // came to move a block (the same trade `loadInitialPages` makes), and it
+    // is the same helper the route uses, so the seeded number is the one a
+    // refetch would return — `initialData` is fresh for the provider's
+    // staleTime, and a first paint that disagrees with it is a visible jump.
+    loadSiteQuotaBytes(communityId),
   ]);
 
   if (!features.hasSiteEditor) {
@@ -243,6 +256,10 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         initialSiteSettings={{
           settings: resolveSiteSettings(branding),
           footer: resolveFooterSettings(branding),
+          storage: {
+            assetsBytesUsed: resolveAssetsBytesUsed(branding),
+            quotaBytes: siteQuotaBytes,
+          },
         }}
         // From the same free `branding` read as the settings above, so the
         // Colours panel opens on the community's real overrides. The Address

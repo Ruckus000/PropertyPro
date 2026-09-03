@@ -6,8 +6,14 @@
  * response: `blocks` and `publishedBlocks` have to resolve in the same tick for
  * the change model, so the client filters rather than refetching per page. This
  * is that filter, kept as a pure function so the publish path can keep using the
- * unfiltered list (D-C2) and the slot allocator can keep seeing every page
- * (D-C3) without either of them accidentally inheriting a page scope.
+ * unfiltered list (D-C2) without accidentally inheriting a page scope.
+ *
+ * The slot allocator is the OTHER caller, and it wants the opposite: since
+ * migration 0048 dropped the community-wide unique index, `block_order` is
+ * unique only within a page, so `nextContentSlot` is given this filter's OUTPUT
+ * rather than the raw list. An earlier version of this sentence said the
+ * allocator had to keep seeing every page (D-C3); that was true only while the
+ * 3-column index stood.
  *
  * Two behaviours are deliberate:
  *
