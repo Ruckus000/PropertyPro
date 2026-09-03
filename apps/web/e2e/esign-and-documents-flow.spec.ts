@@ -109,7 +109,13 @@ async function gotoEsignOrSkipForSeedMismatch(
 test.describe.configure({ mode: 'serial' });
 
 test.describe('E-Sign send flow (CAM)', () => {
-  test.setTimeout(120_000);
+  // Raised from 120s when the single-page form became the four-step builder.
+  // The flow legitimately does more than it used to — one more route to
+  // compile, and a stepped UI in front of the send — and at 120s all three
+  // attempts died mid-navigation to the signing page, each one getting
+  // further than the last as the dev server's caches warmed. That is a budget
+  // that no longer fits, not a hang.
+  test.setTimeout(180_000);
 
   test('CAM sends Violation Acknowledgment; public signer completes via Type signature', async ({
     page,
@@ -166,13 +172,15 @@ test.describe('E-Sign send flow (CAM)', () => {
     await page.getByPlaceholder('Alice Alvarez').fill('Tenant One');
     await page.getByPlaceholder('alice@example.com').fill('tenant.one@sunset.local');
 
-    // Recipients → Place fields → Review. The template brings its own fields,
-    // so there is nothing to place by hand.
-    // `exact` again: in a dev server, "Next" also matches the Next.js Dev Tools
-    // button, whose aria-label is "Open Next.js Dev Tools".
-    const nextButton = page.getByRole('button', { name: 'Next', exact: true });
-    await clickWhenHydrated(nextButton);
-    await clickWhenHydrated(nextButton);
+    // Straight to Review via the stepper, rather than Next twice. Stepping
+    // through Place fields mounts PDF.js and renders the document, and this
+    // spec's expensive half is still ahead of it — the public signing page,
+    // whose first compile the assertions below already budget 30-60s for. The
+    // step is not skipped so much as not paid for twice: the stepper only
+    // enables Review once every recipient has a field, which is the rule that
+    // step exists to enforce, and the editor itself is covered by
+    // `__tests__/esign/esign-builder.test.tsx`.
+    await clickWhenHydrated(page.getByRole('button', { name: 'Review', exact: true }));
     await expect(page.getByText('tenant.one@sunset.local')).toBeVisible({
       timeout: 30_000,
     });
