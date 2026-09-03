@@ -26,6 +26,7 @@ import {
   getMeetingDetail,
   getMeetingDocumentTargets,
   listMeetingsForCommunity,
+  markMeetingNoticePosted,
   softDeleteMeetingForCommunity,
   updateMeetingForCommunity,
 } from '@/lib/services/meeting-service';
@@ -74,6 +75,12 @@ const updateMeetingSchema = z.object({
 
 const deleteMeetingSchema = z.object({
   action: z.literal('delete').optional(),
+  id: z.number().int().positive(),
+  communityId: z.number().int().positive(),
+});
+
+const postNoticeSchema = z.object({
+  action: z.literal('post-notice'),
   id: z.number().int().positive(),
   communityId: z.number().int().positive(),
 });
@@ -160,6 +167,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
   if (action === 'delete') {
     return handleDelete(normalizedBody, actorUserId);
+  }
+  if (action === 'post-notice') {
+    return handlePostNotice(normalizedBody, actorUserId, membership.communityType);
   }
   if (action === 'attach') {
     return handleAttach(normalizedBody, actorUserId);
@@ -382,6 +392,58 @@ async function handleUpdate(
   });
 
   return meetingResponse(updatedMeeting, communityType);
+}
+
+/**
+ * Record that this meeting's statutory notice is posted.
+ *
+ * The stamp is an attestation by a manager, not something the platform
+ * observed — §718.112(2)(c) notice goes on the property as well as the
+ * website. The UI's confirmation copy says so; this handler only writes it.
+ *
+ * Deliberately NOT wrapped in `meetingResponse()`. That helper appends the
+ * notice-window warning, whose advice is "reschedule with a compliant
+ * notice" — stale the instant a notice is posted, and actively misleading
+ * next to a fresh stamp. A late posting is still recorded: the public
+ * transparency page derives the achieved lead time and reports the miss.
+ */
+async function handlePostNotice(
+  body: Record<string, unknown>,
+  actorUserId: string,
+  communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'],
+): Promise<NextResponse> {
+  const parsed = postNoticeSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new UnprocessableEntityError('Invalid notice data', {
+      fields: formatZodErrors(parsed.error),
+    });
+  }
+
+  const { id, communityId } = parsed.data;
+  const result = await markMeetingNoticePosted(communityId, id, new Date());
+  if (!result.found) {
+    throw new NotFoundError('Meeting not found');
+  }
+
+  // Audited from the value just written, before the read-back below: a
+  // failing read must not be able to leave a stamped row with no audit entry.
+  if (!result.alreadyStamped && result.stampedAt) {
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'meeting_notice_posted',
+      resourceType: 'meeting',
+      resourceId: String(id),
+      communityId,
+      newValues: { noticePostedAt: result.stampedAt.toISOString() },
+    });
+  }
+
+  const meeting = await getMeetingDetail(communityId, id);
+  if (!meeting) {
+    throw new NotFoundError('Meeting not found');
+  }
+
+  return NextResponse.json({ data: serializeMeetingResponse(meeting, communityType) });
 }
 
 async function handleDelete(

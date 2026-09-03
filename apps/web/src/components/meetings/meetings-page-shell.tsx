@@ -141,9 +141,11 @@ export function MeetingsPageShell({
 
       {noticeOwed ? (
         <NextNoticeStrip
+          communityId={communityId}
           meeting={noticeOwed}
           now={now}
           timeZone={timezone}
+          canWrite={canWrite}
           onOpen={setActiveMeetingId}
         />
       ) : null}

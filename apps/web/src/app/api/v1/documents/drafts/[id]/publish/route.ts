@@ -37,6 +37,7 @@ import {
   linkPublishedDocumentToMeeting,
   softDeleteDocumentDraft,
 } from '@/lib/services/document-draft-service';
+import { markMeetingMinutesPosted } from '@/lib/services/meeting-service';
 
 // Chromium needs a real Node runtime, more memory, and a longer timeout.
 export const runtime = 'nodejs';
@@ -166,16 +167,44 @@ export const POST = withErrorHandler(
 
     const documentId = Number((result.document as Record<string, unknown>)['id']);
 
-    // 7. Link the published doc to the meeting it was authored from.
+    // 7. Link the published doc to the meeting it was authored from, and
+    //    record on the meeting itself that its minutes are on the record.
+    //
+    //    `target_meeting_id` is seeded from exactly one place — the minutes
+    //    author page — so a meeting-linked authored document IS the minutes,
+    //    and publishing it is the posting event §718.111(12)(g)'s 30-day
+    //    window measures. Without the stamp the loop stays open: the meeting
+    //    reads "minutes owed" forever and keeps offering "Author minutes"
+    //    after the minutes are published.
     if (targetMeetingId != null) {
       const meeting = await getMeetingForDraftSeed(communityId, targetMeetingId);
       if (meeting) {
         try {
           await linkPublishedDocumentToMeeting(communityId, targetMeetingId, documentId);
+          const stamp = await markMeetingMinutesPosted(
+            communityId,
+            targetMeetingId,
+            new Date(),
+          );
+          if (!stamp.alreadyStamped && stamp.stampedAt) {
+            await logAuditEvent({
+              userId,
+              action: 'meeting_minutes_approved',
+              resourceType: 'meeting',
+              resourceId: String(targetMeetingId),
+              communityId,
+              newValues: {
+                minutesApprovedAt: stamp.stampedAt.toISOString(),
+                documentId,
+              },
+            });
+          }
         } catch (err) {
-          // Non-fatal: the publish succeeded, the link can be added later.
+          // Non-fatal: the document is rendered, stored and inserted, and the
+          // author is done. Bookkeeping can be repaired; a thrown error here
+          // would discard finished work.
           // eslint-disable-next-line no-console
-          console.error('[publish] failed to link meeting document', {
+          console.error('[publish] failed to record meeting minutes', {
             meetingId: targetMeetingId,
             documentId,
             error: err instanceof Error ? err.message : String(err),

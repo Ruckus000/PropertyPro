@@ -151,6 +151,29 @@ export function useUpdateMeeting(communityId: number) {
   });
 }
 
+/**
+ * Record that a meeting's statutory notice is posted.
+ *
+ * Idempotent server-side: a meeting that already carries a stamp keeps its
+ * original date and logs no second audit event, so a double-click cannot
+ * move a date the board may already have relied on.
+ */
+export function usePostMeetingNotice(communityId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (meetingId: number) =>
+      requestJson<MeetingListItem>('/api/v1/meetings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'post-notice', communityId, id: meetingId }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: MEETING_KEYS.all });
+    },
+  });
+}
+
 export function useDeleteMeeting(communityId: number) {
   const queryClient = useQueryClient();
 
