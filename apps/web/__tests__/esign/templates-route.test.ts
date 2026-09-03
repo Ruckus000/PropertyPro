@@ -9,7 +9,7 @@ const {
   createTemplateMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
-  requireEsignReadPermissionMock,
+  requireEsignManagementReadMock,
   requireEsignWritePermissionMock,
   resolveEffectiveCommunityIdMock,
   parseCommunityIdFromBodyMock,
@@ -18,7 +18,7 @@ const {
   createTemplateMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
-  requireEsignReadPermissionMock: vi.fn(),
+  requireEsignManagementReadMock: vi.fn(),
   requireEsignWritePermissionMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
   parseCommunityIdFromBodyMock: vi.fn(),
@@ -42,7 +42,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/esign/esign-route-helpers', () => ({
-  requireEsignReadPermission: requireEsignReadPermissionMock,
+  requireEsignManagementRead: requireEsignManagementReadMock,
   requireEsignWritePermission: requireEsignWritePermissionMock,
 }));
 
@@ -105,7 +105,7 @@ beforeEach(() => {
   resolveEffectiveCommunityIdMock.mockReturnValue(COMMUNITY_ID);
   parseCommunityIdFromBodyMock.mockReturnValue(COMMUNITY_ID);
   requireCommunityMembershipMock.mockResolvedValue(membership);
-  requireEsignReadPermissionMock.mockResolvedValue(undefined);
+  requireEsignManagementReadMock.mockResolvedValue(undefined);
   requireEsignWritePermissionMock.mockResolvedValue(undefined);
 });
 
@@ -122,6 +122,10 @@ describe('GET /api/v1/esign/templates', () => {
     expect(response.status).toBe(200);
     expect(json).toEqual({ data: rows });
     expect(listTemplatesMock).toHaveBeenCalledWith(COMMUNITY_ID, { status: undefined, type: undefined });
+    // The gate this route runs is the management one, not `esign:read`,
+    // which residents also hold. `esign-route-helpers.test.ts` proves what
+    // that gate refuses; this proves the route actually reaches it.
+    expect(requireEsignManagementReadMock).toHaveBeenCalledWith(membership);
   });
 
   it('rejects an invalid status with ValidationError (400 path) — #232 contract', async () => {

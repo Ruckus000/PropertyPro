@@ -12,7 +12,7 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   parseCommunityIdFromQueryMock,
-  requireEsignReadPermissionMock,
+  requireEsignManagementReadMock,
   getSubmissionMock,
   getTemplateMock,
   createPresignedDownloadUrlMock,
@@ -20,7 +20,7 @@ const {
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   parseCommunityIdFromQueryMock: vi.fn(),
-  requireEsignReadPermissionMock: vi.fn(),
+  requireEsignManagementReadMock: vi.fn(),
   getSubmissionMock: vi.fn(),
   getTemplateMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
@@ -39,7 +39,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/esign/esign-route-helpers', () => ({
-  requireEsignReadPermission: requireEsignReadPermissionMock,
+  requireEsignManagementRead: requireEsignManagementReadMock,
 }));
 
 vi.mock('@/lib/services/esign-service', () => ({
@@ -89,7 +89,7 @@ describe('GET /api/v1/esign/submissions/[id]', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-admin-1');
     parseCommunityIdFromQueryMock.mockReturnValue(42);
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
-    requireEsignReadPermissionMock.mockResolvedValue(undefined);
+    requireEsignManagementReadMock.mockResolvedValue(undefined);
     getSubmissionMock.mockResolvedValue(SUBMISSION_DETAIL);
     getTemplateMock.mockResolvedValue(TEMPLATE);
     createPresignedDownloadUrlMock.mockImplementation(async (_bucket: string, path: string) => {
@@ -137,7 +137,7 @@ describe('GET /api/v1/esign/submissions/[id]', () => {
   });
 
   it('returns 403 when esign read permission is denied', async () => {
-    requireEsignReadPermissionMock.mockRejectedValueOnce(
+    requireEsignManagementReadMock.mockRejectedValueOnce(
       new ForbiddenError('E-Sign read permission required'),
     );
     const req = new NextRequest(

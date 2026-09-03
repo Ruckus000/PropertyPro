@@ -7,7 +7,7 @@ import { ValidationError } from '@/lib/api/errors';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
-  requireEsignReadPermission,
+  requireEsignManagementRead,
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
@@ -44,7 +44,7 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    await requireEsignReadPermission(membership);
+    await requireEsignManagementRead(membership);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 
