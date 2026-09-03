@@ -12,7 +12,6 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   archiveTemplate,
-  countInFlightSubmissionsForTemplate,
   getTemplate,
   updateTemplate,
 } from '@/lib/services/esign-service';
@@ -32,17 +31,7 @@ export const GET = withErrorHandler(
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 
-    // `inFlightSubmissionCount` rides alongside the template so the UI can say
-    // why field edits are blocked BEFORE the manager opens the editor. It is
-    // composed here rather than inside `getTemplate`, which is also called by
-    // createSubmission, cloneTemplate and the signer context — none of which
-    // want a second query.
-    const [template, inFlightSubmissionCount] = await Promise.all([
-      getTemplate(communityId, params.id),
-      countInFlightSubmissionsForTemplate(communityId, params.id),
-    ]);
-
-    return { ...template, inFlightSubmissionCount };
+    return getTemplate(communityId, params.id);
   }),
 );
 

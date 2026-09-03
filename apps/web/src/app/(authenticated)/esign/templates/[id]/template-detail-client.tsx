@@ -4,7 +4,12 @@
  * TemplateDetailClient — Read-only template preview with field overlay.
  *
  * Displays template metadata, PDF preview with field markers in view mode,
- * and action buttons (Send for Signing, Edit Fields, Clone, Archive).
+ * and action buttons (Send for Signing, Clone, Archive).
+
+ * Edit Fields is deliberately absent: field editing belongs in the shared
+ * stepped builder from the design prototype (`pp-esign-editor.js`), which is
+ * not built yet. A button linking to the blank new-template builder — which is
+ * what shipped here before — is worse than no button.
  */
 
 import { useCallback, useMemo, useState } from 'react';
@@ -14,7 +19,6 @@ import {
   Archive,
   ChevronLeft,
   Copy,
-  Edit,
   Loader2,
   Send,
 } from 'lucide-react';
@@ -31,11 +35,7 @@ import {
 import { useEsignTemplatePdfUrl } from '@/hooks/use-esign-template-pdf';
 import { FieldOverlay } from '@/components/esign/field-overlay';
 import { ESIGN_FIELD_COLORS } from '@/components/esign/esign-field-colors';
-import {
-  describeInFlightSignatures,
-  templateFieldsAreEditable,
-  templateHasSourceDocument,
-} from '@/lib/esign/template-readiness';
+import { templateHasSourceDocument } from '@/lib/esign/template-readiness';
 
 const PdfViewer = dynamic(
   () => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer),
@@ -130,14 +130,9 @@ export function TemplateDetailClient({
     height: 792,
   };
 
-  // Which verbs this template can actually honour. Offering one the server
-  // will refuse only moves the failure to the end of the work.
+  // Send is withheld from a template with no stored PDF: `createSubmission`
+  // refuses it, so the link would only move the failure later.
   const canSend = template ? templateHasSourceDocument(template) : false;
-  const inFlightCount =
-    typeof template?.inFlightSubmissionCount === 'number'
-      ? template.inFlightSubmissionCount
-      : 0;
-  const fieldsEditable = template ? templateFieldsAreEditable(template) : false;
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -217,15 +212,6 @@ export function TemplateDetailClient({
                 Send for Signing
               </Link>
             )}
-            {fieldsEditable && (
-              <Link
-                href={`/esign/templates/${templateId}/edit?communityId=${communityId}`}
-                className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
-              >
-                <Edit className="size-4" />
-                Edit Fields
-              </Link>
-            )}
             <button
               type="button"
               onClick={() => {
@@ -249,22 +235,6 @@ export function TemplateDetailClient({
           </div>
         }
       />
-
-      {/* Why Edit Fields is missing. The signing page reads the field schema
-          live off the template on every open, so changing it mid-flight would
-          change the document under the people signing it. */}
-      {!fieldsEditable && (
-        <div
-          role="status"
-          className="rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-4 py-3 text-sm text-[var(--status-warning)]"
-        >
-          <span className="font-medium">
-            Fields are locked: {describeInFlightSignatures(inFlightCount)}.
-          </span>{' '}
-          Changing them now would change the document under the people signing
-          it. Clone this template and edit the copy instead.
-        </div>
-      )}
 
       {/* Metadata panel */}
       <div className="grid grid-cols-4 gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-5">

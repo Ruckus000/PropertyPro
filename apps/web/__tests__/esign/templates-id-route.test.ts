@@ -18,7 +18,6 @@ const {
   getTemplateMock,
   updateTemplateMock,
   archiveTemplateMock,
-  countInFlightSubmissionsForTemplateMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -31,7 +30,6 @@ const {
   getTemplateMock: vi.fn(),
   updateTemplateMock: vi.fn(),
   archiveTemplateMock: vi.fn(),
-  countInFlightSubmissionsForTemplateMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -64,7 +62,6 @@ vi.mock('@/lib/services/esign-service', () => ({
   getTemplate: getTemplateMock,
   updateTemplate: updateTemplateMock,
   archiveTemplate: archiveTemplateMock,
-  countInFlightSubmissionsForTemplate: countInFlightSubmissionsForTemplateMock,
 }));
 
 import { DELETE, GET, PATCH } from '../../src/app/api/v1/esign/templates/[id]/route';
@@ -99,7 +96,6 @@ describe('/api/v1/esign/templates/[id]', () => {
     getTemplateMock.mockResolvedValue(TEMPLATE);
     updateTemplateMock.mockResolvedValue(TEMPLATE);
     archiveTemplateMock.mockResolvedValue(undefined);
-    countInFlightSubmissionsForTemplateMock.mockResolvedValue(0);
   });
 
   describe('GET', () => {
@@ -111,22 +107,9 @@ describe('/api/v1/esign/templates/[id]', () => {
 
       expect(res.status).toBe(200);
       const json = (await res.json()) as { data: typeof TEMPLATE };
-      expect(json.data).toMatchObject(TEMPLATE);
+      expect(json.data).toEqual(TEMPLATE);
       expect(getTemplateMock).toHaveBeenCalledWith(42, 7);
       expect(requireEsignReadPermissionMock).toHaveBeenCalledWith(MEMBERSHIP);
-    });
-
-    it('carries the in-flight signature count so the UI can explain a blocked edit', async () => {
-      countInFlightSubmissionsForTemplateMock.mockResolvedValue(3);
-
-      const res = await GET(
-        new NextRequest('http://localhost:3000/api/v1/esign/templates/7?communityId=42'),
-        routeCtx('7'),
-      );
-
-      const json = (await res.json()) as { data: { inFlightSubmissionCount: number } };
-      expect(json.data.inFlightSubmissionCount).toBe(3);
-      expect(countInFlightSubmissionsForTemplateMock).toHaveBeenCalledWith(42, 7);
     });
 
     it('returns 400 for invalid id', async () => {

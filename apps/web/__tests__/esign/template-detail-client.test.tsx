@@ -155,15 +155,6 @@ describe('TemplateDetailClient', () => {
     ).toBe('/esign/submissions/new?communityId=1&templateId=5');
   });
 
-  it('edits fields on this template, not on a blank new one', () => {
-    setPdf({ data: { pdfUrl: 'https://signed.example/proxy.pdf' } });
-    render(<TemplateDetailClient communityId={1} templateId={5} />);
-
-    expect(
-      screen.getByRole('link', { name: /Edit Fields/i }).getAttribute('href'),
-    ).toBe('/esign/templates/5/edit?communityId=1');
-  });
-
   it('offers no Send link when the template has no source PDF', () => {
     useEsignTemplateMock.mockReturnValue({
       data: baseTemplate({ sourceDocumentPath: null }),
@@ -176,22 +167,17 @@ describe('TemplateDetailClient', () => {
     expect(screen.queryByRole('link', { name: /Send for Signing/i })).toBeNull();
   });
 
-  it('blocks field editing while signatures are still out, and says why', () => {
-    useEsignTemplateMock.mockReturnValue({
-      data: baseTemplate({ inFlightSubmissionCount: 2 }),
-      isLoading: false,
-      error: null,
-    });
+  it('offers no Edit Fields link at all, rather than one to the blank builder', () => {
+    // Field editing belongs in the shared stepped builder, which is not built
+    // yet. Until then no button is honest; a button to `/esign/templates/new`
+    // is not.
     setPdf({ data: { pdfUrl: 'https://signed.example/proxy.pdf' } });
     render(<TemplateDetailClient communityId={1} templateId={5} />);
 
-    // No link to the editor at all — the server refuses the write, and
-    // offering the door would only produce a 422 at the end of the work.
     expect(screen.queryByRole('link', { name: /Edit Fields/i })).toBeNull();
-    const banner = screen.getByRole('status');
-    expect(banner.textContent).toMatch(/2 signature requests still out/i);
-    // It has to say what to do instead, or it is just a refusal.
-    expect(banner.textContent).toMatch(/Clone this template/i);
+    expect(
+      screen.queryByRole('link', { name: /Send for Signing/i })?.getAttribute('href'),
+    ).not.toContain('/esign/templates/new');
   });
 
   it('renders the "no PDF document uploaded" branch when sourceDocumentPath is null', () => {

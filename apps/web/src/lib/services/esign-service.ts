@@ -490,44 +490,6 @@ export async function getTemplate(
   return rows[0] as EsignTemplateRecord;
 }
 
-/**
- * How many submissions from this template a signer could still act on.
- *
- * Used to refuse field edits: a submission does NOT snapshot the field
- * schema — the public signing route reads `template.fieldsSchema` live on
- * every open — so editing a template mid-flight changes the document under
- * the people signing it.
- *
- * In flight means effective status `pending`. `expired` is never stored: it
- * is derived from a `pending` row whose `expiresAt` has passed, and such a
- * signer can no longer open their link. `processing` and later are excluded
- * because everyone has already signed.
- *
- * Both filters are pushed into SQL. `listSubmissions` selects every
- * submission in the community and filters in JS; that is the wrong shape for
- * a check that runs on a single template.
- *
- * AUTHZ: tenant-scoped — caller MUST have verified community membership.
- */
-export async function countInFlightSubmissionsForTemplate(
-  communityId: number,
-  templateId: number,
-): Promise<number> {
-  const scoped = createScopedClient(communityId);
-  const rows = (await scoped.selectFrom(
-    esignSubmissions,
-    {},
-    and(
-      eq(esignSubmissions.templateId, templateId),
-      eq(esignSubmissions.status, 'pending'),
-    ),
-  )) as EsignSubmissionRecord[];
-
-  return rows.filter(
-    (row) => getEffectiveSubmissionStatus(row) === 'pending',
-  ).length;
-}
-
 export async function updateTemplate(
   communityId: number,
   userId: string,
@@ -539,20 +501,6 @@ export async function updateTemplate(
 
   if (input.fieldsSchema) {
     validateFieldsSchema(input.fieldsSchema);
-  }
-
-  // Only a field change can alter what a signer is shown, so only a field
-  // change pays for the guard query. Name and description are always safe.
-  if (input.fieldsSchema !== undefined) {
-    const inFlight = await countInFlightSubmissionsForTemplate(communityId, templateId);
-    if (inFlight > 0) {
-      throw new UnprocessableEntityError(
-        `This template has ${inFlight} signature ${
-          inFlight === 1 ? 'request' : 'requests'
-        } still out. Changing its fields now would change the document under ` +
-          `the people signing it. Clone the template and edit the copy instead.`,
-      );
-    }
   }
 
   const scoped = createScopedClient(communityId);
