@@ -83,11 +83,6 @@ export function summarizeWarnings(manifest: ExportJobManifest): string[] {
   return lines;
 }
 
-// Moved to `@/lib/utils/format-bytes` (the site editor needed it, and a panel
-// must not depend on an export-notification service). Re-exported so existing
-// importers — and this module's own tests — are untouched.
-export { formatBytes };
-
 /**
  * Email the requester that their export is ready.
  *

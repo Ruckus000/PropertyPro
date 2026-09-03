@@ -89,7 +89,7 @@ export const downloadExportPartContract = defineRoute({
     url: z.string(),
     expiresInSeconds: z.number(),
     fileName: z.string(),
-    byteSize: z.number(),
+    byteSize: z.number().int().nonnegative(),
   }),
   permission: { resource: 'settings', action: 'read' },
 });

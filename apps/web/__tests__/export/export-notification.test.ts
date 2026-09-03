@@ -37,7 +37,7 @@ vi.mock('@propertypro/email', () => ({
   },
 }));
 
-const { formatBytes, sendExportReadyEmail, summarizeWarnings } = await import(
+const { sendExportReadyEmail, summarizeWarnings } = await import(
   '@/lib/services/export/export-notification'
 );
 
@@ -116,18 +116,6 @@ describe('summarizeWarnings', () => {
       warnings: [{ code: 'SOMETHING_NEW', detail: 'an unfamiliar problem' }],
     });
     expect(lines).toEqual(['an unfamiliar problem']);
-  });
-});
-
-describe('formatBytes', () => {
-  it.each([
-    [0, '0 B'],
-    [null, '0 B'],
-    [512, '512 B'],
-    [1024, '1.0 KB'],
-    [1024 * 1024 * 3.5, '3.5 MB'],
-  ])('formats %s as %s', (input, expected) => {
-    expect(formatBytes(input as number | null)).toBe(expected);
   });
 });
 
