@@ -11,6 +11,7 @@ import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
 import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
+import { deadlineEscalation } from '@/lib/meetings/meeting-status';
 import { DocumentViewerModal } from '@/components/documents/DocumentViewerModal';
 
 interface MeetingDetailModalProps {
@@ -21,22 +22,6 @@ interface MeetingDetailModalProps {
   onClose: () => void;
   onEdit: (meetingId: number) => void;
   onDeleted?: () => void;
-}
-
-function getDeadlineBadge(dateIso: string): { variant: 'neutral' | 'warning' | 'danger'; label: string } {
-  const deadline = new Date(dateIso);
-  const daysUntil = Math.floor((deadline.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-
-  if (daysUntil < 0) {
-    return { variant: 'danger', label: 'Critical' };
-  }
-  if (daysUntil <= 7) {
-    return { variant: 'warning', label: 'Urgent' };
-  }
-  if (daysUntil <= 30) {
-    return { variant: 'warning', label: 'Aware' };
-  }
-  return { variant: 'neutral', label: 'Calm' };
 }
 
 export function MeetingDetailModal({
@@ -174,7 +159,7 @@ export function MeetingDetailModal({
                         'Conservative internal reminder based on meeting date; statutory website-posting deadlines may depend on when approved minutes are created or received. Confirm with counsel.',
                     },
                   ].map(({ label, value, title }) => {
-                    const badge = getDeadlineBadge(value);
+                    const badge = deadlineEscalation(value, new Date());
                     return (
                       <div
                         key={label}
