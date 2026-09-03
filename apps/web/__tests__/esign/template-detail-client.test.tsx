@@ -167,17 +167,32 @@ describe('TemplateDetailClient', () => {
     expect(screen.queryByRole('link', { name: /Send for Signing/i })).toBeNull();
   });
 
-  it('offers no Edit Fields link at all, rather than one to the blank builder', () => {
-    // Field editing belongs in the shared stepped builder, which is not built
-    // yet. Until then no button is honest; a button to `/esign/templates/new`
-    // is not.
+  it('sends Edit Fields to the builder seeded from THIS template', () => {
+    // The link was removed in #1020 because the only destination that existed
+    // was the blank new-template builder. It is back now that the stepped
+    // builder can be seeded — and it must never point at `/templates/new`,
+    // which would silently discard the layout it claims to edit.
     setPdf({ data: { pdfUrl: 'https://signed.example/proxy.pdf' } });
     render(<TemplateDetailClient communityId={1} templateId={5} />);
 
+    const href = screen
+      .getByRole('link', { name: /Edit Fields/i })
+      .getAttribute('href');
+
+    expect(href).toBe('/esign/templates/5/edit?communityId=1');
+    expect(href).not.toContain('/esign/templates/new');
+  });
+
+  it('offers no Edit Fields link when the template has no PDF to place fields on', () => {
+    useEsignTemplateMock.mockReturnValue({
+      data: baseTemplate({ sourceDocumentPath: null }),
+      isLoading: false,
+      error: null,
+    });
+    setPdf({});
+    render(<TemplateDetailClient communityId={1} templateId={5} />);
+
     expect(screen.queryByRole('link', { name: /Edit Fields/i })).toBeNull();
-    expect(
-      screen.queryByRole('link', { name: /Send for Signing/i })?.getAttribute('href'),
-    ).not.toContain('/esign/templates/new');
   });
 
   it('renders the "no PDF document uploaded" branch when sourceDocumentPath is null', () => {

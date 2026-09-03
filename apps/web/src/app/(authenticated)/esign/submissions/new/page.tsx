@@ -1,8 +1,12 @@
-// breadcrumbs:exempt — delegated to apps/web/src/components/esign/new-submission-form.tsx
+// breadcrumbs:exempt — delegated to apps/web/src/components/esign/builder/esign-builder.tsx
 /**
- * E-Sign submission creation page.
+ * Send a document for signature — the four-step builder in send mode.
  *
- * Route: /esign/submissions/new?communityId=X
+ * Document → Recipients → Place fields → Review & send. With `?templateId=`
+ * the builder is seeded from that template and opens on the recipients step,
+ * since the names and emails are what a template cannot supply.
+ *
+ * Route: /esign/submissions/new?communityId=X[&templateId=Y]
  * Auth: admin roles only.
  * Feature gate: hasEsign must be true.
  */
@@ -11,7 +15,7 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
-import { NewSubmissionForm } from '@/components/esign/new-submission-form';
+import { EsignBuilder } from '@/components/esign/builder/esign-builder';
 import { FeatureGate } from '@/components/billing/feature-gate';
 
 interface PageProps {
@@ -28,9 +32,8 @@ export default async function NewSubmissionPage({ searchParams }: PageProps) {
 
   const communityId = rawId;
 
-  // Optional: "Send for Signing" on a template links here with the template
-  // already chosen. A malformed value is simply ignored — the form falls back
-  // to the picker, and the id is re-checked against the fetched list anyway.
+  // "Send for signing" on a template links here with the template already
+  // chosen. A malformed value is ignored — the builder simply starts at step 1.
   const rawTemplateId = Number(params['templateId']);
   const initialTemplateId =
     Number.isInteger(rawTemplateId) && rawTemplateId > 0 ? rawTemplateId : undefined;
@@ -56,7 +59,11 @@ export default async function NewSubmissionPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasEsign" communityId={communityId}>
-      <NewSubmissionForm communityId={communityId} initialTemplateId={initialTemplateId} />
+      <EsignBuilder
+        communityId={communityId}
+        mode="send"
+        {...(initialTemplateId === undefined ? {} : { templateId: initialTemplateId })}
+      />
     </FeatureGate>
   );
 }

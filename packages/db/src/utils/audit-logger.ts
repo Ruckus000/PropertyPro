@@ -23,6 +23,7 @@ export type AuditAction =
   | 'esign_submission_created' | 'esign_submission_completed'  // E-sign submission lifecycle
   | 'esign_submission_cancelled' | 'esign_reminder_sent'       // E-sign submission actions
   | 'esign_document_verified' | 'esign_consent_revoked'        // E-sign verification + consent
+  | 'esign_source_document_imported'                           // Library file copied into the e-sign prefix
   // Emergency broadcast audit actions (Phase 1B)
   | 'emergency_broadcast_created' | 'emergency_broadcast_sent'  // Broadcast lifecycle
   | 'emergency_broadcast_canceled'                               // Broadcast cancellation

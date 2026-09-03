@@ -154,3 +154,35 @@ export function usePresignEsignTemplateUpload() {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Library import
+// ---------------------------------------------------------------------------
+
+export interface ImportLibraryDocumentInput {
+  communityId: number;
+  documentId: number;
+}
+
+export interface ImportLibraryDocumentResult {
+  sourceDocumentPath: string;
+  name: string;
+}
+
+/**
+ * Copy a Documents-library file into the community's e-sign source prefix.
+ *
+ * The copy is what makes the path usable: both e-sign create routes accept
+ * only `communities/{id}/esign-templates/…`, so a library path cannot be bound
+ * directly. See the route's contract for the full reasoning.
+ */
+export function useImportEsignLibraryDocument() {
+  return useMutation<ImportLibraryDocumentResult, Error, ImportLibraryDocumentInput>({
+    mutationFn: (input) =>
+      requestJson<ImportLibraryDocumentResult>('/api/v1/esign/documents/from-library', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+  });
+}
