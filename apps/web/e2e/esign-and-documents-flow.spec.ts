@@ -122,39 +122,60 @@ test.describe('E-Sign send flow (CAM)', () => {
       return;
     }
 
+    // The single-page form became a four-step builder. The E-Sign screen's own
+    // link still lands on it, at step 1.
     await page.getByRole('link', { name: /Send Document/i }).click();
-    await expect(page.getByRole('heading', { name: /Send Document for Signing/i })).toBeVisible();
+    // `exact` matters: without it this also matches the global search button,
+    // whose aria-label is "Search documents, residents, meetings".
+    await expect(
+      page.getByRole('button', { name: 'Document', exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
 
-    const templateTrigger = page.getByTestId('esign-template-select-trigger');
-    await templateTrigger.scrollIntoViewIfNeeded();
-    // Measured: this trigger is not hydrated until ~260ms after the heading is
-    // visible, and a click before that is swallowed rather than delayed — which
-    // is why the 30s timeout below never helped. See helpers/hydration.ts. (The
-    // file header's "stale process on port 3000" theory was a misdiagnosis of
-    // this same symptom.)
-    await clickWhenHydrated(templateTrigger);
-    await expect(page.getByPlaceholder('Search templates...')).toBeVisible({
-      timeout: 30_000,
-    });
-    await page.getByPlaceholder('Search templates...').fill('Violation');
-    const violationOption = page.locator('[cmdk-item]').filter({
-      has: page.getByText('Violation Acknowledgment', { exact: true }),
-    });
-    try {
-      await expect(violationOption).toBeVisible({ timeout: 60_000 });
-    } catch {
+    // Resolve the template through the API rather than driving the templates
+    // list. The "Send for Signing" href is covered by
+    // `__tests__/esign/template-detail-client.test.tsx`; what this spec is here
+    // to exercise is the builder and everything downstream of it.
+    const templatesResp = await page.request.get(
+      `/api/v1/esign/templates?communityId=${communityId}`,
+    );
+    const templatesJson = (await templatesResp.json()) as {
+      data?: Array<{ id: number; name: string }>;
+    };
+    const violationTemplate = (templatesJson.data ?? []).find(
+      (t) => t.name === 'Violation Acknowledgment',
+    );
+    if (!violationTemplate) {
       testInfo.skip(
         true,
         'No Violation Acknowledgment template in UI. Run: scripts/with-env-local-demo-db.sh pnpm seed:demo (supply PROPERTYPRO_LOCAL_SUPABASE_* keys from `supabase status`).',
       );
       return;
     }
-    await violationOption.click();
 
-    await page.getByPlaceholder('Full name').fill('Tenant One');
-    await page.getByPlaceholder('Email address').fill('tenant.one@sunset.local');
+    await page.goto(
+      `/esign/submissions/new?communityId=${communityId}&templateId=${violationTemplate.id}`,
+      { waitUntil: 'domcontentloaded' },
+    );
 
-    await page.getByRole('button', { name: /Review & Send/i }).click();
+    // Seeded from a template, the builder opens on Recipients — the one thing a
+    // template cannot supply. The role arrives filled in; the person does not.
+    // Waiting for the seeded value also waits out hydration, since this step is
+    // only rendered by a client effect.
+    await expect(page.getByLabel(/^Role/)).toHaveValue('owner', { timeout: 30_000 });
+
+    await page.getByPlaceholder('Alice Alvarez').fill('Tenant One');
+    await page.getByPlaceholder('alice@example.com').fill('tenant.one@sunset.local');
+
+    // Recipients → Place fields → Review. The template brings its own fields,
+    // so there is nothing to place by hand.
+    // `exact` again: in a dev server, "Next" also matches the Next.js Dev Tools
+    // button, whose aria-label is "Open Next.js Dev Tools".
+    const nextButton = page.getByRole('button', { name: 'Next', exact: true });
+    await clickWhenHydrated(nextButton);
+    await clickWhenHydrated(nextButton);
+    await expect(page.getByText('tenant.one@sunset.local')).toBeVisible({
+      timeout: 30_000,
+    });
 
     const createResponsePromise = page.waitForResponse(
       (r) =>
