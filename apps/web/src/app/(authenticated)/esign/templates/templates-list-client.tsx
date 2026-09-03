@@ -8,11 +8,15 @@
  */
 
 import Link from 'next/link';
-import { Plus, FileSignature } from 'lucide-react';
+import { Plus, FileSignature, Edit, Send } from 'lucide-react';
 import { Badge } from '@propertypro/ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
+import {
+  templateFieldsAreEditable,
+  templateHasSourceDocument,
+} from '@/lib/esign/template-readiness';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 
 // ---------------------------------------------------------------------------
@@ -135,9 +139,14 @@ export function EsignTemplatesListClient({
         </div>
       )}
 
-      {/* Templates table */}
+      {/* Templates table.
+
+          The wrapper is `overflow-x-auto`, not `overflow-hidden`: the table is
+          ~842px and a phone viewport is 375, so hiding the overflow CLIPPED the
+          right-hand columns with no way to reach them. Survivable when the last
+          column was Created; not now that the row actions live there. */}
       {templates && templates.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)]">
+        <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)]">
           <table className="min-w-full divide-y divide-[var(--border-subtle)]">
             <thead className="bg-[var(--surface-subtle)]">
               <tr>
@@ -170,6 +179,12 @@ export function EsignTemplatesListClient({
                   className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]"
                 >
                   Created
+                </th>
+                <th
+                  scope="col"
+                  className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]"
+                >
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -216,6 +231,34 @@ export function EsignTemplatesListClient({
                   </td>
                   <td className="px-5 py-4 text-sm text-[var(--text-secondary)]">
                     {formatDate(template.createdAt)}
+                  </td>
+                  {/* Send is withheld when the template has no stored PDF —
+                      createSubmission refuses it, so the link would only move
+                      the failure later. Edit is withheld while signatures are
+                      out, which the detail response reports; a list row that
+                      does not carry the count still offers it and the server
+                      stays the real gate. */}
+                  <td className="px-5 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      {templateHasSourceDocument(template) && (
+                        <Link
+                          href={`/esign/submissions/new?communityId=${communityId}&templateId=${template.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
+                        >
+                          <Send className="size-3.5" aria-hidden="true" />
+                          Send
+                        </Link>
+                      )}
+                      {templateFieldsAreEditable(template) && (
+                        <Link
+                          href={`/esign/templates/${template.id}/edit?communityId=${communityId}`}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
+                        >
+                          <Edit className="size-3.5" aria-hidden="true" />
+                          Edit
+                        </Link>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

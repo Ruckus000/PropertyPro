@@ -27,6 +27,14 @@ export default async function NewSubmissionPage({ searchParams }: PageProps) {
   }
 
   const communityId = rawId;
+
+  // Optional: "Send for Signing" on a template links here with the template
+  // already chosen. A malformed value is simply ignored — the form falls back
+  // to the picker, and the id is re-checked against the fetched list anyway.
+  const rawTemplateId = Number(params['templateId']);
+  const initialTemplateId =
+    Number.isInteger(rawTemplateId) && rawTemplateId > 0 ? rawTemplateId : undefined;
+
   let userId: string;
 
   try {
@@ -48,7 +56,7 @@ export default async function NewSubmissionPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasEsign" communityId={communityId}>
-      <NewSubmissionForm communityId={communityId} />
+      <NewSubmissionForm communityId={communityId} initialTemplateId={initialTemplateId} />
     </FeatureGate>
   );
 }

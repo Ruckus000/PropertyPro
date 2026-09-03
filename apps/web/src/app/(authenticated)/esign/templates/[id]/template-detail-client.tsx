@@ -31,6 +31,11 @@ import {
 import { useEsignTemplatePdfUrl } from '@/hooks/use-esign-template-pdf';
 import { FieldOverlay } from '@/components/esign/field-overlay';
 import { ESIGN_FIELD_COLORS } from '@/components/esign/esign-field-colors';
+import {
+  describeInFlightSignatures,
+  templateFieldsAreEditable,
+  templateHasSourceDocument,
+} from '@/lib/esign/template-readiness';
 
 const PdfViewer = dynamic(
   () => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer),
@@ -125,6 +130,15 @@ export function TemplateDetailClient({
     height: 792,
   };
 
+  // Which verbs this template can actually honour. Offering one the server
+  // will refuse only moves the failure to the end of the work.
+  const canSend = template ? templateHasSourceDocument(template) : false;
+  const inFlightCount =
+    typeof template?.inFlightSubmissionCount === 'number'
+      ? template.inFlightSubmissionCount
+      : 0;
+  const fieldsEditable = template ? templateFieldsAreEditable(template) : false;
+
   // -----------------------------------------------------------------------
   // Handlers
   // -----------------------------------------------------------------------
@@ -194,20 +208,24 @@ export function TemplateDetailClient({
             >
               {template.status}
             </Badge>
-            <Link
-              href={`/esign/templates/new?communityId=${communityId}`}
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
-            >
-              <Send className="size-4" />
-              Send for Signing
-            </Link>
-            <Link
-              href={`/esign/templates/new?communityId=${communityId}`}
-              className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
-            >
-              <Edit className="size-4" />
-              Edit Fields
-            </Link>
+            {canSend && (
+              <Link
+                href={`/esign/submissions/new?communityId=${communityId}&templateId=${templateId}`}
+                className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
+              >
+                <Send className="size-4" />
+                Send for Signing
+              </Link>
+            )}
+            {fieldsEditable && (
+              <Link
+                href={`/esign/templates/${templateId}/edit?communityId=${communityId}`}
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
+              >
+                <Edit className="size-4" />
+                Edit Fields
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -231,6 +249,22 @@ export function TemplateDetailClient({
           </div>
         }
       />
+
+      {/* Why Edit Fields is missing. The signing page reads the field schema
+          live off the template on every open, so changing it mid-flight would
+          change the document under the people signing it. */}
+      {!fieldsEditable && (
+        <div
+          role="status"
+          className="rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-4 py-3 text-sm text-[var(--status-warning)]"
+        >
+          <span className="font-medium">
+            Fields are locked: {describeInFlightSignatures(inFlightCount)}.
+          </span>{' '}
+          Changing them now would change the document under the people signing
+          it. Clone this template and edit the copy instead.
+        </div>
+      )}
 
       {/* Metadata panel */}
       <div className="grid grid-cols-4 gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-5">

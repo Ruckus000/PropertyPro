@@ -27,20 +27,12 @@ import {
   type EsignFieldsSchema,
   type EsignTemplateType,
 } from '@propertypro/shared';
-import dynamic from 'next/dynamic';
 import {
   useCreateEsignTemplate,
   usePresignEsignTemplateUpload,
 } from '@/hooks/use-esign-templates';
-import { FieldOverlay } from '@/components/esign/field-overlay';
-import { FieldPalette } from '@/components/esign/field-palette';
+import { TemplateFieldEditor } from '@/components/esign/template-field-editor';
 import { ESIGN_FIELD_COLORS } from '@/components/esign/esign-field-colors';
-
-// pdfjs-dist has top-level side effects that crash during SSR — skip SSR entirely
-const PdfViewer = dynamic(
-  () => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer),
-  { ssr: false, loading: () => <div className="flex items-center justify-center p-12"><div className="text-sm text-[var(--text-tertiary)]">Loading PDF viewer...</div></div> },
-);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,38 +109,8 @@ export function TemplateBuilderClient({
   // -----------------------------------------------------------------------
   // Phase 2 — Editor state
   // -----------------------------------------------------------------------
-  const [currentPage, setCurrentPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [pageDimensions, setPageDimensions] = useState<PageDimension[]>([]);
   const [fields, setFields] = useState<EsignFieldDefinition[]>([]);
-  const [activeRole, setActiveRole] = useState('signer');
-  const [activeFieldType, setActiveFieldType] = useState<EsignFieldType | null>(
-    null,
-  );
-  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // -----------------------------------------------------------------------
-  // Signer role color map
-  // -----------------------------------------------------------------------
-  const signerRoleColors = useMemo(() => {
-    const map: Record<string, string> = {};
-    signerRoles.forEach((role, i) => {
-      map[role] = ESIGN_FIELD_COLORS[i % ESIGN_FIELD_COLORS.length]!;
-    });
-    return map;
-  }, [signerRoles]);
-
-  // -----------------------------------------------------------------------
-  // Field counts per role
-  // -----------------------------------------------------------------------
-  const fieldCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const role of signerRoles) {
-      counts[role] = fields.filter((f) => f.signerRole === role).length;
-    }
-    return counts;
-  }, [fields, signerRoles]);
 
   // -----------------------------------------------------------------------
   // PDF upload handler
@@ -184,11 +146,8 @@ export function TemplateBuilderClient({
       if (signerRoles.length <= 1) return;
       setSignerRoles((prev) => prev.filter((r) => r !== role));
       setFields((prev) => prev.filter((f) => f.signerRole !== role));
-      if (activeRole === role) {
-        setActiveRole(signerRoles.find((r) => r !== role) ?? 'signer');
-      }
     },
-    [signerRoles, activeRole],
+    [signerRoles],
   );
 
   // -----------------------------------------------------------------------
@@ -198,78 +157,8 @@ export function TemplateBuilderClient({
 
   const goToEditor = useCallback(() => {
     if (!canProceedToEditor) return;
-    setActiveRole(signerRoles[0]!);
     setPhase(2);
-  }, [canProceedToEditor, signerRoles]);
-
-  // -----------------------------------------------------------------------
-  // Document load handler
-  // -----------------------------------------------------------------------
-  const handleDocumentLoad = useCallback(
-    (meta: { totalPages: number; pageDimensions: PageDimension[] }) => {
-      setTotalPages(meta.totalPages);
-      setPageDimensions(meta.pageDimensions);
-    },
-    [],
-  );
-
-  // -----------------------------------------------------------------------
-  // Field placement — click on PDF to add field
-  // -----------------------------------------------------------------------
-  const handleOverlayClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!activeFieldType) return;
-
-      const rect = e.currentTarget.getBoundingClientRect();
-      const dims = pageDimensions[currentPage];
-      if (!dims) return;
-
-      const clickX = ((e.clientX - rect.left) / rect.width) * 100;
-      const clickY = ((e.clientY - rect.top) / rect.height) * 100;
-      const size = DEFAULT_FIELD_SIZE[activeFieldType];
-
-      const newField: EsignFieldDefinition = {
-        id: crypto.randomUUID(),
-        type: activeFieldType,
-        signerRole: activeRole,
-        page: currentPage,
-        x: Math.max(0, Math.min(100 - size.w, clickX - size.w / 2)),
-        y: Math.max(0, Math.min(100 - size.h, clickY - size.h / 2)),
-        width: size.w,
-        height: size.h,
-        required: true,
-      };
-
-      setFields((prev) => [...prev, newField]);
-      setSelectedFieldId(newField.id);
-      setActiveFieldType(null);
-    },
-    [activeFieldType, activeRole, currentPage, pageDimensions],
-  );
-
-  // -----------------------------------------------------------------------
-  // Field operations
-  // -----------------------------------------------------------------------
-  const handleFieldUpdate = useCallback(
-    (
-      fieldId: string,
-      update: Partial<Pick<EsignFieldDefinition, 'x' | 'y' | 'width' | 'height'>>,
-    ) => {
-      setFields((prev) =>
-        prev.map((f) => (f.id === fieldId ? { ...f, ...update } : f)),
-      );
-    },
-    [],
-  );
-
-  const handleFieldRemove = useCallback((fieldId: string) => {
-    setFields((prev) => prev.filter((f) => f.id !== fieldId));
-    setSelectedFieldId(null);
-  }, []);
-
-  const handleFieldSelect = useCallback((fieldId: string) => {
-    setSelectedFieldId(fieldId || null);
-  }, []);
+  }, [canProceedToEditor]);
 
   // -----------------------------------------------------------------------
   // Save template
@@ -526,102 +415,23 @@ export function TemplateBuilderClient({
   }
 
   // -----------------------------------------------------------------------
-  // Phase 2 — Editor UI
+  // Phase 2 — the shared field editor, driven by the uploaded bytes.
   // -----------------------------------------------------------------------
 
-  const currentDimensions = pageDimensions[currentPage] ?? {
-    width: 612,
-    height: 792,
-  };
-
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
-      {/* Editor header */}
-      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setPhase(1)}
-            className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            <ArrowLeft className="size-4" />
-            Setup
-          </button>
-          <span className="text-sm font-medium text-[var(--text-primary)]">
-            {name}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-[var(--text-tertiary)]">
-            {fields.length} field{fields.length !== 1 ? 's' : ''} placed
-          </span>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={saving || fields.length === 0}
-            className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {saving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            {saving ? 'Saving...' : 'Save Template'}
-          </button>
-        </div>
-      </div>
-
-      {/* Error banner */}
-      {createTemplate.error && (
-        <div className="border-b border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-2 text-sm text-[var(--status-danger)]">
-          {createTemplate.error.message}
-        </div>
-      )}
-
-      {/* Editor body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className="shrink-0 overflow-y-auto border-r border-[var(--border-subtle)] bg-[var(--surface-page)] p-4">
-          <FieldPalette
-            signerRoles={signerRoles}
-            activeRole={activeRole}
-            onRoleChange={setActiveRole}
-            activeFieldType={activeFieldType}
-            onFieldTypeSelect={setActiveFieldType}
-            fieldCounts={fieldCounts}
-            signerRoleColors={signerRoleColors}
-          />
-        </div>
-
-        {/* PDF viewer area */}
-        <div
-          className="flex-1 overflow-auto bg-[var(--surface-page)] p-6"
-          onClick={activeFieldType ? handleOverlayClick : undefined}
-          style={{ cursor: activeFieldType ? 'crosshair' : undefined }}
-        >
-          {pdfData && (
-            <PdfViewer
-              pdfData={pdfData}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              onDocumentLoad={handleDocumentLoad}
-              scale={1}
-            >
-              <FieldOverlay
-                fields={fields}
-                pageDimensions={currentDimensions}
-                currentPage={currentPage}
-                mode="edit"
-                selectedFieldId={selectedFieldId}
-                onFieldSelect={handleFieldSelect}
-                onFieldUpdate={handleFieldUpdate}
-                onFieldRemove={handleFieldRemove}
-                signerRoleColors={signerRoleColors}
-              />
-            </PdfViewer>
-          )}
-        </div>
-      </div>
-    </div>
+    <TemplateFieldEditor
+      templateName={name}
+      pdfData={pdfData}
+      signerRoles={signerRoles}
+      fields={fields}
+      onFieldsChange={setFields}
+      onSave={() => void handleSave()}
+      saving={saving}
+      errorMessage={createTemplate.error?.message ?? null}
+      onBack={() => setPhase(1)}
+      backLabel="Setup"
+      saveLabel="Save Template"
+      savingLabel="Saving..."
+    />
   );
 }
