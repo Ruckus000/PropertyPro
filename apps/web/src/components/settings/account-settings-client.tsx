@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { useReauth } from '@/hooks/use-reauth';
 import { ReauthModal } from '@/components/auth/reauth-modal';
+import { PageHeader } from '@/components/shared/page-header';
 
 // ── Password requirements (same as set-password-form) ──────────────
 
@@ -215,12 +216,7 @@ export function AccountSettingsClient({
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Account Settings</h1>
-        <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          Manage your personal information and security.
-        </p>
-      </div>
+      <PageHeader title="Account Settings" />
 
       {/* ── Profile Section ──────────────────────────── */}
       <section aria-labelledby="profile-heading">

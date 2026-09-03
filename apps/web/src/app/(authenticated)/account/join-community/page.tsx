@@ -8,6 +8,7 @@ import {
 import { JoinRequestForm } from '@/components/join-requests/join-request-form';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageBody } from '@/components/shared/page-body';
+import { PageHeader } from '@/components/shared/page-header';
 
 export default function JoinCommunityPage() {
   const [selected, setSelected] = useState<CommunitySearchResult | null>(null);
@@ -15,13 +16,7 @@ export default function JoinCommunityPage() {
 
   return (
     <PageBody width="prose">
-      <div>
-        <h1 className="text-2xl font-semibold">Join Another Community</h1>
-        <p className="text-sm text-content-secondary mt-2">
-          Search for your community and submit a request to be added as an owner or tenant.
-          A community admin will review your request.
-        </p>
-      </div>
+      <PageHeader title="Join Another Community" />
 
       {submitted ? (
         <AlertBanner

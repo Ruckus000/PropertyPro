@@ -2,6 +2,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { MeetingsPageShell } from '@/components/meetings/meetings-page-shell';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -14,7 +15,7 @@ export default async function MeetingsPage({ params }: PageProps) {
   if (!Number.isInteger(communityId) || communityId <= 0) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Meetings</h1>
+        <PageHeader title="Meetings" />
         <p className="mt-2 text-sm text-[var(--status-danger)]">Invalid community ID.</p>
       </div>
     );

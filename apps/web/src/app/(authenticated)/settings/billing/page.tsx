@@ -9,6 +9,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { getActiveSubscriptionInterval } from '@/lib/services/stripe-service';
 import { canManageBilling, canViewBilling } from '@propertypro/shared';
 import { BillingPageClient } from '@/components/settings/billing-page-client';
+import { PageHeader } from '@/components/shared/page-header';
 
 /**
  * Settings → Billing page (B-02/B-03/B-04).
@@ -35,7 +36,7 @@ export default async function BillingPage({
   if (!context.communityId) {
     return (
       <>
-        <h1 className="mb-4 text-xl font-semibold">Billing</h1>
+        <PageHeader title="Billing" />
         <p className="text-sm text-content-secondary">
           Provide a communityId to view billing information.
         </p>

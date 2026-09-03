@@ -12,6 +12,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { LeaseListPage } from '@/components/leases/LeaseListPage';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -47,14 +48,7 @@ export default async function LeasesPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasLeaseTracking" communityId={communityId}>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">
-          Lease Management
-        </h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          Track leases, renewals, and expirations for your community.
-        </p>
-      </div>
+      <PageHeader title="Lease Management" />
 
       <LeaseListPage communityId={communityId} />
     </FeatureGate>

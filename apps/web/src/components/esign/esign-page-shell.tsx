@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Plus, FileText, LayoutTemplate } from 'lucide-react';
 import { SubmissionList } from '@/components/esign/submission-list';
+import { PageHeader } from '@/components/shared/page-header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
@@ -22,20 +23,17 @@ export function EsignPageShell({ communityId }: EsignPageShellProps) {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-content">E-Sign</h1>
-          <p className="mt-1 text-sm text-content-tertiary">
-            Digital document signing
-          </p>
-        </div>
-        <Link href={`/esign/submissions/new?communityId=${communityId}`}>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Send Document
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="E-Sign"
+        actions={
+          <Link href={`/esign/submissions/new?communityId=${communityId}`}>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Send Document
+            </Button>
+          </Link>
+        }
+      />
 
       {/* Tabs */}
       <Tabs defaultValue="documents">

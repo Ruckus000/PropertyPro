@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface BoardChromeProps {
   communityId: number;
@@ -41,22 +42,20 @@ export function BoardChrome({
 }: BoardChromeProps) {
   const pathname = usePathname();
   const tabs = BOARD_TABS.filter((tab) => tab.id !== 'elections' || electionsEnabled);
-  const description = electionsEnabled
-    ? 'Polls, forum discussions, and elections for this community live here.'
-    : 'Polls and forum discussions live here. Elections appear after attorney review is complete.';
-
   return (
     <div className="space-y-6">
       <header className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-content-tertiary">
           {communityName}
         </p>
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold text-content">Community Board</h1>
+        <PageHeader title="Community Board" />
+        {/* Not a lede: while elections are gated behind attorney review, the
+            page says so. With elections live there is nothing to explain. */}
+        {!electionsEnabled && (
           <p className="max-w-2xl text-sm text-content-secondary">
-            {description}
+            Polls and forum discussions live here. Elections appear after attorney review is complete.
           </p>
-        </div>
+        )}
       </header>
 
       <nav

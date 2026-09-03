@@ -21,6 +21,7 @@ import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
 import { DashboardViolations } from '@/components/dashboard/dashboard-violations';
 import { DashboardEsignPending } from '@/components/dashboard/dashboard-esign-pending';
 import { ClaimRootBanner } from '@/components/dashboard/ClaimRootBanner';
+import { PageHeader } from '@/components/shared/page-header';
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -102,6 +103,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <ErrorBoundary>
       <div className="space-y-6">
+        {/* Outside the Suspense boundary: the page names itself for the
+            breadcrumb leaf and assistive tech before the panels stream in, and
+            as the first child it collects no space-y margin above it. */}
+        <PageHeader title="Dashboard" />
         <ClaimRootBanner isAdmin={membership.isAdmin} />
         <Suspense fallback={<DashboardSkeleton />}>
           <DashboardPanels

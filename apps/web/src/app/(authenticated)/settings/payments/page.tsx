@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { ConnectStatus } from '@/components/finance/connect-status';
 import { FeePolicySettings } from '@/components/finance/fee-policy-settings';
+import { PageHeader } from '@/components/shared/page-header';
 
 /**
  * Settings → Payments page.
@@ -17,7 +18,7 @@ export default function PaymentSettingsPage() {
   if (!communityId || !Number.isInteger(communityId) || communityId <= 0) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold">Payment Settings</h1>
+        <PageHeader title="Payment Settings" />
         <p className="text-sm text-content-secondary">
           Provide a communityId to manage payment settings.
         </p>
@@ -27,12 +28,7 @@ export default function PaymentSettingsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="mb-2 text-xl font-semibold">Payment Settings</h1>
-        <p className="mb-6 text-sm text-content-secondary">
-          Connect your association&apos;s bank account to collect dues and assessments from unit owners.
-        </p>
-      </div>
+      <PageHeader title="Payment Settings" />
 
       <ConnectStatus communityId={communityId} />
 

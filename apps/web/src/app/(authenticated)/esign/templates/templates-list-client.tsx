@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { Plus, FileSignature } from 'lucide-react';
 import { Badge } from '@propertypro/ui';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/shared/page-header';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 
@@ -101,23 +102,18 @@ export function EsignTemplatesListClient({
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-            E-Sign Templates
-          </h1>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Manage document templates for electronic signing.
-          </p>
-        </div>
-        <Link
-          href={`/esign/templates/new?communityId=${communityId}`}
-          className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
-        >
-          <Plus className="size-4" />
-          Create Template
-        </Link>
-      </div>
+      <PageHeader
+        title="E-Sign Templates"
+        actions={
+          <Link
+            href={`/esign/templates/new?communityId=${communityId}`}
+            className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
+          >
+            <Plus className="size-4" />
+            Create Template
+          </Link>
+        }
+      />
 
       {/* Empty state */}
       {(!templates || templates.length === 0) && (

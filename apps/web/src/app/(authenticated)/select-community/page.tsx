@@ -1,3 +1,4 @@
+// page-header:exempt — orientation page rendered without the rail or breadcrumb trail (shell-breadcrumbs HIDE_PATHS); its title is the only wayfinding on screen.
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';

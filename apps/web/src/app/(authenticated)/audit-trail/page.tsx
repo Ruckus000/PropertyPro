@@ -12,6 +12,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { isAdminRole } from '@propertypro/shared';
 import { AuditTrailViewer } from '@/components/audit/AuditTrailViewer';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -42,12 +43,7 @@ export default async function AuditTrailPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">Audit Trail</h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          View compliance and security audit events for this community.
-        </p>
-      </div>
+      <PageHeader title="Audit Trail" />
 
       <AuditTrailViewer communityId={communityId} />
     </>

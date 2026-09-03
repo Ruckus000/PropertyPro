@@ -12,6 +12,7 @@ import { isPmAdminInAnyCommunity, listManagedCommunitiesForPm } from '@/lib/api/
 import { userHasPortfolioTemplatesAccess } from '@/lib/services/site-portfolio-template-service';
 import { PortfolioTemplatesManager } from '@/components/pm/portfolio/PortfolioTemplatesManager';
 import { PageBody } from '@/components/shared/page-body';
+import { PageHeader } from '@/components/shared/page-header';
 
 export default async function PortfolioTemplatesPage() {
   const userId = await requirePageAuthenticatedUserId();
@@ -29,13 +30,7 @@ export default async function PortfolioTemplatesPage() {
 
   return (
     <PageBody width="reading" spacing="none">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-content">Portfolio Templates</h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          Save a community&rsquo;s brand as a reusable template, then apply it across the communities
-          you manage.
-        </p>
-      </div>
+      <PageHeader title="Portfolio Templates" />
       <PortfolioTemplatesManager hasAccess={hasAccess} communities={communities} />
     </PageBody>
   );

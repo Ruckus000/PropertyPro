@@ -40,6 +40,7 @@
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
     "guard:token-freshness": "tsx scripts/verify-token-freshness.ts",
     "guard:breadcrumbs": "tsx scripts/verify-page-breadcrumbs.ts",
+    "guard:page-header": "tsx scripts/verify-page-header-usage.ts",
     "guard:operations-routes": "tsx --tsconfig apps/web/tsconfig.json scripts/verify-operations-routes.ts",
     "guard:sentry-instrumentation": "tsx scripts/verify-sentry-instrumentation.ts",
     "guard:component-api-calls": "tsx scripts/verify-component-api-calls.ts",

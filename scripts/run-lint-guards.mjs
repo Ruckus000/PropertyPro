@@ -21,6 +21,7 @@ const GUARDS = [
   'guard:db-access',
   'guard:token-freshness',
   'guard:breadcrumbs',
+  'guard:page-header',
   'guard:operations-routes',
   'guard:sentry-instrumentation',
   'guard:component-api-calls',

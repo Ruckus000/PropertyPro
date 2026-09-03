@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { useReauth } from '@/hooks/use-reauth';
 import { useMyRootless } from '@/hooks/use-claim-root';
 import { ReauthModal } from '@/components/auth/reauth-modal';
+import { PageHeader } from '@/components/shared/page-header';
 
 import { PLAN_FEATURES, LEGACY_PLAN_ALIASES } from '@propertypro/shared';
 
@@ -224,12 +225,7 @@ export function BillingPageClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="mb-1 text-xl font-semibold">Billing</h1>
-        <p className="text-sm text-content-secondary">
-          Manage your subscription and payment details for {communityName}.
-        </p>
-      </div>
+      <PageHeader title="Billing" />
 
       {/* Payment Failed Warning */}
       {paymentFailedAt && (

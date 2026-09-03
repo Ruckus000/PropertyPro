@@ -13,6 +13,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { isAdminRole } from '@propertypro/shared';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { ContractTableContainer } from '@/components/contracts/contract-table-container';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -49,12 +50,7 @@ export default async function ContractsPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">Contracts & Vendors</h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          Track vendor contracts, manage bids, and monitor expiration dates.
-        </p>
-      </div>
+      <PageHeader title="Contracts & Vendors" />
 
       <ContractTableContainer communityId={communityId} />
     </>
