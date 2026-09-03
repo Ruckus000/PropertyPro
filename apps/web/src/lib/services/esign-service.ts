@@ -139,7 +139,18 @@ export interface UpdateTemplateInput {
 }
 
 export interface CreateSubmissionInput {
-  templateId: number;
+  /** Send from a saved template. Mutually exclusive with `document`. */
+  templateId?: number;
+  /**
+   * Send a document that has no template, which is what the builder's send
+   * path produces: the request carries its own field layout and its own PDF
+   * and nothing is saved for reuse. Mutually exclusive with `templateId`.
+   */
+  document?: {
+    name: string;
+    sourceDocumentPath: string;
+    fieldsSchema: EsignFieldsSchema;
+  };
   signers: Array<{
     email: string;
     name: string;
@@ -617,13 +628,38 @@ export async function createSubmission(
   input: CreateSubmissionInput,
   requestId?: string | null,
 ): Promise<{ submission: EsignSubmissionRecord; signers: EsignSignerRecord[] }> {
-  const template = await getTemplate(communityId, input.templateId);
-  const fieldsSchema = template.fieldsSchema;
+  // A request is sent either from a saved template or from a document that has
+  // no template. Both end in the same row: the field layout and the PDF are
+  // stored on the submission either way, so nothing downstream has to care
+  // which one it came from.
+  let template: EsignTemplateRecord | null = null;
+  let fieldsSchema: EsignFieldsSchema;
+  let sourceDocumentPath: string;
+  let documentName: string;
 
-  if (!fieldsSchema) {
-    throw new BadRequestError('Template has no field definitions');
+  if (input.templateId !== undefined) {
+    template = await getTemplate(communityId, input.templateId);
+    if (!template.fieldsSchema) {
+      throw new BadRequestError('Template has no field definitions');
+    }
+    requireRenderableSourceDocument(template);
+    fieldsSchema = template.fieldsSchema;
+    sourceDocumentPath = template.sourceDocumentPath as string;
+    documentName = template.name;
+  } else if (input.document) {
+    // A saved template's layout is checked when the template is created. A
+    // one-off layout is never saved, so this is its only check — and two of
+    // the rules have no equivalent in the route contract: a field can sit
+    // inside 0-100 on both axes and still run off the page once its width is
+    // added, and a field can name a role the layout never declares, which no
+    // signer can fill.
+    validateFieldsSchema(input.document.fieldsSchema);
+    fieldsSchema = input.document.fieldsSchema;
+    sourceDocumentPath = input.document.sourceDocumentPath;
+    documentName = input.document.name;
+  } else {
+    throw new BadRequestError('A signature request needs a template or a document');
   }
-  requireRenderableSourceDocument(template);
 
   for (const signer of input.signers) {
     if (!fieldsSchema.signerRoles.includes(signer.role)) {
@@ -636,12 +672,13 @@ export async function createSubmission(
 
   const subRows = await scoped.insert(esignSubmissions, {
     communityId,
-    templateId: input.templateId,
+    templateId: input.templateId ?? null,
     // Capture what this request is being sent with. The signing page reads the
     // snapshot, so a later template edit cannot change the document under the
-    // people signing it.
+    // people signing it — and a request with no template has nowhere else to
+    // read its layout from.
     fieldsSchema,
-    sourceDocumentPath: template.sourceDocumentPath,
+    sourceDocumentPath,
     externalId: submissionExternalId,
     status: 'pending',
     signingOrder: input.signingOrder,
@@ -690,22 +727,22 @@ export async function createSubmission(
       .limit(1);
     const communityName = (communityRows?.[0] as { name?: string } | undefined)?.name ?? 'PropertyPro';
 
-    // A one-off send has no template, so its subject line is the document name.
-  const documentName =
-    submission.messageSubject ?? template?.name ?? 'Document for signature';
+    // A custom subject wins; otherwise the template's name or, for a request
+    // with no template, the document's own file name.
+    const emailSubjectName = submission.messageSubject ?? documentName;
 
     for (const signer of signerRecords) {
       try {
         const signingUrl = buildSigningUrl(submission.externalId!, signer.slug!);
         await sendEmail({
           to: signer.email,
-          subject: `Signature requested: ${documentName}`,
+          subject: `Signature requested: ${emailSubjectName}`,
           category: 'transactional',
           react: EsignInvitationEmail({
             branding: { communityName },
             signerName: signer.name || signer.email,
             senderName,
-            documentName,
+            documentName: emailSubjectName,
             signingUrl,
             expiresAt: input.expiresAt ?? undefined,
             messageBody: input.messageBody ?? undefined,
@@ -722,7 +759,7 @@ export async function createSubmission(
     communityId,
     submissionId: submission.id,
     eventType: 'created',
-    eventData: { templateName: template.name, signerCount: signerRecords.length },
+    eventData: { templateName: documentName, signerCount: signerRecords.length },
   });
 
   await logAuditEvent({

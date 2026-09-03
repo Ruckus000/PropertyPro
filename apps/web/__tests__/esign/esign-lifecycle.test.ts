@@ -113,7 +113,7 @@ vi.mock('@propertypro/email', () => ({
   EsignInvitationEmail: esignInvitationEmailMock,
 }));
 
-import type { EsignFieldsSchema } from '@propertypro/shared';
+import type { EsignFieldDefinition, EsignFieldsSchema } from '@propertypro/shared';
 import {
   createTemplate,
   updateTemplate,
@@ -1627,5 +1627,201 @@ describe('E-Sign Full Lifecycle', () => {
 
       await expect(getSignerContext('slug-1')).rejects.toThrow(/not found/i);
     });
+  });
+});
+
+/**
+ * Sending a document that has no template.
+ *
+ * The builder's send path starts from a document, not from a template — the
+ * same act as saving a template, with a different ending. The request carries
+ * its own field layout and its own PDF, and never reads `esign_templates`.
+ */
+describe('E-Sign: send with no template', () => {
+  function makeInsertCapturingScoped() {
+    const inserts: Array<{ table: unknown; data: unknown }> = [];
+    return {
+      inserts,
+      selectFrom: vi.fn(async () => {
+        throw new Error('a template-less send must not read esign_templates');
+      }),
+      insert: vi.fn(async (table: unknown, data: unknown) => {
+        inserts.push({ table, data });
+        if (Array.isArray(data)) {
+          return data.map((item: Record<string, unknown>, i: number) => ({
+            id: i + 1,
+            communityId: 1,
+            ...item,
+          }));
+        }
+        return [
+          {
+            id: 77,
+            communityId: 1,
+            externalId: 'sub-ext-oneoff',
+            ...(data as Record<string, unknown>),
+          },
+        ];
+      }),
+      update: vi.fn(async () => []),
+    };
+  }
+
+  const ONE_OFF_DOC = {
+    name: 'Limited proxy.pdf',
+    sourceDocumentPath: 'communities/1/esign-templates/one-off.pdf',
+    fieldsSchema: twoRoleFieldsSchema(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    logAuditEventMock.mockResolvedValue(undefined);
+    sendEmailMock.mockResolvedValue({ id: 'email-1' });
+    // Sender-name and community-name lookups, the only admin reads on this path.
+    const chain = {
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn(async () => ({
+            data: { full_name: 'Admin User', email: 'admin@test.com' },
+            error: null,
+          })),
+          limit: vi.fn(async () => ({
+            data: [{ name: 'Test Community' }],
+            error: null,
+          })),
+        })),
+      })),
+    };
+    createAdminClientMock.mockReturnValue({ from: vi.fn(() => chain) });
+  });
+
+  it('stores the request’s own schema and PDF, with no template id', async () => {
+    const scoped = makeInsertCapturingScoped();
+    createScopedClientMock.mockReturnValue(scoped);
+
+    const result = await createSubmission(1, 'admin-1', {
+      document: ONE_OFF_DOC,
+      signers: [
+        { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
+        { email: 'b@test.com', name: 'Bob', role: 'witness', sortOrder: 1 },
+      ],
+      signingOrder: 'parallel',
+      sendEmail: false,
+    });
+
+    expect(result.signers).toHaveLength(2);
+    const submissionInsert = scoped.inserts[0]!.data as Record<string, unknown>;
+    expect(submissionInsert.templateId).toBeNull();
+    expect(submissionInsert.fieldsSchema).toEqual(ONE_OFF_DOC.fieldsSchema);
+    expect(submissionInsert.sourceDocumentPath).toBe(ONE_OFF_DOC.sourceDocumentPath);
+  });
+
+  it('rejects a signer whose role the supplied schema does not declare', async () => {
+    // Same rule as the template path — the check just reads the other schema.
+    createScopedClientMock.mockReturnValue(makeInsertCapturingScoped());
+
+    await expect(
+      createSubmission(1, 'admin-1', {
+        document: ONE_OFF_DOC,
+        signers: [{ email: 'a@test.com', name: 'Alice', role: 'landlord', sortOrder: 0 }],
+        signingOrder: 'parallel',
+        sendEmail: false,
+      }),
+    ).rejects.toThrow(/not defined/i);
+  });
+
+  it('refuses a request that names neither a template nor a document', async () => {
+    createScopedClientMock.mockReturnValue(makeInsertCapturingScoped());
+
+    await expect(
+      createSubmission(1, 'admin-1', {
+        signers: [{ email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 }],
+        signingOrder: 'parallel',
+        sendEmail: false,
+      }),
+    ).rejects.toThrow(/template or a document/i);
+  });
+
+  it('names the document in the invitation email, there being no template name', async () => {
+    const scoped = makeInsertCapturingScoped();
+    createScopedClientMock.mockReturnValue(scoped);
+
+
+    await createSubmission(1, 'admin-1', {
+      document: ONE_OFF_DOC,
+      signers: [{ email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 }],
+      signingOrder: 'parallel',
+      sendEmail: true,
+    });
+
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: 'Signature requested: Limited proxy.pdf' }),
+    );
+  });
+});
+
+/**
+ * A one-off document's layout gets the same shape checks a template's does.
+ *
+ * Two of those checks have no equivalent in the route contract: a field can sit
+ * inside 0-100 on both axes and still run off the page once its width is added,
+ * and a field can name a role the schema never declares, which no signer can
+ * ever fill.
+ */
+describe('E-Sign: send with no template — field layout validation', () => {
+  const scoped = {
+    selectFrom: vi.fn(async () => {
+      throw new Error('must not read esign_templates');
+    }),
+    insert: vi.fn(async () => [{ id: 1, communityId: 1, externalId: 'x' }]),
+    update: vi.fn(async () => []),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createScopedClientMock.mockReturnValue(scoped);
+  });
+
+  function sendWithFields(fields: EsignFieldDefinition[], signerRoles = ['owner']) {
+    return createSubmission(1, 'admin-1', {
+      document: {
+        name: 'Doc.pdf',
+        sourceDocumentPath: 'communities/1/esign-templates/d.pdf',
+        fieldsSchema: { version: 1, signerRoles, fields },
+      },
+      signers: [{ email: 'a@test.com', name: 'Alice', role: 'owner', sortOrder: 0 }],
+      signingOrder: 'parallel',
+      sendEmail: false,
+    });
+  }
+
+  const baseField: EsignFieldDefinition = {
+    id: 'f1',
+    type: 'signature',
+    signerRole: 'owner',
+    page: 0,
+    x: 10,
+    y: 10,
+    width: 20,
+    height: 5,
+    required: true,
+  };
+
+  it('rejects a field that runs off the right edge once its width is counted', async () => {
+    await expect(sendWithFields([{ ...baseField, x: 90, width: 20 }])).rejects.toThrow(
+      /beyond page bounds/i,
+    );
+    expect(scoped.insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a field addressed to a role the layout does not declare', async () => {
+    await expect(
+      sendWithFields([{ ...baseField, signerRole: 'witness' }], ['owner']),
+    ).rejects.toThrow(/not in template roles/i);
+    expect(scoped.insert).not.toHaveBeenCalled();
+  });
+
+  it('accepts a layout that sits inside the page', async () => {
+    await expect(sendWithFields([baseField])).resolves.toBeDefined();
   });
 });

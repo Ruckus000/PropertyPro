@@ -11,6 +11,10 @@ import {
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import {
+  assertCommunityOwnedStoragePath,
+  assertPdfMagicBytes,
+} from '@/lib/services/storage-validators';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -74,12 +78,28 @@ export const POST = withErrorHandler(
     await requireEsignWritePermission(membership);
     await requirePlanFeature(communityId, 'hasEsign');
 
+    // A request that carries its own document arrived by the same presigned
+    // upload a template's PDF does, so the server has seen neither the path nor
+    // the bytes. Re-check both, exactly as `POST /esign/templates` does — a
+    // send is as good a way to bind a foreign path or non-PDF bytes as a save.
+    // A request naming a template needs neither: its path was checked when the
+    // template was created.
+    if (body.document) {
+      assertCommunityOwnedStoragePath(
+        body.document.sourceDocumentPath,
+        communityId,
+        'esign-templates',
+      );
+      await assertPdfMagicBytes('documents', body.document.sourceDocumentPath);
+    }
+
     const requestId = req.headers.get('x-request-id');
     return createSubmission(
       communityId,
       actorUserId,
       {
         templateId: body.templateId,
+        document: body.document,
         signers: body.signers,
         signingOrder: body.signingOrder,
         sendEmail: body.sendEmail,

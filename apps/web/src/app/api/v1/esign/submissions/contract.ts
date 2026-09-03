@@ -26,9 +26,46 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
+/**
+ * The field layout carried by a request that has no template. Identical to the
+ * template route's `fieldsSchema`, because it is the same thing — the builder
+ * produces one layout and either saves it as a template or sends it once.
+ */
+const fieldsSchemaShape = z.object({
+  version: z.literal(1),
+  fields: z.array(
+    z.object({
+      id: z.string(),
+      type: z.enum(['signature', 'initials', 'date', 'text', 'checkbox']),
+      signerRole: z.string(),
+      page: z.number().int().min(0),
+      x: z.number().min(0).max(100),
+      y: z.number().min(0).max(100),
+      width: z.number().gt(0).max(100),
+      height: z.number().gt(0).max(100),
+      required: z.boolean(),
+      label: z.string().optional(),
+    }),
+  ),
+  signerRoles: z.array(z.string().min(1)),
+});
+
 const createSubmissionBodySchema = z.object({
   communityId: z.number().int().positive(),
-  templateId: z.number().int().positive(),
+  /** Send from a saved template. Exactly one of this or `document`. */
+  templateId: z.number().int().positive().optional(),
+  /**
+   * Send a document with no template. The PDF is uploaded through the same
+   * presigned route a template's is, so the path and the bytes are re-checked
+   * server-side in the handler.
+   */
+  document: z
+    .object({
+      name: z.string().trim().min(1).max(200),
+      sourceDocumentPath: z.string().trim().min(1),
+      fieldsSchema: fieldsSchemaShape,
+    })
+    .optional(),
   signers: z.array(
     z.object({
       email: z.string().email(),
@@ -45,7 +82,13 @@ const createSubmissionBodySchema = z.object({
   messageSubject: z.string().trim().max(200).optional(),
   messageBody: z.string().trim().max(4000).optional(),
   linkedDocumentId: z.number().int().positive().optional(),
-});
+}).refine(
+  (body) => (body.templateId === undefined) !== (body.document === undefined),
+  {
+    message: 'Provide exactly one of templateId or document',
+    path: ['templateId'],
+  },
+);
 
 export const esignSubmissionsListContract = defineRoute({
   method: 'GET',
