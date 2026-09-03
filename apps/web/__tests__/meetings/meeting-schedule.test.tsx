@@ -137,7 +137,7 @@ describe('MeetingSchedule', () => {
       'July Board Meeting',
     ]);
     expect(within(rows[0]!).getByText('Minutes due Sep 11')).toBeInTheDocument();
-    expect(within(rows[1]!).getByText('Minutes published')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Minutes posted')).toBeInTheDocument();
   });
 
   it('the row title opens that meeting', async () => {

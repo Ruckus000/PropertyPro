@@ -105,19 +105,19 @@ describe('MeetingMinutesList', () => {
     );
 
     const july = within(items[1]!);
-    expect(july.getByText('Approved Jul 20')).toBeInTheDocument();
-    expect(july.getByText('Published')).toBeInTheDocument();
+    expect(july.getByText('Posted Jul 20')).toBeInTheDocument();
+    expect(july.getByText('Posted')).toBeInTheDocument();
     expect(july.queryByRole('link', { name: 'Author minutes' })).not.toBeInTheDocument();
   });
 
-  it('reads All published when nothing is owed, and hides authoring from readers', () => {
+  it('reads All posted when nothing is owed, and hides authoring from readers', () => {
     renderList({ meetings: [JULY_PUBLISHED, AUGUST_OWED], canWrite: false });
 
     expect(screen.queryByRole('link', { name: 'Author minutes' })).not.toBeInTheDocument();
     expect(screen.getByText('1 set owed')).toBeInTheDocument();
   });
 
-  it('pluralises the owed count and reads All published at zero', () => {
+  it('pluralises the owed count and reads All posted at zero', () => {
     const { unmount } = renderList({
       meetings: [AUGUST_OWED, { ...JULY_PUBLISHED, minutesApprovedAt: null }],
     });
@@ -125,7 +125,7 @@ describe('MeetingMinutesList', () => {
     unmount();
 
     renderList({ meetings: [JULY_PUBLISHED] });
-    expect(screen.getByText('All published')).toBeInTheDocument();
+    expect(screen.getByText('All posted')).toBeInTheDocument();
   });
 
   it('the meeting name opens that meeting', async () => {

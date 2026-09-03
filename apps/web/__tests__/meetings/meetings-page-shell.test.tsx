@@ -34,6 +34,7 @@ vi.mock('@/hooks/use-meetings', () => ({
     isError: false,
     refetch: refetchMeetings,
   }),
+  usePostMeetingNotice: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 const monthGridSpy = vi.fn();

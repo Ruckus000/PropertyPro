@@ -116,7 +116,10 @@ export function describeMeetingStatus(
   const status = deriveMeetingStatus(meeting, now);
   switch (status) {
     case 'minutes_published':
-      return { status, badge: 'completed', label: 'Minutes published' };
+      // "Posted", not "Approved": the stamp records the act the 30-day window
+      // measures — putting approved minutes on the record. Board approval
+      // happens at a later meeting and is not something the app witnesses.
+      return { status, badge: 'completed', label: 'Minutes posted' };
     case 'minutes_owed': {
       const late = noticeShortfall(new Date(meeting.deadlines.minutesPostBy), now);
       return late

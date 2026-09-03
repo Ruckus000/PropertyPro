@@ -128,6 +128,93 @@ export async function updateMeetingForCommunity(
 }
 
 /**
+ * The outcome of stamping one of the two statutory record columns.
+ *
+ * `found: false` is a 404 for the caller. `alreadyStamped` distinguishes "we
+ * wrote the stamp just now" from "a stamp was already there", which the
+ * callers need in order to log exactly one audit event per real posting.
+ */
+export interface MeetingStampResult {
+  found: boolean;
+  stampedAt: Date | null;
+  alreadyStamped: boolean;
+}
+
+/**
+ * Stamp one statutory record column, once.
+ *
+ * Both columns record WHEN a thing was put on the record, so a second write
+ * would move a date the association may already have relied on, and would
+ * claim a second posting that never happened. First write wins; later calls
+ * report the original value and change nothing.
+ */
+async function stampMeetingColumn(
+  communityId: number,
+  meetingId: number,
+  column: 'noticePostedAt' | 'minutesApprovedAt',
+  stampedAt: Date,
+): Promise<MeetingStampResult> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<Record<string, unknown>>(
+    meetings,
+    { id: meetings.id, [column]: meetings[column] },
+    eq(meetings.id, meetingId),
+  );
+
+  const existing = rows[0];
+  if (!existing) {
+    return { found: false, stampedAt: null, alreadyStamped: false };
+  }
+
+  const current = existing[column];
+  if (current instanceof Date) {
+    return { found: true, stampedAt: current, alreadyStamped: true };
+  }
+
+  await scoped.update(meetings, { [column]: stampedAt }, eq(meetings.id, meetingId));
+  return { found: true, stampedAt, alreadyStamped: false };
+}
+
+/**
+ * Record that a meeting's statutory notice is posted.
+ *
+ * This is an ATTESTATION, not an observation. §718.112(2)(c) notice goes on
+ * the property AND the website, and the platform can only witness the second,
+ * so what the column records is that a manager stated the notice is posted.
+ * The public transparency page then derives the achieved lead time from this
+ * stamp — including, honestly, a lead time that missed the requirement.
+ *
+ * AUTHZ: caller MUST have verified `requirePermission('meetings', 'write')`.
+ */
+export async function markMeetingNoticePosted(
+  communityId: number,
+  meetingId: number,
+  postedAt: Date,
+): Promise<MeetingStampResult> {
+  return stampMeetingColumn(communityId, meetingId, 'noticePostedAt', postedAt);
+}
+
+/**
+ * Record that a meeting's minutes are on the record.
+ *
+ * Called from the document-draft publish path: publishing minutes authored
+ * from a meeting IS the posting event that §718.111(12)(g)'s 30-day window
+ * measures. Before this existed the loop was open — authoring minutes created
+ * the document and linked it to the meeting, but the meeting itself still read
+ * "minutes owed" forever, on the meetings screen and in the snowbird digest.
+ *
+ * AUTHZ: caller MUST have verified `requirePermission('documents', 'write')`
+ * (the publish path) or `requirePermission('meetings', 'write')`.
+ */
+export async function markMeetingMinutesPosted(
+  communityId: number,
+  meetingId: number,
+  postedAt: Date,
+): Promise<MeetingStampResult> {
+  return stampMeetingColumn(communityId, meetingId, 'minutesApprovedAt', postedAt);
+}
+
+/**
  * Soft-delete a meeting by id.
  *
  * AUTHZ: caller MUST have verified `requirePermission('meetings', 'write')`.

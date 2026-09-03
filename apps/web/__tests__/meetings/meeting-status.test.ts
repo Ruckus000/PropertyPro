@@ -141,7 +141,7 @@ describe('describeMeetingStatus', () => {
   it('reports published minutes and a plain scheduled meeting', () => {
     expect(
       describeMeetingStatus(meeting(-3 * DAY, BOARD, { minutesApprovedAt: iso(-DAY) }), NOW, TZ),
-    ).toEqual({ status: 'minutes_published', badge: 'completed', label: 'Minutes published' });
+    ).toEqual({ status: 'minutes_published', badge: 'completed', label: 'Minutes posted' });
     expect(describeMeetingStatus(meeting(40 * DAY, OWNER), NOW, TZ)).toEqual({
       status: 'scheduled',
       badge: 'draft',

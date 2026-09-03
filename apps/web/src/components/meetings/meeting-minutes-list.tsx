@@ -54,10 +54,10 @@ function escalationStatusKey(variant: 'neutral' | 'warning' | 'danger'): string 
  * The Minutes view: every past meeting, most recent first, with whether its
  * minutes are on the record and how long is left to post them.
  *
- * "On the record" is the schema's `minutes_approved_at` stamp — the same
- * fact the transparency page and the export read. Nothing in the app writes
- * it yet, so a meeting reads as owed until that lands; the verb offered is
- * the one that exists, authoring a minutes draft from the meeting.
+ * "On the record" is the schema's `minutes_approved_at` stamp — the same fact
+ * the export and the snowbird digest read. Publishing minutes authored from a
+ * meeting stamps it, so a meeting stops reading as owed once its minutes are
+ * on the record, and the Author minutes verb disappears with it.
  */
 export function MeetingMinutesList({
   communityId,
@@ -127,13 +127,13 @@ export function MeetingMinutesList({
                 </button>
                 <div className="text-xs text-content-tertiary">
                   {published
-                    ? `Approved ${formatShortDate(meeting.minutesApprovedAt as string, timeZone)}`
+                    ? `Posted ${formatShortDate(meeting.minutesApprovedAt as string, timeZone)}`
                     : `No minutes on record · post by ${formatDeadlineStamp(meeting.deadlines.minutesPostBy, timeZone)}`}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {published ? (
-                  <StatusBadge status="completed" label="Published" subtle />
+                  <StatusBadge status="completed" label="Posted" subtle />
                 ) : (
                   <StatusBadge
                     status={escalationStatusKey(escalation.variant)}
@@ -165,7 +165,7 @@ export function MeetingMinutesList({
         {owed > 0 ? (
           <StatusBadge status="pending" label={`${owed} ${owed === 1 ? 'set' : 'sets'} owed`} subtle />
         ) : (
-          <StatusBadge status="completed" label="All published" subtle />
+          <StatusBadge status="completed" label="All posted" subtle />
         )}
       </CardHeader>
       <CardContent className="p-0">{body}</CardContent>
