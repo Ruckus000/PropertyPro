@@ -17,7 +17,11 @@ const {
   parseCommunityIdFromBodyMock,
   assertNotDemoGraceMock,
   requirePlanFeatureMock,
+  assertCommunityOwnedStoragePathMock,
+  assertPdfMagicBytesMock,
 } = vi.hoisted(() => ({
+  assertCommunityOwnedStoragePathMock: vi.fn(),
+  assertPdfMagicBytesMock: vi.fn(),
   listSubmissionsMock: vi.fn(),
   createSubmissionMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -65,10 +69,16 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
 }));
 
 
+vi.mock('@/lib/services/storage-validators', () => ({
+  assertCommunityOwnedStoragePath: assertCommunityOwnedStoragePathMock,
+  assertPdfMagicBytes: assertPdfMagicBytesMock,
+}));
+
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: vi.fn(() => ({})),
 }));
 
+import { ValidationError } from '../../src/lib/api/errors';
 import { GET, POST } from '../../src/app/api/v1/esign/submissions/route';
 
 function makeRequest(url: string) {
@@ -96,6 +106,8 @@ beforeEach(() => {
   requireEsignWritePermissionMock.mockResolvedValue(undefined);
   assertNotDemoGraceMock.mockResolvedValue(undefined);
   requirePlanFeatureMock.mockResolvedValue(undefined);
+  assertCommunityOwnedStoragePathMock.mockReturnValue(undefined);
+  assertPdfMagicBytesMock.mockResolvedValue(undefined);
 });
 
 describe('GET /api/v1/esign/submissions', () => {
@@ -204,3 +216,127 @@ describe('POST /api/v1/esign/submissions', () => {
 });
 
 
+
+/**
+ * A send that carries its own document instead of naming a template.
+ *
+ * The PDF arrives the same way a template's does — presigned upload straight
+ * to storage — so the server sees only a caller-supplied path and a
+ * client-asserted MIME type. Both trust gaps the template route closes have to
+ * be closed here too, or this route becomes the way around them.
+ */
+const ONE_OFF_SCHEMA = {
+  version: 1 as const,
+  signerRoles: ['owner'],
+  fields: [
+    {
+      id: 'f1',
+      type: 'signature' as const,
+      signerRole: 'owner',
+      page: 0,
+      x: 10,
+      y: 20,
+      width: 30,
+      height: 5,
+      required: true,
+    },
+  ],
+};
+
+const ONE_OFF_BODY = {
+  communityId: COMMUNITY_ID,
+  document: {
+    name: 'Limited proxy.pdf',
+    sourceDocumentPath: `communities/${COMMUNITY_ID}/esign-templates/one-off.pdf`,
+    fieldsSchema: ONE_OFF_SCHEMA,
+  },
+  signers: [
+    { email: 'signer@example.com', name: 'Signer', role: 'owner', sortOrder: 0 },
+  ],
+  signingOrder: 'parallel' as const,
+  sendEmail: true,
+};
+
+function postJson(body: unknown) {
+  return POST(
+    new NextRequest('http://localhost:3000/api/v1/esign/submissions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json', 'x-request-id': 'req-9' },
+    }),
+  );
+}
+
+describe('POST /api/v1/esign/submissions — send with no template', () => {
+  beforeEach(() => {
+    createSubmissionMock.mockResolvedValue(CREATE_RESULT);
+  });
+
+  it('passes the document through to the service', async () => {
+    const response = await postJson(ONE_OFF_BODY);
+
+    expect(response.status).toBe(200);
+    expect(createSubmissionMock).toHaveBeenCalledWith(
+      COMMUNITY_ID,
+      'user-staff',
+      expect.objectContaining({
+        templateId: undefined,
+        document: ONE_OFF_BODY.document,
+      }),
+      'req-9',
+    );
+  });
+
+  it('rejects a storage path outside this community before creating anything', async () => {
+    assertCommunityOwnedStoragePathMock.mockImplementationOnce(() => {
+      throw new ValidationError('Storage path does not belong to this community.');
+    });
+
+    const response = await postJson(ONE_OFF_BODY);
+
+    expect(response.status).toBe(400);
+    expect(createSubmissionMock).not.toHaveBeenCalled();
+    expect(assertCommunityOwnedStoragePathMock).toHaveBeenCalledWith(
+      ONE_OFF_BODY.document.sourceDocumentPath,
+      COMMUNITY_ID,
+      'esign-templates',
+    );
+  });
+
+  it('rejects bytes that are not a PDF before creating anything', async () => {
+    assertPdfMagicBytesMock.mockRejectedValueOnce(
+      new ValidationError('Uploaded file is not a valid PDF.'),
+    );
+
+    const response = await postJson(ONE_OFF_BODY);
+
+    expect(response.status).toBe(400);
+    expect(createSubmissionMock).not.toHaveBeenCalled();
+    expect(assertPdfMagicBytesMock).toHaveBeenCalledWith(
+      'documents',
+      ONE_OFF_BODY.document.sourceDocumentPath,
+    );
+  });
+
+  it('leaves the upload gates alone when the request names a template', async () => {
+    await postJson(CREATE_BODY);
+
+    expect(assertCommunityOwnedStoragePathMock).not.toHaveBeenCalled();
+    expect(assertPdfMagicBytesMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a request that names both a template and a document', async () => {
+    const response = await postJson({ ...ONE_OFF_BODY, templateId: 3 });
+
+    expect(response.status).toBe(400);
+    expect(createSubmissionMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a request that names neither', async () => {
+    const { document: _omitted, ...withoutDocument } = ONE_OFF_BODY;
+    const response = await postJson(withoutDocument);
+
+    expect(response.status).toBe(400);
+    expect(createSubmissionMock).not.toHaveBeenCalled();
+  });
+});
