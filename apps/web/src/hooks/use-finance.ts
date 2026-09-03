@@ -60,6 +60,8 @@ export interface LedgerFilters {
   unitId?: number;
   startDate?: string;
   endDate?: string;
+  /** Row cap. Defaults to 200; the server clamps to [1, 500]. */
+  limit?: number;
 }
 
 export interface PaymentHistoryItem {
@@ -263,7 +265,7 @@ export function useLedger(
     queryFn: () => {
       const params = new URLSearchParams({
         communityId: String(communityId),
-        limit: '200',
+        limit: String(filters?.limit ?? 200),
       });
       if (filters?.entryType) params.set('entryType', filters.entryType);
       if (filters?.unitId) params.set('unitId', String(filters.unitId));

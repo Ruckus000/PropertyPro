@@ -543,6 +543,28 @@ describe('useLedger', () => {
     expect(url).toContain('limit=200');
   });
 
+  it('forwards a caller-supplied limit instead of the 200 default', async () => {
+    const { wrapper } = createWrapper();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: [] }),
+    });
+
+    // The KPI row asks for the server cap (500): a special assessment in the
+    // same month as the monthly one puts a 124-unit community past 200 rows,
+    // and a truncated list would silently under-report what was billed.
+    renderHook(() => useLedger(42, { entryType: 'assessment', limit: 500 }), { wrapper });
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    const url = mockFetch.mock.calls[0]![0] as string;
+    expect(url).toContain('limit=500');
+    expect(url).not.toContain('limit=200');
+  });
+
   it('omits undefined filter params from URL', async () => {
     const { wrapper } = createWrapper();
 

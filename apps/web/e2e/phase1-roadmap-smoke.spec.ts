@@ -108,7 +108,7 @@ test.describe('phase 1 roadmap smoke', () => {
     // sub-tabs are reachable, and Ledger exposes its filter control.
     await page.goto(`/communities/${communityId}/finance`);
 
-    await expect(page.getByText('Total Assessed')).toBeVisible();
+    await expect(page.getByText('Billed This Month')).toBeVisible();
     await expect(page.getByText('Collected This Month')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Ledger' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Delinquency' })).toBeVisible();
