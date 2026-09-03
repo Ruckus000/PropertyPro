@@ -22,7 +22,13 @@ import { ESIGN_FIELD_TYPES, type EsignFieldType } from '@propertypro/shared';
 // ---------------------------------------------------------------------------
 
 export interface FieldPaletteProps {
+  /**
+   * The tokens fields are addressed by. In the builder these are RECIPIENT
+   * ids, not role names, so `roleLabels` is what the author reads.
+   */
   signerRoles: string[];
+  /** Token → the name to show for it. Falls back to the token itself. */
+  roleLabels?: Record<string, string>;
   activeRole: string;
   onRoleChange: (role: string) => void;
   activeFieldType: EsignFieldType | null;
@@ -52,6 +58,7 @@ const FIELD_TYPE_CONFIG: Record<
 
 export function FieldPalette({
   signerRoles,
+  roleLabels,
   activeRole,
   onRoleChange,
   activeFieldType,
@@ -88,7 +95,7 @@ export function FieldPalette({
                   style={{ backgroundColor: color }}
                 />
                 <span className="flex-1 truncate text-left capitalize">
-                  {role.replace(/_/g, ' ')}
+                  {(roleLabels?.[role] ?? role).replace(/_/g, ' ')}
                 </span>
                 {count > 0 && (
                   <span className="rounded-full bg-surface-subtle px-1.5 py-0.5 text-xs font-semibold tabular-nums text-content-tertiary">
@@ -147,7 +154,7 @@ export function FieldPalette({
               <strong>{FIELD_TYPE_CONFIG[activeFieldType].label.toLowerCase()}</strong>{' '}
               field for{' '}
               <strong className="capitalize">
-                {activeRole.replace(/_/g, ' ')}
+                {(roleLabels?.[activeRole] ?? activeRole).replace(/_/g, ' ')}
               </strong>
               .
             </span>

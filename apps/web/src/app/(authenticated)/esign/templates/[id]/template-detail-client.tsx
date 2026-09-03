@@ -4,12 +4,14 @@
  * TemplateDetailClient — Read-only template preview with field overlay.
  *
  * Displays template metadata, PDF preview with field markers in view mode,
- * and action buttons (Send for Signing, Clone, Archive).
-
- * Edit Fields is deliberately absent: field editing belongs in the shared
- * stepped builder from the design prototype (`pp-esign-editor.js`), which is
- * not built yet. A button linking to the blank new-template builder — which is
- * what shipped here before — is worse than no button.
+ * and action buttons (Send for Signing, Edit Fields, Clone, Archive).
+ *
+ * Edit Fields was removed in #1020 for want of an honest destination — the
+ * only one that existed was the blank new-template builder, and editing a
+ * template would have rewritten what in-flight signers were being shown.
+ * Migration 0063 fixed the second problem (a request now keeps the layout it
+ * was sent with) and the stepped builder fixed the first, so it is back,
+ * pointing at the builder seeded from this template.
  */
 
 import { useCallback, useMemo, useState } from 'react';
@@ -20,6 +22,7 @@ import {
   ChevronLeft,
   Copy,
   Loader2,
+  PenLine,
   Send,
 } from 'lucide-react';
 import { Badge } from '@propertypro/ui';
@@ -210,6 +213,15 @@ export function TemplateDetailClient({
               >
                 <Send className="size-4" />
                 Send for Signing
+              </Link>
+            )}
+            {canSend && (
+              <Link
+                href={`/esign/templates/${templateId}/edit?communityId=${communityId}`}
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
+              >
+                <PenLine className="size-4" aria-hidden="true" />
+                Edit Fields
               </Link>
             )}
             <button

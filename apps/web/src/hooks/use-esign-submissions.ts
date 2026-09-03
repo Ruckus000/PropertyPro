@@ -6,6 +6,7 @@ import type {
   EsignSignerRecord,
   EsignEventRecord,
 } from '@/lib/services/esign-service';
+import type { EsignFieldsSchema } from '@propertypro/shared';
 import { requestJson } from '@/lib/api/request-json';
 
 export const ESIGN_SUBMISSION_KEYS = {
@@ -56,7 +57,14 @@ export function useCreateEsignSubmission(communityId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: {
-      templateId: number;
+      /** Exactly one of `templateId` or `document`; the route enforces it. */
+      templateId?: number;
+      /** A send that carries its own PDF and layout, with no template saved. */
+      document?: {
+        name: string;
+        sourceDocumentPath: string;
+        fieldsSchema: EsignFieldsSchema;
+      };
       signers: Array<{
         email: string;
         name: string;
