@@ -27,6 +27,8 @@ const {
   inMock,
   ltMock,
   orMock,
+  gteMock,
+  inArrayMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   createAdminClientMock: vi.fn(),
@@ -74,6 +76,8 @@ const {
   inMock: vi.fn((...args: unknown[]) => ({ type: 'in', args })),
   ltMock: vi.fn((...args: unknown[]) => ({ type: 'lt', args })),
   orMock: vi.fn((...args: unknown[]) => ({ type: 'or', args })),
+  gteMock: vi.fn((...args: unknown[]) => ({ type: 'gte', args })),
+  inArrayMock: vi.fn((...args: unknown[]) => ({ type: 'inArray', args })),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -101,6 +105,8 @@ vi.mock('@propertypro/db/filters', () => ({
   isNull: isNullMock,
   lt: ltMock,
   or: orMock,
+  gte: gteMock,
+  inArray: inArrayMock,
 }));
 
 vi.mock('../../src/lib/services/esign-pdf-service', () => ({
@@ -125,6 +131,7 @@ import {
   cloneTemplate,
   createSubmission,
   listSubmissions,
+  listSubmissionsWithSigners,
   getSubmission,
   cancelSubmission,
   sendReminder,
@@ -1430,5 +1437,136 @@ describe('esign-service', () => {
         ),
       ).rejects.toThrow('You have already signed this document');
     });
+  });
+});
+
+/**
+ * `listSubmissionsWithSigners` — the shape the E-Sign screen reads.
+ *
+ * Two properties are worth a test each because both are silently wrong when
+ * they break: the query count (a per-row fetch still returns correct data, just
+ * N times slower), and what is left OUT of a signer (`signedValues` holds a
+ * base64 PNG of the person's handwritten signature).
+ */
+describe('listSubmissionsWithSigners', () => {
+  function scopedFor(submissions: unknown[], signers: unknown[], templates: unknown[] = []) {
+    const calls: Array<{ table: unknown; where: unknown }> = [];
+    const selectFrom = vi.fn(async (table: unknown, _cols: unknown, where?: unknown) => {
+      calls.push({ table, where });
+      if (table === esignSubmissionsTable) return submissions;
+      if (table === esignSignersTable) return signers;
+      if (table === esignTemplatesTable) return templates;
+      return [];
+    });
+    return { calls, selectFrom, insert: vi.fn(), update: vi.fn() };
+  }
+
+  const signerRow = (over: Record<string, unknown> = {}) => ({
+    id: 1,
+    submissionId: 1,
+    userId: null,
+    name: 'Alice Owner',
+    email: 'alice@test.com',
+    role: 'owner',
+    status: 'pending',
+    sortOrder: 0,
+    slug: 'slug-alice',
+    completedAt: null,
+    lastReminderAt: null,
+    reminderCount: 0,
+    // Never rendered by any screen, and a signature field's value is a base64
+    // PNG of the person's actual handwriting.
+    signedValues: { f1: { value: 'data:image/png;base64,AAAA' } },
+    prefilledFields: { unit: '101' },
+    ...over,
+  });
+
+  it('fetches every signer in ONE query, however many submissions there are', async () => {
+    const submissions = [1, 2, 3, 4, 5].map((id) => ({ id, templateId: null, status: 'pending' }));
+    const scoped = scopedFor(
+      submissions,
+      submissions.map((s) => signerRow({ id: s.id * 10, submissionId: s.id })),
+    );
+    createScopedClientMock.mockReturnValue(scoped);
+
+    await listSubmissionsWithSigners(1);
+
+    const signerQueries = scoped.calls.filter((c) => c.table === esignSignersTable);
+    expect(signerQueries).toHaveLength(1);
+    expect(inArrayMock).toHaveBeenCalledWith(
+      esignSignersTable.submissionId,
+      [1, 2, 3, 4, 5],
+    );
+  });
+
+  it('never lets a signature image reach the caller', async () => {
+    const scoped = scopedFor([{ id: 1, templateId: null, status: 'pending' }], [signerRow()]);
+    createScopedClientMock.mockReturnValue(scoped);
+
+    const [row] = await listSubmissionsWithSigners(1);
+    const signer = row!.signers[0]!;
+
+    expect('signedValues' in signer).toBe(false);
+    expect('prefilledFields' in signer).toBe(false);
+    expect(signer.email).toBe('alice@test.com');
+    expect(signer.slug).toBe('slug-alice');
+  });
+
+  it('asks for nothing at all when there are no submissions', async () => {
+    // drizzle rejects `inArray(col, [])`, so the short-circuit is load-bearing,
+    // not an optimisation.
+    const scoped = scopedFor([], []);
+    createScopedClientMock.mockReturnValue(scoped);
+
+    await expect(listSubmissionsWithSigners(1)).resolves.toEqual([]);
+    expect(scoped.calls.filter((c) => c.table === esignSignersTable)).toHaveLength(0);
+  });
+
+  it('attaches each signer to its own request, in signing order', async () => {
+    const scoped = scopedFor(
+      [
+        { id: 1, templateId: null, status: 'pending' },
+        { id: 2, templateId: null, status: 'pending' },
+      ],
+      [
+        signerRow({ id: 12, submissionId: 1, sortOrder: 1, name: 'Second' }),
+        signerRow({ id: 21, submissionId: 2, sortOrder: 0, name: 'Other request' }),
+        signerRow({ id: 11, submissionId: 1, sortOrder: 0, name: 'First' }),
+      ],
+    );
+    createScopedClientMock.mockReturnValue(scoped);
+
+    const rows = await listSubmissionsWithSigners(1);
+
+    expect(rows[0]!.signers.map((s) => s.name)).toEqual(['First', 'Second']);
+    expect(rows[1]!.signers.map((s) => s.name)).toEqual(['Other request']);
+  });
+
+  it('names the template once per template, not once per request', async () => {
+    const scoped = scopedFor(
+      [
+        { id: 1, templateId: 7, status: 'pending' },
+        { id: 2, templateId: 7, status: 'pending' },
+      ],
+      [signerRow({ submissionId: 1 }), signerRow({ id: 2, submissionId: 2 })],
+      [{ id: 7, name: 'Proxy Designation Form' }],
+    );
+    createScopedClientMock.mockReturnValue(scoped);
+
+    const rows = await listSubmissionsWithSigners(1);
+
+    expect(rows.every((r) => r.templateName === 'Proxy Designation Form')).toBe(true);
+    expect(inArrayMock).toHaveBeenCalledWith(esignTemplatesTable.id, [7]);
+    expect(scoped.calls.filter((c) => c.table === esignTemplatesTable)).toHaveLength(1);
+  });
+
+  it('does not look up a template for a request that has none', async () => {
+    const scoped = scopedFor([{ id: 1, templateId: null, status: 'pending' }], [signerRow()]);
+    createScopedClientMock.mockReturnValue(scoped);
+
+    const [row] = await listSubmissionsWithSigners(1);
+
+    expect(row!.templateName).toBeNull();
+    expect(scoped.calls.filter((c) => c.table === esignTemplatesTable)).toHaveLength(0);
   });
 });

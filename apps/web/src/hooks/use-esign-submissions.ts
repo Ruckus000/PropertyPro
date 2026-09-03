@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  EsignSubmissionListRow,
   EsignSubmissionRecord,
   EsignSignerRecord,
   EsignEventRecord,
@@ -28,7 +29,7 @@ export function useEsignSubmissions(
     queryFn: async () => {
       const params = new URLSearchParams({ communityId: String(communityId) });
       if (filters?.status) params.set('status', filters.status);
-      return requestJson<EsignSubmissionRecord[]>(
+      return requestJson<EsignSubmissionListRow[]>(
         `/api/v1/esign/submissions?${params.toString()}`,
       );
     },
