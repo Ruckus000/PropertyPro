@@ -10,7 +10,7 @@
  * 4. Confirm and send
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import { templateHasSourceDocument } from '@/lib/esign/template-readiness';
 import {
   Check,
   ChevronsUpDown,
@@ -38,6 +39,11 @@ import {
 
 interface NewSubmissionFormProps {
   communityId: number;
+  /**
+   * Preselect this template. Set by "Send for Signing" on a template, so the
+   * manager does not have to find in a dropdown the template they came from.
+   */
+  initialTemplateId?: number;
 }
 
 interface SignerInput {
@@ -46,14 +52,10 @@ interface SignerInput {
   email: string;
 }
 
-function templateHasSourceDocument(template: Pick<EsignTemplateRecord, 'sourceDocumentPath'>): boolean {
-  return (
-    typeof template.sourceDocumentPath === 'string' &&
-    template.sourceDocumentPath.trim().length > 0
-  );
-}
-
-export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
+export function NewSubmissionForm({
+  communityId,
+  initialTemplateId,
+}: NewSubmissionFormProps) {
   const router = useRouter();
 
   // Template selection
@@ -104,6 +106,28 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
     },
     [],
   );
+
+  /**
+   * Apply `?templateId=` once the list has arrived.
+   *
+   * Not a `useState` initializer: selection is the whole record, and the list
+   * is async. The ref makes it one-shot, so a refetch cannot re-select a
+   * template the user has since changed away from. The list is filtered to
+   * active templates, so an archived or unknown id simply selects nothing —
+   * `handleSelectTemplate` also declines one with no source PDF, which is the
+   * same template the dropdown disables.
+   */
+  const appliedInitialTemplate = useRef(false);
+  useEffect(() => {
+    if (appliedInitialTemplate.current) return;
+    if (!initialTemplateId || !templates) return;
+
+    appliedInitialTemplate.current = true;
+    const match = templates.find((t) => t.id === initialTemplateId);
+    if (match) {
+      handleSelectTemplate(match);
+    }
+  }, [initialTemplateId, templates, handleSelectTemplate]);
 
   // Signer updates
   const updateSigner = useCallback(

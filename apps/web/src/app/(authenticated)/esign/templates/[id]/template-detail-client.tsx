@@ -4,7 +4,12 @@
  * TemplateDetailClient — Read-only template preview with field overlay.
  *
  * Displays template metadata, PDF preview with field markers in view mode,
- * and action buttons (Send for Signing, Edit Fields, Clone, Archive).
+ * and action buttons (Send for Signing, Clone, Archive).
+
+ * Edit Fields is deliberately absent: field editing belongs in the shared
+ * stepped builder from the design prototype (`pp-esign-editor.js`), which is
+ * not built yet. A button linking to the blank new-template builder — which is
+ * what shipped here before — is worse than no button.
  */
 
 import { useCallback, useMemo, useState } from 'react';
@@ -14,7 +19,6 @@ import {
   Archive,
   ChevronLeft,
   Copy,
-  Edit,
   Loader2,
   Send,
 } from 'lucide-react';
@@ -31,6 +35,7 @@ import {
 import { useEsignTemplatePdfUrl } from '@/hooks/use-esign-template-pdf';
 import { FieldOverlay } from '@/components/esign/field-overlay';
 import { ESIGN_FIELD_COLORS } from '@/components/esign/esign-field-colors';
+import { templateHasSourceDocument } from '@/lib/esign/template-readiness';
 
 const PdfViewer = dynamic(
   () => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer),
@@ -125,6 +130,10 @@ export function TemplateDetailClient({
     height: 792,
   };
 
+  // Send is withheld from a template with no stored PDF: `createSubmission`
+  // refuses it, so the link would only move the failure later.
+  const canSend = template ? templateHasSourceDocument(template) : false;
+
   // -----------------------------------------------------------------------
   // Handlers
   // -----------------------------------------------------------------------
@@ -194,20 +203,15 @@ export function TemplateDetailClient({
             >
               {template.status}
             </Badge>
-            <Link
-              href={`/esign/templates/new?communityId=${communityId}`}
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
-            >
-              <Send className="size-4" />
-              Send for Signing
-            </Link>
-            <Link
-              href={`/esign/templates/new?communityId=${communityId}`}
-              className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-subtle)]"
-            >
-              <Edit className="size-4" />
-              Edit Fields
-            </Link>
+            {canSend && (
+              <Link
+                href={`/esign/submissions/new?communityId=${communityId}&templateId=${templateId}`}
+                className="inline-flex items-center gap-2 rounded-md bg-[var(--interactive-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--interactive-primary-hover)]"
+              >
+                <Send className="size-4" />
+                Send for Signing
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => {

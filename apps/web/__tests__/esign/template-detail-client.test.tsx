@@ -139,6 +139,47 @@ describe('TemplateDetailClient', () => {
     );
   });
 
+  // -------------------------------------------------------------------
+  // Header actions. Both of these links pointed at
+  // `/esign/templates/new?communityId=…` — the blank builder, with no
+  // template id — and nothing asserted either, so the two verbs a manager
+  // reaches for silently did nothing useful.
+  // -------------------------------------------------------------------
+
+  it('sends for signing through the submissions form, with the template preselected', () => {
+    setPdf({ data: { pdfUrl: 'https://signed.example/proxy.pdf' } });
+    render(<TemplateDetailClient communityId={1} templateId={5} />);
+
+    expect(
+      screen.getByRole('link', { name: /Send for Signing/i }).getAttribute('href'),
+    ).toBe('/esign/submissions/new?communityId=1&templateId=5');
+  });
+
+  it('offers no Send link when the template has no source PDF', () => {
+    useEsignTemplateMock.mockReturnValue({
+      data: baseTemplate({ sourceDocumentPath: null }),
+      isLoading: false,
+      error: null,
+    });
+    setPdf({});
+    render(<TemplateDetailClient communityId={1} templateId={5} />);
+
+    expect(screen.queryByRole('link', { name: /Send for Signing/i })).toBeNull();
+  });
+
+  it('offers no Edit Fields link at all, rather than one to the blank builder', () => {
+    // Field editing belongs in the shared stepped builder, which is not built
+    // yet. Until then no button is honest; a button to `/esign/templates/new`
+    // is not.
+    setPdf({ data: { pdfUrl: 'https://signed.example/proxy.pdf' } });
+    render(<TemplateDetailClient communityId={1} templateId={5} />);
+
+    expect(screen.queryByRole('link', { name: /Edit Fields/i })).toBeNull();
+    expect(
+      screen.queryByRole('link', { name: /Send for Signing/i })?.getAttribute('href'),
+    ).not.toContain('/esign/templates/new');
+  });
+
   it('renders the "no PDF document uploaded" branch when sourceDocumentPath is null', () => {
     useEsignTemplateMock.mockReturnValue({
       data: baseTemplate({ sourceDocumentPath: null }),

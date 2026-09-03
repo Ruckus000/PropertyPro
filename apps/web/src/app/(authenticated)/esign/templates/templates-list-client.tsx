@@ -135,9 +135,13 @@ export function EsignTemplatesListClient({
         </div>
       )}
 
-      {/* Templates table */}
+      {/* Templates table.
+
+          The wrapper is `overflow-x-auto`, not `overflow-hidden`: the table is
+          far wider than a phone viewport, so hiding the overflow CLIPPED the
+          right-hand columns with no way to reach them at all. */}
       {templates && templates.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)]">
+        <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)]">
           <table className="min-w-full divide-y divide-[var(--border-subtle)]">
             <thead className="bg-[var(--surface-subtle)]">
               <tr>
