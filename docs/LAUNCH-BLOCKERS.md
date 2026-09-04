@@ -10,12 +10,19 @@ of both apps as of `aabf9727`.
 Items **6–7 are the exception**: two Website Editor feature gaps promoted to blockers on
 2026-09-02. They are code, not config, and they are sequenced last for that reason.
 
-> **6 and 7 are in review as of 2026-09-04** — #1031 (notify on publish), #1032
-> (announcement expiry, migration `0064`), #1033 (scheduled publishing, migration `0065`).
-> The stack merges in that order, and **both migrations must be applied to production
-> before their PR merges** (expand-before-code; each is purely additive). The verify
-> commands in items 6–7 below still return nothing until they land — that is the point of
-> keeping them.
+> **6 and 7 are DONE as of 2026-09-04** — #1031 (notify on publish), #1032 (announcement
+> expiry, migration `0064`) and #1037 (scheduled publishing, migration `0065`) are all
+> merged, and **both migrations are applied to production** with drizzle ledger rows
+> recorded by hand. The verify commands under items 6–7 now return matches rather than
+> nothing; they are kept because they are how anyone re-confirms the work is still there.
+>
+> Two notes for whoever reads this next. **#1033 became #1037**: merging #1031 with
+> `--delete-branch` auto-closed the PR stacked on top of it, and a closed PR's base cannot
+> be retargeted, so the commits were replayed onto `main` under a new number. And the
+> production ledger is **out of numeric order** — `0063 → 0066 → 0064 → 0065` — because
+> another session applied `0066` in between. Harmless (all three are independent and
+> additive), but it means the ledger's newest `created_at` belongs to `0066`, and
+> `drizzle-kit migrate` only applies migrations stamped after the newest applied one.
 
 The through-line is that all of these fail **silently**. None crashes anything; each
 degrades or no-ops while dashboards stay green. That is why they need a checklist rather
@@ -207,7 +214,7 @@ onboard. Unlike items 1–5, these are engineering work.
 
 ## 6. Publishing the site notifies nobody
 
-**Status:** PR open 2026-09-04 (#1031) · **Owner:** engineering · **Source:** gap audit G-05
+**Status:** ✅ DONE — merged 2026-09-04 (#1031) · **Source:** gap audit G-05
 
 A publish updates the public site and tells no one. Residents do not poll a website. The
 platform already holds the resident roster and a working email channel — DKIM and SPF are
@@ -236,7 +243,7 @@ delivery and unrelated. An unfiltered grep reads as a false positive and scores 
 
 ## 7. Nothing can be scheduled; only urgent notices expire
 
-**Status:** PRs open 2026-09-04 (#1032 expiry, #1033 scheduling) · **Owner:** engineering · **Source:** gap audit G-07
+**Status:** ✅ DONE — merged 2026-09-04 (#1032 expiry, #1037 scheduling) · **Source:** gap audit G-07
 
 Half shipped, and the missing half is the half on a statutory clock. Urgent notices carry
 an `expiresAt` — it shipped alongside the mobile fast path — so a pool-closure notice can
