@@ -775,13 +775,27 @@ describe('recoverUser', () => {
     const result = await recoverUser(1, 'admin-001');
 
     expect(result).toEqual(request);
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'update',
-        resourceType: 'account_deletion_request',
-        newValues: expect.objectContaining({ status: 'recovered' }),
-      }),
-    );
+  });
+
+  it('writes no audit entry — there is no community to attribute it to', async () => {
+    // This case used to assert the OPPOSITE, and the assertion was wrong: it
+    // pinned a call passing `communityId: 0, // platform-level, no community`.
+    // compliance_audit_log.community_id is NOT NULL with an ON DELETE RESTRICT
+    // FK to communities.id, and communities.id is a bigserial whose lowest value
+    // in production is 1 — so that insert did not record a platform-level
+    // event, it threw. And because logAuditEvent runs AFTER the transaction
+    // commits, the recovery succeeded and then the admin route returned 500 on
+    // an operation that had actually worked.
+    //
+    // The mock accepted `0` happily, which is why a green test coexisted with a
+    // live 500 for as long as it did.
+    const request = { id: 1, userId: 'user-uuid-001', status: 'recovered' };
+    const dbMock = buildDbMock({ updateReturning: [[request], [{}]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await recoverUser(1, 'admin-001');
+
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 });
 
@@ -881,6 +895,71 @@ describe('interveneCommunityDeletion', () => {
     expect((updateCall?.values as Record<string, unknown>)?.interventionNotes).toBe(
       'Retained by admin review',
     );
+  });
+
+  it('audits the cancellation against the community', async () => {
+    // `apps/web/src/app/api/v1/communities/delete/route.ts` justifies making
+    // cancellation root-exclusive by pointing at platform-admin intervention as
+    // "a break-glass that leaves an audit trail". For the apps/admin route that
+    // was true; for this service it was not.
+    const updated = {
+      id: 1,
+      communityId: 100,
+      status: 'cancelled',
+      cancelledBy: 'platform-admin-001',
+    };
+    const dbMock = buildDbMock({ updateReturning: [[updated]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await interveneCommunityDeletion(1, { adminUserId: 'platform-admin-001', notes: 'ok' });
+
+    expect(logAuditEventMock).toHaveBeenCalledOnce();
+    expect(logAuditEventMock.mock.calls[0]![0]).toMatchObject({
+      userId: 'platform-admin-001',
+      action: 'update', // reversible — unlike the purge, which mints its own action
+      resourceType: 'account_deletion_request',
+      resourceId: '1',
+      communityId: 100,
+    });
+  });
+
+  it('does NOT log the intervention notes', async () => {
+    // `notes` is admin-supplied free text (max 2000 chars) that can name a
+    // resident or repeat a grievance, and compliance_audit_log is board-readable
+    // and append-only — so a name logged here is visible to the board forever
+    // and cannot be retracted. A boolean answers "was a reason given" without
+    // committing the reason itself.
+    //
+    // apps/admin's twin DOES log notes, into platform_admin_audit_log, which is
+    // operator-only with zero RLS policies. Different table, different
+    // readership, different rule — the two are not inconsistent.
+    const updated = { id: 1, communityId: 100, status: 'cancelled' };
+    const dbMock = buildDbMock({ updateReturning: [[updated]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await interveneCommunityDeletion(1, {
+      adminUserId: 'admin-1',
+      notes: 'resident jane@example.com asked us to stop',
+    });
+
+    // A string search is right here: the claim is literally "this text is absent".
+    expect(JSON.stringify(logAuditEventMock.mock.calls[0])).not.toContain('jane@example.com');
+    expect(logAuditEventMock.mock.calls[0]![0]).toMatchObject({
+      metadata: { notesProvided: true },
+    });
+  });
+
+  it('does NOT audit a request with no community', async () => {
+    // The intervene ROUTE passes any request id straight through with no
+    // requestType filter, so a user-type request reaches this function. Same
+    // NOT NULL wall as the purge.
+    const updated = { id: 2, communityId: null, status: 'cancelled' };
+    const dbMock = buildDbMock({ updateReturning: [[updated]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await interveneCommunityDeletion(2, { adminUserId: 'admin-1' });
+
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('throws when request is not found', async () => {
@@ -984,6 +1063,87 @@ describe('purgeCommunityData', () => {
 
     const result = await purgeCommunityData(1);
     expect(result).toBeNull();
+  });
+
+  it('audits the purge, carrying no PII in the payload', async () => {
+    // The destructive step had no trail at all, while the REVERSIBLE
+    // recoverCommunity/recoverUser both logged one. Worse, the route that makes
+    // cancelling root-exclusive justifies itself by citing intervention as
+    // "a break-glass that leaves an audit trail" — a promise this service did
+    // not keep.
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    purgeCommunitySiteAssetsMock.mockResolvedValue({ deletedCount: 7 });
+    purgeCommunityExportArchivesMock.mockResolvedValue({ deletedCount: 2 });
+
+    await purgeCommunityData(1);
+
+    expect(logAuditEventMock).toHaveBeenCalledOnce();
+    const entry = logAuditEventMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(entry).toMatchObject({
+      userId: null, // the cron has no actor; AuditEntry renders null as "System"
+      action: 'community_purged',
+      resourceType: 'account_deletion_request',
+      resourceId: '1',
+      communityId: 100,
+    });
+
+    // EXACT keys, not a substring search. compliance_audit_log is append-only
+    // AND board-readable, so anything logged here is permanent and
+    // uncorrectable — and this function's whole job is destroying PII, so
+    // logging any of it would defeat the purpose in the one place that can
+    // never be undone. Asserting the exact key set reddens the moment a field
+    // is added, which is the only durable way to state "no PII crept in".
+    expect(Object.keys(entry['newValues'] as object).sort()).toEqual(['purgedAt', 'status']);
+    expect(Object.keys(entry['metadata'] as object).sort()).toEqual([
+      'exportArchivesDeleted',
+      'siteAssetsDeleted',
+    ]);
+    expect(entry['metadata']).toMatchObject({ siteAssetsDeleted: 7, exportArchivesDeleted: 2 });
+  });
+
+  it('does NOT audit a user deletion — community_id is NOT NULL', async () => {
+    // compliance_audit_log.community_id is NOT NULL with a RESTRICT FK, and a
+    // user-type request has no community. The apparent escape hatch of passing
+    // 0 is not one: prod's lowest community id is 1, so the insert FK-violates.
+    // platform_admin_audit_log accepts a null community but requires a non-null
+    // admin_user_id, and this is a cron with no actor. Both doors are shut.
+    const request = { id: 2, communityId: null, status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[{ id: 2, status: 'purged', purgedAt: new Date() }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await purgeCommunityData(2);
+
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('audits AFTER the status flip, so a failed audit cannot un-purge', async () => {
+    // Ordering is deliberate. Auditing first would record an outcome that may
+    // not have happened, and in an append-only table a false "purged" entry is
+    // strictly worse than a missing one because it can never be retracted.
+    // If the audit write throws, the bytes are already gone and the status is
+    // already 'purged'; the cron's catch records it and the request is not
+    // retried. We do not swallow it — an unaudited mutation must not look like
+    // a success.
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    logAuditEventMock.mockRejectedValueOnce(new Error('audit down'));
+
+    await expect(purgeCommunityData(1)).rejects.toThrow(/audit down/);
+
+    const updates = dbMock._calls.filter((c: { op: string }) => c.op === 'update');
+    expect(updates).toHaveLength(1);
   });
 
   it('calls purgeCommunitySiteAssets when communityId is set', async () => {

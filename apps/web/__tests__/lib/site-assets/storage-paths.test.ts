@@ -34,6 +34,18 @@ describe('buildSiteAssetPath', () => {
   it('rejects filenames starting with a dot', () => {
     expect(() => buildSiteAssetPath(1, 'hero', '.htaccess')).toThrow();
   });
+
+  it('accepts the favicon kind', () => {
+    // Direct coverage for the newest member of SITE_ASSET_KINDS. Until now
+    // nothing asserted it: `finalize-favicon` reached it only indirectly, so
+    // dropping 'favicon' from the constant would have reddened no test in this
+    // file at all — which is exactly what makes a "single source of truth"
+    // claim vacuous. `purgeCommunitySiteAssets` now derives its sweep from that
+    // same constant, so this case defends the purge too.
+    expect(buildSiteAssetPath(42, 'favicon', 'logo.png')).toMatch(
+      /^42\/favicon\/[a-f0-9-]{36}-logo\.png$/,
+    );
+  });
 });
 
 describe('parseSiteAssetPath', () => {
@@ -45,6 +57,19 @@ describe('parseSiteAssetPath', () => {
   it('preserves multi-segment filenames after the kind', () => {
     const result = parseSiteAssetPath('42/content/some-uuid-pool.webp.1600w.webp');
     expect(result).toEqual({ communityId: 42, kind: 'content', filename: 'some-uuid-pool.webp.1600w.webp' });
+  });
+
+  it('parses a favicon variant, which keeps its suffix on the filename segment', () => {
+    // Asserted rather than assumed, because `purgeCommunitySiteAssets` walks
+    // exactly ONE level per kind. That only works if a favicon variant leaves
+    // the path three segments deep — an immediate child of `{id}/favicon` —
+    // rather than nesting. If `.32.png` ever became its own directory, the
+    // purge would silently stop finding favicons again.
+    expect(parseSiteAssetPath('42/favicon/uuid-logo.png.32.png')).toEqual({
+      communityId: 42,
+      kind: 'favicon',
+      filename: 'uuid-logo.png.32.png',
+    });
   });
 
   it('returns null for invalid path shapes', () => {

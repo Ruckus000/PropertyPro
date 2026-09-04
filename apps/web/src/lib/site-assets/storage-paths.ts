@@ -15,8 +15,20 @@ import { randomUUID } from 'node:crypto';
 // this module's node:crypto import into the browser bundle.
 export { SITE_ASSETS_BUCKET, buildPublicAssetUrl } from './public-url';
 
-const VALID_KINDS = ['logo', 'hero', 'content', 'favicon'] as const;
-export type AssetKind = (typeof VALID_KINDS)[number];
+/**
+ * Every asset kind, and the single source of truth for two things that must
+ * never disagree: which paths are VALID, and which prefixes the hard-delete
+ * sweep WALKS.
+ *
+ * Exported because `purgeCommunitySiteAssets` used to restate a shorter list of
+ * its own — `['logo','hero','content']` — so every purged community left its
+ * favicon objects in the bucket permanently. A purge that knows a shorter list
+ * than the writer is a purge that misses assets, and nothing failed when the two
+ * drifted apart. Deriving the sweep from this constant is what makes that class
+ * of bug impossible rather than merely fixed.
+ */
+export const SITE_ASSET_KINDS = ['logo', 'hero', 'content', 'favicon'] as const;
+export type AssetKind = (typeof SITE_ASSET_KINDS)[number];
 
 function sanitizeFilename(name: string): string {
   if (name.includes('/') || name.includes('\\')) {
@@ -36,7 +48,7 @@ export function buildSiteAssetPath(
   if (!Number.isInteger(communityId) || communityId <= 0) {
     throw new Error(`communityId must be a positive integer; got ${communityId}`);
   }
-  if (!(VALID_KINDS as readonly string[]).includes(kind)) {
+  if (!(SITE_ASSET_KINDS as readonly string[]).includes(kind)) {
     throw new Error(`Unknown asset kind: ${kind}`);
   }
   const safe = sanitizeFilename(filename);
@@ -64,7 +76,7 @@ export function parseSiteAssetPath(path: string): ParsedSiteAssetPath | null {
   const [communityIdStr, kind, filename] = parts as [string, string, string];
   const communityId = Number(communityIdStr);
   if (!Number.isInteger(communityId) || communityId <= 0) return null;
-  if (!(VALID_KINDS as readonly string[]).includes(kind)) return null;
+  if (!(SITE_ASSET_KINDS as readonly string[]).includes(kind)) return null;
   if (!filename || filename === '.' || filename === '..') return null;
   if (filename.includes('/') || filename.includes('\\')) return null;
   return { communityId, kind: kind as AssetKind, filename };
