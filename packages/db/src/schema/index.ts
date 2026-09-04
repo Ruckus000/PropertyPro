@@ -73,6 +73,7 @@ export * from './onboarding-checklist-items';
 export * from './rls-config';
 export * from './site-pages';
 export * from './site-blocks';
+export * from './site-publish-schedules';
 export { siteThemePresets, type ThemePresetTokens } from './site-theme-presets';
 export { siteStarterPacks, type StarterPackBlock } from './site-starter-packs';
 export { siteLayoutMetadata } from './site-layout-metadata';

@@ -106,6 +106,10 @@
     {
       "path": "/api/v1/internal/community-export-worker",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/v1/internal/scheduled-site-publish",
+      "schedule": "5,20,35,50 * * * *"
     }
   ]
 }

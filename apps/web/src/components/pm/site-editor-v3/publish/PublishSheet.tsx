@@ -91,6 +91,11 @@ import { SITE_CHANGE_GROUP, useSiteDiff } from '../use-site-diff';
 import { ApiRequestError } from '@/lib/api/request-json';
 import { describePublishedCounts } from '@/lib/site-editor/describe-publish-outcome';
 import { SITE_PUBLISH_SUMMARY_MAX_LENGTH } from '@/lib/site-editor/publish-notification';
+import {
+  useCancelSitePublishSchedule,
+  useScheduleSitePublish,
+  useSitePublishSchedule,
+} from '@/hooks/use-site-publish-schedule';
 import { Receipt, type ReceiptStatus } from './Receipt';
 
 /**
@@ -383,6 +388,16 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
    */
   const [notifyResidents, setNotifyResidents] = useState(false);
   const [notifySummary, setNotifySummary] = useState('');
+  /*
+   * Scheduling is opt-in per open, like the notification. The two compose: a
+   * scheduled publish carries the same summary and notifies when it fires.
+   */
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [scheduleAtInput, setScheduleAtInput] = useState('');
+
+  const pendingSchedule = useSitePublishSchedule(communityId);
+  const createSchedule = useScheduleSitePublish(communityId);
+  const cancelSchedule = useCancelSitePublishSchedule(communityId);
 
   const issues: Issue[] = useMemo(() => {
     /*
@@ -489,6 +504,46 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
    */
   const notifySummaryValid = notifySummary.trim().length > 0;
   const notifyWanted = notifyResidents && notifySummaryValid;
+
+  /*
+   * A `datetime-local` value is LOCAL wall-clock time. `new Date(value)` parses
+   * it as local and `toISOString()` converts to UTC, so the instant survives —
+   * whereas building the ISO string by hand from the input's own characters
+   * would shift every PM outside UTC by their offset.
+   */
+  const scheduleAtIso = (() => {
+    if (!scheduleAtInput) return null;
+    const parsed = new Date(scheduleAtInput);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  })();
+  const scheduleInFuture =
+    scheduleAtIso !== null && new Date(scheduleAtIso).getTime() > Date.now();
+  const scheduleValid = scheduleLater && scheduleInFuture;
+
+  async function onSchedule() {
+    setReceipt(null);
+    if (!scheduleAtIso) return;
+    try {
+      const created = await createSchedule.mutateAsync({
+        scheduledFor: scheduleAtIso,
+        ...(notifyWanted ? { notifyResidents: { summary: notifySummary.trim() } } : {}),
+      });
+      toast.success(
+        `Scheduled for ${new Date(created.scheduledFor).toLocaleString()}.${
+          notifyWanted ? ' Residents will be notified then.' : ''
+        }`,
+      );
+      onOpenChange(false);
+    } catch (error) {
+      // No receipt: nothing was published and nothing changed on the live site,
+      // so a toast is the truthful surface. A receipt describes a publish.
+      toast.error(
+        error instanceof Error
+          ? `We couldn't schedule that. ${error.message}`
+          : "We couldn't schedule that. Please try again.",
+      );
+    }
+  }
 
   async function onPublish() {
     setReceipt(null);
@@ -772,19 +827,109 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
         </div>
       ) : null}
 
+      {pendingSchedule.data ? (
+        <div
+          className="mt-4 flex items-start justify-between gap-3 rounded-md border border-edge bg-surface-subtle p-4"
+          data-testid="pending-schedule"
+        >
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-content">
+              A publish is already scheduled
+            </p>
+            <p className="text-xs text-content-secondary">
+              {new Date(pendingSchedule.data.scheduledFor).toLocaleString()}
+              {pendingSchedule.data.notifySummary
+                ? ' — residents will be notified.'
+                : ' — residents will not be notified.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={cancelSchedule.isPending}
+            onClick={() => {
+              void cancelSchedule
+                .mutateAsync()
+                .then(() => toast.success('Scheduled publish canceled.'))
+                .catch((error: unknown) =>
+                  toast.error(
+                    error instanceof Error
+                      ? `We couldn't cancel it. ${error.message}`
+                      : "We couldn't cancel it. Please try again.",
+                  ),
+                );
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+
+      {hasChanges ? (
+        <div className="mt-4 rounded-md border border-edge bg-surface-muted p-4">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="schedule-later"
+              checked={scheduleLater}
+              onCheckedChange={(checked) => setScheduleLater(checked === true)}
+              disabled={publish.isPending || createSchedule.isPending}
+            />
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="schedule-later" className="text-sm font-medium">
+                Publish later instead
+              </Label>
+              <p className="text-xs text-content-secondary">
+                Your changes stay as a draft until then. Meeting materials can go up
+                on their own.
+              </p>
+            </div>
+          </div>
+
+          {scheduleLater ? (
+            <div className="mt-3 space-y-1">
+              <Label htmlFor="schedule-at" className="text-xs font-medium">
+                Publish at
+              </Label>
+              <Input
+                id="schedule-at"
+                type="datetime-local"
+                value={scheduleAtInput}
+                onChange={(event) => setScheduleAtInput(event.target.value)}
+                disabled={createSchedule.isPending}
+                aria-describedby="schedule-at-hint"
+              />
+              <p id="schedule-at-hint" className="text-xs text-content-secondary">
+                {scheduleAtInput && !scheduleInFuture
+                  ? 'Pick a time in the future.'
+                  : 'Replaces any publish already scheduled for this community.'}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-auto flex flex-col gap-2 border-t border-edge pt-4">
         <Button
           type="button"
-          onClick={() => void onPublish()}
+          onClick={() => void (scheduleLater ? onSchedule() : onPublish())}
           disabled={
             blocked ||
             !hasChanges ||
             publish.isPending ||
-            (notifyResidents && !notifySummaryValid)
+            createSchedule.isPending ||
+            (notifyResidents && !notifySummaryValid) ||
+            (scheduleLater && !scheduleValid)
           }
-          loading={publish.isPending}
+          loading={publish.isPending || createSchedule.isPending}
         >
-          {publish.isPending ? 'Publishing…' : 'Publish changes'}
+          {scheduleLater
+            ? createSchedule.isPending
+              ? 'Scheduling…'
+              : 'Schedule publish'
+            : publish.isPending
+              ? 'Publishing…'
+              : 'Publish changes'}
         </Button>
         <p className="text-xs text-content-secondary" data-testid="publish-hint">
           {blocked
@@ -793,6 +938,10 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
               ? "There's nothing to publish yet."
               : notifyResidents && !notifySummaryValid
                 ? 'Say what changed, or untick the box to publish quietly.'
+            : scheduleLater && !scheduleValid
+              ? 'Pick a time in the future, or untick to publish now.'
+              : scheduleLater
+                ? 'Nothing is published until the time you picked.'
                 : /*
                    * One "go live" literal, with the notification clause
                    * appended rather than a second copy of the sentence.
