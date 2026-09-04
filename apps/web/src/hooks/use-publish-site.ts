@@ -22,6 +22,7 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CROSS_NOTIFICATION_KEYS, NOTIFICATION_KEYS } from '@/hooks/use-notifications';
 
 export type PublishSiteResult =
   | {
@@ -60,6 +61,14 @@ export type PublishSiteResult =
         | { status: 'sent'; announcementId: number; recipientCount: number }
         | { status: 'partial'; announcementId: number; reason: string }
         | { status: 'failed'; reason: string };
+      /**
+       * Set only when this publish disarmed a pending scheduled publish.
+       *
+       * Optional for the same deploy-skew reason as the page counts above — a
+       * tab can be older or newer than the server it talks to. Absent means
+       * "this server did not say", never "there was none".
+       */
+      canceledSchedule?: { id: number; scheduledFor: string };
     }
   | { published: false; reason: 'nothing-to-publish' };
 
@@ -128,7 +137,7 @@ export function usePublishSite(communityId: number) {
       const body = (await res.json()) as { data: PublishSiteResult };
       return body.data;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       // The whole ['pm','site'] prefix, not a hand-listed pair of keys (D10′).
       //
       // This used to invalidate exactly two keys — ['pm','site','blocks',id] and
@@ -147,6 +156,29 @@ export function usePublishSite(communityId: number) {
       // editor state — that is a redundant refetch for a PM who has more than
       // one community open, never a wrong render.
       await qc.invalidateQueries({ queryKey: ['pm', 'site'] });
+
+      /*
+       * A notifying publish also writes an ANNOUNCEMENT and in-app
+       * notifications — resources outside this prefix, which would otherwise
+       * keep serving a feed and an unread count that predate the publish.
+       * `use-notification-realtime` only covers a recipient who happens to be
+       * live-subscribed at that moment.
+       *
+       * Gated on the field being PRESENT, not on `status === 'sent'`: a
+       * `partial` created the announcement and its feed rows too, and
+       * refetching after a `failed` costs one request and is never wrong.
+       *
+       * Deliberately NOT invalidating `['announcements', …]`: that key is
+       * module-private to `use-announcements` and no `useQuery` anywhere
+       * registers it, so it would be a provable no-op. The announcements list
+       * is server-rendered and picks the row up on navigation.
+       */
+      if (result.published && result.residentNotification) {
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: NOTIFICATION_KEYS.all(communityId) }),
+          qc.invalidateQueries({ queryKey: CROSS_NOTIFICATION_KEYS.all() }),
+        ]);
+      }
     },
   });
 }

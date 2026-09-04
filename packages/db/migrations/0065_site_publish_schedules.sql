@@ -6,6 +6,7 @@ CREATE TABLE "site_publish_schedules" (
 	"status" text DEFAULT 'pending' NOT NULL,
 	"notify_summary" text,
 	"attempt_count" integer DEFAULT 0 NOT NULL,
+	"lease_expires_at" timestamp with time zone,
 	"executed_at" timestamp with time zone,
 	"error_message" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -48,19 +49,31 @@ ALTER TABLE "site_publish_schedules" ADD CONSTRAINT "site_publish_schedules_stat
   CHECK ("status" IN ('pending', 'running', 'published', 'nothing_to_publish', 'canceled', 'failed'));--> statement-breakpoint
 
 -- What makes "the next scheduled publish" singular. A publish is atomic and
--- community-wide, so two pending schedules for one community have no coherent
+-- community-wide, so two live schedules for one community have no coherent
 -- meaning — the second would silently republish whatever the first left behind.
 -- Partial, so completed/canceled schedules do not block scheduling the next one.
 -- Drizzle cannot express a partial unique index, hence hand-authored here.
-CREATE UNIQUE INDEX IF NOT EXISTS "site_publish_schedules_one_pending_idx"
+--
+-- Covers 'running' as well as 'pending' deliberately: a CLAIMED row is still a
+-- live schedule. Were this 'pending'-only, a PM could arm a second schedule
+-- while the first was mid-publish, and both would publish and email — the exact
+-- double-send this index exists to prevent. That path is reachable only because
+-- a lapsed lease makes 'running' rows claimable again, so the two must ship
+-- together.
+CREATE UNIQUE INDEX IF NOT EXISTS "site_publish_schedules_one_active_idx"
   ON "site_publish_schedules" ("community_id")
-  WHERE "status" = 'pending' AND "deleted_at" IS NULL;--> statement-breakpoint
+  WHERE "status" IN ('pending', 'running') AND "deleted_at" IS NULL;--> statement-breakpoint
 
 -- ---------------------------------------------------------------------------
 -- RLS
 --
--- Read is the ordinary member bar: "the site updates at 3pm" is operational
--- metadata, not resident data, and a member seeing it is harmless.
+-- Read is the MANAGER bar, not the ordinary member bar. An earlier draft used
+-- the member bar on the grounds that "the site updates at 3pm" is harmless
+-- operational metadata — true of scheduled_for, but not of error_message, which
+-- carries why a publish failed and is rendered back to the PM. The sibling
+-- community_export_jobs (0058) gates the same class of field the same way. The
+-- only reader is the PM editor's GET, which already requires a manager role, so
+-- matching it costs nothing.
 --
 -- Write is the MANAGER bar (pp_rls_can_read_audit_log is granted on the manager
 -- row only), because scheduling a publish is the same authority as publishing.
@@ -81,7 +94,7 @@ CREATE TRIGGER pp_rls_enforce_tenant_scope BEFORE INSERT OR UPDATE ON public.sit
 
 DROP POLICY IF EXISTS "pp_site_publish_schedules_select" ON public."site_publish_schedules";--> statement-breakpoint
 CREATE POLICY "pp_site_publish_schedules_select" ON public."site_publish_schedules" AS PERMISSIVE FOR SELECT TO public
-  USING ((pp_rls_is_privileged() OR ((auth.uid() IS NOT NULL) AND pp_rls_can_access_community(community_id))));--> statement-breakpoint
+  USING ((pp_rls_is_privileged() OR ((auth.uid() IS NOT NULL) AND pp_rls_can_access_community(community_id) AND pp_rls_can_read_audit_log(community_id))));--> statement-breakpoint
 DROP POLICY IF EXISTS "pp_site_publish_schedules_insert" ON public."site_publish_schedules";--> statement-breakpoint
 CREATE POLICY "pp_site_publish_schedules_insert" ON public."site_publish_schedules" AS PERMISSIVE FOR INSERT TO public
   WITH CHECK ((pp_rls_is_privileged() OR ((auth.uid() IS NOT NULL) AND pp_rls_can_access_community(community_id) AND pp_rls_can_read_audit_log(community_id))));--> statement-breakpoint
@@ -94,4 +107,4 @@ CREATE POLICY "pp_site_publish_schedules_delete" ON public."site_publish_schedul
   USING ((pp_rls_is_privileged() OR ((auth.uid() IS NOT NULL) AND pp_rls_can_access_community(community_id) AND pp_rls_can_read_audit_log(community_id))));--> statement-breakpoint
 
 COMMENT ON TABLE "site_publish_schedules" IS
-  'Scheduled community-site publishes. At most one pending row per community (site_publish_schedules_one_pending_idx). Fired by the scheduled-site-publish cron.';
+  'Scheduled community-site publishes. At most one live (pending or running) row per community (site_publish_schedules_one_active_idx). Fired by the scheduled-site-publish cron; a lapsed lease_expires_at makes a claimed row re-claimable.';

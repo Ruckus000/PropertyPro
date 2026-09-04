@@ -20,7 +20,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { ValidationError } from '@/lib/api/errors';
 import {
   cancelSitePublishSchedule,
-  getPendingSitePublishSchedule,
+  getSitePublishScheduleForEditor,
   maxScheduleDate,
   scheduleSitePublish,
   MAX_SCHEDULE_DAYS_AHEAD,
@@ -51,7 +51,7 @@ export const GET = withErrorHandler(
     // A lapsed community's managers lose admin reads; residents are unaffected.
     // Same gate every other admin GET carries.
     await requireEntitledForAdminRead(communityId, membership);
-    return { schedule: await getPendingSitePublishSchedule(communityId) };
+    return { schedule: await getSitePublishScheduleForEditor(communityId) };
   }),
 );
 

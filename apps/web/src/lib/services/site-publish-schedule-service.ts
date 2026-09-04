@@ -30,6 +30,7 @@ import { sitePublishSchedules, logAuditEvent } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, eq, isNull, lte, sql } from '@propertypro/db/filters';
 import { createScopedClient } from '@propertypro/db';
+import { ConflictError } from '@/lib/api/errors';
 import { publishCommunitySite } from './site-blocks-service';
 import { notifyResidentsOfSitePublish } from './site-publish-notification';
 
@@ -41,14 +42,83 @@ export type SitePublishScheduleStatus =
   | 'canceled'
   | 'failed';
 
-export interface PendingSitePublishSchedule {
+export interface EditorSitePublishSchedule {
   id: number;
+  /**
+   * `pending` — armed. `running` — a tick is publishing it right now.
+   * `failed` — every attempt was used and nothing was published.
+   */
+  status: 'pending' | 'running' | 'failed';
   scheduledFor: string;
   notifySummary: string | null;
+  /** PM-facing reason, set only on `failed`. Never raw driver text. */
+  errorMessage: string | null;
 }
+
+/** @deprecated Kept as an alias while callers migrate to the widened shape. */
+export type PendingSitePublishSchedule = EditorSitePublishSchedule;
+
+/** How long a failed schedule keeps being reported to the editor. */
+const FAILED_VISIBLE_DAYS = 7;
 
 /** How many due schedules one cron tick will process. */
 const BATCH_SIZE = 25;
+
+/**
+ * How long a tick holds a claim before another tick may take the row back.
+ *
+ * The recovery mechanism, not a performance knob. A Vercel function killed by
+ * the platform deadline throws nothing — no catch block runs, no terminal
+ * status is written — so without a lease a claimed row would sit in `running`
+ * forever: never re-claimed, and invisible to the PM, whose statutory notice
+ * then silently never goes out. A lapsed lease makes the row claimable again,
+ * which is why reclaiming a crashed tick is the SAME code path as a fresh claim.
+ *
+ * 10 minutes, matching `EXPORT_JOB_LEASE_MS`, comfortably exceeds a publish and
+ * comfortably precedes the next 15-minute tick.
+ */
+const LEASE_MS = 10 * 60 * 1000;
+
+/** Exported for tests, which assert the exact expiry the claim writes. */
+export const SITE_PUBLISH_SCHEDULE_LEASE_MS = LEASE_MS;
+
+/**
+ * Walks `cause` because the driver wraps the original error — a top-level
+ * `code` check alone misses it. Local rather than shared: the repo already has
+ * several copies of this and consolidating them is worth doing, but not inside
+ * a defect fix that would then touch three unrelated services.
+ */
+function hasPostgresErrorCode(error: unknown, expectedCode: string): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  if ('code' in error && (error as { code: unknown }).code === expectedCode) return true;
+  if ('cause' in error) return hasPostgresErrorCode((error as { cause: unknown }).cause, expectedCode);
+  return false;
+}
+
+/** 23505 — here, always the one-active-schedule-per-community index. */
+function isUniqueViolation(error: unknown): boolean {
+  return hasPostgresErrorCode(error, '23505');
+}
+
+/**
+ * How many times a schedule is attempted before it is given up on.
+ *
+ * A code constant rather than a per-row column: nothing wants per-schedule
+ * retry budgets, and `notification-digest-processor` sets the same precedent
+ * with its own `MAX_ATTEMPTS`.
+ */
+const MAX_ATTEMPTS = 3;
+
+/**
+ * What the PM is told when one attempt fails. Deliberately free of internal
+ * detail — see the note at the throw site.
+ */
+const SCHEDULE_FAILURE_MESSAGE =
+  "This scheduled publish didn't finish, so nothing was published. It will be retried automatically.";
+
+/** What the PM is told once every attempt is spent. */
+const SCHEDULE_EXHAUSTED_MESSAGE =
+  "This scheduled publish was retried until it ran out of attempts and never finished. Nothing was published. Schedule it again, or publish now.";
 
 /**
  * The furthest ahead a publish may be scheduled.
@@ -66,30 +136,53 @@ export function maxScheduleDate(now: Date = new Date()): Date {
 }
 
 /** The community's pending schedule, or null. */
-export async function getPendingSitePublishSchedule(
+export async function getSitePublishScheduleForEditor(
   communityId: number,
-): Promise<PendingSitePublishSchedule | null> {
-  const scoped = createScopedClient(communityId);
-  const rows = (await scoped.selectFrom(
-    sitePublishSchedules,
-    {
-      id: sitePublishSchedules.id,
-      scheduledFor: sitePublishSchedules.scheduledFor,
-      notifySummary: sitePublishSchedules.notifySummary,
-    },
-    and(
-      eq(sitePublishSchedules.communityId, communityId),
-      eq(sitePublishSchedules.status, 'pending'),
-      isNull(sitePublishSchedules.deletedAt),
-    ),
-  )) as Array<{ id: number; scheduledFor: Date; notifySummary: string | null }>;
+  now: Date = new Date(),
+): Promise<EditorSitePublishSchedule | null> {
+  const db = createUnscopedClient();
+  const failedCutoff = new Date(now.getTime() - FAILED_VISIBLE_DAYS * 24 * 60 * 60 * 1000);
 
+  /*
+   * ONE row: the live schedule if there is one, otherwise a recent failure.
+   *
+   * `ORDER BY created_at DESC LIMIT 1` does the precedence without a CASE — a
+   * newly armed schedule is always newer than the failure it replaces, so it
+   * naturally wins. The 7-day cutoff is what keeps this a status read rather
+   * than a history query, and stops a failure becoming a permanent tombstone
+   * the PM has no way to dismiss.
+   */
+  const result = (await db.execute(sql`
+    SELECT id, status, scheduled_for, notify_summary, error_message
+      FROM site_publish_schedules
+     WHERE community_id = ${communityId}
+       AND deleted_at IS NULL
+       AND (
+         status IN ('pending', 'running')
+         OR (status = 'failed' AND executed_at >= ${failedCutoff})
+       )
+     ORDER BY created_at DESC
+     LIMIT 1
+  `)) as unknown as Array<{
+    id: number;
+    status: 'pending' | 'running' | 'failed';
+    scheduled_for: Date;
+    notify_summary: string | null;
+    error_message: string | null;
+  }>;
+
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: typeof result })?.rows ?? []);
   const row = rows[0];
   if (!row) return null;
+
   return {
     id: row.id,
-    scheduledFor: row.scheduledFor.toISOString(),
-    notifySummary: row.notifySummary,
+    status: row.status,
+    scheduledFor: new Date(row.scheduled_for).toISOString(),
+    notifySummary: row.notify_summary,
+    errorMessage: row.error_message,
   };
 }
 
@@ -104,7 +197,7 @@ export interface ScheduleSitePublishInput {
 /**
  * Schedule a publish, replacing any existing pending one.
  *
- * Replace rather than reject-as-conflict: `site_publish_schedules_one_pending_idx`
+ * Replace rather than reject-as-conflict: `site_publish_schedules_one_active_idx`
  * makes one pending schedule per community a database invariant, and a PM
  * changing their mind about the time is the ordinary case. Cancelling first
  * would make the common path two round trips and leave a window with no
@@ -116,28 +209,67 @@ export async function scheduleSitePublish({
   scheduledFor,
   notifySummary,
 }: ScheduleSitePublishInput): Promise<PendingSitePublishSchedule> {
-  const scoped = createScopedClient(communityId);
+  const db = createUnscopedClient();
 
-  await scoped.update(
-    sitePublishSchedules,
-    { status: 'canceled', updatedAt: new Date() },
-    and(
-      eq(sitePublishSchedules.communityId, communityId),
-      eq(sitePublishSchedules.status, 'pending'),
-      isNull(sitePublishSchedules.deletedAt),
-    ),
-  );
+  /*
+   * One transaction, because cancel-then-insert must be atomic. As two
+   * statements an insert that failed after the cancel committed would leave the
+   * community with NO schedule and the PM with an error that looks identical to
+   * "nothing happened" — silently discarding a schedule they had already made.
+   *
+   * `createScopedClient` exposes only query/insert/update and has no
+   * transaction, so this uses the unscoped client with an explicit
+   * `community_id` predicate on every statement, exactly as `publishCommunitySite`
+   * does.
+   */
+  const row = await db
+    .transaction(async (tx) => {
+      /*
+       * The row lock, and the primary fix for the race. It serialises two
+       * managers scheduling at once AND a schedule racing an immediate publish,
+       * which takes the same lock. The unique-violation catch below is only the
+       * backstop for the window this does not cover.
+       */
+      await tx.execute(sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`);
 
-  const inserted = (await scoped.insert(sitePublishSchedules, {
-    communityId,
-    scheduledFor,
-    requestedBy: actorUserId,
-    status: 'pending',
-    notifySummary,
-  })) as Array<{ id: number; scheduledFor: Date; notifySummary: string | null }>;
+      /*
+       * `pending` only — never a `running` row. A worker is mid-publish inside
+       * one: cancelling would race its `finishSchedule` and, worse, free the
+       * exclusivity slot so a second schedule could be armed during a live
+       * publish. If the slot is held by a running row the insert below fails on
+       * the index, which is exactly the right answer.
+       */
+      await tx.execute(sql`
+        UPDATE site_publish_schedules
+           SET status = 'canceled', updated_at = now()
+         WHERE community_id = ${communityId}
+           AND status = 'pending'
+           AND deleted_at IS NULL
+      `);
 
-  const row = inserted[0]!;
+      const inserted = (await tx.execute(sql`
+        INSERT INTO site_publish_schedules
+          (community_id, scheduled_for, requested_by, status, notify_summary)
+        VALUES (${communityId}, ${scheduledFor}, ${actorUserId}, 'pending', ${notifySummary})
+        RETURNING id, scheduled_for, notify_summary
+      `)) as unknown as Array<{ id: number; scheduled_for: Date; notify_summary: string | null }>;
 
+      const rows = Array.isArray(inserted)
+        ? inserted
+        : ((inserted as { rows?: typeof inserted })?.rows ?? []);
+      return rows[0]!;
+    })
+    .catch((error: unknown) => {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(
+          'A scheduled publish for this community is running right now. Wait a minute and try again.',
+        );
+      }
+      throw error;
+    });
+
+  // Outside the transaction on purpose: an audit-log failure must not roll back
+  // a schedule the PM was told about.
   await logAuditEvent({
     userId: actorUserId,
     action: 'settings_changed',
@@ -152,8 +284,12 @@ export async function scheduleSitePublish({
 
   return {
     id: row.id,
-    scheduledFor: row.scheduledFor.toISOString(),
-    notifySummary: row.notifySummary,
+    // A freshly inserted row is always pending with nothing to report; stated
+    // explicitly so the POST response and the GET response are the same shape.
+    status: 'pending',
+    scheduledFor: new Date(row.scheduled_for).toISOString(),
+    notifySummary: row.notify_summary,
+    errorMessage: null,
   };
 }
 
@@ -162,8 +298,8 @@ export async function cancelSitePublishSchedule(
   communityId: number,
   actorUserId: string,
 ): Promise<boolean> {
-  const existing = await getPendingSitePublishSchedule(communityId);
-  if (!existing) return false;
+  const existing = await getSitePublishScheduleForEditor(communityId);
+  if (!existing || existing.status !== 'pending') return false;
 
   const scoped = createScopedClient(communityId);
   await scoped.update(
@@ -194,6 +330,8 @@ export interface ProcessDueSitePublishesSummary {
   published: number;
   nothingToPublish: number;
   failed: number;
+  /** Schedules given up on this tick because they ran out of attempts. */
+  exhausted: number;
 }
 
 interface ClaimedRow {
@@ -214,24 +352,36 @@ export async function processDueSitePublishes(
 ): Promise<ProcessDueSitePublishesSummary> {
   const db = createUnscopedClient();
 
+  const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
+
   /*
    * Claim and select in ONE statement. `FOR UPDATE SKIP LOCKED` on the inner
    * select means concurrent ticks take disjoint rows rather than blocking on
-   * each other, and the outer UPDATE's `status = 'pending'` predicate means a
-   * row already claimed by another tick cannot be claimed twice. Only rows this
-   * statement RETURNS are ours to act on.
+   * each other, and it holds the row lock for the whole statement — so a row
+   * claimed by another tick cannot be claimed twice, and the predicates need
+   * not be restated on the outer UPDATE. Only rows this statement RETURNS are
+   * ours to act on.
+   *
+   * `running` is claimable, not excluded. That is the crash recovery: a row
+   * whose lease has lapsed was claimed by a tick that never finished, and
+   * taking it back is the same operation as taking a fresh one. `attempt_count`
+   * bounds that, so a schedule that fails every time cannot loop forever — it
+   * runs out of attempts and `failExhaustedSchedules` gives up on it visibly.
    */
   const claimed = (await db.execute(sql`
     UPDATE site_publish_schedules
        SET status = 'running',
            attempt_count = attempt_count + 1,
+           lease_expires_at = ${leaseExpiresAt},
            updated_at = now()
      WHERE id IN (
        SELECT id
          FROM site_publish_schedules
-        WHERE status = 'pending'
+        WHERE status IN ('pending', 'running')
           AND deleted_at IS NULL
           AND scheduled_for <= ${now}
+          AND attempt_count < ${MAX_ATTEMPTS}
+          AND (lease_expires_at IS NULL OR lease_expires_at < ${now})
         ORDER BY scheduled_for ASC
         LIMIT ${BATCH_SIZE}
         FOR UPDATE SKIP LOCKED
@@ -248,6 +398,7 @@ export async function processDueSitePublishes(
     published: 0,
     nothingToPublish: 0,
     failed: 0,
+    exhausted: 0,
   };
 
   for (const row of rows) {
@@ -305,11 +456,43 @@ export async function processDueSitePublishes(
         communityId: row.community_id,
         error: message,
       });
-      await finishSchedule(db, row.id, 'failed', message).catch(() => {
+      /*
+       * A CURATED sentence, not `message`.
+       *
+       * `error_message` is read back by the publish sheet and stored in a
+       * tenant table, so raw driver text — constraint names, table internals,
+       * whatever a connection error carries — must not land in it. The detail
+       * is not lost: it is in the console line above, which is where an
+       * engineer looks. The PM gets something they can act on.
+       */
+      await finishSchedule(db, row.id, 'failed', SCHEDULE_FAILURE_MESSAGE).catch(() => {
         // A failure to RECORD the failure must not abort the remaining rows.
       });
       summary.failed += 1;
     }
+  }
+
+  /*
+   * AFTER the loop, never before.
+   *
+   * A row this tick just claimed holds a live lease and is deliberately spared
+   * by the sweep, so ordering only matters for rows the loop finished: sweeping
+   * first would examine them on their pre-run attempt count and could give up
+   * on a schedule that was about to succeed. Its own try/catch because losing
+   * the sweep must not lose the tick's summary — the claim loop's work is
+   * already done and reported by this point.
+   */
+  try {
+    summary.exhausted = (await failExhaustedSchedules(now)).length;
+    if (summary.exhausted > 0) {
+      console.warn('[scheduled-site-publish] gave up on exhausted schedules', {
+        count: summary.exhausted,
+      });
+    }
+  } catch (error) {
+    console.error('[scheduled-site-publish] exhausted sweep failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   return summary;
@@ -326,7 +509,46 @@ async function finishSchedule(
        SET status = ${status},
            executed_at = now(),
            error_message = ${errorMessage},
+           lease_expires_at = NULL,
            updated_at = now()
      WHERE id = ${id}
   `);
 }
+
+/**
+ * Give up on schedules that have used every attempt, so they stop being
+ * invisible.
+ *
+ * The counterpart to a claimable `running` row. Reclaiming recovers a crash,
+ * but a schedule that fails on every attempt would otherwise cycle between
+ * `running` and reclaimed forever, and the PM would never learn their notice
+ * did not go out. This writes the terminal state the publish sheet reads.
+ *
+ * One UPDATE, no select — there is nothing to decide per row. A row inside a
+ * LIVE lease is spared: it may be mid-flight on its final attempt and about to
+ * succeed. `pending` is included alongside `running` for symmetry with the
+ * claim predicate; nothing currently returns a row to `pending`, so that arm is
+ * defensive rather than load-bearing.
+ */
+export async function failExhaustedSchedules(now: Date = new Date()): Promise<number[]> {
+  const db = createUnscopedClient();
+  const result = (await db.execute(sql`
+    UPDATE site_publish_schedules
+       SET status = 'failed',
+           error_message = ${SCHEDULE_EXHAUSTED_MESSAGE},
+           executed_at = now(),
+           lease_expires_at = NULL,
+           updated_at = now()
+     WHERE status IN ('pending', 'running')
+       AND deleted_at IS NULL
+       AND attempt_count >= ${MAX_ATTEMPTS}
+       AND (lease_expires_at IS NULL OR lease_expires_at < ${now})
+    RETURNING id
+  `)) as unknown as Array<{ id: number }>;
+
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: Array<{ id: number }> })?.rows ?? []);
+  return rows.map((row) => row.id);
+}
+

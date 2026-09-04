@@ -439,11 +439,41 @@ describe('publishCommunitySite', () => {
     ]);
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
-    expect(txExecuteMock).toHaveBeenCalledTimes(1);
+
+    /*
+     * Asserted as "the lock is FIRST", not "there is exactly one statement".
+     * The count was a proxy for ordering, and it stopped matching when the
+     * publish gained a second raw statement — disarming a pending scheduled
+     * publish, which must happen inside this same transaction. Position is what
+     * the test name actually claims, and it stays true as more statements join.
+     */
     const sqlArg = txExecuteMock.mock.calls[0][0];
     const sqlText = (sqlArg as { __sql: { strings: string[] } }).__sql.strings.join('');
     expect(sqlText).toContain('FOR UPDATE');
     expect((sqlArg as { __sql: { values: unknown[] } }).__sql.values).toContain(42);
+  });
+
+  it('disarms a pending scheduled publish inside the same transaction', async () => {
+    /*
+     * Publishing now satisfies the intent of "publish later", so an armed
+     * schedule must be called off — and INSIDE this transaction, or the cron
+     * could claim it in the window between commit and a later cancel and
+     * republish under the original summary.
+     */
+    setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]);
+    setUpdateReturnQueue([
+      [{ id: 1 }, { id: 2 }, { id: 3 }],
+      [],
+      [{ id: 10 }, { id: 11 }],
+    ]);
+
+    await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    const statements = txExecuteMock.mock.calls.map((c) =>
+      (c[0] as { __sql: { strings: string[] } }).__sql.strings.join(''),
+    );
+    expect(statements.some((t) => t.includes('site_publish_schedules'))).toBe(true);
+    expect(statements.some((t) => t.includes("status = 'canceled'"))).toBe(true);
   });
 
   it('returns { published:true, retiredCount, promotedCount } on a successful publish', async () => {

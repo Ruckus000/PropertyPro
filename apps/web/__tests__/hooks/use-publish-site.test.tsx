@@ -135,3 +135,88 @@ describe('usePublishSite', () => {
     });
   });
 });
+
+describe('usePublishSite — caches touched by a notifying publish', () => {
+  function publishResult(extra: Record<string, unknown> = {}) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          published: true,
+          publishedAt: '2026-05-15T12:00:00.000Z',
+          promotedCount: 1,
+          retiredCount: 0,
+          ...extra,
+        },
+      }),
+    };
+  }
+
+  /** Every key `invalidateQueries` was called with, flattened for matching. */
+  function invalidatedKeys(spy: ReturnType<typeof vi.fn>): string[] {
+    return spy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
+  }
+
+  it('also refreshes the notification feed when residents were notified', async () => {
+    /*
+     * A notifying publish writes an ANNOUNCEMENT and in-app notifications —
+     * resources outside the `['pm','site']` prefix. Without this the unread
+     * count and the feed keep serving state that predates the publish, and
+     * `use-notification-realtime` only covers whoever happens to be
+     * live-subscribed at that instant.
+     */
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      publishResult({ residentNotification: { status: 'sent', announcementId: 7, recipientCount: 3 } }),
+    );
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    const { result } = renderHook(() => usePublishSite(42), { wrapper: wrap(qc) });
+
+    await result.current.mutateAsync({ expectedPublishedAt: null });
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+
+    const keys = invalidatedKeys(spy as unknown as ReturnType<typeof vi.fn>);
+    expect(keys).toContain(JSON.stringify(['pm', 'site']));
+    expect(keys).toContain(JSON.stringify(['notifications', 42]));
+    expect(keys).toContain(JSON.stringify(['notifications', 'cross']));
+  });
+
+  it('refreshes them for a PARTIAL notification too — the feed row exists', async () => {
+    // `partial` means the announcement landed and only the email failed, so the
+    // in-app feed did change.
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      publishResult({ residentNotification: { status: 'partial', announcementId: 7, reason: 'smtp' } }),
+    );
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    const { result } = renderHook(() => usePublishSite(42), { wrapper: wrap(qc) });
+
+    await result.current.mutateAsync({ expectedPublishedAt: null });
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+
+    expect(invalidatedKeys(spy as unknown as ReturnType<typeof vi.fn>)).toContain(
+      JSON.stringify(['notifications', 42]),
+    );
+  });
+
+  it('does NOT touch the notification caches on a quiet publish', async () => {
+    /*
+     * The control. Without it the two cases above would pass for a hook that
+     * invalidated the notification keys unconditionally, which would make every
+     * ordinary publish refetch two feeds for nothing.
+     */
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(publishResult());
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    const { result } = renderHook(() => usePublishSite(42), { wrapper: wrap(qc) });
+
+    await result.current.mutateAsync({ expectedPublishedAt: null });
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+
+    const keys = invalidatedKeys(spy as unknown as ReturnType<typeof vi.fn>);
+    expect(keys).toContain(JSON.stringify(['pm', 'site']));
+    expect(keys).not.toContain(JSON.stringify(['notifications', 42]));
+    expect(keys).not.toContain(JSON.stringify(['notifications', 'cross']));
+  });
+});

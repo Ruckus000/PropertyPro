@@ -589,6 +589,17 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
        * the resident feed and only the email did not go.
        */
       const notification = result.published ? result.residentNotification : undefined;
+
+      /*
+       * Built once and appended to BOTH outcomes below. Publishing now disarms
+       * a schedule, and a PM who is not told will later wonder why the publish
+       * they set up never happened — so this must survive the half-failure path
+       * as well as the happy one.
+       */
+      const canceled = result.published ? result.canceledSchedule : undefined;
+      const scheduleNote = canceled
+        ? ` The publish you had scheduled for ${new Date(canceled.scheduledFor).toLocaleString()} was called off.`
+        : '';
       if (notification && notification.status !== 'sent') {
         toast.warning(
           notification.status === 'partial'
@@ -603,17 +614,18 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
               ? `Published, and posted to residents\u2019 feeds \u2014 but the email didn\u2019t send. ${notification.reason}`
               : `Published \u2014 but residents were not notified at all. ${notification.reason}`,
           nextStep:
-            notification.status === 'partial'
+            (notification.status === 'partial'
               ? 'Residents can see the update in the app. To email it as well, post an announcement from Announcements.'
-              : 'Your changes are live. To tell residents, post an announcement from Announcements.',
+              : 'Your changes are live. To tell residents, post an announcement from Announcements.') +
+            scheduleNote,
         });
         return;
       }
 
       toast.success(
-        notification?.status === 'sent'
+        (notification?.status === 'sent'
           ? `${describeOutcome(result)} ${plural(notification.recipientCount, 'resident')} notified.`
-          : describeOutcome(result),
+          : describeOutcome(result)) + scheduleNote,
       );
       onOpenChange(false);
     } catch (error) {
@@ -827,14 +839,50 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
         </div>
       ) : null}
 
-      {pendingSchedule.data ? (
+      {/*
+        * The schedule read is SECONDARY. It deliberately does not join the
+        * primary early return above: blanking the whole sheet — and blocking a
+        * publish — because a status read failed is worse than the bug it would
+        * be guarding against. Nor does it disable the controls: the database's
+        * one-active-schedule index is the real guard, and it now answers with a
+        * clean 409 rather than a raw error.
+        */}
+      {pendingSchedule.isError ? (
+        <AlertBanner
+          status="warning"
+          title="We couldn't check for a scheduled publish"
+          description={pendingSchedule.error?.message ?? 'Please try again.'}
+          className="mt-4"
+          data-testid="publish-schedule-read-error"
+        />
+      ) : null}
+
+      {pendingSchedule.isPending ? (
+        // A skeleton, not nothing: rendering the empty state here would assert
+        // "no publish is scheduled" before the answer has arrived.
+        <Skeleton className="mt-4 h-20 w-full" data-testid="publish-schedule-loading" />
+      ) : null}
+
+      {pendingSchedule.data?.status === 'failed' ? (
+        <AlertBanner
+          status="danger"
+          title="Your scheduled publish didn't run"
+          description={`${pendingSchedule.data.errorMessage ?? 'It stopped before finishing.'} Your site was not published.`}
+          className="mt-4"
+          data-testid="failed-schedule"
+        />
+      ) : null}
+
+      {pendingSchedule.data && pendingSchedule.data.status !== 'failed' ? (
         <div
           className="mt-4 flex items-start justify-between gap-3 rounded-md border border-edge bg-surface-subtle p-4"
           data-testid="pending-schedule"
         >
           <div className="space-y-1">
             <p className="text-sm font-medium text-content">
-              A publish is already scheduled
+              {pendingSchedule.data.status === 'running'
+                ? 'Publishing now…'
+                : 'A publish is already scheduled'}
             </p>
             <p className="text-xs text-content-secondary">
               {new Date(pendingSchedule.data.scheduledFor).toLocaleString()}
@@ -843,11 +891,16 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
                 : ' — residents will not be notified.'}
             </p>
           </div>
+          {/*
+            * Only a `pending` schedule can be called off. A `running` one has
+            * been claimed by a tick that is publishing right now — cancelling
+            * would race its own completion write.
+            */}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={cancelSchedule.isPending}
+            disabled={cancelSchedule.isPending || pendingSchedule.data.status === 'running'}
             onClick={() => {
               void cancelSchedule
                 .mutateAsync()

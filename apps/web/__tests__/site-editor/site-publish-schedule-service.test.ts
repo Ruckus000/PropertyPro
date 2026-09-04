@@ -16,7 +16,14 @@ const { executeMock, publishMock, notifyMock, logAuditEventMock } = vi.hoisted((
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
-  createUnscopedClient: () => ({ execute: executeMock }),
+  createUnscopedClient: () => ({
+    execute: executeMock,
+    // `scheduleSitePublish` is transactional now. The fake hands the callback a
+    // handle whose `execute` is the SAME spy, so the tx's statements land in
+    // `executeMock.mock.calls` in order and can be asserted like any other.
+    transaction: (fn: (tx: { execute: typeof executeMock }) => unknown) =>
+      Promise.resolve(fn({ execute: executeMock })),
+  }),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -58,13 +65,37 @@ vi.mock('@/lib/services/site-publish-notification', () => ({
   notifyResidentsOfSitePublish: notifyMock,
 }));
 
-import { processDueSitePublishes } from '@/lib/services/site-publish-schedule-service';
+import {
+  processDueSitePublishes,
+  failExhaustedSchedules,
+  scheduleSitePublish,
+  SITE_PUBLISH_SCHEDULE_LEASE_MS,
+} from '@/lib/services/site-publish-schedule-service';
+import { ConflictError } from '@/lib/api/errors';
 
-/** First execute() call is the claim; the rest are per-row finishes. */
+/**
+ * First `execute()` is the claim; then one finish per row; then the exhausted
+ * sweep, which is always last.
+ */
 function claimReturning(rows: unknown[]) {
   executeMock.mockReset();
   executeMock.mockResolvedValueOnce(rows);
   executeMock.mockResolvedValue([]);
+}
+
+/** The SQL text of the nth execute() call, for substring assertions. */
+function sqlOf(callIndex: number): string {
+  return executeMock.mock.calls[callIndex][0].__sql.strings.join('?');
+}
+
+/** The bound values of the nth execute() call. */
+function valuesOf(callIndex: number): unknown[] {
+  return executeMock.mock.calls[callIndex][0].__sql.values;
+}
+
+/** The last execute() call — the sweep. */
+function lastSql(): string {
+  return executeMock.mock.calls.at(-1)![0].__sql.strings.join('?');
 }
 
 const ROW = {
@@ -99,12 +130,13 @@ describe('processDueSitePublishes', () => {
 
     await processDueSitePublishes(new Date('2026-08-01T15:00:00Z'));
 
-    const claimSql = executeMock.mock.calls[0][0].__sql.strings.join('?');
+    const claimSql = sqlOf(0);
     expect(claimSql).toContain('UPDATE site_publish_schedules');
     expect(claimSql).toContain("SET status = 'running'");
-    expect(claimSql).toContain("WHERE status = 'pending'");
     expect(claimSql).toContain('FOR UPDATE SKIP LOCKED');
     expect(claimSql).toContain('RETURNING');
+    // `running` is claimable, which is what makes a crashed tick recoverable.
+    expect(claimSql).toContain("status IN ('pending', 'running')");
   });
 
   it('publishes each claimed schedule and records the outcome', async () => {
@@ -119,7 +151,7 @@ describe('processDueSitePublishes', () => {
       // session, so there is no optimistic-concurrency token to honour.
       expectedPublishedAt: null,
     });
-    expect(summary).toEqual({ claimed: 1, published: 1, nothingToPublish: 0, failed: 0 });
+    expect(summary).toEqual({ claimed: 1, published: 1, nothingToPublish: 0, failed: 0, exhausted: 0 });
 
     const finishSql = executeMock.mock.calls[1][0].__sql;
     expect(finishSql.strings.join('?')).toContain('SET status =');
@@ -174,9 +206,10 @@ describe('processDueSitePublishes', () => {
 
     expect(publishMock).not.toHaveBeenCalled();
     expect(summary).toMatchObject({ failed: 1, published: 0 });
-    const finishValues = executeMock.mock.calls[1][0].__sql.values;
+    const finishValues = valuesOf(1);
     expect(finishValues).toContain('failed');
-    expect(finishValues.some((v: unknown) => String(v).includes('no longer has an account'))).toBe(
+    // The specific cause is in the console line; the row carries PM-facing text.
+    expect(finishValues.some((v: unknown) => String(v).includes('nothing was published'))).toBe(
       true,
     );
   });
@@ -188,7 +221,13 @@ describe('processDueSitePublishes', () => {
     const summary = await processDueSitePublishes();
 
     expect(summary).toMatchObject({ failed: 1 });
-    expect(executeMock.mock.calls[1][0].__sql.values).toContain('deadlock detected');
+    /*
+     * The RAW error goes to the console, never into the row: `error_message` is
+     * read back by the publish sheet and lives in a tenant table, so driver
+     * text (constraint names, connection detail) must not land in it.
+     */
+    expect(valuesOf(1).join(' ')).not.toContain('deadlock detected');
+    expect(valuesOf(1).some((v) => String(v).includes('nothing was published'))).toBe(true);
   });
 
   it('keeps going after one community fails', async () => {
@@ -208,7 +247,7 @@ describe('processDueSitePublishes', () => {
 
     const summary = await processDueSitePublishes();
 
-    expect(summary).toEqual({ claimed: 3, published: 2, nothingToPublish: 0, failed: 1 });
+    expect(summary).toEqual({ claimed: 3, published: 2, nothingToPublish: 0, failed: 1, exhausted: 0 });
   });
 
   it('does nothing, quietly, when nothing is due', async () => {
@@ -216,9 +255,232 @@ describe('processDueSitePublishes', () => {
 
     const summary = await processDueSitePublishes();
 
-    expect(summary).toEqual({ claimed: 0, published: 0, nothingToPublish: 0, failed: 0 });
+    expect(summary).toEqual({ claimed: 0, published: 0, nothingToPublish: 0, failed: 0, exhausted: 0 });
     expect(publishMock).not.toHaveBeenCalled();
-    // Only the claim ran — no finish statements.
-    expect(executeMock).toHaveBeenCalledTimes(1);
+    // The claim and the sweep — and no finish statements in between.
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    expect(lastSql()).toContain('attempt_count >=');
+  });
+});
+
+describe('the lease — crash recovery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    publishMock.mockResolvedValue({
+      published: true,
+      publishedAt: new Date(),
+      promotedCount: 1,
+      retiredCount: 0,
+    });
+    logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  it('takes back a row whose lease has lapsed', async () => {
+    /*
+     * The whole point. A Vercel function killed by the platform deadline throws
+     * nothing — no catch runs, no terminal status is written — so without this
+     * the row sits in `running` forever: never retried, invisible to the PM,
+     * and the statutory notice silently never goes out.
+     */
+    claimReturning([ROW]);
+
+    await processDueSitePublishes(new Date('2026-08-01T15:00:00Z'));
+
+    const claimSql = sqlOf(0);
+    expect(claimSql).toContain("status IN ('pending', 'running')");
+    expect(claimSql).toContain('lease_expires_at IS NULL OR lease_expires_at <');
+  });
+
+  it('writes a lease that expires exactly one lease-length out', async () => {
+    const now = new Date('2026-08-01T15:00:00Z');
+    claimReturning([ROW]);
+
+    await processDueSitePublishes(now);
+
+    expect(sqlOf(0)).toContain('lease_expires_at =');
+    const expiry = valuesOf(0).find((v) => v instanceof Date && v > now) as Date;
+    expect(expiry.getTime()).toBe(now.getTime() + SITE_PUBLISH_SCHEDULE_LEASE_MS);
+  });
+
+  it('will not claim a row that has used every attempt', async () => {
+    // Without this bound, a schedule that fails every time would cycle between
+    // running and reclaimed forever.
+    claimReturning([ROW]);
+
+    await processDueSitePublishes();
+
+    expect(sqlOf(0)).toContain('attempt_count <');
+  });
+
+  it('releases the lease when a schedule reaches a terminal state', async () => {
+    // A finished row must not look leased, or the sweep would spare it forever.
+    claimReturning([ROW]);
+
+    await processDueSitePublishes();
+
+    expect(sqlOf(1)).toContain('lease_expires_at = NULL');
+  });
+});
+
+describe('failExhaustedSchedules', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('gives up only on rows that are out of attempts AND not currently leased', async () => {
+    /*
+     * The lease clause is not redundant: a row on its final attempt may be
+     * mid-flight and about to succeed, and failing it there would report a
+     * failure for a publish that then happened.
+     */
+    executeMock.mockReset();
+    executeMock.mockResolvedValue([{ id: 4 }]);
+
+    const ids = await failExhaustedSchedules(new Date('2026-08-01T15:00:00Z'));
+
+    const sweep = sqlOf(0);
+    expect(sweep).toContain("SET status = 'failed'");
+    expect(sweep).toContain('attempt_count >=');
+    expect(sweep).toContain('lease_expires_at IS NULL OR lease_expires_at <');
+    expect(ids).toEqual([4]);
+  });
+
+  it('records a reason the PM can act on, not an error code', async () => {
+    executeMock.mockReset();
+    executeMock.mockResolvedValue([]);
+
+    await failExhaustedSchedules();
+
+    const reason = valuesOf(0).find((v) => typeof v === 'string' && v.length > 20) as string;
+    expect(reason).toContain('Nothing was published');
+    expect(reason).toMatch(/schedule it again|publish now/i);
+  });
+
+  it('runs AFTER the claim loop, never before', async () => {
+    /*
+     * Ordering matters for rows the loop just finished: sweeping first would
+     * judge them on their pre-run attempt count and could give up on a schedule
+     * that was about to succeed.
+     */
+    claimReturning([ROW]);
+    publishMock.mockResolvedValue({
+      published: true,
+      publishedAt: new Date(),
+      promotedCount: 1,
+      retiredCount: 0,
+    });
+
+    await processDueSitePublishes();
+
+    expect(lastSql()).toContain('attempt_count >=');
+  });
+
+  it('a failing sweep does not lose the tick’s work', async () => {
+    claimReturning([ROW]);
+    publishMock.mockResolvedValue({
+      published: true,
+      publishedAt: new Date(),
+      promotedCount: 1,
+      retiredCount: 0,
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Claim ok, finish ok, sweep throws.
+    executeMock.mockReset();
+    executeMock
+      .mockResolvedValueOnce([ROW])
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('sweep exploded'));
+
+    const summary = await processDueSitePublishes();
+
+    expect(summary.published).toBe(1);
+    expect(summary.exhausted).toBe(0);
+  });
+});
+
+describe('scheduleSitePublish', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  it('locks the community row, then cancels only pending, then inserts', async () => {
+    /*
+     * The row lock is the primary fix for the race — it serialises two managers
+     * scheduling at once AND a schedule racing an immediate publish, which takes
+     * the same lock. Cancelling `pending` only matters because a `running` row
+     * is mid-publish: cancelling it would race that tick's own completion write.
+     */
+    executeMock.mockReset();
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 9, scheduled_for: new Date('2026-08-01T15:00:00Z'), notify_summary: null },
+      ]);
+
+    await scheduleSitePublish({
+      communityId: 42,
+      actorUserId: 'user-1',
+      scheduledFor: new Date('2026-08-01T15:00:00Z'),
+      notifySummary: null,
+    });
+
+    expect(sqlOf(0)).toContain('FOR UPDATE');
+    expect(sqlOf(1)).toContain("status = 'pending'");
+    expect(sqlOf(1)).not.toContain('running');
+    expect(sqlOf(2)).toContain('INSERT INTO site_publish_schedules');
+  });
+
+  it('turns a unique violation into a 409, not a raw 500', async () => {
+    executeMock.mockReset();
+    executeMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    executeMock.mockRejectedValueOnce(Object.assign(new Error('dup'), { code: '23505' }));
+
+    await expect(
+      scheduleSitePublish({
+        communityId: 42,
+        actorUserId: 'user-1',
+        scheduledFor: new Date(),
+        notifySummary: null,
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('finds the violation even when the driver wraps it in `cause`', async () => {
+    // The recursive walk is the thing under test — a top-level check alone
+    // misses the wrapped shape the driver actually throws.
+    executeMock.mockReset();
+    executeMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    executeMock.mockRejectedValueOnce(
+      Object.assign(new Error('dup'), { cause: { code: '23505' } }),
+    );
+
+    await expect(
+      scheduleSitePublish({
+        communityId: 42,
+        actorUserId: 'user-1',
+        scheduledFor: new Date(),
+        notifySummary: null,
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('lets an unrelated error through unchanged', async () => {
+    executeMock.mockReset();
+    executeMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    executeMock.mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(
+      scheduleSitePublish({
+        communityId: 42,
+        actorUserId: 'user-1',
+        scheduledFor: new Date(),
+        notifySummary: null,
+      }),
+    ).rejects.toThrow('connection reset');
   });
 });

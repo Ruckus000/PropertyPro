@@ -52,7 +52,7 @@ vi.mock('@/lib/services/site-publish-schedule-service', async () => {
     ...actual,
     scheduleSitePublish: scheduleMock,
     cancelSitePublishSchedule: cancelMock,
-    getPendingSitePublishSchedule: getPendingMock,
+    getSitePublishScheduleForEditor: getPendingMock,
   };
 });
 
@@ -90,8 +90,10 @@ describe('/api/v1/pm/site/publish/schedule', () => {
     cancelMock.mockResolvedValue(true);
     scheduleMock.mockImplementation(async ({ scheduledFor }: { scheduledFor: Date }) => ({
       id: 1,
+      status: 'pending' as const,
       scheduledFor: scheduledFor.toISOString(),
       notifySummary: null,
+      errorMessage: null,
     }));
   });
 
@@ -202,5 +204,52 @@ describe('/api/v1/pm/site/publish/schedule', () => {
     cancelMock.mockResolvedValueOnce(false);
     const res = await DELETE(del());
     expect((await res.json()).data.canceled).toBe(false);
+  });
+});
+
+describe('GET /api/v1/pm/site/publish/schedule — reporting a failure', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthMock.mockResolvedValue('user-1');
+    requireMembershipMock.mockResolvedValue({ role: 'property_manager', communityId: 42 });
+    resolveEffectiveCommunityIdMock.mockImplementation((_r: unknown, id: number) => id);
+    requirePlanFeatureMock.mockResolvedValue(undefined);
+  });
+
+  it('reports a failed schedule and its reason, not an empty result', async () => {
+    /*
+     * A schedule that ran out of attempts must not simply vanish — an absent
+     * row is indistinguishable from "never scheduled", which is exactly the
+     * silence this feature exists to remove.
+     */
+    getPendingMock.mockResolvedValue({
+      id: 4,
+      status: 'failed',
+      scheduledFor: '2026-08-01T15:00:00.000Z',
+      notifySummary: null,
+      errorMessage: 'Nothing was published.',
+    });
+
+    const res = await GET(get());
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.schedule).toMatchObject({
+      status: 'failed',
+      errorMessage: 'Nothing was published.',
+    });
+  });
+
+  it('passes a running schedule through so the sheet can say so', async () => {
+    getPendingMock.mockResolvedValue({
+      id: 5,
+      status: 'running',
+      scheduledFor: '2026-08-01T15:00:00.000Z',
+      notifySummary: null,
+      errorMessage: null,
+    });
+
+    const res = await GET(get());
+
+    expect((await res.json()).data.schedule.status).toBe('running');
   });
 });
