@@ -15,6 +15,8 @@ interface EditableAnnouncement {
   body: string;
   audience: 'all' | 'owners_only' | 'board_only' | 'tenants_only';
   isPinned: boolean;
+  /** ISO-8601, or null when the announcement has no expiry. */
+  expiresAt?: string | null;
 }
 
 interface AnnouncementAuthoringFormProps {
@@ -74,6 +76,10 @@ export function AnnouncementAuthoringForm({
               body: announcement.body,
               audience: announcement.audience,
               isPinned: announcement.isPinned,
+              // Carried through explicitly. Omitting it would make every EDIT
+              // silently clear the expiry, because the composer would fall back
+              // to its "no expiry" default and then submit that as the value.
+              expiresAt: announcement.expiresAt ?? null,
             }
           : undefined
       }
