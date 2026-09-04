@@ -101,6 +101,26 @@ export const EMPTY_STATE_CONFIGS = {
     description: "All signature requests have been completed.",
     icon: "check",
   },
+  no_esign_requests: {
+    title: "Send your first document for signature",
+    description:
+      "Pick a template or upload a PDF, add who signs it, and PropertyPro tracks every signature and reminder for you.",
+    actionLabel: "Send Document",
+    icon: "file-text",
+  },
+  no_esign_waiting: {
+    title: "Nobody is holding anything up",
+    description:
+      "Every signature on an open request is in. New requests appear here the moment you send one.",
+    icon: "check",
+  },
+  no_esign_templates: {
+    title: "Build your signing templates",
+    description:
+      "Save a document with its signature fields once, then send it as often as you need.",
+    actionLabel: "Create Template",
+    icon: "file-text",
+  },
   no_board_polls: {
     title: "No active polls yet",
     description:

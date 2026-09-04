@@ -150,7 +150,7 @@ export function TemplateDetailClient({
   const handleArchive = useCallback(async () => {
     if (!confirm('Are you sure you want to archive this template?')) return;
     await archiveMutation.mutateAsync(templateId);
-    router.push(`/esign/templates?communityId=${communityId}`);
+    router.push(`/esign?view=templates&communityId=${communityId}`);
   }, [archiveMutation, templateId, communityId, router]);
 
   const handleClone = useCallback(async () => {
@@ -158,7 +158,7 @@ export function TemplateDetailClient({
     await cloneMutation.mutateAsync({ templateId, name: cloneName.trim() });
     setShowCloneDialog(false);
     setCloneName('');
-    router.push(`/esign/templates?communityId=${communityId}`);
+    router.push(`/esign?view=templates&communityId=${communityId}`);
   }, [cloneMutation, templateId, cloneName, communityId, router]);
 
   // -----------------------------------------------------------------------
@@ -180,7 +180,7 @@ export function TemplateDetailClient({
           {error?.message ?? 'Template not found'}
         </p>
         <Link
-          href={`/esign/templates?communityId=${communityId}`}
+          href={`/esign?view=templates&communityId=${communityId}`}
           className="mt-4 inline-flex items-center gap-1 text-sm text-[var(--interactive-primary)] hover:underline"
         >
           <ChevronLeft className="size-4" />

@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ESIGN_URGENT_WINDOW_DAYS,
   canRemind,
+  canShareLink,
   countByStatus,
   daysLeft,
   describeExpiry,
@@ -158,6 +159,29 @@ describe('isOpenSigner', () => {
     // Reading the signer alone would report work that can no longer be done.
     const expired = request({ effectiveStatus: 'expired', expiresAt: at(-1) });
     expect(isOpenSigner(expired, signer({ status: 'pending' }))).toBe(false);
+  });
+});
+
+describe('canShareLink', () => {
+  it('offers the link to an open, unblocked signer who has one', () => {
+    expect(canShareLink(request(), signer())).toBe(true);
+    // Still true at the reminder cap — running out of reminders does not stop
+    // you handing someone the link yourself.
+    expect(canShareLink(request(), signer({ reminderCount: 3 }))).toBe(true);
+  });
+
+  it('withholds it from a signer whose turn has not come', () => {
+    // The signing page refuses a blocked signer, so offering the URL would be
+    // handing over something that does not work.
+    const first = signer({ id: 1, sortOrder: 0 });
+    const second = signer({ id: 2, sortOrder: 1 });
+    const r = request({ signingOrder: 'sequential', signers: [first, second] });
+    expect(canShareLink(r, second)).toBe(false);
+  });
+
+  it('withholds it when there is no link, or the request is closed', () => {
+    expect(canShareLink(request(), signer({ slug: null }))).toBe(false);
+    expect(canShareLink(request({ effectiveStatus: 'expired' }), signer())).toBe(false);
   });
 });
 

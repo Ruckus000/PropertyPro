@@ -59,3 +59,24 @@ export const EVENT_ICONS: Record<string, typeof Clock> = {
   verified: CheckCircle2,
   downloaded: Download,
 };
+
+/**
+ * Look up a status safely.
+ *
+ * `ESIGN_STATUS_DISPLAY` is built with `Object.fromEntries`, so it inherits
+ * from `Object.prototype`. Every call site reads it as
+ * `ESIGN_STATUS_DISPLAY[status] ?? DEFAULT` — and for a status of
+ * `'constructor'`, `'toString'` or `'valueOf'` that lookup returns a truthy
+ * INHERITED value, `??` never fires, `config.icon` is undefined, and rendering
+ * `<Icon />` throws "Element type is invalid", blanking the subtree.
+ *
+ * `status` is a bare `string` off the API, and the signer row is about to
+ * become a third caller. The same hazard was already fixed in
+ * `packages/ui/src/constants/status.ts`; this mirrors it.
+ */
+export function esignStatusDisplay(status: string): EsignStatusConfigEntry {
+  const own = Object.prototype.hasOwnProperty.call(ESIGN_STATUS_DISPLAY, status)
+    ? ESIGN_STATUS_DISPLAY[status]
+    : undefined;
+  return own ?? (ESIGN_STATUS_DISPLAY['pending'] as EsignStatusConfigEntry);
+}

@@ -23,6 +23,8 @@ import { ESIGN_MAX_REMINDERS, type EsignSubmissionStatus } from '@propertypro/sh
 
 export interface EsignRequestSigner {
   id: number;
+  /** Set when the signer is a member; null for an external party. */
+  userId: string | null;
   name: string | null;
   email: string;
   role: string;
@@ -140,14 +142,25 @@ export function isOpenSigner(request: EsignRequest, signer: EsignRequestSigner):
   return signer.status === 'pending' || signer.status === 'opened';
 }
 
-/** Every gate `sendReminder` checks, in the same order, so the button cannot lie. */
-export function canRemind(request: EsignRequest, signer: EsignRequestSigner): boolean {
+/**
+ * There is a link, and handing it over would do something.
+ *
+ * Separate from `canRemind` because the two differ by exactly one clause, and
+ * `submission-detail.tsx` computed them as two overlapping inline predicates —
+ * which is how you end up offering Copy link to a signer whose turn has not
+ * come, on a URL the signing page then refuses.
+ */
+export function canShareLink(request: EsignRequest, signer: EsignRequestSigner): boolean {
   return (
     isOpenSigner(request, signer) &&
     signer.slug != null &&
-    signer.reminderCount < ESIGN_MAX_REMINDERS &&
     findBlockingPriorSigner(request, signer) === null
   );
+}
+
+/** Every gate `sendReminder` checks, so the button cannot promise what the API refuses. */
+export function canRemind(request: EsignRequest, signer: EsignRequestSigner): boolean {
+  return canShareLink(request, signer) && signer.reminderCount < ESIGN_MAX_REMINDERS;
 }
 
 export interface OutstandingSigner {

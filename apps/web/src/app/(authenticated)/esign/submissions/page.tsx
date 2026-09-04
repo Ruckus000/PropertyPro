@@ -1,56 +1,38 @@
+// breadcrumbs:exempt — redirect-only page
 /**
- * E-Sign Submissions List — displays all e-sign submissions for the community.
+ * The submissions list is the E-Sign screen's Requests view.
  *
- * Route: /esign/submissions?communityId=X
- * Auth: admin roles only + hasEsign feature gate.
+ * This route rendered a second copy of the same list under its own
+ * `PageHeader`, and nothing in the app linked to it. It stays as a redirect
+ * rather than being deleted because `build-auto-trail` emits a linked crumb for
+ * every path segment, so `/esign/submissions/[id]` and `/esign/submissions/new`
+ * both render a "Submissions" crumb pointing here.
+ *
+ * Route: /esign/submissions?communityId=X  →  /esign?view=requests&communityId=X
  */
 import { redirect } from 'next/navigation';
-import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
-import { SubmissionList } from '@/components/esign/submission-list';
-import { FeatureGate } from '@/components/billing/feature-gate';
-import { PageHeader } from '@/components/shared/page-header';
+import { headers } from 'next/headers';
+import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 
 interface PageProps {
-  searchParams: Promise<SearchParams>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function EsignSubmissionsPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const rawId = Number(params['communityId']);
+  const [resolvedSearchParams, requestHeaders] = await Promise.all([
+    searchParams,
+    headers(),
+  ]);
 
-  if (!Number.isInteger(rawId) || rawId <= 0) {
+  const context = resolveCommunityContext({
+    searchParams: toUrlSearchParams(resolvedSearchParams),
+    host: requestHeaders.get('host'),
+  });
+
+  if (!context.communityId) {
     redirect('/dashboard?reason=invalid-selection');
   }
 
-  const communityId = rawId;
-  let userId: string;
-
-  try {
-    userId = await requireAuthenticatedUserId();
-  } catch {
-    redirect('/auth/login');
-  }
-
-  const membership = await requireCommunityMembership(communityId, userId);
-
-  const typeFeatures = getFeaturesForCommunity(membership.communityType);
-  if (!typeFeatures.hasEsign) {
-    redirect('/dashboard?reason=feature-not-available');
-  }
-
-  if (!isAdminRole(membership.role)) {
-    redirect('/dashboard?reason=insufficient-permissions');
-  }
-
-  return (
-    <FeatureGate feature="hasEsign" communityId={communityId}>
-    <div>
-      <PageHeader title="E-Sign Submissions" />
-      <SubmissionList communityId={communityId} />
-    </div>
-    </FeatureGate>
-  );
+  redirect(`/esign?view=requests&communityId=${context.communityId}`);
 }
