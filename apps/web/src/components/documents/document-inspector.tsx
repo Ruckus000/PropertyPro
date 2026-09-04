@@ -10,15 +10,14 @@
  * document it applies to rather than in a row the eye has already left.
  */
 
-import { Download, Globe, Lock, Trash2 } from 'lucide-react';
+import { Download, Globe, Lock, RotateCcw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { useDeleteDocument, useSetDocumentPublicAccess } from '@/hooks/use-documents';
+import { useDeleteDocument } from '@/hooks/use-documents';
 import type { ChecklistRow, DocumentRow, DocumentState } from '@/lib/documents/document-state';
 import { DocumentVersionHistory } from './document-version-history';
 import { DocumentViewer } from './document-viewer';
-import { PublishDocumentDialog } from './publish-document-dialog';
 
 type InspectorMode = 'viewer' | 'versions';
 
@@ -30,8 +29,11 @@ interface DocumentInspectorProps {
   canManage: boolean;
   /** Whether the statutory line is meaningful — see DocumentsTable. */
   showStatutory: boolean;
-  /** Decides whether publishing needs a redaction attestation. */
-  categoryName: string | null;
+  /** This record is soft-deleted — the board's Deleted column selected it. */
+  isDeleted?: boolean;
+  /** The board and this panel share one review dialog, owned by the screen. */
+  onRequestPublish: (document: DocumentRow, publishing: boolean) => void;
+  onRestore: (document: DocumentRow) => void;
   onDeleted: (document: DocumentRow) => void;
   onClose: () => void;
 }
@@ -43,15 +45,15 @@ export function DocumentInspector({
   state,
   canManage,
   showStatutory,
-  categoryName,
+  isDeleted = false,
+  onRequestPublish,
+  onRestore,
   onDeleted,
   onClose,
 }: DocumentInspectorProps) {
   const [mode, setMode] = useState<InspectorMode>('viewer');
   const [preview, setPreview] = useState<DocumentRow | null>(document);
   const deleteMutation = useDeleteDocument(communityId);
-  const publicAccessMutation = useSetDocumentPublicAccess(communityId);
-  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   // Selecting a different record resets the pane; without this, opening a
   // second document while the version history is open shows the new title
@@ -59,11 +61,6 @@ export function DocumentInspector({
   useEffect(() => {
     setMode('viewer');
     setPreview(document);
-    setPublishDialogOpen(false);
-    publicAccessMutation.reset();
-    // `publicAccessMutation` is a stable TanStack object; including it would
-    // re-run this on every mutation state change and close the dialog mid-flight.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [document]);
 
   const handleDownload = useCallback(() => {
@@ -130,11 +127,17 @@ export function DocumentInspector({
           <Download className="size-4" aria-hidden="true" />
           Download
         </Button>
-        {canManage && showStatutory && (
+        {canManage && isDeleted && (
+          <Button variant="outline" size="sm" onClick={() => onRestore(document)}>
+            <RotateCcw className="size-4" aria-hidden="true" />
+            Restore
+          </Button>
+        )}
+        {canManage && showStatutory && !isDeleted && (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setPublishDialogOpen(true)}
+            onClick={() => onRequestPublish(document, !isPublic)}
           >
             {isPublic ? (
               <Lock className="size-4" aria-hidden="true" />
@@ -144,7 +147,7 @@ export function DocumentInspector({
             {isPublic ? 'Remove from public site' : 'Put on public site'}
           </Button>
         )}
-        {canManage && (
+        {canManage && !isDeleted && (
           <Button
             variant="ghost"
             size="sm"
@@ -173,36 +176,6 @@ export function DocumentInspector({
           onViewVersions={() => setMode('versions')}
         />
       )}
-
-      <PublishDocumentDialog
-        open={publishDialogOpen}
-        publishing={!isPublic}
-        documentTitle={document.title}
-        categoryName={categoryName}
-        requirementTitle={requirement?.title ?? null}
-        isPending={publicAccessMutation.isPending}
-        errorMessage={
-          publicAccessMutation.error instanceof Error ? publicAccessMutation.error.message : null
-        }
-        onCancel={() => setPublishDialogOpen(false)}
-        onConfirm={(redactionAttested) => {
-          publicAccessMutation.mutate(
-            {
-              id: document.id,
-              publicAccess: !isPublic,
-              ...(redactionAttested === undefined ? {} : { redactionAttested }),
-            },
-            {
-              onSuccess: () => {
-                setPublishDialogOpen(false);
-                toast.success(
-                  isPublic ? 'Removed from the public site.' : 'Now on the public site.',
-                );
-              },
-            },
-          );
-        }}
-      />
 
       {mode === 'versions' && (
         <DocumentVersionHistory

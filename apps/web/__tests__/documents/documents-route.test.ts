@@ -31,6 +31,8 @@ const {
   softDeleteDocumentMock,
   getDocumentForPublishAuditMock,
   setDocumentPublicAccessMock,
+  paginateDeletedDocumentsMock,
+  restoreDocumentMock,
   enforcePublishRedactionAttestationMock,
   tryAutoCompleteMock,
   logAuditEventMock,
@@ -52,6 +54,8 @@ const {
   softDeleteDocumentMock: vi.fn(),
   getDocumentForPublishAuditMock: vi.fn(),
   setDocumentPublicAccessMock: vi.fn(),
+  paginateDeletedDocumentsMock: vi.fn(),
+  restoreDocumentMock: vi.fn(),
   enforcePublishRedactionAttestationMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
   logAuditEventMock: vi.fn(),
@@ -107,6 +111,8 @@ vi.mock('@/lib/services/documents-service', () => ({
   softDeleteDocument: softDeleteDocumentMock,
   getDocumentForPublishAudit: getDocumentForPublishAuditMock,
   setDocumentPublicAccess: setDocumentPublicAccessMock,
+  paginateDeletedDocuments: paginateDeletedDocumentsMock,
+  restoreDocument: restoreDocumentMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -651,5 +657,116 @@ describe('PATCH /api/v1/documents - public_access', () => {
 
     expect(response.status).toBe(400);
     expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('the deleted column, and the way back', () => {
+  const DELETED_ROW = { ...DOCUMENT_ROW, id: 9, deletedAt: new Date('2026-06-01T00:00:00.000Z') };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-admin');
+    resolveEffectiveCommunityIdMock.mockReturnValue(42);
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
+    requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
+    requirePermissionMock.mockReturnValue(undefined);
+    requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
+    paginateDeletedDocumentsMock.mockResolvedValue({
+      data: [DELETED_ROW],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+    restoreDocumentMock.mockResolvedValue([{ id: 9 }]);
+    logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  it('lists soft-deleted documents only when asked', async () => {
+    const response = await GET(
+      new NextRequest('http://localhost/api/v1/documents?communityId=42&deleted=true'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(paginateDeletedDocumentsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ communityId: 42 }),
+    );
+    // The per-role read filter is NOT the gate here.
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+    expect(requirePermissionMock).toHaveBeenCalledWith(MEMBERSHIP, 'documents', 'write');
+  });
+
+  it('refuses a reader who cannot write', async () => {
+    // A resident can read documents. A deleted one is management's to see.
+    requirePermissionMock.mockImplementation(() => {
+      throw new ForbiddenError('Insufficient permissions');
+    });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/v1/documents?communityId=42&deleted=true'),
+    );
+
+    expect(response.status).toBe(403);
+    expect(paginateDeletedDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('leaves the ordinary list untouched', async () => {
+    paginateAccessibleDocumentsMock.mockResolvedValue({
+      data: [DOCUMENT_ROW],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+
+    await GET(new NextRequest('http://localhost/api/v1/documents?communityId=42'));
+
+    expect(paginateAccessibleDocumentsMock).toHaveBeenCalled();
+    expect(paginateDeletedDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('restores a document and records it', async () => {
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/v1/documents?id=9&communityId=42', {
+        method: 'PATCH',
+        body: JSON.stringify({ restore: true }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ data: { id: 9, restored: true } });
+    expect(restoreDocumentMock).toHaveBeenCalledWith(42, 9);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        oldValues: { deleted: true },
+        newValues: { deleted: false },
+      }),
+    );
+    // Restoring is not publishing.
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a body that tries to publish and restore at once', async () => {
+    // Two lifecycle changes in one unreviewable step is what the refine stops.
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/v1/documents?id=9&communityId=42', {
+        method: 'PATCH',
+        body: JSON.stringify({ restore: true, publicAccess: true }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(restoreDocumentMock).not.toHaveBeenCalled();
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('404s a restore for a document that is not deleted', async () => {
+    restoreDocumentMock.mockResolvedValue([]);
+
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/v1/documents?id=9&communityId=42', {
+        method: 'PATCH',
+        body: JSON.stringify({ restore: true }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(response.status).toBe(400);
   });
 });

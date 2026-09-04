@@ -18,7 +18,7 @@ import {
   paginate,
   type DocumentAccessContext,
 } from '@propertypro/db';
-import { eq, inArray } from '@propertypro/db/filters';
+import { and, eq, inArray, isNotNull } from '@propertypro/db/filters';
 
 /**
  * Resolve `deleted_at` for a specific set of document ids, INCLUDING
@@ -181,5 +181,44 @@ export async function setDocumentPublicAccess(
     documents,
     { publicAccess },
     eq(documents.id, documentId),
+  )) as unknown as Array<Record<string, unknown>>;
+}
+
+/**
+ * Soft-deleted documents, for the board's Deleted column.
+ *
+ * A separate path rather than a flag on `buildAccessibleDocumentsFilter`: that
+ * filter is the per-role access rule every other read depends on, and widening
+ * it to sometimes admit deleted rows would put "can this actor see it" and
+ * "is it deleted" in one predicate. Here the two stay apart — the ROUTE gates
+ * this on `documents:write`, and this query only ever returns deleted rows.
+ */
+export async function paginateDeletedDocuments(params: {
+  communityId: number;
+  cursor?: string;
+  pageSize?: number;
+}) {
+  const scoped = createScopedClient(params.communityId);
+  return paginate(
+    scoped,
+    documents,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where: isNotNull(documents.deletedAt) },
+  );
+}
+
+/**
+ * Undo a soft delete. Returns the affected rows so the caller can tell a no-op
+ * (already live, or no such row in this community) from a success.
+ */
+export async function restoreDocument(
+  communityId: number,
+  documentId: number,
+): Promise<Record<string, unknown>[]> {
+  const scoped = createScopedClient(communityId);
+  return (await scoped.update(
+    documents,
+    { deletedAt: null },
+    and(eq(documents.id, documentId), isNotNull(documents.deletedAt)),
   )) as unknown as Array<Record<string, unknown>>;
 }

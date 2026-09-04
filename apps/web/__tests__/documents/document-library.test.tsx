@@ -9,11 +9,21 @@
  * Firing it anyway 403s the screen for those viewers.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const { useComplianceChecklistMock } = vi.hoisted(() => ({
   useComplianceChecklistMock: vi.fn(() => ({ data: [], isLoading: false, error: null })),
+}));
+
+let searchParams = new URLSearchParams();
+const routerReplace = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
+  usePathname: () => '/communities/9/documents',
+  useSearchParams: () => searchParams,
 }));
 
 vi.mock('@/hooks/use-compliance-checklist', () => ({
@@ -27,6 +37,8 @@ vi.mock('@/hooks/use-document-categories', () => ({
 
 vi.mock('@/hooks/use-documents', () => ({
   useDocuments: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
+  useDeletedDocuments: () => ({ data: [], isLoading: false, error: null }),
+  useRestoreDocument: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useDocumentsInvalidator: () => vi.fn(),
   useDeleteDocument: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
   useSetDocumentPublicAccess: () => ({
@@ -90,6 +102,14 @@ vi.mock('../../src/components/documents/documents-table', () => ({
       </button>
     </div>
   ),
+}));
+
+vi.mock('../../src/components/documents/documents-board', () => ({
+  DocumentsBoard: () => <div>board view</div>,
+}));
+
+vi.mock('../../src/components/documents/documents-timeline', () => ({
+  DocumentsTimeline: () => <div>timeline view</div>,
 }));
 
 vi.mock('../../src/components/documents/document-viewer', () => ({
@@ -200,5 +220,59 @@ describe('DocumentLibrary', () => {
 
     expect(screen.queryByText(/statutory records/i)).toBeNull();
     expect(useComplianceChecklistMock).toHaveBeenCalledWith(9, { enabled: false });
+  });
+});
+
+describe('the view switcher', () => {
+  beforeEach(() => {
+    searchParams = new URLSearchParams();
+    routerReplace.mockClear();
+  });
+
+  it('offers exactly the three readings', () => {
+    renderLibrary();
+    expect(screen.getByRole('tab', { name: 'List' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Board' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Timeline' })).toBeDefined();
+  });
+
+  it('opens on List, and treats anything unknown as List', () => {
+    const { unmount } = renderLibrary();
+    expect(screen.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
+    unmount();
+
+    searchParams = new URLSearchParams('view=zzz');
+    renderLibrary();
+    expect(screen.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('mounts only the view the URL names', () => {
+    searchParams = new URLSearchParams('view=board');
+    const { unmount } = renderLibrary();
+    expect(screen.getByText('board view')).toBeDefined();
+    expect(screen.queryByText('timeline view')).toBeNull();
+    unmount();
+
+    searchParams = new URLSearchParams('view=timeline');
+    renderLibrary();
+    expect(screen.getByText('timeline view')).toBeDefined();
+    expect(screen.queryByText('board view')).toBeNull();
+  });
+
+  it('writes the view with replace, keeping the other params', async () => {
+    // `push` would make Back walk every view the user glanced at instead of
+    // leaving the page. Radix activates a tab on mousedown/focus, not on a bare
+    // click event, so this needs the full pointer sequence userEvent sends.
+    const user = userEvent.setup();
+    searchParams = new URLSearchParams('q=budget');
+    renderLibrary();
+
+    await user.click(screen.getByRole('tab', { name: 'Board' }));
+
+    expect(routerReplace).toHaveBeenCalled();
+    const [url, opts] = routerReplace.mock.calls.at(-1)!;
+    expect(url).toContain('view=board');
+    expect(url).toContain('q=budget');
+    expect(opts).toEqual({ scroll: false });
   });
 });

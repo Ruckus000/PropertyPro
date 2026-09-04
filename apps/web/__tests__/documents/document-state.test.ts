@@ -6,14 +6,17 @@
  * of which do not. Everything the screen says about a row is derived here, with
  * no DOM and no network, so the rules can be tested directly.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  boardColumns,
+  coerceDocumentsView,
   coverageFacts,
   documentState,
   filterRows,
   linkedRequirementsByDocumentId,
   mergeDocumentsAndGaps,
   owedToPublic,
+  timelineRows,
   unlinkedDocuments,
   type ChecklistRow,
   type DocumentRow,
@@ -201,5 +204,152 @@ describe('linkedRequirementsByDocumentId', () => {
 
     expect(map.size).toBe(1);
     expect(map.get(5)?.id).toBe(100);
+  });
+});
+
+describe('coerceDocumentsView', () => {
+  it('offers the three readings and falls back to the historical one', () => {
+    expect(coerceDocumentsView('board')).toBe('board');
+    expect(coerceDocumentsView('timeline')).toBe('timeline');
+    expect(coerceDocumentsView('list')).toBe('list');
+    // The screen has always opened on a list; an old link must not change.
+    expect(coerceDocumentsView(null)).toBe('list');
+    expect(coerceDocumentsView('zzz')).toBe('list');
+  });
+});
+
+describe('boardColumns', () => {
+  it('lays the statutory lifecycle out as four columns', () => {
+    const rows = mergeDocumentsAndGaps(
+      [doc({ id: 1, publicAccess: true }), doc({ id: 2, publicAccess: false })],
+      [item({ id: 100, documentId: 1 }), item({ id: 101, documentId: 2 }), item({ id: 102 })],
+    );
+
+    const columns = boardColumns(rows, [doc({ id: 9, title: 'Old minutes' })]);
+
+    expect(columns.map((c) => c.id)).toEqual(['gap', 'private', 'public', 'deleted']);
+    expect(columns[0]?.rows).toHaveLength(1);
+    expect(columns[1]?.rows.map((r) => r.id)).toEqual([2]);
+    expect(columns[2]?.rows.map((r) => r.id)).toEqual([1]);
+    expect(columns[3]?.rows.map((r) => r.id)).toEqual([9]);
+  });
+
+  it('keeps deleted documents out of the live columns', () => {
+    // They arrive on their own channel — the list endpoint filters them out of
+    // every other view, so a deleted file must never appear as "not public".
+    const columns = boardColumns([], [doc({ id: 9 })]);
+    expect(columns[1]?.rows).toHaveLength(0);
+    expect(columns[3]?.rows).toHaveLength(1);
+  });
+});
+
+describe('timelineRows', () => {
+  const NOW = new Date('2026-08-15T00:00:00.000Z');
+
+  it('places a record on its deadline month', () => {
+    const rows = timelineRows(
+      [],
+      [item({ deadline: '2026-03-10T00:00:00.000Z' })],
+      NOW,
+    );
+    expect(rows[0]?.monthIndex).toBe(2);
+  });
+
+  it('falls back to when the document was posted', () => {
+    const rows = timelineRows(
+      [doc({ id: 5 })],
+      [item({ documentId: 5, deadline: null, documentPostedAt: '2026-05-02T00:00:00.000Z' })],
+      NOW,
+    );
+    expect(rows[0]?.monthIndex).toBe(4);
+  });
+
+  it('runs an overdue exposure from its own month to today', () => {
+    // The bar is the argument: an obligation owed in March and still open in
+    // August reads as a span, not a dot in the past.
+    const rows = timelineRows(
+      [],
+      [item({ deadline: '2026-03-10T00:00:00.000Z', status: 'overdue' })],
+      NOW,
+    );
+    expect(rows[0]?.bar).toEqual({ from: 2, to: 7 });
+    // A gap past its deadline is the only thing that reads as already missed.
+    expect(rows[0]?.tone).toBe('bad');
+    expect(rows[0]?.label).toBe('no file');
+  });
+
+  it('separates a gap that is merely open from one already missed', () => {
+    const notYet = timelineRows([], [item({ deadline: '2026-11-01T00:00:00.000Z' })], NOW);
+    expect(notYet[0]?.tone).toBe('none');
+  });
+
+  it('draws no bar for a record that is satisfied', () => {
+    const rows = timelineRows(
+      [doc({ id: 5, publicAccess: true })],
+      [item({ documentId: 5, deadline: '2026-03-10T00:00:00.000Z', status: 'satisfied' })],
+      NOW,
+    );
+    expect(rows[0]?.bar).toBeNull();
+    expect(rows[0]?.tone).toBe('ok');
+  });
+
+  it('marks a linked but unpublished record as owed, not overdue', () => {
+    const rows = timelineRows(
+      [doc({ id: 5, publicAccess: false })],
+      [item({ documentId: 5, deadline: '2026-03-10T00:00:00.000Z', status: 'satisfied' })],
+      NOW,
+    );
+    expect(rows[0]?.tone).toBe('warn');
+    expect(rows[0]?.label).toBe('not public');
+  });
+
+  it('reads the month in UTC, in every timezone', () => {
+    /**
+     * The sort test above catches a local-calendar read — but ONLY outside UTC,
+     * and localci runs `TZ=UTC`, where `getMonth()` and `getUTCMonth()` are the
+     * same call. Measured: injecting `getMonth()` reddens that test under EDT
+     * and passes under TZ=UTC. So it is vacuous exactly where CI runs it.
+     *
+     * This asserts the choice itself, which is the only thing that can fail in
+     * any timezone: a deadline is a UTC timestamp, and midnight UTC on the 1st
+     * belongs to that month, not the previous one.
+     */
+    const localMonth = vi.spyOn(Date.prototype, 'getMonth');
+    const localYear = vi.spyOn(Date.prototype, 'getFullYear');
+    try {
+      timelineRows(
+        [doc({ id: 5 })],
+        [item({ documentId: 5, deadline: '2026-02-01T00:00:00.000Z' })],
+        NOW,
+      );
+      expect(localMonth).not.toHaveBeenCalled();
+      expect(localYear).not.toHaveBeenCalled();
+    } finally {
+      localMonth.mockRestore();
+      localYear.mockRestore();
+    }
+  });
+
+  it('clamps a record from another year to the edge rather than dropping it', () => {
+    const older = timelineRows([], [item({ deadline: '2024-06-01T00:00:00.000Z' })], NOW);
+    const later = timelineRows([], [item({ deadline: '2027-06-01T00:00:00.000Z' })], NOW);
+    expect(older[0]?.monthIndex).toBe(0);
+    expect(later[0]?.monthIndex).toBe(11);
+  });
+
+  it('leaves out requirements the community does not have', () => {
+    expect(timelineRows([], [item({ isApplicable: false })], NOW)).toHaveLength(0);
+  });
+
+  it('sorts by month so the year reads left to right', () => {
+    const rows = timelineRows(
+      [],
+      [
+        item({ id: 1, deadline: '2026-09-01T00:00:00.000Z' }),
+        item({ id: 2, deadline: '2026-02-01T00:00:00.000Z' }),
+      ],
+      NOW,
+    );
+    expect(rows.map((r) => r.monthIndex)).toEqual([1, 8]);
   });
 });

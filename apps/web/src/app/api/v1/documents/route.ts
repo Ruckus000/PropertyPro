@@ -45,6 +45,8 @@ import {
   getDocumentForDeletionAudit,
   getDocumentForPublishAudit,
   paginateAccessibleDocuments,
+  paginateDeletedDocuments,
+  restoreDocument,
   setDocumentPublicAccess,
   softDeleteDocument,
 } from '@/lib/services/documents-service';
@@ -66,6 +68,19 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(effectiveCommunityId, userId);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(effectiveCommunityId, membership);
+
+    // The board's Deleted column. Gated on `documents:write` rather than the
+    // per-role read filter: a soft-deleted record is management's to see and
+    // put back, and it is deliberately absent from every other view.
+    if (query.deleted === 'true') {
+      requirePermission(membership, 'documents', 'write');
+      const deletedResult = await paginateDeletedDocuments({
+        communityId: effectiveCommunityId,
+        ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        ...(query.pageSize === undefined ? {} : { pageSize: query.pageSize }),
+      });
+      return { data: deletedResult.data, pagination: deletedResult.pagination };
+    }
 
     const result = await paginateAccessibleDocuments({
       filter: {
@@ -231,6 +246,23 @@ export const PATCH = withErrorHandler(
     requirePermission(membership, 'documents', 'write');
     await requireActiveSubscriptionForMutation(communityId);
 
+    if (body.restore) {
+      const restored = await restoreDocument(communityId, id);
+      if (restored.length === 0) {
+        throw new ValidationError('Document not found, or not deleted');
+      }
+      await logAuditEvent({
+        userId,
+        action: 'update',
+        resourceType: 'document',
+        resourceId: String(id),
+        communityId,
+        oldValues: { deleted: true },
+        newValues: { deleted: false },
+      });
+      return { id, restored: true as const };
+    }
+
     const existing = await getDocumentForPublishAudit(communityId, id);
     if (!existing) {
       throw new ValidationError('Document not found');
@@ -239,7 +271,7 @@ export const PATCH = withErrorHandler(
     // Publishing only. Removing a document from the public site reduces
     // disclosure, so it carries no attestation — gating it would strand a
     // record a board wants pulled.
-    if (body.publicAccess) {
+    if (body.publicAccess === true) {
       await enforcePublishRedactionAttestation({
         communityId,
         // A null category is treated as sensitive by
@@ -252,7 +284,8 @@ export const PATCH = withErrorHandler(
       });
     }
 
-    const updated = await setDocumentPublicAccess(communityId, id, body.publicAccess);
+    const publicAccess = body.publicAccess === true;
+    const updated = await setDocumentPublicAccess(communityId, id, publicAccess);
     if (updated.length === 0) {
       throw new ValidationError('Failed to update document');
     }
@@ -264,9 +297,9 @@ export const PATCH = withErrorHandler(
       resourceId: String(id),
       communityId,
       oldValues: { publicAccess: existing.publicAccess },
-      newValues: { publicAccess: body.publicAccess },
+      newValues: { publicAccess },
     });
 
-    return { id, publicAccess: body.publicAccess };
+    return { id, publicAccess };
   }),
 );
