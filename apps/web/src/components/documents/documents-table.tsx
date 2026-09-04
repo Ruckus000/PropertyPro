@@ -88,6 +88,9 @@ export function DocumentsTable({
       {
         id: 'record',
         header: 'Record',
+        // The title column absorbs whatever the ladder frees, and truncates
+        // rather than widening the table.
+        meta: { absorbSlack: true },
         cell: ({ row }) => {
           const item = row.original;
 
@@ -120,15 +123,17 @@ export function DocumentsTable({
                   type="button"
                   onClick={() => onSelectDocument(document)}
                   aria-pressed={selectedId === document.id}
-                  className="truncate text-left font-medium text-content hover:text-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+                  className="block max-w-full truncate text-left font-medium text-content hover:text-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
                 >
                   {document.title}
                 </button>
                 <p className="flex items-center gap-2 text-xs text-content-secondary">
-                  <span className="truncate">
+                  <span className="min-w-0 truncate">
                     {document.fileName} · {formatBytes(document.fileSize)}
                   </span>
-                  <ExtractionStatusBadge status={document.extractionStatus} />
+                  <span className="shrink-0">
+                    <ExtractionStatusBadge status={document.extractionStatus} />
+                  </span>
                 </p>
               </div>
             </div>
@@ -138,6 +143,9 @@ export function DocumentsTable({
       {
         id: 'category',
         header: 'Category',
+        // The pills above the table already filter by category, so this is the
+        // first column a narrow screen can afford to lose.
+        meta: { hideBelow: 'md' },
         cell: ({ row }) => {
           const item = row.original;
           const name =
@@ -155,6 +163,9 @@ export function DocumentsTable({
       {
         id: 'requirement',
         header: 'Statutory record',
+        // Survives one step longer than Category: it is the link that makes a
+        // document evidence rather than a file.
+        meta: { hideBelow: 'sm' },
         cell: ({ row }) => {
           // Both row kinds carry `requirement`; only a document's can be null.
           const { requirement } = row.original;
@@ -197,6 +208,7 @@ export function DocumentsTable({
     const updated: ColumnDef<LibraryRow, unknown> = {
       id: 'updated',
       header: 'Added',
+      meta: { hideBelow: 'md' },
       cell: ({ row }) => {
         const item = row.original;
         return (
