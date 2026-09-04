@@ -12,6 +12,7 @@ import { and, desc, eq, inArray, isNull, lt, notInArray, or, sql, type SQL } fro
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { applyDemoAnnouncementProvenancePolicy } from './demo-announcement-provenance';
+import { announcementNotExpiredWhere, isAnnouncementExpired } from './expiry';
 
 export type AnnouncementAudience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
@@ -271,6 +272,15 @@ async function buildVisibleAnnouncementsWhere(
     clauses.push(isNull(announcements.archivedAt));
   }
 
+  // Expiry rides with archival: both hide a row from the default feed, and an
+  // admin asking to see archived rows is asking to see what is no longer shown
+  // — which includes what has expired. Keeping them on one flag avoids a
+  // second axis whose only distinct combination ("show archived but hide
+  // expired") nobody has asked for.
+  if (options.includeArchived !== true) {
+    clauses.push(announcementNotExpiredWhere());
+  }
+
   const audienceWhere = buildAnnouncementAudienceWhere(membership);
   if (audienceWhere) {
     clauses.push(audienceWhere);
@@ -381,6 +391,10 @@ export async function filterVisibleAnnouncements(
     }
 
     if (!includeArchived && announcement.archivedAt != null) {
+      return false;
+    }
+
+    if (!includeArchived && isAnnouncementExpired(announcement)) {
       return false;
     }
 

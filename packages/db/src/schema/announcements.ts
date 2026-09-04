@@ -33,6 +33,18 @@ export const announcements = pgTable('announcements', {
   isPinned: boolean('is_pinned').notNull().default(false),
   /** When non-null, the announcement is archived and hidden from the default feed */
   archivedAt: timestamp('archived_at', { withTimezone: true }),
+  /**
+   * When non-null, the announcement stops being shown at this instant.
+   *
+   * Distinct from `archivedAt`, which is a manual act already taken; this is a
+   * decision taken in advance about a moment that has not arrived. Both hide
+   * the row from the default feed, and they compose — an announcement can be
+   * archived by hand before it expires.
+   *
+   * Null means "no expiry", which is every pre-existing row and remains the
+   * default: seasonal notices opt IN to disappearing.
+   */
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
   /** The user who published the announcement */
   publishedBy: uuid('published_by')
     .notNull()

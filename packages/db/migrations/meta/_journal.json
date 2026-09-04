@@ -435,6 +435,13 @@
       "when": 1788457812986,
       "tag": "0063_esign_submission_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1788538299817,
+      "tag": "0064_announcement_expiry",
+      "breakpoints": true
     }
   ]
 }
