@@ -30,6 +30,10 @@ export function QuickFilterTabs({
           <button
             key={tab.value}
             type="button"
+            // Which filter is on was signalled by background colour alone —
+            // invisible to assistive tech, and `design.md` says status is never
+            // colour alone. Five screens share this component.
+            aria-pressed={isActive}
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-quick',
               isActive
