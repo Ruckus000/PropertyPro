@@ -10,6 +10,13 @@ of both apps as of `aabf9727`.
 Items **6–7 are the exception**: two Website Editor feature gaps promoted to blockers on
 2026-09-02. They are code, not config, and they are sequenced last for that reason.
 
+> **6 and 7 are in review as of 2026-09-04** — #1031 (notify on publish), #1032
+> (announcement expiry, migration `0064`), #1033 (scheduled publishing, migration `0065`).
+> The stack merges in that order, and **both migrations must be applied to production
+> before their PR merges** (expand-before-code; each is purely additive). The verify
+> commands in items 6–7 below still return nothing until they land — that is the point of
+> keeping them.
+
 The through-line is that all of these fail **silently**. None crashes anything; each
 degrades or no-ops while dashboards stay green. That is why they need a checklist rather
 than a bug tracker.
@@ -50,6 +57,11 @@ not proof that prod serves test keys. Either way it blocks:
 
 Check whether Vercel Production's `STRIPE_SECRET_KEY` is `sk_live_` or `sk_test_`. If it
 is live, the price-id re-seed below is **urgent**, not scheduled.
+
+> **This cannot be answered from outside.** Checked 2026-09-04: the publishable key is not
+> present in the served production bundle at all — Stripe.js only loads inside the checkout
+> flow, so the public pages carry no key to read. It is a dashboard check, not something a
+> script can settle.
 
 ### 1b. Then: the cutover is four surfaces, not one
 
@@ -174,7 +186,11 @@ curl -H "Authorization: Bearer $READINESS_CHECK_SECRET" \
 
 Point an uptime monitor at it: 200 `healthy` / 200 `degraded` / 503 `unhealthy`. Alert on
 `degraded`, not only on 503 — the whole point is that a missing secret keeps serving
-traffic. Add `/api/health` on both apps for plain liveness.
+traffic.
+
+> **Correction (2026-09-04):** an earlier version of this item said to *add* `/api/health`
+> on both apps. It already exists — `apps/web/src/app/api/health/route.ts` and the admin
+> equivalent. Only the polling is missing.
 
 **Expect `degraded` on the first run** until item 2 is done. That is the probe working.
 
@@ -191,7 +207,7 @@ onboard. Unlike items 1–5, these are engineering work.
 
 ## 6. Publishing the site notifies nobody
 
-**Status:** verified 2026-09-02 · **Owner:** engineering · **Source:** gap audit G-05
+**Status:** PR open 2026-09-04 (#1031) · **Owner:** engineering · **Source:** gap audit G-05
 
 A publish updates the public site and tells no one. Residents do not poll a website. The
 platform already holds the resident roster and a working email channel — DKIM and SPF are
@@ -220,7 +236,7 @@ delivery and unrelated. An unfiltered grep reads as a false positive and scores 
 
 ## 7. Nothing can be scheduled; only urgent notices expire
 
-**Status:** verified 2026-09-02 · **Owner:** engineering · **Source:** gap audit G-07
+**Status:** PRs open 2026-09-04 (#1032 expiry, #1033 scheduling) · **Owner:** engineering · **Source:** gap audit G-07
 
 Half shipped, and the missing half is the half on a statutory clock. Urgent notices carry
 an `expiresAt` — it shipped alongside the mobile fast path — so a pool-closure notice can
