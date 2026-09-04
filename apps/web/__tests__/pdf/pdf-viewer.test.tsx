@@ -236,4 +236,96 @@ describe('PdfViewer', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     expect(captureExceptionMock).not.toHaveBeenCalled();
   });
+  describe('fitToWidth', () => {
+    /**
+     * A PDF page is rendered at its intrinsic point size — 612 CSS px for US
+     * Letter. On a 375px phone that is 237px wider than the viewport, so a third
+     * of the signing page's required fields sat off the right edge (measured on
+     * the seeded Proxy Designation Form: three of six fields at x 370-492).
+     *
+     * The rule is the design prototype's: scale down to fit, never up.
+     */
+    function stubClientWidth(width: number) {
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return width;
+        },
+      });
+    }
+
+    afterEach(() => {
+      // `vi.restoreAllMocks()` cannot undo a defineProperty, so the stub would
+      // otherwise leak into every later test in this file.
+      delete (HTMLElement.prototype as Partial<HTMLElement>).clientWidth;
+    });
+
+    /** The scale the canvas was actually rendered at. */
+    function renderedScale(page: PdfPageDouble): number {
+      const calls = page.getViewport.mock.calls as Array<[{ scale: number }]>;
+      return calls[calls.length - 1]![0].scale;
+    }
+
+    async function renderViewer(props: { fitToWidth?: boolean }) {
+      const page = createPdfPage();
+      const pdfjsModule = createPdfJsModule(Promise.resolve(createPdfDocument(page)));
+      __setPdfJsRuntimeImportForTests(async () => pdfjsModule);
+
+      render(
+        <PdfViewer
+          pdfUrl="https://storage.example.com/letter.pdf"
+          currentPage={0}
+          onPageChange={vi.fn()}
+          onDocumentLoad={vi.fn()}
+          scale={1}
+          {...props}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(page.render).toHaveBeenCalled();
+      });
+      return page;
+    }
+
+    it('scales a 612pt page down to a 311px container', async () => {
+      stubClientWidth(311);
+
+      const page = await renderViewer({ fitToWidth: true });
+
+      expect(renderedScale(page)).toBeCloseTo(311 / 612, 5);
+    });
+
+    it('never scales up when there is room to spare', async () => {
+      // A wider container must not magnify the page past its own resolution.
+      stubClientWidth(1400);
+
+      const page = await renderViewer({ fitToWidth: true });
+
+      expect(renderedScale(page)).toBe(1);
+    });
+
+    it('leaves the scale alone when fitToWidth is off', async () => {
+      // The template editor converts pixel drag deltas with the page's
+      // intrinsic width, so it must keep rendering at exactly `scale`.
+      stubClientWidth(311);
+
+      const page = await renderViewer({});
+
+      expect(renderedScale(page)).toBe(1);
+    });
+
+    it('re-fits when the window resizes', async () => {
+      stubClientWidth(311);
+      const page = await renderViewer({ fitToWidth: true });
+      expect(renderedScale(page)).toBeCloseTo(311 / 612, 5);
+
+      stubClientWidth(500);
+      fireEvent(window, new Event('resize'));
+
+      await waitFor(() => {
+        expect(renderedScale(page)).toBeCloseTo(500 / 612, 5);
+      });
+    });
+  });
 });

@@ -44,7 +44,18 @@ export interface PdfViewerProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   onDocumentLoad: (meta: DocumentMeta) => void;
+  /**
+   * Maximum render scale. With `fitToWidth` the page may render smaller.
+   */
   scale?: number;
+  /**
+   * Scale the page down when it is wider than the space available, never up.
+   *
+   * Off by default: callers that convert pixel drag deltas with the page's
+   * intrinsic width (the template field editor, via FieldOverlay) require the
+   * canvas to stay at exactly `scale`.
+   */
+  fitToWidth?: boolean;
   className?: string;
   children?: ReactNode;
 }
@@ -56,11 +67,13 @@ export function PdfViewer({
   onPageChange,
   onDocumentLoad,
   scale = 1,
+  fitToWidth = false,
   className,
   children,
 }: PdfViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fitRef = useRef<HTMLDivElement>(null);
   const loadAttemptRef = useRef(0);
   const renderTaskRef = useRef<ReturnType<
     Awaited<ReturnType<PDFDocumentProxy['getPage']>>['render']
@@ -74,6 +87,7 @@ export function PdfViewer({
     width: 0,
     height: 0,
   });
+  const [availableWidth, setAvailableWidth] = useState(0);
 
   const loadDocument = useCallback(async () => {
     if (!pdfUrl && !pdfData) {
@@ -152,6 +166,21 @@ export function PdfViewer({
   }, [loadDocument]);
 
   useEffect(() => {
+    if (!fitToWidth) return;
+    const el = fitRef.current;
+    if (!el) return;
+
+    const measure = () => setAvailableWidth(el.clientWidth);
+    measure();
+    // A window listener, not a ResizeObserver: the width that moves is the
+    // viewport's. The one container that can change width on its own — the
+    // authenticated shell's collapsible rail — only ever leaves room to spare,
+    // where the fit already resolves to `scale`.
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [fitToWidth]);
+
+  useEffect(() => {
     if (!pdfDocRef.current || !canvasRef.current || loading || error) return;
 
     let cancelled = false;
@@ -168,7 +197,16 @@ export function PdfViewer({
 
       try {
         const page = await pdf.getPage(currentPage + 1);
-        const viewport = page.getViewport({ scale });
+
+        // `availableWidth` is measured only while fitToWidth is on, so that flag
+        // is gated in exactly one place — the effect above.
+        let effectiveScale = scale;
+        if (availableWidth > 0) {
+          const intrinsic = page.getViewport({ scale: 1 });
+          effectiveScale = Math.min(scale, availableWidth / intrinsic.width);
+        }
+
+        const viewport = page.getViewport({ scale: effectiveScale });
         const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
         const canvasContext = canvas.getContext('2d');
 
@@ -225,81 +263,87 @@ export function PdfViewer({
         renderTaskRef.current = null;
       }
     };
-  }, [currentPage, scale, loading, error, pdfUrl, pdfData]);
+  }, [currentPage, scale, availableWidth, loading, error, pdfUrl, pdfData]);
 
-  if (error) {
-    return (
-      <div
-        className={`flex flex-col items-center justify-center gap-4 rounded-lg border border-edge-subtle bg-surface-card p-12 ${className ?? ''}`}
-      >
-        <p className="text-sm text-status-danger">{error.message}</p>
-        <button
-          type="button"
-          onClick={() => void loadDocument()}
-          className="inline-flex items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
+  // One always-rendered wrapper carries `fitRef`, so the available width is
+  // measured before the document has loaded and stays measured across states.
+  const body = (() => {
+    if (error) {
+      return (
+        <div
+          className={`flex flex-col items-center justify-center gap-4 rounded-lg border border-edge-subtle bg-surface-card p-12 ${className ?? ''}`}
         >
-          <RefreshCw className="size-4" />
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div
-        className={`rounded-lg border border-edge-subtle bg-surface-card p-4 ${className ?? ''}`}
-      >
-        <Skeleton className="aspect-[8.5/11] w-full rounded-sm" />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`flex flex-col items-center gap-3 ${className ?? ''}`}>
-      <div ref={containerRef} className="relative inline-block">
-        <canvas
-          ref={canvasRef}
-          className="rounded-sm shadow-e1"
-        />
-        {children && canvasDimensions.width > 0 && (
-          <div
-            className="absolute inset-0"
-            style={{
-              width: canvasDimensions.width,
-              height: canvasDimensions.height,
-            }}
+          <p className="text-sm text-status-danger">{error.message}</p>
+          <button
+            type="button"
+            onClick={() => void loadDocument()}
+            className="inline-flex items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
           >
-            {children}
+            <RefreshCw className="size-4" />
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (loading) {
+      return (
+        <div
+          className={`rounded-lg border border-edge-subtle bg-surface-card p-4 ${className ?? ''}`}
+        >
+          <Skeleton className="aspect-[8.5/11] w-full rounded-sm" />
+        </div>
+      );
+    }
+
+    return (
+      <div className={`flex flex-col items-center gap-3 ${className ?? ''}`}>
+        <div ref={containerRef} className="relative inline-block">
+          <canvas
+            ref={canvasRef}
+            className="rounded-sm shadow-e1"
+          />
+          {children && canvasDimensions.width > 0 && (
+            <div
+              className="absolute inset-0"
+              style={{
+                width: canvasDimensions.width,
+                height: canvasDimensions.height,
+              }}
+            >
+              {children}
+            </div>
+          )}
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onPageChange(Math.max(0, currentPage - 1))}
+              disabled={currentPage === 0}
+              className="inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-card p-1.5 text-content-secondary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <span className="tabular-nums text-sm text-content-secondary">
+              Page {currentPage + 1} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
+              disabled={currentPage >= totalPages - 1}
+              className="inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-card p-1.5 text-content-secondary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next page"
+            >
+              <ChevronRight className="size-4" />
+            </button>
           </div>
         )}
       </div>
+    );
+  })();
 
-      {totalPages > 1 && (
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => onPageChange(Math.max(0, currentPage - 1))}
-            disabled={currentPage === 0}
-            className="inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-card p-1.5 text-content-secondary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="size-4" />
-          </button>
-          <span className="tabular-nums text-sm text-content-secondary">
-            Page {currentPage + 1} of {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
-            disabled={currentPage >= totalPages - 1}
-            className="inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-card p-1.5 text-content-secondary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Next page"
-          >
-            <ChevronRight className="size-4" />
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  return <div ref={fitRef}>{body}</div>;
 }

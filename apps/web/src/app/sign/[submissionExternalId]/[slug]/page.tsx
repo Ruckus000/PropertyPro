@@ -428,7 +428,7 @@ export default function SigningPage() {
 
       {/* Sender message */}
       {data.submission.messageBody && (
-        <div className="max-w-4xl mx-auto px-4 mt-4">
+        <div className="max-w-4xl mx-auto w-full px-4 mt-4">
           <button
             type="button"
             onClick={() => setMessageExpanded((p) => !p)}
@@ -450,7 +450,7 @@ export default function SigningPage() {
       )}
 
       {/* PDF + Fields */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-4xl mx-auto w-full px-4 py-6">
         <div className="bg-surface-card border rounded-md shadow-sm overflow-hidden p-4">
           <PdfViewer
             pdfUrl={data.pdfUrl}
@@ -460,6 +460,7 @@ export default function SigningPage() {
               setCurrentPage((page) => Math.min(page, Math.max(totalPages - 1, 0)));
             }}
             scale={1}
+            fitToWidth
           >
             <div className="absolute inset-0">
               {currentPageFields.map((field) => {
@@ -476,7 +477,7 @@ export default function SigningPage() {
                   return (
                     <div
                       key={field.id}
-                      className={`absolute border-2 rounded transition-colors ${
+                      className={`absolute flex items-center overflow-hidden border-2 rounded transition-colors ${
                         isFilled
                           ? 'border-status-success bg-status-success-bg'
                           : 'border-interactive bg-interactive-subtle'
@@ -488,7 +489,7 @@ export default function SigningPage() {
                         type="text"
                         value={value?.value ?? ''}
                         onChange={(e) => handleTextFieldChange(field, e.target.value)}
-                        className="w-full h-full bg-transparent text-xs px-1 outline-none"
+                        className="w-full h-full min-w-0 bg-transparent text-xs px-1 outline-none"
                         placeholder={field.label ?? 'Enter text'}
                       />
                     </div>
@@ -500,7 +501,7 @@ export default function SigningPage() {
                     key={field.id}
                     type="button"
                     onClick={() => handleFieldClick(field)}
-                    className={`absolute border-2 rounded transition-colors cursor-pointer ${
+                    className={`absolute flex items-center justify-center overflow-hidden border-2 rounded transition-colors cursor-pointer ${
                       isFilled
                         ? 'border-status-success bg-status-success-bg'
                         : 'border-interactive bg-interactive-subtle hover:bg-interactive-subtle-hover'
@@ -516,15 +517,17 @@ export default function SigningPage() {
                       />
                     )}
                     {isFilled && field.type === 'date' && (
-                      <span className="text-xs text-content-secondary">{value?.value ?? ''}</span>
+                      <span className="truncate px-0.5 text-xs leading-none text-content-secondary">
+                        {value?.value ?? ''}
+                      </span>
                     )}
                     {isFilled && field.type === 'checkbox' && (
-                      <span className="text-status-success text-lg">
+                      <span className="text-status-success text-sm leading-none">
                         {value?.value === 'true' ? '\u2713' : ''}
                       </span>
                     )}
                     {!isFilled && (
-                      <span className="text-xs text-interactive font-medium">
+                      <span className="truncate px-0.5 text-xs leading-none text-interactive font-medium">
                         {field.label ?? field.type}
                       </span>
                     )}
@@ -536,8 +539,13 @@ export default function SigningPage() {
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="sticky bottom-[72px] z-20 bg-surface-card backdrop-blur border-t">
+      {/* Progress + consent + actions: ONE sticky footer.
+          These were two independently-sticky bars, the upper one pinned with
+          `bottom-[72px]` — a constant that had to equal the lower bar's height.
+          Measured at 375px that bar is 227px tall, because the statutory consent
+          text wraps to eight lines, so the progress bar rendered 155px inside
+          it, over the consent copy. One container has no offset to keep in sync. */}
+      <div className="sticky bottom-0 z-20 bg-surface-card border-t shadow-lg">
         <div className="max-w-4xl mx-auto px-4 py-2">
           <div className="flex items-center justify-between text-sm text-content-secondary mb-1">
             <span>
@@ -554,11 +562,7 @@ export default function SigningPage() {
             />
           </div>
         </div>
-      </div>
-
-      {/* Bottom bar: consent + actions */}
-      <div className="sticky bottom-0 z-20 bg-surface-card border-t shadow-lg">
-        <div className="max-w-4xl mx-auto px-4 py-3 space-y-3">
+        <div className="max-w-4xl mx-auto px-4 pb-3 space-y-3">
           {/* Consent */}
           <label className="flex items-start gap-2 cursor-pointer">
             <input
