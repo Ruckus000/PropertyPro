@@ -19,6 +19,7 @@
  * round-trip validation issues on the Date instance.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
+import { SITE_PUBLISH_SUMMARY_MAX_LENGTH } from '@/lib/site-editor/publish-notification';
 
 const publishBodySchema = z.object({
   communityId: z.number().int().positive(),
@@ -36,6 +37,28 @@ const publishBodySchema = z.object({
    * Optional + defaults to undefined so existing editor callers are unchanged.
    */
   markOnboardingComplete: z.boolean().optional(),
+  /**
+   * Opt-in resident notification (launch blocker #6). Absent means "publish
+   * quietly", which is what every caller did before this existed and remains
+   * the default in the editor.
+   *
+   * Modelled as an OBJECT rather than a `notifyResidents: boolean` beside a
+   * `notifySummary: string` so the invariant is expressible at the schema
+   * layer: you cannot ask to notify without saying what changed. The two-flag
+   * shape makes `{ notify: true }` with no summary representable, and that
+   * would have to be caught by hand in the handler.
+   */
+  notifyResidents: z
+    .object({
+      /**
+       * The PM's one-line description of what changed. It becomes the
+       * announcement title, so it is the entire message most residents read —
+       * `.min(1)` after trimming keeps a whitespace-only summary from
+       * publishing a blank notice to an entire association.
+       */
+      summary: z.string().trim().min(1).max(SITE_PUBLISH_SUMMARY_MAX_LENGTH),
+    })
+    .optional(),
 });
 
 export const publishCommunitySiteContract = defineRoute({

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { AppError, ConflictError } from '@/lib/api/errors';
+import { SITE_PUBLISH_SUMMARY_MAX_LENGTH } from '@/lib/site-editor/publish-notification';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -13,6 +14,8 @@ const {
   resolveEffectiveCommunityIdMock,
   requirePlanFeatureMock,
   markOnboardingCompleteMock,
+  notifyResidentsMock,
+  requirePermissionMock,
 } = vi.hoisted(() => ({
   publishMock: vi.fn(),
   requireAuthMock: vi.fn(),
@@ -20,6 +23,8 @@ const {
   resolveEffectiveCommunityIdMock: vi.fn(),
   requirePlanFeatureMock: vi.fn(),
   markOnboardingCompleteMock: vi.fn(),
+  notifyResidentsMock: vi.fn(),
+  requirePermissionMock: vi.fn(),
 }));
 
 vi.mock('@/lib/services/site-blocks-service', () => ({
@@ -46,6 +51,20 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
   requirePlanFeature: requirePlanFeatureMock,
 }));
 
+vi.mock('@/lib/services/site-publish-notification', () => ({
+  notifyResidentsOfSitePublish: notifyResidentsMock,
+}));
+
+// Mocked rather than exercised for real: `access-control` reaches the database
+// at module load, which would fail every case in this file with
+// "Missing DATABASE_URL" long before any assertion ran. The matrix itself is
+// covered by the RBAC suite; what matters here is only WHETHER the route
+// consults it, and on which path.
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: requirePermissionMock,
+  checkPermissionV2: vi.fn(() => true),
+}));
+
 import { POST } from '@/app/api/v1/pm/site/publish/route';
 
 function makeRequest(body: unknown): NextRequest {
@@ -69,6 +88,12 @@ describe('POST /api/v1/pm/site/publish', () => {
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
     markOnboardingCompleteMock.mockResolvedValue(undefined);
+    requirePermissionMock.mockReturnValue(undefined);
+    notifyResidentsMock.mockResolvedValue({
+      status: 'sent',
+      announcementId: 7,
+      recipientCount: 12,
+    });
   });
 
   it('200s and forwards the parsed expectedPublishedAt as a Date to publishCommunitySite', async () => {
@@ -331,5 +356,181 @@ describe('POST /api/v1/pm/site/publish', () => {
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(403);
     expect(publishMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/pm/site/publish — resident notification (launch blocker #6)', () => {
+  const PUBLISHED = {
+    published: true as const,
+    publishedAt: new Date('2026-05-15T12:00:00.000Z'),
+    promotedCount: 2,
+    retiredCount: 0,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthMock.mockResolvedValue('user-1');
+    requireMembershipMock.mockResolvedValue({ role: 'property_manager', communityId: 42 });
+    resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
+    requirePlanFeatureMock.mockResolvedValue(undefined);
+    markOnboardingCompleteMock.mockResolvedValue(undefined);
+    requirePermissionMock.mockReturnValue(undefined);
+    notifyResidentsMock.mockResolvedValue({
+      status: 'sent',
+      announcementId: 7,
+      recipientCount: 12,
+    });
+  });
+
+  it('does NOT notify residents when the publish did not ask for it', async () => {
+    publishMock.mockResolvedValueOnce(PUBLISHED);
+
+    const res = await POST(makeRequest(VALID_BODY));
+
+    expect(res.status).toBe(200);
+    expect(notifyResidentsMock).not.toHaveBeenCalled();
+    // And the body is unchanged from a pre-feature publish: absent, never
+    // `{ status: 'skipped' }`, so no consumer can mistake a quiet publish for
+    // a delivered one.
+    const json = await res.json();
+    expect(json.data.residentNotification).toBeUndefined();
+  });
+
+  it('forwards the summary and the resolved community to the notifier', async () => {
+    publishMock.mockResolvedValueOnce(PUBLISHED);
+
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, notifyResidents: { summary: 'Pool hours updated' } }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(notifyResidentsMock).toHaveBeenCalledTimes(1);
+    expect(notifyResidentsMock).toHaveBeenCalledWith({
+      communityId: 42,
+      actorUserId: 'user-1',
+      summary: 'Pool hours updated',
+    });
+  });
+
+  it('puts the notification outcome on the wire beside the publish result', async () => {
+    publishMock.mockResolvedValueOnce(PUBLISHED);
+
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, notifyResidents: { summary: 'Pool hours updated' } }),
+    );
+
+    const json = await res.json();
+    expect(json.data).toMatchObject({
+      published: true,
+      promotedCount: 2,
+      residentNotification: { status: 'sent', announcementId: 7, recipientCount: 12 },
+    });
+  });
+
+  it('still 200s — and reports the failure — when delivery fails', async () => {
+    /*
+     * The whole point of the feature's failure design. `publishCommunitySite`
+     * has already COMMITTED by the time the notifier runs, so a delivery
+     * failure cannot be turned into an error response without telling the PM
+     * their publish failed when their site is, in fact, live.
+     *
+     * It must equally not be swallowed: a silent drop hands back an ordinary
+     * success and the PM believes their residents were told.
+     */
+    publishMock.mockResolvedValueOnce(PUBLISHED);
+    notifyResidentsMock.mockResolvedValueOnce({
+      status: 'failed',
+      reason: 'smtp exploded',
+    });
+
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, notifyResidents: { summary: 'Pool hours updated' } }),
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.published).toBe(true);
+    expect(json.data.residentNotification).toEqual({
+      status: 'failed',
+      reason: 'smtp exploded',
+    });
+  });
+
+  it('does NOT notify when there was nothing to publish', async () => {
+    /*
+     * `nothing-to-publish` rolls the transaction back. Notifying there would
+     * mail an entire association to announce a no-op.
+     */
+    publishMock.mockResolvedValueOnce({ published: false, reason: 'nothing-to-publish' });
+
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, notifyResidents: { summary: 'Pool hours updated' } }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(notifyResidentsMock).not.toHaveBeenCalled();
+    expect(await res.json()).toMatchObject({
+      data: { published: false, reason: 'nothing-to-publish' },
+    });
+  });
+
+  it('requires announcements:write before broadcasting, and refuses BEFORE publishing', async () => {
+    /*
+     * Publishing the site and mailing every resident are different authorities.
+     * The gate runs before `publishCommunitySite` on purpose: a caller who may
+     * publish but may not announce should be refused outright, not have the
+     * site go live and the notification quietly dropped afterwards — which is
+     * the shape the whole launch-blocker list is about.
+     */
+    requirePermissionMock.mockImplementation(() => {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    });
+
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, notifyResidents: { summary: 'Pool hours updated' } }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(requirePermissionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'property_manager' }),
+      'announcements',
+      'write',
+    );
+    expect(publishMock).not.toHaveBeenCalled();
+    expect(notifyResidentsMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT consult announcements:write for a quiet publish', async () => {
+    publishMock.mockResolvedValueOnce(PUBLISHED);
+
+    await POST(makeRequest(VALID_BODY));
+
+    expect(requirePermissionMock).not.toHaveBeenCalled();
+  });
+
+  it('400s on a whitespace-only summary rather than broadcasting a blank notice', async () => {
+    publishMock.mockResolvedValueOnce(PUBLISHED);
+
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, notifyResidents: { summary: '   ' } }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(publishMock).not.toHaveBeenCalled();
+    expect(notifyResidentsMock).not.toHaveBeenCalled();
+  });
+
+  it('400s on a summary past the length limit', async () => {
+    publishMock.mockResolvedValueOnce(PUBLISHED);
+
+    const res = await POST(
+      makeRequest({
+        ...VALID_BODY,
+        notifyResidents: { summary: 'x'.repeat(SITE_PUBLISH_SUMMARY_MAX_LENGTH + 1) },
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(notifyResidentsMock).not.toHaveBeenCalled();
   });
 });
