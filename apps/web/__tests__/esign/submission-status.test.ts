@@ -20,7 +20,7 @@ import {
   daysLeft,
   describeExpiry,
   filterRequests,
-  findBlockingPriorSigner,
+  blockingPriorSignerFor,
   isOpenSigner,
   mostUrgentRequest,
   outstandingSigners,
@@ -114,19 +114,19 @@ describe('findBlockingPriorSigner', () => {
 
   it('never blocks under a parallel order', () => {
     const r = request({ signingOrder: 'parallel', signers: [first, second] });
-    expect(findBlockingPriorSigner(r, second)).toBeNull();
+    expect(blockingPriorSignerFor(r, second)).toBeNull();
   });
 
   it('blocks a later signer while an earlier one is outstanding', () => {
     const r = request({ signingOrder: 'sequential', signers: [first, second] });
-    expect(findBlockingPriorSigner(r, second)?.name).toBe('First');
-    expect(findBlockingPriorSigner(r, first)).toBeNull();
+    expect(blockingPriorSignerFor(r, second)?.name).toBe('First');
+    expect(blockingPriorSignerFor(r, first)).toBeNull();
   });
 
   it('unblocks once the earlier signer completes', () => {
     const done = { ...first, status: 'completed' as const };
     const r = request({ signingOrder: 'sequential', signers: [done, second] });
-    expect(findBlockingPriorSigner(r, second)).toBeNull();
+    expect(blockingPriorSignerFor(r, second)).toBeNull();
   });
 
   it('still blocks when the earlier signer DECLINED', () => {
@@ -134,14 +134,14 @@ describe('findBlockingPriorSigner', () => {
     // the next signer's turn is active would invite a reminder the API rejects.
     const declined = { ...first, status: 'declined' as const };
     const r = request({ signingOrder: 'sequential', signers: [declined, second] });
-    expect(findBlockingPriorSigner(r, second)?.name).toBe('First');
+    expect(blockingPriorSignerFor(r, second)?.name).toBe('First');
   });
 
   it('does not let signers who share a sortOrder block each other', () => {
     const a = signer({ id: 1, sortOrder: 0, name: 'A' });
     const b = signer({ id: 2, sortOrder: 0, name: 'B' });
     const r = request({ signingOrder: 'sequential', signers: [a, b] });
-    expect(findBlockingPriorSigner(r, b)).toBeNull();
+    expect(blockingPriorSignerFor(r, b)).toBeNull();
   });
 });
 

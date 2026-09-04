@@ -26,7 +26,7 @@ import { formatShortDate } from '@/lib/utils/format-date';
 import {
   canRemind,
   canShareLink,
-  findBlockingPriorSigner,
+  blockingPriorSignerFor,
   type EsignRequest,
   type EsignRequestSigner,
 } from '@/lib/esign/submission-status';
@@ -50,7 +50,7 @@ export function SignerRow({ communityId, request, signer }: SignerRowProps) {
   const remind = useSendEsignReminder(communityId);
   const { copy, copied } = useCopyToClipboard();
 
-  const blocker = findBlockingPriorSigner(request, signer);
+  const blocker = blockingPriorSignerFor(request, signer);
   const shareable = canShareLink(request, signer);
   const remindable = canRemind(request, signer);
   const status = esignStatusDisplay(signer.status);

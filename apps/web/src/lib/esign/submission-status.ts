@@ -108,13 +108,12 @@ export function signatureProgress(request: EsignRequest): SignatureProgress {
  * status other than `completed` blocks — a signer who DECLINED still holds up
  * the ones behind them, because the request is going nowhere.
  */
-export function findBlockingPriorSigner(
-  request: EsignRequest,
-  signer: EsignRequestSigner,
-): EsignRequestSigner | null {
-  if (request.signingOrder !== 'sequential') return null;
+export function findBlockingPriorSigner<
+  T extends { id: number; sortOrder: number; status: string },
+>(signingOrder: string, signers: readonly T[], signer: T): T | null {
+  if (signingOrder !== 'sequential') return null;
 
-  const blocking = request.signers
+  const blocking = signers
     .filter(
       (candidate) =>
         candidate.id !== signer.id &&
@@ -124,6 +123,14 @@ export function findBlockingPriorSigner(
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   return blocking[0] ?? null;
+}
+
+/** The same rule, for callers that already hold a whole request. */
+export function blockingPriorSignerFor(
+  request: EsignRequest,
+  signer: EsignRequestSigner,
+): EsignRequestSigner | null {
+  return findBlockingPriorSigner(request.signingOrder, request.signers, signer);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +161,7 @@ export function canShareLink(request: EsignRequest, signer: EsignRequestSigner):
   return (
     isOpenSigner(request, signer) &&
     signer.slug != null &&
-    findBlockingPriorSigner(request, signer) === null
+    blockingPriorSignerFor(request, signer) === null
   );
 }
 
