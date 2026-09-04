@@ -97,6 +97,12 @@ export const RLS_TENANT_TABLES = [
       'Async community-data export jobs. SELECT/write restricted to admin-tier via pp_rls_can_read_audit_log(community_id) — an export is a copy of the entire association including resident PII, so it carries the same read bar as the audit log rather than the ordinary member bar. The worker runs as service_role (pp_rls_is_privileged) and scans cross-tenant to claim jobs. Deliberately NOT entitlement-gated at the route layer: a lapsed association must still be able to retrieve its own statutory records (§718.111(12)(b)).',
   },
   {
+    tableName: 'site_publish_schedules',
+    policyFamily: 'tenant_admin_write',
+    notes:
+      'Scheduled community-site publishes. SELECT carries the admin-tier bar (pp_rls_can_read_audit_log) rather than the ordinary member bar, because error_message records why a publish failed and is rendered back to the PM — the scheduled_for instant alone would be harmless, the failure detail is not. Writes are admin-tier because scheduling a publish is the same authority as publishing. The cron runs as service_role (pp_rls_is_privileged) and scans cross-tenant to claim due rows, so the authenticated policies never fire on that path.',
+  },
+  {
     tableName: 'community_export_job_parts',
     policyFamily: 'tenant_admin_write',
     notes:
@@ -532,9 +538,10 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // AT MERGE for the same reason as every bump above: two PRs each editing this
 // line auto-merge without a conflict, so the second one to merge has to set the
 // true total rather than trusting the number it was authored against.
-// 80 on main + community_export_jobs + community_export_job_parts (0058) = 82.
+// 80 on main + community_export_jobs + community_export_job_parts (0058) = 82,
+// + site_publish_schedules (0065) = 83.
 // RE-DERIVE AT MERGE, same as every bump above.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 82;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 83;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

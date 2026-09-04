@@ -36,6 +36,7 @@ import {
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from '@propertypro/db/filters';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies management-tier (property_manager / root_manager) + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { cancelPendingScheduleInTx } from './site-publish-schedule-store';
 import {
   TOMBSTONE_BLOCK_TYPE,
   isLazyDraftHome,
@@ -507,6 +508,13 @@ export type PublishCommunitySiteResult =
       addedPageCount: number;
       /** Pages this publish took off the live site, with everything on them. */
       removedPageCount: number;
+      /**
+       * Set only when this publish disarmed a pending scheduled publish.
+       *
+       * Absent means there was none — the PM is told what happened rather than
+       * discovering later that a schedule they had forgotten fired on its own.
+       */
+      canceledSchedule?: { id: number; scheduledFor: string };
     }
   | {
       published: false;
@@ -1074,6 +1082,22 @@ export async function publishCommunitySite({
     // `effectivePublishedAt`, not the pre-promote stamp: the caller may echo
     // this back as its optimistic-concurrency token, and it must therefore be a
     // value MAX(published_at) will actually agree with.
+    /*
+     * Publishing now satisfies the intent of "publish later", so an armed
+     * schedule is disarmed here — INSIDE the transaction, so there is no window
+     * in which the cron could claim it between this commit and a later cancel.
+     *
+     * Left armed, it would fire at its original time and publish whatever
+     * happened to be staged by then, announced with the summary written for
+     * THIS publish. Benign when nothing new is staged (the tick finds nothing
+     * and, being gated on `published`, notifies nobody) and wrong the moment
+     * anything is.
+     *
+     * Note `nothing-to-publish` never reaches here — it rolls back at step 3 —
+     * which is correct: nothing changed, so the schedule still means something.
+     */
+    const canceledSchedule = await cancelPendingScheduleInTx(tx, communityId);
+
     return {
       published: true as const,
       publishedAt: effectivePublishedAt,
@@ -1081,6 +1105,7 @@ export async function publishCommunitySite({
       retiredCount,
       addedPageCount,
       removedPageCount: removedPageIds.length,
+      ...(canceledSchedule ? { canceledSchedule } : {}),
     };
   })
     .catch((err: unknown) => {

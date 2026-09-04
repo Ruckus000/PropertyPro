@@ -91,6 +91,11 @@ import { SITE_CHANGE_GROUP, useSiteDiff } from '../use-site-diff';
 import { ApiRequestError } from '@/lib/api/request-json';
 import { describePublishedCounts } from '@/lib/site-editor/describe-publish-outcome';
 import { SITE_PUBLISH_SUMMARY_MAX_LENGTH } from '@/lib/site-editor/publish-notification';
+import {
+  useCancelSitePublishSchedule,
+  useScheduleSitePublish,
+  useSitePublishSchedule,
+} from '@/hooks/use-site-publish-schedule';
 import { Receipt, type ReceiptStatus } from './Receipt';
 
 /**
@@ -383,6 +388,16 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
    */
   const [notifyResidents, setNotifyResidents] = useState(false);
   const [notifySummary, setNotifySummary] = useState('');
+  /*
+   * Scheduling is opt-in per open, like the notification. The two compose: a
+   * scheduled publish carries the same summary and notifies when it fires.
+   */
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [scheduleAtInput, setScheduleAtInput] = useState('');
+
+  const pendingSchedule = useSitePublishSchedule(communityId);
+  const createSchedule = useScheduleSitePublish(communityId);
+  const cancelSchedule = useCancelSitePublishSchedule(communityId);
 
   const issues: Issue[] = useMemo(() => {
     /*
@@ -490,6 +505,46 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
   const notifySummaryValid = notifySummary.trim().length > 0;
   const notifyWanted = notifyResidents && notifySummaryValid;
 
+  /*
+   * A `datetime-local` value is LOCAL wall-clock time. `new Date(value)` parses
+   * it as local and `toISOString()` converts to UTC, so the instant survives —
+   * whereas building the ISO string by hand from the input's own characters
+   * would shift every PM outside UTC by their offset.
+   */
+  const scheduleAtIso = (() => {
+    if (!scheduleAtInput) return null;
+    const parsed = new Date(scheduleAtInput);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  })();
+  const scheduleInFuture =
+    scheduleAtIso !== null && new Date(scheduleAtIso).getTime() > Date.now();
+  const scheduleValid = scheduleLater && scheduleInFuture;
+
+  async function onSchedule() {
+    setReceipt(null);
+    if (!scheduleAtIso) return;
+    try {
+      const created = await createSchedule.mutateAsync({
+        scheduledFor: scheduleAtIso,
+        ...(notifyWanted ? { notifyResidents: { summary: notifySummary.trim() } } : {}),
+      });
+      toast.success(
+        `Scheduled for ${new Date(created.scheduledFor).toLocaleString()}.${
+          notifyWanted ? ' Residents will be notified then.' : ''
+        }`,
+      );
+      onOpenChange(false);
+    } catch (error) {
+      // No receipt: nothing was published and nothing changed on the live site,
+      // so a toast is the truthful surface. A receipt describes a publish.
+      toast.error(
+        error instanceof Error
+          ? `We couldn't schedule that. ${error.message}`
+          : "We couldn't schedule that. Please try again.",
+      );
+    }
+  }
+
   async function onPublish() {
     setReceipt(null);
     /*
@@ -534,6 +589,17 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
        * the resident feed and only the email did not go.
        */
       const notification = result.published ? result.residentNotification : undefined;
+
+      /*
+       * Built once and appended to BOTH outcomes below. Publishing now disarms
+       * a schedule, and a PM who is not told will later wonder why the publish
+       * they set up never happened — so this must survive the half-failure path
+       * as well as the happy one.
+       */
+      const canceled = result.published ? result.canceledSchedule : undefined;
+      const scheduleNote = canceled
+        ? ` The publish you had scheduled for ${new Date(canceled.scheduledFor).toLocaleString()} was called off.`
+        : '';
       if (notification && notification.status !== 'sent') {
         toast.warning(
           notification.status === 'partial'
@@ -548,17 +614,18 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
               ? `Published, and posted to residents\u2019 feeds \u2014 but the email didn\u2019t send. ${notification.reason}`
               : `Published \u2014 but residents were not notified at all. ${notification.reason}`,
           nextStep:
-            notification.status === 'partial'
+            (notification.status === 'partial'
               ? 'Residents can see the update in the app. To email it as well, post an announcement from Announcements.'
-              : 'Your changes are live. To tell residents, post an announcement from Announcements.',
+              : 'Your changes are live. To tell residents, post an announcement from Announcements.') +
+            scheduleNote,
         });
         return;
       }
 
       toast.success(
-        notification?.status === 'sent'
+        (notification?.status === 'sent'
           ? `${describeOutcome(result)} ${plural(notification.recipientCount, 'resident')} notified.`
-          : describeOutcome(result),
+          : describeOutcome(result)) + scheduleNote,
       );
       onOpenChange(false);
     } catch (error) {
@@ -772,19 +839,150 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
         </div>
       ) : null}
 
+      {/*
+        * The schedule read is SECONDARY. It deliberately does not join the
+        * primary early return above: blanking the whole sheet — and blocking a
+        * publish — because a status read failed is worse than the bug it would
+        * be guarding against. Nor does it disable the controls: the database's
+        * one-active-schedule index is the real guard, and it now answers with a
+        * clean 409 rather than a raw error.
+        */}
+      {pendingSchedule.isError ? (
+        <AlertBanner
+          status="warning"
+          title="We couldn't check for a scheduled publish"
+          description={pendingSchedule.error?.message ?? 'Please try again.'}
+          className="mt-4"
+          data-testid="publish-schedule-read-error"
+        />
+      ) : null}
+
+      {pendingSchedule.isPending ? (
+        // A skeleton, not nothing: rendering the empty state here would assert
+        // "no publish is scheduled" before the answer has arrived.
+        <Skeleton className="mt-4 h-20 w-full" data-testid="publish-schedule-loading" />
+      ) : null}
+
+      {pendingSchedule.data?.status === 'failed' ? (
+        <AlertBanner
+          status="danger"
+          title="Your scheduled publish didn't run"
+          description={`${pendingSchedule.data.errorMessage ?? 'It stopped before finishing.'} Your site was not published.`}
+          className="mt-4"
+          data-testid="failed-schedule"
+        />
+      ) : null}
+
+      {pendingSchedule.data && pendingSchedule.data.status !== 'failed' ? (
+        <div
+          className="mt-4 flex items-start justify-between gap-3 rounded-md border border-edge bg-surface-subtle p-4"
+          data-testid="pending-schedule"
+        >
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-content">
+              {pendingSchedule.data.status === 'running'
+                ? 'Publishing now…'
+                : 'A publish is already scheduled'}
+            </p>
+            <p className="text-xs text-content-secondary">
+              {new Date(pendingSchedule.data.scheduledFor).toLocaleString()}
+              {pendingSchedule.data.notifySummary
+                ? ' — residents will be notified.'
+                : ' — residents will not be notified.'}
+            </p>
+          </div>
+          {/*
+            * Only a `pending` schedule can be called off. A `running` one has
+            * been claimed by a tick that is publishing right now — cancelling
+            * would race its own completion write.
+            */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={cancelSchedule.isPending || pendingSchedule.data.status === 'running'}
+            onClick={() => {
+              void cancelSchedule
+                .mutateAsync()
+                .then(() => toast.success('Scheduled publish canceled.'))
+                .catch((error: unknown) =>
+                  toast.error(
+                    error instanceof Error
+                      ? `We couldn't cancel it. ${error.message}`
+                      : "We couldn't cancel it. Please try again.",
+                  ),
+                );
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+
+      {hasChanges ? (
+        <div className="mt-4 rounded-md border border-edge bg-surface-muted p-4">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="schedule-later"
+              checked={scheduleLater}
+              onCheckedChange={(checked) => setScheduleLater(checked === true)}
+              disabled={publish.isPending || createSchedule.isPending}
+            />
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="schedule-later" className="text-sm font-medium">
+                Publish later instead
+              </Label>
+              <p className="text-xs text-content-secondary">
+                Your changes stay as a draft until then. Meeting materials can go up
+                on their own.
+              </p>
+            </div>
+          </div>
+
+          {scheduleLater ? (
+            <div className="mt-3 space-y-1">
+              <Label htmlFor="schedule-at" className="text-xs font-medium">
+                Publish at
+              </Label>
+              <Input
+                id="schedule-at"
+                type="datetime-local"
+                value={scheduleAtInput}
+                onChange={(event) => setScheduleAtInput(event.target.value)}
+                disabled={createSchedule.isPending}
+                aria-describedby="schedule-at-hint"
+              />
+              <p id="schedule-at-hint" className="text-xs text-content-secondary">
+                {scheduleAtInput && !scheduleInFuture
+                  ? 'Pick a time in the future.'
+                  : 'Replaces any publish already scheduled for this community.'}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-auto flex flex-col gap-2 border-t border-edge pt-4">
         <Button
           type="button"
-          onClick={() => void onPublish()}
+          onClick={() => void (scheduleLater ? onSchedule() : onPublish())}
           disabled={
             blocked ||
             !hasChanges ||
             publish.isPending ||
-            (notifyResidents && !notifySummaryValid)
+            createSchedule.isPending ||
+            (notifyResidents && !notifySummaryValid) ||
+            (scheduleLater && !scheduleValid)
           }
-          loading={publish.isPending}
+          loading={publish.isPending || createSchedule.isPending}
         >
-          {publish.isPending ? 'Publishing…' : 'Publish changes'}
+          {scheduleLater
+            ? createSchedule.isPending
+              ? 'Scheduling…'
+              : 'Schedule publish'
+            : publish.isPending
+              ? 'Publishing…'
+              : 'Publish changes'}
         </Button>
         <p className="text-xs text-content-secondary" data-testid="publish-hint">
           {blocked
@@ -793,6 +991,10 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
               ? "There's nothing to publish yet."
               : notifyResidents && !notifySummaryValid
                 ? 'Say what changed, or untick the box to publish quietly.'
+            : scheduleLater && !scheduleValid
+              ? 'Pick a time in the future, or untick to publish now.'
+              : scheduleLater
+                ? 'Nothing is published until the time you picked.'
                 : /*
                    * One "go live" literal, with the notification clause
                    * appended rather than a second copy of the sentence.

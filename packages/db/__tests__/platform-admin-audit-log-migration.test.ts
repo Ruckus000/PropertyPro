@@ -147,8 +147,9 @@ describe('platform_admin_audit_log RLS registration', () => {
     // A platform table must NOT bump RLS_EXPECTED_TENANT_TABLE_COUNT. Pinning
     // the value here makes an accidental bump in this PR visible.
     // Bumped 80 → 82 by migration 0058 (community_export_jobs +
-    // community_export_job_parts), which ARE tenant tables. The assertion still
-    // does its job: it pins the value so an accidental bump is visible.
-    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(82);
+    // community_export_job_parts), then 82 → 83 by 0065
+    // (site_publish_schedules) — all tenant tables. The assertion still does
+    // its job: it pins the value so an accidental bump is visible.
+    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(83);
   });
 });

@@ -20,6 +20,14 @@ export interface MutateAnnouncementPayload {
   body: string;
   audience: 'all' | 'owners_only' | 'board_only' | 'tenants_only';
   isPinned: boolean;
+  /**
+   * ISO-8601 instant at which the announcement stops showing, or null for no
+   * expiry. Declared because the composer spreads it into this payload — a
+   * spread skips excess-property checks, so without this the field reached the
+   * wire while the type denied it existed, and a rename would not have failed
+   * to compile.
+   */
+  expiresAt?: string | null;
   /** Present only on the update path. */
   action?: 'update';
   /** Present only on the update path. */
