@@ -1,19 +1,18 @@
+// breadcrumbs:exempt — redirect-only page
 /**
- * E-Sign Templates List — displays all e-sign templates for the community.
+ * Templates is now a view of the E-Sign screen, not a route of its own.
  *
- * Route: /esign/templates?communityId=X
- * Auth: community member with esign read access.
+ * The route still has to resolve rather than being deleted: `build-auto-trail`
+ * emits a linked crumb for every path segment, so `/esign/templates/[id]` and
+ * `/esign/templates/new` both render a "Templates" crumb pointing here. It also
+ * keeps every existing bookmark and link working.
+ *
+ * Route: /esign/templates?communityId=X  →  /esign?view=templates&communityId=X
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { getFeaturesForCommunity } from '@propertypro/shared';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { FeatureGate } from '@/components/billing/feature-gate';
-import { PageHeader } from '@/components/shared/page-header';
-import { EsignTemplatesListClient } from './templates-list-client';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -25,37 +24,16 @@ export default async function EsignTemplatesPage({ searchParams }: PageProps) {
     headers(),
   ]);
 
+  // Kept rather than reading the query directly, so a tenant subdomain that
+  // carries no `?communityId=` still resolves to the right community.
   const context = resolveCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
     host: requestHeaders.get('host'),
   });
 
   if (!context.communityId) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="E-Sign Templates" />
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          Add a valid{' '}
-          <code className="rounded bg-[var(--surface-subtle)] px-1">
-            communityId
-          </code>{' '}
-          query parameter to view templates.
-        </p>
-      </div>
-    );
+    redirect('/dashboard?reason=invalid-selection');
   }
 
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(context.communityId, userId);
-
-  const typeFeatures = getFeaturesForCommunity(membership.communityType);
-  if (!typeFeatures.hasEsign) {
-    redirect('/dashboard?reason=feature-not-available');
-  }
-
-  return (
-    <FeatureGate feature="hasEsign" communityId={context.communityId}>
-      <EsignTemplatesListClient communityId={context.communityId} />
-    </FeatureGate>
-  );
+  redirect(`/esign?view=templates&communityId=${context.communityId}`);
 }

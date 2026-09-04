@@ -5,12 +5,12 @@
  * Auth: admin roles only.
  * Feature gate: hasEsign must be true.
  *
- * Two tabs: "Documents" (submissions) | "Templates" (links to templates page).
- * Primary CTA: "Send Document".
+ * One screen, three URL-backed views: Requests / Waiting on / Templates.
+ * Primary CTA follows the view.
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageAuthenticatedUser } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
 import { EsignPageShell } from '@/components/esign/esign-page-shell';
@@ -29,15 +29,17 @@ export default async function EsignPage({ searchParams }: PageProps) {
   }
 
   const communityId = rawId;
-  let userId: string;
+  // The full user, not just the id: the "Awaiting your signature" panel matches
+  // the viewer against each signer by user id OR email.
+  let viewer: { id: string; email: string | null };
 
   try {
-    userId = await requireAuthenticatedUserId();
+    viewer = await requirePageAuthenticatedUser();
   } catch {
     redirect('/auth/login');
   }
 
-  const membership = await requireCommunityMembership(communityId, userId);
+  const membership = await requireCommunityMembership(communityId, viewer.id);
 
   // Type-gate first (community type doesn't support e-sign at all → redirect).
   // Plan-gate is delegated to <FeatureGate> for the marketing surface.
@@ -52,7 +54,11 @@ export default async function EsignPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasEsign" communityId={communityId}>
-      <EsignPageShell communityId={communityId} />
+      <EsignPageShell
+        communityId={communityId}
+        viewerUserId={viewer.id}
+        viewerEmail={viewer.email}
+      />
     </FeatureGate>
   );
 }

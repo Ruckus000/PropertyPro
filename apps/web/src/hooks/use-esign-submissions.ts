@@ -7,6 +7,10 @@ import type {
   EsignEventRecord,
 } from '@/lib/services/esign-service';
 import type { EsignFieldsSchema } from '@propertypro/shared';
+// The WIRE shape, not the service's. `listSubmissionsWithSigners` returns `Date`
+// objects; JSON delivers ISO strings, and `submission-status.ts` is written
+// against strings. Typing this with the service's row would compile and lie.
+import type { EsignRequest } from '@/lib/esign/submission-status';
 import { requestJson } from '@/lib/api/request-json';
 
 export const ESIGN_SUBMISSION_KEYS = {
@@ -28,7 +32,7 @@ export function useEsignSubmissions(
     queryFn: async () => {
       const params = new URLSearchParams({ communityId: String(communityId) });
       if (filters?.status) params.set('status', filters.status);
-      return requestJson<EsignSubmissionRecord[]>(
+      return requestJson<EsignRequest[]>(
         `/api/v1/esign/submissions?${params.toString()}`,
       );
     },

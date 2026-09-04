@@ -57,7 +57,7 @@ vi.mock('@/lib/esign/esign-route-helpers', () => ({
 
 vi.mock('@/lib/services/esign-service', () => ({
   createSubmission: createSubmissionMock,
-  listSubmissions: listSubmissionsMock,
+  listSubmissionsWithSigners: listSubmissionsMock,
 }));
 
 vi.mock('@/lib/middleware/plan-guard', () => ({

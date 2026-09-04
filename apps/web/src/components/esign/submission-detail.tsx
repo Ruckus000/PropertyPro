@@ -46,6 +46,12 @@ import {
   Clock,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+// The one rule, shared. It was written privately here, again in `sendReminder`
+// (which ENFORCES it with a 422), and a third time as `getSignerContext`'s
+// `isWaiting` — so a screen computing it differently offers a button the API
+// then refuses.
+import { findBlockingPriorSigner } from '@/lib/esign/submission-status';
 
 interface SubmissionDetailProps {
   communityId: number;
@@ -72,23 +78,6 @@ function formatEventType(type: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function signerIsBlockedBySequence(
-  signingOrder: string,
-  signers: EsignSignerRecord[],
-  signer: EsignSignerRecord,
-): boolean {
-  if (signingOrder !== 'sequential') {
-    return false;
-  }
-
-  return signers.some(
-    (candidate) =>
-      candidate.id !== signer.id &&
-      candidate.sortOrder < signer.sortOrder &&
-      candidate.status !== 'completed',
-  );
-}
-
 export function SubmissionDetail({
   communityId,
   submissionId,
@@ -108,16 +97,19 @@ export function SubmissionDetail({
     setCancelDialogOpen(false);
   }, [submissionId, cancelMutation]);
 
+  // Was a silent copy: it wrote to the clipboard and said nothing at all, which
+  // is indistinguishable from a broken button. The hook toasts, and says nothing
+  // on the prompt fallback rather than claiming a copy the user may have
+  // cancelled.
+  const { copy } = useCopyToClipboard();
   const copySigningUrl = useCallback(
     async (submissionExternalId: string, slug: string) => {
-      const url = `${window.location.origin}/sign/${submissionExternalId}/${slug}`;
-      try {
-        await navigator.clipboard.writeText(url);
-      } catch {
-        window.prompt('Copy signing link:', url);
-      }
+      await copy(
+        `${window.location.origin}/sign/${submissionExternalId}/${slug}`,
+        'Signing link copied.',
+      );
     },
-    [],
+    [copy],
   );
 
   const openDownload = useCallback((downloadUrl: string) => {
@@ -272,11 +264,8 @@ export function SubmissionDetail({
                 const signerConfig =
                   ESIGN_STATUS_DISPLAY[signer.status] ?? DEFAULT_STATUS;
                 const SIcon = signerConfig.icon;
-                const blockedBySequence = signerIsBlockedBySequence(
-                  submission.signingOrder,
-                  signers,
-                  signer,
-                );
+                const blockedBySequence =
+                  findBlockingPriorSigner(submission.signingOrder, signers, signer) !== null;
                 const showSigningLink =
                   Boolean(signer.slug) &&
                   isPending &&

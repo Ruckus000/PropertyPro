@@ -19,7 +19,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createSubmission,
-  listSubmissions,
+  listSubmissionsWithSigners,
 } from '@/lib/services/esign-service';
 import type { EsignSubmissionStatus } from '@propertypro/shared';
 import {
@@ -64,7 +64,10 @@ export const GET = withErrorHandler(
       status = parsed.data as EsignSubmissionStatus;
     }
 
-    return listSubmissions(communityId, { status });
+    // Signers ride along: the screen needs the progress column, the status
+    // counts, the Waiting-on view and a filter that matches on a signer's name
+    // or email — none of which a per-row fetch on expand could answer.
+    return listSubmissionsWithSigners(communityId, { status });
   }),
 );
 

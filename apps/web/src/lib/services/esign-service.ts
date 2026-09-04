@@ -808,6 +808,122 @@ export async function listSubmissions(
   return rows.map((row) => withEffectiveStatus(row));
 }
 
+/**
+ * A signer as the E-Sign screen sees one.
+ *
+ * Deliberately NOT the raw row. `esign_signers.signed_values` holds what each
+ * person entered, and for a signature field that is a base64 PNG of their
+ * actual handwriting (see `esign-pdf-service.ts`, which decodes it to embed in
+ * the PDF). The screen renders none of it, so it does not travel.
+ */
+export interface EsignListSigner {
+  id: number;
+  userId: string | null;
+  name: string | null;
+  email: string;
+  role: string;
+  status: string;
+  sortOrder: number;
+  slug: string | null;
+  completedAt: Date | null;
+  lastReminderAt: Date | null;
+  reminderCount: number;
+}
+
+export interface EsignSubmissionListRow extends EsignSubmissionRecord {
+  /** Null for a one-off send, which has no template to name. */
+  templateName: string | null;
+  signers: EsignListSigner[];
+}
+
+function toListSigner(row: EsignSignerRecord): EsignListSigner {
+  return {
+    id: row.id,
+    userId: row.userId,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    status: row.status,
+    sortOrder: row.sortOrder,
+    slug: row.slug ?? null,
+    completedAt: row.completedAt ?? null,
+    lastReminderAt: row.lastReminderAt ?? null,
+    reminderCount: row.reminderCount ?? 0,
+  };
+}
+
+/**
+ * The submissions list with every signer attached, plus the template's name.
+ *
+ * The E-Sign screen needs all of it before a row is expanded: the progress
+ * column, the status counts, the Waiting-on view and its tab badge, and a text
+ * filter that matches on a signer's name or email. Fetching signers per row on
+ * expand would answer none of those.
+ *
+ * Two queries regardless of how many submissions come back — one for the
+ * signers, one for the template names. Never one per row.
+ */
+export async function listSubmissionsWithSigners(
+  communityId: number,
+  filters?: { status?: EsignSubmissionStatus },
+): Promise<EsignSubmissionListRow[]> {
+  const submissions = await listSubmissions(communityId, filters);
+  if (submissions.length === 0) {
+    // drizzle rejects `inArray(col, [])`, and there is nothing to look up.
+    return [];
+  }
+
+  const scoped = createScopedClient(communityId);
+
+  const signerRows = (await scoped.selectFrom(
+    esignSigners,
+    {},
+    inArray(
+      esignSigners.submissionId,
+      submissions.map((s) => s.id),
+    ),
+  )) as EsignSignerRecord[];
+
+  const signersBySubmission = new Map<number, EsignListSigner[]>();
+  for (const row of signerRows) {
+    const list = signersBySubmission.get(row.submissionId) ?? [];
+    list.push(toListSigner(row));
+    signersBySubmission.set(row.submissionId, list);
+  }
+  for (const list of signersBySubmission.values()) {
+    list.sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  }
+
+  const templateIds = [
+    ...new Set(
+      submissions
+        .map((s) => s.templateId)
+        .filter((id): id is number => typeof id === 'number'),
+    ),
+  ];
+
+  const namesByTemplate = new Map<number, string>();
+  if (templateIds.length > 0) {
+    const templateRows = (await scoped.selectFrom(
+      esignTemplates,
+      {},
+      inArray(esignTemplates.id, templateIds),
+    )) as EsignTemplateRecord[];
+    for (const row of templateRows) {
+      namesByTemplate.set(row.id, row.name);
+    }
+  }
+
+  return submissions.map((submission) => ({
+    ...submission,
+    templateName:
+      submission.templateId == null
+        ? null
+        : namesByTemplate.get(submission.templateId) ?? null,
+    signers: signersBySubmission.get(submission.id) ?? [],
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // My-pending: user-scoped pending signers (for dashboard widget / non-admin view)
 // ---------------------------------------------------------------------------
