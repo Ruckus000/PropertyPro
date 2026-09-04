@@ -174,7 +174,11 @@ export function SignatureCapture({
           'flex flex-col overflow-hidden',
           // Mobile: bottom sheet
           'top-auto bottom-0 left-0 right-0 translate-x-0 translate-y-0',
-          'w-full h-[85vh]',
+          // `max-w-none` is load-bearing: DialogContent's base sets
+          // `max-w-[calc(100vw-2rem)]`, which beats this `w-full`, and with
+          // `left-0` the 2rem lands entirely on the right — a "full-width"
+          // sheet that stops 36px short of the edge.
+          'w-full max-w-none h-[85vh]',
           'rounded-t-2xl rounded-b-none',
           // Desktop: centered modal
           'md:top-1/2 md:bottom-auto md:left-1/2 md:right-auto',
