@@ -25,6 +25,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import { FilePlus2, PenTool } from 'lucide-react';
 import { type CommunityRole, type CommunityType } from '@propertypro/shared';
@@ -34,15 +35,26 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PageHeader } from '@/components/shared/page-header';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { Button } from '@/components/ui/button';
+import { useUrlView } from '@/hooks/use-url-view';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
 import { useDocumentCategories } from '@/hooks/use-document-categories';
-import { useDocuments, useDocumentsInvalidator } from '@/hooks/use-documents';
+import {
+  useDeletedDocuments,
+  useDocuments,
+  useDocumentsInvalidator,
+  useRestoreDocument,
+  useSetDocumentPublicAccess,
+} from '@/hooks/use-documents';
 import type { UploadDocumentResult } from '@/hooks/use-document-upload';
 import {
+  boardColumns,
+  coerceDocumentsView,
   coverageFacts,
   filterRows,
   mergeDocumentsAndGaps,
   owedToPublic,
+  timelineRows,
   unlinkedDocuments,
   type ChecklistRow,
   type DocumentQuickFilter,
@@ -52,7 +64,10 @@ import { DocumentCategoryFilter } from './document-category-filter';
 import { DocumentInspector } from './document-inspector';
 import { DocumentSearch } from './document-search';
 import { DocumentUploadArea } from './document-upload-area';
+import { DocumentsBoard } from './documents-board';
 import { DocumentsTable } from './documents-table';
+import { DocumentsTimeline } from './documents-timeline';
+import { PublishDocumentDialog } from './publish-document-dialog';
 
 interface DocumentLibraryProps {
   communityId: number;
@@ -85,6 +100,11 @@ export function DocumentLibrary({
   const [quickFilter, setQuickFilter] = useState<DocumentQuickFilter>('all');
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(!!initialSearchQuery);
+  const [publishTarget, setPublishTarget] = useState<{
+    document: DocumentRow;
+    publishing: boolean;
+  } | null>(null);
+  const { view, setView } = useUrlView('view', coerceDocumentsView);
 
   const canUpload = checkPermissionV2(userRole, communityType, 'documents', 'write', {
     isUnitOwner,
@@ -96,6 +116,13 @@ export function DocumentLibrary({
   const documentsQuery = useDocuments({ communityId });
   const checklistQuery = useComplianceChecklist(communityId, { enabled: showStatutory });
   const { categories } = useDocumentCategories(communityId);
+  // Only the board asks for deleted rows, and only management may see them.
+  const deletedQuery = useDeletedDocuments({
+    communityId,
+    enabled: view === 'board' && canUpload,
+  });
+  const publicAccessMutation = useSetDocumentPublicAccess(communityId);
+  const restoreMutation = useRestoreDocument(communityId);
   const invalidateDocuments = useDocumentsInvalidator(communityId);
 
   const documents = useMemo<DocumentRow[]>(() => documentsQuery.data ?? [], [documentsQuery.data]);
@@ -117,6 +144,27 @@ export function DocumentLibrary({
     [checklist, documents, quickFilter, selectedCategoryId],
   );
 
+  const deletedDocuments = useMemo<DocumentRow[]>(
+    () => deletedQuery.data ?? [],
+    [deletedQuery.data],
+  );
+
+  const columns = useMemo(
+    () => boardColumns(rows, deletedDocuments),
+    [deletedDocuments, rows],
+  );
+
+  const now = useMemo(() => new Date(), []);
+  const timeline = useMemo(
+    () => timelineRows(documents, checklist, now),
+    [checklist, documents, now],
+  );
+
+  const selectedIsDeleted = useMemo(
+    () => (selectedDocument ? deletedDocuments.some((d) => d.id === selectedDocument.id) : false),
+    [deletedDocuments, selectedDocument],
+  );
+
   const facts = useMemo(() => coverageFacts(documents, checklist), [checklist, documents]);
   const unlinkedCount = useMemo(
     () => unlinkedDocuments(documents, checklist).length,
@@ -131,11 +179,6 @@ export function DocumentLibrary({
     if (!selectedDocument) return null;
     return checklist.find((item) => item.documentId === selectedDocument.id) ?? null;
   }, [checklist, selectedDocument]);
-
-  const selectedCategoryName = useMemo(() => {
-    if (!selectedDocument || selectedDocument.categoryId == null) return null;
-    return categoryNameById.get(selectedDocument.categoryId) ?? null;
-  }, [categoryNameById, selectedDocument]);
 
   const selectedState = useMemo(() => {
     if (!selectedDocument) return null;
@@ -228,7 +271,15 @@ export function DocumentLibrary({
             )}
           </>
         }
-      />
+      >
+        <Tabs value={view} onValueChange={setView}>
+          <TabsList aria-label="View">
+            <TabsTrigger value="list">List</TabsTrigger>
+            <TabsTrigger value="board">Board</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </PageHeader>
 
       {showUpload && canUpload && (
         <div className="rounded-md border border-edge bg-surface-card p-6">
@@ -298,27 +349,60 @@ export function DocumentLibrary({
           <div
             className={`min-w-0 border-r border-edge p-6 ${selectedDocument ? 'hidden lg:block' : ''}`}
           >
-            <DocumentsTable
-              rows={rows}
-              isLoading={documentsQuery.isLoading}
-              selectedId={selectedDocument?.id ?? null}
-              showStatutoryColumns={showStatutory}
-              categoryNameById={categoryNameById}
-              onSelectDocument={setSelectedDocument}
-              {...(documents.length === 0 && !documentsQuery.isLoading
-                ? {
-                    emptyAction: (
-                      <EmptyState
-                        preset="no_documents"
-                        size="sm"
-                        {...(canUpload
-                          ? { action: <Button onClick={openUploadPanel}>Upload Document</Button> }
-                          : {})}
-                      />
-                    ),
-                  }
-                : {})}
-            />
+            {view === 'list' && (
+              <DocumentsTable
+                rows={rows}
+                isLoading={documentsQuery.isLoading}
+                selectedId={selectedDocument?.id ?? null}
+                showStatutoryColumns={showStatutory}
+                categoryNameById={categoryNameById}
+                onSelectDocument={setSelectedDocument}
+                {...(documents.length === 0 && !documentsQuery.isLoading
+                  ? {
+                      emptyAction: (
+                        <EmptyState
+                          preset="no_documents"
+                          size="sm"
+                          {...(canUpload
+                            ? { action: <Button onClick={openUploadPanel}>Upload Document</Button> }
+                            : {})}
+                        />
+                      ),
+                    }
+                  : {})}
+              />
+            )}
+
+            {view === 'board' && (
+              <DocumentsBoard
+                columns={columns}
+                selectedId={selectedDocument?.id ?? null}
+                canManage={canUpload}
+                onSelectDocument={setSelectedDocument}
+                onMove={(document, from, to) => {
+                  // Nothing commits on a drop: this opens the same review the
+                  // inspector's button does. Only the public/private transition
+                  // is draggable — deleting is destructive and keeps its own
+                  // explicit verb, and restoring is offered in the panel.
+                  if (from === 'deleted' || to === 'deleted') return;
+                  setSelectedDocument(document);
+                  setPublishTarget({ document, publishing: to === 'public' });
+                }}
+              />
+            )}
+
+            {view === 'timeline' && (
+              <DocumentsTimeline
+                rows={timeline}
+                year={now.getUTCFullYear()}
+                currentMonth={now.getUTCMonth()}
+                selectedId={selectedDocument?.id ?? null}
+                onSelectDocument={(documentId) => {
+                  const found = documents.find((d) => d.id === documentId);
+                  if (found) setSelectedDocument(found);
+                }}
+              />
+            )}
           </div>
 
           <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden lg:block'}`}>
@@ -338,13 +422,71 @@ export function DocumentLibrary({
               state={selectedState}
               canManage={canUpload}
               showStatutory={showStatutory}
-              categoryName={selectedCategoryName}
+              isDeleted={selectedIsDeleted}
+              onRequestPublish={(document, publishing) =>
+                setPublishTarget({ document, publishing })
+              }
+              onRestore={(document) => {
+                restoreMutation.mutate(
+                  { id: document.id },
+                  {
+                    onSuccess: () => {
+                      setSelectedDocument(null);
+                      toast.success('Document restored.');
+                    },
+                  },
+                );
+              }}
               onDeleted={handleDeleted}
               onClose={() => setSelectedDocument(null)}
             />
           </div>
         </div>
       </div>
+
+      <PublishDocumentDialog
+        open={publishTarget !== null}
+        publishing={publishTarget?.publishing ?? true}
+        documentTitle={publishTarget?.document.title ?? ''}
+        categoryName={
+          publishTarget?.document.categoryId != null
+            ? categoryNameById.get(publishTarget.document.categoryId) ?? null
+            : null
+        }
+        requirementTitle={
+          publishTarget
+            ? checklist.find((c) => c.documentId === publishTarget.document.id)?.title ?? null
+            : null
+        }
+        isPending={publicAccessMutation.isPending}
+        errorMessage={
+          publicAccessMutation.error instanceof Error ? publicAccessMutation.error.message : null
+        }
+        onCancel={() => {
+          setPublishTarget(null);
+          publicAccessMutation.reset();
+        }}
+        onConfirm={(redactionAttested) => {
+          if (!publishTarget) return;
+          publicAccessMutation.mutate(
+            {
+              id: publishTarget.document.id,
+              publicAccess: publishTarget.publishing,
+              ...(redactionAttested === undefined ? {} : { redactionAttested }),
+            },
+            {
+              onSuccess: () => {
+                toast.success(
+                  publishTarget.publishing
+                    ? 'Now on the public site.'
+                    : 'Removed from the public site.',
+                );
+                setPublishTarget(null);
+              },
+            },
+          );
+        }}
+      />
     </div>
   );
 }

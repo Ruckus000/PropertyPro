@@ -67,6 +67,8 @@
 import { defineRoute, z } from '@propertypro/api-contract';
 
 const listQuerySchema = z.object({
+  /** Board's Deleted column: soft-deleted rows ONLY. Requires documents:write. */
+  deleted: z.enum(['true']).optional(),
   communityId: z.coerce.number().int().positive(),
   categoryId: z.coerce.number().int().positive().optional(),
   cursor: z.string().min(1).max(256).optional(),
@@ -148,13 +150,28 @@ const patchQuerySchema = z.object({
   communityId: z.coerce.number().int().positive(),
 });
 
+/**
+ * Two document state flags, exactly one per request.
+ *
+ * This widened from `publicAccess` alone when the board's Deleted column needed
+ * a way back. It is still deliberately NOT a general document PATCH: both keys
+ * are lifecycle flags with their own audit entry, and the refine below refuses
+ * a body that sets neither or both, so a caller cannot publish and restore in
+ * one unreviewable step.
+ */
 const patchBodySchema = z
   .object({
-    publicAccess: z.boolean(),
+    publicAccess: z.boolean().optional(),
     /** Fla. Stat. 718.111(12)(c) — required by category when publishing. */
     redactionAttested: z.boolean().optional(),
+    /** Undo a soft delete. */
+    restore: z.literal(true).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (body) => (body.publicAccess === undefined) !== (body.restore === undefined),
+    { message: 'Send exactly one of publicAccess or restore' },
+  );
 
 export const documentsPatchContract = defineRoute({
   method: 'PATCH',
@@ -165,7 +182,8 @@ export const documentsPatchContract = defineRoute({
   },
   response: z.object({
     id: z.number().int().positive(),
-    publicAccess: z.boolean(),
+    publicAccess: z.boolean().optional(),
+    restored: z.literal(true).optional(),
   }),
   permission: { resource: 'documents', action: 'write' },
 });

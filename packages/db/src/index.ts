@@ -130,6 +130,7 @@ export type {
 export {
   buildAccessibleDocumentsFilter,
   buildDocumentAccessFilter,
+  buildSourceTypeFilter,
   getAccessibleDocuments,
   isDocumentAccessible,
   getDocumentWithAccessCheck,

@@ -228,3 +228,47 @@ export function useSetDocumentPublicAccess(communityId: number) {
     },
   });
 }
+
+/**
+ * The board's Deleted column. Its own query key, because these rows are
+ * deliberately absent from every other view and must not leak into the list's
+ * cache.
+ */
+export function useDeletedDocuments({
+  communityId,
+  enabled = true,
+}: {
+  communityId: number;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ['documents', communityId, 'deleted'],
+    queryFn: ({ signal }) =>
+      walkPaginated<DocumentRow>(
+        '/api/v1/documents',
+        { communityId: String(communityId), deleted: 'true' },
+        { signal },
+      ),
+    enabled: enabled && communityId > 0,
+  });
+}
+
+/** Undo a soft delete. Refreshes both the live list and the deleted one. */
+export function useRestoreDocument(communityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { id: number }) => {
+      const params = new URLSearchParams({
+        id: String(payload.id),
+        communityId: String(communityId),
+      });
+      return requestJson<{ id: number; restored: true }>(
+        `/api/v1/documents?${params.toString()}`,
+        { method: 'PATCH', body: JSON.stringify({ restore: true }) },
+      );
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
+    },
+  });
+}
