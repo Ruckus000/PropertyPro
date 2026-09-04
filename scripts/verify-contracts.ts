@@ -94,6 +94,14 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   // Drain this entry when the runner grows a way to return response headers
   // (e.g. a `{ data, cookies }` result shape), not by dropping the cookie.
   'apps/web/src/app/api/v1/support/end-session/route.ts',
+  // NOT grandfathered — added with the public-documents path, same class of
+  // reason as the entry above. `runRoute`'s `buildResponse` always constructs a
+  // fresh `NextResponse.json(...)`, and this route's whole job is to 302 an
+  // anonymous visitor to a short-lived signed storage URL. A JSON envelope would
+  // mean the association's public site could not simply link to it.
+  //
+  // Drain this entry when the runner can express a redirect, not by returning
+  // JSON to a browser that followed a Download link.
   'apps/web/src/app/api/health/route.ts',
   'apps/web/src/app/api/v1/announcements/route.ts',
   'apps/web/src/app/api/v1/audit-trail/route.ts',
@@ -150,6 +158,7 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/violations/[id]/notice/route.ts',
   'apps/web/src/app/api/v1/webhooks/stripe/route.ts',
   'apps/web/src/app/api/v1/webhooks/twilio/route.ts',
+  'apps/web/src/app/api/v1/public/documents/[id]/download/route.ts',
 ]);
 
 // ---------------------------------------------------------------------------

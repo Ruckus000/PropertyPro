@@ -29,6 +29,9 @@ const {
   paginateAccessibleDocumentsMock,
   getDocumentForDeletionAuditMock,
   softDeleteDocumentMock,
+  getDocumentForPublishAuditMock,
+  setDocumentPublicAccessMock,
+  enforcePublishRedactionAttestationMock,
   tryAutoCompleteMock,
   logAuditEventMock,
   createScopedClientMock,
@@ -47,6 +50,9 @@ const {
   paginateAccessibleDocumentsMock: vi.fn(),
   getDocumentForDeletionAuditMock: vi.fn(),
   softDeleteDocumentMock: vi.fn(),
+  getDocumentForPublishAuditMock: vi.fn(),
+  setDocumentPublicAccessMock: vi.fn(),
+  enforcePublishRedactionAttestationMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   createScopedClientMock: vi.fn(),
@@ -84,6 +90,7 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
 
 vi.mock('@/lib/documents/redaction-attestation', () => ({
   enforceRedactionAttestation: enforceRedactionAttestationMock,
+  enforcePublishRedactionAttestation: enforcePublishRedactionAttestationMock,
 }));
 
 vi.mock('@/lib/documents/create-uploaded-document', () => ({
@@ -98,6 +105,8 @@ vi.mock('@/lib/services/documents-service', () => ({
   paginateAccessibleDocuments: paginateAccessibleDocumentsMock,
   getDocumentForDeletionAudit: getDocumentForDeletionAuditMock,
   softDeleteDocument: softDeleteDocumentMock,
+  getDocumentForPublishAudit: getDocumentForPublishAuditMock,
+  setDocumentPublicAccess: setDocumentPublicAccessMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -110,7 +119,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: vi.fn((col: unknown, value: unknown) => ({ __eq: { col, value } })),
 }));
 
-import { DELETE, GET, POST } from '../../src/app/api/v1/documents/route';
+import { DELETE, GET, PATCH, POST } from '../../src/app/api/v1/documents/route';
 
 const MEMBERSHIP = {
   userId: 'user-admin',
@@ -521,5 +530,126 @@ describe('DELETE /api/v1/documents', () => {
     expect(res.status).toBe(403);
     expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
     expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /api/v1/documents - public_access', () => {
+  /**
+   * This is the ONLY writer for `documents.public_access`, and that flag is what
+   * puts an association's record on the open internet. Every gate below is a
+   * reason a board cannot do that by accident.
+   */
+  function patchRequest(body: unknown, query = 'id=7&communityId=42') {
+    return new NextRequest(`http://localhost/api/v1/documents?${query}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-admin');
+    resolveEffectiveCommunityIdMock.mockReturnValue(42);
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
+    requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
+    requirePermissionMock.mockReturnValue(undefined);
+    requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
+    enforcePublishRedactionAttestationMock.mockResolvedValue(undefined);
+    getDocumentForPublishAuditMock.mockResolvedValue({
+      title: 'Bylaws',
+      categoryId: 3,
+      publicAccess: false,
+    });
+    setDocumentPublicAccessMock.mockResolvedValue([{ id: 7, publicAccess: true }]);
+    logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  it('puts a document on the public site and records who did it', async () => {
+    const response = await PATCH(patchRequest({ publicAccess: true, redactionAttested: true }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      data: { id: 7, publicAccess: true },
+    });
+    expect(setDocumentPublicAccessMock).toHaveBeenCalledWith(42, 7, true);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-admin',
+        action: 'update',
+        resourceType: 'document',
+        resourceId: '7',
+        communityId: 42,
+        oldValues: { publicAccess: false },
+        newValues: { publicAccess: true },
+      }),
+    );
+  });
+
+  it('refuses a viewer without documents:write', async () => {
+    requirePermissionMock.mockImplementation(() => {
+      throw new ForbiddenError('Insufficient permissions');
+    });
+
+    const response = await PATCH(patchRequest({ publicAccess: true, redactionAttested: true }));
+
+    expect(response.status).toBe(403);
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unauthenticated caller', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError('Unauthorized'));
+
+    const response = await PATCH(patchRequest({ publicAccess: true }));
+
+    expect(response.status).toBe(401);
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('will not publish without the redaction attestation the category requires', async () => {
+    // Fla. Stat. 718.111(12)(c). The upload attestation covers the owner portal;
+    // the open internet is a materially larger disclosure, so publishing asks
+    // again rather than inheriting a consent given for a smaller audience.
+    enforcePublishRedactionAttestationMock.mockRejectedValue(
+      new ValidationError('Confirm you have redacted it before publishing.'),
+    );
+
+    const response = await PATCH(patchRequest({ publicAccess: true }));
+
+    expect(response.status).toBe(400);
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('does not ask for an attestation to REMOVE a document from the public site', async () => {
+    // Un-publishing reduces disclosure. Gating it would be friction with no
+    // statutory purpose, and would strand a document a board wants pulled.
+    getDocumentForPublishAuditMock.mockResolvedValue({
+      title: 'Bylaws',
+      categoryId: 3,
+      publicAccess: true,
+    });
+    setDocumentPublicAccessMock.mockResolvedValue([{ id: 7, publicAccess: false }]);
+
+    const response = await PATCH(patchRequest({ publicAccess: false }));
+
+    expect(response.status).toBe(200);
+    expect(enforcePublishRedactionAttestationMock).not.toHaveBeenCalled();
+    expect(setDocumentPublicAccessMock).toHaveBeenCalledWith(42, 7, false);
+  });
+
+  it('refuses a document that is not in this community', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(null);
+
+    const response = await PATCH(patchRequest({ publicAccess: true, redactionAttested: true }));
+
+    expect(response.status).toBe(400);
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body that does not carry publicAccess', async () => {
+    const response = await PATCH(patchRequest({ redactionAttested: true }));
+
+    expect(response.status).toBe(400);
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
   });
 });

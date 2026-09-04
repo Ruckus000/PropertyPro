@@ -87,3 +87,61 @@ export async function enforceRedactionAttestation(params: {
     },
   });
 }
+
+/**
+ * The same duty, at the moment of a materially larger disclosure.
+ *
+ * `enforceRedactionAttestation` fires on UPLOAD, where the audience is the
+ * owner portal. Putting a document on the association's public site publishes
+ * it to the open internet, and two gaps make the upload attestation an unsafe
+ * thing to inherit here:
+ *
+ *   - it is only required for the categories that USUALLY carry PII, so a file
+ *     filed under Governing Documents carries none at all; and
+ *   - documents uploaded before that check shipped (audit F-02) carry none
+ *     either.
+ *
+ * So publishing asks again rather than assuming a consent given for a smaller
+ * audience covers a larger one. Un-publishing does not: it reduces disclosure,
+ * and gating it would strand a document a board wants pulled.
+ */
+export async function enforcePublishRedactionAttestation(params: {
+  communityId: number;
+  categoryId: number;
+  userId: string;
+  title: string;
+  attested: boolean | undefined;
+}): Promise<void> {
+  const required = await categoryRequiresRedactionAttestation(
+    params.communityId,
+    params.categoryId,
+  );
+  if (!required) return;
+
+  if (params.attested !== true) {
+    throw new ValidationError(
+      'This document category commonly contains protected personal information. Confirm you have redacted it before putting it on the public site.',
+      {
+        fields: [{ field: 'redactionAttested', message: REDACTION_ATTESTATION_TEXT }],
+      },
+    );
+  }
+
+  // A distinct resourceType from the upload attestation: the two are different
+  // acts against different audiences, and a later reader must be able to tell
+  // which one a board actually made.
+  await logAuditEvent({
+    userId: params.userId,
+    action: 'create',
+    resourceType: 'document_publish_redaction_attestation',
+    resourceId: String(params.categoryId),
+    communityId: params.communityId,
+    newValues: {
+      attested: true,
+      attestationText: REDACTION_ATTESTATION_TEXT,
+      documentTitle: params.title,
+      statute: '718.111(12)(c)',
+      audience: 'public_site',
+    },
+  });
+}

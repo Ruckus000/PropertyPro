@@ -35,12 +35,17 @@ import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
-import { enforceRedactionAttestation } from '@/lib/documents/redaction-attestation';
+import {
+  enforcePublishRedactionAttestation,
+  enforceRedactionAttestation,
+} from '@/lib/documents/redaction-attestation';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import {
   getDocumentForDeletionAudit,
+  getDocumentForPublishAudit,
   paginateAccessibleDocuments,
+  setDocumentPublicAccess,
   softDeleteDocument,
 } from '@/lib/services/documents-service';
 import { unlinkChecklistItemsForDocument } from '@/lib/services/compliance-service';
@@ -48,6 +53,7 @@ import {
   documentsCreateContract,
   documentsDeleteContract,
   documentsListContract,
+  documentsPatchContract,
 } from './contract';
 
 export const GET = withErrorHandler(
@@ -202,5 +208,65 @@ export const DELETE = withErrorHandler(
     });
 
     return { deleted: true as const, id };
+  }),
+);
+
+/**
+ * The only writer for `documents.public_access`.
+ *
+ * Publishing puts an association record on the open internet: it is what
+ * `public-community-reader` filters on for both the site's documents block and
+ * the sitemap, and §718.111(12)(g) is the duty it serves. The gate chain is the
+ * DELETE chain — the same destructive-write posture — plus a redaction
+ * attestation on the publishing direction only.
+ */
+export const PATCH = withErrorHandler(
+  runRoute(documentsPatchContract, async ({ query, body, req }) => {
+    const userId = await requireAuthenticatedUserId();
+
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    await assertNotDemoGrace(communityId);
+    const { id } = query;
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'documents', 'write');
+    await requireActiveSubscriptionForMutation(communityId);
+
+    const existing = await getDocumentForPublishAudit(communityId, id);
+    if (!existing) {
+      throw new ValidationError('Document not found');
+    }
+
+    // Publishing only. Removing a document from the public site reduces
+    // disclosure, so it carries no attestation — gating it would strand a
+    // record a board wants pulled.
+    if (body.publicAccess) {
+      await enforcePublishRedactionAttestation({
+        communityId,
+        // A null category is treated as sensitive by
+        // `categoryRequiresRedactionAttestation`: a missing category is not
+        // evidence that a document is safe to publish.
+        categoryId: existing.categoryId ?? 0,
+        userId,
+        title: existing.title ?? String(id),
+        attested: body.redactionAttested,
+      });
+    }
+
+    const updated = await setDocumentPublicAccess(communityId, id, body.publicAccess);
+    if (updated.length === 0) {
+      throw new ValidationError('Failed to update document');
+    }
+
+    await logAuditEvent({
+      userId,
+      action: 'update',
+      resourceType: 'document',
+      resourceId: String(id),
+      communityId,
+      oldValues: { publicAccess: existing.publicAccess },
+      newValues: { publicAccess: body.publicAccess },
+    });
+
+    return { id, publicAccess: body.publicAccess };
   }),
 );

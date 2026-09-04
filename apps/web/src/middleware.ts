@@ -219,6 +219,22 @@ function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
   if (request.nextUrl.pathname.startsWith('/api/v1/esign/sign/')) {
     return true;
   }
+  // Anonymous download of a document an association has PUBLISHED to its public
+  // site (§718.111(12)(g)). Dynamic [id] segment, so it cannot use exact-path
+  // matching. GET only — this route reads one row and redirects; it can neither
+  // list documents nor change anything. The route itself is the authorization:
+  // `getPublicDocumentFile` returns a row only when `public_access` is true, the
+  // row is not soft-deleted, it belongs to the named community, and that
+  // community is not itself soft-deleted — the last predicate standing in for
+  // the host-resolution gate this route bypasses by taking `communityId` from
+  // the query string.
+  if (
+    request.nextUrl.pathname.startsWith('/api/v1/public/documents/') &&
+    request.nextUrl.pathname.endsWith('/download') &&
+    request.method.toUpperCase() === 'GET'
+  ) {
+    return true;
+  }
   // Demo entry route uses dynamic [slug] segment
   if (
     request.nextUrl.pathname.startsWith('/api/v1/demo/') &&

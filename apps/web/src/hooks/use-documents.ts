@@ -193,3 +193,38 @@ export function useDocumentsInvalidator(communityId: number) {
     void queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
   }, [queryClient, communityId]);
 }
+
+/**
+ * Put a document on the association's public site, or take it off.
+ *
+ * `redactionAttested` is required by the server when the document's category
+ * commonly carries protected personal information (Fla. Stat. 718.111(12)(c));
+ * omitting it is a 400, not a silent publish.
+ */
+export function useSetDocumentPublicAccess(communityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      id: number;
+      publicAccess: boolean;
+      redactionAttested?: boolean;
+    }) => {
+      const params = new URLSearchParams({
+        id: String(payload.id),
+        communityId: String(communityId),
+      });
+      const body: Record<string, unknown> = { publicAccess: payload.publicAccess };
+      // The contract body is `.strict()`, so only send the key when it applies.
+      if (payload.redactionAttested !== undefined) {
+        body.redactionAttested = payload.redactionAttested;
+      }
+      return requestJson<{ id: number; publicAccess: boolean }>(
+        `/api/v1/documents?${params.toString()}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
+    },
+  });
+}

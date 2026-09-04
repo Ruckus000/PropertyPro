@@ -1062,4 +1062,77 @@ describe('getPublicCommunityScopedReader', () => {
     expect(result).toEqual({ management: null, board: [] });
     expect(mockDb.select).not.toHaveBeenCalled();
   });
+
+  describe('getPublicDocumentFile', () => {
+    /**
+     * This filter is the entire authorization for the product's only
+     * unauthenticated read of the private documents bucket. If a predicate goes
+     * missing, a private association record is on the open internet — so each
+     * one is asserted by name rather than by a single shape snapshot.
+     */
+    it('demands public_access, a live row, and this community', async () => {
+      mockSelectChain.then.mockImplementation((resolve) =>
+        Promise.resolve([]).then(resolve),
+      );
+      const reader = getPublicCommunityScopedReader(42);
+      await reader.getPublicDocumentFile(7);
+
+      const where = mockSelectChain.where.mock.calls[0][0];
+      const clauses = where.__and as unknown[];
+
+      const equals = clauses
+        .filter((c) => (c as { __eq?: unknown }).__eq !== undefined)
+        .map((c) => (c as { __eq: { col: string; val: unknown } }).__eq);
+      const isNulls = clauses
+        .filter((c) => (c as { __isNull?: string }).__isNull !== undefined)
+        .map((c) => (c as { __isNull: string }).__isNull);
+
+      expect(equals).toEqual(
+        expect.arrayContaining([
+          { col: 'documents.publicAccess', val: true },
+          { col: 'documents.communityId', val: 42 },
+          { col: 'documents.id', val: 7 },
+        ]),
+      );
+      expect(isNulls).toContain('documents.deletedAt');
+      // The community must still be live. Soft-deleting a community sets
+      // `communities.deleted_at` and touches nothing on `documents`, so without
+      // this predicate a deleted association's published records stay
+      // anonymously downloadable — including after the 6-month purge.
+      expect(isNulls).toContain('communities.deletedAt');
+    });
+
+    /**
+     * The download route reads `communityId` off the query string, so it never
+     * passes through the middleware RPC (`pp_public_community_id_by_slug`,
+     * migration 0045) that filters `deleted_at IS NULL` for every other public
+     * surface. This join is the only thing standing in for that gate.
+     */
+    it('joins communities so a soft-deleted community cannot serve its documents', async () => {
+      mockSelectChain.then.mockImplementation((resolve) =>
+        Promise.resolve([]).then(resolve),
+      );
+      const reader = getPublicCommunityScopedReader(42);
+      await reader.getPublicDocumentFile(7);
+
+      expect(mockSelectChain.innerJoin).toHaveBeenCalledTimes(1);
+      expect(mockSelectChain.innerJoin).toHaveBeenCalledWith(
+        expect.anything(),
+        { __eq: { col: 'communities.id', val: 'documents.communityId' } },
+      );
+
+      // One WHERE per method — the liveness predicate rides in the same flat
+      // and(...) as the document predicates (the `resolveRedirect` shape),
+      // never as a second lookup.
+      expect(mockSelectChain.where).toHaveBeenCalledTimes(1);
+    });
+
+    it('never queries for a non-positive id', async () => {
+      const reader = getPublicCommunityScopedReader(42);
+
+      await expect(reader.getPublicDocumentFile(0)).resolves.toBeNull();
+      await expect(reader.getPublicDocumentFile(-1)).resolves.toBeNull();
+      await expect(reader.getPublicDocumentFile(1.5)).resolves.toBeNull();
+    });
+  });
 });

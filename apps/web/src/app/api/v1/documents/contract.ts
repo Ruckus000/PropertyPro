@@ -134,3 +134,38 @@ export const documentsDeleteContract = defineRoute({
   }),
   permission: { resource: 'documents', action: 'write' },
 });
+
+/**
+ * PATCH — the `public_access` writer.
+ *
+ * `.strict()` on purpose: this endpoint exists to flip ONE flag, and an
+ * unrecognised key should be refused rather than silently ignored. It is
+ * deliberately not a general document PATCH — nothing else needs one, and a
+ * wider body would widen what a `documents:write` holder can change here.
+ */
+const patchQuerySchema = z.object({
+  id: z.coerce.number().int().positive(),
+  communityId: z.coerce.number().int().positive(),
+});
+
+const patchBodySchema = z
+  .object({
+    publicAccess: z.boolean(),
+    /** Fla. Stat. 718.111(12)(c) — required by category when publishing. */
+    redactionAttested: z.boolean().optional(),
+  })
+  .strict();
+
+export const documentsPatchContract = defineRoute({
+  method: 'PATCH',
+  path: '/api/v1/documents',
+  request: {
+    query: patchQuerySchema,
+    body: patchBodySchema,
+  },
+  response: z.object({
+    id: z.number().int().positive(),
+    publicAccess: z.boolean(),
+  }),
+  permission: { resource: 'documents', action: 'write' },
+});

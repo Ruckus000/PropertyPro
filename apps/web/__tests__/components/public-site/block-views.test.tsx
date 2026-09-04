@@ -136,7 +136,7 @@ describe('DocumentsBlockView', () => {
     const link = screen.getByRole('link', { name: 'Download FY26 Budget' });
     expect(link).toHaveAttribute(
       'href',
-      '/api/v1/documents/12/download?communityId=7&attachment=true',
+      '/api/v1/public/documents/12/download?communityId=7',
     );
   });
 
