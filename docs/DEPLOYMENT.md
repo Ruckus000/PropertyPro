@@ -86,7 +86,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `ADMIN_ORIGIN` | Web | Optional; CSP framing for admin→web previews, e.g. `https://admin.getpropertypro.com` |
 | `SUPPORT_SESSION_JWT_SECRET` | **Both apps, server only** | **Required** — HMAC key for support-impersonation JWTs (min 32 chars). Admin signs, web verifies, so the **same value** must be set on `property-pro-admin` **and** `property-pro-web`. Generate with `openssl rand -hex 32`. See the note below. |
 | `NODE_ENV` | All | `production` |
-| `CRON_SECRET` | **Production, server only** | **Required — every scheduled job depends on it.** Vercel Cron authenticates all 16 jobs with this one platform-wide value. See §4.2. |
+| `CRON_SECRET` | **Production, server only** | **Required — every scheduled job depends on it.** Vercel Cron authenticates all 17 jobs with this one platform-wide value. See §4.2. |
 | `OTP_HMAC_SECRET` | Server only | **Required** (min 16 chars). Access-request OTPs are 6 digits, so this HMAC key is the only thing preventing an attacker precomputing the entire code space. See §4.2. |
 | `TOKEN_ENCRYPTION_KEY` | Server only | **Required** — **exactly 64 hex characters** (32 bytes for AES-256-GCM); not a minimum, and not any 64 characters. Calendar sync and accounting connectors throw without it — those features 500 rather than degrade. See §4.2. |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
@@ -148,7 +148,7 @@ surfaced:
 - **`CRON_SECRET`** — Vercel Cron only sends `Authorization: Bearer
   $CRON_SECRET` **when the variable exists**. Unset, it sends no header at all,
   every scheduled job answers 401, and the Vercel dashboard still shows each
-  cron as registered and firing on schedule. All 16 jobs — payment reminders,
+  cron as registered and firing on schedule. All 17 jobs — payment reminders,
   late fees, assessment generation, compliance alerts, demo expiry, account
   lifecycle — can be dead for months behind a green dashboard.
 

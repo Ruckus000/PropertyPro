@@ -58,6 +58,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/assessment-automation-service.ts'),
   // Calendar reminder cron — cross-community reminder enqueue + delivery
   resolve(repoRoot, 'apps/web/src/lib/services/calendar-event-reminder-service.ts'),
+  // Cron worker: its claim scan is cross-tenant (due schedules in every
+  // community), so it cannot use a community-scoped client. Every statement
+  // carries an explicit predicate; the per-community entry points in the same
+  // file use createScopedClient.
+  resolve(repoRoot, 'apps/web/src/lib/services/site-publish-schedule-service.ts'),
   // Compliance alert cron — cross-community overdue scanning
   resolve(repoRoot, 'apps/web/src/lib/services/compliance-alert-service.ts'),
   // P2-34: Stripe integration — pre-tenant context, no communityId available

@@ -20,7 +20,7 @@
  * genuinely belongs to no single page.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TOMBSTONE_BLOCK_TYPE, type Change } from '@propertypro/shared';
 import {
@@ -163,6 +163,30 @@ vi.mock('@/hooks/use-site-pages', () => ({
   }),
 }));
 
+const scheduleState = vi.hoisted(() => ({
+  pending: null as { id: number; scheduledFor: string; notifySummary: string | null } | null,
+  createPending: false,
+  cancelPending: false,
+}));
+const scheduleAsync = vi.hoisted(() => vi.fn());
+const cancelScheduleAsync = vi.hoisted(() => vi.fn());
+
+// Mocked COMPLETELY, per the note above on partial factories: the real
+// `useSitePublishSchedule` is a React Query hook, and this harness renders
+// without a QueryClientProvider — a missing export here surfaces as
+// "No QueryClient set" from whichever component happens to reach it.
+vi.mock('@/hooks/use-site-publish-schedule', () => ({
+  useSitePublishSchedule: () => ({ data: scheduleState.pending, isPending: false }),
+  useScheduleSitePublish: () => ({
+    mutateAsync: scheduleAsync,
+    isPending: scheduleState.createPending,
+  }),
+  useCancelSitePublishSchedule: () => ({
+    mutateAsync: cancelScheduleAsync,
+    isPending: scheduleState.cancelPending,
+  }),
+}));
+
 const mutateAsync = vi.hoisted(() => vi.fn());
 const publishState = vi.hoisted(() => ({ isPending: false }));
 
@@ -242,6 +266,15 @@ beforeEach(() => {
   unstageState.isPending = false;
   unstageAsync.mockResolvedValue(undefined);
   mutateAsync.mockResolvedValue(PUBLISHED_OK);
+  scheduleState.pending = null;
+  scheduleState.createPending = false;
+  scheduleState.cancelPending = false;
+  scheduleAsync.mockResolvedValue({
+    id: 1,
+    scheduledFor: '2026-08-01T15:00:00.000Z',
+    notifySummary: null,
+  });
+  cancelScheduleAsync.mockResolvedValue(true);
 });
 
 // ── the change list ────────────────────────────────────────────────────────
@@ -499,10 +532,19 @@ describe('PublishSheet — publishing is atomic', () => {
       expect(within(group).queryAllByRole('checkbox')).toHaveLength(0);
     }
 
-    // And the only checkbox anywhere on the sheet is the notification opt-in.
+    /*
+     * And every checkbox on the sheet is named. Both are decisions ABOUT an
+     * already-atomic publish — whether to announce it, and whether to defer it
+     * — never a selection of which changes it contains. Naming them (rather
+     * than counting) means a new tick box cannot be added silently: adding one
+     * fails here until someone states what it is and why it is not selection.
+     */
     const checkboxes = screen.queryAllByRole('checkbox');
-    expect(checkboxes).toHaveLength(1);
-    expect(checkboxes[0]).toHaveAccessibleName(/email residents about this update/i);
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes.map((box) => box.getAttribute('id'))).toEqual([
+      'notify-residents',
+      'schedule-later',
+    ]);
 
     expect(screen.queryByRole('button', { name: /select all/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/select all/i)).not.toBeInTheDocument();
@@ -1541,5 +1583,143 @@ describe('PublishSheet — notifying residents', () => {
 
     expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('posted in residents'));
     expect(screen.getByText(/the email didn’t send/i)).toBeInTheDocument();
+  });
+});
+
+// ── scheduling a publish (launch blocker #7) ───────────────────────────────
+
+describe('PublishSheet — scheduling', () => {
+  function scheduleBox() {
+    return screen.getByRole('checkbox', { name: /publish later instead/i });
+  }
+  function actionButton() {
+    return screen.getByRole('button', { name: /publish changes|schedule publish/i });
+  }
+  /** A local-time datetime-local value a month out, so it is always future. */
+  function futureLocalValue() {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    d.setSeconds(0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return {
+      input: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      iso: d.toISOString(),
+    };
+  }
+
+  it('publishes immediately by default', async () => {
+    renderSheet();
+
+    expect(scheduleBox()).not.toBeChecked();
+    await userEvent.click(actionButton());
+
+    expect(mutateAsync).toHaveBeenCalled();
+    expect(scheduleAsync).not.toHaveBeenCalled();
+  });
+
+  it('switches the button from publishing to scheduling', async () => {
+    renderSheet();
+    await userEvent.click(scheduleBox());
+
+    expect(
+      screen.getByRole('button', { name: /schedule publish/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^publish changes$/i })).not.toBeInTheDocument();
+  });
+
+  it('will not schedule into the past — and does not fall back to publishing now', async () => {
+    /*
+     * The dangerous degradation. If an invalid time quietly published instead,
+     * a PM staging meeting materials for next week would put them live
+     * immediately and be told it succeeded.
+     */
+    renderSheet();
+    await userEvent.click(scheduleBox());
+    fireEvent.change(screen.getByLabelText(/publish at/i), {
+      target: { value: '2020-01-01T09:00' },
+    });
+
+    expect(actionButton()).toBeDisabled();
+    expect(screen.getByTestId('publish-hint')).toHaveTextContent(/time in the future/i);
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(scheduleAsync).not.toHaveBeenCalled();
+  });
+
+  it('sends the chosen local time as a UTC instant', async () => {
+    /*
+     * A datetime-local value is local wall-clock. Parsing it as local and
+     * converting with toISOString() preserves the instant; assembling the ISO
+     * string from the input's characters would shift every PM outside UTC by
+     * their offset — a notice set for 5pm would publish at 1pm.
+     */
+    const { input, iso } = futureLocalValue();
+    renderSheet();
+    await userEvent.click(scheduleBox());
+    fireEvent.change(screen.getByLabelText(/publish at/i), { target: { value: input } });
+    await userEvent.click(actionButton());
+
+    expect(scheduleAsync).toHaveBeenCalledWith({ scheduledFor: iso });
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('carries the resident-notification opt-in into the schedule', async () => {
+    const { input, iso } = futureLocalValue();
+    renderSheet();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /email residents/i }));
+    await userEvent.type(screen.getByLabelText(/what changed\?/i), 'Pool hours updated');
+    await userEvent.click(scheduleBox());
+    fireEvent.change(screen.getByLabelText(/publish at/i), { target: { value: input } });
+    await userEvent.click(actionButton());
+
+    expect(scheduleAsync).toHaveBeenCalledWith({
+      scheduledFor: iso,
+      notifyResidents: { summary: 'Pool hours updated' },
+    });
+  });
+
+  it('shows an existing pending schedule, and can cancel it', async () => {
+    scheduleState.pending = {
+      id: 4,
+      scheduledFor: '2026-08-01T15:00:00.000Z',
+      notifySummary: 'Pool hours updated',
+    };
+    renderSheet();
+
+    const banner = screen.getByTestId('pending-schedule');
+    expect(banner).toHaveTextContent(/already scheduled/i);
+    expect(banner).toHaveTextContent(/residents will be notified/i);
+
+    await userEvent.click(within(banner).getByRole('button', { name: /cancel/i }));
+    expect(cancelScheduleAsync).toHaveBeenCalled();
+  });
+
+  it('says plainly when a pending schedule will NOT notify residents', async () => {
+    // The absence of a notification is a fact the PM needs, not a blank.
+    scheduleState.pending = {
+      id: 4,
+      scheduledFor: '2026-08-01T15:00:00.000Z',
+      notifySummary: null,
+    };
+    renderSheet();
+
+    expect(screen.getByTestId('pending-schedule')).toHaveTextContent(
+      /residents will not be notified/i,
+    );
+  });
+
+  it('reports a scheduling failure without claiming anything was published', async () => {
+    const { input } = futureLocalValue();
+    scheduleAsync.mockRejectedValueOnce(new Error('Pick a time within 90 days.'));
+    const onOpenChange = vi.fn();
+    renderSheet({ onOpenChange });
+
+    await userEvent.click(scheduleBox());
+    fireEvent.change(screen.getByLabelText(/publish at/i), { target: { value: input } });
+    await userEvent.click(actionButton());
+
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining("couldn't schedule"));
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

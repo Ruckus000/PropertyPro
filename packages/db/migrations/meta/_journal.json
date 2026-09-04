@@ -442,6 +442,13 @@
       "when": 1788538299817,
       "tag": "0064_announcement_expiry",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1788539083129,
+      "tag": "0065_site_publish_schedules",
+      "breakpoints": true
     }
   ]
 }
