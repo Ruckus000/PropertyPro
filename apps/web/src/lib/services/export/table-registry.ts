@@ -564,6 +564,8 @@ export const INTENTIONALLY_EXCLUDED: Record<string, string> = {
   // ── Website builder (regenerable presentation, not records) ───────────────
   site_blocks: 'Website page content blocks — presentation, regenerable, not a statutory record.',
   site_pages: 'Website page structure — presentation, regenerable, not a statutory record.',
+  site_publish_schedules:
+    'A pending instruction to publish the website later — one step further from a record than site_blocks/site_pages, which are themselves excluded as regenerable presentation. Transient by construction: at most one live row per community, and it clears itself the moment the cron fires it.',
   site_page_redirects: 'Website URL redirects — presentation routing, regenerable, not a statutory record.',
   site_publish_snapshots: 'Website publish history — versioning of presentation content, not a record.',
   document_drafts: 'In-progress unpublished drafts; the published documents themselves are exported.',
