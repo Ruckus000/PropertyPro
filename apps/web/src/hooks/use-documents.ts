@@ -7,9 +7,10 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { requestJson } from '@/lib/api/request-json';
 import { walkPaginated } from '@/lib/api/walk-paginated';
-import type { DocumentListItem } from '@/components/documents/document-list';
+import type { DocumentRow } from '@/lib/documents/document-state';
 
 /**
  * TanStack-Query hooks for the documents API. Replaces the previous
@@ -84,12 +85,12 @@ function fetchDocuments(
   communityId: number,
   categoryId: number | null | undefined,
   signal?: AbortSignal,
-): Promise<DocumentListItem[]> {
+): Promise<DocumentRow[]> {
   const baseParams: Record<string, string> = {
     communityId: String(communityId),
   };
   if (categoryId != null) baseParams.categoryId = String(categoryId);
-  return walkPaginated<DocumentListItem>('/api/v1/documents', baseParams, { signal });
+  return walkPaginated<DocumentRow>('/api/v1/documents', baseParams, { signal });
 }
 
 export function useDocuments({ communityId, categoryId, enabled = true }: UseDocumentsOptions) {
@@ -179,4 +180,16 @@ export function useDeleteDocument(communityId: number) {
       await queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
     },
   });
+}
+
+/**
+ * Invalidate the documents cache after an out-of-band write (an upload).
+ * Moved here from `document-list-container.tsx` when that container was
+ * replaced — it is a query-cache concern, not a list-rendering one.
+ */
+export function useDocumentsInvalidator(communityId: number) {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
+  }, [queryClient, communityId]);
 }

@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { ExtractionStatusBadge } from '../../src/components/documents/extraction-status-badge';
+import { DocumentsTable } from '../../src/components/documents/documents-table';
 import {
-  DocumentList,
-  ExtractionStatusBadge,
-  type ExtractionStatus,
-} from '../../src/components/documents/document-list';
+  mergeDocumentsAndGaps,
+  type DocumentExtractionStatus as ExtractionStatus,
+  type DocumentRow,
+} from '../../src/lib/documents/document-state';
 
 async function flushEffects(): Promise<void> {
   await Promise.resolve();
@@ -104,7 +106,7 @@ describe('ExtractionStatusBadge', () => {
   });
 });
 
-describe('DocumentList extraction badges', () => {
+describe('DocumentsTable extraction badges', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -123,17 +125,14 @@ describe('DocumentList extraction badges', () => {
     vi.unstubAllGlobals();
   });
 
-  // DocumentList is now a pure presentational component (B5 pattern). The
-  // container owns data fetching; these tests pass documents directly via
-  // props instead of stubbing global fetch.
+  // The merged records table replaced DocumentList. It is still pure and
+  // prop-driven, so these tests pass rows directly rather than stubbing fetch.
   const baseProps = {
     isLoading: false,
-    errorMessage: null,
-    deletingId: null,
-    canManage: false,
+    selectedId: null,
+    showStatutoryColumns: false,
+    categoryNameById: new Map<number, string>(),
     onSelectDocument: () => {},
-    onDeleteDocument: () => {},
-    onDownloadDocument: () => {},
   };
 
   it('renders extraction badges for documents with various statuses', async () => {
@@ -177,7 +176,7 @@ describe('DocumentList extraction badges', () => {
     ];
 
     await act(async () => {
-      root.render(<DocumentList {...baseProps} documents={mockDocuments} />);
+      root.render(<DocumentsTable {...baseProps} rows={mergeDocumentsAndGaps(mockDocuments as DocumentRow[], [])} />);
       await flushEffects();
     });
 
@@ -207,7 +206,7 @@ describe('DocumentList extraction badges', () => {
     ];
 
     await act(async () => {
-      root.render(<DocumentList {...baseProps} documents={mockDocuments} />);
+      root.render(<DocumentsTable {...baseProps} rows={mergeDocumentsAndGaps(mockDocuments as DocumentRow[], [])} />);
       await flushEffects();
     });
 

@@ -14,15 +14,15 @@ import {
   loadDocumentPreview,
   type DocumentPreviewResult,
 } from '@/lib/documents/document-preview-loader';
-import type { DocumentListItem } from './document-list';
+import type { DocumentRow } from '@/lib/documents/document-state';
 import { DocumentViewerModal } from './DocumentViewerModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface DocumentViewerProps {
   communityId: number;
-  document: DocumentListItem | null;
+  document: DocumentRow | null;
   onClose?: () => void;
-  onViewVersions?: (document: DocumentListItem) => void;
+  onViewVersions?: (document: DocumentRow) => void;
   /** When true, an "Edit" CTA appears for authored documents that re-opens
    *  the in-app editor seeded from the published HTML. */
   canEditAuthored?: boolean;

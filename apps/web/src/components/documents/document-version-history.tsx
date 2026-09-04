@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { DocumentListItem } from './document-list';
+import type { DocumentRow } from '@/lib/documents/document-state';
 import { DocumentViewerModal } from './DocumentViewerModal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDocumentVersions, type DocumentVersionItem } from '@/hooks/use-documents';
@@ -9,7 +9,7 @@ import { formatBytes } from '@/lib/utils/format-bytes';
 
 interface DocumentVersionHistoryProps {
   communityId: number;
-  document: DocumentListItem;
+  document: DocumentRow;
   onClose?: () => void;
   onSelectVersion?: (version: DocumentVersionItem) => void;
 }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { DocumentVersionItem } from '../../src/hooks/use-documents';
-import type { DocumentListItem } from '../../src/components/documents/document-list';
+import type { DocumentRow } from '../../src/lib/documents/document-state';
 
 const useDocumentVersionsMock = vi.fn();
 
@@ -21,7 +21,7 @@ import { DocumentVersionHistory } from '../../src/components/documents/document-
 const currentDoc = {
   id: 2,
   title: 'Annual Budget',
-} as DocumentListItem;
+} as DocumentRow;
 
 const currentVersion: DocumentVersionItem = {
   id: 2,
