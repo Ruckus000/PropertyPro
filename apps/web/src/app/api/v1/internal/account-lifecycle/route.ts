@@ -19,6 +19,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import {
+  PURGE_SAFETY_CAP,
+  readPurgeDryRun,
+} from '@/lib/account-lifecycle/purge-guards';
+import {
   sendEmail,
   FreeAccessExpiringEmail,
   FreeAccessExpiredEmail,
@@ -44,6 +48,10 @@ import {
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.ACCOUNT_LIFECYCLE_CRON_SECRET, process.env.CRON_SECRET);
 
+  // Parsed before ANY phase runs, so a malformed value costs no destructive
+  // work — parsing after phase 1 would soft-delete and then reject.
+  const purgeDryRun = readPurgeDryRun(req.nextUrl.searchParams);
+
   const now = new Date();
   const summary = {
     softDeleted: { users: 0, communities: 0 },
@@ -51,6 +59,9 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     // scan and the state-guarded batch write — surfaced for observability.
     skipped: { users: 0, communities: 0 },
     purged: { users: 0, communities: 0 },
+    // Under `dryRun` the `purged` counts above mean "would have purged". This
+    // block is what tells the reader which of the two they are looking at.
+    purge: { dryRun: purgeDryRun, candidates: 0, cap: PURGE_SAFETY_CAP },
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
     siteBlocksCleaned: 0,
     sitePublishSnapshotsPruned: 0,
@@ -91,14 +102,37 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   // 2. Soft-deleted → purge
   // -------------------------------------------------------------------------
   const purgeReady = await findPurgeReadyDeletionRequests(now);
+  summary.purge.candidates = purgeReady.length;
 
-  for (const req of purgeReady) {
+  // A circuit breaker, not a rate limiter. Over the cap we purge NOTHING:
+  // if the candidate set is wrong, purging the first 50 of it is still purging
+  // 50 wrong things, and doing so spreads irreversible damage across nights
+  // instead of raising a signal on the first one. Each purge is its own
+  // non-transactional unit, so there is nothing to roll back — the only safe
+  // move is not to start.
+  //
+  // Deliberately not a throw: throwing would abort phases 3-5, which is exactly
+  // the isolation `account-lifecycle-sweeps.test.ts` exists to defend. A cap
+  // that trips silently is not a cap, so it goes to `summary.errors` AND to
+  // console.error, since nothing alerts on the summary today.
+  let purgeBatch = purgeReady;
+  if (purgeReady.length > PURGE_SAFETY_CAP) {
+    const message =
+      `purge aborted: ${purgeReady.length} candidates exceeds cap ${PURGE_SAFETY_CAP} — ` +
+      'refusing to purge. This usually means the candidate predicate regressed, ' +
+      'not that a genuine backlog appeared.';
+    summary.errors.push(message);
+    console.error(`[account-lifecycle] ${message}`);
+    purgeBatch = [];
+  }
+
+  for (const req of purgeBatch) {
     try {
       if (req.requestType === 'user') {
-        await purgeUserPII(req.id);
+        if (!purgeDryRun) await purgeUserPII(req.id);
         summary.purged.users++;
       } else {
-        await purgeCommunityData(req.id);
+        if (!purgeDryRun) await purgeCommunityData(req.id);
         summary.purged.communities++;
       }
     } catch (err) {
@@ -233,7 +267,11 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 
 // Vercel Cron issues GET; the GitHub-Actions era of this job issued POST.
 // One handler serves both so the scheduler's verb can never be the thing that
-// breaks the job. Neither verb reads a body or query params, so they are
-// genuinely interchangeable.
+// breaks the job. Neither reads a body, and the one query param either verb
+// accepts (`?purgeDryRun=1`) makes the request strictly LESS mutating — so this
+// is not the "state change via GET" hazard it might look like. The real hazard
+// is the opposite, that this GET is destructive by default; that predates the
+// flag and is gated by requireCronSecret on an Authorization header, which no
+// prefetcher, link scanner or browser preconnect supplies.
 export const GET = handler;
 export const POST = handler;
