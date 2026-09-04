@@ -25,7 +25,14 @@ import { documents } from '../schema/documents';
  */
 const USER_VISIBLE_SOURCE_TYPES = ['library', 'authored'] as const;
 
-function buildSourceTypeFilter(
+/**
+ * The `source_type` gate every documents-UI read shares. Exported because the
+ * board's Deleted column reads soft-deleted rows through `queryWhere` rather
+ * than through {@link buildAccessibleDocumentsFilter}, and without this it
+ * would surface `violation_evidence` rows the live list deliberately hides —
+ * and offer to restore them into the library.
+ */
+export function buildSourceTypeFilter(
   sourceTypes: ReadonlyArray<typeof USER_VISIBLE_SOURCE_TYPES[number]> = USER_VISIBLE_SOURCE_TYPES,
 ): SQL {
   if (sourceTypes.length === 1) {

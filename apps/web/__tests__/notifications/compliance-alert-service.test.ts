@@ -29,6 +29,10 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
+  // Loaded transitively via documents-service's deleted-documents read. Both
+  // are real values, not spies: nothing here asserts on them.
+  MAX_PAGE_SIZE: 100,
+  buildSourceTypeFilter: () => ({ __sourceTypeFilter: true }),
   communities: tables.communities,
   complianceChecklistItems: tables.complianceChecklistItems,
   visitorLog: tables.visitorLog,
