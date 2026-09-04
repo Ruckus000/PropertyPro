@@ -44,6 +44,22 @@ export type PublishSiteResult =
        */
       addedPageCount?: number;
       removedPageCount?: number;
+      /**
+       * Present only when the publish requested a resident notification.
+       *
+       * Optional for the same reason as the page counts above — a browser tab
+       * can be older or newer than the server it talks to — and additionally
+       * because a quiet publish never produces one. Absent means "no
+       * notification was attempted"; it must never be read as success.
+       *
+       * `partial` means the announcement exists (residents see it in the app)
+       * but the email fan-out failed. It is reported separately so the sheet
+       * never tells a PM their residents were emailed when they were not.
+       */
+      residentNotification?:
+        | { status: 'sent'; announcementId: number; recipientCount: number }
+        | { status: 'partial'; announcementId: number; reason: string }
+        | { status: 'failed'; reason: string };
     }
   | { published: false; reason: 'nothing-to-publish' };
 
@@ -59,6 +75,11 @@ export interface PublishSiteVariables {
    * ongoing editor's PublishBar.
    */
   markOnboardingComplete?: boolean;
+  /**
+   * Opt-in resident notification. Omitted for a quiet publish, which is the
+   * editor's default.
+   */
+  notifyResidents?: { summary: string };
 }
 
 async function readJsonError(res: Response): Promise<string> {
@@ -82,7 +103,7 @@ export class PublishConflictError extends Error {
 export function usePublishSite(communityId: number) {
   const qc = useQueryClient();
   return useMutation<PublishSiteResult, Error, PublishSiteVariables>({
-    mutationFn: async ({ expectedPublishedAt, markOnboardingComplete }) => {
+    mutationFn: async ({ expectedPublishedAt, markOnboardingComplete, notifyResidents }) => {
       const res = await fetch('/api/v1/pm/site/publish', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -92,6 +113,10 @@ export function usePublishSite(communityId: number) {
           // Only include the flag when set so editor publishes send the exact
           // body shape they always have.
           ...(markOnboardingComplete ? { markOnboardingComplete: true } : {}),
+          // Same reasoning: a quiet publish sends no key at all, so the
+          // server's `notifyResidents` stays undefined rather than arriving as
+          // an empty object the schema would then have to reject.
+          ...(notifyResidents ? { notifyResidents } : {}),
         }),
       });
       if (res.status === 409) {

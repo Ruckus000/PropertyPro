@@ -178,13 +178,14 @@ vi.mock('@/hooks/use-publish-site', async (importOriginal) => {
 
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
+const toastWarning = vi.hoisted(() => vi.fn());
 // `dismiss` is here because `useUndoableRemove` takes the undo toast down when
 // its section unmounts, and `info` because the selection repair speaks through
 // it. Every method the site-editor tree can reach is stubbed, not only the ones
 // asserted here — corpus trap #3: a factory missing an export yields
 // `undefined` at call time, which reads as an unrelated component breaking.
 vi.mock('sonner', () => ({
-  toast: { success: toastSuccess, error: toastError, dismiss: vi.fn(), info: vi.fn() },
+  toast: { success: toastSuccess, error: toastError, warning: toastWarning, dismiss: vi.fn(), info: vi.fn() },
 }));
 
 // ── harness ────────────────────────────────────────────────────────────────
@@ -476,9 +477,33 @@ describe('PublishSheet — page changes', () => {
 // ── the atomic decision, encoded ───────────────────────────────────────────
 
 describe('PublishSheet — publishing is atomic', () => {
-  it('offers no tick boxes, no per-change selection and no select-all', () => {
+  it('offers no per-change selection and no select-all', () => {
+    /*
+     * This used to assert `queryAllByRole('checkbox')` was EMPTY. That was a
+     * proxy for the real rule — a publish is all-or-nothing, so a PM must not
+     * be able to tick individual changes — and the proxy stopped matching the
+     * rule when the sheet gained an opt-in for notifying residents (launch
+     * blocker #6). That control selects nothing; it decides whether an
+     * already-atomic publish is announced.
+     *
+     * Narrowed rather than deleted, and deliberately made STRICTER where it
+     * counts: the blanket count could not tell a per-change tick box from any
+     * other checkbox, so it would have passed a real regression that added
+     * selection to a change row as long as some other checkbox was removed.
+     * These assertions name the thing that must not exist.
+     */
     renderSheet();
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+
+    // No change row may carry a tick box.
+    for (const group of screen.queryAllByTestId(/^change-group-/)) {
+      expect(within(group).queryAllByRole('checkbox')).toHaveLength(0);
+    }
+
+    // And the only checkbox anywhere on the sheet is the notification opt-in.
+    const checkboxes = screen.queryAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(1);
+    expect(checkboxes[0]).toHaveAccessibleName(/email residents about this update/i);
+
     expect(screen.queryByRole('button', { name: /select all/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/select all/i)).not.toBeInTheDocument();
   });
@@ -1394,5 +1419,127 @@ describe('describeRefusalNextStep', () => {
     expect(describeRefusalNextStep(undefined)).toMatch(/try publishing again/i);
     expect(describeRefusalNextStep([{ field: 'page:2.slug' }])).toMatch(/Pages panel/i);
     expect(describeRefusalNextStep([{ field: 'page:7.hero.headline' }])).toMatch(/sections/i);
+  });
+});
+
+// ── notifying residents (launch blocker #6) ────────────────────────────────
+
+describe('PublishSheet — notifying residents', () => {
+  function notifyBox() {
+    return screen.getByRole('checkbox', { name: /email residents about this update/i });
+  }
+  function publishButton() {
+    return screen.getByRole('button', { name: /publish changes/i });
+  }
+
+  it('is off by default, so a publish stays quiet unless asked', async () => {
+    /*
+     * Off on every open, and not remembered between publishes: a sheet that
+     * recalled "notify" would mail an entire association on the next one-word
+     * typo fix.
+     */
+    renderSheet();
+
+    expect(notifyBox()).not.toBeChecked();
+    await userEvent.click(publishButton());
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      expectedPublishedAt: '2026-07-01T00:00:00.000Z',
+    });
+  });
+
+  it('asks what changed only once the box is ticked', async () => {
+    renderSheet();
+    expect(screen.queryByLabelText(/what changed\?/i)).not.toBeInTheDocument();
+
+    await userEvent.click(notifyBox());
+
+    expect(screen.getByLabelText(/what changed\?/i)).toBeInTheDocument();
+  });
+
+  it('blocks the publish while the summary is empty instead of quietly not notifying', async () => {
+    /*
+     * The alternative — publishing quietly when the box is ticked but empty —
+     * hands the PM a success toast for an action they believe told their
+     * residents. That is the exact failure this feature exists to remove, so
+     * the unfinished choice blocks rather than degrades.
+     */
+    renderSheet();
+    await userEvent.click(notifyBox());
+
+    expect(publishButton()).toBeDisabled();
+    expect(screen.getByTestId('publish-hint')).toHaveTextContent(/say what changed/i);
+
+    await userEvent.type(screen.getByLabelText(/what changed\?/i), 'Pool hours updated');
+
+    expect(publishButton()).toBeEnabled();
+  });
+
+  it('sends the trimmed summary with the publish', async () => {
+    renderSheet();
+    await userEvent.click(notifyBox());
+    await userEvent.type(screen.getByLabelText(/what changed\?/i), '  Pool hours updated  ');
+    await userEvent.click(publishButton());
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      expectedPublishedAt: '2026-07-01T00:00:00.000Z',
+      notifyResidents: { summary: 'Pool hours updated' },
+    });
+  });
+
+  it('reports how many residents were notified on success', async () => {
+    mutateAsync.mockResolvedValue({
+      ...PUBLISHED_OK,
+      residentNotification: { status: 'sent', announcementId: 7, recipientCount: 12 },
+    });
+    renderSheet();
+    await userEvent.click(notifyBox());
+    await userEvent.type(screen.getByLabelText(/what changed\?/i), 'Pool hours updated');
+    await userEvent.click(publishButton());
+
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringContaining('12 residents notified'));
+  });
+
+  it('does NOT claim residents were notified when delivery failed', async () => {
+    /*
+     * The publish succeeded, so this is not an error state — but the PM must
+     * not walk away believing their residents were told. The sheet stays OPEN
+     * with a receipt, because closing on success is right only when there is
+     * nothing further to know.
+     */
+    mutateAsync.mockResolvedValue({
+      ...PUBLISHED_OK,
+      residentNotification: { status: 'failed', reason: 'smtp exploded' },
+    });
+    const onOpenChange = vi.fn();
+    renderSheet({ onOpenChange });
+
+    await userEvent.click(notifyBox());
+    await userEvent.type(screen.getByLabelText(/what changed\?/i), 'Pool hours updated');
+    await userEvent.click(publishButton());
+
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('notify residents'));
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByText(/residents were not notified at all/i)).toBeInTheDocument();
+  });
+
+  it('distinguishes a partial delivery — posted in-app, not emailed', async () => {
+    /*
+     * Collapsing this into "failed" would tell the PM nothing reached their
+     * residents, when in fact the announcement IS in every resident's feed.
+     */
+    mutateAsync.mockResolvedValue({
+      ...PUBLISHED_OK,
+      residentNotification: { status: 'partial', announcementId: 7, reason: 'resend 500' },
+    });
+    renderSheet();
+
+    await userEvent.click(notifyBox());
+    await userEvent.type(screen.getByLabelText(/what changed\?/i), 'Pool hours updated');
+    await userEvent.click(publishButton());
+
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('posted in residents'));
+    expect(screen.getByText(/the email didn’t send/i)).toBeInTheDocument();
   });
 });

@@ -66,6 +66,9 @@ import {
   type SiteSnapshot,
 } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Sheet,
   SheetContent,
@@ -87,6 +90,7 @@ import { cn } from '@/lib/utils';
 import { SITE_CHANGE_GROUP, useSiteDiff } from '../use-site-diff';
 import { ApiRequestError } from '@/lib/api/request-json';
 import { describePublishedCounts } from '@/lib/site-editor/describe-publish-outcome';
+import { SITE_PUBLISH_SUMMARY_MAX_LENGTH } from '@/lib/site-editor/publish-notification';
 import { Receipt, type ReceiptStatus } from './Receipt';
 
 /**
@@ -372,6 +376,13 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
   const unstagePage = useUnstageSitePageDelete(communityId);
 
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
+  /*
+   * Opt-in, and off on every open. A publish sheet that remembered "notify"
+   * across publishes would mail an entire association on the next one-word typo
+   * fix — the PM has to choose it each time, deliberately.
+   */
+  const [notifyResidents, setNotifyResidents] = useState(false);
+  const [notifySummary, setNotifySummary] = useState('');
 
   const issues: Issue[] = useMemo(() => {
     /*
@@ -470,6 +481,15 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
     }
   }
 
+  /*
+   * A ticked box with an empty summary is not "notify with no message" — it is
+   * an unfinished choice. It BLOCKS the publish (below) rather than silently
+   * degrading to a quiet publish, because degrading would hand the PM a success
+   * toast for an action they believe told their residents.
+   */
+  const notifySummaryValid = notifySummary.trim().length > 0;
+  const notifyWanted = notifyResidents && notifySummaryValid;
+
   async function onPublish() {
     setReceipt(null);
     /*
@@ -490,6 +510,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
     try {
       const result = await publish.mutateAsync({
         expectedPublishedAt: tokenQuery.data ?? null,
+        ...(notifyWanted ? { notifyResidents: { summary: notifySummary.trim() } } : {}),
       });
       if (!result.published) {
         setReceipt({
@@ -501,7 +522,44 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
         });
         return;
       }
-      toast.success(describeOutcome(result));
+      /*
+       * The publish succeeded either way — so this is a success toast, not an
+       * error — but it must not claim residents were told when they were not.
+       *
+       * A notification failure is reported without closing the sheet: closing
+       * on success is right when there is nothing more to know, and wrong when
+       * the PM has just been told half their action did not happen. `failed`
+       * and `partial` are different messages because they leave the community
+       * in genuinely different states — `partial` means the announcement IS in
+       * the resident feed and only the email did not go.
+       */
+      const notification = result.published ? result.residentNotification : undefined;
+      if (notification && notification.status !== 'sent') {
+        toast.warning(
+          notification.status === 'partial'
+            ? 'Your site is live and the update is posted in residents\u2019 feeds, but we couldn\u2019t email it. No one has been emailed.'
+            : "Your site is live, but we couldn't notify residents. Nothing was posted or emailed.",
+        );
+        setReceipt({
+          status: 'error',
+          attempted,
+          outcome:
+            notification.status === 'partial'
+              ? `Published, and posted to residents\u2019 feeds \u2014 but the email didn\u2019t send. ${notification.reason}`
+              : `Published \u2014 but residents were not notified at all. ${notification.reason}`,
+          nextStep:
+            notification.status === 'partial'
+              ? 'Residents can see the update in the app. To email it as well, post an announcement from Announcements.'
+              : 'Your changes are live. To tell residents, post an announcement from Announcements.',
+        });
+        return;
+      }
+
+      toast.success(
+        notification?.status === 'sent'
+          ? `${describeOutcome(result)} ${plural(notification.recipientCount, 'resident')} notified.`
+          : describeOutcome(result),
+      );
       onOpenChange(false);
     } catch (error) {
       if (error instanceof PublishConflictError) {
@@ -670,11 +728,60 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
 
       {warnings.length > 0 ? <WarningList issues={warnings} /> : null}
 
+      {hasChanges ? (
+        <div className="mt-4 rounded-md border border-edge bg-surface-muted p-4">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="notify-residents"
+              checked={notifyResidents}
+              onCheckedChange={(checked) => setNotifyResidents(checked === true)}
+              disabled={publish.isPending}
+            />
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="notify-residents" className="text-sm font-medium">
+                Email residents about this update
+              </Label>
+              <p className="text-xs text-content-secondary">
+                Posts to everyone&apos;s feed and emails them, following each
+                resident&apos;s digest preference.
+              </p>
+            </div>
+          </div>
+
+          {notifyResidents ? (
+            <div className="mt-3 space-y-1">
+              <Label htmlFor="notify-summary" className="text-xs font-medium">
+                What changed?
+              </Label>
+              <Input
+                id="notify-summary"
+                value={notifySummary}
+                onChange={(event) => setNotifySummary(event.target.value)}
+                maxLength={SITE_PUBLISH_SUMMARY_MAX_LENGTH}
+                placeholder="e.g. Pool hours updated for the season"
+                disabled={publish.isPending}
+                aria-describedby="notify-summary-hint"
+              />
+              <p id="notify-summary-hint" className="text-xs text-content-secondary">
+                Residents see this as the subject line.{' '}
+                {SITE_PUBLISH_SUMMARY_MAX_LENGTH - notifySummary.length} characters
+                left.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-auto flex flex-col gap-2 border-t border-edge pt-4">
         <Button
           type="button"
           onClick={() => void onPublish()}
-          disabled={blocked || !hasChanges || publish.isPending}
+          disabled={
+            blocked ||
+            !hasChanges ||
+            publish.isPending ||
+            (notifyResidents && !notifySummaryValid)
+          }
           loading={publish.isPending}
         >
           {publish.isPending ? 'Publishing…' : 'Publish changes'}
@@ -684,7 +791,19 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
             ? 'Fix the problems above before publishing.'
             : !hasChanges
               ? "There's nothing to publish yet."
-              : 'All of these changes go live at once.'}
+              : notifyResidents && !notifySummaryValid
+                ? 'Say what changed, or untick the box to publish quietly.'
+                : /*
+                   * One "go live" literal, with the notification clause
+                   * appended rather than a second copy of the sentence.
+                   * `guard:page-state-copy` counts page-visibility claims per
+                   * file against a shrink-only ceiling, and two phrasings of
+                   * the same claim cost two — which is the drift it exists to
+                   * stop, not an accounting quirk.
+                   */
+                  `All of these changes go live at once.${
+                    notifyWanted ? ' Residents will be notified.' : ''
+                  }`}
         </p>
       </div>
     </div>

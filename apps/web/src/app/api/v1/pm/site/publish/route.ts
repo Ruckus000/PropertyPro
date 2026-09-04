@@ -16,6 +16,8 @@ import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { publishCommunitySite } from '@/lib/services/site-blocks-service';
+import { notifyResidentsOfSitePublish } from '@/lib/services/site-publish-notification';
+import { requirePermission } from '@/lib/db/access-control';
 import { markSiteOnboardingComplete } from '@/lib/api/branding';
 import { publishCommunitySiteContract } from './contract';
 import type { NextRequest } from 'next/server';
@@ -26,12 +28,22 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can publish the community site');
   await requirePlanFeature(effective, 'hasSiteEditor');
-  return { userId, communityId: effective };
+  return { userId, communityId: effective, membership };
 }
 
 export const POST = withErrorHandler(
   runRoute(publishCommunitySiteContract, async ({ body, req }) => {
-    const { userId, communityId } = await ensurePmAccess(req, body.communityId);
+    const { userId, communityId, membership } = await ensurePmAccess(req, body.communityId);
+
+    // Gate the broadcast on the power it actually exercises. Publishing the
+    // site and mailing every resident are different authorities: `announcements
+    // write` is the manager-only row in the RBAC matrix, and checking it HERE
+    // — before the publish — means a caller who may publish but may not
+    // announce is refused outright rather than having the site go live and the
+    // notification silently dropped afterwards.
+    if (body.notifyResidents) {
+      requirePermission(membership, 'announcements', 'write');
+    }
 
     const expectedPublishedAt = body.expectedPublishedAt
       ? new Date(body.expectedPublishedAt)
@@ -55,6 +67,25 @@ export const POST = withErrorHandler(
     // publishCommunitySite short-circuit before reaching here.
     if (body.markOnboardingComplete) {
       await markSiteOnboardingComplete(communityId);
+    }
+
+    // Only after a publish that actually changed something. `nothing-to-publish`
+    // rolls the transaction back, so notifying there would mail an entire
+    // association about a no-op.
+    //
+    // `notifyResidentsOfSitePublish` never throws: the publish transaction has
+    // already committed and there is nothing to roll back, so a delivery
+    // failure must not turn a successful publish into an error response. It
+    // returns its outcome instead, and that outcome goes on the wire — a PM who
+    // ticked the box is told what really happened rather than being left to
+    // assume residents were reached.
+    if (body.notifyResidents && result.published) {
+      const residentNotification = await notifyResidentsOfSitePublish({
+        communityId,
+        actorUserId: userId,
+        summary: body.notifyResidents.summary,
+      });
+      return { ...result, residentNotification };
     }
 
     return result;
