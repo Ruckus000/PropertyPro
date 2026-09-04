@@ -1062,4 +1062,47 @@ describe('getPublicCommunityScopedReader', () => {
     expect(result).toEqual({ management: null, board: [] });
     expect(mockDb.select).not.toHaveBeenCalled();
   });
+
+  describe('getPublicDocumentFile', () => {
+    /**
+     * This filter is the entire authorization for the product's only
+     * unauthenticated read of the private documents bucket. If a predicate goes
+     * missing, a private association record is on the open internet — so each
+     * one is asserted by name rather than by a single shape snapshot.
+     */
+    it('demands public_access, a live row, and this community', async () => {
+      mockSelectChain.then.mockImplementation((resolve) =>
+        Promise.resolve([]).then(resolve),
+      );
+      const reader = getPublicCommunityScopedReader(42);
+      await reader.getPublicDocumentFile(7);
+
+      const where = mockSelectChain.where.mock.calls[0][0];
+      const clauses = where.__and as unknown[];
+
+      const equals = clauses
+        .filter((c) => (c as { __eq?: unknown }).__eq !== undefined)
+        .map((c) => (c as { __eq: { col: string; val: unknown } }).__eq);
+      const isNulls = clauses
+        .filter((c) => (c as { __isNull?: string }).__isNull !== undefined)
+        .map((c) => (c as { __isNull: string }).__isNull);
+
+      expect(equals).toEqual(
+        expect.arrayContaining([
+          { col: 'documents.publicAccess', val: true },
+          { col: 'documents.communityId', val: 42 },
+          { col: 'documents.id', val: 7 },
+        ]),
+      );
+      expect(isNulls).toContain('documents.deletedAt');
+    });
+
+    it('never queries for a non-positive id', async () => {
+      const reader = getPublicCommunityScopedReader(42);
+
+      await expect(reader.getPublicDocumentFile(0)).resolves.toBeNull();
+      await expect(reader.getPublicDocumentFile(-1)).resolves.toBeNull();
+      await expect(reader.getPublicDocumentFile(1.5)).resolves.toBeNull();
+    });
+  });
 });

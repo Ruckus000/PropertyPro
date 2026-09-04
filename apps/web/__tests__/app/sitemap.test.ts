@@ -110,9 +110,13 @@ describe('sitemap.ts', () => {
     const result = await sitemap();
     // 2 static + 2 documents = 4 entries.
     expect(result).toHaveLength(4);
-    expect(result[2]?.url).toBe('https://sunset-condos.getpropertypro.com/api/v1/documents/101/download');
+    expect(result[2]?.url).toBe(
+      'https://sunset-condos.getpropertypro.com/api/v1/public/documents/101/download?communityId=42',
+    );
     expect(result[2]?.lastModified).toEqual(new Date('2026-02-01T00:00:00Z'));
-    expect(result[3]?.url).toBe('https://sunset-condos.getpropertypro.com/api/v1/documents/247/download');
+    expect(result[3]?.url).toBe(
+      'https://sunset-condos.getpropertypro.com/api/v1/public/documents/247/download?communityId=42',
+    );
     // Reader is bound to the parsed numeric community id.
     expect(getReaderMock).toHaveBeenCalledWith(42);
     expect(listPublicDocumentsForSitemapMock).toHaveBeenCalledWith({ limit: 1000 });

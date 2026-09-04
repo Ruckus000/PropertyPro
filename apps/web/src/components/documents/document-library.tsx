@@ -42,6 +42,7 @@ import {
   coverageFacts,
   filterRows,
   mergeDocumentsAndGaps,
+  owedToPublic,
   unlinkedDocuments,
   type ChecklistRow,
   type DocumentQuickFilter,
@@ -121,11 +122,20 @@ export function DocumentLibrary({
     () => unlinkedDocuments(documents, checklist).length,
     [checklist, documents],
   );
+  const owedCount = useMemo(
+    () => owedToPublic(documents, checklist).length,
+    [checklist, documents],
+  );
 
   const selectedRequirement = useMemo(() => {
     if (!selectedDocument) return null;
     return checklist.find((item) => item.documentId === selectedDocument.id) ?? null;
   }, [checklist, selectedDocument]);
+
+  const selectedCategoryName = useMemo(() => {
+    if (!selectedDocument || selectedDocument.categoryId == null) return null;
+    return categoryNameById.get(selectedDocument.categoryId) ?? null;
+  }, [categoryNameById, selectedDocument]);
 
   const selectedState = useMemo(() => {
     if (!selectedDocument) return null;
@@ -253,6 +263,7 @@ export function DocumentLibrary({
               onChange={(value) => setQuickFilter(value as DocumentQuickFilter)}
               tabs={[
                 { label: 'All records', value: 'all' },
+                { label: 'Owed to public', value: 'owed', count: owedCount },
                 { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
               ]}
             />
@@ -327,6 +338,7 @@ export function DocumentLibrary({
               state={selectedState}
               canManage={canUpload}
               showStatutory={showStatutory}
+              categoryName={selectedCategoryName}
               onDeleted={handleDeleted}
               onClose={() => setSelectedDocument(null)}
             />

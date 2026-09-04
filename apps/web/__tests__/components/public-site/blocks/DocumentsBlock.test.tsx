@@ -65,7 +65,7 @@ describe('<DocumentsBlock>', () => {
     const downloadLink = screen.getByRole('link', { name: /Download Budget 2025/i });
     expect(downloadLink).toHaveAttribute(
       'href',
-      '/api/v1/documents/1/download?communityId=42&attachment=true',
+      '/api/v1/public/documents/1/download?communityId=42',
     );
   });
 

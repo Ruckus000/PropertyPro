@@ -29,6 +29,12 @@ vi.mock('@/hooks/use-documents', () => ({
   useDocuments: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
   useDocumentsInvalidator: () => vi.fn(),
   useDeleteDocument: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
+  useSetDocumentPublicAccess: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
   useDocumentDownloadUrl: () => ({ data: null, isLoading: false }),
 }));
 

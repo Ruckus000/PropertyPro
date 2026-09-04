@@ -57,7 +57,7 @@ export function DocumentsBlockView({ content, blockId, data, community }: Docume
                     </div>
                   </div>
                   <a
-                    href={`/api/v1/documents/${doc.id}/download?communityId=${community.id}&attachment=true`}
+                    href={`/api/v1/public/documents/${doc.id}/download?communityId=${community.id}`}
                     className="shrink-0 inline-flex items-center rounded-md border border-edge px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
                     aria-label={`Download ${doc.title}`}
                   >

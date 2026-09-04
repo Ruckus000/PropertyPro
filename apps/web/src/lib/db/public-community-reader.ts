@@ -103,6 +103,19 @@ export interface PublicNavPage {
 }
 
 /** Minimal projection used by sitemap.xml — id + dates only, no PII. */
+/**
+ * The file behind a public document. Returned ONLY for a row that is
+ * `public_access = true`, not soft-deleted, and in the requested community —
+ * the three predicates that stand between a private storage object and the open
+ * internet.
+ */
+export interface PublicDocumentFile {
+  id: number;
+  filePath: string;
+  fileName: string;
+  mimeType: string;
+}
+
 export interface PublicSitemapDocument {
   id: number;
   updatedAt: Date;
@@ -257,6 +270,7 @@ export interface PublicScopedReader {
    * category filter — sitemap surfaces every public document.
    */
   listPublicDocumentsForSitemap(opts: { limit: number }): Promise<PublicSitemapDocument[]>;
+  getPublicDocumentFile(documentId: number): Promise<PublicDocumentFile | null>;
 
   /**
    * Phase 11b-2 — published, non-deleted pages for sitemap.xml.
@@ -550,6 +564,40 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         .orderBy(desc(documents.createdAt))
         .limit(opts.limit);
       return rows;
+    },
+
+    /**
+     * Resolve one document for ANONYMOUS download.
+     *
+     * This is the only read in the product that hands an unauthenticated
+     * caller a path into the private `documents` storage bucket, so the three
+     * predicates below are the whole authorization: the row must belong to this
+     * community, must not be soft-deleted, and must carry `public_access`.
+     * There is no session and no membership to fall back on — if this filter is
+     * wrong, a private association record is on the open internet.
+     */
+    async getPublicDocumentFile(documentId) {
+      if (!Number.isInteger(documentId) || documentId <= 0) return null;
+
+      const rows = await db
+        .select({
+          id: documents.id,
+          filePath: documents.filePath,
+          fileName: documents.fileName,
+          mimeType: documents.mimeType,
+        })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.id, documentId),
+            eq(documents.communityId, communityId),
+            isNull(documents.deletedAt),
+            eq(documents.publicAccess, true),
+          ),
+        )
+        .limit(1);
+
+      return rows[0] ?? null;
     },
 
     async listPublicDocumentsForSitemap(opts) {

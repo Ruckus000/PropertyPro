@@ -131,3 +131,55 @@ export async function softDeleteDocument(
     eq(documents.id, documentId),
   )) as unknown as Array<Record<string, unknown>>;
 }
+
+export interface DocumentPublishAudit {
+  title: string | null;
+  categoryId: number | null;
+  publicAccess: boolean;
+}
+
+/**
+ * The projection the publish path needs: the category (which decides whether a
+ * redaction attestation is required), the title (recorded in that attestation)
+ * and the current flag (the audit entry's `oldValues`).
+ *
+ * Returns `null` when no row matches — the scoped client's community predicate
+ * means that also covers "belongs to another community".
+ */
+export async function getDocumentForPublishAudit(
+  communityId: number,
+  documentId: number,
+): Promise<DocumentPublishAudit | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    documents,
+    {
+      title: documents.title,
+      categoryId: documents.categoryId,
+      publicAccess: documents.publicAccess,
+    },
+    eq(documents.id, documentId),
+  )) as unknown as Array<DocumentPublishAudit>;
+  return rows[0] ?? null;
+}
+
+/**
+ * The ONLY writer for `documents.public_access`.
+ *
+ * That flag is the sole gate between an association's record and the open
+ * internet — `public-community-reader` filters on it for both the site's
+ * documents block and the sitemap. Everything that decides whether the write is
+ * allowed lives in the route; this just performs it.
+ */
+export async function setDocumentPublicAccess(
+  communityId: number,
+  documentId: number,
+  publicAccess: boolean,
+): Promise<Record<string, unknown>[]> {
+  const scoped = createScopedClient(communityId);
+  return (await scoped.update(
+    documents,
+    { publicAccess },
+    eq(documents.id, documentId),
+  )) as unknown as Array<Record<string, unknown>>;
+}

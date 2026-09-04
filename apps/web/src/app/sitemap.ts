@@ -11,12 +11,11 @@
  *
  * Cached via revalidate: 3600 (1 hour).
  *
- * Per-document URLs point at the existing AUTHENTICATED download endpoint
- * `/api/v1/documents/{id}/download`. Search engines that try to fetch will
- * see 401 — but the URL appears in the sitemap, which gives logged-in
- * residents a working link and signals to crawlers that these resources
- * exist. An unauthenticated public-document download path is a separate
- * future PR.
+ * Per-document URLs point at `/api/v1/public/documents/{id}/download`, which
+ * serves a document ONLY while `public_access` is true, it is not soft-deleted,
+ * and it belongs to this community. Until that route existed these URLs pointed
+ * at the authenticated endpoint and every crawler — and every resident who
+ * clicked one — got a 401, which made the whole public-documents feature inert.
  */
 import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
@@ -121,7 +120,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
       const docs = await reader.listPublicDocumentsForSitemap({ limit: SITEMAP_DOCUMENT_LIMIT });
       const documentEntries: MetadataRoute.Sitemap = docs.map((doc) => ({
-        url: `${base}/api/v1/documents/${doc.id}/download`,
+        url: `${base}/api/v1/public/documents/${doc.id}/download?communityId=${communityId}`,
         lastModified: doc.updatedAt,
         changeFrequency: 'yearly',
         priority: 0.4,
