@@ -89,6 +89,7 @@ export default async function EditAnnouncementPage({ params, searchParams }: Pag
           body: announcement.body,
           audience: announcement.audience as 'all' | 'owners_only' | 'board_only' | 'tenants_only',
           isPinned: announcement.isPinned,
+          expiresAt: announcement.expiresAt ? new Date(announcement.expiresAt).toISOString() : null,
         }}
       />
     </div>

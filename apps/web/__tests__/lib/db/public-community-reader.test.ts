@@ -20,6 +20,7 @@ vi.mock('@propertypro/db', () => ({
     audience: 'announcements.audience',
     isPinned: 'announcements.isPinned',
     archivedAt: 'announcements.archivedAt',
+    expiresAt: 'announcements.expiresAt',
     deletedAt: 'announcements.deletedAt',
     publishedAt: 'announcements.publishedAt',
   },
@@ -102,10 +103,12 @@ vi.mock('@propertypro/db/filters', () => ({
   asc: (col: unknown) => ({ __asc: col }),
   desc: (col: unknown) => ({ __desc: col }),
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
+  gt: (col: unknown, val: unknown) => ({ __gt: { col, val } }),
   gte: (col: unknown, val: unknown) => ({ __gte: { col, val } }),
   inArray: (col: unknown, vals: unknown) => ({ __inArray: { col, vals } }),
   isNull: (col: unknown) => ({ __isNull: col }),
   lte: (col: unknown, val: unknown) => ({ __lte: { col, val } }),
+  or: (...args: unknown[]) => ({ __or: args }),
 }));
 
 // Mock the unscoped client BEFORE importing the helper
@@ -563,10 +566,11 @@ describe('getPublicCommunityScopedReader', () => {
     await reader.listAnnouncements({ limit: 5, timeWindowDays: 30 });
 
     const whereCall = mockSelectChain.where.mock.calls[0][0];
-    // With timeWindowDays, and() should receive 6 conditions
-    expect(whereCall.__and).toHaveLength(6);
-    // The 6th condition should be a gte (time window cutoff)
-    const gteClause = whereCall.__and[5];
+    // 7 since the per-announcement expiry predicate joined the base set: the
+    // 6 that were here plus `expires_at IS NULL OR expires_at > now()`.
+    expect(whereCall.__and).toHaveLength(7);
+    // The time-window cutoff is still appended LAST, after the base predicates.
+    const gteClause = whereCall.__and[6];
     expect(gteClause).toHaveProperty('__gte');
   });
 
@@ -579,8 +583,37 @@ describe('getPublicCommunityScopedReader', () => {
     await reader.listAnnouncements({ limit: 5 });
 
     const whereCall = mockSelectChain.where.mock.calls[0][0];
-    // Without timeWindowDays, and() should receive exactly 5 conditions
-    expect(whereCall.__and).toHaveLength(5);
+    // 6 since expiry joined the base set (was 5).
+    expect(whereCall.__and).toHaveLength(6);
+  });
+
+  it('listAnnouncements WHERE excludes expired announcements — keeping the NULL case', async () => {
+    /*
+     * The docblock on `listAnnouncements` has promised "published, non-expired"
+     * since PR #3, and until the expires_at column existed there was nothing to
+     * enforce it with. The `timeWindowDays` filter above is a different thing —
+     * a block-level rolling window over publishedAt, not a per-announcement
+     * decision.
+     *
+     * Asserted by SHAPE rather than by position or count, per the note below on
+     * length-based assertions: the load-bearing half is the `__isNull` branch,
+     * because a bare `>` comparison would hide every announcement (SQL
+     * `NULL > now()` is NULL, not TRUE) and every row's expiry is NULL today.
+     */
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listAnnouncements({ limit: 5 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    expect(whereCall.__and).toContainEqual({
+      __or: [
+        { __isNull: 'announcements.expiresAt' },
+        { __gt: { col: 'announcements.expiresAt', val: expect.any(Date) } },
+      ],
+    });
   });
 
   // ---------------------------------------------------------------------------

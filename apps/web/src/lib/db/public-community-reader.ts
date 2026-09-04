@@ -30,6 +30,7 @@ import { announcements, communities, documentCategories, documents, meetings, si
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
 import { BOARD_DESIGNATIONS, TOMBSTONE_BLOCK_TYPE, isBoardPresident } from '@propertypro/shared';
+import { announcementNotExpiredWhere } from '@/lib/announcements/expiry';
 
 export interface PublicAnnouncement {
   id: number;
@@ -513,6 +514,11 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         isNull(announcements.archivedAt),
         isNull(announcements.deletedAt),
         lte(announcements.publishedAt, new Date()),
+        // The docblock above has claimed "non-expired" since PR #3; until the
+        // expires_at column existed there was nothing to enforce it with, and
+        // the rolling `timeWindowDays` filter below is a different thing (a
+        // block-level window over publishedAt, not a per-announcement decision).
+        announcementNotExpiredWhere(),
       ];
       if (opts.timeWindowDays != null) {
         const cutoff = new Date(Date.now() - opts.timeWindowDays * 24 * 60 * 60 * 1000);

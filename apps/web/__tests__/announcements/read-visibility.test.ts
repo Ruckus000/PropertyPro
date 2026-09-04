@@ -14,6 +14,7 @@ const {
     audience: Symbol('announcements.audience'),
     isPinned: Symbol('announcements.isPinned'),
     archivedAt: Symbol('announcements.archivedAt'),
+    expiresAt: Symbol('announcements.expiresAt'),
     publishedAt: Symbol('announcements.publishedAt'),
   },
   communitiesTableMock: {
@@ -46,6 +47,7 @@ vi.mock('@propertypro/db/filters', () => ({
   and: (...clauses: unknown[]) => ({ __and: clauses }),
   desc: (col: unknown) => ({ __desc: col }),
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
+  gt: (col: unknown, val: unknown) => ({ __gt: { col, val } }),
   inArray: (col: unknown, vals: unknown[]) => ({ __inArray: { col, vals } }),
   isNull: (col: unknown) => ({ __isNull: col }),
   lt: (col: unknown, val: unknown) => ({ __lt: { col, val } }),
@@ -187,6 +189,13 @@ describe('listVisibleAnnouncements ordered-keyset path', () => {
     expect(selectFrom.mock.calls[1]?.[2]).toEqual({
       __and: [
         { __isNull: announcementsTableMock.archivedAt },
+        // Expiry rides with archival — see buildVisibleAnnouncementsWhere.
+        {
+          __or: [
+            { __isNull: announcementsTableMock.expiresAt },
+            { __gt: { col: announcementsTableMock.expiresAt, val: expect.any(Date) } },
+          ],
+        },
         {
           __inArray: {
             col: announcementsTableMock.audience,
@@ -255,6 +264,13 @@ describe('listVisibleAnnouncements ordered-keyset path', () => {
     expect(selectFrom.mock.calls[1]?.[2]).toEqual({
       __and: [
         { __isNull: announcementsTableMock.archivedAt },
+        // Expiry rides with archival — see buildVisibleAnnouncementsWhere.
+        {
+          __or: [
+            { __isNull: announcementsTableMock.expiresAt },
+            { __gt: { col: announcementsTableMock.expiresAt, val: expect.any(Date) } },
+          ],
+        },
         {
           __inArray: {
             col: announcementsTableMock.audience,
@@ -302,6 +318,13 @@ describe('listVisibleAnnouncements ordered-keyset path', () => {
     expect(selectFrom.mock.calls[2]?.[2]).toEqual({
       __and: [
         { __isNull: announcementsTableMock.archivedAt },
+        // Expiry rides with archival — see buildVisibleAnnouncementsWhere.
+        {
+          __or: [
+            { __isNull: announcementsTableMock.expiresAt },
+            { __gt: { col: announcementsTableMock.expiresAt, val: expect.any(Date) } },
+          ],
+        },
         {
           __inArray: {
             col: announcementsTableMock.audience,
@@ -349,6 +372,40 @@ describe('filterVisibleAnnouncements full-list visibility', () => {
 
     expect(result.rows.map((row) => row.id)).toEqual([2]);
     expect(result.totalCount).toBe(1);
+  });
+
+  it('hides an announcement whose expiry has passed', async () => {
+    const result = await filterVisibleAnnouncements(
+      community,
+      membership as never,
+      [
+        announcement(1, 'all'),
+        { ...announcement(2, 'all'), expiresAt: new Date(Date.now() - 60_000) },
+      ] as never,
+    );
+
+    expect(result.rows.map((row) => row.id)).toEqual([1]);
+    expect(result.totalCount).toBe(1);
+  });
+
+  it('keeps an announcement whose expiry is still ahead, and one with no expiry', async () => {
+    /*
+     * The control for the case above. Without it, a filter that dropped
+     * EVERYTHING would look identical — and "everything disappears" is the
+     * specific failure mode of getting the NULL branch wrong, since every
+     * pre-existing row has a null expiry.
+     */
+    const result = await filterVisibleAnnouncements(
+      community,
+      membership as never,
+      [
+        { ...announcement(1, 'all'), expiresAt: null },
+        { ...announcement(2, 'all'), expiresAt: new Date(Date.now() + 60_000) },
+      ] as never,
+    );
+
+    expect(result.rows.map((row) => row.id)).toEqual([2, 1]);
+    expect(result.totalCount).toBe(2);
   });
 
   it('lets admins read board-only and archived rows when requested', async () => {

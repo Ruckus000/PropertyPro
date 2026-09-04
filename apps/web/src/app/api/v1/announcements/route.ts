@@ -55,6 +55,15 @@ const createAnnouncementSchema = z.object({
   body: z.string().min(1, 'Body is required'),
   audience: z.enum(['all', 'owners_only', 'board_only', 'tenants_only']).default('all'),
   isPinned: z.boolean().default(false),
+  /**
+   * Optional auto-removal instant, ISO-8601. Null / absent means "never
+   * expires", which is every pre-existing announcement.
+   *
+   * `z.coerce.date()` so the wire stays a string while the column takes a
+   * Date; coercion still REJECTS an unparseable value rather than storing an
+   * Invalid Date, which would make the row's visibility undefined.
+   */
+  expiresAt: z.coerce.date().nullable().optional(),
   communityId: z.number().int().positive('Community ID must be a positive integer'),
 });
 
@@ -65,6 +74,13 @@ const updateAnnouncementSchema = z.object({
   body: z.string().min(1, 'Body is required').optional(),
   audience: z.enum(['all', 'owners_only', 'board_only', 'tenants_only']).optional(),
   isPinned: z.boolean().optional(),
+  /**
+   * Nullable so an expiry can be CLEARED, not only set. The update loop below
+   * skips `undefined` and passes `null` through, so "absent" and "cleared" stay
+   * distinguishable — without that, a seasonal notice could be given an expiry
+   * and never given one back.
+   */
+  expiresAt: z.coerce.date().nullable().optional(),
 });
 
 const pinActionSchema = z.object({
@@ -323,7 +339,12 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
     action: 'create',
     resourceType: 'announcement',
     resourceId: String(created.id),
-    newValues: { title: data.title, audience: data.audience, isPinned: data.isPinned },
+    newValues: {
+      title: data.title,
+      audience: data.audience,
+      isPinned: data.isPinned,
+      expiresAt: data.expiresAt ? data.expiresAt.toISOString() : null,
+    },
   });
 
   const authorName = await getAnnouncementAuthorName(communityId, audit.userId);

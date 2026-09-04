@@ -43,6 +43,11 @@ export interface AnnouncementComposerValues {
   body: string;
   audience: AnnouncementAudience;
   isPinned: boolean;
+  /**
+   * ISO-8601 instant at which the announcement stops being shown, or null for
+   * "never expires" — which is the default and every pre-existing row.
+   */
+  expiresAt?: string | null;
 }
 
 export interface AnnouncementComposerProps {
@@ -58,7 +63,34 @@ const DEFAULT_VALUES: AnnouncementComposerValues = {
   body: '',
   audience: 'all',
   isPinned: false,
+  expiresAt: null,
 };
+
+/**
+ * ISO instant → the `YYYY-MM-DDTHH:mm` a `datetime-local` input requires.
+ *
+ * Built from the LOCAL getters rather than by slicing `toISOString()`: the
+ * input is local-time, and slicing the ISO string would silently shift a PM in
+ * any non-UTC zone — every Florida association — by their UTC offset. A notice
+ * set to expire at 5pm would then vanish at 1pm.
+ */
+function toLocalInputValue(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
+/** The inverse. Returns null for an empty or unparseable input. */
+function fromLocalInputValue(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
 
 export function AnnouncementComposer({
   initialValues = DEFAULT_VALUES,
@@ -71,7 +103,22 @@ export function AnnouncementComposer({
   const [body, setBody] = useState(initialValues.body);
   const [audience, setAudience] = useState<AnnouncementAudience>(initialValues.audience);
   const [isPinned, setIsPinned] = useState(initialValues.isPinned);
+  const [expiresAtInput, setExpiresAtInput] = useState(
+    toLocalInputValue(initialValues.expiresAt),
+  );
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * A warning, not a block. A past expiry is a legitimate "take this down now"
+   * action, so refusing it would remove a real capability — but it is also
+   * exactly what a mistyped year looks like, and that mistake would otherwise
+   * hide the announcement with no feedback at all. Saying what will happen
+   * serves both readings.
+   */
+  const expiryIsInThePast = (() => {
+    const iso = fromLocalInputValue(expiresAtInput);
+    return iso !== null && new Date(iso).getTime() <= Date.now();
+  })();
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -97,6 +144,7 @@ export function AnnouncementComposer({
           body: nextBody,
           audience,
           isPinned,
+          expiresAt: fromLocalInputValue(expiresAtInput),
         });
       } catch (submitError) {
         setError(
@@ -106,7 +154,7 @@ export function AnnouncementComposer({
         );
       }
     },
-    [audience, body, isPinned, onSubmit, title],
+    [audience, body, expiresAtInput, isPinned, onSubmit, title],
   );
 
   return (
@@ -174,6 +222,23 @@ export function AnnouncementComposer({
               Keep this update at the top of the list.
             </p>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="announcement-expires-at">Stop showing on (optional)</Label>
+          <Input
+            id="announcement-expires-at"
+            type="datetime-local"
+            value={expiresAtInput}
+            onChange={(event) => setExpiresAtInput(event.target.value)}
+            disabled={isSubmitting}
+            aria-describedby="announcement-expires-at-hint"
+          />
+          <p id="announcement-expires-at-hint" className="text-sm text-content-secondary">
+            {expiryIsInThePast
+              ? 'That time has already passed, so this will be hidden as soon as you save.'
+              : 'Leave empty to keep it up until you archive it. Seasonal notices can take themselves down.'}
+          </p>
         </div>
       </div>
 
