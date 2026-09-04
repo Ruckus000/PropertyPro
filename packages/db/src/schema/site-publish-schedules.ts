@@ -17,11 +17,16 @@
  *
  * ── Invariants worth knowing before you change this ──
  *
- * - `site_publish_schedules_one_pending_idx` (partial unique on community_id
- *   where status = 'pending') is what makes "the next scheduled publish"
- *   singular. A publish is atomic and community-wide, so two pending schedules
- *   for one community have no coherent meaning — the second would silently
- *   republish whatever the first left.
+ * - `site_publish_schedules_one_active_idx` (partial unique on community_id
+ *   where status is 'pending' OR 'running') is what makes "the next scheduled
+ *   publish" singular. A publish is atomic and community-wide, so two live
+ *   schedules for one community have no coherent meaning — the second would
+ *   silently republish whatever the first left.
+ *
+ *   It covers `running` as well as `pending` deliberately: a claimed row is
+ *   still a live schedule. Were it `pending`-only, a PM could arm a second
+ *   schedule while the first was mid-publish, and both would publish and
+ *   email — the exact double-send the index exists to prevent.
  * - `requested_by` is ON DELETE SET NULL, not restrict: a departing manager's
  *   account must not be undeletable because they once scheduled a publish, and
  *   the schedule itself is still valid work. The actor is preserved in the
@@ -74,6 +79,17 @@ export const sitePublishSchedules = pgTable(
     notifySummary: text('notify_summary'),
     /** Incremented per attempt so a permanently failing schedule cannot loop. */
     attemptCount: integer('attempt_count').notNull().default(0),
+    /**
+     * When the current claim lapses. Null means "not claimed".
+     *
+     * This is what makes a crash recoverable. A Vercel function killed by the
+     * platform deadline throws nothing, so no catch block runs and no terminal
+     * status is written — without a lease the row would sit in `running`
+     * forever, never re-claimed and invisible to the PM. A lapsed lease makes
+     * the row claimable again, so reclaiming a crashed tick is the SAME code
+     * path as a fresh claim.
+     */
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
     /** When the cron actually ran it, whatever the outcome. */
     executedAt: timestamp('executed_at', { withTimezone: true }),
     /** Why it failed, for the PM to read. Never a secret — see below. */

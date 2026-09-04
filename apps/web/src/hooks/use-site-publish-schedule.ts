@@ -19,9 +19,12 @@ import { requestJson } from '@/lib/api/request-json';
 
 export interface SitePublishSchedule {
   id: number;
+  status: 'pending' | 'running' | 'failed';
   /** ISO-8601. */
   scheduledFor: string;
   notifySummary: string | null;
+  /** PM-facing reason, set only on `failed`. */
+  errorMessage: string | null;
 }
 
 export interface ScheduleSitePublishVariables {

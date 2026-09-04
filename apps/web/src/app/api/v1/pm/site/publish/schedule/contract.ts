@@ -6,7 +6,7 @@
  *   POST   — schedule (or reschedule) a publish.
  *   DELETE — cancel the pending schedule.
  *
- * POST replaces rather than conflicts. `site_publish_schedules_one_pending_idx`
+ * POST replaces rather than conflicts. `site_publish_schedules_one_active_idx`
  * makes "one pending schedule per community" a database invariant, and a PM
  * changing the time is the ordinary case — requiring a cancel first would make
  * the common path two round trips with a window of no schedule in between.
@@ -16,8 +16,16 @@ import { SITE_PUBLISH_SUMMARY_MAX_LENGTH } from '@/lib/site-editor/publish-notif
 
 const scheduleShape = z.object({
   id: z.number().int().positive(),
+  /**
+   * `failed` is reported as well as the live states so the editor can tell a PM
+   * their scheduled notice never went out. Without it the row would simply
+   * vanish and the absence would be indistinguishable from "never scheduled".
+   */
+  status: z.enum(['pending', 'running', 'failed']),
   scheduledFor: z.string(),
   notifySummary: z.string().nullable(),
+  /** PM-facing reason, set only on `failed`. */
+  errorMessage: z.string().nullable(),
 });
 
 export const getSitePublishScheduleContract = defineRoute({

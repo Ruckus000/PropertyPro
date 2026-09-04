@@ -164,9 +164,18 @@ vi.mock('@/hooks/use-site-pages', () => ({
 }));
 
 const scheduleState = vi.hoisted(() => ({
-  pending: null as { id: number; scheduledFor: string; notifySummary: string | null } | null,
+  pending: null as {
+    id: number;
+    status: 'pending' | 'running' | 'failed';
+    scheduledFor: string;
+    notifySummary: string | null;
+    errorMessage: string | null;
+  } | null,
   createPending: false,
   cancelPending: false,
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
 }));
 const scheduleAsync = vi.hoisted(() => vi.fn());
 const cancelScheduleAsync = vi.hoisted(() => vi.fn());
@@ -176,7 +185,12 @@ const cancelScheduleAsync = vi.hoisted(() => vi.fn());
 // without a QueryClientProvider — a missing export here surfaces as
 // "No QueryClient set" from whichever component happens to reach it.
 vi.mock('@/hooks/use-site-publish-schedule', () => ({
-  useSitePublishSchedule: () => ({ data: scheduleState.pending, isPending: false }),
+  useSitePublishSchedule: () => ({
+    data: scheduleState.pending,
+    isPending: scheduleState.isPending,
+    isError: scheduleState.isError,
+    error: scheduleState.error,
+  }),
   useScheduleSitePublish: () => ({
     mutateAsync: scheduleAsync,
     isPending: scheduleState.createPending,
@@ -269,10 +283,15 @@ beforeEach(() => {
   scheduleState.pending = null;
   scheduleState.createPending = false;
   scheduleState.cancelPending = false;
+  scheduleState.isPending = false;
+  scheduleState.isError = false;
+  scheduleState.error = null;
   scheduleAsync.mockResolvedValue({
     id: 1,
+    status: 'pending' as const,
     scheduledFor: '2026-08-01T15:00:00.000Z',
     notifySummary: null,
+    errorMessage: null,
   });
   cancelScheduleAsync.mockResolvedValue(true);
 });
@@ -1681,8 +1700,10 @@ describe('PublishSheet — scheduling', () => {
   it('shows an existing pending schedule, and can cancel it', async () => {
     scheduleState.pending = {
       id: 4,
+      status: 'pending',
       scheduledFor: '2026-08-01T15:00:00.000Z',
       notifySummary: 'Pool hours updated',
+      errorMessage: null,
     };
     renderSheet();
 
@@ -1698,8 +1719,10 @@ describe('PublishSheet — scheduling', () => {
     // The absence of a notification is a fact the PM needs, not a blank.
     scheduleState.pending = {
       id: 4,
+      status: 'pending',
       scheduledFor: '2026-08-01T15:00:00.000Z',
       notifySummary: null,
+      errorMessage: null,
     };
     renderSheet();
 
@@ -1723,3 +1746,82 @@ describe('PublishSheet — scheduling', () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });
+
+// ── the schedule read is a SECONDARY query ─────────────────────────────────
+
+describe('PublishSheet — schedule read states', () => {
+  it('surfaces a failed schedule read without blocking the publish', async () => {
+    /*
+     * The bug this pins: the query's error was never read, so a 500 or a
+     * lapsed-plan 403 rendered identically to "no schedule" — a PM with a real
+     * scheduled notice saw no sign of it. It must NOT become a blocking early
+     * return either: refusing to publish because a status read failed is worse
+     * than the bug.
+     */
+    scheduleState.isError = true;
+    scheduleState.error = new Error('Upstream timed out');
+    renderSheet();
+
+    expect(screen.getByTestId('publish-schedule-read-error')).toHaveTextContent(
+      /Upstream timed out/i,
+    );
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+  });
+
+  it('shows a placeholder while the schedule is still loading, not "none"', async () => {
+    scheduleState.isPending = true;
+    renderSheet();
+
+    expect(screen.getByTestId('publish-schedule-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('pending-schedule')).not.toBeInTheDocument();
+  });
+
+  it('tells the PM when a scheduled publish never ran, and why', async () => {
+    scheduleState.pending = {
+      id: 4,
+      status: 'failed',
+      scheduledFor: '2026-08-01T15:00:00.000Z',
+      notifySummary: null,
+      errorMessage: 'It ran out of attempts. Nothing was published.',
+    };
+    renderSheet();
+
+    const banner = screen.getByTestId('failed-schedule');
+    expect(banner).toHaveTextContent(/didn.t run/i);
+    expect(banner).toHaveTextContent(/ran out of attempts/i);
+    // No cancel affordance — there is nothing left to cancel.
+    expect(screen.queryByTestId('pending-schedule')).not.toBeInTheDocument();
+  });
+
+  it('will not offer to cancel a schedule that is already publishing', async () => {
+    // Cancelling a claimed row would race the tick's own completion write.
+    scheduleState.pending = {
+      id: 4,
+      status: 'running',
+      scheduledFor: '2026-08-01T15:00:00.000Z',
+      notifySummary: null,
+      errorMessage: null,
+    };
+    renderSheet();
+
+    const banner = screen.getByTestId('pending-schedule');
+    expect(banner).toHaveTextContent(/publishing now/i);
+    expect(within(banner).getByRole('button', { name: /cancel/i })).toBeDisabled();
+  });
+
+  it('tells the PM when publishing now called off their scheduled publish', async () => {
+    /*
+     * Otherwise the schedule silently disappears and the PM later wonders why
+     * the publish they set up never happened.
+     */
+    mutateAsync.mockResolvedValue({
+      ...PUBLISHED_OK,
+      canceledSchedule: { id: 4, scheduledFor: '2026-08-01T15:00:00.000Z' },
+    });
+    renderSheet();
+
+    await userEvent.click(screen.getByRole('button', { name: /publish changes/i }));
+
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringContaining('called off'));
+  });
+})
