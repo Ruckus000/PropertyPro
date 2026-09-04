@@ -2,18 +2,59 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * The wrapper scrolls horizontally when the table is wider than its box. A
+ * scrollable region that cannot be focused cannot be scrolled without a
+ * pointer (WCAG 2.1.1), and whatever it hides is simply unreachable — measured
+ * on the Documents screen at 375px: a 401px table in a 274px box, `tabIndex`
+ * -1, two of five columns gone.
+ *
+ * The tab stop is CONDITIONAL. Most tables in the app fit; giving every one of
+ * them a focus stop would trade an access failure for a nuisance for the same
+ * keyboard users. It is also re-measured on every render rather than only on
+ * mount, because a table is typically empty on first paint and filled when its
+ * query resolves — a mount-only check decides "fits" before there is anything
+ * to overflow. `setState` with an unchanged value is a no-op, so this settles.
+ *
+ * Deliberately NO `role="region"`: that would need an accessible name this
+ * component cannot know, and an unnamed region is worse than none.
+ */
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm tabular-nums", className)}
-      {...props}
-    />
-  </div>
-))
+>(({ className, ...props }, ref) => {
+  const wrapperRef = React.useRef<HTMLDivElement>(null)
+  const [scrollable, setScrollable] = React.useState(false)
+
+  const measure = React.useCallback(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    setScrollable(el.scrollWidth > el.clientWidth)
+  }, [])
+
+  // No dependency array: re-measure after every render, so late-arriving rows
+  // are accounted for.
+  React.useEffect(measure)
+
+  React.useEffect(() => {
+    window.addEventListener("resize", measure)
+    return () => window.removeEventListener("resize", measure)
+  }, [measure])
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="relative w-full overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+      {...(scrollable ? { tabIndex: 0 } : {})}
+    >
+      <table
+        ref={ref}
+        className={cn("w-full caption-bottom text-sm tabular-nums", className)}
+        {...props}
+      />
+    </div>
+  )
+})
 Table.displayName = "Table"
 
 const TableHeader = React.forwardRef<
