@@ -449,6 +449,13 @@
       "when": 1788550321796,
       "tag": "0065_site_publish_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1788550482637,
+      "tag": "0066_provision_maintenance_and_community_assets_buckets",
+      "breakpoints": true
     }
   ]
 }

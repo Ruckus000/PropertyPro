@@ -9,11 +9,11 @@
  */
 import { sanitizeFilename } from '@/lib/utils/sanitize-filename';
 import { createPresignedDownloadUrl, createPresignedUploadUrl } from '@propertypro/db';
+import { MAINTENANCE_BUCKET } from '@propertypro/db/constants';
 import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-const MAINTENANCE_BUCKET = 'maintenance';
 
 export interface PhotoEntry {
   url: string;
