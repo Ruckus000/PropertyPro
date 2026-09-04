@@ -105,9 +105,9 @@ export interface PublicNavPage {
 /** Minimal projection used by sitemap.xml — id + dates only, no PII. */
 /**
  * The file behind a public document. Returned ONLY for a row that is
- * `public_access = true`, not soft-deleted, and in the requested community —
- * the three predicates that stand between a private storage object and the open
- * internet.
+ * `public_access = true`, not soft-deleted, in the requested community, and
+ * belonging to a community that is itself not soft-deleted — the four
+ * predicates that stand between a private storage object and the open internet.
  */
 export interface PublicDocumentFile {
   id: number;
@@ -570,11 +570,35 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
      * Resolve one document for ANONYMOUS download.
      *
      * This is the only read in the product that hands an unauthenticated
-     * caller a path into the private `documents` storage bucket, so the three
+     * caller a path into the private `documents` storage bucket, so the four
      * predicates below are the whole authorization: the row must belong to this
-     * community, must not be soft-deleted, and must carry `public_access`.
-     * There is no session and no membership to fall back on — if this filter is
-     * wrong, a private association record is on the open internet.
+     * community, must not be soft-deleted, must carry `public_access`, and the
+     * community itself must still be live. There is no session and no
+     * membership to fall back on — if this filter is wrong, a private
+     * association record is on the open internet.
+     *
+     * The community join is not redundant here, unlike everywhere else in this
+     * file. Every OTHER public surface reaches a reader only after middleware
+     * has resolved the host through `pp_public_community_id_by_slug`
+     * (migration 0045), which filters `deleted_at IS NULL` — a soft-deleted
+     * community's host 404s before a reader exists. The download route
+     * (`/api/v1/public/documents/[id]/download`) takes `communityId` off the
+     * query string instead, so nothing upstream checks it. And
+     * `executeCommunitySoftDelete` stamps only `communities.deleted_at`: the
+     * documents keep `public_access = true` and a null `deleted_at`, so without
+     * this predicate a deleted association's records stay downloadable through
+     * the URLs `sitemap.ts` handed to crawlers — including after the 6-month
+     * purge.
+     *
+     * `deleted_at IS NULL` is the whole liveness test, deliberately. It is what
+     * the middleware RPC enforces and what `getCommunityPublicInfo` /
+     * `getContactInfo` check; `site_published_at` is NOT a gate anywhere (the
+     * public site is "always live" per spec §4.0 — it is read for the editor's
+     * banner state, never as a visibility filter), so adding it here would take
+     * documents offline that the rest of the public site still serves.
+     *
+     * Shape follows `resolveRedirect` above: innerJoin the parent, parent
+     * predicates flat in the same `and(...)`, one WHERE per method.
      */
     async getPublicDocumentFile(documentId) {
       if (!Number.isInteger(documentId) || documentId <= 0) return null;
@@ -587,12 +611,14 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           mimeType: documents.mimeType,
         })
         .from(documents)
+        .innerJoin(communities, eq(communities.id, documents.communityId))
         .where(
           and(
             eq(documents.id, documentId),
             eq(documents.communityId, communityId),
             isNull(documents.deletedAt),
             eq(documents.publicAccess, true),
+            isNull(communities.deletedAt),
           ),
         )
         .limit(1);

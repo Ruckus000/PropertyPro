@@ -19,8 +19,13 @@
  * product. Two auth modes in one handler is exactly where that kind of thing
  * goes wrong; keeping it separate means the authenticated route keeps its
  * single, unconditional gate, and this route has exactly one rule —
- * `getPublicDocumentFile` returns a row only when it is public, not deleted, and
- * in the named community.
+ * `getPublicDocumentFile` returns a row only when it is public, not deleted, in
+ * the named community, and that community is not itself soft-deleted.
+ *
+ * That last predicate is this route's alone to enforce. `communityId` arrives
+ * on the query string, so unlike every other public surface the request never
+ * passes the middleware RPC (`pp_public_community_id_by_slug`, migration 0045)
+ * that filters out soft-deleted communities.
  *
  * ## No audit entry, deliberately
  *
