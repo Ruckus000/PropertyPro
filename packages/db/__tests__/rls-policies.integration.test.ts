@@ -1782,6 +1782,17 @@ describeDb('P4-55 RLS policies (integration)', () => {
         'pp_community_export_job_parts_select',
         'pp_community_export_job_parts_update',
       ],
+      // site_publish_schedules (tenant_admin_write, 0065): per-table policy names
+      // rather than the shared `pp_tenant_select`, matching the export-job tables
+      // above. Same reasoning — the predicate IS the standard
+      // `pp_rls_can_read_audit_log` one, and the cron reads through the service
+      // role, so the authenticated SELECT policy never fires in practice.
+      site_publish_schedules: [
+        'pp_site_publish_schedules_delete',
+        'pp_site_publish_schedules_insert',
+        'pp_site_publish_schedules_select',
+        'pp_site_publish_schedules_update',
+      ],
       support_consent_grants: ['consent_community_read', 'consent_service_bypass'],
       support_access_log: ['access_log_community_read', 'access_log_service_bypass'],
       // onboarding_checklist_items (tenant_user_scoped): bespoke per-user policy
