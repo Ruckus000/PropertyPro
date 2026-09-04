@@ -9,7 +9,7 @@
  *   requireAuthenticatedUserId
  *     → parseCommunityIdFromQuery(req)
  *     → requireCommunityMembership
- *     → requireEsignReadPermission (async, awaited)
+ *     → requireEsignManagementRead (async, awaited)
  *     → getSubmission(communityId, id)
  *     → (business rule) signedDocumentPath present
  *     → createPresignedDownloadUrl('documents', signedDocumentPath)
@@ -26,7 +26,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { requireEsignReadPermission } from '@/lib/esign/esign-route-helpers';
+import { requireEsignManagementRead } from '@/lib/esign/esign-route-helpers';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getSubmission } from '@/lib/services/esign-service';
 import { esignSubmissionDownloadContract } from './contract';
@@ -37,7 +37,7 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    await requireEsignReadPermission(membership);
+    await requireEsignManagementRead(membership);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 

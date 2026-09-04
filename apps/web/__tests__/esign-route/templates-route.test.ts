@@ -10,13 +10,13 @@ const {
   listTemplatesMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
-  requireEsignReadPermissionMock,
+  requireEsignManagementReadMock,
   parseCommunityIdFromQueryMock,
 } = vi.hoisted(() => ({
   listTemplatesMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
-  requireEsignReadPermissionMock: vi.fn(),
+  requireEsignManagementReadMock: vi.fn(),
   parseCommunityIdFromQueryMock: vi.fn(),
 }));
 
@@ -34,7 +34,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/esign/esign-route-helpers', () => ({
-  requireEsignReadPermission: requireEsignReadPermissionMock,
+  requireEsignManagementRead: requireEsignManagementReadMock,
   requireEsignWritePermission: vi.fn(),
 }));
 
@@ -103,7 +103,7 @@ beforeEach(() => {
   requireAuthenticatedUserIdMock.mockResolvedValue('user-staff');
   parseCommunityIdFromQueryMock.mockReturnValue(COMMUNITY_ID);
   requireCommunityMembershipMock.mockResolvedValue(membership);
-  requireEsignReadPermissionMock.mockResolvedValue(undefined);
+  requireEsignManagementReadMock.mockResolvedValue(undefined);
 });
 
 describe('GET /api/v1/esign/templates', () => {
@@ -120,6 +120,10 @@ describe('GET /api/v1/esign/templates', () => {
       status: undefined,
       type: undefined,
     });
+    // The gate this route runs is the management one, not `esign:read`, which
+    // residents also hold. `esign-route-helpers.test.ts` proves what that gate
+    // refuses; this proves the route actually reaches it.
+    expect(requireEsignManagementReadMock).toHaveBeenCalledWith(membership);
   });
 
   it('passes valid status + type filters through to listTemplates', async () => {

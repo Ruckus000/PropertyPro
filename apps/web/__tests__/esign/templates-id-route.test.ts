@@ -11,7 +11,7 @@ const {
   requireCommunityMembershipMock,
   parseCommunityIdFromQueryMock,
   parseCommunityIdFromBodyMock,
-  requireEsignReadPermissionMock,
+  requireEsignManagementReadMock,
   requireEsignWritePermissionMock,
   assertNotDemoGraceMock,
   requirePlanFeatureMock,
@@ -23,7 +23,7 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   parseCommunityIdFromQueryMock: vi.fn(),
   parseCommunityIdFromBodyMock: vi.fn(),
-  requireEsignReadPermissionMock: vi.fn(),
+  requireEsignManagementReadMock: vi.fn(),
   requireEsignWritePermissionMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn(),
   requirePlanFeatureMock: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/esign/esign-route-helpers', () => ({
-  requireEsignReadPermission: requireEsignReadPermissionMock,
+  requireEsignManagementRead: requireEsignManagementReadMock,
   requireEsignWritePermission: requireEsignWritePermissionMock,
 }));
 
@@ -89,7 +89,7 @@ describe('/api/v1/esign/templates/[id]', () => {
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
     parseCommunityIdFromQueryMock.mockReturnValue(42);
     parseCommunityIdFromBodyMock.mockReturnValue(42);
-    requireEsignReadPermissionMock.mockResolvedValue(undefined);
+    requireEsignManagementReadMock.mockResolvedValue(undefined);
     requireEsignWritePermissionMock.mockResolvedValue(undefined);
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requirePlanFeatureMock.mockResolvedValue(undefined);
@@ -109,7 +109,7 @@ describe('/api/v1/esign/templates/[id]', () => {
       const json = (await res.json()) as { data: typeof TEMPLATE };
       expect(json.data).toEqual(TEMPLATE);
       expect(getTemplateMock).toHaveBeenCalledWith(42, 7);
-      expect(requireEsignReadPermissionMock).toHaveBeenCalledWith(MEMBERSHIP);
+      expect(requireEsignManagementReadMock).toHaveBeenCalledWith(MEMBERSHIP);
     });
 
     it('returns 400 for invalid id', async () => {

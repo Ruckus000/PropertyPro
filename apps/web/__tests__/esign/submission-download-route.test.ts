@@ -17,14 +17,14 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   parseCommunityIdFromQueryMock,
-  requireEsignReadPermissionMock,
+  requireEsignManagementReadMock,
   getSubmissionMock,
   createPresignedDownloadUrlMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   parseCommunityIdFromQueryMock: vi.fn(),
-  requireEsignReadPermissionMock: vi.fn(),
+  requireEsignManagementReadMock: vi.fn(),
   getSubmissionMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
 }));
@@ -42,7 +42,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/esign/esign-route-helpers', () => ({
-  requireEsignReadPermission: requireEsignReadPermissionMock,
+  requireEsignManagementRead: requireEsignManagementReadMock,
 }));
 
 vi.mock('@/lib/services/esign-service', () => ({
@@ -93,7 +93,7 @@ describe('GET /api/v1/esign/submissions/[id]/download', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-admin-1');
     parseCommunityIdFromQueryMock.mockReturnValue(42);
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
-    requireEsignReadPermissionMock.mockResolvedValue(undefined);
+    requireEsignManagementReadMock.mockResolvedValue(undefined);
     getSubmissionMock.mockResolvedValue(SUBMISSION_DETAIL);
     createPresignedDownloadUrlMock.mockResolvedValue(
       'https://signed.example/esign/signed/doc-9.pdf',
@@ -109,7 +109,7 @@ describe('GET /api/v1/esign/submissions/[id]/download', () => {
       'https://signed.example/esign/signed/doc-9.pdf',
     );
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-admin-1');
-    expect(requireEsignReadPermissionMock).toHaveBeenCalledWith(MEMBERSHIP);
+    expect(requireEsignManagementReadMock).toHaveBeenCalledWith(MEMBERSHIP);
     expect(getSubmissionMock).toHaveBeenCalledWith(42, 9);
     expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith(
       'documents',
@@ -148,7 +148,7 @@ describe('GET /api/v1/esign/submissions/[id]/download', () => {
   });
 
   it('returns 403 when esign read permission is denied (before getSubmission)', async () => {
-    requireEsignReadPermissionMock.mockRejectedValueOnce(
+    requireEsignManagementReadMock.mockRejectedValueOnce(
       new ForbiddenError('E-Sign read permission required'),
     );
 

@@ -24,14 +24,14 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   parseCommunityIdFromQueryMock,
-  requireEsignReadPermissionMock,
+  requireEsignManagementReadMock,
   getTemplateMock,
   createPresignedDownloadUrlMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   parseCommunityIdFromQueryMock: vi.fn(),
-  requireEsignReadPermissionMock: vi.fn(),
+  requireEsignManagementReadMock: vi.fn(),
   getTemplateMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
 }));
@@ -49,7 +49,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/esign/esign-route-helpers', () => ({
-  requireEsignReadPermission: requireEsignReadPermissionMock,
+  requireEsignManagementRead: requireEsignManagementReadMock,
 }));
 
 vi.mock('@/lib/services/esign-service', () => ({
@@ -90,7 +90,7 @@ describe('GET /api/v1/esign/templates/[id]/pdf', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-staff');
     parseCommunityIdFromQueryMock.mockReturnValue(1);
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
-    requireEsignReadPermissionMock.mockResolvedValue(undefined);
+    requireEsignManagementReadMock.mockResolvedValue(undefined);
     getTemplateMock.mockResolvedValue({
       id: 5,
       name: 'Violation Acknowledgment',
@@ -107,7 +107,7 @@ describe('GET /api/v1/esign/templates/[id]/pdf', () => {
     expect(json.data.pdfUrl).toBe(PRESIGNED_URL);
     expect(requireAuthenticatedUserIdMock).toHaveBeenCalled();
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(1, 'user-staff');
-    expect(requireEsignReadPermissionMock).toHaveBeenCalledWith(MEMBERSHIP);
+    expect(requireEsignManagementReadMock).toHaveBeenCalledWith(MEMBERSHIP);
     expect(getTemplateMock).toHaveBeenCalledWith(1, 5);
     expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith(
       'documents',
@@ -166,12 +166,12 @@ describe('GET /api/v1/esign/templates/[id]/pdf', () => {
     const res = await GET(getReq(5), routeCtx('5'));
 
     expect(res.status).toBe(403);
-    expect(requireEsignReadPermissionMock).not.toHaveBeenCalled();
+    expect(requireEsignManagementReadMock).not.toHaveBeenCalled();
     expect(getTemplateMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 when esign read permission is denied', async () => {
-    requireEsignReadPermissionMock.mockRejectedValueOnce(
+    requireEsignManagementReadMock.mockRejectedValueOnce(
       new ForbiddenError('Insufficient permissions'),
     );
 
