@@ -300,8 +300,19 @@ describe('the lease — crash recovery', () => {
     await processDueSitePublishes(now);
 
     expect(sqlOf(0)).toContain('lease_expires_at =');
-    const expiry = valuesOf(0).find((v) => v instanceof Date && v > now) as Date;
-    expect(expiry.getTime()).toBe(now.getTime() + SITE_PUBLISH_SCHEDULE_LEASE_MS);
+    /*
+     * Asserted as an ISO STRING, not a Date, and that is the point rather than
+     * an incidental detail. postgres-js cannot serialise a bare `Date` as an
+     * untyped bind parameter — it throws ERR_INVALID_ARG_TYPE on the client —
+     * so every Date this file's raw statements bind is converted first. This
+     * case previously searched the bound values for `v instanceof Date`, which
+     * passed against exactly the shape that took the cron down in production.
+     * Pinning the serialised form keeps that regression visible here as well as
+     * in site-publish-schedule.integration.test.ts.
+     */
+    const expected = new Date(now.getTime() + SITE_PUBLISH_SCHEDULE_LEASE_MS).toISOString();
+    expect(valuesOf(0)).toContain(expected);
+    expect(valuesOf(0).some((v) => v instanceof Date)).toBe(false);
   });
 
   it('will not claim a row that has used every attempt', async () => {

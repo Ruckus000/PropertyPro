@@ -58,6 +58,31 @@ export interface EditorSitePublishSchedule {
 /** @deprecated Kept as an alias while callers migrate to the widened shape. */
 export type PendingSitePublishSchedule = EditorSitePublishSchedule;
 
+/**
+ * Bind a `Date` into a raw `sql` template.
+ *
+ * postgres-js picks a serialiser for an untyped bind parameter from the JS type
+ * it is handed, and it has no case for `Date`: it throws `ERR_INVALID_ARG_TYPE`
+ * ("Received an instance of Date") on the CLIENT, before a packet is sent. The
+ * failure therefore surfaces as a query error for a statement Postgres never
+ * saw — which is why a missing column was the first thing suspected when this
+ * took `/api/v1/internal/scheduled-site-publish` down on every run.
+ *
+ * Drizzle's QUERY BUILDER never hits this: a column's `timestamp` type tells it
+ * to serialise the Date itself, which is why the sibling `claimNextExportJob`,
+ * the same lease pattern written through the builder, was unaffected. A raw
+ * template has no column to consult, so the conversion has to happen here.
+ *
+ * `toISOString()` is exactly what drizzle's own `withTimezone` serialiser
+ * emits, so a value bound through this helper and one written via the builder
+ * are identical on the wire.
+ *
+ * Every `Date` interpolated into a raw statement in this file goes through it.
+ */
+function ts(value: Date): string {
+  return value.toISOString();
+}
+
 /** How long a failed schedule keeps being reported to the editor. */
 const FAILED_VISIBLE_DAYS = 7;
 
@@ -159,7 +184,7 @@ export async function getSitePublishScheduleForEditor(
        AND deleted_at IS NULL
        AND (
          status IN ('pending', 'running')
-         OR (status = 'failed' AND executed_at >= ${failedCutoff})
+         OR (status = 'failed' AND executed_at >= ${ts(failedCutoff)})
        )
      ORDER BY created_at DESC
      LIMIT 1
@@ -250,7 +275,7 @@ export async function scheduleSitePublish({
       const inserted = (await tx.execute(sql`
         INSERT INTO site_publish_schedules
           (community_id, scheduled_for, requested_by, status, notify_summary)
-        VALUES (${communityId}, ${scheduledFor}, ${actorUserId}, 'pending', ${notifySummary})
+        VALUES (${communityId}, ${ts(scheduledFor)}, ${actorUserId}, 'pending', ${notifySummary})
         RETURNING id, scheduled_for, notify_summary
       `)) as unknown as Array<{ id: number; scheduled_for: Date; notify_summary: string | null }>;
 
@@ -372,16 +397,16 @@ export async function processDueSitePublishes(
     UPDATE site_publish_schedules
        SET status = 'running',
            attempt_count = attempt_count + 1,
-           lease_expires_at = ${leaseExpiresAt},
+           lease_expires_at = ${ts(leaseExpiresAt)},
            updated_at = now()
      WHERE id IN (
        SELECT id
          FROM site_publish_schedules
         WHERE status IN ('pending', 'running')
           AND deleted_at IS NULL
-          AND scheduled_for <= ${now}
+          AND scheduled_for <= ${ts(now)}
           AND attempt_count < ${MAX_ATTEMPTS}
-          AND (lease_expires_at IS NULL OR lease_expires_at < ${now})
+          AND (lease_expires_at IS NULL OR lease_expires_at < ${ts(now)})
         ORDER BY scheduled_for ASC
         LIMIT ${BATCH_SIZE}
         FOR UPDATE SKIP LOCKED
@@ -542,7 +567,7 @@ export async function failExhaustedSchedules(now: Date = new Date()): Promise<nu
      WHERE status IN ('pending', 'running')
        AND deleted_at IS NULL
        AND attempt_count >= ${MAX_ATTEMPTS}
-       AND (lease_expires_at IS NULL OR lease_expires_at < ${now})
+       AND (lease_expires_at IS NULL OR lease_expires_at < ${ts(now)})
     RETURNING id
   `)) as unknown as Array<{ id: number }>;
 
