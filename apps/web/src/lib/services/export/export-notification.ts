@@ -23,15 +23,17 @@
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
  */
 import { createElement } from 'react';
-import { communities, users } from '@propertypro/db';
+import { communities, userRoles, users } from '@propertypro/db';
 import type { CommunityExportJob, ExportJobManifest } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { and, eq, isNull } from '@propertypro/db/filters';
 // Reads exactly two rows — the requesting user and their community name — to
 // address one email. Runs from the export cron, which has no session and no
 // membership to scope by, and the community is fixed by the job row itself.
 // AUTHZ: export-ready notification — single-row lookup of the job's own requester + community.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { CommunityExportReadyEmail, sendEmail } from '@propertypro/email';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
+import { isExportEligible } from './export-route-auth';
 import { formatBytes } from '@/lib/utils/format-bytes';
 
 /** How many individual warnings to enumerate before collapsing the rest. */
@@ -101,23 +103,73 @@ export async function sendExportReadyEmail(
 
     const db = createUnscopedClient();
 
+    /*
+     * Re-check the requester at SEND time, not just at request time.
+     *
+     * Nothing between queueing and here re-examines who asked. A manager
+     * removed from the community, or an account since soft-deleted, still got
+     * this mail. The archive itself was never reachable to them — the link goes
+     * to /settings, never a signed URL, and the download re-runs the whole
+     * `requireExportAccess` chain — so what leaked was METADATA: the community
+     * name in the subject line, the part count, the total size, the expiry, and
+     * any "a record set could not be read" warning.
+     *
+     * That is what makes this a joined read and a few guards rather than a
+     * second copy of the route's auth chain. There is no session here, no
+     * request to refuse, and no reauth challenge to make.
+     */
     const [requester] = await db
-      .select({ email: users.email, fullName: users.fullName })
+      .select({
+        email: users.email,
+        fullName: users.fullName,
+        deletedAt: users.deletedAt,
+        role: userRoles.role,
+        designation: userRoles.designation,
+      })
       .from(users)
+      .innerJoin(
+        userRoles,
+        and(
+          eq(userRoles.userId, users.id),
+          eq(userRoles.communityId, job.communityId),
+        ),
+      )
       .where(eq(users.id, job.requestedBy))
       .limit(1);
 
-    if (!requester?.email) {
+    // No row means the join found no membership: they are no longer in this
+    // community at all.
+    if (!requester) {
+      return { sent: false, reason: 'requester is no longer a member of this community' };
+    }
+    if (requester.deletedAt) {
+      return { sent: false, reason: 'requester account was deleted' };
+    }
+    if (
+      !isExportEligible({
+        isAdmin: (ADMIN_TIER_DB_ROLES as readonly string[]).includes(requester.role),
+        designation: requester.designation,
+      })
+    ) {
+      return { sent: false, reason: 'requester no longer has export permission' };
+    }
+    if (!requester.email) {
       return { sent: false, reason: 'requester has no email address' };
     }
 
     const [community] = await db
       .select({ name: communities.name })
       .from(communities)
-      .where(eq(communities.id, job.communityId))
+      .where(and(eq(communities.id, job.communityId), isNull(communities.deletedAt)))
       .limit(1);
 
-    const communityName = community?.name ?? 'Your Community';
+    // Costs nothing — the row was already being fetched. A community in its
+    // deletion cooling window should not be mailing anyone about its records.
+    if (!community) {
+      return { sent: false, reason: 'community is no longer active' };
+    }
+
+    const communityName = community.name;
     const warnings = summarizeWarnings(job.manifest);
 
     await sendEmail({

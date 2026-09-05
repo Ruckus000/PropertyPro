@@ -23,6 +23,7 @@ import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
   accessPlans,
   communities,
+  communityExportJobs,
   users,
   userRoles,
   accountDeletionRequests,
@@ -881,6 +882,47 @@ export async function executeCommunitySoftDelete(requestIds: number[]) {
         .update(communities)
         .set({ deletedAt: now })
         .where(inArray(communities.id, communityIds));
+
+      /*
+       * Stop any export this community had in flight, in the SAME transaction
+       * that soft-deletes it.
+       *
+       * The claim scan now skips soft-deleted communities, but a filter alone
+       * would leave the job sitting `queued` — invisible to the requester,
+       * holding the one-active-job-per-community slot for six months, and
+       * firing on a stale cursor the moment the community is recovered. A job
+       * that silently never runs is the failure mode this codebase keeps
+       * meeting.
+       *
+       * `failed`, not `cancelled`: the settings card renders `errorMessage`
+       * only under `failed` — `cancelled` shows a bare "Cancelled." that reads
+       * as user-initiated, so the board member who asked for the export would
+       * never learn why it stopped. Both release the exclusivity slot, so a
+       * RECOVERED community can request a fresh export immediately, which is
+       * what the cooling window requires.
+       *
+       * The worker's reaper then deletes whatever volumes the job had already
+       * uploaded — which is the actual point: no partial copy of the
+       * association's records left in storage through the cooling window.
+       */
+      await tx
+        .update(communityExportJobs)
+        .set({
+          status: 'failed',
+          errorCode: 'COMMUNITY_DELETED',
+          errorMessage:
+            'This account is scheduled for deletion, so the export was stopped before it finished. Recover the account and request a new export if you still need it.',
+          leaseExpiresAt: null,
+          completedAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            inArray(communityExportJobs.communityId, communityIds),
+            inArray(communityExportJobs.status, ['queued', 'running']),
+            isNull(communityExportJobs.deletedAt),
+          ),
+        );
     }
 
     return requests;
