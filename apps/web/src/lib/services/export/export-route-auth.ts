@@ -96,11 +96,35 @@ function refuseUnderImpersonation(req: NextRequest): void {
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
  */
 export function requireExportPermission(membership: CommunityMembership): void {
-  if (membership.isAdmin || hasBoardDesignation(membership.designation)) return;
+  if (isExportEligible(membership)) return;
 
   throw new ForbiddenError(
     'Only a property manager or a board member can export the community record set.',
   );
+}
+
+/**
+ * The export bar as a PREDICATE, for callers that must decide rather than
+ * refuse.
+ *
+ * The export-ready notification runs from a cron with no session and no request
+ * to reject — it needs to know whether the original requester still qualifies,
+ * and skip the mail if not. Sharing the rule with `requireExportPermission`
+ * rather than restating it is the same discipline the docblock above already
+ * argues for: two gates that can drift is how one of them ends up wrong.
+ */
+export function isExportEligible(membership: {
+  isAdmin: boolean;
+  /**
+   * `unknown` deliberately: `hasBoardDesignation` is a type guard over
+   * `unknown`, and the notification caller passes a raw `user_roles.designation`
+   * column (`string | null`) rather than an already-narrowed
+   * `CommunityMembership`. Narrowing here would force that caller to cast,
+   * which is exactly the kind of assertion that lets a wrong value through.
+   */
+  designation: unknown;
+}): boolean {
+  return membership.isAdmin || hasBoardDesignation(membership.designation);
 }
 
 /**

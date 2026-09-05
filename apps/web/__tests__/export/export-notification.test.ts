@@ -18,12 +18,31 @@ const { createUnscopedClientMock, sendEmailMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@propertypro/db', () => ({
-  communities: { id: 'communities.id', name: 'communities.name' },
-  users: { id: 'users.id', email: 'users.email', fullName: 'users.full_name' },
+  communities: {
+    id: 'communities.id',
+    name: 'communities.name',
+    deletedAt: 'communities.deleted_at',
+  },
+  users: {
+    id: 'users.id',
+    email: 'users.email',
+    fullName: 'users.full_name',
+    deletedAt: 'users.deleted_at',
+  },
+  // Joined at send time so a requester who has since left the community, or
+  // lost the export bar, is not mailed.
+  userRoles: {
+    userId: 'user_roles.user_id',
+    communityId: 'user_roles.community_id',
+    role: 'user_roles.role',
+    designation: 'user_roles.designation',
+  },
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
+  and: (...c: unknown[]) => ({ __and: c }),
   eq: (a: unknown, b: unknown) => ({ __eq: [a, b] }),
+  isNull: (a: unknown) => ({ __isNull: a }),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
@@ -49,12 +68,26 @@ function buildDb(selectResults: unknown[][]) {
       const rows = queue.shift() ?? [];
       const chain: Record<string, unknown> = {};
       chain.from = vi.fn(() => chain);
+      chain.innerJoin = vi.fn(() => chain);
       chain.where = vi.fn(() => chain);
       chain.limit = vi.fn(() => Promise.resolve(rows));
       return chain;
     }),
   };
 }
+
+/**
+ * A requester who still passes the export bar at SEND time. The row shape
+ * mirrors the joined `users` x `user_roles` read: a manager qualifies on role
+ * alone, a resident only via board designation.
+ */
+const ELIGIBLE_REQUESTER = {
+  email: 'board@example.com',
+  fullName: 'Dana',
+  deletedAt: null,
+  role: 'property_manager',
+  designation: null,
+};
 
 const JOB = {
   id: 1,
@@ -70,7 +103,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   sendEmailMock.mockResolvedValue(undefined);
   createUnscopedClientMock.mockReturnValue(
-    buildDb([[{ email: 'board@example.com', fullName: 'Dana' }], [{ name: 'Sunset Condos' }]]),
+    buildDb([[ELIGIBLE_REQUESTER], [{ name: 'Sunset Condos' }]]),
   );
 });
 
@@ -182,14 +215,105 @@ describe('sendExportReadyEmail', () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to a generic community name rather than failing', async () => {
+  it('does not mail about a community that is gone or being deleted', async () => {
+    /*
+     * This case USED to assert the opposite: no community row meant fall back
+     * to the name "Your Community" and send anyway. That fallback existed for a
+     * missing row, but the community lookup now also excludes soft-deleted
+     * ones — so the same empty result covers a community inside its six-month
+     * deletion cooling window, and mailing that association about its records
+     * is not a nicety worth preserving.
+     *
+     * Losing the fallback costs nothing real: a `ready` job always has a
+     * community, or the export could not have been built from it.
+     */
     createUnscopedClientMock.mockReturnValue(
-      buildDb([[{ email: 'a@b.com', fullName: 'Dana' }], []]),
+      buildDb([[ELIGIBLE_REQUESTER], []]),
+    );
+
+    const result = await sendExportReadyEmail(JOB);
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toMatch(/no longer active/i);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── the requester is re-checked at SEND time ──────────────────────────────
+
+describe('sendExportReadyEmail — who still qualifies', () => {
+  const COMMUNITY = [{ name: 'Sunset Condos' }];
+
+  it('does not mail someone who has left the community', async () => {
+    /*
+     * Nothing between queueing and sending re-examined who asked, so a manager
+     * removed from the association still got this mail. The archive was never
+     * reachable to them — the link goes to /settings and the download re-runs
+     * the full auth chain — but the mail itself leaks metadata: the community
+     * name in the subject, the part count, the total size, the expiry, and any
+     * "a record set could not be read" warning.
+     *
+     * An empty result IS the signal: the read inner-joins `user_roles`, so no
+     * membership means no row.
+     */
+    createUnscopedClientMock.mockReturnValue(buildDb([[], COMMUNITY]));
+
+    const result = await sendExportReadyEmail(JOB);
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toMatch(/no longer a member/i);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('does not mail a deleted account', async () => {
+    createUnscopedClientMock.mockReturnValue(
+      buildDb([[{ ...ELIGIBLE_REQUESTER, deletedAt: new Date() }], COMMUNITY]),
+    );
+
+    const result = await sendExportReadyEmail(JOB);
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toMatch(/account was deleted/i);
+  });
+
+  it('does not mail someone who kept membership but lost the export bar', async () => {
+    // A plain resident with no board designation: still in the community, no
+    // longer entitled to its record set.
+    createUnscopedClientMock.mockReturnValue(
+      buildDb([[{ ...ELIGIBLE_REQUESTER, role: 'resident', designation: null }], COMMUNITY]),
+    );
+
+    const result = await sendExportReadyEmail(JOB);
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toMatch(/no longer has export permission/i);
+  });
+
+  it('DOES mail a board-designated resident — the guards must not over-reject', async () => {
+    /*
+     * The false-positive pin. Every case above asserts a refusal, so a
+     * predicate that rejected everyone would satisfy all of them. Board members
+     * qualify by DESIGNATION, not by role, and they are exactly who exports the
+     * record set most often.
+     */
+    createUnscopedClientMock.mockReturnValue(
+      buildDb([
+        [{ ...ELIGIBLE_REQUESTER, role: 'resident', designation: 'board_president' }],
+        COMMUNITY,
+      ]),
     );
 
     const result = await sendExportReadyEmail(JOB);
 
     expect(result.sent).toBe(true);
-    expect(sendEmailMock.mock.calls[0]![0].subject).toContain('Your Community');
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never throws when a guard trips — the archive is already built', async () => {
+    // The job is `ready` and downloadable regardless; a refusal to mail must
+    // not send the worker back to rebuild an export that already exists.
+    createUnscopedClientMock.mockReturnValue(buildDb([[], COMMUNITY]));
+
+    await expect(sendExportReadyEmail(JOB)).resolves.toMatchObject({ sent: false });
   });
 });

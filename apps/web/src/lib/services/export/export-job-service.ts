@@ -10,7 +10,7 @@
  *
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
  */
-import { communityExportJobParts, communityExportJobs, logAuditEvent } from '@propertypro/db';
+import { communities, communityExportJobParts, communityExportJobs, logAuditEvent } from '@propertypro/db';
 import type { CommunityExportJob, ExportJobCursor, ExportJobManifest } from '@propertypro/db';
 import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
 // The worker's claim scan is cross-tenant by nature: a cron with no session,
@@ -151,8 +151,22 @@ export async function claimNextExportJob(
   const candidates = await db
     .select({ id: communityExportJobs.id })
     .from(communityExportJobs)
+    /*
+     * Join the community so a SOFT-DELETED one's jobs are not claimed. This was
+     * the only cross-tenant cron scan in the repo without the filter — every
+     * other one has it (calendar-event-reminder's `loadActiveCommunities`,
+     * insurance alerts, compliance alerts, assessment automation, payment
+     * alerts, snowbird digest, provisioning). Without it a community in its
+     * six-month deletion cooling window still had a full PII archive built and
+     * written to storage, and mail sent about it.
+     *
+     * Note the `isNull(communityExportJobs.deletedAt)` below is the JOB's own
+     * column, not the community's — easy to misread as already covering this.
+     */
+    .innerJoin(communities, eq(communities.id, communityExportJobs.communityId))
     .where(
       and(
+        isNull(communities.deletedAt),
         inArray(communityExportJobs.status, ['queued', 'running']),
         isNull(communityExportJobs.deletedAt),
         // Column-to-column. A job that has burned its attempts must stop being
@@ -420,23 +434,88 @@ export async function cancelExportJob(
   return !!cancelled;
 }
 
-/** Jobs whose archives have aged out and should be deleted from storage. */
-export async function findExpiredReadyJobs(now: Date = new Date()) {
+/**
+ * Jobs whose archive volumes should be deleted from storage.
+ *
+ * Two populations, both terminal:
+ *
+ *  - `ready` past its expiry — the original retention sweep.
+ *  - `failed` / `cancelled` — previously reaped by NOTHING. Neither is
+ *    re-claimable (`claimNextExportJob` takes only `queued`/`running`) and
+ *    neither is downloadable (the download route hard-requires `ready`), so
+ *    whatever volumes they uploaded before stopping were pure liability: a
+ *    partial copy of an association's records sitting in storage until the
+ *    community was hard-purged six months later.
+ *
+ * The lease guard is what stops this deleting under a live worker, and it is
+ * exact — a time-based grace constant would be a guess that has to be tuned.
+ *
+ * The join to `community_export_job_parts` is the idempotency marker. Purging
+ * sets `parts.deleted_at`, so a job whose volumes are already gone stops being
+ * listed. Without it the `failed`/`cancelled` arm would re-list the same rows
+ * on every tick forever — `ready` rows leave on their own because
+ * `markJobExpired` moves them to `expired`, but a failed job keeps its status.
+ * (`exists` is deliberately not on the `@propertypro/db/filters` surface, hence
+ * a join + `groupBy` rather than a subquery.)
+ */
+export async function findPurgeableJobArchives(now: Date = new Date()) {
   const db = createUnscopedClient();
   return db
     .select({
       id: communityExportJobs.id,
       communityId: communityExportJobs.communityId,
       downloadToken: communityExportJobs.downloadToken,
+      status: communityExportJobs.status,
     })
     .from(communityExportJobs)
+    .innerJoin(
+      communityExportJobParts,
+      eq(communityExportJobParts.jobId, communityExportJobs.id),
+    )
     .where(
       and(
-        eq(communityExportJobs.status, 'ready'),
-        lt(communityExportJobs.expiresAt, now),
+        isNull(communityExportJobParts.deletedAt),
+        or(
+          isNull(communityExportJobs.leaseExpiresAt),
+          lt(communityExportJobs.leaseExpiresAt, now),
+        ),
+        or(
+          and(
+            eq(communityExportJobs.status, 'ready'),
+            lt(communityExportJobs.expiresAt, now),
+          ),
+          inArray(communityExportJobs.status, ['failed', 'cancelled']),
+        ),
       ),
     )
+    .groupBy(
+      communityExportJobs.id,
+      communityExportJobs.communityId,
+      communityExportJobs.downloadToken,
+      communityExportJobs.status,
+    )
     .limit(50);
+}
+
+/**
+ * Mark a job's volumes as gone from storage.
+ *
+ * Reuses the existing `parts.deleted_at` column rather than adding an
+ * `archive_purged_at` — `listJobParts` already filters on it, so a purged job's
+ * download returns "part not found" instead of a presigned URL to a deleted
+ * object. One column, two jobs, no migration.
+ */
+export async function markJobArchivePurged(jobId: number): Promise<void> {
+  const db = createUnscopedClient();
+  await db
+    .update(communityExportJobParts)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(communityExportJobParts.jobId, jobId),
+        isNull(communityExportJobParts.deletedAt),
+      ),
+    );
 }
 
 /** Flip an expired job's status after its objects are gone. */

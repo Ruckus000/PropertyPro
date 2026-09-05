@@ -24,6 +24,82 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 const PAGE_SIZE = 1000;
 
 /**
+ * Delete every object directly inside one storage directory.
+ *
+ * Shared by both public functions so the pagination discipline above cannot
+ * drift between them: Supabase Storage `.list()` caps at 1000 rows, and a
+ * single unpaginated call silently strands the excess. Re-lists after each
+ * removal until a page comes back having removed nothing.
+ */
+async function removeObjectsIn(
+  admin: ReturnType<typeof createAdminClient>,
+  dir: string,
+  describe: string,
+): Promise<number> {
+  let deletedCount = 0;
+
+  for (;;) {
+    const { data: objects, error: listError } = await admin.storage
+      .from(COMMUNITY_EXPORTS_BUCKET)
+      .list(dir, { limit: PAGE_SIZE });
+
+    if (listError) {
+      throw new Error(`Failed to list ${describe}: ${listError.message}`);
+    }
+    if (!objects || objects.length === 0) break;
+
+    const paths = objects.map((o) => `${dir}/${o.name}`);
+    const { error: removeError } = await admin.storage
+      .from(COMMUNITY_EXPORTS_BUCKET)
+      .remove(paths);
+
+    if (removeError) {
+      throw new Error(`Failed to delete ${describe}: ${removeError.message}`);
+    }
+
+    deletedCount += paths.length;
+    if (paths.length < PAGE_SIZE) break;
+  }
+
+  return deletedCount;
+}
+
+/**
+ * Remove the archive volumes belonging to ONE export job.
+ *
+ * The expiry reaper's purge. It used to call `purgeCommunityExportArchives`,
+ * which deletes the whole `exports/<communityId>/` tree — so expiring one job
+ * destroyed every OTHER job's archive for that community, including a newer
+ * `ready` one whose row still said `ready`. That job's download then minted a
+ * presigned URL to an object that was no longer there.
+ *
+ * Keyed on `download_token`, not `job.id`, because that is the segment the
+ * writer actually used (`partPath` in export-worker.ts) and it is already
+ * carried on the row the reaper selects. Keying on id would strand every
+ * archive written before this change.
+ *
+ * AUTHZ: service-role admin client. Called only from the export worker cron,
+ * which has already established the job is terminal.
+ *
+ * Idempotent: an already-empty prefix returns 0.
+ */
+export async function purgeExportJobArchive({
+  communityId,
+  downloadToken,
+}: {
+  communityId: number;
+  downloadToken: string;
+}): Promise<{ deletedCount: number }> {
+  const admin = createAdminClient();
+  const deletedCount = await removeObjectsIn(
+    admin,
+    `exports/${communityId}/${downloadToken}`,
+    `export archive volumes for community ${communityId}`,
+  );
+  return { deletedCount };
+}
+
+/**
  * Remove every export object under `exports/<communityId>/`.
  *
  * AUTHZ: caller MUST have verified the community is being hard-deleted —
@@ -60,33 +136,14 @@ export async function purgeCommunityExportArchives(
     if (!tokenDirs || tokenDirs.length === 0) break;
 
     let removedThisPage = 0;
-
     for (const dir of tokenDirs) {
-      const { data: objects, error: objectsError } = await admin.storage
-        .from(COMMUNITY_EXPORTS_BUCKET)
-        .list(`${root}/${dir.name}`, { limit: PAGE_SIZE });
-
-      if (objectsError) {
-        throw new Error(
-          `Failed to list export archive parts for community ${communityId}: ${objectsError.message}`,
-        );
-      }
-      if (!objects || objects.length === 0) continue;
-
-      const paths = objects.map((o) => `${root}/${dir.name}/${o.name}`);
-      const { error: removeError } = await admin.storage
-        .from(COMMUNITY_EXPORTS_BUCKET)
-        .remove(paths);
-
-      if (removeError) {
-        throw new Error(
-          `Failed to delete export archives for community ${communityId}: ${removeError.message}`,
-        );
-      }
-
-      deletedCount += paths.length;
-      removedThisPage += paths.length;
+      removedThisPage += await removeObjectsIn(
+        admin,
+        `${root}/${dir.name}`,
+        `export archives for community ${communityId}`,
+      );
     }
+    deletedCount += removedThisPage;
 
     // Nothing left to remove under any listed directory — listing again would
     // return the same empty dirs forever.

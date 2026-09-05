@@ -40,6 +40,12 @@ const {
       partIndex: 'parts.part_index',
       communityId: 'parts.community_id',
       deletedAt: 'parts.deleted_at',
+      updatedAt: 'parts.updated_at',
+    },
+    // The claim scan joins this so a soft-deleted community's jobs are skipped.
+    communities: {
+      id: 'communities.id',
+      deletedAt: 'communities.deleted_at',
     },
   },
 }));
@@ -47,6 +53,7 @@ const {
 vi.mock('@propertypro/db', () => ({
   communityExportJobs: tables.communityExportJobs,
   communityExportJobParts: tables.communityExportJobParts,
+  communities: tables.communities,
   logAuditEvent: logAuditEventMock,
 }));
 
@@ -69,6 +76,8 @@ vi.mock('@propertypro/db/unsafe', () => ({
 const {
   claimNextExportJob,
   failExhaustedJobs,
+  findPurgeableJobArchives,
+  markJobArchivePurged,
   queueExportJob,
 } = await import('@/lib/services/export/export-job-service');
 
@@ -91,7 +100,9 @@ function buildDb(opts: {
     select: vi.fn(() => {
       const rows = selects.shift() ?? [];
       const chain: Record<string, unknown> = {};
-      for (const m of ['from', 'where', 'orderBy']) {
+      // `innerJoin` and `groupBy` joined the chain when the claim scan gained
+      // its soft-deleted-community filter and the reaper gained its parts join.
+      for (const m of ['from', 'innerJoin', 'where', 'orderBy', 'groupBy']) {
         chain[m] = vi.fn(() => chain);
       }
       chain.limit = vi.fn(() => Promise.resolve(rows));
@@ -311,5 +322,84 @@ describe('attempt cap', () => {
     // A job left in `running` with an expired lease is polled forever by a UI
     // that can never resolve it; releasing the lease is part of the fix.
     expect(payload.leaseExpiresAt).toBeNull();
+  });
+});
+
+describe('claimNextExportJob — soft-deleted communities', () => {
+  it('joins communities and requires the community to be live', async () => {
+    /*
+     * This was the only cross-tenant cron scan in the repo without the filter.
+     * Without it a community inside its six-month deletion cooling window still
+     * had a full PII archive built and written to storage, and mail sent about
+     * it.
+     *
+     * Asserted on the emitted predicate rather than on rows, matching how the
+     * other claim tests in this file inspect captured `where` structures. Note
+     * the pre-existing `isNull(communityExportJobs.deletedAt)` is the JOB's
+     * column — this pins the COMMUNITY's, which is a different table entirely.
+     */
+    const db = buildDb({ selectResults: [[]] });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await claimNextExportJob('worker-1');
+
+    const joinArgs = (db.select as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    expect(joinArgs.innerJoin).toHaveBeenCalled();
+
+    const where = JSON.stringify(joinArgs.where.mock.calls[0]![0]);
+    expect(where).toContain('communities.deleted_at');
+  });
+});
+
+describe('findPurgeableJobArchives', () => {
+  it('collects terminal jobs as well as expired ready ones', async () => {
+    /*
+     * `failed` and `cancelled` volumes were reaped by nothing and survived
+     * until the community was hard-purged six months later. Neither status is
+     * re-claimable or downloadable, so those volumes are pure liability.
+     */
+    const db = buildDb({ selectResults: [[]] });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await findPurgeableJobArchives(new Date('2026-09-05T00:00:00Z'));
+
+    const chain = (db.select as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    const where = JSON.stringify(chain.where.mock.calls[0]![0]);
+    expect(where).toContain('failed');
+    expect(where).toContain('cancelled');
+    // Still bounded by the lease, so it cannot delete under a live worker.
+    expect(where).toContain('lease_expires_at');
+  });
+
+  it('skips jobs whose volumes are already marked purged', async () => {
+    // Without this the failed/cancelled arm would re-list the same rows on
+    // every tick forever — a `ready` row leaves on its own via markJobExpired,
+    // but a failed one keeps its status.
+    const db = buildDb({ selectResults: [[]] });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await findPurgeableJobArchives();
+
+    const chain = (db.select as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    expect(chain.innerJoin).toHaveBeenCalled();
+    expect(JSON.stringify(chain.where.mock.calls[0]![0])).toContain('parts.deleted_at');
+  });
+});
+
+describe('markJobArchivePurged', () => {
+  it('soft-deletes the job’s part rows', async () => {
+    /*
+     * Reuses `parts.deleted_at` rather than a new column: `listJobParts`
+     * already filters on it, so a purged job's download returns "part not
+     * found" instead of a presigned URL to a deleted object.
+     */
+    const db = buildDb({ updateReturning: [[]] });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await markJobArchivePurged(9);
+
+    const setArg = (db.update as ReturnType<typeof vi.fn>).mock.results[0]!.value.set.mock
+      .calls[0]![0];
+    expect(setArg.deletedAt).toBeInstanceOf(Date);
   });
 });

@@ -20,7 +20,8 @@ const {
   markJobReadyMock,
   failExhaustedJobsMock,
   markJobFailedMock,
-  findExpiredReadyJobsMock,
+  findPurgeableJobArchivesMock,
+  markJobArchivePurgedMock,
   markJobExpiredMock,
   runExportJobMock,
   sendExportReadyEmailMock,
@@ -32,7 +33,8 @@ const {
   markJobReadyMock: vi.fn(),
   failExhaustedJobsMock: vi.fn(),
   markJobFailedMock: vi.fn(),
-  findExpiredReadyJobsMock: vi.fn(),
+  findPurgeableJobArchivesMock: vi.fn(),
+  markJobArchivePurgedMock: vi.fn(),
   markJobExpiredMock: vi.fn(),
   runExportJobMock: vi.fn(),
   sendExportReadyEmailMock: vi.fn(),
@@ -54,7 +56,8 @@ vi.mock('@/lib/services/export/export-job-service', () => ({
   markJobReady: markJobReadyMock,
   failExhaustedJobs: failExhaustedJobsMock,
   markJobFailed: markJobFailedMock,
-  findExpiredReadyJobs: findExpiredReadyJobsMock,
+  findPurgeableJobArchives: findPurgeableJobArchivesMock,
+  markJobArchivePurged: markJobArchivePurgedMock,
   markJobExpired: markJobExpiredMock,
 }));
 vi.mock('@/lib/services/export/export-worker', () => ({ runExportJob: runExportJobMock }));
@@ -62,7 +65,7 @@ vi.mock('@/lib/services/export/export-notification', () => ({
   sendExportReadyEmail: sendExportReadyEmailMock,
 }));
 vi.mock('@/lib/services/export/purge-export-archives', () => ({
-  purgeCommunityExportArchives: purgeArchivesMock,
+  purgeExportJobArchive: purgeArchivesMock,
 }));
 
 const { POST } = await import('@/app/api/v1/internal/community-export-worker/route');
@@ -94,7 +97,8 @@ function claimOnce(job: unknown = JOB) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  findExpiredReadyJobsMock.mockResolvedValue([]);
+  findPurgeableJobArchivesMock.mockResolvedValue([]);
+  markJobArchivePurgedMock.mockResolvedValue(undefined);
   markJobReadyMock.mockResolvedValue(undefined);
   failExhaustedJobsMock.mockResolvedValue([]);
   findJobByIdMock.mockResolvedValue({ ...JOB, status: 'ready' });
@@ -238,5 +242,86 @@ describe('community-export-worker route — stuck and multi-tick jobs', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.errors.some((e: string) => e.includes('exhausted-sweep'))).toBe(true);
+  });
+});
+
+// ── the reaper purges per JOB, not per community ──────────────────────────
+
+describe('community-export-worker reaper', () => {
+  const READY = { id: 5, communityId: 42, downloadToken: 'tok-expired', status: 'ready' };
+
+  it('deletes only the expiring job’s archive, not the whole community prefix', async () => {
+    /*
+     * The bug this pins. The reaper used to call
+     * `purgeCommunityExportArchives(communityId)`, which deletes everything
+     * under `exports/<communityId>/`. Volumes are written per job, at
+     * `exports/<communityId>/<downloadToken>/`, so expiring ONE job destroyed
+     * every other job's archive for that community — including a newer `ready`
+     * one whose row still said `ready`. That PM's download then minted a
+     * presigned URL to an object that was no longer there.
+     */
+    findPurgeableJobArchivesMock.mockResolvedValue([READY]);
+
+    await POST(request());
+
+    expect(purgeArchivesMock).toHaveBeenCalledTimes(1);
+    expect(purgeArchivesMock).toHaveBeenCalledWith({
+      communityId: 42,
+      downloadToken: 'tok-expired',
+    });
+    // The community id alone must never be the whole argument again.
+    expect(purgeArchivesMock).not.toHaveBeenCalledWith(42);
+  });
+
+  it('marks the volumes purged so the job is not re-listed every tick', async () => {
+    findPurgeableJobArchivesMock.mockResolvedValue([READY]);
+
+    await POST(request());
+
+    expect(markJobArchivePurgedMock).toHaveBeenCalledWith(5);
+  });
+
+  it('purges a FAILED job’s volumes but leaves its status and error intact', async () => {
+    /*
+     * A failed job's partial volumes were reaped by nothing and sat in storage
+     * until the community was hard-purged six months later. They are now
+     * collected — but the job must NOT become `expired`: the settings card
+     * renders `errorMessage` only under `failed`, so flipping the status would
+     * erase the user's only explanation of why their export never arrived.
+     */
+    findPurgeableJobArchivesMock.mockResolvedValue([
+      { id: 9, communityId: 42, downloadToken: 'tok-failed', status: 'failed' },
+    ]);
+
+    const body = await (await POST(request())).json();
+
+    expect(purgeArchivesMock).toHaveBeenCalledWith({
+      communityId: 42,
+      downloadToken: 'tok-failed',
+    });
+    expect(markJobArchivePurgedMock).toHaveBeenCalledWith(9);
+    expect(markJobExpiredMock).not.toHaveBeenCalled();
+    expect(body.data.archivesPurged).toBe(1);
+    expect(body.data.expired).toBe(0);
+  });
+
+  it('still expires a READY job, so retention keeps working', async () => {
+    // The control for the case above — without it, a reaper that never expired
+    // anything would look identical.
+    findPurgeableJobArchivesMock.mockResolvedValue([READY]);
+
+    const body = await (await POST(request())).json();
+
+    expect(markJobExpiredMock).toHaveBeenCalledWith(5);
+    expect(body.data.expired).toBe(1);
+    expect(body.data.archivesPurged).toBe(1);
+  });
+
+  it('reports a reaper failure instead of losing the tick', async () => {
+    findPurgeableJobArchivesMock.mockRejectedValue(new Error('storage down'));
+
+    const body = await (await POST(request())).json();
+
+    expect(body.data.errors.some((e: string) => e.includes('reaper'))).toBe(true);
   });
 });

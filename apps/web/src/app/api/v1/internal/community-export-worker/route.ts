@@ -39,7 +39,8 @@ import { requireCronSecret } from '@/lib/api/cron-auth';
 import {
   claimNextExportJob,
   failExhaustedJobs,
-  findExpiredReadyJobs,
+  findPurgeableJobArchives,
+  markJobArchivePurged,
   findJobById,
   markJobExpired,
   markJobFailed,
@@ -47,7 +48,7 @@ import {
 } from '@/lib/services/export/export-job-service';
 import { sendExportReadyEmail } from '@/lib/services/export/export-notification';
 import { runExportJob } from '@/lib/services/export/export-worker';
-import { purgeCommunityExportArchives } from '@/lib/services/export/purge-export-archives';
+import { purgeExportJobArchive } from '@/lib/services/export/purge-export-archives';
 
 // archiver and the storage stream are Node stream APIs — this cannot run on Edge.
 export const runtime = 'nodejs';
@@ -81,6 +82,12 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     failed: 0,
     exhausted: 0,
     expired: 0,
+    /**
+     * Jobs whose storage volumes were deleted this tick. Distinct from
+     * `expired`: a `failed` or `cancelled` job has its archive purged but keeps
+     * its status, so the two counts diverge and both are worth reporting.
+     */
+    archivesPurged: 0,
     errors: [] as string[],
   };
 
@@ -180,10 +187,32 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   // "export at any time" is satisfied by free re-request, not by hosting one
   // archive forever.
   try {
-    for (const expired of await findExpiredReadyJobs()) {
-      await purgeCommunityExportArchives(expired.communityId);
-      await markJobExpired(expired.id);
-      summary.expired += 1;
+    for (const job of await findPurgeableJobArchives()) {
+      /*
+       * Per JOB, not per community. This used to call
+       * `purgeCommunityExportArchives(communityId)`, which deletes the whole
+       * `exports/<communityId>/` tree — so expiring one job destroyed every
+       * other job's archive for that community, including a newer `ready` one
+       * whose row still said `ready`. Its download then minted a presigned URL
+       * to an object that was no longer there.
+       */
+      await purgeExportJobArchive({
+        communityId: job.communityId,
+        downloadToken: job.downloadToken,
+      });
+      await markJobArchivePurged(job.id);
+      summary.archivesPurged += 1;
+
+      /*
+       * Only a `ready` job becomes `expired`. A `failed` job keeps its status
+       * and its error message — the card renders `errorMessage` under `failed`
+       * only, so flipping it would erase the user's sole explanation of why
+       * their export never arrived, while deleting the volumes underneath it.
+       */
+      if (job.status === 'ready') {
+        await markJobExpired(job.id);
+        summary.expired += 1;
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

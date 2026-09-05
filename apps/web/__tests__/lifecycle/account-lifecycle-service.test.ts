@@ -41,6 +41,7 @@ const {
   inArrayMock,
   accessPlansTable,
   communitiesTable,
+  communityExportJobsTable,
   usersTable,
   accountDeletionRequestsTable,
 } = vi.hoisted(() => {
@@ -76,6 +77,12 @@ const {
       id: 'communities.id',
       freeAccessExpiresAt: 'communities.free_access_expires_at',
       deletedAt: 'communities.deleted_at',
+    },
+    // Soft-deleting a community now also stops any export it had in flight.
+    communityExportJobsTable: {
+      communityId: 'community_export_jobs.community_id',
+      status: 'community_export_jobs.status',
+      deletedAt: 'community_export_jobs.deleted_at',
     },
     usersTable: {
       id: 'users.id',
@@ -115,6 +122,7 @@ vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
   users: usersTable,
   accountDeletionRequests: accountDeletionRequestsTable,
+  communityExportJobs: communityExportJobsTable,
   logAuditEvent: logAuditEventMock,
 }));
 
@@ -994,7 +1002,46 @@ describe('executeCommunitySoftDelete', () => {
     const result = await executeCommunitySoftDelete([1]);
 
     expect(result).toEqual([request]);
-    expect(dbMock._calls.filter((c) => c.op === 'update')).toHaveLength(2);
+
+    /*
+     * Asserted by WHAT was written, not by how many writes happened. The count
+     * was 2 and is now 3 — soft-delete also stops the community's in-flight
+     * exports — and a bare count would have to be edited again for the next
+     * addition while telling the reader nothing about which writes matter.
+     */
+    const updates = dbMock._calls.filter((c) => c.op === 'update');
+    expect(updates.some((c) => c.values?.deletedAt instanceof Date)).toBe(true);
+    expect(updates.some((c) => c.values?.status === 'soft_deleted')).toBe(true);
+  });
+
+  it('stops an in-flight export rather than leaving it queued for six months', async () => {
+    /*
+     * The claim scan skips soft-deleted communities, but a filter alone would
+     * leave the job `queued` — invisible to the requester, holding the
+     * one-active-job-per-community slot, and firing on a stale cursor the
+     * moment the community is recovered.
+     *
+     * `failed` and not `cancelled` because the settings card renders
+     * `errorMessage` only under `failed`; `cancelled` shows a bare "Cancelled."
+     * that reads as user-initiated, so the board member who asked for the
+     * export would never learn why it stopped.
+     */
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({ updateReturning: [[request], [{}], [{}]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await executeCommunitySoftDelete([1]);
+
+    const jobUpdate = dbMock._calls
+      .filter((c) => c.op === 'update')
+      .find((c) => c.values?.errorCode === 'COMMUNITY_DELETED');
+
+    expect(jobUpdate).toBeDefined();
+    expect(jobUpdate!.values.status).toBe('failed');
+    expect(jobUpdate!.values.errorMessage).toMatch(/scheduled for deletion/i);
+    // The lease must be released, or the reaper's lease guard would spare the
+    // row and its partial volumes would survive the cooling window.
+    expect(jobUpdate!.values.leaseExpiresAt).toBeNull();
   });
 
   it('does not throw when request is not found, processes what it finds', async () => {
