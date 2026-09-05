@@ -10,6 +10,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+// From @propertypro/db/constants, NOT the root barrel: the barrel pulls in
+// drizzle.ts, which throws at module load without DATABASE_URL.
+import { COMMUNITY_ASSETS_BUCKET } from '@propertypro/db/constants';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
@@ -62,7 +65,6 @@ const MIME_TO_EXT: Record<AllowedMime, string> = {
   'image/webp': 'webp',
 };
 
-const STORAGE_BUCKET = 'community-assets';
 
 /**
  * Detect MIME type from magic bytes in a Uint8Array buffer.
@@ -138,7 +140,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   // Upload to Supabase Storage via admin client (bypasses RLS)
   const admin = createAdminClient();
   const { error: uploadError } = await admin.storage
-    .from(STORAGE_BUCKET)
+    .from(COMMUNITY_ASSETS_BUCKET)
     .upload(storagePath, bytes, {
       contentType: detectedMime,
       upsert: false,
@@ -147,7 +149,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   assertNoDbError(uploadError, 'Failed to upload asset to storage');
 
   // Generate public URL
-  const { data: urlData } = admin.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+  const { data: urlData } = admin.storage.from(COMMUNITY_ASSETS_BUCKET).getPublicUrl(storagePath);
 
   // best-effort: the file is already stored and the URL already returned, so
   // failing the request here would report an error for an upload that in fact
@@ -161,7 +163,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     resourceId: storagePath,
     communityId: communityIdNum,
     metadata: {
-      bucket: STORAGE_BUCKET,
+      bucket: COMMUNITY_ASSETS_BUCKET,
       content_type: detectedMime,
       size_bytes: file.size,
     },
