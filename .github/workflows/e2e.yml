@@ -65,9 +65,24 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR runs, but never cancel a run on main.
+#
+# `cancel-in-progress: true` is right for a pull_request: a new push obsoletes
+# the previous run, and nobody wants a verdict on code that no longer exists.
+#
+# On main it silently destroyed the coverage this workflow exists to provide.
+# The push trigger below has NO path filter, so every merge starts a ~15-minute
+# run — and the next merge cancelled it. On 2026-09-05, six merges landed in
+# about 45 minutes and five of their runs were cancelled; the one that survived
+# did so only because it happened to fall in a quiet half hour. A cancelled run
+# reports no verdict, so main's e2e was decorative exactly when merges were
+# frequent, which is exactly when it matters most.
+#
+# With this, main runs QUEUE on one group and each merge gets its own verdict.
+# The cost is serial runs during a merge burst; the alternative is not knowing.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   e2e:
