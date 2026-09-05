@@ -2081,7 +2081,11 @@ export async function seedCommunity(
     const score = Math.max(0, Math.min(100, config.seedHints.complianceScore));
     // Linear interpolation: score=100 → 5 days ago (compliant); score=0 → 45 days ago (overdue).
     const postingOffsetDays = Math.round(5 + (1 - score / 100) * 40);
-    const createdAt = new Date(Date.now() - postingOffsetDays * DAY_MS);
+    // `.toISOString()`, not the Date: postgres-js has no serialiser for a bare
+    // `Date` in an untyped bind parameter and throws ERR_INVALID_ARG_TYPE on the
+    // client. Nothing passes `seedHints` today, which is the only reason this
+    // has never fired — the same shape took the scheduled-publish cron down.
+    const createdAt = new Date(Date.now() - postingOffsetDays * DAY_MS).toISOString();
     await db.execute(sql`
       UPDATE documents
       SET created_at = ${createdAt}
