@@ -38,6 +38,7 @@
     "test:e2e:tenant": "pnpm --filter @propertypro/web test:e2e:tenant",
     "test:watch": "vitest",
     "guard:db-access": "tsx scripts/verify-scoped-db-access.ts",
+    "guard:no-date-in-raw-sql": "tsx scripts/verify-no-date-in-raw-sql.ts",
     "guard:token-freshness": "tsx scripts/verify-token-freshness.ts",
     "guard:breadcrumbs": "tsx scripts/verify-page-breadcrumbs.ts",
     "guard:page-header": "tsx scripts/verify-page-header-usage.ts",

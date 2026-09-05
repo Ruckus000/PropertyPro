@@ -19,6 +19,7 @@ import { cpus } from 'node:os';
 
 const GUARDS = [
   'guard:db-access',
+  'guard:no-date-in-raw-sql',
   'guard:token-freshness',
   'guard:breadcrumbs',
   'guard:page-header',
