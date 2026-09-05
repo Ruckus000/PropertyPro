@@ -64,7 +64,14 @@ test.describe('phase 1 roadmap smoke', () => {
     await page.goto(`/communities/${communityId}/assessments`, {
       waitUntil: 'domcontentloaded',
     });
-    await expect(page).toHaveURL(/\/payments\?tab=assessments$/, { timeout: 30_000 });
+    // 60s, not 30s. This is a redirect CHAIN into a route being compiled for
+    // the first time, so it pays two first-compile costs where the assertions
+    // below pay one. At 30s it was the run's only flaky block — failing once
+    // and passing on retry, which is the signature of a budget that is close
+    // rather than a target that is missing. `esign-and-documents-flow` records
+    // the same measurement: first compile lands in the 30-60s range under a
+    // full-suite run, and its own budgets were widened for it.
+    await expect(page).toHaveURL(/\/payments\?tab=assessments$/, { timeout: 60_000 });
 
     await expect(page.getByRole('heading', { name: 'Assessments' })).toBeVisible({
       timeout: 30_000,
