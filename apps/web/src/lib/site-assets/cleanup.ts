@@ -6,7 +6,7 @@
  * require the deleting user's membership to still exist).
  */
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { SITE_ASSETS_BUCKET } from './storage-paths';
+import { SITE_ASSETS_BUCKET, SITE_ASSET_KINDS } from './storage-paths';
 
 /**
  * Delete every object in community-site-assets under the given community's
@@ -23,8 +23,22 @@ export async function purgeCommunitySiteAssets(communityId: number): Promise<{ d
   const prefix = `${communityId}/`;
 
   // Storage list() doesn't accept arbitrary prefixes — it lists the
-  // immediate children of a path. We need to walk the tree for each kind
-  // ('logo', 'hero', 'content') to find every object.
+  // immediate children of a path. We need to walk the tree for each kind to
+  // find every object.
+  //
+  // The kinds are DERIVED from SITE_ASSET_KINDS, never restated here. This loop
+  // used to carry its own `['logo', 'hero', 'content']`, which had silently
+  // fallen one kind behind the writer: every purged community left its favicon
+  // objects (`{id}/favicon/*.32.png`, `*.180.png`) in the bucket forever, and
+  // because the cron marks the request 'purged' on success and never retries,
+  // "forever" is literal. Nothing failed when the two lists drifted, so the fix
+  // is to make them the same list rather than to lengthen this one.
+  //
+  // One level per kind is sufficient, and that is a property of the path
+  // format rather than an assumption: buildSiteAssetPath guarantees exactly
+  // three segments, and a variant suffix (`.1600w.webp`, `.32.png`) lands on
+  // the FILENAME segment, so every object is an immediate child of
+  // `{communityId}/{kind}`. storage-paths.test.ts asserts that for favicons.
   //
   // Supabase Storage `.list()` is limited to 1000 results per page. The
   // previous implementation issued a single .list() call per kind, so any
@@ -35,7 +49,7 @@ export async function purgeCommunitySiteAssets(communityId: number): Promise<{ d
   // re-list-after-remove until a page returns fewer than PAGE_SIZE rows.
   const PAGE_SIZE = 1000;
   let deletedCount = 0;
-  for (const kind of ['logo', 'hero', 'content'] as const) {
+  for (const kind of SITE_ASSET_KINDS) {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const { data: items, error: listErr } = await admin.storage

@@ -711,15 +711,21 @@ export async function recoverUser(requestId: number, recoveredBy: string) {
     return request;
   });
 
-  await logAuditEvent({
-    userId: recoveredBy,
-    action: 'update',
-    resourceType: 'account_deletion_request',
-    resourceId: String(requestId),
-    communityId: 0, // platform-level, no community
-    newValues: { status: 'recovered', recoveredAt: now.toISOString() },
-  });
-
+  // NOT audited, and `communityId: 0` was never a way to do it.
+  //
+  // This is a USER recovery, so there is no community — but
+  // compliance_audit_log.community_id is NOT NULL with an ON DELETE RESTRICT FK
+  // to communities.id, and communities.id is a bigserial whose lowest value in
+  // production is 1. So the previous `communityId: 0, // platform-level, no
+  // community` did not record a platform-level event: it threw. And because it
+  // ran AFTER the transaction committed, the recovery succeeded and then
+  // POST /api/v1/admin/deletion-requests/[id]/recover returned 500 — an
+  // operation that worked, reported as broken.
+  //
+  // There is no other home for it either: platform_admin_audit_log permits a
+  // null community but requires a non-null admin_user_id, which fits a platform
+  // admin but not the cron paths that share this shape. Recording nothing is
+  // honest; recording it against an arbitrary community would not be.
   return result;
 }
 
@@ -806,6 +812,37 @@ export async function interveneCommunityDeletion(
     .returning();
 
   if (!updated) throw new Error(`Deletion request ${requestId} not found`);
+
+  // `communityId` comes from the mutation's own .returning(), not a separate
+  // read — same rule as the purge above.
+  //
+  // The notes are deliberately NOT logged. They are admin-supplied free text
+  // that can name a resident or repeat a grievance, and this table is
+  // board-readable and append-only, so anything written here is visible to the
+  // board permanently and cannot be retracted. `notesProvided` answers "was a
+  // reason given" without committing the reason. (apps/admin's twin DOES log
+  // them — into platform_admin_audit_log, which is operator-only with no RLS
+  // policies. Different readership, different rule.)
+  //
+  // A user-type request reaches this function too — the route applies no
+  // requestType filter — and has no community, so it hits the same NOT NULL
+  // wall as the purge and simply is not audited.
+  if (updated.communityId !== null) {
+    await logAuditEvent({
+      userId: params.adminUserId,
+      action: 'update',
+      resourceType: 'account_deletion_request',
+      resourceId: String(requestId),
+      communityId: updated.communityId,
+      newValues: {
+        status: 'cancelled',
+        cancelledAt: now.toISOString(),
+        cancelledBy: params.adminUserId,
+      },
+      metadata: { notesProvided: params.notes != null },
+    });
+  }
+
   return updated;
 }
 
@@ -887,8 +924,21 @@ export async function recoverCommunity(requestId: number, adminUserId: string) {
 }
 
 /**
- * Scrubs PII for all community-only users (those with no roles in other communities).
- * Idempotent: guarded by purgedAt IS NULL.
+ * Terminal step of a COMMUNITY deletion: destroy the community's site assets and
+ * generated export archives, then mark the request purged. Idempotent, guarded
+ * by `purgedAt IS NULL`.
+ *
+ * It deliberately does NOT delete association records — documents, minutes,
+ * ledgers, violations, ARC. That is a decision, not an omission: see the
+ * 2026-08-09 legal-risk audit ("Match copy to the code. No hard-purge build"),
+ * and `content/legal/terms.md`, which tells users association records "may be
+ * retained beyond the purge step" and names an individual-review path for
+ * destruction requests. Associations sit under a ~7-year §718.111(12) retention
+ * duty; destroying their records on a cron would create exposure, not close it.
+ *
+ * (This docblock previously claimed the function "scrubs PII for all
+ * community-only users". It never did — that behaviour was specified in the
+ * 2026-03-23 design and not implemented.)
  */
 export async function purgeCommunityData(requestId: number) {
   const now = new Date();
@@ -906,10 +956,14 @@ export async function purgeCommunityData(requestId: number) {
 
   if (!request) return null; // Already purged or not found — idempotent
 
+  const communityId = request.communityId;
+  let siteAssetsDeleted = 0;
+  let exportArchivesDeleted = 0;
+
   // PR #2: purge community-site-assets storage if this is a community deletion.
   // Failure aborts the status update so the request remains retryable.
-  if (request.communityId !== null) {
-    await purgeCommunitySiteAssets(request.communityId);
+  if (communityId !== null) {
+    ({ deletedCount: siteAssetsDeleted } = await purgeCommunitySiteAssets(communityId));
     // Generated export archives are a COPY OF THE ENTIRE ASSOCIATION — every
     // table plus every uploaded document, including resident PII. Without this
     // the whole dataset would survive in the exports bucket after the community
@@ -917,7 +971,7 @@ export async function purgeCommunityData(requestId: number) {
     // would have introduced. Same failure semantics as the line above: a throw
     // here aborts the status update so the request stays retryable.
     // See docs/audits/2026-08-09-legal-risk-audit.md F-07.
-    await purgeCommunityExportArchives(request.communityId);
+    ({ deletedCount: exportArchivesDeleted } = await purgeCommunityExportArchives(communityId));
   }
 
   const [updated] = await db
@@ -925,6 +979,38 @@ export async function purgeCommunityData(requestId: number) {
     .set({ status: 'purged', purgedAt: now })
     .where(eq(accountDeletionRequests.id, requestId))
     .returning();
+
+  // Audited AFTER the flip, from data already in hand — no read-back, per the
+  // fix in 8dd8f98f. Auditing first would record an outcome that might not
+  // happen, and in an append-only, board-readable table a false "purged" entry
+  // is strictly worse than a missing one: it can never be retracted.
+  //
+  // Payload is counts, ids and timestamps ONLY. Never the data being destroyed.
+  //
+  // A user-type request has no community, and compliance_audit_log.community_id
+  // is NOT NULL with a RESTRICT FK — so that case cannot be audited here at all.
+  // Passing 0 is not a workaround: there is no community 0, and the insert
+  // FK-violates (see recoverUser, where exactly that has been throwing).
+  // platform_admin_audit_log allows a null community but demands a non-null
+  // admin_user_id, and this is a cron with no actor. Both doors are shut.
+  //
+  // Known and accepted: the flip and this write use different clients, so they
+  // cannot share a transaction. Closing that window needs a transaction-aware
+  // audit writer with exactly one caller. If this throws, the storage is already
+  // gone and the status is already 'purged'; the cron's catch surfaces it and
+  // the request is not retried. Let it propagate — an unaudited mutation must
+  // not look like a clean success.
+  if (communityId !== null) {
+    await logAuditEvent({
+      userId: null, // the cron has no actor; rendered as "System"
+      action: 'community_purged',
+      resourceType: 'account_deletion_request',
+      resourceId: String(requestId),
+      communityId,
+      newValues: { status: 'purged', purgedAt: now.toISOString() },
+      metadata: { siteAssetsDeleted, exportArchivesDeleted },
+    });
+  }
 
   return updated!;
 }

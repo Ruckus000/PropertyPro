@@ -48,6 +48,12 @@ export type AuditAction =
   // being folded into 'document_accessed'. "Who downloaded the whole
   // association, and when" must be answerable on its own.
   | 'community_export_downloaded'
+  // Community purge — the terminal, irreversible step of the deletion
+  // lifecycle. Its own action for the same reason as the export above: the
+  // audit UI filters on a free-text `action` box, and a board asking "when was
+  // our site data destroyed" cannot usefully type 'update'. Recovery and
+  // intervention stay on the generic 'update' — they are reversible.
+  | 'community_purged'
   // Support access audit actions
   | 'support_session_started' | 'support_session_ended'
   | 'support_consent_granted' | 'support_consent_revoked'
