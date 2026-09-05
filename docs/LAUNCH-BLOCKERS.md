@@ -10,19 +10,31 @@ of both apps as of `aabf9727`.
 Items **6–7 are the exception**: two Website Editor feature gaps promoted to blockers on
 2026-09-02. They are code, not config, and they are sequenced last for that reason.
 
-> **6 and 7 are DONE as of 2026-09-04** — #1031 (notify on publish), #1032 (announcement
-> expiry, migration `0064`) and #1037 (scheduled publishing, migration `0065`) are all
-> merged, and **both migrations are applied to production** with drizzle ledger rows
-> recorded by hand. The verify commands under items 6–7 now return matches rather than
-> nothing; they are kept because they are how anyone re-confirms the work is still there.
+> **6 and 7 merged 2026-09-04 — but 7 did not WORK in production until 2026-09-05.**
+> #1031 (notify on publish), #1032 (announcement expiry, migration `0064`) and #1037
+> (scheduled publishing, migration `0065`) are all merged, and **both migrations are
+> applied to production** with drizzle ledger rows recorded by hand.
 >
-> Two notes for whoever reads this next. **#1033 became #1037**: merging #1031 with
-> `--delete-branch` auto-closed the PR stacked on top of it, and a closed PR's base cannot
-> be retargeted, so the commits were replayed onto `main` under a new number. And the
-> production ledger is **out of numeric order** — `0063 → 0066 → 0064 → 0065` — because
-> another session applied `0066` in between. Harmless (all three are independent and
-> additive), but it means the ledger's newest `created_at` belongs to `0066`, and
+> **A grep proving code exists is not evidence it runs**, and this entry previously said
+> "DONE" on that basis. Item 7 shipped **non-functional**: every raw statement in
+> `site-publish-schedule-service` bound a JS `Date` into a `sql` template, which
+> postgres-js cannot serialise, so `/api/v1/internal/scheduled-site-publish` returned
+> **500 on all ~96 daily runs from the moment it shipped**, and no schedule could even be
+> armed — `site_publish_schedules` held zero rows. Fixed in #1042 (2026-09-05). Item 6 was
+> unaffected: the manual publish route calls `notifyResidentsOfSitePublish` directly and
+> never touches the schedule service.
+>
+> **The ledger note below is a RED HERRING — do not start there.** The production ledger
+> is out of numeric order — `0063 → 0066 → 0064 → 0065` — because another session applied
+> `0066` in between. That is true and harmless, and it was the first hypothesis for the
+> #1042 outage because it makes a missing column look plausible. It was wrong:
+> `lease_expires_at` is present in production, verified against `information_schema`. The
+> ordering does still mean the ledger's newest `created_at` belongs to `0066`, and
 > `drizzle-kit migrate` only applies migrations stamped after the newest applied one.
+>
+> **#1033 became #1037**: merging #1031 with `--delete-branch` auto-closed the PR stacked
+> on top of it, and a closed PR's base cannot be retargeted, so the commits were replayed
+> onto `main` under a new number.
 
 The through-line is that all of these fail **silently**. None crashes anything; each
 degrades or no-ops while dashboards stay green. That is why they need a checklist rather
@@ -243,7 +255,8 @@ delivery and unrelated. An unfiltered grep reads as a false positive and scores 
 
 ## 7. Nothing can be scheduled; only urgent notices expire
 
-**Status:** ✅ DONE — merged 2026-09-04 (#1032 expiry, #1037 scheduling) · **Source:** gap audit G-07
+**Status:** ✅ DONE — merged 2026-09-04 (#1032 expiry, #1037 scheduling), but scheduling was
+**non-functional in production until #1042** (2026-09-05) · **Source:** gap audit G-07
 
 Half shipped, and the missing half is the half on a statutory clock. Urgent notices carry
 an `expiresAt` — it shipped alongside the mobile fast path — so a pool-closure notice can
@@ -259,8 +272,21 @@ complement to the time-window filtering the public feed sections already perform
 ```bash
 # expiry exists — for urgent notices only
 grep -n "expiresAt" apps/web/src/app/api/v1/pm/site/urgent-notice/contract.ts
-# scheduled publishing exists nowhere
-grep -rlE "scheduledPublishAt|goLiveAt" apps/web/src
+# scheduled publishing — the symbols this repo ACTUALLY uses. The earlier form of this
+# line grepped `scheduledPublishAt|goLiveAt`, names that appear nowhere in the tree, so
+# it kept returning nothing after the feature shipped and read as "still missing".
+grep -rl "scheduleSitePublish" apps/web/src
+```
+
+Existence is not function — #1042 is exactly that gap. To check it still **runs**, look at
+the worker rather than the source:
+
+```bash
+# 200 = healthy. A 500 here is the worker down again; read the `[cause]` chain, not the
+# "Failed query: <SQL>" wrapper, which names a statement Postgres may never have seen.
+vercel logs "$(vercel inspect getpropertypro.com 2>&1 |
+  grep -oE 'property-pro-[a-z0-9]+-[a-z0-9-]+\.vercel\.app' | head -1)" --json |
+  grep scheduled-site-publish | head -3
 ```
 
 ---
