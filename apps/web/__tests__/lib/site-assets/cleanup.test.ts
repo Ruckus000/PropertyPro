@@ -15,7 +15,7 @@ const { listMock, removeMock, fromMock, createAdminClientMock } = vi.hoisted(() 
 
 vi.mock('@propertypro/db/supabase/admin', () => ({ createAdminClient: createAdminClientMock }));
 
-import { purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
+import { purgeCommunityAdminAssets, purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 
 type ListResult = { data: unknown; error: unknown };
 
@@ -140,5 +140,78 @@ describe('purgeCommunitySiteAssets', () => {
     expect(new Set(prefixes)).toEqual(
       new Set(SITE_ASSET_KINDS.map((kind) => `42/${kind}`)),
     );
+  });
+});
+
+describe('purgeCommunityAdminAssets', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    pages = {};
+    removeMock.mockResolvedValue({ error: null });
+    listMock.mockImplementation((prefix: string) =>
+      Promise.resolve(pages[prefix]?.shift() ?? { data: [], error: null }),
+    );
+  });
+
+  it('purges the admin-uploaded site images', async () => {
+    // The `community-assets` bucket — admin-console uploads for a community's
+    // PUBLIC WEBSITE, at `{communityId}/site/{uuid}.{ext}`. Nothing swept it,
+    // so a purged community's logo and site imagery survived indefinitely.
+    // The ToS says the purge step deletes "community website assets"; these are
+    // precisely that, so this is the promise being kept rather than a new one.
+    pages['42/site'] = [
+      { data: [{ name: 'a.webp' }, { name: 'b.png' }], error: null },
+    ];
+
+    const result = await purgeCommunityAdminAssets(42);
+
+    expect(result.deletedCount).toBe(2);
+    expect(fromMock).toHaveBeenCalledWith('community-assets');
+    expect(removeMock).toHaveBeenCalledWith(['42/site/a.webp', '42/site/b.png']);
+  });
+
+  it('reads the community-assets bucket, NOT community-site-assets', async () => {
+    // The two bucket names differ by one word and hold different things. A
+    // sweep pointed at the wrong one would delete the wrong community's
+    // website assets while silently leaving these — worth its own assertion.
+    await purgeCommunityAdminAssets(42);
+
+    expect(fromMock).toHaveBeenCalledWith('community-assets');
+    expect(fromMock).not.toHaveBeenCalledWith('community-site-assets');
+  });
+
+  it('returns 0 when the community uploaded nothing', async () => {
+    const result = await purgeCommunityAdminAssets(42);
+    expect(result.deletedCount).toBe(0);
+    expect(removeMock).not.toHaveBeenCalled();
+  });
+
+  it('paginates beyond a single 1000-item page', async () => {
+    // Shares the paginated walk with purgeCommunitySiteAssets rather than
+    // restating it. An unpaginated sweep strands everything past 1000 objects
+    // permanently, because the cron marks the request purged and never retries
+    // — the exact failure the site-assets sweep already had to be fixed for.
+    const fullPage = Array.from({ length: 1000 }, (_, i) => ({ name: `f${i}.webp` }));
+    pages['42/site'] = [
+      { data: fullPage, error: null },
+      { data: [{ name: 'tail.webp' }], error: null },
+    ];
+
+    const result = await purgeCommunityAdminAssets(42);
+
+    expect(result.deletedCount).toBe(1001);
+    expect(removeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('tolerates "not found" but throws on any other list error', async () => {
+    pages['42/site'] = [{ data: null, error: { message: 'The resource was not found' } }];
+    await expect(purgeCommunityAdminAssets(42)).resolves.toEqual({ deletedCount: 0 });
+
+    vi.clearAllMocks();
+    pages['42/site'] = [{ data: null, error: { message: 'storage offline' } }];
+    listMock.mockImplementation((prefix: string) =>
+      Promise.resolve(pages[prefix]?.shift() ?? { data: [], error: null }),
+    );
+    await expect(purgeCommunityAdminAssets(42)).rejects.toThrow(/storage offline/);
   });
 });

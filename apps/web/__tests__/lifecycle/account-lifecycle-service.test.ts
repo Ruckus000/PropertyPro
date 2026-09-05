@@ -29,6 +29,7 @@ const {
   createUnscopedClientMock,
   createAdminClientMock,
   purgeCommunitySiteAssetsMock,
+  purgeCommunityAdminAssetsMock,
   purgeCommunityExportArchivesMock,
   logAuditEventMock,
   findCommunitiesUserIsRootOfMock,
@@ -47,6 +48,7 @@ const {
     createUnscopedClientMock: vi.fn(),
     createAdminClientMock: vi.fn(),
     purgeCommunitySiteAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
+    purgeCommunityAdminAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     purgeCommunityExportArchivesMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     logAuditEventMock: vi.fn().mockResolvedValue(undefined),
     findCommunitiesUserIsRootOfMock: vi.fn().mockResolvedValue([]),
@@ -130,6 +132,7 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 
 vi.mock('@/lib/site-assets/cleanup', () => ({
   purgeCommunitySiteAssets: purgeCommunitySiteAssetsMock,
+  purgeCommunityAdminAssets: purgeCommunityAdminAssetsMock,
 }));
 
 vi.mock('@/lib/services/export/purge-export-archives', () => ({
@@ -1041,6 +1044,7 @@ describe('purgeCommunityData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     purgeCommunitySiteAssetsMock.mockResolvedValue({ deletedCount: 0 });
+    purgeCommunityAdminAssetsMock.mockResolvedValue({ deletedCount: 0 });
     purgeCommunityExportArchivesMock.mockResolvedValue({ deletedCount: 0 });
   });
 
@@ -1063,6 +1067,67 @@ describe('purgeCommunityData', () => {
 
     const result = await purgeCommunityData(1);
     expect(result).toBeNull();
+  });
+
+  it('sweeps BOTH website-asset buckets, and counts them separately', async () => {
+    // community-site-assets (site editor uploads) was swept; community-assets
+    // (admin console uploads, `{id}/site/…`) was not, so a purged community's
+    // logo and site imagery survived indefinitely in a PUBLIC bucket. The ToS
+    // says the purge step deletes "community website assets" — both are that.
+    //
+    // Counted separately in the audit metadata rather than summed: the two
+    // buckets fail independently, and a single total cannot tell you which
+    // sweep found nothing because there was nothing, versus because it was
+    // pointed at the wrong prefix.
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    purgeCommunitySiteAssetsMock.mockResolvedValue({ deletedCount: 3 });
+    purgeCommunityAdminAssetsMock.mockResolvedValue({ deletedCount: 5 });
+
+    await purgeCommunityData(1);
+
+    expect(purgeCommunityAdminAssetsMock).toHaveBeenCalledWith(100);
+    expect(logAuditEventMock.mock.calls[0]![0]).toMatchObject({
+      metadata: { siteAssetsDeleted: 3, adminAssetsDeleted: 5, exportArchivesDeleted: 0 },
+    });
+  });
+
+  it('a failing admin-assets sweep aborts the status flip, keeping the request retryable', async () => {
+    // Same contract as the two sweeps beside it. The cron never retries a
+    // request already marked 'purged', so a sweep that throws MUST stop the
+    // flip — otherwise the objects it failed to delete are stranded forever.
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({ selectResults: [[request]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    purgeCommunityAdminAssetsMock.mockRejectedValueOnce(new Error('storage offline'));
+
+    await expect(purgeCommunityData(1)).rejects.toThrow(/storage offline/);
+
+    expect(dbMock._calls.filter((c: { op: string }) => c.op === 'update')).toHaveLength(0);
+  });
+
+  it('does NOT sweep the maintenance or documents buckets', async () => {
+    // Guarding a DECISION, not a mechanism. The privacy policy names uploaded
+    // documents AND maintenance requests as "content you contributed to a
+    // community … the association's record, not yours alone", retained beyond
+    // the purge. Only the two website-asset buckets may be swept here; adding a
+    // third would contradict a live policy rather than close a gap.
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await purgeCommunityData(1);
+
+    // createAdminClient is how any bucket sweep reaches storage. The two
+    // sanctioned sweeps are mocked out, so a third would have to open its own.
+    expect(createAdminClientMock).not.toHaveBeenCalled();
   });
 
   it('audits the purge, carrying no PII in the payload', async () => {
@@ -1100,6 +1165,7 @@ describe('purgeCommunityData', () => {
     // is added, which is the only durable way to state "no PII crept in".
     expect(Object.keys(entry['newValues'] as object).sort()).toEqual(['purgedAt', 'status']);
     expect(Object.keys(entry['metadata'] as object).sort()).toEqual([
+      'adminAssetsDeleted',
       'exportArchivesDeleted',
       'siteAssetsDeleted',
     ]);

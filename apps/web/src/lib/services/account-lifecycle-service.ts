@@ -32,7 +32,7 @@ import type { AccessPlan } from '@propertypro/db';
 // AUTHZ: Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
+import { purgeCommunityAdminAssets, purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 import { purgeCommunityExportArchives } from '@/lib/services/export/purge-export-archives';
 import {
   findRootOffboardingImpact,
@@ -958,12 +958,20 @@ export async function purgeCommunityData(requestId: number) {
 
   const communityId = request.communityId;
   let siteAssetsDeleted = 0;
+  let adminAssetsDeleted = 0;
   let exportArchivesDeleted = 0;
 
   // PR #2: purge community-site-assets storage if this is a community deletion.
   // Failure aborts the status update so the request remains retryable.
   if (communityId !== null) {
     ({ deletedCount: siteAssetsDeleted } = await purgeCommunitySiteAssets(communityId));
+    // The OTHER website-asset bucket. `community-assets` holds the logos and
+    // site imagery uploaded through the admin console, and nothing had ever
+    // swept it — so a purged community's website images survived in a PUBLIC
+    // bucket indefinitely. Same category the ToS names ("community website
+    // assets"), same failure semantics: a throw here aborts the status update
+    // below, and the cron never retries a request already marked 'purged'.
+    ({ deletedCount: adminAssetsDeleted } = await purgeCommunityAdminAssets(communityId));
     // Generated export archives are a COPY OF THE ENTIRE ASSOCIATION — every
     // table plus every uploaded document, including resident PII. Without this
     // the whole dataset would survive in the exports bucket after the community
@@ -1008,7 +1016,10 @@ export async function purgeCommunityData(requestId: number) {
       resourceId: String(requestId),
       communityId,
       newValues: { status: 'purged', purgedAt: now.toISOString() },
-      metadata: { siteAssetsDeleted, exportArchivesDeleted },
+      // Counted per bucket, not summed: the sweeps fail independently, and a
+      // single total cannot distinguish "found nothing because there was
+      // nothing" from "found nothing because it swept the wrong prefix".
+      metadata: { siteAssetsDeleted, adminAssetsDeleted, exportArchivesDeleted },
     });
   }
 
