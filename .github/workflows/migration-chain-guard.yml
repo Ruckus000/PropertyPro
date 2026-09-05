@@ -1,0 +1,93 @@
+name: Migration Chain Guard
+
+# Validates the drizzle migration journal and snapshot chain.
+#
+# ── Why this exists, when localci already runs the same script ──
+#
+# `localci.yml` runs `verify-migration-ordering.ts` in the pre-push GATE, against
+# the branch — where the chain is still valid. The rot this guards against is
+# created BY THE MERGE, not by the branch, so the gate cannot see it:
+#
+#   0033 (PRs #815/#816) and 0066 (#1034 vs #1037) both rotted the same way —
+#   two migrations developed in parallel, the second GENERATED off a baseline
+#   that predates the first, then merged second. Each branch passed on its own.
+#   The tip snapshot then silently lost a live table, and `drizzle-kit generate`
+#   would have re-CREATED a table that exists in production.
+#
+# A `pull_request` trigger is the fix: GitHub checks out `refs/pull/N/merge`, so
+# this runs against the MERGED tree — the only place the fork exists.
+#
+# `ci.yml` would also have caught it, but it is `disabled_manually` (#976 moved
+# CI to localci when Actions minutes ran out). This is deliberately a small,
+# fast, dedicated job rather than a reason to re-enable that one.
+#
+# ── Two gaps the script still has (recorded here, not fixed here) ──
+#
+#   1. `prevId` is never validated. The drizzle collision that actually aborts
+#      `db:generate` is invisible to the script; it caught 0066 only through the
+#      table-content proxy (`checkSnapshotTableContinuity`).
+#   2. Column-level rot is invisible. `snapshotTableNames` reduces a snapshot to
+#      bare table names, so 0066 losing `announcements.expires_at` was never
+#      reported — only the missing table was.
+#
+# Both are worth closing; neither belongs in the workflow that merely schedules
+# the check.
+
+on:
+  pull_request:
+    paths:
+      - packages/db/migrations/**
+      - packages/db/src/schema/**
+      - scripts/verify-migration-ordering.ts
+      - package.json
+      - pnpm-lock.yaml
+  # Post-merge belt-and-braces. Filtered to main for the INF-04 reason
+  # scoped-db-access-guard.yml documents: feature-branch pushes are already
+  # covered by the pull_request trigger, and an unfiltered push trigger just
+  # doubles every run on the same commit.
+  push:
+    branches: [main]
+    paths:
+      - packages/db/migrations/**
+      - packages/db/src/schema/**
+      - scripts/verify-migration-ordering.ts
+      - package.json
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+concurrency:
+  group: migration-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-migration-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # REQUIRED, not tidiness. `checkBaselineCollisions` diffs the branch
+          # against origin/main; under the default shallow clone that comparison
+          # either errors or passes vacuously, which is worse than not running.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify migration journal and snapshot chain
+        run: pnpm exec tsx scripts/verify-migration-ordering.ts
