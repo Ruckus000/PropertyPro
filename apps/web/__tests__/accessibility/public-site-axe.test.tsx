@@ -73,35 +73,30 @@ const THEME: ResolvedTheme = {
 const LAYOUT: LayoutId = 'tidewater';
 
 /**
- * ⚠️ KNOWN-WEAK FIXTURE — preserved deliberately, not endorsed.
+ * The header's theme, populated so the branches actually render.
  *
  * `PublicSiteHeader` takes `CommunityTheme` (from `@propertypro/theme`), NOT the
  * `ResolvedTheme` above; in the app the two are bridged by `toHeaderTheme()` in
- * `components/public-site/layouts/Tidewater.tsx`. Until `__tests__` was brought
- * into the tsconfig, the header audit below called
- * `<PublicSiteHeader community={…} theme={THEME} layout={…} pages={[]} />` —
- * three props the component does not declare (silently ignored) and a `theme`
- * missing five required fields. So at runtime the header rendered with
- * `communityName`, `logoUrl` and `fontHeading` all `undefined`: an empty title
- * and no logo, meaning the `<img alt={`${communityName} logo`}>` branch and the
- * heading text have NEVER been axe-audited.
+ * `components/public-site/layouts/Tidewater.tsx`, and this mirrors it.
  *
- * The values below reproduce that rendered DOM: `logoUrl: null` takes the same
- * falsy branch and `communityName: ''` renders the same empty text node, so the
- * audited markup is unchanged. The only difference is the inline
- * `font-family: '', sans-serif` in place of `'undefined', sans-serif` — both
- * invalid, neither visible to axe. Populating these — and adding a `logoUrl`
- * case — is a real coverage improvement and belongs in its own change, with its
- * own review of whatever axe then reports.
+ * WHY THE VALUES MATTER. Until #1056 this audit passed three props the component
+ * does not declare and a theme missing five required fields, so `communityName`,
+ * `logoUrl` and `fontHeading` were all `undefined` at runtime: no `<img>` and an
+ * empty title. #1056 fixed the types but kept `logoUrl: null` / `communityName: ''`
+ * to preserve that exact DOM, which meant the LOGO and TITLE branches were still
+ * audited only in their absent form. A non-null `logoUrl` is the ONLY way the
+ * `<img alt={`${communityName} logo`}>` branch renders at all.
  */
 const HEADER_THEME: CommunityTheme = {
   primaryColor: THEME.primaryColor,
   secondaryColor: THEME.secondaryColor,
   accentColor: THEME.accentColor,
-  fontHeading: '',
-  fontBody: '',
-  logoUrl: null,
-  communityName: '',
+  // Real font names, not '' — `resolveTheme` validates against ALLOWED_FONTS in
+  // production, and an empty value emitted `font-family: '', sans-serif`.
+  fontHeading: 'Inter',
+  fontBody: 'Inter',
+  logoUrl: '/logo.png',
+  communityName: COMMUNITY.name,
   communityType: COMMUNITY.communityType,
 };
 
@@ -276,8 +271,50 @@ describe('public site — block views', () => {
 });
 
 describe('public site — chrome', () => {
-  it('header has no axe violations', async () => {
+  it('header has no axe violations, including the logo and title branches', async () => {
     const { container } = render(<PublicSiteHeader theme={HEADER_THEME} />);
+
+    /*
+     * ANTI-VACUITY — and deliberately NOT the `querySelectorAll('*').length > 3`
+     * idiom used for the block cases above. That check is already satisfied here
+     * by the always-rendered "Resident Login" nav, so it passed even with the
+     * old broken fixture and proves nothing about either branch. Naming the two
+     * branches is the only assertion that can tell those states apart.
+     */
+    expect(container.querySelector(`img[alt="${COMMUNITY.name} logo"]`)).not.toBeNull();
+    expect(container.textContent).toContain(COMMUNITY.name);
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('header with the page nav has no axe violations', async () => {
+    /*
+     * The second `<nav>`. `PageNav` puts a "Site pages" landmark inside the same
+     * `<header>` that already holds the "Resident access" one, and marks the
+     * active page with `aria-current`. Reachable in production since Phase
+     * 11b-2 and audited by nothing until now — two landmarks of the same role in
+     * one region is exactly what `landmark-unique` exists to catch.
+     *
+     * Two items minimum: PageNav returns null below that (D10).
+     */
+    const { container } = render(
+      <PublicSiteHeader
+        theme={HEADER_THEME}
+        nav={{
+          currentSlug: 'about',
+          items: [
+            { id: 1, name: 'Home', slug: '', isHome: true },
+            { id: 2, name: 'About', slug: 'about', isHome: false },
+          ],
+        }}
+      />,
+    );
+
+    // Anti-vacuity: PageNav silently renders nothing below two items, so a
+    // one-item fixture would audit the header without the branch under test.
+    expect(container.querySelectorAll('nav')).toHaveLength(2);
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toBe('About');
+
     expect(await axe(container)).toHaveNoViolations();
   });
 
