@@ -470,6 +470,13 @@
       "when": 1788657668125,
       "tag": "0068_support_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1788667392122,
+      "tag": "0069_cron_runs_revoke_grants",
+      "breakpoints": true
     }
   ]
 }
