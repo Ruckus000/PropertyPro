@@ -48,14 +48,14 @@ function collectListEntries(lines: string[], startMarker: string, endMarker: str
 
   const entries: string[] = [];
   for (let i = startIndex + 1; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (trimmed === endMarker) {
       break;
     }
 
     const match = trimmed.match(/^- `([^`]+)`/);
-    if (match && match[1].startsWith('P2-')) {
-      entries.push(match[1]);
+    if (match && match[1]!.startsWith('P2-')) {
+      entries.push(match[1]!);
     }
   }
 
@@ -123,11 +123,11 @@ function collectSection(lines: string[], headingPrefix: string): string[] {
 
   const section: string[] = [];
   for (let i = startIndex + 1; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (trimmed.startsWith('## ')) {
       break;
     }
-    section.push(lines[i]);
+    section.push(lines[i]!);
   }
 
   return section;
@@ -150,16 +150,16 @@ function collectPhase2TaskStatuses(lines: string[]): Map<string, string> {
   let currentTaskId: string | null = null;
 
   for (let i = phase2StartIndex + 1; i < phase3StartIndex; i += 1) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     const taskMatch = trimmed.match(/^### Task:\s+(P2-\d+[a-z]?)/i);
     if (taskMatch) {
-      currentTaskId = taskMatch[1];
+      currentTaskId = taskMatch[1]!;
       continue;
     }
 
     const statusMatch = trimmed.match(/^- \*\*Status:\*\*\s*(.+)$/);
     if (statusMatch && currentTaskId) {
-      statuses.set(currentTaskId, statusMatch[1].trim());
+      statuses.set(currentTaskId, statusMatch[1]!.trim());
     }
   }
 
@@ -174,8 +174,8 @@ function verifyPhase2ExecutionPlan(content: string, errors: string[]): void {
     const match = line.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
     if (match) {
       statusRatioFound = true;
-      const completedInStatus = Number.parseInt(match[1], 10);
-      const denominatorInStatus = Number.parseInt(match[2], 10);
+      const completedInStatus = Number.parseInt(match[1]!, 10);
+      const denominatorInStatus = Number.parseInt(match[2]!, 10);
 
       if (denominatorInStatus !== BASE_DENOMINATOR) {
         errors.push(
@@ -260,7 +260,7 @@ function verifyPhase2ExecutionPlan(content: string, errors: string[]): void {
   if (statusMatchLine) {
     const match = statusMatchLine.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
     if (match) {
-      const completedInStatus = Number.parseInt(match[1], 10);
+      const completedInStatus = Number.parseInt(match[1]!, 10);
       if (completedInStatus !== completedIds.length) {
         errors.push(
           `PHASE2_EXECUTION_PLAN.md: status says ${completedInStatus} completed, but completed list has ${completedIds.length}.`,
@@ -455,8 +455,8 @@ function validateCrossFileConsistency(
     return;
   }
 
-  const phase2Completed = Number.parseInt(phase2Match[1], 10);
-  const phase2Total = Number.parseInt(phase2Match[2], 10);
+  const phase2Completed = Number.parseInt(phase2Match[1]!, 10);
+  const phase2Total = Number.parseInt(phase2Match[2]!, 10);
 
   // If Phase 2 is complete, IMPLEMENTATION_PLAN.md should reflect that
   if (phase2Completed === phase2Total) {
@@ -514,9 +514,9 @@ function main(): void {
 
   const errors: string[] = [];
   const completedCountMatch = phase2Plan.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
-  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1], 10) : 0;
+  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1]!, 10) : 0;
   const canonicalTotal = completedCountMatch
-    ? Number.parseInt(completedCountMatch[2], 10)
+    ? Number.parseInt(completedCountMatch[2]!, 10)
     : BASE_DENOMINATOR;
 
   // Existing validators

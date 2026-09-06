@@ -1,3 +1,10 @@
+// Note on the `match[n]!` assertions throughout this file: under
+// `noUncheckedIndexedAccess` every capture-group read types as `string |
+// undefined`, but none of the groups here sit behind a `?`/`|` alternation —
+// a successful match always fills them. The assertion states that, rather
+// than adding a runtime branch that can never be taken. If you widen one of
+// these regexes to make a group optional, the assertion becomes a lie: handle
+// the `undefined` instead of moving the `!`.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -68,14 +75,14 @@ function validatePhase2StatusConsistency(
     return;
   }
 
-  const phase2Completed = parseInt(phase2Match[1], 10);
-  const phase2Total = parseInt(phase2Match[2], 10);
+  const phase2Completed = parseInt(phase2Match[1]!, 10);
+  const phase2Total = parseInt(phase2Match[2]!, 10);
 
   // Check IMPLEMENTATION_PLAN.md - should reference, not duplicate
   const implMatch = ctx.implementationPlan.match(/(\d+)\/(\d+)\s+base (Phase 2 )?tasks/);
   if (implMatch) {
-    const implCompleted = parseInt(implMatch[1], 10);
-    const implTotal = parseInt(implMatch[2], 10);
+    const implCompleted = parseInt(implMatch[1]!, 10);
+    const implTotal = parseInt(implMatch[2]!, 10);
 
     if (implCompleted !== phase2Completed || implTotal !== phase2Total) {
       errors.push({
@@ -90,8 +97,8 @@ function validatePhase2StatusConsistency(
   // Check CLAUDE.md
   const claudeStatusMatch = ctx.claudeMd.match(/Phase 2[^(]*\((\d+)\/(\d+)/);
   if (claudeStatusMatch) {
-    const claudeCompleted = parseInt(claudeStatusMatch[1], 10);
-    const claudeTotal = parseInt(claudeStatusMatch[2], 10);
+    const claudeCompleted = parseInt(claudeStatusMatch[1]!, 10);
+    const claudeTotal = parseInt(claudeStatusMatch[2]!, 10);
 
     if (claudeCompleted !== phase2Completed || claudeTotal !== phase2Total) {
       errors.push({
@@ -109,8 +116,8 @@ function validateGateStatusAlignment(ctx: ValidationContext, errors: ValidationE
   const gate3InClaude = ctx.claudeMd.match(/Gate 3[:\s]+([\w\s]+)/i);
 
   if (gate3InPhase2 && gate3InClaude) {
-    const status1 = gate3InPhase2[1].toLowerCase().trim();
-    const status2 = gate3InClaude[1].toLowerCase().trim();
+    const status1 = gate3InPhase2[1]!.toLowerCase().trim();
+    const status2 = gate3InClaude[1]!.toLowerCase().trim();
 
     // Normalize "in progress" vs "verification in progress"
     const normalize = (s: string) => s.replace(/verification\s+/, '').replace(/\s+/g, ' ');
@@ -142,8 +149,8 @@ function validateTestCountAccuracy(ctx: ValidationContext, errors: ValidationErr
     if (doc.content.includes('102 tests')) {
       const match = doc.content.match(/102 tests[^(]*\((\d+)\s+DB[^+]*\+[^0-9]*(\d+)\s+web\)/i);
       if (match) {
-        const dbCount = parseInt(match[1], 10);
-        const webCount = parseInt(match[2], 10);
+        const dbCount = parseInt(match[1]!, 10);
+        const webCount = parseInt(match[2]!, 10);
 
         if (dbCount !== expectedDbTests || webCount !== expectedWebTests) {
           errors.push({
@@ -162,7 +169,7 @@ function validatePackageJsonCommands(ctx: ValidationContext, errors: ValidationE
   const commandSection = ctx.claudeMd.match(/## Development Commands.*?```bash(.*?)```/s);
   if (!commandSection) return;
 
-  const commandBlock = commandSection[1];
+  const commandBlock = commandSection[1]!;
   const pnpmCommands = commandBlock.match(/pnpm\s+([a-z:]+)/g) || [];
 
   const availableScripts = Object.keys(ctx.packageJson.scripts || {});
@@ -197,15 +204,15 @@ function validateCompletedTaskReferences(ctx: ValidationContext, errors: Validat
   if (!completedSection) return;
 
   const completedIds: string[] = [];
-  const matches = completedSection[1].matchAll(/`(P2-\d+[a-z]?)`/g);
+  const matches = completedSection[1]!.matchAll(/`(P2-\d+[a-z]?)`/g);
   for (const match of matches) {
-    completedIds.push(match[1]);
+    completedIds.push(match[1]!);
   }
 
   // Check if any completed IDs appear in "Current cursor" section (errors only)
   const cursorSection = ctx.phase2Plan.match(/## Current cursor(.*?)(?:##|$)/s);
   if (cursorSection) {
-    const cursorText = cursorSection[1];
+    const cursorText = cursorSection[1]!;
     for (const id of completedIds) {
       // Skip false positives: allow references in completion announcements
       if (cursorText.includes(id) && !cursorText.includes('complete')) {
@@ -227,7 +234,7 @@ function validateStaleStatusLabels(ctx: ValidationContext, errors: ValidationErr
   const statusMatch = ctx.claudeMd.match(/\*\*Status:\*\*\s+(.+)/);
   if (!statusMatch) return;
 
-  const statusText = statusMatch[1].toLowerCase();
+  const statusText = statusMatch[1]!.toLowerCase();
 
   // If Phase 2 is complete, status shouldn't say "Pre-Development Planning"
   if (statusText.includes('phase 2 complete') && statusText.includes('pre-development')) {
@@ -267,7 +274,7 @@ function validateNoPrismaReferences(ctx: ValidationContext, errors: ValidationEr
 function validateCorrectOrmReferences(ctx: ValidationContext, errors: ValidationError[]): void {
   // Check that Tech Stack ORM field mentions Drizzle
   const ormMatch = ctx.claudeMd.match(/\*\*ORM:\*\*\s+(.+)/);
-  if (ormMatch && !ormMatch[1].includes('Drizzle')) {
+  if (ormMatch && !ormMatch[1]!.includes('Drizzle')) {
     errors.push({
       file: 'CLAUDE.md',
       severity: 'error',
@@ -303,7 +310,7 @@ function validateCorrectMigrationCommands(ctx: ValidationContext, errors: Valida
 function validateProjectStructureAccuracy(ctx: ValidationContext, errors: ValidationError[]): void {
   // Check that CLAUDE.md project structure doesn't reference prisma/ directory
   const structureMatch = ctx.claudeMd.match(/## Project Structure(.*?)##/s);
-  if (structureMatch && structureMatch[1].includes('prisma/')) {
+  if (structureMatch && structureMatch[1]!.includes('prisma/')) {
     errors.push({
       file: 'CLAUDE.md',
       severity: 'error',
@@ -360,8 +367,8 @@ function validatePhaseCompletionClaims(ctx: ValidationContext, errors: Validatio
   // Extract completed count from PHASE2_EXECUTION_PLAN.md
   const completedMatch = ctx.phase2Plan.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
   if (completedMatch) {
-    const completed = parseInt(completedMatch[1], 10);
-    const total = parseInt(completedMatch[2], 10);
+    const completed = parseInt(completedMatch[1]!, 10);
+    const total = parseInt(completedMatch[2]!, 10);
 
     if (completed !== total) {
       errors.push({
@@ -386,7 +393,7 @@ function validateBaseTaskDenominator(ctx: ValidationContext, errors: ValidationE
   for (const doc of docs) {
     const matches = doc.content.matchAll(/(\d+)\/(\d+)\s+base Phase 2 tasks/gi);
     for (const match of matches) {
-      const denominator = parseInt(match[2], 10);
+      const denominator = parseInt(match[2]!, 10);
       denominators.set(doc.name, denominator);
     }
   }
@@ -410,8 +417,8 @@ function validateRemainingTaskList(ctx: ValidationContext, errors: ValidationErr
   const statusMatch = ctx.phase2Plan.match(/(\d+)\/(\d+)\s+base Phase 2 tasks complete/);
   if (!statusMatch) return;
 
-  const completed = parseInt(statusMatch[1], 10);
-  const total = parseInt(statusMatch[2], 10);
+  const completed = parseInt(statusMatch[1]!, 10);
+  const total = parseInt(statusMatch[2]!, 10);
   const expectedRemaining = total - completed;
 
   // Count remaining task list items
@@ -419,7 +426,7 @@ function validateRemainingTaskList(ctx: ValidationContext, errors: ValidationErr
     /Remaining base implementation tasks:(.*?)Remaining mandatory/s,
   );
   if (remainingSection) {
-    const remainingItems = (remainingSection[1].match(/- `/g) || []).length;
+    const remainingItems = (remainingSection[1]!.match(/- `/g) || []).length;
 
     if (remainingItems !== expectedRemaining) {
       errors.push({
@@ -438,7 +445,7 @@ function validateGate3TestCount(ctx: ValidationContext, errors: ValidationError[
   const gate3Match = ctx.phase2Plan.match(/Gate 3(.*?)##/s);
   if (!gate3Match) return;
 
-  const gate3Text = gate3Match[1];
+  const gate3Text = gate3Match[1]!;
   if (gate3Text.includes('102 tests')) {
     // Check for proper breakdown
     if (!gate3Text.match(/\(31\s+DB[^+]*\+[^0-9]*71\s+web\)/i)) {
@@ -463,7 +470,7 @@ function validateGate3CommandAccuracy(ctx: ValidationContext, errors: Validation
     const gate3Match = doc.content.match(/Gate 3(.*?)(?:##|$)/s);
     if (!gate3Match) continue;
 
-    const gate3Text = gate3Match[1];
+    const gate3Text = gate3Match[1]!;
     // Check for DB-only test command
     if (
       gate3Text.includes('pnpm --filter @propertypro/db test:integration') &&
@@ -484,7 +491,7 @@ function validateGate3ProtocolReference(ctx: ValidationContext, errors: Validati
   const gate3Section = ctx.phase2Plan.match(/## Gate 3[^#]+(.*?)(?:##|$)/s);
   if (!gate3Section) return;
 
-  const gate3Text = gate3Section[1];
+  const gate3Text = gate3Section[1]!;
   // Check for evidence protocol reference (with or without full path)
   if (!gate3Text.includes('GATE3_EVIDENCE_PROTOCOL') && !gate3Text.toLowerCase().includes('evidence protocol')) {
     errors.push({

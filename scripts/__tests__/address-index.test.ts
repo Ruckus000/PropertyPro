@@ -16,7 +16,8 @@ const fixturePath = path.resolve(
 );
 
 const [headerLine, ...dataLines] = readFileSync(fixturePath, 'utf8').trim().split('\n');
-const columns = headerLine.split(',').map((column) => column.replace(/^\ufeff/, '').trim());
+// `String.split` always yields at least one element, so the header is present.
+const columns = headerLine!.split(',').map((column) => column.replace(/^\ufeff/, '').trim());
 const rows = dataLines.map((line) => mapCsvRow(columns, line));
 
 describe('address index generator helpers', () => {

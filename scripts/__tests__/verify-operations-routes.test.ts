@@ -17,14 +17,14 @@ describe('verify-operations-routes', () => {
   it('fails when an operations-family href omits communityId', async () => {
     const violations = verifyRoutes(await loadFixture('missing-community-id-registry'));
     expect(violations.length).toBeGreaterThan(0);
-    expect(violations[0].code).toBe('OPS001');
-    expect(violations[0].message).toMatch(/communityId|communities\/\[id\]/i);
+    expect(violations[0]!.code).toBe('OPS001');
+    expect(violations[0]!.message).toMatch(/communityId|communities\/\[id\]/i);
   });
 
   it('fails on a phantom (nonexistent) non-operations page route', async () => {
     const violations = verifyRoutes(await loadFixture('phantom-page-registry'));
     expect(violations.length).toBeGreaterThan(0);
-    expect(violations[0].code).toBe('OPS002');
-    expect(violations[0].message).toMatch(/does not resolve/i);
+    expect(violations[0]!.code).toBe('OPS002');
+    expect(violations[0]!.message).toMatch(/does not resolve/i);
   });
 });

@@ -141,7 +141,10 @@ function scanContent(src: string, only?: readonly string[]): Counts {
       // when it accompanies a bare focus ring on the same line (see the rule's
       // docblock); on its own it is a legitimate focus-container idiom.
       if (rule === 'bare-focus-ring' && n > 0) {
-        counts[rule] += (line.match(BARE_FOCUS_OUTLINE) ?? []).length;
+        // `?? 0` is unreachable in practice — this branch requires n > 0, so the
+        // line above already seeded counts[rule] — but it keeps the read total
+        // under noUncheckedIndexedAccess without an assertion.
+        counts[rule] = (counts[rule] ?? 0) + (line.match(BARE_FOCUS_OUTLINE) ?? []).length;
       }
     }
   }
