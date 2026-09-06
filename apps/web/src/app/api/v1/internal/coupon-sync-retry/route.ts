@@ -38,7 +38,14 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  return NextResponse.json({ processed: results.length, results });
+  // `failed` is additive and exists for `withCronJob`'s summary scan: a
+  // `results: [{ ok: false }]` shape is invisible to it, so every row could
+  // fail here and the run would still look clean.
+  return NextResponse.json({
+    processed: results.length,
+    failed: results.filter((r) => !r.ok).length,
+    results,
+  });
 });
 
 // Vercel Cron issues GET; the GitHub-Actions era of this job issued POST.

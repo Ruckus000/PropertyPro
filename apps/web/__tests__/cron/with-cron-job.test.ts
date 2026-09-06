@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { withCronJob } from '@/lib/cron/with-cron-job';
+import { collectFailureSignals, withCronJob } from '@/lib/cron/with-cron-job';
 
 /**
  * The `job` tag, tested against the REAL Sentry SDK.
@@ -145,5 +145,91 @@ describe('withCronJob stamps the job tag', () => {
 
     expect(captured).toHaveLength(1);
     expect(tagsOf()).not.toHaveProperty('job');
+  });
+});
+
+/**
+ * Failures that hide behind a 200.
+ *
+ * HTTP status is not a reliable signal for these jobs: several catch their own
+ * errors and report them in the body. `console.error` is not a Sentry signal
+ * (no `captureConsoleIntegration`), so before this those counters lived only in
+ * Vercel logs nobody tails.
+ *
+ * There is no single production line to revert here, so each case below is its
+ * own anti-vacuity probe — per .claude/rules/verification.md, one probe does
+ * not cover several mechanisms.
+ */
+describe('collectFailureSignals', () => {
+  it('reads a numeric counter', () => {
+    expect(collectFailureSignals({ failed: 3 })).toEqual([{ key: 'failed', count: 3 }]);
+  });
+
+  it('reads an array counter by its length', () => {
+    expect(collectFailureSignals({ errors: ['a', 'b'] })).toEqual([{ key: 'errors', count: 2 }]);
+  });
+
+  it('finds counters nested inside the response envelope', () => {
+    // Real shape: `{ data: { summary: { errors: [...] } } }`.
+    expect(collectFailureSignals({ data: { summary: { rowsFailed: 4 } } })).toEqual([
+      { key: 'rowsFailed', count: 4 },
+    ]);
+  });
+
+  it('stays silent on a clean run — zero is not a failure', () => {
+    expect(collectFailureSignals({ data: { failed: 0, errors: [], processed: 12 } })).toEqual([]);
+  });
+
+  it('ignores keys that merely look failure-ish', () => {
+    // The allowlist is explicit so a field added later cannot silently start
+    // paging someone at 4am.
+    expect(collectFailureSignals({ failureRate: 9, hasFailed: true, failedAt: 'x' })).toEqual([]);
+  });
+
+  it('does not recurse forever on a cyclic body', () => {
+    const cyclic: Record<string, unknown> = { failed: 1 };
+    cyclic.self = cyclic;
+    expect(() => collectFailureSignals(cyclic)).not.toThrow();
+  });
+});
+
+describe('withCronJob reports summary failures', () => {
+  const jsonHandler = (body: unknown, status = 200) =>
+    withCronJob('account-lifecycle', async () => NextResponse.json(body, { status }));
+
+  it('raises a tagged event when the body admits to failures behind a 200', async () => {
+    const res = await jsonHandler({ data: { failed: 2 } })(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.message).toBe('cron_job_reported_failures');
+    expect(captured[0]?.level).toBe('error');
+    expect(tagsOf()).toMatchObject({ job: 'account-lifecycle' });
+  });
+
+  it('stays silent on a clean run', async () => {
+    await jsonHandler({ data: { failed: 0, errors: [] } })(req());
+    await settle();
+
+    expect(captured).toHaveLength(0);
+  });
+
+  it('stays silent — and does not throw — on a non-JSON body', async () => {
+    // Telemetry must never be able to turn a working cron into a broken one.
+    const handler = withCronJob('expire-demos', async () => new Response('plain text'));
+
+    const res = await handler(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(captured).toHaveLength(0);
+  });
+
+  it('leaves the response body readable by the caller', async () => {
+    // The scan reads a clone; consuming the original would break every route.
+    const res = await jsonHandler({ data: { failed: 1 } })(req());
+
+    await expect(res.json()).resolves.toEqual({ data: { failed: 1 } });
   });
 });
