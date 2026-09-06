@@ -44,6 +44,7 @@ const GUARDS = [
   'guard:read-entitlement',
   'guard:admin-error-leakage',
   'guard:internal-cron-auth',
+  'guard:cron-job-tagging',
   'guard:token-auth-routes',
   'guard:shared-side-effects',
 ];

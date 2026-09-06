@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { processInsuranceAlerts } from '@/lib/services/insurance-alert-processor';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.INSURANCE_ALERTS_CRON_SECRET, process.env.CRON_SECRET);
@@ -26,5 +27,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 // One handler serves both so the scheduler's verb can never be the thing that
 // breaks the job. Neither verb reads a body or query params, so they are
 // genuinely interchangeable.
-export const GET = handler;
-export const POST = handler;
+const cronHandler = withCronJob('insurance-alerts', handler);
+
+export const GET = cronHandler;
+export const POST = cronHandler;

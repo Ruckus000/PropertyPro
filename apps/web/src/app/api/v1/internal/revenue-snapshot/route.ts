@@ -20,6 +20,7 @@ import {
   insertRevenueSnapshot,
   loadRevenueSnapshotInputs,
 } from '@/lib/services/revenue-snapshot-data-service';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 // DO NOT use withErrorHandler — we want explicit control over responses here.
 async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
@@ -145,5 +146,7 @@ async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
 // One handler serves both so the scheduler's verb can never be the thing that
 // breaks the job. Neither verb reads a body or query params, so they are
 // genuinely interchangeable.
-export const GET = handleRevenueSnapshot;
-export const POST = handleRevenueSnapshot;
+const cronHandler = withCronJob('revenue-snapshot', handleRevenueSnapshot);
+
+export const GET = cronHandler;
+export const POST = cronHandler;

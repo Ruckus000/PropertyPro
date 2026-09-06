@@ -49,6 +49,7 @@ import {
 import { sendExportReadyEmail } from '@/lib/services/export/export-notification';
 import { runExportJob } from '@/lib/services/export/export-worker';
 import { purgeExportJobArchive } from '@/lib/services/export/purge-export-archives';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 // archiver and the storage stream are Node stream APIs — this cannot run on Edge.
 export const runtime = 'nodejs';
@@ -223,5 +224,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   return NextResponse.json({ data: summary });
 });
 
-export const GET = handler;
-export const POST = handler;
+const cronHandler = withCronJob('community-export-worker', handler);
+
+export const GET = cronHandler;
+export const POST = cronHandler;
