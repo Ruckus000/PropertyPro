@@ -530,3 +530,17 @@ export {
   type NewPlatformAdminAuditLogEntry,
 } from './platform-admin-audit-log';
 export { supportAccessLevelEnum } from './enums';
+
+// Platform support inbox — inbound mail to support@/privacy@/contact@, answered
+// from the admin console. Platform-scoped (no community_id); the mailbox and
+// status vocabularies live in @propertypro/shared.
+export {
+  supportInboxThreads,
+  type SupportInboxThread,
+  type NewSupportInboxThread,
+} from './support-inbox-threads';
+export {
+  supportInboxMessages,
+  type SupportInboxMessage,
+  type NewSupportInboxMessage,
+} from './support-inbox-messages';

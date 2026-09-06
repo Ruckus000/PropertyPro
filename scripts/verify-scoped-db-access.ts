@@ -354,6 +354,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // community_export_job* tables — all tenant DATA is read through
   // createScopedClient in export-worker.ts.
   resolve(repoRoot, 'apps/web/src/lib/services/export/export-job-service.ts'),
+  // Platform support inbox ingestion. support_inbox_threads and
+  // support_inbox_messages have NO community_id at all — whoever writes to
+  // support@getpropertypro.com is usually not a member of any community and
+  // often not a user — so createScopedClient cannot express these tables, not
+  // merely "would be inconvenient". Confined to those two tables; it reads no
+  // tenant data. The route in front of it is HMAC-signature-authenticated and
+  // fails closed. See packages/db/src/schema/rls-config.ts for the RLS posture.
+  resolve(repoRoot, 'apps/web/src/lib/services/support-inbox/inbound-email-service.ts'),
   // Export-ready notification. Runs from the same cron — no session, no
   // membership — and reads exactly two rows to address one email: the job's own
   // requester, and its community's name. The community is fixed by the job row,

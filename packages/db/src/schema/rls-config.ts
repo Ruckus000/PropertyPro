@@ -482,6 +482,16 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
     reason:
       'Inbound marketing/sales leads — no community_id, and that is the point: a lead has no community yet (the compliance checker and the /contact form are both unauthenticated, pre-signup surfaces), so tenant scoping does not apply. Holds prospect contact details (email, contact_name, association_name) plus a free-text message. Locked down by 0053 with the same posture as users/pending_signups/stripe_webhook_events: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated on both the table and its sequence, service_role retaining CRUD. The two legitimate writers are the public capture routes over the privileged Drizzle connection and the admin console over service_role, both of which hold rolbypassrls. The anon key ships in the browser bundle, so leaving the vestigial Supabase grants in place would have exposed the entire prospect list to an unauthenticated reader.',
   },
+  {
+    tableName: 'support_inbox_threads',
+    reason:
+      'Platform support inbox conversations — mail sent to support@/privacy@/contact@getpropertypro.com, received via the Forward Email webhook and answered from apps/admin. No community_id, and that is the point rather than an omission: the correspondent is usually not a member of any community and often not a user at all, so there is no tenant to scope to. Holds third-party contact details (participant_email, participant_name) and subject lines. Locked down by 0068 on the marketing_leads posture: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated on both the table and its sequence, service_role retaining CRUD. The only writers are the web ingress over the privileged Drizzle connection and the admin console over service_role, both of which hold rolbypassrls. The anon key ships in the browser bundle, so leaving the vestigial Supabase grants would expose every support conversation to an unauthenticated reader.',
+  },
+  {
+    tableName: 'support_inbox_messages',
+    reason:
+      'Bodies and internal notes for support_inbox_threads. Same 0068 lockdown and the same reason there is no community_id. Strictly more sensitive than the thread table: html_body holds RAW, UNSANITIZED, attacker-controlled markup, and raw_payload holds a quarantined provider payload including message bodies belonging to third parties, which is why that column is written to the database rather than to logs. Read only through apps/admin behind requirePlatformAdmin, and sanitized at render time, never at write time.',
+  },
   { tableName: 'platform_admin_users', reason: 'Platform-level admin authorization — service_role only (REVOKE ALL from anon/authenticated). No community_id column; not community-scoped.' },
   { tableName: 'access_plans', reason: 'Platform-level access management — not community-scoped. Managed by super_admin only.' },
   { tableName: 'account_deletion_requests', reason: 'Platform-level deletion workflow — not community-scoped. Cross-community visibility required for admin dashboard.' },

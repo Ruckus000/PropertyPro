@@ -155,35 +155,68 @@ secret is set or not, because the verifier returns `null` in both cases.
 
 ## 3. No MX record — `support@getpropertypro.com` bounces
 
-**Status:** verified 2026-09-01 · **Owner:** you (DNS)
+**Status:** code shipped, **DNS still to do** · **Owner:** you (DNS)
 
-`dig @ns1.vercel-dns.com getpropertypro.com MX` returns SOA only — the record does not
-exist. That address is published as the support off-ramp on
-`(marketing)/contact/page.tsx` and in the global marketing footer, so **the only human
-support channel on the site hard-bounces.**
+`dig @ns1.vercel-dns.com getpropertypro.com MX` still returns SOA only. That
+address is published as the support off-ramp on `(marketing)/contact/page.tsx`
+and in the global marketing footer, so **the only human support channel on the
+site hard-bounces** until the records below exist.
 
-Needs an inbox or forwarding provider; a forwarder is sufficient if you only need to
-receive. Note this is also why the PM-lead notification work was deferred — there is no
-destination inbox to notify yet.
+**What is now built and waiting for them:** an ingress at
+`POST /api/v1/webhooks/inbound-email` (HMAC-verified, fails closed) and an
+**Inbox** section in the admin console at `/inbox` — threads, triage, internal
+notes, and replies sent from the mailbox the thread arrived on. Transport is
+[Forward Email](https://forwardemail.net)'s free tier (MIT-licensed, unlimited
+inbound, no mailbox to pay for); replies go out through Resend, which is
+already DKIM-verified.
 
-**Verify:** `dig getpropertypro.com MX +short` returns a host, then send a test message.
+**Do this, in this order** — the full record values are in
+`docs/DEPLOYMENT.md` §5.5:
+
+1. Set `INBOUND_EMAIL_WEBHOOK_SECRET` on the web project
+   (`vercel env add … --no-sensitive`) and confirm `RESEND_API_KEY` is set on
+   the **admin** project too, then redeploy both.
+2. Add Forward Email's verification TXT, then the alias routing TXT — the
+   webhook URL **must** carry `?raw=false&attachments=false`, or a single
+   ~900 KB attachment exceeds Vercel's 4.5 MB body cap and the message vanishes
+   with no log line.
+3. Add the MX records **last**.
+
+**Verify:** `dig getpropertypro.com MX +short` returns a host, then send a real
+message from an external account and confirm the thread appears at `/inbox`.
+
+**If the webhook is broken when mail arrives, nothing is lost:** it returns 5xx,
+Forward Email temp-fails the SMTP session with a 421, and the sender's own mail
+server holds the message and retries for 24-72 hours. That is why there is no
+fallback mailbox — but the window only helps if somebody notices, so point an
+uptime monitor at the readiness probe (item 5).
 
 ---
 
 ## 4. No DMARC record
 
-**Status:** verified 2026-09-01 · **Owner:** you (DNS) · **Do after item 3**
+**Status:** open · **Owner:** you (DNS) · **Do with item 3**
 
-`_dmarc.getpropertypro.com` is absent at the authoritative nameserver. Publish after the MX
-so the report address is deliverable:
+`_dmarc.getpropertypro.com` is absent at the authoritative nameserver.
 
 ```
-_dmarc  TXT  v=DMARC1; p=none; rua=mailto:dmarc@getpropertypro.com; fo=1
+_dmarc  TXT  v=DMARC1; p=none; rua=mailto:<id>@dmarc.postmarkapp.com; fo=1
 ```
 
-The rest of email auth is already correct — DKIM (`resend._domainkey`) is live and
-`send.getpropertypro.com` carries both SPF (`v=spf1 include:amazonses.com ~all`) and the
-feedback MX. This is the last missing piece.
+**Point `rua=` at Postmark's free DMARC Digests**, not at an address on this
+domain. Aggregate reports arrive as gzipped XML attachments — exactly the
+payload class the inbound webhook deliberately does not store — so
+`rua=mailto:dmarc@getpropertypro.com` would deliver them somewhere that drops
+them. Postmark's service needs no account and no mailbox and emails a weekly
+summary: https://dmarc.postmarkapp.com/
+
+Start at `p=none`, read a week of reports, then ratchet to `quarantine`.
+
+The rest of email auth is already correct — DKIM (`resend._domainkey`) is live
+and `send.getpropertypro.com` carries both SPF (`v=spf1 include:amazonses.com ~all`)
+and the feedback MX. Note that `docs/DEPLOYMENT.md` §5.4 previously claimed an
+apex SPF and a `p=quarantine` DMARC that never existed; that section has been
+corrected.
 
 **Verify:** `dig _dmarc.getpropertypro.com TXT +short`.
 

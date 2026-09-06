@@ -10,6 +10,8 @@
  * @module supabase/admin-types
  */
 
+import type { SupportMailbox, SupportThreadStatus } from '@propertypro/shared';
+
 // ─── Support ───
 
 export type SupportConsentGrantRow = {
@@ -336,6 +338,89 @@ export type MarketingLeadUpdate = Partial<
   Pick<MarketingLeadRow, 'status' | 'notes' | 'updated_at'>
 >;
 
+// ─── Support inbox ───
+//
+// Mail to support@/privacy@/contact@, received by the apps/web webhook over the
+// privileged Drizzle connection and read/answered here over service_role.
+// `mailbox` and `status` are typed from @propertypro/shared rather than
+// re-declared, so a fourth mailbox is one edit.
+
+export type SupportInboxThreadRow = {
+  id: number;
+  mailbox: SupportMailbox;
+  subject: string;
+  normalized_subject: string;
+  participant_email: string;
+  participant_name: string | null;
+  status: SupportThreadStatus;
+  first_message_at: string;
+  last_message_at: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** The admin console only ever changes triage state. It never creates a thread. */
+export type SupportInboxThreadUpdate = Partial<
+  Pick<SupportInboxThreadRow, 'status' | 'last_message_at' | 'updated_at'>
+>;
+
+export type SupportInboxMessageRow = {
+  id: number;
+  thread_id: number;
+  kind: 'email' | 'note';
+  direction: 'inbound' | 'outbound' | 'internal';
+  dedupe_key: string;
+  rfc_message_id: string | null;
+  in_reply_to: string | null;
+  references_ids: string[] | null;
+  delivered_to: string | null;
+  from_email: string | null;
+  from_name: string | null;
+  to_emails: string[] | null;
+  cc_emails: string[] | null;
+  subject: string | null;
+  text_body: string | null;
+  /** RAW, UNSANITIZED sender HTML. Sanitize at render, never trust this. */
+  html_body: string | null;
+  sent_at: string | null;
+  received_at: string;
+  has_attachments: boolean;
+  raw_payload: Record<string, unknown> | null;
+  normalization_status: 'ok' | 'failed';
+  provider_message_id: string | null;
+  author_user_id: string | null;
+  created_at: string;
+};
+
+/**
+ * The admin console writes exactly two message shapes — an outbound reply and
+ * an internal note. Both are `email`/`note` rows the database's
+ * `support_inbox_messages_kind_shape_check` will reject if they are malformed,
+ * so this type is a convenience, not the guarantee.
+ */
+export type SupportInboxMessageInsert = Omit<
+  SupportInboxMessageRow,
+  | 'id'
+  | 'received_at'
+  | 'has_attachments'
+  | 'normalization_status'
+  | 'raw_payload'
+  | 'created_at'
+> & {
+  id?: number;
+  received_at?: string;
+  has_attachments?: boolean;
+  normalization_status?: 'ok' | 'failed';
+  /**
+   * Optional here because the admin console never writes it. `raw_payload`
+   * holds a quarantined provider payload, which only the web ingress produces
+   * (over Drizzle, not this type) when a message cannot be normalized.
+   */
+  raw_payload?: Record<string, unknown> | null;
+  created_at?: string;
+};
+
 export type AdminDatabase = {
   public: {
     Tables: {
@@ -392,6 +477,16 @@ export type AdminDatabase = {
         ComplianceAuditLogRow,
         ComplianceAuditLogInsert,
         Partial<ComplianceAuditLogRow>
+      >;
+      support_inbox_threads: AdminTable<
+        SupportInboxThreadRow,
+        Partial<SupportInboxThreadRow>,
+        SupportInboxThreadUpdate
+      >;
+      support_inbox_messages: AdminTable<
+        SupportInboxMessageRow,
+        SupportInboxMessageInsert,
+        Partial<SupportInboxMessageRow>
       >;
     };
     Views: Record<string, never>;

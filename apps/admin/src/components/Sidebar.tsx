@@ -17,6 +17,7 @@ import {
   Trash2,
   ShieldAlert,
   Mail,
+  Inbox,
 } from 'lucide-react';
 
 interface NavItem {
@@ -30,6 +31,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { href: '/clients', label: 'Clients', icon: LayoutGrid },
   { href: '/leads', label: 'Leads', icon: Mail },
+  // `Mail` is taken by Leads; `Inbox` keeps the two distinguishable at a glance.
+  { href: '/inbox', label: 'Inbox', icon: Inbox },
   { href: '/communities/rootless', label: 'Rootless Communities', icon: ShieldAlert },
   { href: '/deletion-requests', label: 'Deletion Requests', icon: Trash2, badge: true },
   { href: '/demo', label: 'Demos', icon: MonitorPlay },

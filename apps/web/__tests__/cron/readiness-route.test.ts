@@ -84,6 +84,9 @@ describe('readiness route', () => {
     process.env.COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET = 'test-community-unsub-secret';
     process.env.SNOWBIRD_UNSUBSCRIBE_SECRET = 'test-snowbird-unsub-secret';
     process.env.INSURANCE_ALERTS_UNSUBSCRIBE_SECRET = 'test-insurance-unsub-secret';
+    // 32-char minimum, matching the floor in the route's secretRules — the
+    // ingress fails CLOSED without it, so support@ stops being ingested.
+    process.env.INBOUND_EMAIL_WEBHOOK_SECRET = 'test-inbound-email-webhook-secret-32ch';
     // Email must resolve to 'live' for the healthy baseline. EMAIL_DRY_RUN is
     // deleted rather than set falsy: it outranks the API key, and leaving it
     // set from another test would degrade every case in this file.
@@ -236,6 +239,7 @@ describe('readiness route', () => {
     ['COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET', 'community_email_unsubscribe_secret'],
     ['SNOWBIRD_UNSUBSCRIBE_SECRET', 'snowbird_unsubscribe_secret'],
     ['INSURANCE_ALERTS_UNSUBSCRIBE_SECRET', 'insurance_alerts_unsubscribe_secret'],
+    ['INBOUND_EMAIL_WEBHOOK_SECRET', 'inbound_email_webhook_secret'],
   ])('reports degraded when %s is missing', async (envName, checkKey) => {
     delete process.env[envName];
     executeMock

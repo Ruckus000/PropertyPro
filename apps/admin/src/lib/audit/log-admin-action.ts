@@ -72,7 +72,18 @@ export type AdminAuditAction =
   // Settings
   | 'community_settings_changed'
   // Storage
-  | 'file_uploaded';
+  | 'file_uploaded'
+  // Platform support inbox. Both log with communityId: null — a support thread
+  // belongs to no community, which is the case that column is nullable for.
+  //
+  // A reply is outbound communication to an external party under a
+  // PropertyPro address, so it is audited without exception. A status change
+  // is the triage trail. Internal notes are deliberately NOT logged here: the
+  // note row already carries author_user_id and created_at, so it is
+  // self-auditing, and a second write would duplicate the record for no
+  // recall benefit.
+  | 'support_thread_replied'
+  | 'support_thread_status_changed';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */
