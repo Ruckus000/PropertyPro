@@ -60,7 +60,7 @@ export function verifyFile(absolutePath: string): VerifyResult {
     const reason = exemptMatch[1] ?? '';
     const delegatedMatch = reason.match(DELEGATED_RE);
     if (delegatedMatch) {
-      const targetRel = delegatedMatch[1];
+      const targetRel = delegatedMatch[1]!;
       const targetAbs = resolve(repoRoot, targetRel);
       if (!existsSync(targetAbs)) {
         return { ok: false, reason: `delegated target not found: ${targetRel}` };

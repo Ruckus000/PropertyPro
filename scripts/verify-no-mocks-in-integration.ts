@@ -157,7 +157,7 @@ function scanFile(filePath: string): Violation[] {
   const lines = content.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     // Skip comment lines
     if (line.trimStart().startsWith('//') || line.trimStart().startsWith('*')) {
       continue;

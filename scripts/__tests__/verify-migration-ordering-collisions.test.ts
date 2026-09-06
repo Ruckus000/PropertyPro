@@ -52,9 +52,9 @@ describe('checkBaselineCollisions', () => {
     const problems = checkBaselineCollisions(local, BASELINE);
 
     expect(problems).toHaveLength(1);
-    expect(problems[0].severity).toBe('error');
-    expect(problems[0].message).toContain('idx 40');
-    expect(problems[0].message).toContain('0040_fix_rent_guard_trigger_depth');
+    expect(problems[0]!.severity).toBe('error');
+    expect(problems[0]!.message).toContain('idx 40');
+    expect(problems[0]!.message).toContain('0040_fix_rent_guard_trigger_depth');
   });
 
   it('rejects reusing a `when` the baseline already took, even under a free idx', () => {
@@ -64,8 +64,8 @@ describe('checkBaselineCollisions', () => {
     const problems = checkBaselineCollisions(local, BASELINE);
 
     expect(problems).toHaveLength(1);
-    expect(problems[0].severity).toBe('error');
-    expect(problems[0].message).toContain('when=1784511314576');
+    expect(problems[0]!.severity).toBe('error');
+    expect(problems[0]!.message).toContain('when=1784511314576');
   });
 
   it('reports both when a branch collides on idx and `when` together', () => {
@@ -84,10 +84,10 @@ describe('checkBaselineCollisions', () => {
     const problems = checkBaselineCollisions(local, BASELINE);
 
     expect(problems).toHaveLength(1);
-    expect(problems[0].severity).toBe('error');
-    expect(problems[0].message).toContain('0041_authored_before_0040_merged');
-    expect(problems[0].message).toContain('0040_fix_rent_guard_trigger_depth');
-    expect(problems[0].message).toContain('silently skipped');
+    expect(problems[0]!.severity).toBe('error');
+    expect(problems[0]!.message).toContain('0041_authored_before_0040_merged');
+    expect(problems[0]!.message).toContain('0040_fix_rent_guard_trigger_depth');
+    expect(problems[0]!.message).toContain('silently skipped');
   });
 
   it('accepts a wall-clock `when` stamped after the baseline', () => {
@@ -103,7 +103,7 @@ describe('checkBaselineCollisions', () => {
     const problems = checkBaselineCollisions(local, BASELINE);
 
     expect(problems).toHaveLength(1);
-    expect(problems[0].message).toContain('already used on the baseline');
+    expect(problems[0]!.message).toContain('already used on the baseline');
   });
 
   it('measures staleness against the newest baseline entry, not the last in array order', () => {

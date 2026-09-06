@@ -1,0 +1,67 @@
+{
+  // `scripts/` is NOT a workspace package, so nothing in the solution-style root
+  // tsconfig's `references` reaches it and `turbo run typecheck` cannot see it.
+  // This project closes that gap; the root `typecheck` script chains
+  // `tsc -p scripts/tsconfig.json` after turbo, the same way `lint` chains
+  // `run-lint-guards.mjs`.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // Pin the global type environment. TypeScript's DEFAULT typeRoots walks
+    // every ancestor directory looking for `node_modules/@types`, and because
+    // `scripts/` has no node_modules of its own — and pnpm does not create a
+    // root `node_modules/@types` for packages the root does not declare — the
+    // walk escapes the repo entirely and picks up whatever happens to sit in
+    // the developer's home directory. That is not hypothetical: a stray
+    // `~/node_modules/@types/react` was silently supplying the global `React`
+    // namespace here, giving a second `csstype` identity and 252 bogus
+    // "CSSProperties is not assignable to CSSProperties" errors in
+    // packages/email templates that type-check clean under their own project.
+    // Pinning typeRoots makes this project's result identical on any machine.
+    "typeRoots": ["../node_modules/@types"],
+    // Scripts' test files import from 'vitest' explicitly (scripts/vitest.config.ts
+    // does not set `globals: true`), so `node` is the only global type package
+    // needed. Anything else must be imported.
+    "types": ["node"],
+    // Everything here is executed by `tsx`, which loads TypeScript sources
+    // directly, so a `.ts` specifier (verify-scoped-db-access's dynamic import of
+    // packages/db/src/schema/rls-config.ts) is the correct runtime path rather
+    // than something to strip. Nothing is emitted (`noEmit` from the root), which
+    // is the precondition this flag requires.
+    "allowImportingTsExtensions": true,
+    // `paths` REPLACES the inherited map rather than merging with it, so the
+    // root's @propertypro/* entries have to be restated here. The reason to
+    // override at all is `@/*`: several scripts run under
+    // `tsx --tsconfig apps/web/tsconfig.json`, and — more importantly — the
+    // apps/web modules they import (seed-demo pulls in the billing services,
+    // which reach notification-service and packages/email) use `@/` internally.
+    // Those files are in this program whether or not we want them, so the alias
+    // has to resolve or they report phantom "cannot find module" errors.
+    "paths": {
+      "@/*": ["apps/web/src/*"],
+      "@propertypro/api-contract": ["packages/api-contract/src"],
+      "@propertypro/api-contract/*": ["packages/api-contract/src/*"],
+      "@propertypro/db": ["packages/db/src"],
+      "@propertypro/db/*": ["packages/db/src/*"],
+      "@propertypro/email": ["packages/email/src"],
+      "@propertypro/email/*": ["packages/email/src/*"],
+      "@propertypro/shared": ["packages/shared/src"],
+      "@propertypro/shared/*": ["packages/shared/src/*"],
+      "@propertypro/theme": ["packages/theme/src"],
+      "@propertypro/theme/*": ["packages/theme/src/*"],
+      "@propertypro/tokens": ["packages/tokens/src"],
+      "@propertypro/tokens/*": ["packages/tokens/src/*"],
+      "@propertypro/ui": ["packages/ui/src"],
+      "@propertypro/ui/*": ["packages/ui/src/*"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": [
+    "node_modules",
+    // Golden expected-output for the resource scaffolder. These files are
+    // fixtures of what `pnpm new:resource` WRITES into apps/web and packages/db,
+    // so they are authored against those locations and can never resolve their
+    // own imports from here. `scripts/vitest.config.ts` likewise only collects
+    // `__tests__/**/*.test.ts`, so nothing else treats them as compilable source.
+    "scaffold-resource.test"
+  ]
+}
