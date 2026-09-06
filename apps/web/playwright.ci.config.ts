@@ -148,13 +148,32 @@ export default defineConfig({
         // so every open socket is severed — and it severs ANY in-flight
         // request, not only document navigations.
         //
-        // What follows from that: a `page.goto` retry is the wrong fix (it
-        // covers one of several exposed request types and deletes the only
-        // signal that this happens). `retries: 2` below already recovers it.
-        // The lever that would remove the failure mode is Turbopack, which
-        // holds the module graph outside the V8 heap this watchdog measures —
-        // `dev` already uses it, `dev:e2e` does not. That is a spike with its
-        // own measurement, not a rider on a flake fix.
+        // RESOLVED: `dev:e2e` now runs under Turbopack, which holds the module
+        // graph in Rust-side memory OUTSIDE the V8 heap this watchdog reads. So
+        // `used_heap_size` no longer approaches the threshold and the restart
+        // does not fire. Measured, one variable changed (the `--turbopack` flag
+        // in apps/web/package.json), same allowlist:
+        //
+        //                          webpack      Turbopack
+        //   restarts logged           1             0
+        //   ERR_CONNECTION_RESET      1             0
+        //   flaky                     1             0
+        //   duration                14m36s        8m40s
+        //
+        // Confirmed the flag actually took effect rather than inferring it from
+        // the improvement: Turbopack's `serverExternalPackages` warning
+        // ("… can't be external") appears 114x under the flag and 0x without,
+        // while webpack's `PackFileCacheStrategy` drops 13 -> 3 — the 3 being
+        // the ADMIN server below, still webpack on purpose.
+        //
+        // This ceiling is therefore now mostly vestigial for the web server. It
+        // is left in place because it costs nothing, and because reverting to
+        // webpack (see `dev:webpack`) would need it back.
+        //
+        // Still true, and still the reason not to "fix" a reset in a spec: a
+        // `page.goto` retry covers one of several exposed request types and
+        // deletes the only signal that this happens. `retries: 2` below is the
+        // right backstop.
         NODE_OPTIONS: '--max-old-space-size=8192',
       },
       url: `http://127.0.0.1:${WEB_PORT}`,
