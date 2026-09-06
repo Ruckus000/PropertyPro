@@ -21,7 +21,21 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 
   const errors: string[] = [];
 
-  try {
+  /*
+   * No outer try/catch, deliberately.
+   *
+   * This route used to wrap its ENTIRE body in one catch and return
+   * `{ autoCheckedOut: 0, errors }` with HTTP 200. A dead database produced a
+   * 200. There was no console.error and no Sentry capture, so the job could
+   * have been permanently broken while every dashboard showed it healthy —
+   * strictly worse than the #1042 outage, which at least 500'd loudly.
+   *
+   * Letting the throw reach `withErrorHandler` gives a real 500 plus a
+   * `job`-tagged Sentry event. The per-audit-event failures below are a
+   * genuine PARTIAL failure and stay in `errors`, where `withCronJob`'s
+   * summary scan now reports them.
+   */
+  {
     const overdue = await autoCheckoutOverdueVisitors();
     const now = new Date();
 
@@ -54,11 +68,6 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 
     return NextResponse.json({
       data: { autoCheckedOut: overdue.length, errors },
-    });
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
-    return NextResponse.json({
-      data: { autoCheckedOut: 0, errors },
     });
   }
 });

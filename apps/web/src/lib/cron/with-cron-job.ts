@@ -49,11 +49,89 @@ import type { CronJobSlug } from './registry';
  */
 type CronRouteHandler = (req: NextRequest, ...rest: never[]) => Promise<Response>;
 
+/**
+ * Keys whose value means "some of this run's work failed".
+ *
+ * An explicit allowlist rather than "any key containing 'fail'", so a field
+ * added later cannot silently start paging somebody at 4am. Numeric keys are
+ * read as counts; array keys as lengths.
+ *
+ * This exists because HTTP status is not a reliable signal here. Several jobs
+ * catch their own errors and return 200 with the failures in the body —
+ * `account-lifecycle` pushes into `summary.errors`, the export worker counts
+ * `failed`, the digest processor counts `rowsFailed`. `console.error` is not a
+ * Sentry signal (there is no `captureConsoleIntegration` in
+ * `sentry.server.config.ts`), so before this those counters were visible only
+ * in Vercel logs nobody tails.
+ */
+const NUMERIC_FAILURE_KEYS = ['failed', 'rowsFailed', 'failedCount'] as const;
+const ARRAY_FAILURE_KEYS = ['errors', 'failures'] as const;
+
+export interface FailureSignal {
+  key: string;
+  count: number;
+}
+
+/** Walks a parsed summary for failure counters. Exported for tests. */
+export function collectFailureSignals(value: unknown, depth = 0): FailureSignal[] {
+  // Cron summaries are shallow; the bound stops a pathological or cyclic body
+  // from turning telemetry into a hang.
+  if (depth > 6 || value === null || typeof value !== 'object') return [];
+  if (Array.isArray(value)) return value.flatMap((v) => collectFailureSignals(v, depth + 1));
+
+  const signals: FailureSignal[] = [];
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (NUMERIC_FAILURE_KEYS.includes(key as (typeof NUMERIC_FAILURE_KEYS)[number])) {
+      if (typeof child === 'number' && child > 0) signals.push({ key, count: child });
+      continue;
+    }
+    if (ARRAY_FAILURE_KEYS.includes(key as (typeof ARRAY_FAILURE_KEYS)[number])) {
+      if (Array.isArray(child) && child.length > 0) signals.push({ key, count: child.length });
+      continue;
+    }
+    signals.push(...collectFailureSignals(child, depth + 1));
+  }
+  return signals;
+}
+
+/**
+ * Report failures the response body admits to but the status code hides.
+ *
+ * Everything here is best-effort and swallowing: a body that is not JSON, or a
+ * read that fails, yields no signals and stays SILENT rather than alarming.
+ * Telemetry must never be able to turn a working cron into a broken one — that
+ * would make the monitoring the outage.
+ */
+async function reportSummaryFailures(slug: CronJobSlug, res: Response): Promise<void> {
+  try {
+    if (!res.headers.get('content-type')?.includes('application/json')) return;
+    const body: unknown = await res.clone().json();
+    const signals = collectFailureSignals(body);
+    if (signals.length === 0) return;
+
+    Sentry.captureMessage('cron_job_reported_failures', {
+      level: 'error',
+      extra: {
+        job: slug,
+        signals,
+        total: signals.reduce((sum, s) => sum + s.count, 0),
+        summary: body,
+      },
+    });
+  } catch {
+    // Deliberately silent — see the docblock.
+  }
+}
+
 export function withCronJob(slug: CronJobSlug, handler: CronRouteHandler): CronRouteHandler {
   return async function cronJobHandler(req, ...rest) {
     return Sentry.withIsolationScope(async (scope) => {
       scope.setTag('job', slug);
-      return handler(req, ...rest);
+      const res = await handler(req, ...rest);
+      // Inside the isolation scope, so the event carries the `job` tag and the
+      // one alert rule matches it exactly as it matches a 500.
+      await reportSummaryFailures(slug, res);
+      return res;
     });
   };
 }

@@ -33,7 +33,7 @@ describe('coupon-sync-retry cron route', () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ processed: 0, results: [] });
+    expect(await res.json()).toEqual({ processed: 0, failed: 0, results: [] });
   });
 
   it('falls back to CRON_SECRET when the coupon-specific secret is absent', async () => {
@@ -47,7 +47,7 @@ describe('coupon-sync-retry cron route', () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ processed: 0, results: [] });
+    expect(await res.json()).toEqual({ processed: 0, failed: 0, results: [] });
   });
 
   it('accepts EITHER the route secret or the platform CRON_SECRET', async () => {
@@ -108,5 +108,31 @@ describe('coupon-sync-retry cron route', () => {
     // so this is the ONLY thing standing between an unconfigured deploy and a
     // publicly-runnable job.
     expect(res.status).toBe(401);
+  });
+
+  it('reports a `failed` count, so a run where every row fails is not silent', async () => {
+    /*
+     * `results: [{ ok: false }]` is invisible to `withCronJob`'s summary scan,
+     * which reads numeric `failed` / array `errors`. Without this field every
+     * row could fail and the run would look clean — a 200 with no signal
+     * anywhere, the same shape that made visitor-auto-checkout dangerous.
+     */
+    process.env.COUPON_SYNC_RETRY_CRON_SECRET = 'coupon-secret';
+    findStuckCouponSyncBillingGroupsMock.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+    recalculateVolumeTierMock
+      .mockRejectedValueOnce(new Error('stripe down'))
+      .mockResolvedValueOnce(undefined);
+
+    const res = await POST(
+      new NextRequest(URL, {
+        method: 'POST',
+        headers: { authorization: 'Bearer coupon-secret' },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { processed: number; failed: number };
+    expect(body.processed).toBe(2);
+    expect(body.failed).toBe(1);
   });
 });
