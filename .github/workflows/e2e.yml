@@ -281,7 +281,12 @@ jobs:
           # before this job existed.
           #
           # Heap budgets are now set PER SERVER in playwright.ci.config.ts, not
-          # here.
+          # here — and that file carries the full analysis. Read it before
+          # touching a ceiling: the restart IS the cause of these resets (the
+          # two timestamps above are the evidence), but raising
+          # --max-old-space-size cannot help, because `used_heap_size` is
+          # compared against a fraction of that same limit. For a while these
+          # two files disagreed on that point; they no longer do.
           #
           # A step-level NODE_OPTIONS reaches BOTH dev servers, because
           # Playwright merges `webServer.env` over `process.env`. Once

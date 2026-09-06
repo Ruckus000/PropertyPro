@@ -113,19 +113,48 @@ export default defineConfig({
         // Per-server rather than a step-level NODE_OPTIONS in e2e.yml, which
         // reached BOTH servers. That is tidiness, NOT a fix for anything.
         //
-        // Do not repeat my mistake here: `next dev` logs
-        // "Server is approaching the used memory threshold, restarting..."
-        // during this job, and it is TEMPTING to read that as the cause of the
-        // ERR_CONNECTION_RESET failures. It is not. Measured across runs:
+        // `next dev` logs "Server is approaching the used memory threshold,
+        // restarting..." during this job. The conclusion to draw from that has
+        // been revised once; both halves matter.
         //
-        //   4e7cb929  E2E success  1 restart
-        //   62d63c28  E2E success  1 restart
-        //   e91785d2  E2E failure  1 restart
+        // STILL TRUE: tuning this ceiling does nothing. Measured — 6144 and
+        // 10240 both produced two restarts in a run, and 8192 is simply a value
+        // that has run green repeatedly. It is not load-bearing.
         //
-        // The restart happens just as often when the job PASSES. Tuning the
-        // ceiling changes nothing either — 6144 and 10240 both produced two
-        // restarts in a run. 8192 is simply the value that has run green
-        // repeatedly; it is not load-bearing.
+        // And there is now a mechanism for why, rather than a correlation.
+        // `next@15.5.12` `dist/server/lib/start-server.js` checks, in the
+        // `finally` of the request listener — i.e. after EVERY request:
+        //
+        //     if (used_heap_size > 0.8 * heap_size_limit) { ... process.exit() }
+        //
+        // `used_heap_size` counts garbage V8 has not collected yet, and V8 sizes
+        // old-space growth relative to the configured limit. Raising
+        // --max-old-space-size raises BOTH SIDES of that comparison, which is
+        // exactly why 6144 and 10240 measured the same. There is no env switch
+        // to disable the watchdog; the `isDev` branch is unconditional.
+        //
+        // REVISED: this comment used to conclude "the restart is not the cause"
+        // of the ERR_CONNECTION_RESET failures, from a table of three runs
+        // showing 1 restart in two passes and in one failure. That inference
+        // does not hold. The failure needs a CONJUNCTION — a restart AND a
+        // request in flight at that instant. Restart count is near-constant
+        // because it tracks compile volume, and the suite is the same every
+        // run, so it cannot discriminate pass from fail; the discriminating
+        // variable is coincidence, which that table never measured.
+        //
+        // `.github/workflows/e2e.yml` has the direct temporal evidence, from
+        // the server's own log: the restart at 01:37:15.8, the
+        // ERR_CONNECTION_RESET at 01:37:17.3. `process.exit()` does not drain,
+        // so every open socket is severed — and it severs ANY in-flight
+        // request, not only document navigations.
+        //
+        // What follows from that: a `page.goto` retry is the wrong fix (it
+        // covers one of several exposed request types and deletes the only
+        // signal that this happens). `retries: 2` below already recovers it.
+        // The lever that would remove the failure mode is Turbopack, which
+        // holds the module graph outside the V8 heap this watchdog measures —
+        // `dev` already uses it, `dev:e2e` does not. That is a spike with its
+        // own measurement, not a rider on a flake fix.
         NODE_OPTIONS: '--max-old-space-size=8192',
       },
       url: `http://127.0.0.1:${WEB_PORT}`,
