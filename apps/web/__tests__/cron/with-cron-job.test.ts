@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { recordCronRunMock } = vi.hoisted(() => ({ recordCronRunMock: vi.fn() }));
+vi.mock('@/lib/services/cron-run-service', () => ({ recordCronRun: recordCronRunMock }));
 
 import { collectFailureSignals, withCronJob } from '@/lib/cron/with-cron-job';
 
@@ -49,6 +52,8 @@ const settle = () => Sentry.flush(2000);
 
 beforeEach(() => {
   captured.length = 0;
+  recordCronRunMock.mockReset();
+  recordCronRunMock.mockResolvedValue(undefined);
 });
 
 afterAll(async () => {
@@ -231,5 +236,87 @@ describe('withCronJob reports summary failures', () => {
     const res = await jsonHandler({ data: { failed: 1 } })(req());
 
     await expect(res.json()).resolves.toEqual({ data: { failed: 1 } });
+  });
+});
+
+/**
+ * The heartbeat — durable evidence the job ran.
+ *
+ * Sentry cannot see a job that STOPS running: the 2026-08 outage was every cron
+ * 401ing for months, which throws `UnauthorizedError` (an `AppError`) and never
+ * reaches Sentry at all. `last_succeeded_at` going stale is the only signal
+ * that catches that, which is why a non-2xx must be recorded as a failure and
+ * not quietly ignored.
+ */
+describe('withCronJob records a heartbeat', () => {
+  it('records a success for a 2xx', async () => {
+    await withCronJob('snowbird-digest', async () => NextResponse.json({ data: {} }))(req());
+
+    expect(recordCronRunMock).toHaveBeenCalledWith(
+      'snowbird-digest',
+      expect.objectContaining({ status: 'ok', error: null }),
+    );
+  });
+
+  it('records a FAILURE for a non-2xx — the 401 case that Sentry never sees', async () => {
+    const handler = withCronJob('payment-reminders', async () =>
+      NextResponse.json({ error: 'nope' }, { status: 401 }),
+    );
+
+    await handler(req());
+
+    expect(recordCronRunMock).toHaveBeenCalledWith(
+      'payment-reminders',
+      expect.objectContaining({ status: 'error', error: 'HTTP 401' }),
+    );
+  });
+
+  it('records a failure when the handler throws, and still rethrows', async () => {
+    const handler = withCronJob('late-fee-processor', async () => {
+      throw new Error('DB connection failed');
+    });
+
+    await expect(handler(req())).rejects.toThrow('DB connection failed');
+    expect(recordCronRunMock).toHaveBeenCalledWith(
+      'late-fee-processor',
+      expect.objectContaining({ status: 'error', error: 'DB connection failed' }),
+    );
+  });
+
+  it('truncates a long failure reason rather than storing a log', async () => {
+    const handler = withCronJob('expire-demos', async () => {
+      throw new Error('x'.repeat(5000));
+    });
+
+    await expect(handler(req())).rejects.toThrow();
+    const recorded = recordCronRunMock.mock.calls[0]?.[1] as { error: string };
+    expect(recorded.error.length).toBe(300);
+  });
+
+  /**
+   * THE SAFETY PROPERTY. Monitoring that can cause an outage is worse than no
+   * monitoring, and this code runs precisely when the database is already
+   * unhappy. A heartbeat write that fails must be invisible to the caller.
+   */
+  it('a failing heartbeat write does not change the response', async () => {
+    recordCronRunMock.mockRejectedValue(new Error('cron_runs is unreachable'));
+    const handler = withCronJob('visitor-auto-checkout', async () =>
+      NextResponse.json({ data: { autoCheckedOut: 2 } }),
+    );
+
+    const res = await handler(req());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ data: { autoCheckedOut: 2 } });
+  });
+
+  it('a failing heartbeat write does not mask the handler’s own error', async () => {
+    recordCronRunMock.mockRejectedValue(new Error('cron_runs is unreachable'));
+    const handler = withCronJob('compliance-alerts', async () => {
+      throw new Error('the real failure');
+    });
+
+    // The original error must survive — not be replaced by the telemetry's.
+    await expect(handler(req())).rejects.toThrow('the real failure');
   });
 });

@@ -36,6 +36,16 @@ const INTERNAL_ROOT = 'apps/web/src/app/api/v1/internal';
  */
 const UNAUTHENTICATED_BY_DESIGN: ReadonlyArray<{ file: string; reason: string }> = [
   {
+    file: 'apps/web/src/app/api/v1/internal/cron-health/route.ts',
+    reason:
+      'Cron-freshness probe for external uptime monitors, generalising the ' +
+      'revenue-snapshot one to every scheduled job. Returns only job slugs and ' +
+      'timestamps — deliberately not last_error, which can carry query text — and ' +
+      'must be callable without a secret so a monitor can detect that a job stopped ' +
+      'running. Failure alerting cannot see that case: the 2026-08 outage was every ' +
+      'cron 401ing, which throws AppError and never reaches Sentry.',
+  },
+  {
     file: 'apps/web/src/app/api/v1/internal/revenue-snapshot/health/route.ts',
     reason:
       'Cron-freshness probe for external uptime monitors. Returns only a stale/fresh ' +

@@ -123,6 +123,9 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/internal/community-export-worker/route.ts',
   'apps/web/src/app/api/v1/internal/compliance-alerts/route.ts',
   'apps/web/src/app/api/v1/internal/coupon-sync-retry/route.ts',
+  // Cannot be contracted: `runRoute` hardcodes a 200 response, and this probe's
+  // entire purpose is to return 503 when a scheduled job has gone stale.
+  'apps/web/src/app/api/v1/internal/cron-health/route.ts',
   'apps/web/src/app/api/v1/internal/expire-demos/route.ts',
   'apps/web/src/app/api/v1/internal/generate-assessments/route.ts',
   'apps/web/src/app/api/v1/internal/late-fee-processor/route.ts',
