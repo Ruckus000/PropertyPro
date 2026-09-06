@@ -507,6 +507,11 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
     reason:
       'Global cross-community user search index (no community_id), so tenant scoping does not apply. Held full_name and email (both trigram-indexed) with NO row-level security of any kind until 0037 — no ENABLE, no policies, no REVOKE — which under Supabase\'s open grant baseline left it directly readable by anon and authenticated, and was the table behind Supabase\'s "RLS Disabled in Public" advisor entry. 0037 gives it the same posture as the seven sibling platform tables: RLS enabled and forced, zero policies (the deny-everyone default), and REVOKE ALL from anon/authenticated with service_role retaining CRUD. The sole runtime reader (packages/db/src/queries/trigram-search.ts) goes over the privileged connection and is unaffected.',
   },
+  {
+    tableName: 'cron_runs',
+    reason:
+      'One row per scheduled job — when it last started, last SUCCEEDED, and how it went (0067). Platform-scoped by construction: there is no community_id, because a cron belongs to the deployment rather than to any tenant, and the table is bounded at one row per registered job forever. Written only by `withCronJob` and read only by /api/v1/internal/cron-health, both over the service-role connection, which short-circuits via pp_rls_is_privileged(). Same posture as the sibling platform tables: RLS ENABLED and FORCED with ZERO policies, which is the deny-everyone default — deliberately not left RLS-off, because "nothing tenant-scoped lives here" is a reason for no POLICY, not a reason to leave a table readable by any role that reaches it. That distinction is the one user_search_index got wrong for years before 0037.',
+  },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 
 export const RLS_TENANT_TABLE_NAMES = RLS_TENANT_TABLES.map((entry) => entry.tableName);
