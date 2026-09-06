@@ -159,6 +159,14 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/violations/[id]/notice/route.ts',
   'apps/web/src/app/api/v1/webhooks/stripe/route.ts',
   'apps/web/src/app/api/v1/webhooks/twilio/route.ts',
+  // Inbound support mail. Cannot go through runRoute(), and not merely
+  // "not yet drained": the runner hardcodes a 200 response, and this route's
+  // entire durability contract is the status code it returns. A 5xx makes
+  // Forward Email temp-fail the SMTP session so the SENDER's mail server holds
+  // the message and retries for 24-72 hours; a 200 over a failed write loses it
+  // silently while telling the sender it arrived. It also needs the raw request
+  // body for HMAC verification before any parsing, like the two webhooks above.
+  'apps/web/src/app/api/v1/webhooks/inbound-email/route.ts',
   'apps/web/src/app/api/v1/public/documents/[id]/download/route.ts',
 ]);
 

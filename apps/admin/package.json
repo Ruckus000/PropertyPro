@@ -19,6 +19,7 @@
     "@codemirror/theme-one-dark": "^6.0.0",
     "@codemirror/view": "^6.0.0",
     "@propertypro/db": "workspace:*",
+    "@propertypro/email": "workspace:*",
     "@propertypro/shared": "workspace:*",
     "@propertypro/theme": "workspace:*",
     "@propertypro/ui": "workspace:*",

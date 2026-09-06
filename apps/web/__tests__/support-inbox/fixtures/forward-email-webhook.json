@@ -1,0 +1,36 @@
+{
+  "__source": "provisional-from-source-read-2026-09-05",
+  "__note": "Shape read from forwardemail.net helpers/on-data-mx.js (the webhookBody construction), NOT from their published docs. REPLACE with a real captured request once MX is live: send a message to support@getpropertypro.com, then read support_inbox_messages.raw_payload out of Postgres (a normalization failure quarantines it there) and freeze it here with __source set to captured-<date>. Note the webhook URL passes ?raw=false&attachments=false, so a real capture will carry NEITHER a raw field NOR attachment bodies.",
+  "from": {
+    "value": [{ "address": "jane@example.com", "name": "Jane Doe" }],
+    "text": "Jane Doe <jane@example.com>"
+  },
+  "to": {
+    "value": [{ "address": "support@getpropertypro.com", "name": "" }],
+    "text": "support@getpropertypro.com"
+  },
+  "cc": { "value": [], "text": "" },
+  "subject": "Re: Question about my documents",
+  "messageId": "<reply-2@mail.example.com>",
+  "inReplyTo": "<original-1@mail.example.com>",
+  "references": "<original-1@mail.example.com>",
+  "date": "2026-09-05T10:15:00.000Z",
+  "text": "Any update on this?",
+  "html": "<p>Any update on this?</p>",
+  "headerLines": [
+    { "key": "content-type", "line": "Content-Type: multipart/alternative; boundary=abc" },
+    { "key": "message-id", "line": "Message-ID: <reply-2@mail.example.com>" }
+  ],
+  "recipients": ["support@getpropertypro.com"],
+  "dkim": "pass",
+  "spf": "pass",
+  "dmarc": "pass",
+  "session": {
+    "recipient": "support@getpropertypro.com",
+    "remoteAddress": "203.0.113.10",
+    "clientHostname": "mail.example.com",
+    "sender": "jane@example.com",
+    "mta": "mx1.forwardemail.net",
+    "arrivalDate": "2026-09-05T10:15:02.000Z"
+  }
+}

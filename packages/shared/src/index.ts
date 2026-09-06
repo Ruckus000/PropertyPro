@@ -148,6 +148,11 @@ export * from './billing/format-billing-date';
 export * from './site/custom-domain';
 export * from './site/portfolio-template-branding';
 
+// Platform support inbox vocabulary (mailboxes, thread statuses, reply From).
+// Shared because apps/web's normalizer, apps/admin's UI and the reply sender all
+// need the same closed sets — see packages/shared/src/support-inbox.ts.
+export * from './support-inbox';
+
 // The site change model (website editor v3, Phase 4). Shared rather than
 // editor-local because publish-time validation has to run server-side too —
 // a gate that exists only in the client is a suggestion.

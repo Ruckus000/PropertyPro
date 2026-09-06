@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   eslint: { ignoreDuringBuilds: true },
   transpilePackages: [
     '@propertypro/db',
+    '@propertypro/email',
     '@propertypro/shared',
     '@propertypro/ui',
     '@propertypro/theme',

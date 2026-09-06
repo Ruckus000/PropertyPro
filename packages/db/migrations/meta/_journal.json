@@ -456,6 +456,13 @@
       "when": 1788550482637,
       "tag": "0066_provision_maintenance_and_community_assets_buckets",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1788657668125,
+      "tag": "0068_support_inbox",
+      "breakpoints": true
     }
   ]
 }

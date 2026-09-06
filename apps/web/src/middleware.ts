@@ -96,6 +96,11 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/transparency', method: 'GET' },
   // Twilio SMS delivery webhook: HMAC-signature-verified by handler [Phase 1B]
   { path: '/api/v1/webhooks/twilio', method: 'POST' },
+  // Inbound support mail (Forward Email): HMAC-signature-verified by the handler
+  // via verifyForwardEmailWebhookToken, no session. POST only — the provider
+  // issues nothing else. A provider POST carries no Origin header, so the CSRF
+  // check must be skipped or every delivery 403s.
+  { path: '/api/v1/webhooks/inbound-email', method: 'POST' },
   // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]
   { path: '/api/v1/auth/confirm-verification', method: 'POST' },
   // Resend signup verification email: no session yet, called from /signup/verify page

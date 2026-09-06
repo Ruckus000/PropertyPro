@@ -55,6 +55,15 @@ export interface SendEmailOptions {
   replyTo?: string;
   /** Stable provider key for safe retry of this single-message send request. */
   idempotencyKey?: string;
+  /**
+   * Extra RFC 5322 headers, e.g. `In-Reply-To` / `References` when replying to
+   * a received message so the recipient's client threads it.
+   *
+   * Merged UNDERNEATH the List-Unsubscribe pair, which is compliance
+   * machinery: a caller must not be able to blank out a CAN-SPAM header by
+   * passing one here. See buildHeaders() in send.ts.
+   */
+  headers?: Record<string, string>;
 }
 
 /** Result from the send helper. */

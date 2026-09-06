@@ -70,7 +70,8 @@ Set for **Production** and **Preview** environments unless noted.
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | All | Stripe publishable key. **Inlined into the client bundle at build time** — changing it requires a redeploy, not just an env update. Must be the same account+mode as `STRIPE_SECRET_KEY`. |
 | `STRIPE_SECRET_KEY` | Server only | Stripe secret key. Its `sk_live_`/`sk_test_` prefix is what the app treats as this deployment's Stripe mode. |
 | `STRIPE_WEBHOOK_SECRET` | Server only | Stripe webhook signing secret. Endpoint-specific: a mode change means a *different* endpoint and therefore a different secret. |
-| `RESEND_API_KEY` | Server only | Resend email API key |
+| `RESEND_API_KEY` | **Both apps, server only** | Resend email API key. The admin console needs it too, since the support-inbox reply route sends from there. **Without it on `property-pro-admin`, every reply reports "Sent" and goes nowhere** — `sendEmail` resolves with a `test_N` id in that mode. The reply route surfaces this as `delivered: false`, which is the only signal, because the readiness probe lives on the web app.
+| `INBOUND_EMAIL_WEBHOOK_SECRET` | Server only, web | **Required** (min 32). HMAC for the inbound support-mail webhook. Fails **closed** — see §4.2 and `.env.example` section 14. Must match Forward Email's "Webhook Signature Payload Verification Key". |
 | `NEXT_PUBLIC_SENTRY_DSN` | All | Sentry client DSN |
 | `SENTRY_DSN` | Server only | Sentry server DSN |
 | `SENTRY_AUTH_TOKEN` | Build only | Source map upload token |
@@ -295,25 +296,88 @@ In Supabase Dashboard > Authentication > URL configuration, add redirect pattern
 
 Set **Site URL** to the canonical web apex (e.g. `https://getpropertypro.com`).
 
-### 5.3 Cloudflare DNS Records
+### 5.3 DNS Records
 
-| Type | Name | Content | Proxy |
-|------|------|---------|-------|
-| `A` | `@` | `76.76.21.21` (Vercel) | DNS only (grey cloud) |
-| `CNAME` | `www` | `cname.vercel-dns.com` | DNS only |
-| `CNAME` | `*` | `cname.vercel-dns.com` | DNS only |
-
-**Important:** Set Cloudflare proxy to "DNS only" (grey cloud) for Vercel domains. Vercel manages SSL via Let's Encrypt; Cloudflare proxying can interfere with certificate provisioning.
-
-> **Trade-off:** DNS-only mode bypasses Cloudflare's WAF and DDoS protection for these records. If you need those features, an alternative is to keep the proxy enabled (orange cloud) and set Cloudflare's SSL/TLS mode to **Full (Strict)**. Full (Strict) encrypts traffic end-to-end and avoids certificate conflicts, but requires additional configuration on the Cloudflare side (an Origin CA certificate or a valid cert on the origin). For a simpler setup, DNS-only is the recommended default.
-
-### 5.4 Email DNS Records (Resend)
+> **Corrected 2026-09-05.** This section previously described a Cloudflare
+> setup with proxy/grey-cloud guidance. **DNS is on Vercel**, not Cloudflare —
+> `dig NS getpropertypro.com` returns `ns1.vercel-dns.com` / `ns2.vercel-dns.com`
+> — so none of that applied. Records are managed in the Vercel dashboard under
+> the domain, and there is no proxy setting to get wrong.
 
 | Type | Name | Content |
 |------|------|---------|
-| `TXT` | `@` | `v=spf1 include:send.resend.com ~all` |
-| `CNAME` | `resend._domainkey` | *(value from Resend dashboard)* |
-| `TXT` | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:dmarc@getpropertypro.com` |
+| `A` | `@` | Vercel apex address (assigned in the Vercel domain UI) |
+| `CNAME` | `www` | `cname.vercel-dns.com` |
+| `CNAME` | `*` | `cname.vercel-dns.com` — the per-community subdomains depend on this |
+
+### 5.4 Email DNS Records
+
+> **Corrected 2026-09-05.** The table here previously listed an apex SPF
+> (`include:send.resend.com`) and a `p=quarantine` DMARC record. **Neither
+> exists** — verified against the authoritative nameserver. What is actually
+> live is DKIM on the apex plus SPF on the `send.` subdomain, which is what
+> Resend provisions. Do not "restore" the old rows; they describe a
+> configuration this domain never had.
+
+**Live today (verified `dig`, 2026-09-05):**
+
+| Type | Name | Content | Purpose |
+|------|------|---------|---------|
+| `TXT` | `resend._domainkey` | *(value from the Resend dashboard)* | DKIM for outbound |
+| `TXT` | `send` | `v=spf1 include:amazonses.com ~all` | SPF for Resend's sending subdomain |
+| `MX` | `send` | `10 feedback-smtp.us-east-1.amazonses.com` | Bounce feedback |
+
+**Apex SPF is deliberately absent.** Resend's envelope MAIL FROM is on
+`send.getpropertypro.com`, which already carries SPF, and DMARC's default
+relaxed alignment accepts the organizational-domain match. Adding an apex SPF
+is optional hygiene, and getting it wrong (`-all` plus a forgotten sender)
+breaks outbound mail.
+
+### 5.5 Inbound Mail (Forward Email)
+
+Receiving `support@` / `privacy@` / `contact@` is what feeds the admin console's
+Inbox. Nothing here is live until these records are added, and **order matters**.
+
+**Add the endpoint first.** With no MX record the webhook can be deployed and
+serving 401s to the world with zero blast radius. If MX lands before the alias
+TXT exists, Forward Email rejects at SMTP time and the address still bounces —
+but now it *looks* configured, which is worse than the honest bounce.
+
+1. **Verification TXT** on `@`, value from the Forward Email dashboard.
+2. **Alias routing TXT** on `@`, routing each local part to the webhook:
+
+   ```
+   forward-email=support:https://www.getpropertypro.com/api/v1/webhooks/inbound-email?raw=false&attachments=false,privacy:…,contact:…,hello:…,postmaster:…,abuse:…
+   ```
+
+   `?raw=false&attachments=false` is **not optional**. Forward Email POSTs the
+   whole message, including a full raw copy, and attachment bodies JSON-encode
+   as integer arrays roughly 4-6x their real size. Vercel rejects request
+   bodies over 4.5 MB **before the handler runs**, so without these flags a
+   single ~900 KB PDF silently fails to arrive with no log line and no row.
+
+3. **MX last**, priority 10: `mx1.forwardemail.net`, `mx2.forwardemail.net`.
+4. **DMARC**, which closes launch blocker #4:
+
+   ```
+   _dmarc  TXT  v=DMARC1; p=none; rua=mailto:<id>@dmarc.postmarkapp.com; fo=1
+   ```
+
+   `rua=` points at Postmark's free DMARC Digests (no account, no mailbox,
+   weekly summaries by email) because aggregate reports arrive as gzipped XML
+   attachments — exactly the payload class the webhook deliberately does not
+   store. Pointing `rua=` at our own domain would deliver them somewhere that
+   drops them. Start at `p=none`, read a week of reports, then ratchet.
+
+**Verify:**
+
+```bash
+dig getpropertypro.com MX +short
+dig _dmarc.getpropertypro.com TXT +short
+```
+
+then send a real message to `support@getpropertypro.com` and confirm the thread
+appears at `/inbox` in the admin console.
 
 ## 6. CI/CD Pipeline
 

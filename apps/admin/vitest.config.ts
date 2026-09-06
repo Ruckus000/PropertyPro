@@ -20,6 +20,10 @@ export default defineConfig({
     alias: {
       '@': resolve(import.meta.dirname, './src'),
       '@propertypro/db': resolve(import.meta.dirname, '../../packages/db/src'),
+      // Source, not dist: @propertypro/email's package entry points at a build
+      // output that is absent on a clean checkout and stale the moment anyone
+      // edits the package. apps/web/vitest.shared.ts aliases it the same way.
+      '@propertypro/email': resolve(import.meta.dirname, '../../packages/email/src'),
       '@propertypro/shared': resolve(import.meta.dirname, '../../packages/shared/src'),
       '@propertypro/ui': resolve(import.meta.dirname, '../../packages/ui/src'),
     },

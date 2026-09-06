@@ -90,7 +90,11 @@ function getResendClient(): Resend | null {
 }
 
 function buildHeaders(options: SendEmailOptions): Record<string, string> {
-  const headers: Record<string, string> = {};
+  // Caller headers go in FIRST so the compliance block below overwrites them,
+  // never the other way round. Ordering is the whole guarantee here: a support
+  // reply needs In-Reply-To/References, but no caller may drop or rewrite
+  // List-Unsubscribe on a bulk send.
+  const headers: Record<string, string> = { ...options.headers };
 
   if (options.category === 'non-transactional') {
     if (!options.unsubscribeUrl) {

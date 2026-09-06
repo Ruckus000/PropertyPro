@@ -143,3 +143,7 @@ export type { TestMessage } from "./send";
 // precedence and the truthiness rules ('0'/'false'/'no' are falsy).
 export { resolveDeliveryMode } from "./send";
 export type { DeliveryMode } from "./send";
+
+// Platform support inbox reply. Standalone (no EmailLayout) on purpose —
+// see the template docblock: a 1:1 human reply must not wear community chrome.
+export { SupportReplyEmail, type SupportReplyEmailProps } from './templates/support-reply-email';

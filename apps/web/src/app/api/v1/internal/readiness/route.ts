@@ -104,6 +104,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     { name: 'COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET', minLength: 16 },
     { name: 'SNOWBIRD_UNSUBSCRIBE_SECRET', minLength: 16 },
     { name: 'INSURANCE_ALERTS_UNSUBSCRIBE_SECRET', minLength: 16 },
+    // The support inbox's ingress HMAC. This one is not merely a degraded
+    // feature when unset: the webhook fails CLOSED, so support@ / privacy@ /
+    // contact@ stop being ingested entirely. The sender's mail server holds
+    // each message and retries for 24-72 hours, which is a real window to fix
+    // it in — but only if somebody knows.
+    { name: 'INBOUND_EMAIL_WEBHOOK_SECRET', minLength: 32 },
   ] as const;
 
   for (const rule of secretRules) {
