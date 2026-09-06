@@ -280,13 +280,17 @@ jobs:
           # has more headroom, which is exactly why it could not be caught
           # before this job existed.
           #
-          # Heap budgets are now set PER SERVER in playwright.ci.config.ts, not
-          # here — and that file carries the full analysis. Read it before
-          # touching a ceiling: the restart IS the cause of these resets (the
-          # two timestamps above are the evidence), but raising
-          # --max-old-space-size cannot help, because `used_heap_size` is
-          # compared against a fraction of that same limit. For a while these
-          # two files disagreed on that point; they no longer do.
+          # RESOLVED — the web dev server now runs under Turbopack, which keeps
+          # the module graph outside the V8 heap this watchdog reads, so the
+          # restart above no longer fires. Measured: 1 restart -> 0, one
+          # ERR_CONNECTION_RESET -> none, flaky 1 -> 0, and 14m36s -> 8m40s.
+          # The history is kept because the ADMIN server on :3001 is still
+          # webpack and still exposed to it.
+          #
+          # Heap budgets are set PER SERVER in playwright.ci.config.ts, not here
+          # — and that file carries the full analysis. Read it before touching a
+          # ceiling: raising --max-old-space-size cannot help, because
+          # `used_heap_size` is compared against a fraction of that same limit.
           #
           # A step-level NODE_OPTIONS reaches BOTH dev servers, because
           # Playwright merges `webServer.env` over `process.env`. Once
