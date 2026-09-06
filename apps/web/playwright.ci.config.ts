@@ -196,8 +196,26 @@ export default defineConfig({
       // `StartSessionDialog` returns WITHOUT calling `window.open` — so the
       // spec waited 120s for a popup that could never arrive. That was the
       // whole of #958: an environment gap wearing a timeout as a disguise.
+      // `--turbopack` to match the web server above and `apps/admin`'s own
+      // `dev` script — this CI invocation was the only place either app still
+      // ran webpack.
+      //
+      // HARDENING, NOT A FIX, and worth being clear about: admin has never been
+      // observed restarting. Both Turbopack runs on the web server logged ZERO
+      // "approaching the used memory threshold" lines across the whole job,
+      // which covers this process too, and `support-access` passed in every
+      // measured run either side of that change. So the success criterion here
+      // is NOT "restarts drop" — there were none to drop. It is that
+      // support-access still passes and the server still starts.
+      //
+      // The reasons to do it anyway: the same watchdog mechanism applies if
+      // this server's heap ever grows (the allowlist is meant to GROW, and
+      // admin specs would land here); one fewer webpack process frees runner
+      // memory for Chromium; and a single bundler across both servers means one
+      // less thing that differs when something goes wrong. `dev:webpack` in
+      // apps/admin/package.json remains the revert path.
       command:
-        'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
+        'pnpm --filter @propertypro/admin exec next dev --turbopack --port 3001 --hostname 127.0.0.1',
       env: {
         // 4GB. I first set this to 1536 reasoning that one spec touches this
         // app so it cannot need much — and killed it. A `next dev` process has
