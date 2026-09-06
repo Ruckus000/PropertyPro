@@ -265,10 +265,24 @@ test.describe('E-Sign send flow (CAM)', () => {
       page.getByRole('button', { name: /I agree to take corrective action/i }),
     );
 
+    // `Owner Signature` is the last control that needs the guard. Everything
+    // after it lives INSIDE the signature dialog, which only exists because a
+    // client-side interaction opened it — so it cannot be unhydrated server
+    // markup, and the guard buys nothing there.
+    //
+    // It also actively breaks: `waitForHydrated` probes the MATCHED node for an
+    // `onClick` prop, and a Radix `Tabs.Trigger` activates on mousedown/focus
+    // rather than click, so it carries none. Guarding the Type tab timed out
+    // after 30s on all three attempts with the helper's own message — "React
+    // never attached an onClick handler" — which was true and not the problem.
+    //
+    // The rule this settles: guard the FIRST click on a freshly-loaded,
+    // server-rendered page. Once one click has landed, hydration is proven, and
+    // further guards only add ways to fail.
     await clickWhenHydrated(page.getByRole('button', { name: /Owner Signature/i }));
-    await clickWhenHydrated(page.getByRole('tab', { name: 'Type' }));
+    await page.getByRole('tab', { name: 'Type' }).click();
     await page.getByPlaceholder(/Type your full name/i).fill('Tenant One');
-    await clickWhenHydrated(page.getByRole('button', { name: 'Confirm' }));
+    await page.getByRole('button', { name: 'Confirm' }).click();
 
     // The consent checkbox only mounts once the signature is confirmed, so it
     // is genuinely absent for a moment. Waiting for it separates "not there
@@ -277,7 +291,11 @@ test.describe('E-Sign send flow (CAM)', () => {
     const consent = page.getByRole('checkbox');
     await expect(consent).toBeVisible({ timeout: 30_000 });
     await consent.check();
-    await clickWhenHydrated(page.getByRole('button', { name: 'Finish' }));
+    // Bare click, same reasoning: six controls on this page have already
+    // responded, so hydration is not in question — and Finish may well be a
+    // form submit button, whose handler is `onSubmit` on the form rather than
+    // `onClick` on the button. The guard cannot see that and would time out.
+    await page.getByRole('button', { name: 'Finish' }).click();
 
     // Finish posts and then re-renders; the default 5s budget was being spent
     // on the round trip.
@@ -338,14 +356,18 @@ test.describe('Library documents (board admin → tenant)', () => {
     await expect(categoryTab).toBeVisible({ timeout: 60_000 });
     await clickWhenHydrated(categoryTab);
 
+    // Bare click: the pill above has already responded, so hydration is proven
+    // for this page. And `getByText` matches the TEXT node, whose clickable
+    // ancestor is what carries the handler — `waitForHydrated` probes the
+    // matched node and would find no `onClick` on it.
     const seededDoc = page.getByText('Sunset Condos Annual Budget').first();
     await expect(seededDoc).toBeVisible({ timeout: 30_000 });
-    await clickWhenHydrated(seededDoc);
+    await seededDoc.click();
     await assertPdfJsAssetsReachable(page);
     await expectPdfPreviewCanvas(page);
     await expect(page.locator('iframe')).toHaveCount(0);
 
-    await clickWhenHydrated(page.getByRole('button', { name: /Open upload panel/i }));
+    await page.getByRole('button', { name: /Open upload panel/i }).click();
 
     await page.setInputFiles('input[type="file"][accept]', FIXTURE_PDF);
 
@@ -359,7 +381,10 @@ test.describe('Library documents (board admin → tenant)', () => {
       { timeout: 120_000 },
     );
 
-    await clickWhenHydrated(page.getByRole('button', { name: /^Upload Document$/i }));
+    // Bare click. A submit button's handler is `onSubmit` on the FORM, not
+    // `onClick` on the button, so the guard can time out on a control that is
+    // perfectly hydrated.
+    await page.getByRole('button', { name: /^Upload Document$/i }).click();
     const docResp = await createDocResponse;
     expect(docResp.ok(), `POST /api/v1/documents failed: ${docResp.status()}`).toBeTruthy();
 
@@ -377,7 +402,7 @@ test.describe('Library documents (board admin → tenant)', () => {
       timeout: 120_000,
     });
     await expect(page.getByText(uniqueTitle)).toBeVisible({ timeout: 30_000 });
-    await clickWhenHydrated(page.getByText(uniqueTitle));
+    await page.getByText(uniqueTitle).click();
     await expectPdfPreviewCanvas(page);
     await expect(page.locator('iframe')).toHaveCount(0);
 
