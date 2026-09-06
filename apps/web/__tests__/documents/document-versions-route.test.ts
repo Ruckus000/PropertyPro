@@ -100,9 +100,9 @@ describe('p1-15 document versions route', () => {
     // Should return 3 versions (docs 1, 2, 3 with same title and category)
     expect(json.data).toHaveLength(3);
     // Sorted by createdAt descending (newest first)
-    expect(json.data[0].id).toBe(3);
-    expect(json.data[1].id).toBe(2);
-    expect(json.data[2].id).toBe(1);
+    expect(json.data[0]!.id).toBe(3);
+    expect(json.data[1]!.id).toBe(2);
+    expect(json.data[2]!.id).toBe(1);
   });
 
   it('does NOT group documents with same title but different category', async () => {
@@ -142,7 +142,7 @@ describe('p1-15 document versions route', () => {
     expect(res.status).toBe(200);
     // Should only return 1 version (doc 1) - doc 2 has different category
     expect(json.data).toHaveLength(1);
-    expect(json.data[0].id).toBe(1);
+    expect(json.data[0]!.id).toBe(1);
   });
 
   it('does NOT group documents with different title but same category', async () => {
@@ -182,7 +182,7 @@ describe('p1-15 document versions route', () => {
     expect(res.status).toBe(200);
     // Should only return 1 version (doc 1) - doc 2 has different title
     expect(json.data).toHaveLength(1);
-    expect(json.data[0].id).toBe(1);
+    expect(json.data[0]!.id).toBe(1);
   });
 
   it('returns 404 for non-existent document', async () => {

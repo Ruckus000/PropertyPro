@@ -160,8 +160,8 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
       floor: 3,
     });
 
-    unitAId = readNumberField(unitA, 'id');
-    unitCId = readNumberField(unitC, 'id');
+    unitAId = readNumberField(unitA!, 'id');
+    unitCId = readNumberField(unitC!, 'id');
 
     const neededUsers: MultiTenantUserKey[] = [
       'actorA',

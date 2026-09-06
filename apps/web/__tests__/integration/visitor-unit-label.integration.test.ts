@@ -48,7 +48,7 @@ describeDb('visitor registration by unit label (db-backed integration)', () => {
     otherLabel = `OTH-${state.runSuffix}`;
 
     const [primaryUnit] = await scoped.insert(state.dbModule.units, { unitNumber: unitLabel });
-    const primaryUnitId = readNumberField(primaryUnit, 'id');
+    const primaryUnitId = readNumberField(primaryUnit!, 'id');
 
     await scoped.insert(state.dbModule.units, { unitNumber: dupeLabel });
     await scoped.insert(state.dbModule.units, { unitNumber: dupeLabel });

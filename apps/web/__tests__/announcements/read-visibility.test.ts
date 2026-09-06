@@ -86,8 +86,13 @@ const community = {
   demoExpiresAt: null,
 };
 
-function announcement(id: number, audience: 'all' | 'owners_only' | 'board_only' | 'tenants_only') {
-  return {
+type AnnouncementRow = Parameters<typeof filterVisibleAnnouncements>[2][number];
+
+function announcement(
+  id: number,
+  audience: 'all' | 'owners_only' | 'board_only' | 'tenants_only',
+): AnnouncementRow {
+  const row: Partial<AnnouncementRow> = {
     id,
     title: `Announcement ${id}`,
     body: `Body ${id}`,
@@ -96,7 +101,8 @@ function announcement(id: number, audience: 'all' | 'owners_only' | 'board_only'
     archivedAt: null,
     deletedAt: null,
     publishedAt: new Date(`2026-02-0${id}T12:00:00.000Z`),
-  } as never;
+  };
+  return row as AnnouncementRow;
 }
 
 function mockScopedRows({
@@ -115,7 +121,7 @@ function mockScopedRows({
 }) {
   const limit = vi.fn().mockResolvedValue(announcements);
   const orderBy = vi.fn(() => ({ limit }));
-  const selectFrom = vi.fn((table: unknown) => {
+  const selectFrom = vi.fn((table: unknown, _columns?: unknown, _additionalWhere?: unknown) => {
     if (table === communitiesTableMock) {
       return Promise.resolve([community]);
     }

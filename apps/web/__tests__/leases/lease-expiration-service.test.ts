@@ -155,7 +155,7 @@ describe('getExpiringLeases', () => {
     const activeLease = makeLease({ id: 1, endDate: '2026-03-15', status: 'active' });
     const result = getExpiringLeases([activeLease], 30, reference);
     expect(result).toHaveLength(1);
-    expect(result[0].daysUntilExpiration).toBe(29);
+    expect(result[0]!.daysUntilExpiration).toBe(29);
   });
 
   it('does not return leases expiring in 91 days for 90-day window', () => {
@@ -170,7 +170,7 @@ describe('getExpiringLeases', () => {
     const activeLease = makeLease({ id: 1, endDate: '2026-05-15', status: 'active' });
     const result = getExpiringLeases([activeLease], 90, reference);
     expect(result).toHaveLength(1);
-    expect(result[0].daysUntilExpiration).toBe(90);
+    expect(result[0]!.daysUntilExpiration).toBe(90);
   });
 
   it('excludes non-active leases', () => {
@@ -200,7 +200,7 @@ describe('getExpiringLeases', () => {
     const pastLease = makeLease({ id: 1, endDate: '2026-02-10', status: 'active' });
     const result = getExpiringLeases([pastLease], 30, reference);
     expect(result).toHaveLength(1);
-    expect(result[0].daysUntilExpiration).toBe(-4);
+    expect(result[0]!.daysUntilExpiration).toBe(-4);
   });
 });
 
@@ -213,7 +213,7 @@ describe('getRenewalChain', () => {
     const lease = makeLease({ id: 1, previousLeaseId: null });
     const chain = getRenewalChain(1, [lease]);
     expect(chain).toHaveLength(1);
-    expect(chain[0].id).toBe(1);
+    expect(chain[0]!.id).toBe(1);
   });
 
   it('returns chain from oldest to newest', () => {
@@ -232,8 +232,8 @@ describe('getRenewalChain', () => {
 
     const chain = getRenewalChain(20, [original, renewal]);
     expect(chain).toHaveLength(2);
-    expect(chain[0].id).toBe(10);
-    expect(chain[1].id).toBe(20);
+    expect(chain[0]!.id).toBe(10);
+    expect(chain[1]!.id).toBe(20);
   });
 
   it('returns empty array if lease ID is not found', () => {

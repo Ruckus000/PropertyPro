@@ -467,7 +467,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = imposeViolationFineForCommunityMock.mock.calls[0];
+    const call = imposeViolationFineForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 

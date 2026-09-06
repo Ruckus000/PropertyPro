@@ -87,7 +87,7 @@ describe('GET /api/v1/documents/drafts/[id]/document-search', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: Array<{ documentId: number; title: string }> };
     expect(json.data).toHaveLength(1);
-    expect(json.data[0].documentId).toBe(10);
+    expect(json.data[0]!.documentId).toBe(10);
   });
 
   it('returns 401 when unauthenticated', async () => {

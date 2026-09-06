@@ -34,7 +34,7 @@ describe('useUpgradeRequest', () => {
     });
     result.current.mutate({
       communityId: 42,
-      featureKey: 'hasContracts',
+      featureKey: 'hasViolations',
       requestedPlan: 'pro',
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -45,7 +45,7 @@ describe('useUpgradeRequest', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          featureKey: 'hasContracts',
+          featureKey: 'hasViolations',
           requestedPlan: 'pro',
         }),
       },
@@ -76,7 +76,7 @@ describe('useUpgradeRequest', () => {
     });
     result.current.mutate({
       communityId: 0,
-      featureKey: 'x',
+      featureKey: 'hasViolations',
       requestedPlan: 'plus',
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -93,7 +93,7 @@ describe('useUpgradeRequest', () => {
     });
     result.current.mutate({
       communityId: 1,
-      featureKey: 'x',
+      featureKey: 'hasViolations',
       requestedPlan: 'pro',
     });
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -114,7 +114,7 @@ describe('useUpgradeRequest', () => {
     });
     result.current.mutate({
       communityId: 1,
-      featureKey: 'x',
+      featureKey: 'hasViolations',
       requestedPlan: 'pro',
     });
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -131,7 +131,7 @@ describe('useUpgradeRequest', () => {
     });
     result.current.mutate({
       communityId: 1,
-      featureKey: 'x',
+      featureKey: 'hasViolations',
       requestedPlan: 'pro',
     });
     await waitFor(() => expect(result.current.isError).toBe(true));

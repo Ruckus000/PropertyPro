@@ -15,7 +15,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const onConflictDoUpdateMock = vi.fn();
-const insertValuesMock = vi.fn(() => ({ onConflictDoUpdate: onConflictDoUpdateMock }));
+const insertValuesMock = vi.fn((_values?: unknown) => ({
+  onConflictDoUpdate: onConflictDoUpdateMock,
+}));
 
 const dbMock = {
   insert: vi.fn(() => ({ values: insertValuesMock })),

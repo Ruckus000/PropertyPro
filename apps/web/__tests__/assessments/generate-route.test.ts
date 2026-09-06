@@ -153,7 +153,7 @@ describe('POST /api/v1/assessments/[id]/generate', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = generateAssessmentLineItemsForCommunityMock.mock.calls[0];
+    const call = generateAssessmentLineItemsForCommunityMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
     expect(call[4]).toBe('req-xyz');
   });
@@ -290,7 +290,7 @@ describe('POST /api/v1/assessments/[id]/generate', () => {
     const res = await POST(jsonPost(7, { communityId: 42 }), routeCtx('7'));
 
     expect(res.status).toBe(200);
-    const call = generateAssessmentLineItemsForCommunityMock.mock.calls[0];
+    const call = generateAssessmentLineItemsForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

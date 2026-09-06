@@ -43,7 +43,7 @@ export function makeReadOnlyMembership(overrides: Record<string, unknown> = {}) 
   const base = makeAdminMembership(overrides);
   // Zero out all write permissions
   for (const key of Object.keys(base.permissions.resources)) {
-    (base.permissions.resources as Record<string, { read: boolean; write: boolean }>)[key].write = false;
+    (base.permissions.resources as Record<string, { read: boolean; write: boolean }>)[key]!.write = false;
   }
   return base;
 }

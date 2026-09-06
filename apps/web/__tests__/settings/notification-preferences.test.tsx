@@ -28,6 +28,10 @@ const prefs: NotificationPreferences = {
   calendarReminderPersonalAssessments: false,
   calendarReminderCommunityAssessments: false,
   inAppEnabled: true,
+  // Required by NotificationPreferences but previously omitted, so the form
+  // seeded `undefined` here. `false` keeps that falsy reading; no test in this
+  // file renders the insurance-alerts row (`showInsuranceAlerts` defaults off).
+  emailInsuranceAlerts: false,
 };
 
 const hiddenReminders = {

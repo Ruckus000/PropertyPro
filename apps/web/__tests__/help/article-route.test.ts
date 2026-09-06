@@ -52,7 +52,10 @@ const {
   getAllArticlesMock: vi.fn(),
   compileMDXMock: vi.fn(),
   extractTableOfContentsMock: vi.fn(),
-  unstableCacheMock: vi.fn((fn: () => unknown) => fn),
+  // Return type declared, not inferred: the suite's `beforeEach` swaps in an
+  // implementation that INVOKES `fn` instead of handing it back, so the seed's
+  // `() => unknown` must not be pinned onto the mock.
+  unstableCacheMock: vi.fn((fn: () => unknown): unknown => fn),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),

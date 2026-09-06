@@ -16,6 +16,10 @@ describe('HelpSearchResults', () => {
             slug: 'submitting-a-maintenance-request',
             roles: ['tenant'],
             keywords: ['maintenance'],
+            // Required by HelpArticleMetadata; neither is read by this
+            // component, so the empty values reproduce the absent ones.
+            tags: [],
+            contentHash: '',
             relatedArticles: [],
             featured: true,
             excerpt: 'Report an issue.',

@@ -324,10 +324,13 @@ export function apiUrl(pathname: string): string {
   return `http://localhost:3000${pathname}`;
 }
 
+// `body` is optional because callers also build bodyless GET requests through
+// this helper; `JSON.stringify(undefined)` yields `undefined`, so NextRequest
+// receives no body — identical to what those calls already did at runtime.
 export function jsonRequest(
   url: string,
-  method: 'POST' | 'PATCH' | 'DELETE',
-  body: Record<string, unknown>,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  body?: Record<string, unknown>,
   headers?: Record<string, string>,
 ): NextRequest {
   return new NextRequest(url, {
@@ -397,6 +400,9 @@ export function requireDatabaseUrlInCI(suiteName: string): void {
  * Returns `describe` when DATABASE_URL is set, `describe.skip` otherwise.
  * Centralises the skip-when-no-DB pattern used by every integration suite.
  */
-export function getDescribeDb(): typeof describe {
+// Return type is `typeof describe.skip` (vitest's ChainableSuiteAPI) rather than
+// `typeof describe` (SuiteAPI): SuiteAPI adds `skipIf`/`runIf`, which the `.skip`
+// branch does not carry. Both branches satisfy the chainable shape.
+export function getDescribeDb(): typeof describe.skip {
   return process.env.DATABASE_URL ? describe : describe.skip;
 }

@@ -63,10 +63,10 @@ describeDb('site settings — atomic branding merge', () => {
   it('writes settings without disturbing unrelated branding keys', async () => {
     await updateSiteSettings({ communityId, actorUserId, seoTitle: 'Sunset Living' });
 
-    const rows = await state.sqlClient.unsafe(
+    const rows = await state.sqlClient.unsafe<Array<{ branding: Record<string, unknown> }>>(
       `SELECT branding FROM communities WHERE id = ${communityId}`,
     );
-    const branding = (rows[0] as { branding: Record<string, unknown> }).branding;
+    const branding = rows[0]!.branding;
 
     expect(branding.primaryColor).toBe('#C2533A');
     expect(branding.tagline).toBe('Seed tagline');
@@ -208,11 +208,10 @@ describeDb('migration 0043 — site_published_at backfill', () => {
   });
 
   async function readStamp(): Promise<Date | null> {
-    const rows = await state.sqlClient.unsafe(
+    const rows = await state.sqlClient.unsafe<Array<{ site_published_at: Date | string | null }>>(
       `SELECT site_published_at FROM communities WHERE id = ${communityId}`,
     );
-    const value = (rows[0] as { site_published_at: Date | string | null })
-      .site_published_at;
+    const value = rows[0]!.site_published_at;
     return value ? new Date(value) : null;
   }
 
@@ -224,12 +223,12 @@ describeDb('migration 0043 — site_published_at backfill', () => {
   let fixturePageId: number | null = null;
   async function ensureFixturePage(): Promise<number> {
     if (fixturePageId !== null) return fixturePageId;
-    const rows = await state.sqlClient.unsafe(
+    const rows = await state.sqlClient.unsafe<Array<{ id: number }>>(
       `INSERT INTO site_pages (community_id, name, slug, in_nav, sort_order, is_home, is_draft)
        VALUES (${communityId}, 'Home', '', true, 0, true, true)
        RETURNING id`,
     );
-    fixturePageId = (rows[0] as { id: number }).id;
+    fixturePageId = rows[0]!.id;
     return fixturePageId;
   }
 

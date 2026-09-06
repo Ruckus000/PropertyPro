@@ -195,7 +195,7 @@ describe('setDomain', () => {
 
     expect(addProjectDomainMock).toHaveBeenCalledWith('www.example.com');
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].set).toMatchObject({
+    expect(updateCalls[0]!.set).toMatchObject({
       customDomain: 'www.example.com',
       customDomainStatus: 'pending',
     });
@@ -288,8 +288,8 @@ describe('verifyDomain', () => {
     const state = await verifyDomain(7, 'user-1');
 
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].set).toMatchObject({ customDomainStatus: 'active' });
-    expect(updateCalls[0].set.customDomainVerifiedAt).toBeInstanceOf(Date);
+    expect(updateCalls[0]!.set).toMatchObject({ customDomainStatus: 'active' });
+    expect(updateCalls[0]!.set.customDomainVerifiedAt).toBeInstanceOf(Date);
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',
@@ -315,8 +315,8 @@ describe('verifyDomain', () => {
     const state = await verifyDomain(7, 'user-1');
 
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].set).toMatchObject({ customDomainStatus: 'pending' });
-    expect('customDomainVerifiedAt' in updateCalls[0].set).toBe(false);
+    expect(updateCalls[0]!.set).toMatchObject({ customDomainStatus: 'pending' });
+    expect('customDomainVerifiedAt' in updateCalls[0]!.set).toBe(false);
     expect(logAuditEventMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ action: 'custom_domain_verified' }),
     );
@@ -352,7 +352,7 @@ describe('removeDomain', () => {
 
     expect(removeProjectDomainMock).toHaveBeenCalledWith('www.example.com');
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].set).toMatchObject({
+    expect(updateCalls[0]!.set).toMatchObject({
       customDomain: null,
       customDomainStatus: null,
       customDomainVerifiedAt: null,
@@ -376,7 +376,7 @@ describe('removeDomain', () => {
 
     expect(removeProjectDomainMock).not.toHaveBeenCalled();
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].set).toMatchObject({ customDomain: null });
+    expect(updateCalls[0]!.set).toMatchObject({ customDomain: null });
   });
 });
 

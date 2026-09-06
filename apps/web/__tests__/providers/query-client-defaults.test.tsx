@@ -46,9 +46,14 @@ describe('list hooks keep previous data across filter changes', () => {
 
     fetchMock.mockResolvedValueOnce(notificationsResponse('first page'));
 
+    // The rerender below passes `'billing'`, which is not a member of
+    // `NotificationFilters['category']`. It is an arbitrary value chosen only to
+    // change the query key; the assertions are about placeholder data, so it is
+    // narrowed here rather than swapped for a real category.
+    type CategoryFilter = NonNullable<Parameters<typeof useNotifications>[1]>['category'];
     const { result, rerender } = renderHook(
       ({ category }: { category?: string }) =>
-        useNotifications(1, category ? { category } : {}),
+        useNotifications(1, category ? { category: category as CategoryFilter } : {}),
       { wrapper, initialProps: { category: undefined as string | undefined } },
     );
 

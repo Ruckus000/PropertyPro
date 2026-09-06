@@ -111,9 +111,10 @@ function buildDb(): { userRoleInserts: UserRoleInsert[] } {
   }));
 
   const tx = { insert: insertMock };
+  type TxMock = typeof tx;
 
   const db = {
-    transaction: vi.fn((cb: (tx: typeof tx) => unknown) => cb(tx)),
+    transaction: vi.fn((cb: (txArg: TxMock) => unknown) => cb(tx)),
   };
 
   createUnscopedClientMock.mockReturnValue(db);

@@ -24,9 +24,9 @@ describe('calculatePricingImpact', () => {
     });
     expect(result.previousTier).toBe('none');
     expect(result.newTier).toBe('tier_10');
-    expect(result.perCommunityBreakdown[0].discountedPriceUsd).toBeCloseTo(314.10);
-    expect(result.perCommunityBreakdown[1].discountedPriceUsd).toBeCloseTo(314.10);
-    expect(result.perCommunityBreakdown[2].discountedPriceUsd).toBeCloseTo(179.10);
+    expect(result.perCommunityBreakdown[0]!.discountedPriceUsd).toBeCloseTo(314.10);
+    expect(result.perCommunityBreakdown[1]!.discountedPriceUsd).toBeCloseTo(314.10);
+    expect(result.perCommunityBreakdown[2]!.discountedPriceUsd).toBeCloseTo(179.10);
   });
 
   it('computes downgrade impact when removing drops 6→5', () => {

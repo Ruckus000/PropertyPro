@@ -8,9 +8,13 @@ function membership(overrides: Partial<CommunityMembership>): CommunityMembershi
   return {
     userId: 'u', communityId: 1, communityName: '', role: 'resident',
     communityType: 'condo_718', subscriptionPlan: null, subscriptionStatus: null,
+    subscriptionCanceledAt: null, subscriptionCurrentPeriodEndAt: null,
     freeAccessExpiresAt: null, timezone: 'America/New_York', isUnitOwner: false,
     isAdmin: false, displayTitle: '', designation: null, city: null, state: null,
     isDemo: false, trialEndsAt: null, demoExpiresAt: null, electionsAttorneyReviewed: false,
+    violationFinesEnabled: false, assessmentPaymentsEnabled: false,
+    smsDispatchEnabled: false, noticePdfGenerationEnabled: false,
+    fineCaps: { perFineCents: 0, aggregateCents: 0 },
     ...overrides,
   };
 }

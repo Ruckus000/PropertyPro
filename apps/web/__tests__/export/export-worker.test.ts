@@ -156,7 +156,7 @@ describe('runExportJob', () => {
     };
     createScopedClientMock.mockReturnValue(scoped);
 
-    const result = await runExportJob({ ...JOB, includeDocumentFiles: false } as never, {
+    const result = await runExportJob({ ...(JOB as object), includeDocumentFiles: false } as never, {
       budgetMs: 30_000,
     });
 
@@ -182,7 +182,7 @@ describe('runExportJob', () => {
   it('skips the document phase entirely when includeDocumentFiles is false', async () => {
     mockScoped({ unitRows: [{ id: 1 }], docRows: [{ id: 9, filePath: 'x.pdf', fileName: 'x.pdf' }] });
 
-    const result = await runExportJob({ ...JOB, includeDocumentFiles: false } as never, {
+    const result = await runExportJob({ ...(JOB as object), includeDocumentFiles: false } as never, {
       budgetMs: 30_000,
     });
 

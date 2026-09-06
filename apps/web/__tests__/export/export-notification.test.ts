@@ -177,7 +177,7 @@ describe('sendExportReadyEmail', () => {
 
   it('carries the manifest warnings into the email props', async () => {
     await sendExportReadyEmail({
-      ...JOB,
+      ...(JOB as object),
       manifest: {
         warnings: [{ code: 'DOCUMENT_FILE_MISSING', detail: 'document 5: gone', documentId: 5 }],
       },
@@ -200,7 +200,7 @@ describe('sendExportReadyEmail', () => {
   });
 
   it('skips cleanly when the requester was purged', async () => {
-    const result = await sendExportReadyEmail({ ...JOB, requestedBy: null } as never);
+    const result = await sendExportReadyEmail({ ...(JOB as object), requestedBy: null } as never);
 
     expect(result.sent).toBe(false);
     expect(sendEmailMock).not.toHaveBeenCalled();

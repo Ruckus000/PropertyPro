@@ -87,6 +87,16 @@ function makeRequest(url: string) {
   return new NextRequest(new URL(url, 'http://localhost:3000'));
 }
 
+/**
+ * Shape the tests below assert on the thrown ValidationError. Named rather than
+ * inlined so `err as CaughtValidationError` keeps its type: inside the `catch`,
+ * `typeof caught` is control-flow-narrowed to `null` (the only assignment so
+ * far), which made the cast erase the shape.
+ */
+type CaughtValidationError = Error & {
+  details?: { fields?: Array<{ field: string; message: string }> };
+};
+
 const COMMUNITY_ID = 99;
 
 const membership = {
@@ -156,11 +166,11 @@ describe('GET /api/v1/esign/templates', () => {
   });
 
   it('lists accepted status values in the ValidationError details', async () => {
-    let caught: Error & { details?: { fields?: Array<{ field: string; message: string }> } } | null = null;
+    let caught: CaughtValidationError | null = null;
     try {
       await GET(makeRequest(`/api/v1/esign/templates?communityId=${COMMUNITY_ID}&status=nope`));
     } catch (err) {
-      caught = err as typeof caught;
+      caught = err as CaughtValidationError;
     }
     expect(caught?.details?.fields?.[0]?.field).toBe('status');
     const msg = caught?.details?.fields?.[0]?.message ?? '';
@@ -169,11 +179,11 @@ describe('GET /api/v1/esign/templates', () => {
   });
 
   it('lists accepted type values in the ValidationError details', async () => {
-    let caught: Error & { details?: { fields?: Array<{ field: string; message: string }> } } | null = null;
+    let caught: CaughtValidationError | null = null;
     try {
       await GET(makeRequest(`/api/v1/esign/templates?communityId=${COMMUNITY_ID}&type=garbage`));
     } catch (err) {
-      caught = err as typeof caught;
+      caught = err as CaughtValidationError;
     }
     expect(caught?.details?.fields?.[0]?.field).toBe('type');
     const msg = caught?.details?.fields?.[0]?.message ?? '';

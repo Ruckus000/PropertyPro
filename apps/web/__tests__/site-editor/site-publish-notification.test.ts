@@ -83,7 +83,7 @@ describe('notifyResidentsOfSitePublish', () => {
   it('links the announcement to the community site it is announcing', async () => {
     await notifyResidentsOfSitePublish(INPUT);
 
-    const body = createAnnouncementMock.mock.calls[0][1].body as string;
+    const body = createAnnouncementMock.mock.calls[0]![1].body as string;
     expect(body).toContain('sunset-condos');
     expect(body).toContain('View the updated site');
   });
@@ -99,7 +99,7 @@ describe('notifyResidentsOfSitePublish', () => {
     const result = await notifyResidentsOfSitePublish(INPUT);
 
     expect(result.status).toBe('sent');
-    const body = createAnnouncementMock.mock.calls[0][1].body as string;
+    const body = createAnnouncementMock.mock.calls[0]![1].body as string;
     expect(body).not.toContain('<a href');
     expect(body).toContain('The community website has been updated.');
   });

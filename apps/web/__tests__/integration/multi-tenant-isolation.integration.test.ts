@@ -217,8 +217,12 @@ async function seedData(): Promise<SeededData> {
       role: user.role,
       isUnitOwner: user.isUnitOwner,
       displayTitle: user.displayTitle,
-      presetKey: user.presetKey ?? null,
-      permissions: user.permissions ?? null,
+      // role-v3 dropped both columns from `user_roles` and both fields from
+      // MultiTenantUserFixture; `user.presetKey ?? null` therefore always
+      // evaluated to `null` here. Kept as literal nulls to preserve the
+      // inserted payload byte-for-byte.
+      presetKey: null,
+      permissions: null,
       designation: user.designation ?? null,
       unitId: null,
     });

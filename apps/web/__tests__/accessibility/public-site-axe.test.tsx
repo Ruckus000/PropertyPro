@@ -41,6 +41,7 @@ import type {
   PublicCommunity,
   ResolvedTheme,
 } from '@/components/public-site/blocks/types';
+import type { CommunityTheme } from '@propertypro/theme';
 import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 
@@ -70,6 +71,39 @@ const THEME: ResolvedTheme = {
 };
 
 const LAYOUT: LayoutId = 'tidewater';
+
+/**
+ * ⚠️ KNOWN-WEAK FIXTURE — preserved deliberately, not endorsed.
+ *
+ * `PublicSiteHeader` takes `CommunityTheme` (from `@propertypro/theme`), NOT the
+ * `ResolvedTheme` above; in the app the two are bridged by `toHeaderTheme()` in
+ * `components/public-site/layouts/Tidewater.tsx`. Until `__tests__` was brought
+ * into the tsconfig, the header audit below called
+ * `<PublicSiteHeader community={…} theme={THEME} layout={…} pages={[]} />` —
+ * three props the component does not declare (silently ignored) and a `theme`
+ * missing five required fields. So at runtime the header rendered with
+ * `communityName`, `logoUrl` and `fontHeading` all `undefined`: an empty title
+ * and no logo, meaning the `<img alt={`${communityName} logo`}>` branch and the
+ * heading text have NEVER been axe-audited.
+ *
+ * The values below reproduce that rendered DOM: `logoUrl: null` takes the same
+ * falsy branch and `communityName: ''` renders the same empty text node, so the
+ * audited markup is unchanged. The only difference is the inline
+ * `font-family: '', sans-serif` in place of `'undefined', sans-serif` — both
+ * invalid, neither visible to axe. Populating these — and adding a `logoUrl`
+ * case — is a real coverage improvement and belongs in its own change, with its
+ * own review of whatever axe then reports.
+ */
+const HEADER_THEME: CommunityTheme = {
+  primaryColor: THEME.primaryColor,
+  secondaryColor: THEME.secondaryColor,
+  accentColor: THEME.accentColor,
+  fontHeading: '',
+  fontBody: '',
+  logoUrl: null,
+  communityName: '',
+  communityType: COMMUNITY.communityType,
+};
 
 /**
  * Schema-VALID content per block type.
@@ -178,11 +212,15 @@ const BLOCK_TYPES = Object.keys(blockViewRegistry);
  * component. The registry is still the SOURCE of the type list, so a new
  * code-split block type shows up here as a failure rather than as silence.
  */
-const DYNAMIC_VIEWS: Record<string, React.ComponentType<never>> = {
-  faq: FaqBlock as never,
-  gallery: GalleryBlock as never,
-  amenities: AmenitiesBlock as never,
-  payments: PaymentsBlock as never,
+type BlockViewComponent = NonNullable<
+  (typeof blockViewRegistry)[keyof typeof blockViewRegistry]
+>;
+
+const DYNAMIC_VIEWS: Record<string, BlockViewComponent> = {
+  faq: FaqBlock,
+  gallery: GalleryBlock,
+  amenities: AmenitiesBlock,
+  payments: PaymentsBlock,
 };
 
 function renderBlock(blockType: string) {
@@ -239,9 +277,7 @@ describe('public site — block views', () => {
 
 describe('public site — chrome', () => {
   it('header has no axe violations', async () => {
-    const { container } = render(
-      <PublicSiteHeader community={COMMUNITY} theme={THEME} layout={LAYOUT} pages={[]} />,
-    );
+    const { container } = render(<PublicSiteHeader theme={HEADER_THEME} />);
     expect(await axe(container)).toHaveNoViolations();
   });
 

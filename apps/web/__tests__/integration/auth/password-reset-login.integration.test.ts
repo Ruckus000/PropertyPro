@@ -64,14 +64,14 @@ describeSupabase('password reset → sign-in', () => {
     expect(updateResult.error).toBeNull();
 
     // Use fresh, non-persistent clients per assertion to avoid stale session state.
-    const oldClient = createClient(supabaseUrl, supabaseAnonKey, {
+    const oldClient = createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const oldAttempt = await oldClient.auth.signInWithPassword({ email, password: OLD_PASSWORD });
     expect(oldAttempt.error).not.toBeNull();
     expect(oldAttempt.data.session).toBeNull();
 
-    const newClient = createClient(supabaseUrl, supabaseAnonKey, {
+    const newClient = createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const newAttempt = await newClient.auth.signInWithPassword({ email, password: NEW_PASSWORD });
@@ -114,7 +114,7 @@ describeSupabase('password reset → sign-in', () => {
     //    client. `verifyOtp` with `type: 'recovery'` is the programmatic
     //    equivalent of the browser client picking up the session after the
     //    email-link redirect completes.
-    const recoveryClient = createClient(supabaseUrl, supabaseAnonKey, {
+    const recoveryClient = createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const { data: verifyData, error: verifyError } = await recoveryClient.auth.verifyOtp({
@@ -136,7 +136,7 @@ describeSupabase('password reset → sign-in', () => {
     await recoveryClient.auth.signOut();
 
     // 5. Fresh sign-in with the rotated password must succeed.
-    const loginClient = createClient(supabaseUrl, supabaseAnonKey, {
+    const loginClient = createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const loginResult = await loginClient.auth.signInWithPassword({

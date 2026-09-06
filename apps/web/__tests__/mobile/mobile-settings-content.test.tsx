@@ -89,7 +89,7 @@ describe('MobileSettingsContent', () => {
     fireEvent.click(screen.getByText('Save Changes'));
 
     expect(mutateMock).toHaveBeenCalledTimes(1);
-    const [payload] = mutateMock.mock.calls[0];
+    const [payload] = mutateMock.mock.calls[0]!;
     expect(payload).toEqual({
       profile: {
         communityId: 42,
@@ -122,7 +122,7 @@ describe('MobileSettingsContent', () => {
     render(<MobileSettingsContent {...baseProps} />);
     fireEvent.click(screen.getByText('Save Changes'));
 
-    const { onSuccess } = mutateMock.mock.calls[0][1];
+    const { onSuccess } = mutateMock.mock.calls[0]![1];
     act(() => {
       onSuccess();
     });
@@ -135,7 +135,7 @@ describe('MobileSettingsContent', () => {
     render(<MobileSettingsContent {...baseProps} />);
     fireEvent.click(screen.getByText('Save Changes'));
 
-    const { onError } = mutateMock.mock.calls[0][1];
+    const { onError } = mutateMock.mock.calls[0]![1];
     act(() => {
       onError(new Error('Failed to update profile'));
     });
@@ -148,7 +148,7 @@ describe('MobileSettingsContent', () => {
     render(<MobileSettingsContent {...baseProps} />);
     fireEvent.click(screen.getByText('Save Changes'));
 
-    const { onError } = mutateMock.mock.calls[0][1];
+    const { onError } = mutateMock.mock.calls[0]![1];
     act(() => {
       onError('boom');
     });

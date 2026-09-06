@@ -23,6 +23,7 @@ import {
   removeRecipient,
   toFieldsSchema,
   updateRecipient,
+  type BuilderState,
 } from '@/lib/esign/builder-state';
 
 const DOC = {
@@ -69,7 +70,7 @@ describe('canReachStep', () => {
   });
 
   it('refuses field placement until every recipient has a name and a real email', () => {
-    let s = { ...createBuilderState('send'), document: DOC };
+    let s: BuilderState = { ...createBuilderState('send'), document: DOC };
     expect(canReachStep(s, 3)).toBe(false);
 
     s = updateRecipient(s, s.recipients[0]!.id, { name: 'Alice Owner', email: 'not-an-email' });
@@ -81,7 +82,7 @@ describe('canReachStep', () => {
 
   it('a template needs only a role, never a name or an email', () => {
     // Real people are named when the template is sent.
-    let s = { ...createBuilderState('template'), document: DOC };
+    let s: BuilderState = { ...createBuilderState('template'), document: DOC };
     expect(canReachStep(s, 3)).toBe(true);
 
     s = updateRecipient(s, s.recipients[0]!.id, { role: '  ' });

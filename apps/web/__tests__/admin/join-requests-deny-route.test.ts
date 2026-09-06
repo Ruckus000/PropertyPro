@@ -89,7 +89,7 @@ function postReq(
   opts: { body?: unknown; omitBody?: boolean; headers?: Record<string, string> } = {},
 ): NextRequest {
   const url = `http://localhost:3000/api/v1/admin/join-requests/${id}/deny`;
-  const init: RequestInit = {
+  const init: NonNullable<ConstructorParameters<typeof NextRequest>[1]> = {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(opts.headers ?? {}) },
   };

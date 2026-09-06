@@ -240,7 +240,7 @@ describe('GET /api/v1/calendar/google/callback', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = completeGoogleCalendarConnectMock.mock.calls[0];
+    const call = completeGoogleCalendarConnectMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 });

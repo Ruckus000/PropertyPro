@@ -9,7 +9,9 @@ vi.mock('@propertypro/db', () => {
   // Returns a thenable builder that resolves to the fixture rows for `tableName`.
   // Supports the full chain the service uses: .orderBy(...).limit(n) or just .orderBy(...)
   const stubBuilder = (rows: Array<Record<string, unknown>>) => {
-    const builder: Record<string, unknown> = {};
+    // `symbol` in the key type is load-bearing: the builder also carries
+    // `Symbol.toStringTag` below.
+    const builder: Record<string | symbol, unknown> = {};
     const resolved = Promise.resolve(rows);
     // Make the builder itself awaitable
     builder['then'] = resolved.then.bind(resolved);

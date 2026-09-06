@@ -37,6 +37,15 @@ const ALL_FEATURES: CommunityFeatures = {
   hasAccountingConnectors: true,
   hasEsign: true,
   hasEmergencyNotifications: true,
+  hasSiteEditor: false,
+  hasSitePolishBlocks: false,
+  hasSiteCustomCss: false,
+  hasSiteCustomDomain: false,
+  hasSitePortfolioTemplates: false,
+  hasInsuranceHub: false,
+  hasReserveTransparency: false,
+  hasSnowbirdDigest: false,
+  hasStormTools: false,
 };
 
 const APARTMENT_FEATURES: CommunityFeatures = {
@@ -64,6 +73,15 @@ const APARTMENT_FEATURES: CommunityFeatures = {
   hasAccountingConnectors: true,
   hasEsign: true,
   hasEmergencyNotifications: true,
+  hasSiteEditor: false,
+  hasSitePolishBlocks: false,
+  hasSiteCustomCss: false,
+  hasSiteCustomDomain: false,
+  hasSitePortfolioTemplates: false,
+  hasInsuranceHub: false,
+  hasReserveTransparency: false,
+  hasSnowbirdDigest: false,
+  hasStormTools: false,
 };
 
 // HOA (§720) feature shape — packages and visitors are NOT included.
@@ -85,8 +103,8 @@ describe('NAV_SECTIONS', () => {
   });
 
   it('keeps dashboard in its own top section', () => {
-    expect(NAV_SECTIONS[0].items).toHaveLength(1);
-    expect(NAV_SECTIONS[0].items[0].id).toBe('dashboard');
+    expect(NAV_SECTIONS[0]!.items).toHaveLength(1);
+    expect(NAV_SECTIONS[0]!.items[0]!.id).toBe('dashboard');
   });
 
   it('represents each NAV_ITEMS id exactly once across sections', () => {
@@ -226,7 +244,7 @@ describe('nav href generation', () => {
     const bridgePathnames = ['/documents', '/payments', '/finance', '/assessments'];
 
     for (const item of [...NAV_ITEMS, ...PM_NAV_ITEMS]) {
-      const pathname = item.href(42).split('?')[0];
+      const pathname = item.href(42).split('?')[0]!;
       expect(
         bridgePathnames.includes(pathname),
         `nav item "${item.id}" links to redirect bridge ${pathname}`,

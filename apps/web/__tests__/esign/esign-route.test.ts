@@ -123,7 +123,9 @@ import { POST as remindPOST } from '../../src/app/api/v1/esign/submissions/[id]/
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeRequest(url: string, opts?: RequestInit) {
+type NextRequestInit = NonNullable<ConstructorParameters<typeof NextRequest>[1]>;
+
+function makeRequest(url: string, opts?: NextRequestInit) {
   return new NextRequest(new URL(url, 'http://localhost:3000'), opts);
 }
 

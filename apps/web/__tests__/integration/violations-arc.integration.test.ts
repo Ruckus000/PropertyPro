@@ -125,8 +125,8 @@ async function enableCommunityGate(
       building: 'B',
       floor: 2,
     });
-    unitAId = readNumberField(unitA, 'id');
-    unitBId = readNumberField(unitB, 'id');
+    unitAId = readNumberField(unitA!, 'id');
+    unitBId = readNumberField(unitB!, 'id');
 
     const unitMap = new Map<MultiTenantUserKey, number>();
     unitMap.set('tenantA', unitAId);

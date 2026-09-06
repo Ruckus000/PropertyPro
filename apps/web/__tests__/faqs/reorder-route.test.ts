@@ -111,7 +111,7 @@ describe('PATCH /api/v1/faqs/reorder', () => {
 
     // reorderFaqs called with (communityId, ids, onMissing callback)
     expect(reorderFaqsMock).toHaveBeenCalledTimes(1);
-    const [calledCommunityId, calledIds, calledOnMissing] = reorderFaqsMock.mock.calls[0];
+    const [calledCommunityId, calledIds, calledOnMissing] = reorderFaqsMock.mock.calls[0]!;
     expect(calledCommunityId).toBe(42);
     expect(calledIds).toEqual([1, 2, 3]);
     expect(typeof calledOnMissing).toBe('function');

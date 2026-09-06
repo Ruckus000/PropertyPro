@@ -31,6 +31,7 @@ describe('public website components', () => {
     const html = renderToStaticMarkup(
       <PublicNotices
         communityName="Palm Shores HOA"
+        timezone="America/New_York"
         notices={[
           {
             id: 1,

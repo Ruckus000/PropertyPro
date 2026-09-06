@@ -81,7 +81,7 @@ describe('notifyRootClaimed', () => {
     expect(toAddresses).toEqual(['a@example.com', 'b@example.com']);
 
     // disputeUrl points at the claim-root dispute screen for this community.
-    const firstReact = sendEmailMock.mock.calls[0][0].react as {
+    const firstReact = sendEmailMock.mock.calls[0]![0].react as {
       props: { disputeUrl: string; claimantName: string; communityName: string };
     };
     expect(firstReact.props.disputeUrl).toBe(

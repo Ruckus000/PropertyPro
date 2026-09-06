@@ -84,7 +84,7 @@ describe('community export table registry', () => {
   it('does not reference tables that are not tenant-scoped', () => {
     // A non-tenant table in the registry would mean the worker queries it
     // through a scoped client that cannot scope it — cross-tenant leakage.
-    const tenantSet = new Set(TENANT_TABLES);
+    const tenantSet = new Set<string>(TENANT_TABLES);
     const strays = EXPORT_TABLES.map((t) => t.tableName).filter((n) => !tenantSet.has(n));
     expect(strays).toEqual([]);
   });

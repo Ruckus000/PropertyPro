@@ -24,7 +24,7 @@ function renderDialog() {
     <UpgradeDialog
       open
       onOpenChange={() => {}}
-      featureKey="hasContracts"
+      featureKey="hasViolations"
       currentPlanId="essentials"
       currentPlanRaw="essentials"
       role={null}
@@ -54,11 +54,14 @@ describe('UpgradeDialog (request behavior)', () => {
       screen.getByRole('button', { name: /Request upgrade/ }),
     );
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
-    const arg = mutateAsyncMock.mock.calls[0][0];
+    const arg = mutateAsyncMock.mock.calls[0]![0];
     expect(arg.communityId).toBe(42);
-    expect(arg.featureKey).toBe('hasContracts');
-    // requestedPlan resolves from the feature key — just assert it's present.
-    expect('requestedPlan' in arg).toBe(true);
+    expect(arg.featureKey).toBe('hasViolations');
+    // `in` is true even when the value is null — which is exactly what a
+    // feature key outside `CommunityFeatures` produces, since
+    // `findCheapestPlanEntryForFeature` filters to nothing and returns null.
+    // Assert the resolved plan itself: hasViolations is cheapest on Professional.
+    expect(arg.requestedPlan).toBe('professional');
   });
 
   it('shows the success status after a successful request', async () => {

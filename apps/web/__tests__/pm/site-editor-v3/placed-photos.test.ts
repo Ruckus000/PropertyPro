@@ -133,8 +133,10 @@ describe('placedPhotos', () => {
   });
 
   it('ignores malformed content rather than throwing', () => {
-    expect(placedPhotos([{ blockType: 'image', blockOrder: 2, content: null }])).toEqual([]);
-    expect(placedPhotos([{ blockType: 'gallery', blockOrder: 2, content: { images: 'nope' } }])).toEqual([]);
+    const nullContent = [{ blockType: 'image', blockOrder: 2, content: null }];
+    const badImages = [{ blockType: 'gallery', blockOrder: 2, content: { images: 'nope' } }];
+    expect(placedPhotos(nullContent)).toEqual([]);
+    expect(placedPhotos(badImages)).toEqual([]);
   });
 
   it('names a photo by its upload filename, without the uuid the writer prefixed', () => {
@@ -143,13 +145,14 @@ describe('placedPhotos', () => {
     // path carries, and it is what makes one thumbnail's accessible name
     // distinguishable from the next.
     const uuid = '3f2a9c1e-7b4d-4e8a-9f0c-1d2e3f4a5b6c';
-    const named = placedPhotos([
+    const uuidPrefixed = [
       {
         blockType: 'image',
         blockOrder: 2,
         content: { imagePath: `1/content/${uuid}-pool_deck.jpg`, altText: 'Deck' },
       },
-    ]);
+    ];
+    const named = placedPhotos(uuidPrefixed);
     expect(named[0]?.name).toBe('pool_deck.jpg');
   });
 

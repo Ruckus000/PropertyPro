@@ -28,6 +28,7 @@ const baseRequest: MaintenanceRequestItem = {
   priority: 'medium',
   category: 'plumbing',
   unitId: null,
+  unitLabel: null,
   submittedById: 'user-1',
   assignedToId: null,
   internalNotes: null,

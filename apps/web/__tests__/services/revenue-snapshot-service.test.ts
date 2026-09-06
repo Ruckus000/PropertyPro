@@ -113,7 +113,7 @@ describe('computeSnapshot — basic', () => {
     });
     expect(r.mrrCents).toBe(0);
     expect(r.communitiesSkipped).toBe(1);
-    expect(r.skipReasons[0].reason).toContain('no_price_for_plan_999');
+    expect(r.skipReasons[0]!.reason).toContain('no_price_for_plan_999');
   });
 });
 
@@ -222,7 +222,7 @@ describe('hashPrices', () => {
 
   it('produces a different hash when an amount changes', () => {
     const h1 = hashPrices(PRICES);
-    const h2 = hashPrices([{ ...PRICES[0], unitAmountCents: 99999 }, ...PRICES.slice(1)]);
+    const h2 = hashPrices([{ ...PRICES[0]!, unitAmountCents: 99999 }, ...PRICES.slice(1)]);
     expect(h1).not.toBe(h2);
   });
 });

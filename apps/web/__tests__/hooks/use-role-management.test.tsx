@@ -86,7 +86,7 @@ describe('useAssignPropertyManager', () => {
     });
     expect(returned).toEqual({ assigned: true, alreadyAssigned: false });
     const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0];
+      .calls[0]!;
     expect(url).toBe('/api/v1/communities/role-assignments');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body)).toEqual({ communityId: 42, userId: 'u9' });
@@ -110,9 +110,10 @@ describe('useAssignPropertyManager', () => {
     const { result } = renderHook(() => useAssignPropertyManager(42), {
       wrapper: Wrapper,
     });
-    const error = await result.current
+    type AdminCapError = { code?: string; maxAdmins?: number; message: string };
+    const error = (await result.current
       .mutateAsync({ userId: 'u9' })
-      .catch((e) => e as { code?: string; maxAdmins?: number; message: string });
+      .catch((e) => e as AdminCapError)) as AdminCapError;
     expect(error.code).toBe('ADMIN_LIMIT_REACHED');
     expect(error.maxAdmins).toBe(3);
     expect(error.message).toMatch(/up to 3 administrators/);
@@ -131,7 +132,7 @@ describe('useRevokePropertyManager', () => {
       returned = await result.current.mutateAsync({ userId: 'u9' });
     });
     expect(returned).toEqual({ revoked: true });
-    const [url, init] = requestJsonMock.mock.calls[0];
+    const [url, init] = requestJsonMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/communities/role-assignments');
     expect(init.method).toBe('DELETE');
     expect(JSON.parse(init.body)).toEqual({ communityId: 42, userId: 'u9' });
@@ -150,7 +151,7 @@ describe('useTransferRoot', () => {
       returned = await result.current.mutateAsync({ toUserId: 'u9' });
     });
     expect(returned).toEqual({ transferred: true });
-    const [url, init] = requestJsonMock.mock.calls[0];
+    const [url, init] = requestJsonMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/communities/transfer-root');
     expect(JSON.parse(init.body)).toEqual({ communityId: 42, toUserId: 'u9' });
   });
@@ -180,7 +181,7 @@ describe('useSetDesignation', () => {
     });
     expect(returned).toEqual({ ok: true });
     const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0];
+      .calls[0]!;
     expect(url).toBe('/api/v1/communities/designations');
     expect(JSON.parse(init.body)).toEqual({
       communityId: 42,

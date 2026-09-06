@@ -16,7 +16,11 @@ import { LapsedFeatureScreen } from '@/components/billing/lapsed-feature-screen'
  * administrator". These tests pin the split so the dead-end cannot come back.
  */
 describe('LapsedFeatureScreen — R3-03 role split', () => {
-  const baseProps = { featureKey: 'violations' as const, communityId: 42 };
+  // `featureKey` is `keyof CommunityFeatures`; the key is `hasViolations`. The
+  // former `'violations'` fell through `getPlanFeatureCopy` to
+  // DEFAULT_PLAN_FEATURE_COPY, so the heading read "Premium Feature is paused".
+  // No assertion below reads the heading, so every case is unaffected.
+  const baseProps = { featureKey: 'hasViolations' as const, communityId: 42 };
 
   it('offers the root manager the reactivate action', () => {
     render(<LapsedFeatureScreen {...baseProps} role="root_manager" />);

@@ -214,7 +214,7 @@ describe('POST /api/v1/amenities/[id]/reserve', () => {
     expect(getActorUnitIdsMock).not.toHaveBeenCalled();
     expect(requireActorUnitIdMock).not.toHaveBeenCalled();
     expect(createScopedClientMock).not.toHaveBeenCalled();
-    const call = createReservationForCommunityMock.mock.calls[0];
+    const call = createReservationForCommunityMock.mock.calls[0]!;
     expect(call[2]).toEqual({
       amenityId: 7,
       unitId: null,
@@ -448,7 +448,7 @@ describe('POST /api/v1/amenities/[id]/reserve', () => {
     const res = await POST(jsonPost(7, VALID_BODY), routeCtx('7'));
 
     expect(res.status).toBe(200);
-    const call = createReservationForCommunityMock.mock.calls[0];
+    const call = createReservationForCommunityMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 });

@@ -275,7 +275,7 @@ describe('/api/v1/amenities route', () => {
   it('forwards null x-request-id to service when header missing', async () => {
     const res = await POST(jsonPost({ communityId: 42, name: 'Clubhouse' }));
     expect(res.status).toBe(200);
-    const call = createAmenityForCommunityMock.mock.calls[0];
+    const call = createAmenityForCommunityMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 });

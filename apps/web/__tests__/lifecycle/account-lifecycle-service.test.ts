@@ -175,7 +175,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-type DbCall = { op: string; table?: unknown; values?: unknown; where?: unknown };
+type DbCall = { op: string; table?: unknown; values?: Record<string, unknown>; where?: unknown };
 
 /**
  * Builds a chainable DB mock that records operations.
@@ -196,7 +196,7 @@ function buildDbMock(options: {
   function makeInsertChain() {
     let insertTable: unknown;
     return {
-      values: (vals: unknown) => {
+      values: (vals: Record<string, unknown>) => {
         calls.push({ op: 'insert', table: insertTable, values: vals });
         return {
           returning: () => {
@@ -213,9 +213,9 @@ function buildDbMock(options: {
   }
 
   function makeUpdateChain() {
-    let updateValues: unknown;
+    let updateValues: Record<string, unknown> | undefined;
     return {
-      set: (vals: unknown) => {
+      set: (vals: Record<string, unknown>) => {
         updateValues = vals;
         return {
           where: (condition: unknown) => {
@@ -1037,11 +1037,11 @@ describe('executeCommunitySoftDelete', () => {
       .find((c) => c.values?.errorCode === 'COMMUNITY_DELETED');
 
     expect(jobUpdate).toBeDefined();
-    expect(jobUpdate!.values.status).toBe('failed');
-    expect(jobUpdate!.values.errorMessage).toMatch(/scheduled for deletion/i);
+    expect(jobUpdate!.values!.status).toBe('failed');
+    expect(jobUpdate!.values!.errorMessage).toMatch(/scheduled for deletion/i);
     // The lease must be released, or the reaper's lease guard would spare the
     // row and its partial volumes would survive the cooling window.
-    expect(jobUpdate!.values.leaseExpiresAt).toBeNull();
+    expect(jobUpdate!.values!.leaseExpiresAt).toBeNull();
   });
 
   it('does not throw when request is not found, processes what it finds', async () => {

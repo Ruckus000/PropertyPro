@@ -339,7 +339,7 @@ describe('PATCH /api/v1/arc/[id]/review', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = reviewArcSubmissionForCommunityMock.mock.calls[0];
+    const call = reviewArcSubmissionForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

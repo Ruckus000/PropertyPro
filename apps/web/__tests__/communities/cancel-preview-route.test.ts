@@ -46,7 +46,8 @@ interface EnvelopeJson<T> {
   data: T;
 }
 
-function buildReq(url: string, init?: RequestInit): NextRequest {
+type NextRequestInit = NonNullable<ConstructorParameters<typeof NextRequest>[1]>;
+function buildReq(url: string, init?: NextRequestInit): NextRequest {
   return new NextRequest(url, init);
 }
 

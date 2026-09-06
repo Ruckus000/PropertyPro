@@ -4,7 +4,9 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+// React ships no type for this flag; the rest of apps/web/__tests__ reaches it
+// through the same narrow shape (see components/onboarding/condo-wizard.test.tsx).
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 async function renderBanner(communityId: number): Promise<HTMLElement> {
   const container = document.createElement('div');

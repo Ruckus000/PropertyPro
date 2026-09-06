@@ -127,7 +127,7 @@ describe('faq service helpers', () => {
     function mockSelectRows(rows: Record<string, unknown>[]) {
       const limit = vi.fn().mockResolvedValue(rows);
       const orderBy = vi.fn(() => ({ limit }));
-      const selectFrom = vi.fn(() => ({ orderBy }));
+      const selectFrom = vi.fn((..._args: unknown[]) => ({ orderBy }));
       createScopedClientMock.mockReturnValue({ selectFrom });
       return { selectFrom, orderBy, limit };
     }

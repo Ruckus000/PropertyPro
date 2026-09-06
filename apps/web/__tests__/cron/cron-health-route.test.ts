@@ -16,11 +16,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { listCronRunsMock } = vi.hoisted(() => ({ listCronRunsMock: vi.fn() }));
 vi.mock('@/lib/services/cron-run-service', () => ({ listCronRuns: listCronRunsMock }));
 
+import type { CronRun } from '@propertypro/db';
+
 import { GET } from '../../src/app/api/v1/internal/cron-health/route';
 import { CRON_JOBS, CRON_JOB_SLUGS } from '../../src/lib/cron/registry';
 
-/** A row for every registered job, all succeeded a minute ago. */
-const allFresh = () =>
+/**
+ * A row for every registered job, all succeeded a minute ago.
+ *
+ * Annotated with the REAL `CronRun` row type rather than left to inference.
+ * Inference would narrow `lastSucceededAt` to `Date` and `lastError` to `null`
+ * from these initial values, so the cases below that set them to null / a
+ * string would not type-check — and, more to the point, the fixture would stop
+ * being provably shaped like a row the query can actually return.
+ */
+const allFresh = (): CronRun[] =>
   CRON_JOB_SLUGS.map((slug) => ({
     jobSlug: slug,
     lastStartedAt: new Date(Date.now() - 60_000),

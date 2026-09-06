@@ -251,7 +251,7 @@ describe('DELETE /api/v1/accounting/disconnect', () => {
       null,
     );
     // Belt-and-suspenders: assert exact index [3] position.
-    const call = disconnectAccountingMock.mock.calls[0];
+    const call = disconnectAccountingMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 });

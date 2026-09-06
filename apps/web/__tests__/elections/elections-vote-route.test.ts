@@ -348,7 +348,7 @@ describe('POST /api/v1/elections/[id]/vote', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = castElectionVoteForCommunityMock.mock.calls[0];
+    const call = castElectionVoteForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

@@ -94,8 +94,8 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
       floor: 3,
     });
 
-    unitAId = readNumberField(unitA, 'id');
-    unitCId = readNumberField(unitC, 'id');
+    unitAId = readNumberField(unitA!, 'id');
+    unitCId = readNumberField(unitC!, 'id');
 
     const neededUsers: MultiTenantUserKey[] = ['actorA', 'tenantA', 'actorB', 'actorC', 'tenantC'];
     const unitMap = new Map<MultiTenantUserKey, number>();

@@ -87,7 +87,7 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
       floor: 1,
     });
 
-    unitAId = readNumberField(unitA, 'id');
+    unitAId = readNumberField(unitA!, 'id');
 
     const neededUsers: MultiTenantUserKey[] = ['actorA', 'residentA', 'tenantA', 'actorB', 'actorC', 'tenantC'];
     const unitMap = new Map<MultiTenantUserKey, number>();

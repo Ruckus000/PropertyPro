@@ -72,7 +72,7 @@ const article = {
   keywords: ['assessment', 'budget', 'annual'],
   tags: ['finance'],
   excerpt: 'Assessments are based on the budget divided by units.',
-} as const;
+};
 
 describe('scoreArticleForQuery — ranking', () => {
   it('scores a literal title hit higher than an alias-only excerpt hit', () => {

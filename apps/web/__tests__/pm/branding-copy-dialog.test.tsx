@@ -71,7 +71,7 @@ describe('BrandingCopyDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
     expect(mutate).toHaveBeenCalledTimes(1);
-    const [input] = mutate.mock.calls[0];
+    const [input] = mutate.mock.calls[0]!;
     expect(input.sourceBranding).toEqual(sourceCommunity.branding);
     expect(Array.from(input.communityIds)).toEqual([2]);
   });

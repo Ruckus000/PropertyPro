@@ -78,7 +78,7 @@ describe('useClaimRoot', () => {
       returned = await result.current.mutateAsync({ communityId: 42 });
     });
     expect(returned).toEqual([{ communityId: 42, claimed: true }]);
-    const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(JSON.parse(init.body)).toEqual({ communityId: 42 });
   });
 
@@ -117,7 +117,7 @@ describe('useDisputeRootClaim', () => {
       returned = await result.current.mutateAsync({ communityId: 7 });
     });
     expect(returned).toEqual({ disputed: true, alreadyOpen: false });
-    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(url).toBe('/api/v1/communities/dispute-root-claim');
     expect(JSON.parse(init.body)).toEqual({ communityId: 7 });
   });

@@ -37,6 +37,7 @@ function makeSubmission(overrides: Partial<ArcSubmission> = {}): ArcSubmission {
     attachmentDocumentIds: [],
     status: 'submitted',
     reviewNotes: null,
+    ruleReference: null,
     decidedByUserId: null,
     decidedAt: null,
     createdAt: '2026-04-01T00:00:00.000Z',

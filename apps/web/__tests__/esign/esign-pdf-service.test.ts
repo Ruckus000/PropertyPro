@@ -207,7 +207,7 @@ describe('flattenSignedPdf', () => {
     );
 
     expect(mockPage.drawText).toHaveBeenCalled();
-    const callArgs = mockPage.drawText.mock.calls[0];
+    const callArgs = mockPage.drawText.mock.calls[0]!;
     expect(callArgs[0]).toBe('Hello');
   });
 

@@ -38,7 +38,7 @@ describe('cancelPendingScheduleInTx', () => {
     const t = tx([]);
     await cancelPendingScheduleInTx(t, 42);
 
-    const stmt = t.execute.mock.calls[0][0].__sql;
+    const stmt = t.execute.mock.calls[0]![0].__sql;
     const text = stmt.strings.join('?');
     expect(text).toContain("SET status = 'canceled'");
     expect(text).toContain("status = 'pending'");

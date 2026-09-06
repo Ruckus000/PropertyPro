@@ -153,7 +153,7 @@ describe('/api/v1/pm/site/publish/schedule', () => {
       'announcements',
       'write',
     );
-    expect(scheduleMock.mock.calls[0][0].notifySummary).toBe('Pool hours updated');
+    expect(scheduleMock.mock.calls[0]![0].notifySummary).toBe('Pool hours updated');
   });
 
   it('refuses to schedule a broadcast without announcements:write', async () => {

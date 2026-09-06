@@ -1,11 +1,19 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
+import type { CommunityFeatures } from '@propertypro/shared';
 
 export interface UpgradeRequestInput {
   /** Tenant id; appended as `?communityId=` only when a non-null number. */
   communityId: number | null;
-  featureKey: string | null;
+  /**
+   * The gate that triggered the request. Tied to `CommunityFeatures` rather
+   * than left as `string`: every component prop already declares
+   * `keyof CommunityFeatures | null`, and the looser type here was letting a
+   * key that does not exist compile. A phantom key resolves no plan, so
+   * `requestedPlan` silently becomes null.
+   */
+  featureKey: keyof CommunityFeatures | null;
   requestedPlan: string | null;
 }
 

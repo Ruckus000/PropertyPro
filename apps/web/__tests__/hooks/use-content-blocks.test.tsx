@@ -52,7 +52,7 @@ function makePageWrapper(pageId: number | null) {
 
 /** The parsed request body of the Nth fetch call. */
 function bodyOf(callIndex = 0): Record<string, unknown> {
-  const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[callIndex];
+  const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[callIndex]!;
   return JSON.parse(call[1].body as string) as Record<string, unknown>;
 }
 
@@ -154,7 +154,7 @@ describe('useUpsertContentBlock', () => {
         headers: expect.objectContaining({ 'content-type': 'application/json' }),
       }),
     );
-    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     const body = JSON.parse(call[1].body as string);
     expect(body).toEqual({
       communityId: 7,
@@ -177,7 +177,7 @@ describe('useUpsertContentBlock', () => {
       blockOrder: 1,
       content: { storagePath: '/path/to/img.webp', altText: 'Pool view' },
     });
-    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     const body = JSON.parse(call[1].body as string);
     expect(body.blockType).toBe('image');
     expect(body.communityId).toBe(7);
@@ -197,7 +197,7 @@ describe('useUpsertContentBlock', () => {
       blockOrder: 6,
       content: { showBoard: true, showManagement: false },
     });
-    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     const body = JSON.parse(call[1].body as string);
     expect(body).toEqual({
       communityId: 7,
@@ -329,7 +329,7 @@ describe('page targeting', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     // The publish diff needs every page's blocks (D-C2); scoping the fetch
     // would make it under-report.
-    const url = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    const url = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
     expect(url).toBe('/api/v1/pm/site/blocks?communityId=7');
   });
 });
@@ -362,7 +362,7 @@ describe('useReorderBlocks', () => {
         headers: expect.objectContaining({ 'content-type': 'application/json' }),
       }),
     );
-    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(JSON.parse(call[1].body as string)).toEqual({ communityId: 7, blockId: 12, direction: 'down' });
   });
 
