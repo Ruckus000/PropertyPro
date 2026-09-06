@@ -321,6 +321,9 @@ importers:
       pdfjs-dist:
         specifier: 4.10.38
         version: 4.10.38
+      prettier:
+        specifier: ^3.5.3
+        version: 3.8.1
       puppeteer-core:
         specifier: ^23.11.1
         version: 23.11.1
