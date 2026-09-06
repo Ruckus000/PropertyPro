@@ -100,4 +100,56 @@ describe('POST /api/v1/billing/upgrade-requests', () => {
     expect(res.status).toBe(403);
     expect(listBillingCapableUserIdsMock).not.toHaveBeenCalled();
   });
+
+  /*
+   * `featureKey` used to be `z.string().min(1).max(64)` while `requestedPlan`
+   * one line below was strictly enumerated. A key naming no real feature
+   * round-tripped silently, and the value reaches two sinks in the handler:
+   * humanized into a notification body delivered to OTHER users, and
+   * concatenated into the dedup `sourceId`. No authorization decision reads
+   * it, so this is defence in depth rather than a closed vulnerability — but
+   * the asymmetry is now gone.
+   */
+  it('rejects a featureKey that names no real feature', async () => {
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ featureKey: 'hasContracts', requestedPlan: 'professional' }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    // The request must not reach the notification path at all.
+    expect(listBillingCapableUserIdsMock).not.toHaveBeenCalled();
+    expect(insertNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a featureKey carrying the sourceId delimiter', async () => {
+    // `sourceId` is `${userId}:${featureKey}:${epochSeconds}`. The leading
+    // segment is the requester's own unforgeable id, so a collision was never
+    // reachable — but a caller-supplied ':' has no business getting that far.
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ featureKey: 'a:b:c' }),
+    });
+
+    expect((await POST(req)).status).toBe(400);
+  });
+
+  it('still accepts a real feature key', async () => {
+    // The control: without this, the two cases above would pass just as well
+    // against a schema that rejected everything.
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ featureKey: 'hasViolations', requestedPlan: 'professional' }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(insertNotificationsMock).toHaveBeenCalled();
+  });
 });

@@ -47,6 +47,11 @@ vi.mock('@sentry/nextjs', () => ({
   captureException: vi.fn(),
   withScope: vi.fn(),
   setTag: vi.fn(),
+  // `withCronJob` (the job-identity wrapper on every cron route) calls this.
+  // A mock factory that omits it makes the route throw at module load —
+  // the same trap CLAUDE.md documents for @propertypro/db mocks.
+  withIsolationScope: (fn: (scope: { setTag: () => void }) => unknown) =>
+    fn({ setTag: () => {} }),
 }));
 vi.mock('@propertypro/db', () => ({ COMMUNITY_EXPORT_RETENTION_DAYS: 14 }));
 vi.mock('@/lib/api/cron-auth', () => ({ requireCronSecret: requireCronSecretMock }));

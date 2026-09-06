@@ -5,7 +5,7 @@
  */
 
 export type { CommunityFeatures } from './types';
-export { COMMUNITY_FEATURES } from './community-features';
+export { COMMUNITY_FEATURES, COMMUNITY_FEATURE_KEYS } from './community-features';
 export { getFeaturesForCommunity, getEffectiveFeatures } from './get-features';
 export type { PlanFeatureConfig } from './plan-features';
 export {

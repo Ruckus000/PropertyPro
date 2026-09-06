@@ -37,14 +37,14 @@ function collectBaseTaskIds(lines: string[], warnings: string[]): string[] {
 
   const ids: string[] = [];
   for (let i = startIndex + 1; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (trimmed.startsWith('Count check:')) {
       break;
     }
 
     const match = trimmed.match(/^- `([^`]+)`/);
     if (match) {
-      ids.push(match[1]);
+      ids.push(match[1]!);
       continue;
     }
 
@@ -75,8 +75,8 @@ function verifyPhase4ExecutionPlan(content: string, errors: string[], warnings: 
     return;
   }
 
-  const completedInStatus = Number.parseInt(ratioMatch[1], 10);
-  const denominatorInStatus = Number.parseInt(ratioMatch[2], 10);
+  const completedInStatus = Number.parseInt(ratioMatch[1]!, 10);
+  const denominatorInStatus = Number.parseInt(ratioMatch[2]!, 10);
 
   if (denominatorInStatus !== BASE_DENOMINATOR) {
     errors.push(
@@ -135,9 +135,9 @@ function verifyPhase4ExecutionPlan(content: string, errors: string[], warnings: 
     if (!countMatch) {
       errors.push('PHASE4_EXECUTION_PLAN.md: unable to parse "Count check:" line.');
     } else {
-      const completed = Number.parseInt(countMatch[1], 10);
-      const remaining = Number.parseInt(countMatch[2], 10);
-      const total = Number.parseInt(countMatch[3], 10);
+      const completed = Number.parseInt(countMatch[1]!, 10);
+      const remaining = Number.parseInt(countMatch[2]!, 10);
+      const total = Number.parseInt(countMatch[3]!, 10);
 
       if (total !== BASE_DENOMINATOR) {
         errors.push(
@@ -286,7 +286,7 @@ function main(): void {
   }
 
   const completedCountMatch = phase4Plan.match(/(\d+)\/(\d+)\s+base Phase 4 tasks complete/);
-  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1], 10) : 0;
+  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1]!, 10) : 0;
 
   console.log('Phase 4 plan consistency verification passed.');
   console.log(`- Completed tasks: ${completedCount}/${BASE_DENOMINATOR}`);

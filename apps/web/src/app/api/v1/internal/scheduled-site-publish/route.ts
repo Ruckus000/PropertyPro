@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import { processDueSitePublishes } from '@/lib/services/site-publish-schedule-service';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.SCHEDULED_SITE_PUBLISH_CRON_SECRET, process.env.CRON_SECRET);
@@ -20,5 +21,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 
 // Vercel Cron issues GET; POST is accepted too so the scheduler's verb can
 // never be the thing that breaks the job. Neither reads a body or query params.
-export const GET = handler;
-export const POST = handler;
+const cronHandler = withCronJob('scheduled-site-publish', handler);
+
+export const GET = cronHandler;
+export const POST = cronHandler;

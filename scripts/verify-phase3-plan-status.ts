@@ -49,14 +49,14 @@ function collectListEntries(
 
   const entries: string[] = [];
   for (let i = startIndex + 1; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (trimmed === endMarker) {
       break;
     }
 
     const match = trimmed.match(/^- `([^`]+)`/);
     if (match) {
-      entries.push(match[1]);
+      entries.push(match[1]!);
     } else if (trimmed.startsWith('- ') && trimmed.length > 2) {
       warnings.push(
         `PHASE3_EXECUTION_PLAN.md line ${i + 1}: list entry "${trimmed}" does not use expected backtick format (- \`ID\`).`,
@@ -79,7 +79,7 @@ function collectListEntriesUntilHeading(
 
   const entries: string[] = [];
   for (let i = startIndex + 1; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
 
     if (trimmed.startsWith('## ')) {
       break;
@@ -87,7 +87,7 @@ function collectListEntriesUntilHeading(
 
     const match = trimmed.match(/^- `([^`]+)`/);
     if (match) {
-      entries.push(match[1]);
+      entries.push(match[1]!);
     } else if (trimmed.startsWith('- ') && trimmed.length > 2) {
       warnings.push(
         `PHASE3_EXECUTION_PLAN.md line ${i + 1}: list entry "${trimmed}" does not use expected backtick format (- \`ID\`).`,
@@ -127,8 +127,8 @@ function verifyPhase3ExecutionPlan(content: string, errors: string[], warnings: 
     return;
   }
 
-  const completedInStatus = Number.parseInt(ratioMatch[1], 10);
-  const denominatorInStatus = Number.parseInt(ratioMatch[2], 10);
+  const completedInStatus = Number.parseInt(ratioMatch[1]!, 10);
+  const denominatorInStatus = Number.parseInt(ratioMatch[2]!, 10);
 
   if (denominatorInStatus !== BASE_DENOMINATOR) {
     errors.push(
@@ -292,7 +292,7 @@ function main(): void {
   }
 
   const completedCountMatch = phase3Plan.match(/(\d+)\/(\d+)\s+base Phase 3 tasks complete/);
-  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1], 10) : 0;
+  const completedCount = completedCountMatch ? Number.parseInt(completedCountMatch[1]!, 10) : 0;
 
   console.log('Phase 3 plan consistency verification passed.');
   console.log(`- Completed tasks: ${completedCount}/${BASE_DENOMINATOR}`);

@@ -53,10 +53,23 @@ docs/                   # Specs, ADRs, audits, design system
 
 ## Development Commands
 
+> **`scripts/` is type-checked by its own project, not by turbo.** The root
+> tsconfig is solution-style (`"files": []` + `references`) and `scripts/` is not
+> a workspace package, so `turbo run typecheck` can never reach it — for a long
+> while every file under `scripts/` was type-checked by nothing at all. Root
+> `typecheck` therefore chains `tsc -p scripts/tsconfig.json` after turbo, the
+> same shape `lint` uses for `run-lint-guards.mjs`. That project pins `typeRoots`
+> and `types` deliberately: with no `node_modules` of its own, TypeScript's
+> default `@types` walk escapes the repo and picks up whatever sits in the
+> developer's home directory (a stray `~/node_modules/@types/react` produced 252
+> phantom errors in packages/email). Deps that only `scripts/` imports
+> (`drizzle-orm`, `gray-matter`, `sharp`, `@types/node`, `@types/react`) are root
+> devDependencies for the same reason `tsx`/`stripe`/`postgres` already are.
+
 ```bash
 pnpm install                    # Install dependencies
 pnpm dev                        # Run dev server
-pnpm typecheck                  # Type-check all packages
+pnpm typecheck                  # Type-check all packages AND scripts/
 pnpm lint                       # Lint + DB access guard
 pnpm build                      # Production build
 pnpm test                       # Unit tests

@@ -83,7 +83,7 @@ function validateEvidenceFile(filePath: string, fileName: string): Problem[] {
   // Check context section has required fields
   const contextMatch = content.match(/#+\s*(?:1[.\s)]*)?context[^\n]*\n([\s\S]*?)(?=\n#+\s)/i);
   if (contextMatch) {
-    const contextContent = contextMatch[1];
+    const contextContent = contextMatch[1]!;
     for (const field of CONTEXT_REQUIRED_FIELDS) {
       if (!field.pattern.test(contextContent)) {
         problems.push({
@@ -100,7 +100,7 @@ function validateEvidenceFile(filePath: string, fileName: string): Problem[] {
     /#+\s*(?:4[.\s)]*)?integration\s+test[^\n]*\n([\s\S]*?)(?=\n#+\s)/i,
   );
   if (integrationMatch) {
-    const integrationContent = integrationMatch[1];
+    const integrationContent = integrationMatch[1]!;
     if (!integrationContent.includes('```')) {
       problems.push({
         severity: 'warning',

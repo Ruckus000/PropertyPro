@@ -45,6 +45,10 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
 ]);
 
 const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
+  // Platform-scoped cron heartbeat. `cron_runs` has no community_id — it is one
+  // row per scheduled job — so it cannot be reached through a scoped client.
+  // Addresses a single row by primary key; reads and writes no tenant data.
+  resolve(repoRoot, 'apps/web/src/lib/services/cron-run-service.ts'),
   // Dev-only: reset onboarding wizard state for E2E testing (gated by NODE_ENV)
   resolve(repoRoot, 'apps/web/src/app/dev/reset-onboarding/route.ts'),
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),

@@ -65,9 +65,24 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR runs, but never cancel a run on main.
+#
+# `cancel-in-progress: true` is right for a pull_request: a new push obsoletes
+# the previous run, and nobody wants a verdict on code that no longer exists.
+#
+# On main it silently destroyed the coverage this workflow exists to provide.
+# The push trigger below has NO path filter, so every merge starts a ~15-minute
+# run — and the next merge cancelled it. On 2026-09-05, six merges landed in
+# about 45 minutes and five of their runs were cancelled; the one that survived
+# did so only because it happened to fall in a quiet half hour. A cancelled run
+# reports no verdict, so main's e2e was decorative exactly when merges were
+# frequent, which is exactly when it matters most.
+#
+# With this, main runs QUEUE on one group and each merge gets its own verdict.
+# The cost is serial runs during a merge burst; the alternative is not knowing.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   e2e:
@@ -265,8 +280,20 @@ jobs:
           # has more headroom, which is exactly why it could not be caught
           # before this job existed.
           #
-          # Heap budgets are now set PER SERVER in playwright.ci.config.ts, not
-          # here.
+          # RESOLVED — the web dev server now runs under Turbopack, which keeps
+          # the module graph outside the V8 heap this watchdog reads, so the
+          # restart above no longer fires. Measured: 1 restart -> 0, one
+          # ERR_CONNECTION_RESET -> none, flaky 1 -> 0, and 14m36s -> 8m40s.
+          # The admin server on :3001 now runs Turbopack too, so neither server
+          # is exposed to this any more. The history is kept because it is the
+          # only written record of why the heap ceilings exist and why raising
+          # them does nothing — both of which stay true if either server is ever
+          # reverted to webpack via its `dev:webpack` script.
+          #
+          # Heap budgets are set PER SERVER in playwright.ci.config.ts, not here
+          # — and that file carries the full analysis. Read it before touching a
+          # ceiling: raising --max-old-space-size cannot help, because
+          # `used_heap_size` is compared against a fraction of that same limit.
           #
           # A step-level NODE_OPTIONS reaches BOTH dev servers, because
           # Playwright merges `webServer.env` over `process.env`. Once

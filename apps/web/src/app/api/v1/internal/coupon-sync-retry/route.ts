@@ -13,6 +13,7 @@ import {
   findStuckCouponSyncBillingGroups,
   recalculateVolumeTier,
 } from '@/lib/billing/billing-group-service';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.COUPON_SYNC_RETRY_CRON_SECRET, process.env.CRON_SECRET);
@@ -37,12 +38,21 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  return NextResponse.json({ processed: results.length, results });
+  // `failed` is additive and exists for `withCronJob`'s summary scan: a
+  // `results: [{ ok: false }]` shape is invisible to it, so every row could
+  // fail here and the run would still look clean.
+  return NextResponse.json({
+    processed: results.length,
+    failed: results.filter((r) => !r.ok).length,
+    results,
+  });
 });
 
 // Vercel Cron issues GET; the GitHub-Actions era of this job issued POST.
 // One handler serves both so the scheduler's verb can never be the thing that
 // breaks the job. Neither verb reads a body or query params, so they are
 // genuinely interchangeable.
-export const GET = handler;
-export const POST = handler;
+const cronHandler = withCronJob('coupon-sync-retry', handler);
+
+export const GET = cronHandler;
+export const POST = cronHandler;

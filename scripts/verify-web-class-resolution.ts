@@ -260,7 +260,8 @@ export function extractClasses(fileName: string, source: string): ExtractedClass
     ) {
       // `classes.text.replace("text-", "bg-")` rewrites a utility PREFIX at
       // runtime; the result exists in no source file, so Tailwind never sees it.
-      const arg = node.arguments[0];
+      // Guarded by the `node.arguments.length > 0` check in the condition above.
+      const arg = node.arguments[0]!;
       if (ts.isStringLiteralLike(arg) && /^[a-z][a-zA-Z0-9]*-$/.test(arg.text)) {
         dynamic.push({
           line: lineOf(node.getStart(sf)),
@@ -349,7 +350,10 @@ const run = async () => {
   const resolveFromWeb = (id: string) => pathToFileURL(requireFromWeb.resolve(id)).href;
 
   let postcss: typeof import('postcss').default;
-  let tailwind: (cfg: unknown) => unknown;
+  // Typed as returning a postcss plugin rather than `unknown`: that is what the
+  // tailwindcss default export actually produces, and it is what the
+  // `postcss([...])` call below requires.
+  let tailwind: (cfg: unknown) => import('postcss').AcceptedPlugin;
   try {
     postcss = (await import(resolveFromWeb('postcss'))).default;
     tailwind = (await import(resolveFromWeb('tailwindcss'))).default;

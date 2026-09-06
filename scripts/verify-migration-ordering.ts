@@ -70,8 +70,9 @@ function checkTimestampOrdering(entries: JournalEntry[]): Problem[] {
   const problems: Problem[] = [];
 
   for (let i = 1; i < entries.length; i++) {
-    const prev = entries[i - 1];
-    const curr = entries[i];
+    // Both indices are inside the array by the loop bounds (1 <= i < length).
+    const prev = entries[i - 1]!;
+    const curr = entries[i]!;
 
     // Equality is called out separately from mis-ordering. Two entries sharing a
     // `when` is the signature of a parallel-PR collision (both branches derived
@@ -228,8 +229,9 @@ function checkRangeOverlaps(): Problem[] {
 
   for (let i = 0; i < RESERVED_RANGES.length; i++) {
     for (let j = i + 1; j < RESERVED_RANGES.length; j++) {
-      const a = RESERVED_RANGES[i];
-      const b = RESERVED_RANGES[j];
+      // Both indices are inside the array by the loop bounds.
+      const a = RESERVED_RANGES[i]!;
+      const b = RESERVED_RANGES[j]!;
 
       if (a.start <= b.end && b.start <= a.end) {
         problems.push({
@@ -324,7 +326,8 @@ function extractDroppedTables(sql: string): Set<string> {
   const re = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:"?public"?\s*\.\s*)?"?([a-zA-Z_][a-zA-Z0-9_]*)"?/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(sql)) !== null) {
-    dropped.add(m[1]);
+    // Group 1 is not optional in `re`, so a successful match always fills it.
+    dropped.add(m[1]!);
   }
   return dropped;
 }
@@ -346,8 +349,9 @@ function checkSnapshotTableContinuity(entries: JournalEntry[]): Problem[] {
   const metaDir = join(migrationsDir, 'meta');
 
   for (let i = 1; i < entries.length; i++) {
-    const prev = entries[i - 1];
-    const curr = entries[i];
+    // Both indices are inside the array by the loop bounds (1 <= i < length).
+    const prev = entries[i - 1]!;
+    const curr = entries[i]!;
 
     const prevSnap = join(metaDir, `${String(prev.idx).padStart(4, '0')}_snapshot.json`);
     const currSnap = join(metaDir, `${String(curr.idx).padStart(4, '0')}_snapshot.json`);
@@ -423,7 +427,8 @@ function checkDuplicateFilePrefixes(): Problem[] {
   for (const file of sqlFiles) {
     const match = file.match(/^(\d{4})_/);
     if (!match) continue;
-    const prefix = match[1];
+    // Group 1 is not optional in the pattern, so a match always fills it.
+    const prefix = match[1]!;
     const existing = prefixToFiles.get(prefix);
     if (existing) {
       existing.push(file);
@@ -530,7 +535,7 @@ function main(): void {
   console.log(`\nJournal: ${journal.entries.length} entries, dialect: ${journal.dialect}`);
 
   if (journal.entries.length > 0) {
-    const last = journal.entries[journal.entries.length - 1];
+    const last = journal.entries[journal.entries.length - 1]!;
     console.log(`Last entry: idx=${last.idx}, tag="${last.tag}", when=${last.when}`);
   }
 

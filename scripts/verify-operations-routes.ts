@@ -102,15 +102,16 @@ const NON_OPS_COMMUNITY_ALLOWLIST = new Set<string>([
 ]);
 
 function isOperationsFamily(href: string): boolean {
-  const noQuery = href.split('?')[0];
+  const noQuery = href.split('?')[0]!;
   return OPERATIONS_ROUTE_PATTERNS.some((p) => p.test(noQuery)) ||
     /\/communities\/\d+\/operations/.test(href);
 }
 
 function normalizeForManifest(href: string): string {
   // Strip query string; replace dynamic community id segment.
+  // `String.split` always yields at least one element, so the head is present.
   const [path] = href.split('?');
-  return path.replace(/\/communities\/\d+\//, '/communities/[id]/');
+  return path!.replace(/\/communities\/\d+\//, '/communities/[id]/');
 }
 
 function buildPageManifest(): Set<string> {
@@ -202,11 +203,11 @@ export function verifyRoutes(
     }
 
     // Rule 3: non-ops must resolve to manifest, allowlist, or community allowlist.
-    const path = href1.split('?')[0];
+    const path = href1.split('?')[0]!;
     if (NON_OPS_ALLOWLIST.has(path)) continue;
 
     const normalized = normalizeForManifest(href1);
-    const normalizedPath = normalized.split('?')[0];
+    const normalizedPath = normalized.split('?')[0]!;
 
     if (NON_OPS_COMMUNITY_ALLOWLIST.has(normalizedPath)) continue;
 
@@ -225,7 +226,13 @@ export function verifyRoutes(
 async function main() {
   // Dynamic import so the script can be imported as a library (for tests) without side effects.
   const mod = await import('../apps/web/src/lib/constants/feature-registry');
-  const registry = (mod.FEATURE_REGISTRY ?? mod.default ?? []) as RegistryEntry[];
+  // The `?? mod.default` link that used to sit in this chain was already dead:
+  // feature-registry has no default export, so it evaluated to `undefined` and
+  // `a ?? undefined ?? []` is exactly `a ?? []`. Dropping it is behaviour-
+  // identical and lets the module's real shape be type-checked. The empty-array
+  // fallback is kept — the emptiness check below is the guard's actual defence
+  // against the registry export going missing.
+  const registry = (mod.FEATURE_REGISTRY ?? []) as RegistryEntry[];
 
   if (!Array.isArray(registry) || registry.length === 0) {
     console.error('Operations route guard: FEATURE_REGISTRY is empty or missing');

@@ -57,14 +57,33 @@ test.describe('phase 1 roadmap smoke', () => {
 
     // `/communities/[id]/assessments` is a compatibility redirect into the
     // consolidated payments surface. Settle on the redirect TARGET before
-    // asserting: the default 5s expect budget was expiring while the run was
-    // still reported as "waiting for …/payments?tab=assessments navigation to
+    // asserting: the expect budget was expiring while the run was still
+    // reported as "waiting for …/payments?tab=assessments navigation to
     // finish", i.e. the assertion was racing a first-compile page load rather
     // than observing a missing heading.
+    //
+    // Two corrections to what this comment used to say, both worth keeping so
+    // the pattern is copied for the right reason:
+    //
+    //   - It is NOT that `goto` fails to follow the redirect. This is a
+    //     server-side `redirect()` in a Server Component, so the 307 is already
+    //     followed. What `toHaveURL` buys is budget SEPARATION — one window for
+    //     navigation that says so when it fails, another for content.
+    //   - The budget it was expiring against is 15s, not 5s:
+    //     `playwright.ci.config.ts` sets `expect: { timeout: 15_000 }`. 5s is
+    //     the LOCAL default only, so "15s was not enough" is a much stronger
+    //     signal than the original note implied.
     await page.goto(`/communities/${communityId}/assessments`, {
       waitUntil: 'domcontentloaded',
     });
-    await expect(page).toHaveURL(/\/payments\?tab=assessments$/, { timeout: 30_000 });
+    // 60s, not 30s. This is a redirect CHAIN into a route being compiled for
+    // the first time, so it pays two first-compile costs where the assertions
+    // below pay one. At 30s it was the run's only flaky block — failing once
+    // and passing on retry, which is the signature of a budget that is close
+    // rather than a target that is missing. `esign-and-documents-flow` records
+    // the same measurement: first compile lands in the 30-60s range under a
+    // full-suite run, and its own budgets were widened for it.
+    await expect(page).toHaveURL(/\/payments\?tab=assessments$/, { timeout: 60_000 });
 
     await expect(page.getByRole('heading', { name: 'Assessments' })).toBeVisible({
       timeout: 30_000,
@@ -106,13 +125,51 @@ test.describe('phase 1 roadmap smoke', () => {
     // are ROLE=TAB rather than the standalone buttons this spec was written
     // against. Same assertions, real locators: the summary tiles render, the
     // sub-tabs are reachable, and Ledger exposes its filter control.
-    await page.goto(`/communities/${communityId}/finance`);
+    await page.goto(`/communities/${communityId}/finance`, {
+      waitUntil: 'domcontentloaded',
+    });
 
-    await expect(page.getByText('Billed This Month')).toBeVisible();
+    // Settle the redirect on its own budget before asserting content.
+    //
+    // NOT because `goto` fails to follow the redirect — this is a server-side
+    // `redirect()` in a Server Component, so the 307 is already followed. What
+    // this buys is BUDGET SEPARATION and correct attribution: previously one
+    // 15s window (`expect.timeout` in playwright.ci.config.ts) covered
+    // navigation AND hydration AND a client fetch, and when it expired the
+    // error blamed a missing element while the trace said "waiting for
+    // …/payments?tab=overview navigation to finish". Two windows, and a failure
+    // now names which half was slow.
+    await expect(page).toHaveURL(/\/payments\?tab=overview$/, { timeout: 60_000 });
+
+    // 30s, and this is the expensive one in the file. `KpiCard` returns
+    // `<KpiCardSkeleton />` while `isLoading` (components/shared/kpi-card.tsx),
+    // so this text is not merely late — it is ABSENT FROM THE DOM until
+    // `useLedger` resolves `/api/v1/ledger`. `warmup.setup.ts` warms pages, not
+    // `/api/*`, so this assertion carries a cold `next dev` compile of an API
+    // route that nothing pre-warms.
+    await expect(page.getByText('Billed This Month')).toBeVisible({ timeout: 30_000 });
+
+    // The rest stay on the inherited 15s deliberately. The tabs are server-
+    // rendered with the document, and `useRecentPayments` fires in parallel
+    // with `useLedger` — so once Billed lands, Collected is milliseconds
+    // behind. Padding these would be cargo-culting the line above.
     await expect(page.getByText('Collected This Month')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Ledger' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Delinquency' })).toBeVisible();
 
+    // A BARE click, and it must stay one: this is a Radix `TabsTrigger`, which
+    // handles `onMouseDown`/`onKeyDown` and never `onClick` — so
+    // `clickWhenHydrated`'s probe could never resolve and would time out on a
+    // perfectly hydrated control. Guarding one is what broke
+    // `esign-and-documents-flow` (#1046).
+    //
+    // It is hydration-SAFE for a reason worth stating, because it is not
+    // obvious: `Tabs` here is CONTROLLED from `useSearchParams`, so a click
+    // dispatched before hydration would silently do nothing at all. What makes
+    // that impossible is the `Billed This Month` assertion above — it cannot
+    // pass until a client-side React Query fetch has resolved, which cannot
+    // happen before hydration. That assertion is therefore load-bearing as a
+    // hydration gate, not just a content check. Do not "optimise" it away.
     await page.getByRole('tab', { name: 'Ledger' }).click();
     await expect(page.getByRole('combobox').first()).toBeVisible();
   });

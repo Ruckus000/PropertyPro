@@ -113,19 +113,67 @@ export default defineConfig({
         // Per-server rather than a step-level NODE_OPTIONS in e2e.yml, which
         // reached BOTH servers. That is tidiness, NOT a fix for anything.
         //
-        // Do not repeat my mistake here: `next dev` logs
-        // "Server is approaching the used memory threshold, restarting..."
-        // during this job, and it is TEMPTING to read that as the cause of the
-        // ERR_CONNECTION_RESET failures. It is not. Measured across runs:
+        // `next dev` logs "Server is approaching the used memory threshold,
+        // restarting..." during this job. The conclusion to draw from that has
+        // been revised once; both halves matter.
         //
-        //   4e7cb929  E2E success  1 restart
-        //   62d63c28  E2E success  1 restart
-        //   e91785d2  E2E failure  1 restart
+        // STILL TRUE: tuning this ceiling does nothing. Measured — 6144 and
+        // 10240 both produced two restarts in a run, and 8192 is simply a value
+        // that has run green repeatedly. It is not load-bearing.
         //
-        // The restart happens just as often when the job PASSES. Tuning the
-        // ceiling changes nothing either — 6144 and 10240 both produced two
-        // restarts in a run. 8192 is simply the value that has run green
-        // repeatedly; it is not load-bearing.
+        // And there is now a mechanism for why, rather than a correlation.
+        // `next@15.5.12` `dist/server/lib/start-server.js` checks, in the
+        // `finally` of the request listener — i.e. after EVERY request:
+        //
+        //     if (used_heap_size > 0.8 * heap_size_limit) { ... process.exit() }
+        //
+        // `used_heap_size` counts garbage V8 has not collected yet, and V8 sizes
+        // old-space growth relative to the configured limit. Raising
+        // --max-old-space-size raises BOTH SIDES of that comparison, which is
+        // exactly why 6144 and 10240 measured the same. There is no env switch
+        // to disable the watchdog; the `isDev` branch is unconditional.
+        //
+        // REVISED: this comment used to conclude "the restart is not the cause"
+        // of the ERR_CONNECTION_RESET failures, from a table of three runs
+        // showing 1 restart in two passes and in one failure. That inference
+        // does not hold. The failure needs a CONJUNCTION — a restart AND a
+        // request in flight at that instant. Restart count is near-constant
+        // because it tracks compile volume, and the suite is the same every
+        // run, so it cannot discriminate pass from fail; the discriminating
+        // variable is coincidence, which that table never measured.
+        //
+        // `.github/workflows/e2e.yml` has the direct temporal evidence, from
+        // the server's own log: the restart at 01:37:15.8, the
+        // ERR_CONNECTION_RESET at 01:37:17.3. `process.exit()` does not drain,
+        // so every open socket is severed — and it severs ANY in-flight
+        // request, not only document navigations.
+        //
+        // RESOLVED: `dev:e2e` now runs under Turbopack, which holds the module
+        // graph in Rust-side memory OUTSIDE the V8 heap this watchdog reads. So
+        // `used_heap_size` no longer approaches the threshold and the restart
+        // does not fire. Measured, one variable changed (the `--turbopack` flag
+        // in apps/web/package.json), same allowlist:
+        //
+        //                          webpack      Turbopack
+        //   restarts logged           1             0
+        //   ERR_CONNECTION_RESET      1             0
+        //   flaky                     1             0
+        //   duration                14m36s        8m40s
+        //
+        // Confirmed the flag actually took effect rather than inferring it from
+        // the improvement: Turbopack's `serverExternalPackages` warning
+        // ("… can't be external") appears 114x under the flag and 0x without,
+        // while webpack's `PackFileCacheStrategy` drops 13 -> 3 — the 3 being
+        // the ADMIN server below, still webpack on purpose.
+        //
+        // This ceiling is therefore now mostly vestigial for the web server. It
+        // is left in place because it costs nothing, and because reverting to
+        // webpack (see `dev:webpack`) would need it back.
+        //
+        // Still true, and still the reason not to "fix" a reset in a spec: a
+        // `page.goto` retry covers one of several exposed request types and
+        // deletes the only signal that this happens. `retries: 2` below is the
+        // right backstop.
         NODE_OPTIONS: '--max-old-space-size=8192',
       },
       url: `http://127.0.0.1:${WEB_PORT}`,
@@ -148,8 +196,26 @@ export default defineConfig({
       // `StartSessionDialog` returns WITHOUT calling `window.open` — so the
       // spec waited 120s for a popup that could never arrive. That was the
       // whole of #958: an environment gap wearing a timeout as a disguise.
+      // `--turbopack` to match the web server above and `apps/admin`'s own
+      // `dev` script — this CI invocation was the only place either app still
+      // ran webpack.
+      //
+      // HARDENING, NOT A FIX, and worth being clear about: admin has never been
+      // observed restarting. Both Turbopack runs on the web server logged ZERO
+      // "approaching the used memory threshold" lines across the whole job,
+      // which covers this process too, and `support-access` passed in every
+      // measured run either side of that change. So the success criterion here
+      // is NOT "restarts drop" — there were none to drop. It is that
+      // support-access still passes and the server still starts.
+      //
+      // The reasons to do it anyway: the same watchdog mechanism applies if
+      // this server's heap ever grows (the allowlist is meant to GROW, and
+      // admin specs would land here); one fewer webpack process frees runner
+      // memory for Chromium; and a single bundler across both servers means one
+      // less thing that differs when something goes wrong. `dev:webpack` in
+      // apps/admin/package.json remains the revert path.
       command:
-        'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
+        'pnpm --filter @propertypro/admin exec next dev --turbopack --port 3001 --hostname 127.0.0.1',
       env: {
         // 4GB. I first set this to 1536 reasoning that one spec touches this
         // app so it cannot need much — and killed it. A `next dev` process has

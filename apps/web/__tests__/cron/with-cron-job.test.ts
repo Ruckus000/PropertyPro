@@ -1,0 +1,322 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { recordCronRunMock } = vi.hoisted(() => ({ recordCronRunMock: vi.fn() }));
+vi.mock('@/lib/services/cron-run-service', () => ({ recordCronRun: recordCronRunMock }));
+
+import { collectFailureSignals, withCronJob } from '@/lib/cron/with-cron-job';
+
+/**
+ * The `job` tag, tested against the REAL Sentry SDK.
+ *
+ * WHY NOT MOCK. The thing under test is Sentry's own scope-propagation
+ * behaviour — whether a tag set on an isolation scope reaches an event captured
+ * inside a nested `withScope` fork (which is how `withErrorHandler` captures)
+ * and inside a nested async service call. A mocked `@sentry/nextjs` would
+ * assert only that we called the functions we wrote, which is exactly the
+ * mistake that let #1042 ship: the unit suite mocked `execute`, so the bound
+ * values never reached a driver and a fatal bug read as green.
+ *
+ * So this initialises the real SDK with a `beforeSend` that captures the
+ * assembled event and returns `null` — nothing is transmitted, and the
+ * assertion is against the event Sentry actually built.
+ *
+ * The inverted-nesting case is the anti-vacuity probe for the ordering rule:
+ * without it, these tests would pass just as happily against a wrapper that
+ * tags nothing anyone can see.
+ */
+const captured: Sentry.ErrorEvent[] = [];
+
+Sentry.init({
+  dsn: 'https://examplePublicKey@o0.ingest.sentry.io/0',
+  enabled: true,
+  // Collect and drop: the assertions read the event Sentry assembled, and
+  // nothing leaves the process.
+  beforeSend(event) {
+    captured.push(event);
+    return null;
+  },
+});
+
+const req = () => new Request('http://localhost/api/v1/internal/x') as unknown as NextRequest;
+const tagsOf = (i = 0) => captured[i]?.tags ?? {};
+
+/**
+ * Sentry assembles an event through an async pipeline, so `beforeSend` has not
+ * necessarily run by the time `captureException` returns. Asserting straight
+ * after the call reads an empty array and would pass for a wrapper that tags
+ * nothing — so every case settles the pipeline first.
+ */
+const settle = () => Sentry.flush(2000);
+
+beforeEach(() => {
+  captured.length = 0;
+  recordCronRunMock.mockReset();
+  recordCronRunMock.mockResolvedValue(undefined);
+});
+
+afterAll(async () => {
+  await Sentry.flush(500).catch(() => undefined);
+});
+
+describe('withCronJob stamps the job tag', () => {
+  it('tags an error captured inside a nested withScope — the #1042 shape', async () => {
+    // `withErrorHandler` captures inside its own `Sentry.withScope` fork and
+    // sets `request_id` there. Both tags must survive onto one event.
+    const handler = withCronJob('scheduled-site-publish', async () => {
+      Sentry.withScope((scope) => {
+        scope.setTag('request_id', 'req-1');
+        Sentry.captureException(new Error('Failed query'));
+      });
+      return NextResponse.json({ data: {} });
+    });
+
+    await handler(req());
+    await settle();
+
+    expect(captured).toHaveLength(1);
+    expect(tagsOf()).toMatchObject({ job: 'scheduled-site-publish', request_id: 'req-1' });
+  });
+
+  it('tags a message captured deep in a nested async service', async () => {
+    // Services call captureMessage with no scope of their own; the tag has to
+    // reach them through the async context, which is what an ISOLATION scope
+    // (rather than withScope) buys.
+    const handler = withCronJob('community-export-worker', async () => {
+      await (async () => {
+        await Promise.resolve();
+        Sentry.captureMessage('cron_job_reported_failures');
+      })();
+      return NextResponse.json({ data: {} });
+    });
+
+    await handler(req());
+    await settle();
+
+    expect(captured).toHaveLength(1);
+    expect(tagsOf()).toMatchObject({ job: 'community-export-worker' });
+  });
+
+  it('does not leak the tag to work outside the wrapper', async () => {
+    // Isolation must be isolation: a later unrelated capture must not inherit
+    // the last cron's identity, or every unrelated 500 would match the alert.
+    const handler = withCronJob('expire-demos', async () => NextResponse.json({ data: {} }));
+    await handler(req());
+
+    Sentry.captureException(new Error('unrelated request'));
+    await settle();
+
+    expect(captured).toHaveLength(1);
+    expect(tagsOf().job).toBeUndefined();
+  });
+
+  it('propagates the handler result unchanged', async () => {
+    const handler = withCronJob('snowbird-digest', async () =>
+      NextResponse.json({ data: { sent: 3 } }, { status: 200 }),
+    );
+
+    const res = await handler(req());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ data: { sent: 3 } });
+  });
+
+  it('lets a handler throw rather than swallowing it', async () => {
+    // `withErrorHandler` is what turns a throw into a 500; this wrapper must
+    // stay transparent, or it would become the thing that hides failures.
+    const handler = withCronJob('late-fee-processor', async () => {
+      throw new Error('boom');
+    });
+
+    await expect(handler(req())).rejects.toThrow('boom');
+  });
+
+  /**
+   * ANTI-VACUITY PROBE for the ordering rule enforced by
+   * `pnpm guard:cron-job-tagging`.
+   *
+   * Inverted — the capture happening OUTSIDE the isolation scope — the tag is
+   * silently absent. No error, no warning, and a route that reads as correctly
+   * instrumented. This case is what makes the guard's existence justified
+   * rather than decorative, and it is why the wrapper must be outermost.
+   */
+  it('loses the tag when the capture happens outside the wrapper (why order matters)', async () => {
+    const inner = withCronJob('visitor-auto-checkout', async () => NextResponse.json({ data: {} }));
+
+    await inner(req());
+    Sentry.captureException(new Error('escaped the isolation scope'));
+    await settle();
+
+    expect(captured).toHaveLength(1);
+    expect(tagsOf()).not.toHaveProperty('job');
+  });
+});
+
+/**
+ * Failures that hide behind a 200.
+ *
+ * HTTP status is not a reliable signal for these jobs: several catch their own
+ * errors and report them in the body. `console.error` is not a Sentry signal
+ * (no `captureConsoleIntegration`), so before this those counters lived only in
+ * Vercel logs nobody tails.
+ *
+ * There is no single production line to revert here, so each case below is its
+ * own anti-vacuity probe — per .claude/rules/verification.md, one probe does
+ * not cover several mechanisms.
+ */
+describe('collectFailureSignals', () => {
+  it('reads a numeric counter', () => {
+    expect(collectFailureSignals({ failed: 3 })).toEqual([{ key: 'failed', count: 3 }]);
+  });
+
+  it('reads an array counter by its length', () => {
+    expect(collectFailureSignals({ errors: ['a', 'b'] })).toEqual([{ key: 'errors', count: 2 }]);
+  });
+
+  it('finds counters nested inside the response envelope', () => {
+    // Real shape: `{ data: { summary: { errors: [...] } } }`.
+    expect(collectFailureSignals({ data: { summary: { rowsFailed: 4 } } })).toEqual([
+      { key: 'rowsFailed', count: 4 },
+    ]);
+  });
+
+  it('stays silent on a clean run — zero is not a failure', () => {
+    expect(collectFailureSignals({ data: { failed: 0, errors: [], processed: 12 } })).toEqual([]);
+  });
+
+  it('ignores keys that merely look failure-ish', () => {
+    // The allowlist is explicit so a field added later cannot silently start
+    // paging someone at 4am.
+    expect(collectFailureSignals({ failureRate: 9, hasFailed: true, failedAt: 'x' })).toEqual([]);
+  });
+
+  it('does not recurse forever on a cyclic body', () => {
+    const cyclic: Record<string, unknown> = { failed: 1 };
+    cyclic.self = cyclic;
+    expect(() => collectFailureSignals(cyclic)).not.toThrow();
+  });
+});
+
+describe('withCronJob reports summary failures', () => {
+  const jsonHandler = (body: unknown, status = 200) =>
+    withCronJob('account-lifecycle', async () => NextResponse.json(body, { status }));
+
+  it('raises a tagged event when the body admits to failures behind a 200', async () => {
+    const res = await jsonHandler({ data: { failed: 2 } })(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.message).toBe('cron_job_reported_failures');
+    expect(captured[0]?.level).toBe('error');
+    expect(tagsOf()).toMatchObject({ job: 'account-lifecycle' });
+  });
+
+  it('stays silent on a clean run', async () => {
+    await jsonHandler({ data: { failed: 0, errors: [] } })(req());
+    await settle();
+
+    expect(captured).toHaveLength(0);
+  });
+
+  it('stays silent — and does not throw — on a non-JSON body', async () => {
+    // Telemetry must never be able to turn a working cron into a broken one.
+    const handler = withCronJob('expire-demos', async () => new Response('plain text'));
+
+    const res = await handler(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(captured).toHaveLength(0);
+  });
+
+  it('leaves the response body readable by the caller', async () => {
+    // The scan reads a clone; consuming the original would break every route.
+    const res = await jsonHandler({ data: { failed: 1 } })(req());
+
+    await expect(res.json()).resolves.toEqual({ data: { failed: 1 } });
+  });
+});
+
+/**
+ * The heartbeat — durable evidence the job ran.
+ *
+ * Sentry cannot see a job that STOPS running: the 2026-08 outage was every cron
+ * 401ing for months, which throws `UnauthorizedError` (an `AppError`) and never
+ * reaches Sentry at all. `last_succeeded_at` going stale is the only signal
+ * that catches that, which is why a non-2xx must be recorded as a failure and
+ * not quietly ignored.
+ */
+describe('withCronJob records a heartbeat', () => {
+  it('records a success for a 2xx', async () => {
+    await withCronJob('snowbird-digest', async () => NextResponse.json({ data: {} }))(req());
+
+    expect(recordCronRunMock).toHaveBeenCalledWith(
+      'snowbird-digest',
+      expect.objectContaining({ status: 'ok', error: null }),
+    );
+  });
+
+  it('records a FAILURE for a non-2xx — the 401 case that Sentry never sees', async () => {
+    const handler = withCronJob('payment-reminders', async () =>
+      NextResponse.json({ error: 'nope' }, { status: 401 }),
+    );
+
+    await handler(req());
+
+    expect(recordCronRunMock).toHaveBeenCalledWith(
+      'payment-reminders',
+      expect.objectContaining({ status: 'error', error: 'HTTP 401' }),
+    );
+  });
+
+  it('records a failure when the handler throws, and still rethrows', async () => {
+    const handler = withCronJob('late-fee-processor', async () => {
+      throw new Error('DB connection failed');
+    });
+
+    await expect(handler(req())).rejects.toThrow('DB connection failed');
+    expect(recordCronRunMock).toHaveBeenCalledWith(
+      'late-fee-processor',
+      expect.objectContaining({ status: 'error', error: 'DB connection failed' }),
+    );
+  });
+
+  it('truncates a long failure reason rather than storing a log', async () => {
+    const handler = withCronJob('expire-demos', async () => {
+      throw new Error('x'.repeat(5000));
+    });
+
+    await expect(handler(req())).rejects.toThrow();
+    const recorded = recordCronRunMock.mock.calls[0]?.[1] as { error: string };
+    expect(recorded.error.length).toBe(300);
+  });
+
+  /**
+   * THE SAFETY PROPERTY. Monitoring that can cause an outage is worse than no
+   * monitoring, and this code runs precisely when the database is already
+   * unhappy. A heartbeat write that fails must be invisible to the caller.
+   */
+  it('a failing heartbeat write does not change the response', async () => {
+    recordCronRunMock.mockRejectedValue(new Error('cron_runs is unreachable'));
+    const handler = withCronJob('visitor-auto-checkout', async () =>
+      NextResponse.json({ data: { autoCheckedOut: 2 } }),
+    );
+
+    const res = await handler(req());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ data: { autoCheckedOut: 2 } });
+  });
+
+  it('a failing heartbeat write does not mask the handler’s own error', async () => {
+    recordCronRunMock.mockRejectedValue(new Error('cron_runs is unreachable'));
+    const handler = withCronJob('compliance-alerts', async () => {
+      throw new Error('the real failure');
+    });
+
+    // The original error must survive — not be replaced by the telemetry's.
+    await expect(handler(req())).rejects.toThrow('the real failure');
+  });
+});

@@ -115,7 +115,15 @@ test.describe('E-Sign send flow (CAM)', () => {
   // attempts died mid-navigation to the signing page, each one getting
   // further than the last as the dev server's caches warmed. That is a budget
   // that no longer fits, not a hang.
-  test.setTimeout(180_000);
+  //
+  // Raised 180s -> 240s on 2026-09-05. This block crosses roughly five routes
+  // and mounts PDF.js twice, and it was failing at EXACTLY 3.0m — the cap, not
+  // an assertion. That distinction matters beyond pass/fail: a block that hits
+  // its cap reports "Test timeout of 180000ms exceeded" and names nothing, so
+  // the run tells you only that it was slow somewhere. The swallowed-click
+  // fixes below should reclaim most of the time on their own; the wider cap is
+  // here so that if it fails again it fails AT an assertion, with a name.
+  test.setTimeout(240_000);
 
   test('CAM sends Violation Acknowledgment; public signer completes via Type signature', async ({
     page,
@@ -130,7 +138,7 @@ test.describe('E-Sign send flow (CAM)', () => {
 
     // The single-page form became a four-step builder. The E-Sign screen's own
     // link still lands on it, at step 1.
-    await page.getByRole('link', { name: /Send Document/i }).click();
+    await clickWhenHydrated(page.getByRole('link', { name: /Send Document/i }));
     // `exact` matters: without it this also matches the global search button,
     // whose aria-label is "Search documents, residents, meetings".
     await expect(
@@ -193,7 +201,7 @@ test.describe('E-Sign send flow (CAM)', () => {
       { timeout: 120_000 },
     );
 
-    await page.getByRole('button', { name: /Send for Signing/i }).click();
+    await clickWhenHydrated(page.getByRole('button', { name: /Send for Signing/i }));
     const createResp = await createResponsePromise;
     const createJson = (await createResp.json()) as {
       data: {
@@ -208,7 +216,19 @@ test.describe('E-Sign send flow (CAM)', () => {
     expect(externalId).toBeTruthy();
     expect(slug).toBeTruthy();
 
-    await expect(page.getByRole('heading', { name: /^E-Sign$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^E-Sign$/i })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Settle the client-side navigation Send-for-Signing kicked off BEFORE
+    // navigating away. `page.goto` issued while another navigation is in flight
+    // aborts it, which is the observed
+    // `page.goto: net::ERR_ABORTED; maybe frame was detached?`. The heading
+    // above is not sufficient on its own: it is server markup and can be
+    // visible while the route transition is still resolving.
+    await page.waitForURL((url) => !url.pathname.includes('/submissions/new'), {
+      timeout: 30_000,
+    });
 
     await page.goto(`/sign/${externalId}/${slug}`, { waitUntil: 'domcontentloaded' });
 
@@ -221,28 +241,67 @@ test.describe('E-Sign send flow (CAM)', () => {
     // content. Neighbouring assertions in this file already allow 30-60s for the
     // same reason. The assertion itself is unchanged.
     await expect(page.getByText(/Signing as:/i)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/tenant\.one@sunset\.local/i)).toBeVisible();
+    await expect(page.getByText(/tenant\.one@sunset\.local/i)).toBeVisible({
+      timeout: 30_000,
+    });
     await expectPdfPreviewCanvas(page);
     await expect(page.getByText('PDF Document Preview')).toHaveCount(0);
 
     await page.getByPlaceholder('Owner Name').fill('Tenant One');
     await page.getByPlaceholder('Unit Number').fill('101');
 
-    await page.locator('[title="Correction Deadline"]').click();
-    await page.locator('[title="Date"]').click();
+    // Every control below is a field overlay or a Radix surface on a page this
+    // run has just navigated to, so each one is in the swallowed-click window
+    // that `clickWhenHydrated` exists to close. A bare click here dispatches
+    // into unhydrated markup and is lost, and no timeout downstream can
+    // recover it — the click already happened.
+    await clickWhenHydrated(page.locator('[title="Correction Deadline"]'));
+    await clickWhenHydrated(page.locator('[title="Date"]'));
 
-    await page.getByRole('button', { name: /I acknowledge receipt of this violation notice/i }).click();
-    await page.getByRole('button', { name: /I agree to take corrective action/i }).click();
+    await clickWhenHydrated(
+      page.getByRole('button', { name: /I acknowledge receipt of this violation notice/i }),
+    );
+    await clickWhenHydrated(
+      page.getByRole('button', { name: /I agree to take corrective action/i }),
+    );
 
-    await page.getByRole('button', { name: /Owner Signature/i }).click();
+    // `Owner Signature` is the last control that needs the guard. Everything
+    // after it lives INSIDE the signature dialog, which only exists because a
+    // client-side interaction opened it — so it cannot be unhydrated server
+    // markup, and the guard buys nothing there.
+    //
+    // It also actively breaks: `waitForHydrated` probes the MATCHED node for an
+    // `onClick` prop, and a Radix `Tabs.Trigger` activates on mousedown/focus
+    // rather than click, so it carries none. Guarding the Type tab timed out
+    // after 30s on all three attempts with the helper's own message — "React
+    // never attached an onClick handler" — which was true and not the problem.
+    //
+    // The rule this settles: guard the FIRST click on a freshly-loaded,
+    // server-rendered page. Once one click has landed, hydration is proven, and
+    // further guards only add ways to fail.
+    await clickWhenHydrated(page.getByRole('button', { name: /Owner Signature/i }));
     await page.getByRole('tab', { name: 'Type' }).click();
     await page.getByPlaceholder(/Type your full name/i).fill('Tenant One');
     await page.getByRole('button', { name: 'Confirm' }).click();
 
-    await page.getByRole('checkbox').check();
+    // The consent checkbox only mounts once the signature is confirmed, so it
+    // is genuinely absent for a moment. Waiting for it separates "not there
+    // yet" from "not there at all" — the observed failure was `element(s) not
+    // found`, which is what an unwaited `.check()` reports for both.
+    const consent = page.getByRole('checkbox');
+    await expect(consent).toBeVisible({ timeout: 30_000 });
+    await consent.check();
+    // Bare click, same reasoning: six controls on this page have already
+    // responded, so hydration is not in question — and Finish may well be a
+    // form submit button, whose handler is `onSubmit` on the form rather than
+    // `onClick` on the button. The guard cannot see that and would time out.
     await page.getByRole('button', { name: 'Finish' }).click();
 
-    await expect(page.getByRole('heading', { name: /Signing complete/i })).toBeVisible();
+    // Finish posts and then re-renders; the default 5s budget was being spent
+    // on the round trip.
+    await expect(page.getByRole('heading', { name: /Signing complete/i })).toBeVisible({
+      timeout: 30_000,
+    });
 
     await loginAs(page, 'cam', {
       communitySlug: SUNSET_CONDOS_SLUG,
@@ -260,7 +319,11 @@ test.describe('E-Sign send flow (CAM)', () => {
 });
 
 test.describe('Library documents (board admin → tenant)', () => {
-  test.setTimeout(120_000);
+  // Raised 120s -> 180s for the same reason as the block above: its retry was
+  // observed at 2.1m, i.e. past the cap, so the failure it reported was the
+  // budget rather than whatever was actually slow. It uploads a file, waits on
+  // a POST, mounts PDF.js twice and logs in twice.
+  test.setTimeout(180_000);
 
   test('board admin uploads a PDF to the library; tenant sees it on mobile documents', async ({
     page,
@@ -274,9 +337,11 @@ test.describe('Library documents (board admin → tenant)', () => {
       waitUntil: 'domcontentloaded',
     });
 
+    // First compile of this route, same reason the neighbouring assertions in
+    // this file carry 30-60s budgets rather than the 5s default.
     await expect(
       page.locator('#main-content').getByRole('heading', { name: /^Documents$/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
 
     // Category pills load async.
     //
@@ -289,10 +354,14 @@ test.describe('Library documents (board admin → tenant)', () => {
     // line.
     const categoryTab = page.getByRole('button', { name: /^Governing Documents$/i });
     await expect(categoryTab).toBeVisible({ timeout: 60_000 });
-    await categoryTab.click();
+    await clickWhenHydrated(categoryTab);
 
+    // Bare click: the pill above has already responded, so hydration is proven
+    // for this page. And `getByText` matches the TEXT node, whose clickable
+    // ancestor is what carries the handler — `waitForHydrated` probes the
+    // matched node and would find no `onClick` on it.
     const seededDoc = page.getByText('Sunset Condos Annual Budget').first();
-    await expect(seededDoc).toBeVisible();
+    await expect(seededDoc).toBeVisible({ timeout: 30_000 });
     await seededDoc.click();
     await assertPdfJsAssetsReachable(page);
     await expectPdfPreviewCanvas(page);
@@ -312,6 +381,9 @@ test.describe('Library documents (board admin → tenant)', () => {
       { timeout: 120_000 },
     );
 
+    // Bare click. A submit button's handler is `onSubmit` on the FORM, not
+    // `onClick` on the button, so the guard can time out on a control that is
+    // perfectly hydrated.
     await page.getByRole('button', { name: /^Upload Document$/i }).click();
     const docResp = await createDocResponse;
     expect(docResp.ok(), `POST /api/v1/documents failed: ${docResp.status()}`).toBeTruthy();
@@ -329,7 +401,7 @@ test.describe('Library documents (board admin → tenant)', () => {
     await expect(page.getByRole('button', { name: 'Uploading...' })).toBeHidden({
       timeout: 120_000,
     });
-    await expect(page.getByText(uniqueTitle)).toBeVisible();
+    await expect(page.getByText(uniqueTitle)).toBeVisible({ timeout: 30_000 });
     await page.getByText(uniqueTitle).click();
     await expectPdfPreviewCanvas(page);
     await expect(page.locator('iframe')).toHaveCount(0);
@@ -339,6 +411,8 @@ test.describe('Library documents (board admin → tenant)', () => {
       waitUntil: 'domcontentloaded',
     });
 
-    await expect(page.getByText(uniqueTitle)).toBeVisible();
+    // Mobile route, freshly compiled, after a second dev-login. Same budget as
+    // every other first-visit assertion in this file.
+    await expect(page.getByText(uniqueTitle)).toBeVisible({ timeout: 30_000 });
   });
 });

@@ -598,6 +598,7 @@ For database rollbacks, Supabase provides point-in-time recovery (PITR) on Pro p
 | `/api/v1/compliance` | GET (authed) | 200/401 |
 | `/api/v1/internal/readiness` | GET + Bearer `READINESS_CHECK_SECRET` | `healthy`/`degraded`; `schema_compatibility` must pass |
 | `/api/v1/internal/revenue-snapshot/health` | GET, **no auth** | 200 while `hours_since` < 26, else 503. The only check that proves the cron path *works* rather than that its config exists — see §4.2. |
+| `/api/v1/internal/cron-health` | GET, **no auth** | 200 while EVERY scheduled job has succeeded inside its own window, else 503 naming the stale ones. Generalises the row above from one job to all seventeen. Returns slugs and timestamps only — never `last_error`, which can carry query text. |
 
 ## 9. Troubleshooting
 
@@ -633,7 +634,11 @@ no reminder emails, no late fees, no generated assessments.
 2. Confirm `CRON_SECRET` exists for **Production** (`vercel env ls production`).
    Unset, Vercel sends no `Authorization` header at all, so every job 401s.
 3. Confirm a job actually completed, not merely that config is present:
-   `curl https://www.getpropertypro.com/api/v1/internal/revenue-snapshot/health`
+   `curl https://www.getpropertypro.com/api/v1/internal/cron-health`
+
+   Prefer this over `revenue-snapshot/health`, which proves ONE job of seventeen
+   ran. A 503 here names the stale jobs directly. (The older probe still works and
+   is kept: `curl https://www.getpropertypro.com/api/v1/internal/revenue-snapshot/health`)
 
 See §4.2 — and note that adding a per-route secret does **not** fix this.
 

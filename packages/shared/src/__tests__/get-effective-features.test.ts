@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CommunityFeatures } from '../../src/features/types';
-import { COMMUNITY_FEATURES } from '../../src/features/community-features';
+import {
+  COMMUNITY_FEATURES,
+  COMMUNITY_FEATURE_KEYS,
+} from '../../src/features/community-features';
 import { getEffectiveFeatures } from '../../src/features/get-features';
 
 /**
@@ -152,6 +155,29 @@ describe('getEffectiveFeatures', () => {
     const features = getEffectiveFeatures('condo_718', 'essentials');
     for (const key of ALL_FEATURE_KEYS) {
       expect(typeof features[key]).toBe('boolean');
+    }
+  });
+
+  /*
+   * COMMUNITY_FEATURE_KEYS is DERIVED from COMMUNITY_FEATURES.condo_718, which
+   * `satisfies Record<CommunityType, CommunityFeatures>` already makes
+   * exhaustive at compile time. These two cases are the runtime backstop, and
+   * they are worth having because the derivation is what runtime validators
+   * (the upgrade-requests contract) trust to be complete.
+   *
+   * The first checks it against the hand-written list above — two independent
+   * routes to the same answer, so agreement is evidence rather than tautology.
+   */
+  it('COMMUNITY_FEATURE_KEYS matches the independent hand-written list', () => {
+    expect([...COMMUNITY_FEATURE_KEYS].sort()).toEqual([...ALL_FEATURE_KEYS].sort());
+  });
+
+  it('every community type carries the same key set, so deriving from one is safe', () => {
+    // If a future refactor drops `satisfies`, one entry could diverge and the
+    // derived list would silently under-report. This is what would catch it.
+    const expected = [...COMMUNITY_FEATURE_KEYS].sort();
+    for (const [communityType, features] of Object.entries(COMMUNITY_FEATURES)) {
+      expect(Object.keys(features).sort(), `${communityType} key set`).toEqual(expected);
     }
   });
 });

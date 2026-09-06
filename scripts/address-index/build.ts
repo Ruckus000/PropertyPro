@@ -5,6 +5,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import { spawn } from 'node:child_process';
 import { spawnSync } from 'node:child_process';
 import {
@@ -71,7 +72,12 @@ async function downloadSourceZip(targetPath: string): Promise<void> {
     throw new Error(`Failed to download NAD release: ${response.status} ${response.statusText}`);
   }
 
-  const readable = Readable.fromWeb(response.body);
+  // `response.body` is typed by lib.dom, whose ReadableStream declaration omits
+  // the async-iterator members that node:stream/web's requires — so the two
+  // nominally-identical types are not assignable. The object Node's fetch
+  // actually returns IS a node web stream and does have them; the assertion
+  // reconciles the two declarations rather than loosening anything.
+  const readable = Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>);
   const writable = createWriteStream(targetPath);
   readable.pipe(writable);
   await finished(writable);

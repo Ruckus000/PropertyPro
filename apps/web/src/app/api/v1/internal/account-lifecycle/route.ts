@@ -44,6 +44,8 @@ import {
   cleanupSoftDeletedSiteBlocks,
   pruneSitePublishSnapshots,
 } from '@/lib/services/site-blocks-service';
+import { captureMessage } from '@sentry/nextjs';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.ACCOUNT_LIFECYCLE_CRON_SECRET, process.env.CRON_SECRET);
@@ -113,8 +115,11 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   //
   // Deliberately not a throw: throwing would abort phases 3-5, which is exactly
   // the isolation `account-lifecycle-sweeps.test.ts` exists to defend. A cap
-  // that trips silently is not a cap, so it goes to `summary.errors` AND to
-  // console.error, since nothing alerts on the summary today.
+  // that trips silently is not a cap, so it goes to `summary.errors`, to
+  // console.error, AND — since this is a circuit breaker on IRREVERSIBLE data
+  // deletion — to its own named Sentry event. Its own name rather than the
+  // generic `cron_job_reported_failures` so it can alert on every occurrence
+  // instead of in a 30-minute digest: one tripped cap is worth waking for.
   let purgeBatch = purgeReady;
   if (purgeReady.length > PURGE_SAFETY_CAP) {
     const message =
@@ -123,6 +128,10 @@ const handler = withErrorHandler(async (req: NextRequest) => {
       'not that a genuine backlog appeared.';
     summary.errors.push(message);
     console.error(`[account-lifecycle] ${message}`);
+    captureMessage('cron_purge_cap_tripped', {
+      level: 'error',
+      extra: { candidates: purgeReady.length, cap: PURGE_SAFETY_CAP },
+    });
     purgeBatch = [];
   }
 
@@ -273,5 +282,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 // is the opposite, that this GET is destructive by default; that predates the
 // flag and is gated by requireCronSecret on an Authorization header, which no
 // prefetcher, link scanner or browser preconnect supplies.
-export const GET = handler;
-export const POST = handler;
+const cronHandler = withCronJob('account-lifecycle', handler);
+
+export const GET = cronHandler;
+export const POST = cronHandler;
