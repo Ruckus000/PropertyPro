@@ -87,7 +87,7 @@ describe('ChangePlanForm', () => {
   });
 
   it('shows the highest-plan empty state when no upgrade is available', () => {
-    renderForm({ currentPlan: 'professional', plans: [PLANS[1]] });
+    renderForm({ currentPlan: 'professional', plans: [PLANS[1]!] });
     expect(
       screen.getByText("You're already on the highest plan available for your community."),
     ).toBeDefined();
@@ -107,7 +107,7 @@ describe('ChangePlanForm', () => {
     // reauth ran before the mutation
     expect(triggerReauthMock).toHaveBeenCalled();
     expect(triggerReauthMock.mock.invocationCallOrder[0]).toBeLessThan(
-      mutateAsyncMock.mock.invocationCallOrder[0],
+      mutateAsyncMock.mock.invocationCallOrder[0]!,
     );
     expect(mutateAsyncMock).toHaveBeenCalledWith({
       communityId: 42,

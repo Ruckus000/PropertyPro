@@ -200,7 +200,7 @@ describe('isEligibleForEventKind', () => {
     it('rejects non-residents even with a unit', () => {
       expect(
         isEligibleForEventKind(
-          makeRecipient({ role: 'manager', isAdmin: true }),
+          makeRecipient({ role: 'property_manager', isAdmin: true }),
           'my_assessment_due',
         ),
       ).toBe(false);
@@ -242,7 +242,7 @@ describe('isEligibleForEventKind', () => {
   describe('assessment_due (community-wide)', () => {
     it('requires admin + finance + the community-assessment toggle', () => {
       const admin = makeRecipient({
-        role: 'manager',
+        role: 'property_manager',
         isAdmin: true,
         preferences: {
           ...getDefaultPreferences(),
@@ -269,7 +269,7 @@ describe('isEligibleForEventKind', () => {
     it('defaults community toggle off — admins do NOT receive without opting in', () => {
       expect(
         isEligibleForEventKind(
-          makeRecipient({ role: 'manager', isAdmin: true }),
+          makeRecipient({ role: 'property_manager', isAdmin: true }),
           'assessment_due',
         ),
       ).toBe(false);
@@ -279,7 +279,7 @@ describe('isEligibleForEventKind', () => {
       expect(
         isEligibleForEventKind(
           makeRecipient({
-            role: 'manager',
+            role: 'property_manager',
             isAdmin: true,
             canReadFinances: false,
             preferences: {

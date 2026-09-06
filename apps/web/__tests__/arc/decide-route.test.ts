@@ -466,7 +466,7 @@ describe('POST /api/v1/arc/[id]/decide', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = decideArcSubmissionForCommunityMock.mock.calls[0];
+    const call = decideArcSubmissionForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

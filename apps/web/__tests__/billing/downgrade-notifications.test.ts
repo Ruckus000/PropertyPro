@@ -57,7 +57,7 @@ describe('notifyDowngrade', () => {
 
     expect(createNotificationsForEvent).toHaveBeenCalledTimes(2);
 
-    const firstCall = vi.mocked(createNotificationsForEvent).mock.calls[0];
+    const firstCall = vi.mocked(createNotificationsForEvent).mock.calls[0]!;
     expect(firstCall[0]).toBe(1); // communityId
     expect(firstCall[1]).toMatchObject({
       category: 'system',
@@ -75,7 +75,7 @@ describe('notifyDowngrade', () => {
       canceledCommunityName: 'Sunset Condos',
     });
 
-    const body: string = vi.mocked(createNotificationsForEvent).mock.calls[0][1].body ?? '';
+    const body: string = vi.mocked(createNotificationsForEvent).mock.calls[0]![1].body ?? '';
     expect(body).toContain('Sunset Condos');
   });
 });

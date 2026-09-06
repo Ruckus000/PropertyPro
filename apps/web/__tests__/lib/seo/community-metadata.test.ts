@@ -1,10 +1,18 @@
 import { describe, it, expect } from 'vitest';
+import type { Metadata } from 'next';
 import { buildCommunityMetadata } from '@/lib/seo/community-metadata';
 import {
   DEFAULT_SITE_SETTINGS,
   resolveSiteSettings,
   type SiteSettings,
 } from '@/lib/site-editor/site-settings';
+
+// `Metadata['twitter']` is a union whose bare `TwitterMetadata` member carries no
+// `card`, so the property has to be reached through an `in` narrow. Same result
+// as `meta.twitter?.card`: undefined when twitter is absent or card-less.
+function twitterCard(twitter: Metadata['twitter']): string | undefined {
+  return twitter && 'card' in twitter ? twitter.card : undefined;
+}
 
 const baseCommunity = {
   id: 1,
@@ -74,10 +82,10 @@ describe('buildCommunityMetadata', () => {
 
   it('uses summary_large_image when there is a heroImageUrl, summary otherwise', () => {
     const withImage = buildCommunityMetadata({ ...baseCommunity, heroImageUrl: 'https://x/y.webp' });
-    expect(withImage.twitter?.card).toBe('summary_large_image');
+    expect(twitterCard(withImage.twitter)).toBe('summary_large_image');
 
     const noImage = buildCommunityMetadata(baseCommunity);
-    expect(noImage.twitter?.card).toBe('summary');
+    expect(twitterCard(noImage.twitter)).toBe('summary');
   });
 
   it('falls back gracefully when city is null', () => {

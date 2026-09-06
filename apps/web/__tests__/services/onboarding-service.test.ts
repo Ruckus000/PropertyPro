@@ -118,6 +118,7 @@ const membershipRow = (communityId: number) => ({
   isUnitOwner: false,
 });
 const ACTOR_USER_ID = 'actor-uuid-000';
+const INVITER_NAME = 'Acting Manager';
 const USER_ID = 'user-uuid-123';
 
 function resetMocks() {
@@ -462,6 +463,7 @@ describe('createOnboardingInvitation', () => {
       userId: USER_ID,
       ttlDays: 7,
       actorUserId: ACTOR_USER_ID,
+      inviterName: INVITER_NAME,
     });
 
     // Returns token and expiresAt
@@ -521,6 +523,7 @@ describe('createOnboardingInvitation', () => {
         communityId: 999,
         userId: USER_ID,
         actorUserId: ACTOR_USER_ID,
+        inviterName: INVITER_NAME,
       }),
     ).rejects.toThrow('Community 999 not found');
 
@@ -538,6 +541,7 @@ describe('createOnboardingInvitation', () => {
         communityId: COMMUNITY_ID,
         userId: 'nonexistent-uuid',
         actorUserId: ACTOR_USER_ID,
+        inviterName: INVITER_NAME,
       }),
     ).rejects.toThrow('User nonexistent-uuid not found');
 
@@ -558,6 +562,7 @@ describe('createOnboardingInvitation', () => {
       communityId: COMMUNITY_ID,
       userId: USER_ID,
       actorUserId: ACTOR_USER_ID,
+      inviterName: INVITER_NAME,
     });
 
     // The InvitationEmail createElement call should pass role = 'resident'
@@ -585,6 +590,7 @@ describe('createOnboardingInvitation', () => {
       userId: USER_ID,
       ttlDays: 14,
       actorUserId: ACTOR_USER_ID,
+      inviterName: INVITER_NAME,
     });
 
     const diffDays = (result.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24);

@@ -389,7 +389,7 @@ describe('PUT /api/v1/accounting/mapping', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = updateAccountingMappingMock.mock.calls[0];
+    const call = updateAccountingMappingMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

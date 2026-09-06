@@ -51,7 +51,7 @@ describeDb('units-lookup (db-backed integration)', () => {
     if (!state) return;
     const scoped = state.dbModule.createScopedClient(communityId);
     const [row] = await scoped.insert(state.dbModule.units, { unitNumber: '101A' });
-    const expectedId = row['id'] as number;
+    const expectedId = row!['id'] as number;
 
     const result = await resolveUnitIdByLabel(communityId, '101a');
     expect(result).toEqual({ kind: 'resolved', unitId: expectedId, unitNumber: '101A' });
@@ -76,7 +76,7 @@ describeDb('units-lookup (db-backed integration)', () => {
     if (!state) return;
     const scoped = state.dbModule.createScopedClient(communityId);
     const [row] = await scoped.insert(state.dbModule.units, { unitNumber: 'DEL' });
-    const unitId = row['id'] as number;
+    const unitId = row!['id'] as number;
     await scoped.softDelete(state.dbModule.units, eq(state.dbModule.units.id, unitId));
 
     const result = await resolveUnitIdByLabel(communityId, 'DEL');
@@ -99,8 +99,8 @@ describeDb('units-lookup (db-backed integration)', () => {
     const scoped = state.dbModule.createScopedClient(communityId);
     const [a] = await scoped.insert(state.dbModule.units, { unitNumber: 'A1' });
     const [b] = await scoped.insert(state.dbModule.units, { unitNumber: 'B2' });
-    const aId = a['id'] as number;
-    const bId = b['id'] as number;
+    const aId = a!['id'] as number;
+    const bId = b!['id'] as number;
 
     const map = await getUnitLabelMap(communityId, [aId, bId]);
     expect(map.get(aId)).toBe('A1');

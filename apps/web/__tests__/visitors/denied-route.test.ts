@@ -462,6 +462,6 @@ describe('POST /api/v1/visitors/denied', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(createDeniedVisitorMock.mock.calls[0][3]).toBeNull();
+    expect(createDeniedVisitorMock.mock.calls[0]![3]).toBeNull();
   });
 });

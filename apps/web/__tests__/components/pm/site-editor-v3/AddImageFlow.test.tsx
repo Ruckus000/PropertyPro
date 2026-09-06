@@ -52,6 +52,13 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 const IMAGE_ENTRY = ADD_CATALOG.find((e) => e.blockType === 'image')!;
 const GALLERY_ENTRY = ADD_CATALOG.find((e) => e.blockType === 'gallery')!;
 
+/**
+ * The page the flow is adding to. Deliberately NOT the `pageId: 1` the block
+ * fixtures below carry, so a payload assertion that passes is reading the prop
+ * rather than coinciding with the site list. Mirrors `AddPanel.test.tsx`.
+ */
+const ABOUT_PAGE_ID = 11;
+
 function file(name = 'pool.jpg', type = 'image/jpeg', size = 1024) {
   const f = new File(['x'], name, { type });
   Object.defineProperty(f, 'size', { value: size });
@@ -61,12 +68,17 @@ function file(name = 'pool.jpg', type = 'image/jpeg', size = 1024) {
 const onAdded = vi.fn();
 const onCancel = vi.fn();
 
-function renderFlow(entry = IMAGE_ENTRY, blockOrder: number | null = 4) {
+function renderFlow(
+  entry = IMAGE_ENTRY,
+  blockOrder: number | null = 4,
+  pageId: number | null = ABOUT_PAGE_ID,
+) {
   return render(
     <AddImageFlow
       communityId={7}
       entry={entry}
       blockOrder={blockOrder}
+      pageId={pageId}
       onCancel={onCancel}
       onAdded={onAdded}
     />,
@@ -126,8 +138,26 @@ describe('AddImageFlow', () => {
       blockType: 'image',
       blockOrder: 4,
       content: { imagePath: '7/content/pool.jpg', altText: 'The pool' },
+      pageId: ABOUT_PAGE_ID,
     });
     expect(onAdded).toHaveBeenCalledWith(4, IMAGE_ENTRY);
+  });
+
+  it('forwards a null page id rather than dropping the field', async () => {
+    // `null` is what a provider that has not resolved a page yet supplies, and
+    // what `useSelectedSitePage` returns outside a provider. It must reproduce
+    // the pre-11b-3 behaviour of letting the server default, not throw.
+    // Mirrors `AddPanel.test.tsx`'s own null case.
+    renderFlow(IMAGE_ENTRY, 4, null);
+    await userEvent.upload(screen.getByLabelText(/Photo/i), file());
+    await userEvent.type(screen.getByLabelText(/Alt text/i), 'The pool');
+    await userEvent.click(screen.getByRole('button', { name: /Add Image section/i }));
+
+    await waitFor(() =>
+      expect(upsertMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ pageId: null }),
+      ),
+    );
   });
 
   it('sends the placeholder alt to the pipeline but writes decorative into content', async () => {
@@ -163,6 +193,7 @@ describe('AddImageFlow', () => {
         blockType: 'gallery',
         blockOrder: 4,
         content: { images: [{ imagePath: '7/content/pool.jpg', altText: 'The pool' }] },
+        pageId: ABOUT_PAGE_ID,
       }),
     );
   });
@@ -296,6 +327,7 @@ describe('AddImageFlow', () => {
         blockType: 'image',
         blockOrder: 4,
         content: { imagePath: POOL, altText: 'The pool, from the deck' },
+        pageId: ABOUT_PAGE_ID,
       }),
     );
     // `onAdded` fires after the upsert RESOLVES, one microtask past the call
@@ -341,6 +373,7 @@ describe('AddImageFlow', () => {
         blockType: 'gallery',
         blockOrder: 4,
         content: { images: [{ imagePath: POOL, altText: 'Pool' }] },
+        pageId: ABOUT_PAGE_ID,
       }),
     );
     expect(uploadMutateAsync).not.toHaveBeenCalled();

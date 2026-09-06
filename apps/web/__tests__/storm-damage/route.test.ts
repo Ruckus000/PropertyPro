@@ -168,7 +168,7 @@ describe('POST /api/v1/storm-damage', () => {
       }),
     );
     expect(res.status).toBe(200);
-    const passed = createStormDamageReportMock.mock.calls[0][1];
+    const passed = createStormDamageReportMock.mock.calls[0]![1];
     expect(passed.occurredAt).toBeInstanceOf(Date);
     expect((passed.occurredAt as Date).toISOString()).toBe('2026-07-18T00:00:00.000Z');
   });

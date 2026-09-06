@@ -106,7 +106,7 @@ describe('POST /api/v1/pm/site/publish', () => {
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(200);
     expect(publishMock).toHaveBeenCalledTimes(1);
-    const args = publishMock.mock.calls[0][0];
+    const args = publishMock.mock.calls[0]![0];
     expect(args.communityId).toBe(42);
     expect(args.actorUserId).toBe('user-1');
     expect(args.expectedPublishedAt).toBeInstanceOf(Date);
@@ -124,7 +124,7 @@ describe('POST /api/v1/pm/site/publish', () => {
       makeRequest({ communityId: 42, expectedPublishedAt: null }),
     );
     expect(res.status).toBe(200);
-    expect(publishMock.mock.calls[0][0].expectedPublishedAt).toBeNull();
+    expect(publishMock.mock.calls[0]![0].expectedPublishedAt).toBeNull();
   });
 
   it('returns the service result body verbatim (published path)', async () => {

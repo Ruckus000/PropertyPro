@@ -1950,6 +1950,8 @@ describe('PagesPanel — removing a page', () => {
         selectedPageId={1}
         onSelectPage={onSelectPage}
         onPageRemoved={onPageRemoved}
+        restoreFocusToSelectedRow={false}
+        onFocusRestored={onFocusRestored}
       />,
     );
 

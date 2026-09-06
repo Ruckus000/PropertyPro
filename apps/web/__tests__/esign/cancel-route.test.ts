@@ -85,6 +85,8 @@ const ADMIN_MEMBERSHIP = {
   communityType: 'condo_718' as const,
 };
 
+type NextRequestInit = NonNullable<ConstructorParameters<typeof NextRequest>[1]>;
+
 function postReq(
   id: string | number,
   opts: {
@@ -96,7 +98,7 @@ function postReq(
   const url =
     `http://localhost:3000/api/v1/esign/submissions/${id}/cancel` +
     (opts.query ? `?${opts.query}` : '');
-  const init: RequestInit = {
+  const init: NextRequestInit = {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(opts.headers ?? {}) },
   };
@@ -158,7 +160,7 @@ describe('POST /api/v1/esign/submissions/[id]/cancel', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = cancelSubmissionMock.mock.calls[0];
+    const call = cancelSubmissionMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 

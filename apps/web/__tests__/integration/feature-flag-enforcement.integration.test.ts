@@ -128,7 +128,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
     // Create test lease in apartment community
     const siteManagerC = requireUser(state, 'siteManagerC');
     const [lease] = await scopedC.insert(state.dbModule.leases, {
-      unitId: unit.id,
+      unitId: unit!.id,
       residentId: siteManagerC.id,
       startDate: '2026-01-01',
       endDate: '2026-12-31',
@@ -137,8 +137,8 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
     requireInsertedRow(lease, 'lease');
 
     testData = {
-      unitCId: unit.id,
-      leaseC1Id: lease.id,
+      unitCId: unit!.id as number,
+      leaseC1Id: lease!.id as number,
     };
 
     // Load route modules
@@ -176,7 +176,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       const res = await leases.GET(req);
 
       expect(res.status).toBe(200);
-      const body = await parseJson(res);
+      const body = await parseJson<{ data: unknown }>(res);
       expect(Array.isArray(body.data)).toBe(true);
     });
 
@@ -231,7 +231,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       const res = await leases.GET(req);
 
       expect(res.status).toBe(403);
-      const body = await parseJson(res);
+      const body = await parseJson<{ error: { message: string } }>(res);
       expect(body.error.message).toMatch(/lease tracking/i);
       expect(body.error.message).toMatch(/apartment/i);
     });
@@ -308,7 +308,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       const res = await condoOnboarding.GET(req);
 
       expect(res.status).toBe(200);
-      const body = await parseJson(res);
+      const body = await parseJson<{ data: unknown }>(res);
       expect(body.data).toHaveProperty('nextStep');
     });
 
@@ -336,7 +336,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       const res = await condoOnboarding.GET(req);
 
       expect(res.status).toBe(403);
-      const body = await parseJson(res);
+      const body = await parseJson<{ error: { message: string } }>(res);
       expect(body.error.message).toMatch(/condo onboarding/i);
       expect(body.error.message).toMatch(/condo\/hoa/i);
     });
@@ -391,7 +391,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       const res = await compliance.GET(req);
 
       expect(res.status).toBe(200);
-      const body = await parseJson(res);
+      const body = await parseJson<{ data: unknown }>(res);
       expect(Array.isArray(body.data)).toBe(true);
     });
 
@@ -423,7 +423,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       const res = await compliance.POST(req);
 
       expect(res.status).toBe(403);
-      const body = await parseJson(res);
+      const body = await parseJson<{ error: { message: string } }>(res);
       expect(body.error.message).toMatch(/compliance/i);
       expect(body.error.message).toMatch(/condo\/hoa/i);
     });
@@ -439,7 +439,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       const res = await compliance.GET(req);
 
       expect(res.status).toBe(403);
-      const body = await parseJson(res);
+      const body = await parseJson<{ error: { message: string } }>(res);
       expect(body.error.message).toMatch(/compliance/i);
       expect(body.error.message).toMatch(/condo\/hoa/i);
     });

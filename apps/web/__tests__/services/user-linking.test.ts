@@ -206,11 +206,11 @@ describe('assertActorMayAttachExistingUser', () => {
   it('does not leak the target profile through the error message', async () => {
     whenMemberships({ [ACTOR]: [1], [TARGET]: [2] });
 
-    const error = await assertActorMayAttachExistingUser({
+    const error = (await assertActorMayAttachExistingUser({
       actorUserId: ACTOR,
       targetUserId: TARGET,
       communityId: 1,
-    }).catch((e: unknown) => e as Error);
+    }).catch((e: unknown) => e as Error)) as Error;
 
     // The refusal necessarily confirms the address is registered; it must not
     // also hand over the id, the community, or any profile field.

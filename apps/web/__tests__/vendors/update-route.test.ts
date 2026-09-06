@@ -337,7 +337,7 @@ describe('PATCH /api/v1/vendors/[id]', () => {
     const res = await PATCH(jsonPatch(11, { communityId: 42 }), routeCtx('11'));
 
     expect(res.status).toBe(200);
-    const call = updateVendorForCommunityMock.mock.calls[0];
+    const call = updateVendorForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

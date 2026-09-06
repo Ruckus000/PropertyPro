@@ -220,9 +220,9 @@ describe('contracts route (runRoute)', () => {
         data: { contracts: Array<{ id: number }>; alerts: Array<{ contractId: number }> };
       };
       expect(json.data.contracts).toHaveLength(1);
-      expect(json.data.contracts[0].id).toBe(1);
+      expect(json.data.contracts[0]!.id).toBe(1);
       expect(json.data.alerts).toHaveLength(1);
-      expect(json.data.alerts[0].contractId).toBe(1);
+      expect(json.data.alerts[0]!.contractId).toBe(1);
     });
 
     it('uses createScopedClient with the resolved communityId', async () => {
@@ -257,9 +257,9 @@ describe('contracts route (runRoute)', () => {
       const json = (await res.json()) as {
         data: { contracts: Array<{ bidSummary: { embargoed: boolean; bidCount: number; bids: unknown[] } }> };
       };
-      expect(json.data.contracts[0].bidSummary.embargoed).toBe(true);
-      expect(json.data.contracts[0].bidSummary.bidCount).toBe(2);
-      expect(json.data.contracts[0].bidSummary.bids).toHaveLength(0);
+      expect(json.data.contracts[0]!.bidSummary.embargoed).toBe(true);
+      expect(json.data.contracts[0]!.bidSummary.bidCount).toBe(2);
+      expect(json.data.contracts[0]!.bidSummary.bids).toHaveLength(0);
     });
 
     it('reveals bid details when biddingClosesAt is null', async () => {
@@ -287,8 +287,8 @@ describe('contracts route (runRoute)', () => {
       const json = (await res.json()) as {
         data: { contracts: Array<{ bidSummary: { embargoed: boolean; bids: unknown[] } }> };
       };
-      expect(json.data.contracts[0].bidSummary.embargoed).toBe(false);
-      expect(json.data.contracts[0].bidSummary.bids).toHaveLength(1);
+      expect(json.data.contracts[0]!.bidSummary.embargoed).toBe(false);
+      expect(json.data.contracts[0]!.bidSummary.bids).toHaveLength(1);
     });
 
     it('returns 401 when unauthenticated', async () => {

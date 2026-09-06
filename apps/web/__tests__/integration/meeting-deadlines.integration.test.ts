@@ -189,7 +189,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     expect(typeof deadlines['minutesPostBy']).toBe('string');
 
     const expectedNoticeBy = shiftDaysExact(meetingDate, -2);
-    const actualNoticeBy = new Date(deadlines['noticePostBy']);
+    const actualNoticeBy = new Date(deadlines['noticePostBy']!);
     expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });
 
@@ -225,7 +225,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
 
     const deadlines = meeting['deadlines'] as Record<string, string>;
     const expectedNoticeBy = shiftDaysExact(meetingDate, -14);
-    const actualNoticeBy = new Date(deadlines['noticePostBy']);
+    const actualNoticeBy = new Date(deadlines['noticePostBy']!);
     expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });
 
@@ -255,7 +255,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     // MAXIMUM, not a lead time: rolling it forward would advertise day 31
     // or 32 as compliant. The deadline is exactly the statute.
     const expectedMinutesBy = shiftDaysExact(startsAt, 30);
-    const actualMinutesBy = new Date(deadlines['minutesPostBy']);
+    const actualMinutesBy = new Date(deadlines['minutesPostBy']!);
     expect(isSameDay(actualMinutesBy, expectedMinutesBy)).toBe(true);
   });
 

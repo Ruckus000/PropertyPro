@@ -159,7 +159,7 @@ describe('AddCommunityModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue to Payment' }));
 
     expect(mutateMock).toHaveBeenCalledTimes(1);
-    const [formArg] = mutateMock.mock.calls[0];
+    const [formArg] = mutateMock.mock.calls[0]!;
     expect(formArg).toMatchObject({
       name: 'Sunset Condos',
       subdomain: 'sunset-condos',

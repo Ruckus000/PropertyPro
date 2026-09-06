@@ -83,7 +83,9 @@ beforeEach(() => {
     appleTouch180: Buffer.alloc(400),
   });
   setSiteFaviconMock.mockResolvedValue({ previous: null });
-  downloadMock.mockResolvedValue({ data: new Blob([Buffer.alloc(10)]), error: null });
+  // `Uint8Array` rather than `Buffer`: byte-identical (10 zero bytes) and a
+  // valid `BlobPart`, whereas `Buffer.buffer` is `ArrayBufferLike`.
+  downloadMock.mockResolvedValue({ data: new Blob([new Uint8Array(10)]), error: null });
   uploadMock.mockResolvedValue({ error: null });
   removeMock.mockResolvedValue({ error: null });
   createAdminClientMock.mockReturnValue({

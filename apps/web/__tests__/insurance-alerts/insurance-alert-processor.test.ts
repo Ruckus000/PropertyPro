@@ -152,7 +152,7 @@ describe('processInsuranceAlerts', () => {
     expect(sendEmailMock).toHaveBeenCalledTimes(2);
     const tos = sendEmailMock.mock.calls.map((c) => c[0].to).sort();
     expect(tos).toEqual(['board1@example.com', 'pm1@example.com']);
-    const call = sendEmailMock.mock.calls[0][0];
+    const call = sendEmailMock.mock.calls[0]![0];
     expect(call.category).toBe('non-transactional');
     expect(call.unsubscribeUrl).toContain('/api/v1/insurance-alerts/unsubscribe?token=');
     expect(call.idempotencyKey).toBe('insurance-alert/1/wind_mitigation/11/30_days/board1');
@@ -166,11 +166,11 @@ describe('processInsuranceAlerts', () => {
     await processInsuranceAlerts(NOW);
 
     expect(updateMock).toHaveBeenCalledTimes(1);
-    const [table, values] = updateMock.mock.calls[0];
+    const [table, values] = updateMock.mock.calls[0]!;
     expect(table).toBe(windMitigationReports);
     expect(values).toEqual({ lastAlertBand: '30_days' });
     expect(logAuditEventMock).toHaveBeenCalledTimes(1);
-    expect(logAuditEventMock.mock.calls[0][0]).toMatchObject({
+    expect(logAuditEventMock.mock.calls[0]![0]).toMatchObject({
       action: 'notification_sent',
       resourceType: 'wind_mitigation_report',
       newValues: { alertBand: '30_days', recipients: 2 },
@@ -193,7 +193,7 @@ describe('processInsuranceAlerts', () => {
     expect(result.emailsSent).toBe(0);
     expect(updateMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).toHaveBeenCalledTimes(1);
-    expect(logAuditEventMock.mock.calls[0][0]).toMatchObject({
+    expect(logAuditEventMock.mock.calls[0]![0]).toMatchObject({
       action: 'notification_delivery_partial',
       newValues: {
         alertBand: '30_days',
@@ -224,7 +224,7 @@ describe('processInsuranceAlerts', () => {
     expect(result.emailsSent).toBe(1);
     expect(updateMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).toHaveBeenCalledTimes(1);
-    expect(logAuditEventMock.mock.calls[0][0]).toMatchObject({
+    expect(logAuditEventMock.mock.calls[0]![0]).toMatchObject({
       action: 'notification_delivery_partial',
       newValues: {
         alertBand: '30_days',

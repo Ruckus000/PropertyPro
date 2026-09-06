@@ -245,11 +245,21 @@ function setupDb(options: {
 
   // insert chain
   const onConflictDoNothingMock = vi.fn().mockResolvedValue([]);
+  // Named so both ternary arms share one mock signature — the throwing arm
+  // otherwise infers `() => never`, and `mockImplementation` below then types
+  // its argument against that arm alone.
+  type InsertValuesResult = {
+    onConflictDoNothing: typeof onConflictDoNothingMock;
+    then?: (
+      resolve: (v: unknown) => unknown,
+      _reject?: (e: unknown) => unknown,
+    ) => Promise<unknown>;
+  };
   const valuesMock = insertError
-    ? vi.fn(() => {
+    ? vi.fn((): InsertValuesResult => {
         throw insertError;
       })
-    : vi.fn(() => ({ onConflictDoNothing: onConflictDoNothingMock }));
+    : vi.fn((): InsertValuesResult => ({ onConflictDoNothing: onConflictDoNothingMock }));
   // For direct insert (no onConflictDoNothing) the handler awaits values() —
   // so make the object returned by values() also thenable.
   if (!insertError) {
@@ -1009,7 +1019,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       }));
 
       const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
-      const setMock = vi.fn(() => ({ where: whereForUpdateMock }));
+      const setMock = vi.fn((_payload: Record<string, unknown>) => ({ where: whereForUpdateMock }));
       const updateMock = vi.fn(() => ({ set: setMock }));
 
       const valuesMock = vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) }));
@@ -1069,11 +1079,11 @@ describe('POST /api/v1/webhooks/stripe', () => {
       // Atomic UPDATE returning the row — first cancellation wins.
       const returningMock = vi.fn().mockResolvedValue([{ id: 42 }]);
       const whereForUpdateMock = vi.fn(() => {
-        const p = Promise.resolve([]) as Promise<unknown[]> & { returning: typeof returningMock };
+        const p = Promise.resolve<unknown[]>([]) as Promise<unknown[]> & { returning: typeof returningMock };
         p.returning = returningMock;
         return p;
       });
-      const setMock = vi.fn(() => ({ where: whereForUpdateMock }));
+      const setMock = vi.fn((_payload: Record<string, unknown>) => ({ where: whereForUpdateMock }));
       const updateMock = vi.fn(() => ({ set: setMock }));
       const insertMock = vi.fn(() => ({
         values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
@@ -1142,7 +1152,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       // Atomic UPDATE returns empty — subscriptionCanceledAt was already set (not IS NULL).
       const returningMock = vi.fn().mockResolvedValue([]);
       const whereForUpdateMock = vi.fn(() => {
-        const p = Promise.resolve([]) as Promise<unknown[]> & { returning: typeof returningMock };
+        const p = Promise.resolve<unknown[]>([]) as Promise<unknown[]> & { returning: typeof returningMock };
         p.returning = returningMock;
         return p;
       });
@@ -1198,7 +1208,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       // so this handler's atomic UPDATE finds subscriptionCanceledAt IS NOT NULL → RETURNING [].
       const returningMock = vi.fn().mockResolvedValue([]);
       const whereForUpdateMock = vi.fn(() => {
-        const p = Promise.resolve([]) as Promise<unknown[]> & { returning: typeof returningMock };
+        const p = Promise.resolve<unknown[]>([]) as Promise<unknown[]> & { returning: typeof returningMock };
         p.returning = returningMock;
         return p;
       });
@@ -1473,7 +1483,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
 
       const returningMock = vi.fn().mockResolvedValue(returningRows);
       const whereForDeleteMock = vi.fn(() => {
-        const p = Promise.resolve([]) as Promise<unknown[]> & {
+        const p = Promise.resolve<unknown[]>([]) as Promise<unknown[]> & {
           returning: typeof returningMock;
         };
         p.returning = returningMock;

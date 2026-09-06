@@ -269,7 +269,7 @@ describe('POST /api/v1/delinquency/[unitId]/waive', () => {
     const res = await POST(jsonPost(7, { communityId: 42 }), routeCtx('7'));
 
     expect(res.status).toBe(200);
-    const call = waiveLateFeesForUnitMock.mock.calls[0];
+    const call = waiveLateFeesForUnitMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 });

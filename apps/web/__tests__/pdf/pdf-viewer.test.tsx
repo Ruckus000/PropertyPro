@@ -14,6 +14,7 @@ vi.unmock('@/components/pdf/pdf-viewer');
 import {
   __setPdfJsRuntimeImportForTests,
   PDFJS_WORKER_PATH,
+  type PdfJsModule,
 } from '../../src/lib/pdfjs/browser';
 import { PdfViewer } from '../../src/components/pdf/pdf-viewer';
 
@@ -53,13 +54,24 @@ function createPdfDocument(page: PdfPageDouble, numPages = 1) {
   };
 }
 
-function createPdfJsModule(documentPromise: Promise<ReturnType<typeof createPdfDocument>>) {
-  return {
+/*
+ * The viewer touches exactly two members of the pdfjs module —
+ * `GlobalWorkerOptions.workerSrc` and `getDocument().promise` — so the double
+ * implements that slice and nothing else. `PdfJsModule` is the whole
+ * pdfjs-dist export surface and its `getDocument` returns a real
+ * `PDFDocumentLoadingTask`, which a stub cannot satisfy structurally, so the
+ * double/real boundary is asserted once here instead of at each call site.
+ */
+function createPdfJsModule(
+  documentPromise: Promise<ReturnType<typeof createPdfDocument>>,
+): PdfJsModule {
+  const double = {
     GlobalWorkerOptions: { workerSrc: '' },
     getDocument: vi.fn(() => ({
       promise: documentPromise,
     })),
   };
+  return double as unknown as PdfJsModule;
 }
 
 describe('PdfViewer', () => {
@@ -257,7 +269,10 @@ describe('PdfViewer', () => {
     afterEach(() => {
       // `vi.restoreAllMocks()` cannot undo a defineProperty, so the stub would
       // otherwise leak into every later test in this file.
-      delete (HTMLElement.prototype as Partial<HTMLElement>).clientWidth;
+      // `clientWidth` is declared `readonly` in lib.dom, and `Partial<>` keeps
+      // that modifier, so the delete needs a view with it stripped.
+      type MutableHTMLElement = { -readonly [K in keyof HTMLElement]?: HTMLElement[K] };
+      delete (HTMLElement.prototype as MutableHTMLElement).clientWidth;
     });
 
     /** The scale the canvas was actually rendered at. */

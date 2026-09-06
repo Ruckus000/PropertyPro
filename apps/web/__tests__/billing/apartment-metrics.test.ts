@@ -32,6 +32,11 @@ vi.mock('../../src/lib/dashboard/dashboard-selectors', () => ({
 // ---------------------------------------------------------------------------
 
 import { createScopedClient } from '@propertypro/db';
+import {
+  DEFAULT_FINE_AGGREGATE_CAP_CENTS,
+  DEFAULT_FINE_CAP_CENTS,
+} from '@propertypro/shared';
+import type { CommunityMembership } from '../../src/lib/api/community-membership';
 import { loadApartmentMetrics } from '../../src/lib/queries/apartment-metrics';
 
 // ---------------------------------------------------------------------------
@@ -61,11 +66,14 @@ function offsetDate(days: number): string {
 
 const COMMUNITY_ID = 42;
 const USER_ID = 'user-abc';
-const DEFAULT_MEMBERSHIP = {
+const DEFAULT_MEMBERSHIP: CommunityMembership = {
   userId: USER_ID,
   communityId: COMMUNITY_ID,
   communityName: 'Test Community',
-  role: 'manager',
+  // `manager` pre-dates role-v3 and is not a CommunityRole. Inert here either
+  // way: the only reader is canReadAnnouncementAudience, which returns early on
+  // `isAdmin: true` and never consults `role`.
+  role: 'property_manager',
   communityType: 'apartment',
   timezone: 'America/Chicago',
   isUnitOwner: false,
@@ -77,7 +85,23 @@ const DEFAULT_MEMBERSHIP = {
   trialEndsAt: null,
   demoExpiresAt: null,
   electionsAttorneyReviewed: false,
-} as const;
+  // Required by CommunityMembership but never read on this code path; the
+  // values below are what the omitted properties already behaved as.
+  subscriptionPlan: null,
+  subscriptionStatus: null,
+  subscriptionCanceledAt: null,
+  subscriptionCurrentPeriodEndAt: null,
+  freeAccessExpiresAt: null,
+  designation: null,
+  violationFinesEnabled: false,
+  assessmentPaymentsEnabled: false,
+  smsDispatchEnabled: false,
+  noticePdfGenerationEnabled: false,
+  fineCaps: {
+    perFineCents: DEFAULT_FINE_CAP_CENTS,
+    aggregateCents: DEFAULT_FINE_AGGREGATE_CAP_CENTS,
+  },
+};
 
 interface MockData {
   units?: object[];

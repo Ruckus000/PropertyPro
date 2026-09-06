@@ -312,7 +312,7 @@ describe('POST /api/v1/violations/[id]/resolve', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = resolveViolationForCommunityMock.mock.calls[0];
+    const call = resolveViolationForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

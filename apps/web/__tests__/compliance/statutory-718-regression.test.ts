@@ -187,13 +187,13 @@ describe('getComplianceTemplate community type mapping', () => {
   it('condo_718 returns the 17-item condo template', () => {
     const template = getComplianceTemplate('condo_718');
     expect(template).toHaveLength(17);
-    expect(template[0].templateKey).toBe('718_declaration');
+    expect(template[0]!.templateKey).toBe('718_declaration');
   });
 
   it('hoa_720 returns the 10-item HOA template', () => {
     const template = getComplianceTemplate('hoa_720');
     expect(template).toHaveLength(10);
-    expect(template[0].templateKey).toBe('720_governing_docs');
+    expect(template[0]!.templateKey).toBe('720_governing_docs');
   });
 
   it('apartment community type returns empty array (no statutory requirement)', () => {

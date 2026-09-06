@@ -121,13 +121,13 @@ describe('certificate requests route', () => {
     expect(res.status).toBe(200);
 
     // first send is the agent relay
-    const agentCall = sendEmailMock.mock.calls[0][0];
+    const agentCall = sendEmailMock.mock.calls[0]![0];
     expect(agentCall.to).toBe('agent@insure.example');
     expect(agentCall.replyTo).toBe('olivia@owner.example');
     expect(agentCall.category).toBe('transactional');
 
     // second send is the requester confirmation
-    expect(sendEmailMock.mock.calls[1][0].to).toBe('olivia@owner.example');
+    expect(sendEmailMock.mock.calls[1]![0].to).toBe('olivia@owner.example');
 
     expect(createCertificateRequestMock).toHaveBeenCalledWith(
       expect.anything(),

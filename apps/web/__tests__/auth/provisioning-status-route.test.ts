@@ -6,6 +6,7 @@
  * leaked-signupRequestId replay) see the consumed marker and get no token.
  * These tests mock the provisioning-service layer the route delegates to.
  */
+import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getProvisioningJobBySignupRequestId = vi.fn();
@@ -39,11 +40,11 @@ const BASE_SIGNUP = {
 
 const HASHED_TOKEN = 'hashed-token-xyz789';
 
-function makeRequest(signupRequestId?: string): Request {
+function makeRequest(signupRequestId?: string): NextRequest {
   const url = signupRequestId
     ? `https://getpropertypro.com/api/v1/auth/provisioning-status?signupRequestId=${signupRequestId}`
     : `https://getpropertypro.com/api/v1/auth/provisioning-status`;
-  return new Request(url, { method: 'GET' });
+  return new NextRequest(url, { method: 'GET' });
 }
 
 async function dataOf(response: Response): Promise<Record<string, unknown>> {

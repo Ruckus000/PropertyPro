@@ -132,7 +132,9 @@ vi.mock('next/dynamic', () => ({
         ? () => {
             useEffect(() => {
               inspectorLifecycle.push('mount');
-              return () => inspectorLifecycle.push('unmount');
+              return () => {
+                inspectorLifecycle.push('unmount');
+              };
             }, []);
             return <p>inspector</p>;
           }

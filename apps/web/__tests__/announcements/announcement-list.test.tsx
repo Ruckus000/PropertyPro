@@ -63,7 +63,7 @@ const deletedAnnouncement = {
 } as const;
 
 interface ContainerProps {
-  items: typeof liveAnnouncement[];
+  items: Parameters<typeof AnnouncementListContainer>[0]['items'];
   communityId: number;
   currentUserId: string;
   isAdmin: boolean;

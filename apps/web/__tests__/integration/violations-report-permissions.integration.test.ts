@@ -73,9 +73,9 @@ describeDb('violations reporting permission matrix', () => {
       building: 'B',
       floor: 1,
     });
-    const unitAId = readNumberField(unitA, 'id');
-    const otherUnitAId = readNumberField(otherUnitA, 'id');
-    const unitBId = readNumberField(unitB, 'id');
+    const unitAId = readNumberField(unitA!, 'id');
+    const otherUnitAId = readNumberField(otherUnitA!, 'id');
+    const unitBId = readNumberField(unitB!, 'id');
 
     const neededUsers: MultiTenantUserKey[] = ['actorA', 'tenantA', 'actorB'];
     const unitMap = new Map<MultiTenantUserKey, number>();

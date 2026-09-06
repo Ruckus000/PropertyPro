@@ -162,9 +162,11 @@ describe('role-management-service', () => {
       ]);
       mockEssentialsAdminCapacity(3);
 
-      const error = await assignPropertyManager(7, 'target-user', 'actor-user').catch(
+      // `.catch` widens to `AssignResult | ForbiddenError`; the rejection path is
+      // the one under test, and the instanceof assertion below pins it.
+      const error = (await assignPropertyManager(7, 'target-user', 'actor-user').catch(
         (e) => e as ForbiddenError,
-      );
+      )) as ForbiddenError;
       expect(error).toBeInstanceOf(ForbiddenError);
       expect(error.code).toBe('ADMIN_LIMIT_REACHED');
       expect(error.statusCode).toBe(403);

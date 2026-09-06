@@ -137,7 +137,7 @@ describe('Sentry client instrumentation', () => {
     expect(config['dsn']).toBe('https://public@sentry.io/456');
     expect(config['enabled']).toBe(true);
 
-    mod.onRouterTransitionStart('/dashboard' as never);
+    mod.onRouterTransitionStart('/dashboard' as never, 'pushState');
     await flushMicrotasks();
     expect(mockCaptureRouterTransitionStart).toHaveBeenCalledOnce();
   });
@@ -150,7 +150,7 @@ describe('Sentry client instrumentation', () => {
 
     expect(mockInit).not.toHaveBeenCalled();
 
-    mod.onRouterTransitionStart('/dashboard' as never);
+    mod.onRouterTransitionStart('/dashboard' as never, 'pushState');
     await flushMicrotasks();
     expect(mockCaptureRouterTransitionStart).not.toHaveBeenCalled();
   });
@@ -171,7 +171,7 @@ describe('Sentry client instrumentation', () => {
       expect.any(Error),
     );
 
-    mod.onRouterTransitionStart('/dashboard' as never);
+    mod.onRouterTransitionStart('/dashboard' as never, 'pushState');
     await flushMicrotasks();
     expect(mockCaptureRouterTransitionStart).toHaveBeenCalledOnce();
 

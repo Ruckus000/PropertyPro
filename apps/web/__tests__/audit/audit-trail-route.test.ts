@@ -406,7 +406,7 @@ describe('p3-53 audit trail route', () => {
       const res = await GET(req);
       const json = (await res.json()) as JsonEnvelope;
 
-      const meta = json.data.data[0]['metadata'] as Record<string, unknown>;
+      const meta = json.data.data[0]!['metadata'] as Record<string, unknown>;
       expect(meta['requestId']).toBe('safe');
       expect(meta['apiKey']).toBe('[REDACTED]');
     });
@@ -433,7 +433,7 @@ describe('p3-53 audit trail route', () => {
       const res = await GET(req);
       const json = (await res.json()) as JsonEnvelope;
 
-      const meta = json.data.data[0]['metadata'] as Record<string, unknown>;
+      const meta = json.data.data[0]!['metadata'] as Record<string, unknown>;
       expect(meta['requestId']).toBe('req-1');
       const nested = meta['nested'] as Record<string, unknown>;
       expect(nested['token']).toBe('[REDACTED]');
@@ -463,12 +463,12 @@ describe('p3-53 audit trail route', () => {
       const res = await GET(req);
       const json = (await res.json()) as JsonEnvelope;
 
-      const meta = json.data.data[0]['metadata'] as Record<string, unknown>;
+      const meta = json.data.data[0]!['metadata'] as Record<string, unknown>;
       const items = meta['items'] as Array<Record<string, unknown>>;
-      expect(items[0]['token']).toBe('[REDACTED]');
-      expect(items[0]['label']).toBe('a');
-      expect(items[1]['secret']).toBe('[REDACTED]');
-      expect(items[1]['label']).toBe('b');
+      expect(items[0]!['token']).toBe('[REDACTED]');
+      expect(items[0]!['label']).toBe('a');
+      expect(items[1]!['secret']).toBe('[REDACTED]');
+      expect(items[1]!['label']).toBe('b');
     });
 
     it('redacts sensitive keys in oldValues and newValues', async () => {
@@ -488,8 +488,8 @@ describe('p3-53 audit trail route', () => {
       const res = await GET(req);
       const json = (await res.json()) as JsonEnvelope;
 
-      const oldVals = json.data.data[0]['oldValues'] as Record<string, unknown>;
-      const newVals = json.data.data[0]['newValues'] as Record<string, unknown>;
+      const oldVals = json.data.data[0]!['oldValues'] as Record<string, unknown>;
+      const newVals = json.data.data[0]!['newValues'] as Record<string, unknown>;
       expect(oldVals['token']).toBe('[REDACTED]');
       expect(newVals['token']).toBe('[REDACTED]');
       expect(oldVals['title']).toBe('Old Title');
@@ -514,8 +514,8 @@ describe('p3-53 audit trail route', () => {
       expect(res.status).toBe(200);
       const json = (await res.json()) as JsonEnvelope;
 
-      expect(json.data.data[0]['oldValues']).toBeNull();
-      expect(json.data.data[0]['newValues']).toEqual({ title: 'Created Document' });
+      expect(json.data.data[0]!['oldValues']).toBeNull();
+      expect(json.data.data[0]!['newValues']).toEqual({ title: 'Created Document' });
     });
 
     it('redacts case-insensitive key variants (Authorization, COOKIE, SignedUrl)', async () => {
@@ -538,7 +538,7 @@ describe('p3-53 audit trail route', () => {
       const res = await GET(req);
       const json = (await res.json()) as JsonEnvelope;
 
-      const meta = json.data.data[0]['metadata'] as Record<string, unknown>;
+      const meta = json.data.data[0]!['metadata'] as Record<string, unknown>;
       expect(meta['Authorization']).toBe('[REDACTED]');
       expect(meta['COOKIE']).toBe('[REDACTED]');
       expect(meta['SignedUrl']).toBe('[REDACTED]');

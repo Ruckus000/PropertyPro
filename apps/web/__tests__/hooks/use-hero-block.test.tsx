@@ -70,7 +70,7 @@ describe('useUpdateHeroBlock', () => {
         headers: expect.objectContaining({ 'content-type': 'application/json' }),
       }),
     );
-    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     const body = JSON.parse(call[1].body as string);
     expect(body).toEqual({ communityId: 42, headline: 'NewHead' });
   });

@@ -104,9 +104,9 @@ describeDb('Payments statement — staff community mode', () => {
       building: 'C',
       floor: 1,
     });
-    communityAUnitAId = readNumberField(unitAA, 'id');
-    communityAUnitBId = readNumberField(unitAB, 'id');
-    communityCUnitId = readNumberField(unitC, 'id');
+    communityAUnitAId = readNumberField(unitAA!, 'id');
+    communityAUnitBId = readNumberField(unitAB!, 'id');
+    communityCUnitId = readNumberField(unitC!, 'id');
 
     // Single-unit resident owner in community A.
     singleUnitOwnerId = randomUUID();
@@ -153,8 +153,8 @@ describeDb('Payments statement — staff community mode', () => {
       building: 'A',
       floor: 4,
     });
-    const multiUnitAId = readNumberField(multiUnitA, 'id');
-    const multiUnitBId = readNumberField(multiUnitB, 'id');
+    const multiUnitAId = readNumberField(multiUnitA!, 'id');
+    const multiUnitBId = readNumberField(multiUnitB!, 'id');
     await scopedA.update(
       state.dbModule.units,
       { ownerUserId: multiUnitOwnerId },
@@ -188,7 +188,7 @@ describeDb('Payments statement — staff community mode', () => {
       endDate: null,
       isActive: true,
     });
-    const assessmentAId = readNumberField(assessmentA, 'id');
+    const assessmentAId = readNumberField(assessmentA!, 'id');
     await scopedA.insert(state.dbModule.assessmentLineItems, {
       assessmentId: assessmentAId,
       unitId: communityAUnitAId,

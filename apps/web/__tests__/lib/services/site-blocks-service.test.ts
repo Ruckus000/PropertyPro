@@ -378,7 +378,7 @@ describe('upsertPublishedBlock', () => {
       blockOrder: 5,
       content: { imagePath: '42/content/x.webp', altText: 'a' },
     });
-    const [, predicate] = scopedClient.softDelete.mock.calls[0];
+    const [, predicate] = scopedClient.softDelete.mock.calls[0]!;
     const serialized = JSON.stringify(predicate);
     expect(serialized).not.toContain('block_type');
     expect(serialized).not.toContain('blockType');
@@ -392,7 +392,7 @@ describe('upsertPublishedBlock', () => {
     });
     // Second arg must be the tx (truthy) so scoped operations participate.
     expect(createScopedClientMock).toHaveBeenCalledWith(42, expect.anything());
-    const txArg = createScopedClientMock.mock.calls[0][1];
+    const txArg = createScopedClientMock.mock.calls[0]![1];
     expect(txArg).toBeDefined();
   });
 });
@@ -447,7 +447,7 @@ describe('publishCommunitySite', () => {
      * publish, which must happen inside this same transaction. Position is what
      * the test name actually claims, and it stays true as more statements join.
      */
-    const sqlArg = txExecuteMock.mock.calls[0][0];
+    const sqlArg = txExecuteMock.mock.calls[0]![0];
     const sqlText = (sqlArg as { __sql: { strings: string[] } }).__sql.strings.join('');
     expect(sqlText).toContain('FOR UPDATE');
     expect((sqlArg as { __sql: { values: unknown[] } }).__sql.values).toContain(42);
@@ -621,7 +621,12 @@ describe('publishCommunitySite', () => {
     // rows got — a community stamp that disagreed with its own blocks would be
     // worse than none.
     const stampCall = getUpdateCalls().at(-1);
-    expect(stampCall?.set).toEqual({ sitePublishedAt: result.publishedAt });
+    // `PublishCommunitySiteResult` is discriminated on `published`, and only the
+    // true branch carries `publishedAt`. The false branch has no such key, so
+    // the ternary reads exactly as the bare `result.publishedAt` it replaces.
+    expect(stampCall?.set).toEqual({
+      sitePublishedAt: result.published ? result.publishedAt : undefined,
+    });
   });
 
   it('retires ONLY published rows at (page, block_order) pairs that have a live draft (keeps un-drafted published blocks)', async () => {
@@ -646,15 +651,15 @@ describe('publishCommunitySite', () => {
     // Five UPDATEs: retire, tombstone sweep, promote blocks, promote pages, and
     // the Phase 8 communities.site_published_at stamp.
     expect(updateCalls).toHaveLength(5);
-    expect(retirePairs(updateCalls[0].where)).toEqual([
+    expect(retirePairs(updateCalls[0]!.where)).toEqual([
       { pageId: HOME_PAGE_ID, blockOrder: 2 },
       { pageId: HOME_PAGE_ID, blockOrder: 3 },
     ]);
     // First UPDATE soft-deletes (sets deletedAt); the tombstone sweep also
     // soft-deletes (scoped to blockType=tombstone); then the promotes.
-    expect(updateCalls[0].set).toHaveProperty('deletedAt');
-    expect(updateCalls[1].set).toHaveProperty('deletedAt');
-    expect(updateCalls[2].set).toMatchObject({ isDraft: false });
+    expect(updateCalls[0]!.set).toHaveProperty('deletedAt');
+    expect(updateCalls[1]!.set).toHaveProperty('deletedAt');
+    expect(updateCalls[2]!.set).toMatchObject({ isDraft: false });
   });
 
   it('does NOT retire another page\'s published row at the same block_order', async () => {
@@ -666,7 +671,7 @@ describe('publishCommunitySite', () => {
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
-    const pairs = retirePairs(getUpdateCalls()[0].where);
+    const pairs = retirePairs(getUpdateCalls()[0]!.where);
     expect(pairs).toEqual([{ pageId: 9, blockOrder: 2 }]);
     expect(pairs.some((p) => p.pageId !== 9)).toBe(false);
   });
@@ -683,7 +688,7 @@ describe('publishCommunitySite', () => {
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
-    expect(retirePairs(getUpdateCalls()[0].where)).toEqual([
+    expect(retirePairs(getUpdateCalls()[0]!.where)).toEqual([
       { pageId: HOME_PAGE_ID, blockOrder: 4 },
       { pageId: HOME_PAGE_ID, blockOrder: 7 },
     ]);
@@ -698,7 +703,7 @@ describe('publishCommunitySite', () => {
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
-    expect(retirePairs(getUpdateCalls()[0].where)).toEqual([
+    expect(retirePairs(getUpdateCalls()[0]!.where)).toEqual([
       { pageId: HOME_PAGE_ID, blockOrder: 5 },
     ]);
   });
@@ -804,7 +809,7 @@ describe('upsertPublishedBlock with isDraft=true (PR #8e)', () => {
       isDraft: true,
     });
     expect(scopedClient.softDelete).toHaveBeenCalledTimes(1);
-    const whereArg = scopedClient.softDelete.mock.calls[0][1] as { __and: Array<{ __eq?: { col: unknown; val: unknown } }> };
+    const whereArg = scopedClient.softDelete.mock.calls[0]![1] as { __and: Array<{ __eq?: { col: unknown; val: unknown } }> };
     // The predicate must filter is_draft = true (replace existing draft only).
     // The mock siteBlocks is a Symbol so we identify the clause by val type.
     const isDraftClause = whereArg.__and.find(
@@ -831,7 +836,7 @@ describe('upsertPublishedBlock with isDraft=true (PR #8e)', () => {
       }),
     );
     // publishedAt should be a Date (not null) on the published path.
-    const insertCall = scopedClient.insert.mock.calls[0][1] as { publishedAt: unknown };
+    const insertCall = scopedClient.insert.mock.calls[0]![1] as { publishedAt: unknown };
     expect(insertCall.publishedAt).toBeInstanceOf(Date);
   });
 
@@ -890,7 +895,7 @@ describe('cleanupSoftDeletedSiteBlocks', () => {
     // First clause: isNotNull(deletedAt)
     expect(where.__and[0]).toHaveProperty('__isNotNull');
     // Second clause: lt(deletedAt, cutoff)
-    const ltClause = where.__and[1];
+    const ltClause = where.__and[1]!;
     expect(ltClause).toHaveProperty('__lt');
     const cutoff = ltClause.__lt!.val;
     expect(cutoff).toBeInstanceOf(Date);
@@ -902,7 +907,7 @@ describe('cleanupSoftDeletedSiteBlocks', () => {
     const now = new Date('2026-06-01T00:00:00Z');
     await cleanupSoftDeletedSiteBlocks(now, 7);
     const where = getDeleteWhereArg() as { __and: Array<{ __lt?: { val: Date } }> };
-    const ltClause = where.__and[1];
+    const ltClause = where.__and[1]!;
     const cutoff = ltClause.__lt!.val;
     expect(now.getTime() - cutoff.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
   });
@@ -1143,7 +1148,7 @@ describe('reorderSiteBlock', () => {
     await reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 12, direction: 'down' });
 
     expect(txExecuteMock).toHaveBeenCalledTimes(1);
-    const sqlArg = txExecuteMock.mock.calls[0][0] as { __sql: { strings: string[]; values: unknown[] } };
+    const sqlArg = txExecuteMock.mock.calls[0]![0] as { __sql: { strings: string[]; values: unknown[] } };
     expect(sqlArg.__sql.strings.join('')).toContain('FOR UPDATE');
     expect(sqlArg.__sql.values).toContain(42);
   });
@@ -1302,7 +1307,7 @@ describe('removeSiteBlock', () => {
 
     await removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 3 });
 
-    const sqlArg = txExecuteMock.mock.calls[0][0];
+    const sqlArg = txExecuteMock.mock.calls[0]![0];
     const sqlText = (sqlArg as { __sql: { strings: string[] } }).__sql.strings.join('');
     expect(sqlText).toContain('FOR UPDATE');
   });
@@ -1352,7 +1357,7 @@ describe('discardSiteDrafts', () => {
     expect(result).toEqual({ discardedCount: 3, discardedPageCount: 0 });
     const updateCalls = getUpdateCalls();
     expect(updateCalls).toHaveLength(3);
-    expect(updateCalls[0].set).toHaveProperty('deletedAt');
+    expect(updateCalls[0]!.set).toHaveProperty('deletedAt');
   });
 
   it('drops never-published pages and cancels staged page removals', async () => {
@@ -1364,14 +1369,14 @@ describe('discardSiteDrafts', () => {
     // "discard" has to be able to undo a page-only editing session.
     expect(result).toEqual({ discardedCount: 0, discardedPageCount: 2 });
     const updateCalls = getUpdateCalls();
-    expect(updateCalls[1].set).toHaveProperty('deletedAt');
-    expect(updateCalls[2].set).toMatchObject({ deleteStagedAt: null });
+    expect(updateCalls[1]!.set).toHaveProperty('deletedAt');
+    expect(updateCalls[2]!.set).toMatchObject({ deleteStagedAt: null });
   });
 
   it('acquires the community FOR UPDATE lock before discarding', async () => {
     setUpdateReturnQueue([[{ id: 1 }], [], []]);
     await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
-    const sqlArg = txExecuteMock.mock.calls[0][0];
+    const sqlArg = txExecuteMock.mock.calls[0]![0];
     const sqlText = (sqlArg as { __sql: { strings: string[] } }).__sql.strings.join('');
     expect(sqlText).toContain('FOR UPDATE');
   });
@@ -1472,9 +1477,13 @@ describe('publishCommunitySite — server-side validation', () => {
     ]);
     setUpdateReturnQueue([[{ id: 1 }], [], [{ id: 10 }]]);
 
-    const error = await publishCommunitySite({
+    // `.catch` widens to `PublishCommunitySiteResult | <the rejection shape>`;
+    // this path always rejects, and the assertions below are on the rejection.
+    const error = (await publishCommunitySite({
       communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null,
-    }).catch((e: unknown) => e as { details?: { fields?: { field: string }[] } });
+    }).catch((e: unknown) => e as { details?: { fields?: { field: string }[] } })) as {
+      details?: { fields?: { field: string }[] };
+    };
 
     const fields = error.details?.fields ?? [];
     expect(fields.length).toBeGreaterThan(0);
@@ -1546,8 +1555,8 @@ describe('publishCommunitySite with tombstone drafts', () => {
     expect(updateCalls).toHaveLength(5);
     // The sweep (second UPDATE) soft-deletes and its predicate pins
     // blockType=tombstone + isDraft=true.
-    expect(updateCalls[1].set).toHaveProperty('deletedAt');
-    const sweepClauses = updateCalls[1].where?.__and ?? [];
+    expect(updateCalls[1]!.set).toHaveProperty('deletedAt');
+    const sweepClauses = updateCalls[1]!.where?.__and ?? [];
     const eqClauses = sweepClauses.filter((c) => '__eq' in c) as Array<{ __eq: { val: unknown } }>;
     expect(eqClauses.some((c) => c.__eq.val === 'tombstone')).toBe(true);
     expect(eqClauses.some((c) => c.__eq.val === true)).toBe(true);
@@ -1658,11 +1667,11 @@ describe('publishCommunitySite × captureSnapshot', () => {
       communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null,
     });
 
-    const row = txSnapshotValuesMock.mock.calls[0][0] as { publishedAt: Date };
+    const row = txSnapshotValuesMock.mock.calls[0]![0] as { publishedAt: Date };
     // Same instant AND the same value the promote UPDATE set — a second
     // `new Date()` would produce a history entry matching no site state.
     expect(row.publishedAt).toBeInstanceOf(Date);
-    const promoteSet = getUpdateCalls()[2].set as { publishedAt: Date };
+    const promoteSet = getUpdateCalls()[2]!.set as { publishedAt: Date };
     expect(row.publishedAt.getTime()).toBe(promoteSet.publishedAt.getTime());
     if (result.published) {
       expect(row.publishedAt.getTime()).toBe(result.publishedAt.getTime());
@@ -1698,7 +1707,7 @@ describe('publishCommunitySite × captureSnapshot', () => {
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
-    const row = txSnapshotValuesMock.mock.calls[0][0] as {
+    const row = txSnapshotValuesMock.mock.calls[0]![0] as {
       snapshot: {
         version: number;
         pages: { pageId: number; slug: string; isHome: boolean }[];
@@ -1721,7 +1730,7 @@ describe('publishCommunitySite × captureSnapshot', () => {
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
-    const row = txSnapshotValuesMock.mock.calls[0][0] as {
+    const row = txSnapshotValuesMock.mock.calls[0]![0] as {
       snapshot: { version: number; pages: { pageId: number; name: string; slug: string; isHome: boolean }[] };
     };
     expect(row.snapshot.version).toBe(2);
@@ -1920,7 +1929,7 @@ describe('revertToSnapshot', () => {
     expect(callOrder.filter((s) => s === 'softDelete')).toHaveLength(1);
     expect(callOrder.slice(1).every((s) => s === 'insert')).toBe(true);
     // The clear is scoped to draft rows only — published rows survive.
-    const predicate = scopedClient.softDelete.mock.calls[0][1] as { __and: Array<{ __eq?: { val: unknown } }> };
+    const predicate = scopedClient.softDelete.mock.calls[0]![1] as { __and: Array<{ __eq?: { val: unknown } }> };
     expect(predicate.__and.some((c) => c.__eq?.val === true)).toBe(true);
   });
 
@@ -2032,7 +2041,7 @@ describe('revertToSnapshot', () => {
     await revertToSnapshot({ communityId: 42, actorUserId: 'user-1', snapshotId: 7 });
 
     // Reconstruct the predicate handed to the snapshot select.
-    const chain = txSelectMock.mock.results[0].value as Record<string, unknown>;
+    const chain = txSelectMock.mock.results[0]!.value as Record<string, unknown>;
     expect(chain).toBeDefined();
     // The filter operators are captured by the @propertypro/db/filters mock;
     // assert both values appear in the serialized predicate the service built.
@@ -2068,7 +2077,7 @@ describe('revertToSnapshot', () => {
     await revertToSnapshot({ communityId: 42, actorUserId: 'user-1', snapshotId: 7 });
 
     expect(txExecuteMock).toHaveBeenCalledTimes(1);
-    const sqlArg = txExecuteMock.mock.calls[0][0] as { __sql: { strings: string[]; values: unknown[] } };
+    const sqlArg = txExecuteMock.mock.calls[0]![0] as { __sql: { strings: string[]; values: unknown[] } };
     expect(sqlArg.__sql.strings.join('')).toContain('FOR UPDATE');
     expect(sqlArg.__sql.values).toContain(42);
   });

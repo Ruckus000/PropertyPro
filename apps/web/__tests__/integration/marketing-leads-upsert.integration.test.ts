@@ -79,15 +79,15 @@ describeDb('marketing_leads upsert (integration)', () => {
     });
 
     const [inserted] = await rowFor(merge);
-    expect(inserted.emailNormalized).toBe(merge);
-    expect(inserted.source).toBe('compliance_checker');
-    expect(inserted.obligationRequired).toBe('true');
+    expect(inserted!.emailNormalized).toBe(merge);
+    expect(inserted!.source).toBe('compliance_checker');
+    expect(inserted!.obligationRequired).toBe('true');
 
     // Sales triages it by hand.
     await db
       .update(marketingLeads)
       .set({ status: 'contacted', notes: 'called 8/1' })
-      .where(inArray(marketingLeads.id, [inserted.id]));
+      .where(inArray(marketingLeads.id, [inserted!.id]));
 
     // The same prospect returns through the portfolio form: richer in places,
     // silent in others, and via a higher-ranked door.

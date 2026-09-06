@@ -124,7 +124,9 @@ const mockSelectChain = {
 };
 
 const mockDb = {
-  select: vi.fn(() => mockSelectChain),
+  // `_projection` is declared so the projection argument survives into
+  // `select.mock.calls[0][0]`, which the sitemap tests read.
+  select: vi.fn((_projection?: unknown) => mockSelectChain),
 };
 
 let queuedQueryResults: unknown[][] = [];
@@ -205,7 +207,7 @@ describe('getPublicCommunityScopedReader', () => {
     // The WHERE clause should include all three predicates (post-#9e:
     // template_variant column dropped from the schema).
     expect(mockSelectChain.where).toHaveBeenCalledTimes(1);
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     // Mock 'and' wraps its args in { __and: clauses[] }
     expect(whereCall).toHaveProperty('__and');
     expect(whereCall.__and).toHaveLength(3);
@@ -222,7 +224,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(99);
     await reader.listSiteBlocks();
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     // The first AND clause should be eq(communityId, 99). The mock factory
     // for eq returns { __eq: { col, val } }.
     const communityIdClause = whereCall.__and[0];
@@ -237,7 +239,7 @@ describe('getPublicCommunityScopedReader', () => {
   it('listSiteBlocks default WHERE includes the is_draft=false predicate', async () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listSiteBlocks();
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     // 3 predicates: communityId, deletedAt isNull, isDraft=false
     // (template_variant column was dropped in PR #9e.)
     expect(whereCall.__and).toHaveLength(3);
@@ -251,7 +253,7 @@ describe('getPublicCommunityScopedReader', () => {
   it('listSiteBlocks({ includeDrafts: true }) drops the is_draft predicate', async () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listSiteBlocks({ includeDrafts: true });
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     // Only 2 predicates: communityId, deletedAt isNull
     expect(whereCall.__and).toHaveLength(2);
     // None of the remaining predicates target isDraft
@@ -511,9 +513,9 @@ describe('getPublicCommunityScopedReader', () => {
     expect(mockSelectChain.orderBy).toHaveBeenCalledTimes(1);
     const orderArgs = mockSelectChain.orderBy.mock.calls[0] as unknown as Clause[];
     expect(orderArgs).toHaveLength(3);
-    expect(orderArgs[0].__desc).toBe('sitePages.isHome');
-    expect(orderArgs[1].__asc).toBe('sitePages.sortOrder');
-    expect(orderArgs[2].__asc).toBe('sitePages.id');
+    expect(orderArgs[0]!.__desc).toBe('sitePages.isHome');
+    expect(orderArgs[1]!.__asc).toBe('sitePages.sortOrder');
+    expect(orderArgs[2]!.__asc).toBe('sitePages.id');
   });
 
   it('listNavPages returns the { id, name, slug, isHome } projection home-first', async () => {
@@ -529,7 +531,7 @@ describe('getPublicCommunityScopedReader', () => {
       { id: 4, name: 'Amenities', slug: 'amenities', isHome: false },
       { id: 9, name: 'Documents Hub', slug: 'docs-hub', isHome: false },
     ]);
-    expect(nav[0].isHome).toBe(true);
+    expect(nav[0]!.isHome).toBe(true);
   });
 
   it('listAnnouncements returns mapped rows with the expected shape', async () => {
@@ -554,7 +556,7 @@ describe('getPublicCommunityScopedReader', () => {
       body: '<p>Pool closed.</p>',
       isPinned: false,
     });
-    expect(results[0].publishedAt).toBeInstanceOf(Date);
+    expect(results[0]!.publishedAt).toBeInstanceOf(Date);
   });
 
   it('listAnnouncements includes a timeWindowDays gte predicate when supplied', async () => {
@@ -565,7 +567,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listAnnouncements({ limit: 5, timeWindowDays: 30 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     // 7 since the per-announcement expiry predicate joined the base set: the
     // 6 that were here plus `expires_at IS NULL OR expires_at > now()`.
     expect(whereCall.__and).toHaveLength(7);
@@ -582,7 +584,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listAnnouncements({ limit: 5 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     // 6 since expiry joined the base set (was 5).
     expect(whereCall.__and).toHaveLength(6);
   });
@@ -607,7 +609,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listAnnouncements({ limit: 5 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     expect(whereCall.__and).toContainEqual({
       __or: [
         { __isNull: 'announcements.expiresAt' },
@@ -633,7 +635,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listAnnouncements({ limit: 5 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     const audienceClause = whereCall.__and.find(
       (c: unknown) =>
         (c as { __eq?: { col: string } }).__eq?.col === 'announcements.audience',
@@ -649,7 +651,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listAnnouncements({ limit: 5 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     const isNullCols = whereCall.__and
       .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
       .map((c: unknown) => (c as { __isNull: string }).__isNull);
@@ -664,7 +666,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listAnnouncements({ limit: 5 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     const lteClause = whereCall.__and.find(
       (c: unknown) =>
         (c as { __lte?: { col: string } }).__lte?.col === 'announcements.publishedAt',
@@ -680,7 +682,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     const isNullCols = whereCall.__and
       .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
       .map((c: unknown) => (c as { __isNull: string }).__isNull);
@@ -698,7 +700,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     const publicAccessClause = whereCall.__and.find(
       (c: unknown) =>
         (c as { __eq?: { col: string } }).__eq?.col === 'documents.publicAccess',
@@ -723,7 +725,7 @@ describe('getPublicCommunityScopedReader', () => {
     const result = await reader.listPublicDocumentsForSitemap({ limit: 100 });
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ id: 10 });
-    expect(result[0].updatedAt).toBeInstanceOf(Date);
+    expect(result[0]!.updatedAt).toBeInstanceOf(Date);
   });
 
   it('listPublicDocumentsForSitemap WHERE binds communityId + deletedAt isNull + publicAccess=true', async () => {
@@ -733,7 +735,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(7);
     await reader.listPublicDocumentsForSitemap({ limit: 100 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     // communityId eq
     const cidClause = whereCall.__and.find(
       (c: unknown) => (c as { __eq?: { col: string } }).__eq?.col === 'documents.communityId',
@@ -758,7 +760,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listPublicDocumentsForSitemap({ limit: 100 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     const hasInArray = whereCall.__and.some(
       (c: unknown) => (c as { __inArray?: unknown }).__inArray !== undefined,
     );
@@ -776,7 +778,7 @@ describe('getPublicCommunityScopedReader', () => {
 
   /** The four predicates, extracted from the single WHERE call as `col -> val`. */
   function sitemapPagesEqClauses() {
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     return {
       eqs: whereCall.__and
         .filter((c: unknown) => (c as { __eq?: unknown }).__eq !== undefined)
@@ -843,7 +845,7 @@ describe('getPublicCommunityScopedReader', () => {
     const result = await reader.listPublishedPagesForSitemap({ limit: 200 });
     expect(result).toEqual([fakeRow]);
 
-    const projection = mockDb.select.mock.calls[0][0];
+    const projection = mockDb.select.mock.calls[0]![0];
     expect(projection).toEqual({
       id: 'sitePages.id',
       slug: 'sitePages.slug',
@@ -858,7 +860,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listMeetings({ limit: 5, timeWindowDays: 14 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     const isNullCols = whereCall.__and
       .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
       .map((c: unknown) => (c as { __isNull: string }).__isNull);
@@ -910,7 +912,7 @@ describe('getPublicCommunityScopedReader', () => {
       fileName: 'budget-2025.pdf',
       categoryName: 'budget',
     });
-    expect(results[0].createdAt).toBeInstanceOf(Date);
+    expect(results[0]!.createdAt).toBeInstanceOf(Date);
   });
 
   it('listDocuments issues a leftJoin against documentCategories', async () => {
@@ -923,7 +925,7 @@ describe('getPublicCommunityScopedReader', () => {
     // The query should use leftJoin
     expect(mockSelectChain.leftJoin).toHaveBeenCalledTimes(1);
     // The WHERE predicate should include the inArray filter
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     expect(whereCall).toHaveProperty('__and');
     const inArrayClause = whereCall.__and.find(
       (c: unknown) => (c as { __inArray?: unknown }).__inArray !== undefined,
@@ -959,7 +961,7 @@ describe('getPublicCommunityScopedReader', () => {
       meetingType: 'board',
       location: '123 Main St',
     });
-    expect(results[0].startsAt).toBeInstanceOf(Date);
+    expect(results[0]!.startsAt).toBeInstanceOf(Date);
   });
 
   it('listMeetings returns [] when no upcoming meetings are in the window', async () => {
@@ -978,7 +980,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listMeetings({ limit: 5, timeWindowDays: 14 });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     expect(whereCall).toHaveProperty('__and');
     // 4 conditions: communityId eq, deletedAt isNull, startsAt gte, startsAt lte
     expect(whereCall.__and).toHaveLength(4);
@@ -1045,7 +1047,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.getContactInfo({ showBoard: true, showManagement: false });
 
-    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
     expect(whereCall).toHaveProperty('__and');
     // designation inArray predicate present with BOARD_DESIGNATIONS values
     const designationClause = whereCall.__and.find(
@@ -1110,7 +1112,7 @@ describe('getPublicCommunityScopedReader', () => {
       const reader = getPublicCommunityScopedReader(42);
       await reader.getPublicDocumentFile(7);
 
-      const where = mockSelectChain.where.mock.calls[0][0];
+      const where = mockSelectChain.where.mock.calls[0]![0];
       const clauses = where.__and as unknown[];
 
       const equals = clauses

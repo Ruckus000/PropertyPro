@@ -196,7 +196,7 @@ describe('increment / decrement', () => {
   it('incrementAssetsUsage issues an atomic UPDATE with positive delta', async () => {
     await incrementAssetsUsage(42, 500);
     expect(executeMock).toHaveBeenCalledTimes(1);
-    const sqlCall = executeMock.mock.calls[0][0];
+    const sqlCall = executeMock.mock.calls[0]![0];
     expect(sqlCall).toMatchObject({
       __sql: {
         // sql template strings should include the jsonb_set UPDATE + the
@@ -209,14 +209,14 @@ describe('increment / decrement', () => {
   it('decrementAssetsUsage passes a negative delta into the same UPDATE', async () => {
     await decrementAssetsUsage(42, 500);
     expect(executeMock).toHaveBeenCalledTimes(1);
-    const sqlCall = executeMock.mock.calls[0][0];
+    const sqlCall = executeMock.mock.calls[0]![0];
     // -500 is the delta; GREATEST(0, ...) clamps in SQL (not exercised by the mock).
     expect(sqlCall.__sql.values).toEqual(expect.arrayContaining([-500, 42]));
   });
 
   it('uses GREATEST(0, ...) so decrements cannot drive the counter negative', async () => {
     await decrementAssetsUsage(42, 1_000_000);
-    const sqlCall = executeMock.mock.calls[0][0];
+    const sqlCall = executeMock.mock.calls[0]![0];
     const sqlText = sqlCall.__sql.strings.join('');
     expect(sqlText).toContain('GREATEST');
     expect(sqlText).toContain('jsonb_set');

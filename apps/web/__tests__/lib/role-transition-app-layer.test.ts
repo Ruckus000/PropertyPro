@@ -6,7 +6,7 @@ import { isAdminRole } from '@propertypro/shared';
 describe('checkPermissionV2 — v3 transition roles', () => {
   it('root_manager resolves the property_manager_admin matrix row', () => {
     expect(checkPermissionV2('root_manager', 'condo_718', 'documents', 'write')).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
+      checkPermissionV2('pm_admin' as never, 'condo_718', 'documents', 'write'),
     );
   });
   it('resident (owner or tenant) is read-only for documents:write — the gate used by upload/delete (#734)', () => {
@@ -19,13 +19,13 @@ describe('checkPermissionV2 — v3 transition roles', () => {
   it('property_manager resolves the property_manager_admin matrix (uniform widening)', () => {
     // Reads AND writes resolve from the matrix.
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read')).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'read'),
+      checkPermissionV2('pm_admin' as never, 'condo_718', 'documents', 'read'),
     );
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write')).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
+      checkPermissionV2('pm_admin' as never, 'condo_718', 'documents', 'write'),
     );
     expect(checkPermissionV2('property_manager', 'condo_718', 'finances', 'write')).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'finances', 'write'),
+      checkPermissionV2('pm_admin' as never, 'condo_718', 'finances', 'write'),
     );
     // The matrix grants these.
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read')).toBe(true);
@@ -55,6 +55,6 @@ describe('isAdminRole — v3 transition roles', () => {
   });
   it('treats residents as non-admin', () => {
     expect(isAdminRole('resident' as never)).toBe(false);
-    expect(isAdminRole('tenant')).toBe(false);
+    expect(isAdminRole('tenant' as never)).toBe(false);
   });
 });

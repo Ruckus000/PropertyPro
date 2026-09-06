@@ -321,8 +321,8 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
     }>(getResponse);
     expect(getJson.data.data.length).toBeGreaterThan(0);
     // The created announcement should be pinned and appear first
-    expect(getJson.data.data[0]['id']).toBe(createdAnnouncementId);
-    expect(getJson.data.data[0]['isPinned']).toBe(true);
+    expect(getJson.data.data[0]!['id']).toBe(createdAnnouncementId);
+    expect(getJson.data.data[0]!['isPinned']).toBe(true);
 
     // Unpin
     const unpinResponse = await route.POST(

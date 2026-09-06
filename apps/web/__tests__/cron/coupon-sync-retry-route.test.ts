@@ -3,7 +3,10 @@ import { NextRequest } from 'next/server';
 
 const { recalculateVolumeTierMock, findStuckCouponSyncBillingGroupsMock } = vi.hoisted(() => ({
   recalculateVolumeTierMock: vi.fn(),
-  findStuckCouponSyncBillingGroupsMock: vi.fn(async () => []),
+  // Annotated: a bare `async () => []` infers Promise<never[]>, so any
+  // mockResolvedValue with real rows is a type error once this file is
+  // type-checked.
+  findStuckCouponSyncBillingGroupsMock: vi.fn(async (): Promise<Array<{ id: number }>> => []),
 }));
 
 vi.mock('@/lib/billing/billing-group-service', () => ({

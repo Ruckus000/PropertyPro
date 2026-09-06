@@ -40,6 +40,10 @@ function at(offsetDays: number): string {
 function signer(over: Partial<EsignRequestSigner> = {}): EsignRequestSigner {
   return {
     id: 1,
+    // Required by the type but never read by this module and never asserted
+    // here; `null` is its "external party" value, which is what an absent
+    // property already meant to every code path under test.
+    userId: null,
     name: 'Alice Owner',
     email: 'alice@test.com',
     role: 'owner',

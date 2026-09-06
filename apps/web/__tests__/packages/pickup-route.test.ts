@@ -309,7 +309,7 @@ describe('PATCH /api/v1/packages/[id]/pickup', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = pickupPackageForCommunityMock.mock.calls[0];
+    const call = pickupPackageForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

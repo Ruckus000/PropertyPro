@@ -71,7 +71,10 @@ const theme = {
   bodyFont: 'Inter',
 };
 
-function props(blockType: string, content: unknown): BlockRendererProps {
+function props(
+  blockType: BlockRendererProps['block']['blockType'],
+  content: unknown,
+): BlockRendererProps {
   return {
     block: { id: 1, blockType, blockOrder: 2, content },
     community,

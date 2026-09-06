@@ -241,7 +241,7 @@ describe('DELETE /api/v1/calendar/google/disconnect', () => {
       null,
     );
     // Belt-and-suspenders: assert exact index [2] position.
-    const call = disconnectGoogleCalendarMock.mock.calls[0];
+    const call = disconnectGoogleCalendarMock.mock.calls[0]!;
     expect(call[2]).toBeNull();
   });
 });

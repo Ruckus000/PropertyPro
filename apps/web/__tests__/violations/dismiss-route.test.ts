@@ -291,7 +291,7 @@ describe('POST /api/v1/violations/[id]/dismiss', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = dismissViolationForCommunityMock.mock.calls[0];
+    const call = dismissViolationForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

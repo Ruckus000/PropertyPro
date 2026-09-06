@@ -185,9 +185,11 @@ describe('assessment-automation-service', () => {
       ]);
 
       // generateAssessmentLineItemsForCommunity returns inserted/skipped counts
+      // (plus the period's dueDate, which processRecurringAssessments ignores).
       vi.mocked(generateAssessmentLineItemsForCommunity).mockResolvedValueOnce({
         insertedCount: 4,
         skippedCount: 0,
+        dueDate: '2026-03-01',
       });
 
       const summary = await processRecurringAssessments(new Date('2026-03-01'));
@@ -216,6 +218,7 @@ describe('assessment-automation-service', () => {
       vi.mocked(generateAssessmentLineItemsForCommunity).mockResolvedValueOnce({
         insertedCount: 0,
         skippedCount: 4,
+        dueDate: '2026-03-01',
       });
 
       const summary = await processRecurringAssessments(new Date('2026-03-01'));
@@ -250,6 +253,7 @@ describe('assessment-automation-service', () => {
       vi.mocked(generateAssessmentLineItemsForCommunity).mockResolvedValueOnce({
         insertedCount: 3,
         skippedCount: 1,
+        dueDate: '2026-03-01',
       });
 
       const summary = await processRecurringAssessments(new Date('2026-03-01'));

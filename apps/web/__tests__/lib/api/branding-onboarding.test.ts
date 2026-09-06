@@ -96,7 +96,7 @@ describe('markSiteOnboardingComplete', () => {
     const after = Date.now();
 
     expect(mockUpdate).toHaveBeenCalledTimes(1);
-    const setArg = mockSet.mock.calls[0][0] as { siteOnboardingCompletedAt: Date };
+    const setArg = mockSet.mock.calls[0]![0] as { siteOnboardingCompletedAt: Date };
     expect(setArg.siteOnboardingCompletedAt).toBeInstanceOf(Date);
     const stampedMs = setArg.siteOnboardingCompletedAt.getTime();
     expect(stampedMs).toBeGreaterThanOrEqual(before);
@@ -135,7 +135,7 @@ describe('seedDefaultSiteBranding', () => {
     await seedDefaultSiteBranding(7, 'condo_718');
 
     expect(mockUpdate).toHaveBeenCalledTimes(1);
-    const setArg = mockSet.mock.calls[0][0] as { branding: Record<string, unknown> };
+    const setArg = mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> };
     expect(setArg.branding).toEqual({ layoutId: 'tidewater', themePresetSlug: 'bay-light' });
   });
 
@@ -146,7 +146,7 @@ describe('seedDefaultSiteBranding', () => {
       .mockResolvedValueOnce([{ defaultPresetSlug: 'palm-shadow' }])
       .mockResolvedValueOnce([{ branding: null }]);
     await seedDefaultSiteBranding(8, 'hoa_720');
-    expect((mockSet.mock.calls[0][0] as { branding: Record<string, unknown> }).branding).toEqual({
+    expect((mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> }).branding).toEqual({
       layoutId: 'boulevard',
       themePresetSlug: 'palm-shadow',
     });
@@ -165,7 +165,7 @@ describe('seedDefaultSiteBranding', () => {
       .mockResolvedValueOnce([{ defaultPresetSlug: 'linen-bronze' }])
       .mockResolvedValueOnce([{ branding: null }]);
     await seedDefaultSiteBranding(9, 'apartment');
-    expect((mockSet.mock.calls[0][0] as { branding: Record<string, unknown> }).branding).toEqual({
+    expect((mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> }).branding).toEqual({
       layoutId: 'sable',
       themePresetSlug: 'linen-bronze',
     });
@@ -197,7 +197,7 @@ describe('seedDefaultSiteBranding', () => {
 
     await seedDefaultSiteBranding(7, 'condo_718');
 
-    const setArg = mockSet.mock.calls[0][0] as { branding: Record<string, unknown> };
+    const setArg = mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> };
     expect(setArg.branding).toEqual({ layoutId: 'tidewater', themePresetSlug: null });
   });
 });

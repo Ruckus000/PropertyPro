@@ -301,7 +301,7 @@ describe('POST /api/v1/reservations/[id]/cancel', () => {
     const res = await POST(jsonPost(11, { communityId: 42 }), routeCtx('11'));
 
     expect(res.status).toBe(200);
-    const call = cancelReservationForCommunityMock.mock.calls[0];
+    const call = cancelReservationForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

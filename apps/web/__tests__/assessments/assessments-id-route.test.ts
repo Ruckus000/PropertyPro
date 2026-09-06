@@ -405,7 +405,7 @@ describe('PATCH /api/v1/assessments/[id]', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = updateAssessmentForCommunityMock.mock.calls[0];
+    const call = updateAssessmentForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });
@@ -576,7 +576,7 @@ describe('DELETE /api/v1/assessments/[id]', () => {
     const res = await DELETE(jsonDelete(7, '?communityId=42'), routeCtx('7'));
 
     expect(res.status).toBe(200);
-    const call = deleteAssessmentForCommunityMock.mock.calls[0];
+    const call = deleteAssessmentForCommunityMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 });

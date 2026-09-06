@@ -70,21 +70,21 @@ describe('recalculateVolumeTier (integration)', () => {
       .returning();
 
     await db.insert(communities).values([
-      { name: 'C1', slug: 't-c1-recalc', communityType: 'condo_718', billingGroupId: group.id } as any,
-      { name: 'C2', slug: 't-c2-recalc', communityType: 'condo_718', billingGroupId: group.id } as any,
-      { name: 'C3', slug: 't-c3-recalc', communityType: 'condo_718', billingGroupId: group.id } as any,
+      { name: 'C1', slug: 't-c1-recalc', communityType: 'condo_718', billingGroupId: group!.id } as any,
+      { name: 'C2', slug: 't-c2-recalc', communityType: 'condo_718', billingGroupId: group!.id } as any,
+      { name: 'C3', slug: 't-c3-recalc', communityType: 'condo_718', billingGroupId: group!.id } as any,
     ]);
 
-    const result = await recalculateVolumeTier(group.id);
+    const result = await recalculateVolumeTier(group!.id);
 
     expect(result.previousTier).toBe('none');
     expect(result.newTier).toBe('tier_10');
     expect(applyVolumeDiscountToSubscriptions).toHaveBeenCalledWith('cus_test_recalc', 'tier_10');
 
-    const [updated] = await db.select().from(billingGroups).where(eq(billingGroups.id, group.id));
-    expect(updated.volumeTier).toBe('tier_10');
-    expect(updated.activeCommunityCount).toBe(3);
-    expect(updated.couponSyncStatus).toBe('synced');
+    const [updated] = await db.select().from(billingGroups).where(eq(billingGroups.id, group!.id));
+    expect(updated!.volumeTier).toBe('tier_10');
+    expect(updated!.activeCommunityCount).toBe(3);
+    expect(updated!.couponSyncStatus).toBe('synced');
   });
 
   it('sets coupon_sync_status to failed on Stripe error', async () => {
@@ -102,15 +102,15 @@ describe('recalculateVolumeTier (integration)', () => {
       .returning();
 
     await db.insert(communities).values([
-      { name: 'C1', slug: 't-fail-c1', communityType: 'condo_718', billingGroupId: group.id } as any,
-      { name: 'C2', slug: 't-fail-c2', communityType: 'condo_718', billingGroupId: group.id } as any,
-      { name: 'C3', slug: 't-fail-c3', communityType: 'condo_718', billingGroupId: group.id } as any,
+      { name: 'C1', slug: 't-fail-c1', communityType: 'condo_718', billingGroupId: group!.id } as any,
+      { name: 'C2', slug: 't-fail-c2', communityType: 'condo_718', billingGroupId: group!.id } as any,
+      { name: 'C3', slug: 't-fail-c3', communityType: 'condo_718', billingGroupId: group!.id } as any,
     ]);
 
-    await expect(recalculateVolumeTier(group.id)).rejects.toThrow('Stripe API down');
+    await expect(recalculateVolumeTier(group!.id)).rejects.toThrow('Stripe API down');
 
-    const [updated] = await db.select().from(billingGroups).where(eq(billingGroups.id, group.id));
-    expect(updated.couponSyncStatus).toBe('failed');
+    const [updated] = await db.select().from(billingGroups).where(eq(billingGroups.id, group!.id));
+    expect(updated!.couponSyncStatus).toBe('failed');
   });
 
   it('returns an existing PM billing group unchanged', async () => {
@@ -126,7 +126,7 @@ describe('recalculateVolumeTier (integration)', () => {
     const result = await getOrCreateBillingGroupForPm(TEST_PM_USER_ID);
 
     expect(result).toEqual({
-      billingGroupId: group.id,
+      billingGroupId: group!.id,
       stripeCustomerId: 'cus_existing_pm_group',
     });
     expect(applyVolumeDiscountToSubscriptions).not.toHaveBeenCalled();
@@ -146,7 +146,7 @@ describe('recalculateVolumeTier (integration)', () => {
       insertedCommunities.map((community) => ({
         userId: TEST_PM_USER_ID,
         communityId: community.id,
-        role: 'property_manager',
+        role: 'property_manager' as const,
       })),
     );
 
@@ -159,9 +159,9 @@ describe('recalculateVolumeTier (integration)', () => {
       .select()
       .from(billingGroups)
       .where(eq(billingGroups.id, result.billingGroupId));
-    expect(group.activeCommunityCount).toBe(3);
-    expect(group.volumeTier).toBe('tier_10');
-    expect(group.couponSyncStatus).toBe('synced');
+    expect(group!.activeCommunityCount).toBe(3);
+    expect(group!.volumeTier).toBe('tier_10');
+    expect(group!.couponSyncStatus).toBe('synced');
 
     const linkedCommunities = await db
       .select({ billingGroupId: communities.billingGroupId })
@@ -183,7 +183,7 @@ describe('recalculateVolumeTier (integration)', () => {
       insertedCommunities.map((community) => ({
         userId: TEST_PM_USER_ID,
         communityId: community.id,
-        role: 'property_manager',
+        role: 'property_manager' as const,
       })),
     );
 
@@ -206,7 +206,7 @@ describe('recalculateVolumeTier (integration)', () => {
       insertedCommunities.map((community) => ({
         userId: TEST_PM_USER_ID,
         communityId: community.id,
-        role: 'property_manager',
+        role: 'property_manager' as const,
       })),
     );
 

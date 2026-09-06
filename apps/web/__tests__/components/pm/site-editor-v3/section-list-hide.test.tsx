@@ -72,7 +72,7 @@ describe('SectionList hide affordance', () => {
 
   it('calls duplicate with the block id', async () => {
     render(<SectionList />);
-    const [first] = screen.getAllByRole('button', { name: /^duplicate .* section$/i });
+    const first = screen.getAllByRole('button', { name: /^duplicate .* section$/i })[0]!;
     await userEvent.click(first);
     expect(duplicate).toHaveBeenCalledWith(1);
   });

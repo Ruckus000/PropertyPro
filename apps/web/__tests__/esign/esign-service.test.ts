@@ -146,11 +146,25 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Rows are declared as `Record<string, unknown>` rather than inferred from the
+ * seed literal: individual tests reassign these members with differently
+ * shaped rows, and an inferred `{ id; communityId }` row type would pin the
+ * seed's shape onto every later assignment.
+ */
+type ScopedRow = Record<string, unknown>;
+
 function makeScopedMock(overrides: Record<string, unknown> = {}) {
   return {
-    insert: vi.fn(async () => [{ id: 1, communityId: 1, ...overrides }]),
-    selectFrom: vi.fn(async () => [{ id: 1, communityId: 1, ...overrides }]),
-    update: vi.fn(async () => [{ id: 1, communityId: 1, ...overrides }]),
+    insert: vi.fn(async (..._args: unknown[]): Promise<ScopedRow[]> => [
+      { id: 1, communityId: 1, ...overrides },
+    ]),
+    selectFrom: vi.fn(async (..._args: unknown[]): Promise<ScopedRow[]> => [
+      { id: 1, communityId: 1, ...overrides },
+    ]),
+    update: vi.fn(async (..._args: unknown[]): Promise<ScopedRow[]> => [
+      { id: 1, communityId: 1, ...overrides },
+    ]),
     ...overrides,
   };
 }

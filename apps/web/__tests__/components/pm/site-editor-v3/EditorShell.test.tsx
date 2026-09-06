@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { EditorShell } from '@/components/pm/site-editor-v3/EditorShell';
+import { EditorShell, type EditorShellProps } from '@/components/pm/site-editor-v3/EditorShell';
 
 // The shell asks `(max-width: 767px)` — see the comment on EditorShell. This
 // mock therefore reports NARROWNESS, not width: false = desktop.
@@ -14,7 +14,12 @@ vi.mock('@/hooks/use-media-query', () => ({
   useIsDesktop: () => !isNarrowMock.value,
 }));
 
-function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>> = {}) {
+// `Partial<EditorShellProps>` rather than `Partial<ComponentProps<…>>`: the
+// component's props are that interface intersected with the all-or-nothing
+// `activeTool`/`onActiveToolChange` union, and `Partial` over a union produces
+// the half-controlled shape the union exists to forbid. No case here drives the
+// tool from outside, so the overrides are the non-tool props.
+function renderShell(overrides: Partial<EditorShellProps> = {}) {
   return render(
     <EditorShell
       communityName="Sunset Condos"
@@ -31,6 +36,12 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>
       // missing required prop would silently disable the Preview button here
       // and make every case that touches it pass for the wrong reason.
       canPreview
+      // Read only through `title={canPreview ? undefined : previewDisabledReason}`
+      // and `ref={previewButtonRef}`. Every case here leaves `canPreview` true
+      // and none reads the ref, so these reproduce exactly what the file
+      // rendered while both were absent.
+      previewDisabledReason=""
+      previewButtonRef={null}
       // Supplied for the same reason as `canPreview`: this file is outside the
       // `src/**` typecheck program, so a required prop omitted here fails only
       // at runtime — and a handler that is merely absent produces a button that

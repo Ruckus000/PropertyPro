@@ -85,12 +85,12 @@ function claimReturning(rows: unknown[]) {
 
 /** The SQL text of the nth execute() call, for substring assertions. */
 function sqlOf(callIndex: number): string {
-  return executeMock.mock.calls[callIndex][0].__sql.strings.join('?');
+  return executeMock.mock.calls[callIndex]![0].__sql.strings.join('?');
 }
 
 /** The bound values of the nth execute() call. */
 function valuesOf(callIndex: number): unknown[] {
-  return executeMock.mock.calls[callIndex][0].__sql.values;
+  return executeMock.mock.calls[callIndex]![0].__sql.values;
 }
 
 /** The last execute() call — the sweep. */
@@ -153,7 +153,7 @@ describe('processDueSitePublishes', () => {
     });
     expect(summary).toEqual({ claimed: 1, published: 1, nothingToPublish: 0, failed: 0, exhausted: 0 });
 
-    const finishSql = executeMock.mock.calls[1][0].__sql;
+    const finishSql = executeMock.mock.calls[1]![0].__sql;
     expect(finishSql.strings.join('?')).toContain('SET status =');
     expect(finishSql.values).toContain('published');
   });
@@ -170,7 +170,7 @@ describe('processDueSitePublishes', () => {
     const summary = await processDueSitePublishes();
 
     expect(summary).toMatchObject({ published: 0, nothingToPublish: 1, failed: 0 });
-    expect(executeMock.mock.calls[1][0].__sql.values).toContain('nothing_to_publish');
+    expect(executeMock.mock.calls[1]![0].__sql.values).toContain('nothing_to_publish');
   });
 
   it('notifies residents when the schedule carried a summary', async () => {

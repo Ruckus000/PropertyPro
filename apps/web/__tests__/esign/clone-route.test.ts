@@ -89,6 +89,8 @@ const CLONED_TEMPLATE = {
   status: 'draft',
 };
 
+type NextRequestInit = NonNullable<ConstructorParameters<typeof NextRequest>[1]>;
+
 function postReq(
   id: string | number,
   opts: {
@@ -97,7 +99,7 @@ function postReq(
   } = {},
 ): NextRequest {
   const url = `http://localhost:3000/api/v1/esign/templates/${id}/clone`;
-  const init: RequestInit = {
+  const init: NextRequestInit = {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(opts.headers ?? {}) },
   };
@@ -150,7 +152,7 @@ describe('POST /api/v1/esign/templates/[id]/clone', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = cloneTemplateMock.mock.calls[0];
+    const call = cloneTemplateMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 

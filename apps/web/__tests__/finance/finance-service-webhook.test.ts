@@ -122,7 +122,16 @@ function makeScopedClient(): MockScopedClient {
   };
 }
 
-function makeEvent(type: string, id: string, payload: Record<string, unknown>): Stripe.Event {
+function makeEvent(
+  type: string,
+  id: string,
+  payload: Record<string, unknown>,
+  // Two `charge.refunded` call sites pass a fourth argument that reads as
+  // `previous_attributes`. This helper has never placed it on the event, so
+  // those cases exercise the "previous_attributes missing" branch. Declared
+  // (and still ignored) so making the file type-check changes no behaviour.
+  _previousAttributes?: Record<string, unknown>,
+): Stripe.Event {
   return {
     id,
     type,

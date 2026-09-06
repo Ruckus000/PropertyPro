@@ -77,8 +77,8 @@ function buildUnscopedClient(packBlocks: unknown[] | null, slug = 'florida-condo
 // chain is select().from().where().orderBy().limit().
 function buildUnscopedClientFromRows(rows: unknown[]) {
   const limitMock = vi.fn().mockResolvedValue(rows);
-  const orderByMock = vi.fn(() => ({ limit: limitMock }));
-  const whereMock = vi.fn(() => ({ orderBy: orderByMock, limit: limitMock }));
+  const orderByMock = vi.fn((..._clauses: unknown[]) => ({ limit: limitMock }));
+  const whereMock = vi.fn((_predicate?: unknown) => ({ orderBy: orderByMock, limit: limitMock }));
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));
   return {

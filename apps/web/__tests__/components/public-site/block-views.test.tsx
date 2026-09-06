@@ -38,7 +38,7 @@ describe('AnnouncementsBlockView', () => {
     bodyHtml: '<p>Resurfacing</p>',
     publishedAt: new Date('2026-03-04T15:00:00Z'),
     isPinned: false,
-  } as never;
+  };
 
   it('renders items from props with no data access', () => {
     render(
@@ -115,10 +115,10 @@ describe('DocumentsBlockView', () => {
     description: 'Approved November',
     categoryName: 'budget',
     createdAt: new Date('2026-01-10T12:00:00Z'),
-  } as never;
+  };
 
   it('renders documents from props', () => {
-    render(<DocumentsBlockView blockId={2} content={content} data={[doc]} community={COMMUNITY} />);
+    render(<DocumentsBlockView blockId={2} content={content} data={[doc as never]} community={COMMUNITY} />);
     expect(screen.getByText('FY26 Budget')).toBeInTheDocument();
     expect(screen.getByText('Approved November')).toBeInTheDocument();
     expect(screen.getByText('budget')).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('DocumentsBlockView', () => {
   it('scopes the download link to the community', () => {
     // The download route is tenant-scoped; dropping communityId here would send
     // visitors to another community's document.
-    render(<DocumentsBlockView blockId={2} content={content} data={[doc]} community={COMMUNITY} />);
+    render(<DocumentsBlockView blockId={2} content={content} data={[doc as never]} community={COMMUNITY} />);
     const link = screen.getByRole('link', { name: 'Download FY26 Budget' });
     expect(link).toHaveAttribute(
       'href',
@@ -161,16 +161,16 @@ describe('MeetingsBlockView', () => {
     meetingType: 'board_meeting',
     startsAt: new Date('2026-04-01T23:00:00Z'),
     location: 'Clubhouse',
-  } as never;
+  };
 
   it('renders meetings from props', () => {
-    render(<MeetingsBlockView blockId={3} content={content} data={[meeting]} community={COMMUNITY} />);
+    render(<MeetingsBlockView blockId={3} content={content} data={[meeting as never]} community={COMMUNITY} />);
     expect(screen.getByText('Annual Meeting')).toBeInTheDocument();
     expect(screen.getByText('Clubhouse')).toBeInTheDocument();
   });
 
   it('humanises the meeting type', () => {
-    render(<MeetingsBlockView blockId={3} content={content} data={[meeting]} community={COMMUNITY} />);
+    render(<MeetingsBlockView blockId={3} content={content} data={[meeting as never]} community={COMMUNITY} />);
     expect(screen.getByText('Board meeting')).toBeInTheDocument();
   });
 
@@ -197,7 +197,7 @@ describe('MeetingsBlockView', () => {
         <MeetingsBlockView
           blockId={3}
           content={content}
-          data={[meeting]}
+          data={[meeting as never]}
           community={BAD_TZ_COMMUNITY}
         />,
       ),

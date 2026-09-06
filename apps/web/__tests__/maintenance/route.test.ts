@@ -384,7 +384,7 @@ describe('maintenance requests route', () => {
       const json = (await res.json()) as {
         data: { data: Array<{ comments: Array<Record<string, unknown>> }>; pagination: unknown };
       };
-      const comments = json.data.data[0].comments;
+      const comments = json.data.data[0]!.comments;
       // isInternal field must not be emitted to resident callers (defense-in-depth
       // on top of the filter that drops isInternal=true comments).
       expect(comments).toHaveLength(1);
@@ -424,8 +424,8 @@ describe('maintenance requests route', () => {
       const json = (await res.json()) as {
         data: { data: Array<{ comments: Array<{ isInternal: boolean }> }>; pagination: unknown };
       };
-      expect(json.data.data[0].comments).toHaveLength(1);
-      expect(json.data.data[0].comments[0].isInternal).toBe(true);
+      expect(json.data.data[0]!.comments).toHaveLength(1);
+      expect(json.data.data[0]!.comments[0]!.isInternal).toBe(true);
     });
   });
 
@@ -461,7 +461,7 @@ describe('maintenance requests route', () => {
       const json = (await res.json()) as {
         data: { data: Array<{ status: string }>; pagination: unknown };
       };
-      expect(json.data.data[0].status).toBe('submitted');
+      expect(json.data.data[0]!.status).toBe('submitted');
     });
 
     it("normalizes priority 'normal' to 'medium'", async () => {
@@ -491,7 +491,7 @@ describe('maintenance requests route', () => {
       const json = (await res.json()) as {
         data: { data: Array<{ priority: string }>; pagination: unknown };
       };
-      expect(json.data.data[0].priority).toBe('medium');
+      expect(json.data.data[0]!.priority).toBe('medium');
     });
   });
 

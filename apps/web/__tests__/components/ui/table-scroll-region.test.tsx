@@ -35,8 +35,12 @@ function stubMetrics(scrollWidth: number, clientWidth: number) {
 }
 
 function clearMetrics() {
-  delete (HTMLDivElement.prototype as Partial<HTMLDivElement>).scrollWidth;
-  delete (HTMLDivElement.prototype as Partial<HTMLDivElement>).clientWidth;
+  // Both were installed as own accessors on the prototype above; neither
+  // existed there before, so removing them restores the native inherited
+  // getters. `Reflect.deleteProperty` is the `delete` operator without the
+  // readonly-property type complaint.
+  Reflect.deleteProperty(HTMLDivElement.prototype, 'scrollWidth');
+  Reflect.deleteProperty(HTMLDivElement.prototype, 'clientWidth');
 }
 
 function renderTable() {

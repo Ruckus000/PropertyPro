@@ -111,7 +111,9 @@ import { POST as denyPOST } from '../../src/app/api/v1/access-requests/[id]/deny
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeRequest(url: string, opts?: RequestInit) {
+type NextRequestInit = ConstructorParameters<typeof NextRequest>[1];
+
+function makeRequest(url: string, opts?: NextRequestInit) {
   return new NextRequest(new URL(url, 'http://localhost:3000'), opts);
 }
 

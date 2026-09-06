@@ -525,7 +525,7 @@ describe('the removed section leaves the canvas — the ordinary path', () => {
     // The refetch lands and the section is gone from the canvas. The host stays.
     rerender(
       <SelectedSitePageProvider pageId={10}>
-        <UndoableRemoveProvider communityId={7} />
+        <UndoableRemoveProvider communityId={7}>{null}</UndoableRemoveProvider>
       </SelectedSitePageProvider>,
     );
 

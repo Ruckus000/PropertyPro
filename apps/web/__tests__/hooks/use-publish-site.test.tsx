@@ -27,7 +27,7 @@ describe('usePublishSite', () => {
     const promise = result.current.mutateAsync({ expectedPublishedAt: '2026-05-01T10:00:00.000Z' });
     const data = await promise;
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(url).toBe('/api/v1/pm/site/publish');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({
@@ -49,7 +49,7 @@ describe('usePublishSite', () => {
       expectedPublishedAt: null,
       markOnboardingComplete: true,
     });
-    const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(JSON.parse(init.body as string)).toEqual({
       communityId: 42,
       expectedPublishedAt: null,

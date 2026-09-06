@@ -240,7 +240,7 @@ describe('PATCH /api/v1/visitors/[id]/checkout', () => {
     const res = await PATCH(jsonPatch(7, { communityId: 42 }), routeCtx('7'));
 
     expect(res.status).toBe(200);
-    const call = checkOutVisitorForCommunityMock.mock.calls[0];
+    const call = checkOutVisitorForCommunityMock.mock.calls[0]!;
     expect(call[3]).toBeNull();
   });
 });

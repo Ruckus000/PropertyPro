@@ -450,7 +450,7 @@ describe('p2-37 leases route', () => {
 
       expect(res.status).toBe(200);
       expect(json.data).toHaveLength(1);
-      expect(json.data[0].id).toBe(1);
+      expect(json.data[0]!.id).toBe(1);
     });
 
     it('filters by status parameter', async () => {
@@ -470,7 +470,7 @@ describe('p2-37 leases route', () => {
       const json = (await res.json()) as { data: Array<{ id: number }> };
 
       expect(json.data).toHaveLength(1);
-      expect(json.data[0].id).toBe(2);
+      expect(json.data[0]!.id).toBe(2);
     });
 
     it('filters by unit parameter', async () => {
@@ -490,7 +490,7 @@ describe('p2-37 leases route', () => {
       const json = (await res.json()) as { data: Array<{ id: number }> };
 
       expect(json.data).toHaveLength(1);
-      expect(json.data[0].id).toBe(2);
+      expect(json.data[0]!.id).toBe(2);
     });
   });
 

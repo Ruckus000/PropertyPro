@@ -87,7 +87,7 @@ describe('UpgradeForm', () => {
     fireEvent.click(screen.getByText('Start Checkout'));
 
     expect(mutateMock).toHaveBeenCalledTimes(1);
-    expect(mutateMock.mock.calls[0][0]).toEqual({
+    expect(mutateMock.mock.calls[0]![0]).toEqual({
       slug: 'sunset-condos',
       planId: 'starter',
       customerEmail: 'owner@example.com',
@@ -111,7 +111,7 @@ describe('UpgradeForm', () => {
     });
     fireEvent.click(screen.getByText('Start Checkout'));
 
-    const { onError } = mutateMock.mock.calls[0][1];
+    const { onError } = mutateMock.mock.calls[0]![1];
     act(() => onError(new Error('This demo has expired')));
 
     expect(screen.getByRole('alert').textContent).toContain(
@@ -127,7 +127,7 @@ describe('UpgradeForm', () => {
     });
     fireEvent.click(screen.getByText('Start Checkout'));
 
-    const { onError } = mutateMock.mock.calls[0][1];
+    const { onError } = mutateMock.mock.calls[0]![1];
     act(() => onError('weird'));
 
     expect(screen.getByRole('alert').textContent).toContain(
@@ -136,7 +136,7 @@ describe('UpgradeForm', () => {
   });
 
   it('redirects to checkoutUrl on success', () => {
-    const originalLocation = window.location;
+    const originalLocation = window.location as string & Location;
     // @ts-expect-error — replace for assertion
     delete window.location;
     // @ts-expect-error — minimal stub
@@ -149,7 +149,7 @@ describe('UpgradeForm', () => {
     });
     fireEvent.click(screen.getByText('Start Checkout'));
 
-    const { onSuccess } = mutateMock.mock.calls[0][1];
+    const { onSuccess } = mutateMock.mock.calls[0]![1];
     onSuccess({ checkoutUrl: 'https://stripe.test/checkout' });
 
     expect(window.location.href).toBe('https://stripe.test/checkout');
@@ -158,7 +158,7 @@ describe('UpgradeForm', () => {
   });
 
   it('does not redirect when checkoutUrl is missing', () => {
-    const originalLocation = window.location;
+    const originalLocation = window.location as string & Location;
     // @ts-expect-error — replace for assertion
     delete window.location;
     // @ts-expect-error — minimal stub
@@ -171,7 +171,7 @@ describe('UpgradeForm', () => {
     });
     fireEvent.click(screen.getByText('Start Checkout'));
 
-    const { onSuccess } = mutateMock.mock.calls[0][1];
+    const { onSuccess } = mutateMock.mock.calls[0]![1];
     onSuccess({ checkoutUrl: undefined });
 
     expect(window.location.href).toBe('unchanged');

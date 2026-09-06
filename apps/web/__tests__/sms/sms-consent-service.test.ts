@@ -48,10 +48,10 @@ const { restoreSmsConsentByPhone, revokeSmsConsentByPhone } = await import(
  * it.
  */
 function buildDb(opts: { userRows?: unknown[]; updated?: unknown[] }) {
-  const updateWhereSpy = vi.fn(() => ({
+  const updateWhereSpy = vi.fn((_predicate: unknown) => ({
     returning: vi.fn(() => Promise.resolve(opts.updated ?? [])),
   }));
-  const setSpy = vi.fn(() => ({ where: updateWhereSpy }));
+  const setSpy = vi.fn((_values: unknown) => ({ where: updateWhereSpy }));
   return {
     setSpy,
     updateWhereSpy,

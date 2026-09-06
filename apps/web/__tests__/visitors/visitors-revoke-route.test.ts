@@ -414,7 +414,7 @@ describe('POST /api/v1/visitors/[id]/revoke', () => {
     );
 
     expect(res.status).toBe(200);
-    const call = revokeVisitorForCommunityMock.mock.calls[0];
+    const call = revokeVisitorForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

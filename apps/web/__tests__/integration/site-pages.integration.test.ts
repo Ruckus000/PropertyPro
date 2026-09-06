@@ -792,7 +792,13 @@ describeDb('multi-page site (db-backed integration)', () => {
 
       const held = state.sqlClient
         .begin(async (tx) => {
-          await tx`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`;
+          // postgres.js declares `TransactionSql` as `Omit<Sql, …>`, and `Omit`
+          // is a mapped type, which drops call signatures — so the transaction
+          // handle has no tagged-template form even though at runtime it is the
+          // same callable object. `unsafe` survives the `Omit`, and is the idiom
+          // the rest of this file already uses; `communityId` is a number this
+          // test allocates, not external input.
+          await tx.unsafe(`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`);
           signalAcquired();
           await released;
         })

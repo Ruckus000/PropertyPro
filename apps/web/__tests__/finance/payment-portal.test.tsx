@@ -118,6 +118,7 @@ describe('PaymentPortal', () => {
         <PaymentPortal
           communityId={42}
           userRole="owner"
+          paymentsEnabled={false}
         />
       </Wrapper>,
     );
@@ -140,6 +141,7 @@ describe('PaymentPortal', () => {
         <PaymentPortal
           communityId={42}
           userRole="owner"
+          paymentsEnabled={false}
         />
       </Wrapper>,
     );
@@ -193,6 +195,7 @@ describe('PaymentPortal', () => {
         <PaymentPortal
           communityId={42}
           userRole="owner"
+          paymentsEnabled={false}
         />
       </Wrapper>,
     );
@@ -243,6 +246,7 @@ describe('PaymentPortal', () => {
         <PaymentPortal
           communityId={42}
           userRole="owner"
+          paymentsEnabled={false}
         />
       </Wrapper>,
     );
@@ -270,6 +274,7 @@ describe('PaymentPortal', () => {
         <PaymentPortal
           communityId={42}
           userRole="owner"
+          paymentsEnabled={false}
         />
       </Wrapper>,
     );
@@ -290,6 +295,7 @@ describe('PaymentPortal', () => {
         <PaymentPortal
           communityId={42}
           userRole="resident"
+          paymentsEnabled={false}
           actorUnits={[
             { id: 101, label: 'Unit 101' },
             { id: 202, label: 'Unit 202' },
@@ -322,6 +328,7 @@ describe('PaymentPortal', () => {
         <PaymentPortal
           communityId={42}
           userRole="resident"
+          paymentsEnabled={false}
           unitId={202}
           actorUnits={[
             { id: 101, label: 'Unit 101' },
@@ -386,7 +393,7 @@ describe('PaymentPortal', () => {
 
       render(
         <Wrapper>
-          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" />
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" paymentsEnabled={false} />
         </Wrapper>,
       );
 
@@ -425,7 +432,7 @@ describe('PaymentPortal', () => {
 
       render(
         <Wrapper>
-          <PaymentPortal communityId={42} userRole="cam" mode="community" />
+          <PaymentPortal communityId={42} userRole="cam" mode="community" paymentsEnabled={false} />
         </Wrapper>,
       );
 
@@ -451,7 +458,7 @@ describe('PaymentPortal', () => {
 
       render(
         <Wrapper>
-          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" />
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" paymentsEnabled={false} />
         </Wrapper>,
       );
 
@@ -487,7 +494,7 @@ describe('PaymentPortal', () => {
 
       render(
         <Wrapper>
-          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" />
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" paymentsEnabled={false} />
         </Wrapper>,
       );
 
@@ -507,6 +514,7 @@ describe('PaymentPortal', () => {
           <PaymentPortal
             communityId={42}
             userRole="resident"
+            paymentsEnabled={false}
             mode="unit"
             actorUnits={[
               { id: 101, label: 'Unit 101' },
@@ -540,7 +548,7 @@ describe('PaymentPortal', () => {
 
       render(
         <Wrapper>
-          <PaymentPortal communityId={42} userRole="resident" mode="unit" unitId={303} />
+          <PaymentPortal communityId={42} userRole="resident" mode="unit" unitId={303} paymentsEnabled={false} />
         </Wrapper>,
       );
 

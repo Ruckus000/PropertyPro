@@ -157,14 +157,14 @@ describe('demo-conversion prerequisites', () => {
       // CRITICAL: exactly one root_manager per community (partial unique index).
       const roots = rows.filter((r) => r.role === 'root_manager');
       expect(roots).toHaveLength(1);
-      expect(roots[0].designation).toBe('board_president');
+      expect(roots[0]!.designation).toBe('board_president');
       // role-v3: founding rows no longer carry a presetKey (column removed).
-      expect(roots[0].presetKey).toBeUndefined();
+      expect(roots[0]!.presetKey).toBeUndefined();
 
       // The companion PM-portfolio row must NOT be a second root.
       const companions = rows.filter((r) => r.role !== 'root_manager');
       expect(companions).toHaveLength(1);
-      expect(companions[0].role).toBe('property_manager');
+      expect(companions[0]!.role).toBe('property_manager');
 
       // No legacy pm_admin / manager founding rows survive.
       expect(rows.some((r) => r.role === 'pm_admin')).toBe(false);

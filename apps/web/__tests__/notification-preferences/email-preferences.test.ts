@@ -47,6 +47,12 @@ describe('email-preferences util (p1-26)', () => {
       calendarReminderPersonalAssessments: false,
       calendarReminderCommunityAssessments: false,
       inAppEnabled: true,
+      inAppAnnouncements: false,
+      inAppDocuments: false,
+      inAppMeetings: false,
+      inAppMaintenance: false,
+      inAppViolations: false,
+      inAppElections: false,
     };
 
     expect(isCriticalNotification('password_reset')).toBe(true);
@@ -64,6 +70,12 @@ describe('email-preferences util (p1-26)', () => {
       calendarReminderPersonalAssessments: true,
       calendarReminderCommunityAssessments: false,
       inAppEnabled: true,
+      inAppAnnouncements: false,
+      inAppDocuments: false,
+      inAppMeetings: false,
+      inAppMaintenance: false,
+      inAppViolations: false,
+      inAppElections: false,
     };
 
     expect(shouldSendEmailNow('announcement', prefs)).toBe(true);
@@ -80,6 +92,12 @@ describe('email-preferences util (p1-26)', () => {
       calendarReminderPersonalAssessments: true,
       calendarReminderCommunityAssessments: false,
       inAppEnabled: true,
+      inAppAnnouncements: false,
+      inAppDocuments: false,
+      inAppMeetings: false,
+      inAppMaintenance: false,
+      inAppViolations: false,
+      inAppElections: false,
     };
     expect(shouldSendEmailNow('announcement', prefs)).toBe(false);
     expect(shouldSendEmailNow('meeting', prefs)).toBe(false);

@@ -426,7 +426,7 @@ describe('wind-mitigation route', () => {
     it('does not reset the alert ladder on an unrelated edit', async () => {
       await PATCH(jsonReq('PATCH', { id: 7, communityId: 42, notes: 'Typo fix' }));
 
-      const [, , values] = updateWindMitigationReportByIdMock.mock.calls[0];
+      const [, , values] = updateWindMitigationReportByIdMock.mock.calls[0]!;
       expect(values).not.toHaveProperty('lastAlertBand');
     });
 

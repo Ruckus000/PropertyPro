@@ -20,6 +20,8 @@ const communities: PortfolioCommunity[] = [
     complianceScore: 81,
     outstandingBalance: 225000,
     expiringLeases: 0,
+    siteOnboardingCompletedAt: null,
+    hasUnpublishedSiteDrafts: false,
   },
   {
     communityId: 3,
@@ -33,6 +35,8 @@ const communities: PortfolioCommunity[] = [
     complianceScore: null,
     outstandingBalance: 0,
     expiringLeases: 4,
+    siteOnboardingCompletedAt: null,
+    hasUnpublishedSiteDrafts: false,
   },
 ];
 

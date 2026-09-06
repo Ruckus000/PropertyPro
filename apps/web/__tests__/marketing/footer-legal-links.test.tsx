@@ -6,6 +6,7 @@ import { FooterLegalLinks } from '@/components/marketing/footer-legal-links';
 const legalDocs = {
   terms: '<h1>Terms Heading</h1><p>terms body</p>',
   privacy: '<h1>Privacy Heading</h1><p>privacy body</p>',
+  accessibility: '',
 };
 
 describe('FooterLegalLinks', () => {

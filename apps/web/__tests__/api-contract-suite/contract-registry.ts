@@ -25,6 +25,16 @@ function isRouteContract(value: unknown): value is AnyRouteContract {
   );
 }
 
+// `import.meta.glob` is a Vite build-time feature. Its types ship in
+// `vite/client`, which this project's tsconfig does not reference (pulling it
+// in would also add Vite's ambient asset-module declarations program-wide), so
+// declare the single member this file uses.
+declare global {
+  interface ImportMeta {
+    glob(pattern: string, options: { eager: true }): Record<string, unknown>;
+  }
+}
+
 // Vite eagerly inlines these imports at build time. Path is relative to THIS
 // file: up out of api-contract-suite/ and __tests__/ into apps/web/, then src.
 const modules = import.meta.glob('../../src/app/api/**/contract.ts', {

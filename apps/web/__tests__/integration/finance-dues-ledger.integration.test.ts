@@ -112,9 +112,9 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       floor: 2,
     });
 
-    unitAId = readNumberField(unitA, 'id');
-    unitASecondaryId = readNumberField(unitASecondary, 'id');
-    unitCId = readNumberField(unitC, 'id');
+    unitAId = readNumberField(unitA!, 'id');
+    unitASecondaryId = readNumberField(unitASecondary!, 'id');
+    unitCId = readNumberField(unitC!, 'id');
 
     ownerAUserId = randomUUID();
     await state.db.insert(state.dbModule.users).values({
@@ -288,7 +288,7 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       endDate: null,
       isActive: true,
     });
-    const assessmentId = readNumberField(assessment, 'id');
+    const assessmentId = readNumberField(assessment!, 'id');
 
     const [ownerLineItem] = await scopedA.insert(kit.dbModule.assessmentLineItems, {
       assessmentId,
@@ -316,7 +316,7 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       amountCents: 15000,
       description: 'Owner-scoped assessment',
       sourceType: 'assessment',
-      sourceId: `owner-line-${readNumberField(ownerLineItem, 'id')}`,
+      sourceId: `owner-line-${readNumberField(ownerLineItem!, 'id')}`,
       unitId: unitAId,
       userId: ownerAUserId,
       effectiveDate: '2026-01-15',
@@ -407,7 +407,7 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     const paymentIntentForbidden = await routeModules.paymentCreateIntent.POST(
       jsonRequest(apiUrl('/api/v1/payments/create-intent'), 'POST', {
         communityId: communityA.id,
-        lineItemId: readNumberField(otherUnitLineItem, 'id'),
+        lineItemId: readNumberField(otherUnitLineItem!, 'id'),
       }),
     );
     expect(paymentIntentForbidden.status).toBe(403);
@@ -475,7 +475,7 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       endDate: null,
       isActive: true,
     });
-    const assessmentAId = readNumberField(assessmentA, 'id');
+    const assessmentAId = readNumberField(assessmentA!, 'id');
 
     await scopedA.insert(kit.dbModule.assessmentLineItems, {
       assessmentId: assessmentAId,

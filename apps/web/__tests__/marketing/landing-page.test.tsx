@@ -91,7 +91,7 @@ describe('photography', () => {
     expect(html.match(/width="\d+" height="\d+"/g)?.length).toBe(6);
     // Every photo offers at least two widths, or srcset is doing nothing.
     const srcsets = [...html.matchAll(/srcSet="([^"]*)"|srcset="([^"]*)"/g)].map(
-      (m) => m[1] ?? m[2],
+      (m) => m[1] ?? m[2]!,
     );
     expect(srcsets).toHaveLength(6);
     for (const set of srcsets) {
@@ -105,7 +105,7 @@ describe('photography', () => {
 
   it('gives every decorative photo an empty alt and every meaningful one real alt text', () => {
     const html = wholePage();
-    const alts = [...html.matchAll(/<img[^>]*\salt="([^"]*)"/g)].map((m) => m[1]);
+    const alts = [...html.matchAll(/<img[^>]*\salt="([^"]*)"/g)].map((m) => m[1]!);
     expect(alts).toHaveLength(6);
     // The three audience cards carry meaning; the two atmospheric bands do not.
     expect(alts.filter((a) => a.length > 0)).toHaveLength(4);

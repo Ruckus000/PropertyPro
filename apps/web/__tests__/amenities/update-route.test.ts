@@ -354,7 +354,7 @@ describe('PATCH /api/v1/amenities/[id]', () => {
     const res = await PATCH(jsonPatch(7, { communityId: 42 }), routeCtx('7'));
 
     expect(res.status).toBe(200);
-    const call = updateAmenityForCommunityMock.mock.calls[0];
+    const call = updateAmenityForCommunityMock.mock.calls[0]!;
     expect(call[4]).toBeNull();
   });
 });

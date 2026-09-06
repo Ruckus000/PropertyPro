@@ -33,7 +33,7 @@ describe('rulBadge — non-valent status keys', () => {
 
     // ...and must not be one of the adequacy traffic-light keys/variants.
     expect(VALENT_KEYS.has(status)).toBe(false);
-    expect(VALENT_VARIANTS.has(entry.variant)).toBe(false);
+    expect(VALENT_VARIANTS.has(entry!.variant)).toBe(false);
   });
 
   it('keeps neutral time-remaining labels (no condition/adequacy words)', () => {

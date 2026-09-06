@@ -32,7 +32,8 @@ function readCssVars(): Map<string, string> {
   const css = fs.readFileSync(TOKENS_CSS, 'utf8');
   const vars = new Map<string, string>();
   for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/gi)) {
-    if (!vars.has(m[1])) vars.set(m[1], m[2].trim());
+    // Both groups are mandatory in the pattern, so a match always fills them.
+    if (!vars.has(m[1]!)) vars.set(m[1]!, m[2]!.trim());
   }
   return vars;
 }
@@ -42,7 +43,9 @@ function resolveVar(value: string, vars: Map<string, string>, depth = 0): string
   if (depth > 10) throw new Error(`Unresolvable var chain: ${value}`);
   const m = /^var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([\s\S]+))?\)$/i.exec(value.trim());
   if (!m) return value.trim();
-  const [, name, fallback] = m;
+  // Group 1 is mandatory; group 2 (the fallback arm) is optional by design.
+  const name = m[1]!;
+  const fallback = m[2];
   const direct = vars.get(name);
   // A theme-overridable var (e.g. --theme-primary) is not defined in tokens.css;
   // its documented default is the fallback arm.
@@ -72,7 +75,7 @@ function classToCssValue(suffix: string): string {
 function hexToRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) throw new Error(`Not a 6-digit hex colour: "${hex}"`);
-  const n = parseInt(m[1], 16);
+  const n = parseInt(m[1]!, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
@@ -81,12 +84,14 @@ function relativeLuminance(hex: string): number {
     const s = c / 255;
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   });
-  return 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  // `hexToRgb` returns a 3-tuple, so the mapped array has exactly 3 entries.
+  return 0.2126 * srgb[0]! + 0.7152 * srgb[1]! + 0.0722 * srgb[2]!;
 }
 
 function contrastRatio(a: string, b: string): number {
+  // Sorting a 2-element literal yields a 2-element array.
   const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
+  return (hi! + 0.05) / (lo! + 0.05);
 }
 
 /** Resolve a `bg-<suffix>` class straight through to a hex colour. */

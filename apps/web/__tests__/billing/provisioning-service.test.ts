@@ -225,7 +225,7 @@ function makeJob(overrides: {
 }
 
 /** Track which DB operations were called for assertions. */
-type DbCall = { op: string; table?: unknown; values?: unknown };
+type DbCall = { op: string; table?: unknown; values?: unknown; config?: unknown };
 
 /**
  * Build a db mock that records every operation and resolves selects with
@@ -543,7 +543,7 @@ describe('runProvisioning', () => {
     }));
 
     const updateWhereMock = vi.fn(() => Promise.resolve(undefined));
-    const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
+    const updateSetMock = vi.fn((_values?: Record<string, unknown>) => ({ where: updateWhereMock }));
     const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
     let insertCallCount = 0;
@@ -566,7 +566,7 @@ describe('runProvisioning', () => {
 
     // update should have been called with status='failed'
     expect(updateMock).toHaveBeenCalled();
-    const setCall = updateSetMock.mock.calls[updateSetMock.mock.calls.length - 1][0];
+    const setCall = updateSetMock.mock.calls[updateSetMock.mock.calls.length - 1]![0]!;
     expect(setCall.status).toBe('failed');
     expect(setCall.lastSuccessfulStatus).toBeUndefined(); // NOT overwritten
   });
@@ -691,7 +691,7 @@ describe('runProvisioning', () => {
     }));
 
     const updateWhereMock = vi.fn(() => Promise.resolve(undefined));
-    const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
+    const updateSetMock = vi.fn((_values?: Record<string, unknown>) => ({ where: updateWhereMock }));
     const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
     createUnscopedClientMock.mockReturnValue({
@@ -702,7 +702,7 @@ describe('runProvisioning', () => {
 
     await expect(runProvisioning(1)).rejects.toThrow('Email already registered');
 
-    const setCall = updateSetMock.mock.calls[updateSetMock.mock.calls.length - 1][0];
+    const setCall = updateSetMock.mock.calls[updateSetMock.mock.calls.length - 1]![0]!;
     expect(setCall.status).toBe('failed');
     expect(setCall.errorMessage).toContain('Email already registered');
   });

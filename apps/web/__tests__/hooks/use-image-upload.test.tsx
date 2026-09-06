@@ -79,7 +79,7 @@ describe('useImageUpload', () => {
       '/api/v1/site/uploads/presign',
       expect.objectContaining({ method: 'POST' }),
     );
-    const presignBody = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+    const presignBody = JSON.parse(mockFetch.mock.calls[0]![1].body as string);
     expect(presignBody).toMatchObject({
       communityId: 7,
       kind: 'hero',
@@ -101,7 +101,7 @@ describe('useImageUpload', () => {
       '/api/v1/site/images/finalize',
       expect.objectContaining({ method: 'POST' }),
     );
-    const finalizeBody = JSON.parse(mockFetch.mock.calls[2][1].body as string);
+    const finalizeBody = JSON.parse(mockFetch.mock.calls[2]![1].body as string);
     expect(finalizeBody).toMatchObject({
       communityId: 7,
       storagePath: 'community/7/images/hero/photo.jpg',
@@ -147,7 +147,7 @@ describe('useImageUpload', () => {
       cropBox: { x: 10, y: 20, width: 800, height: 400 },
     });
 
-    const finalizeBody = JSON.parse(mockFetch.mock.calls[2][1].body as string);
+    const finalizeBody = JSON.parse(mockFetch.mock.calls[2]![1].body as string);
     expect(finalizeBody.cropBox).toEqual({ x: 10, y: 20, width: 800, height: 400 });
   });
 

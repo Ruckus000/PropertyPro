@@ -129,7 +129,9 @@ function setupScopedMock(overrides: {
     return [{ id: 99, ...row }];
   });
 
-  const updateMock = vi.fn(async () => [{}]);
+  const updateMock = vi.fn(
+    async (_table: unknown, _data: unknown, _additionalWhere?: unknown) => [{}],
+  );
 
   // Cross-tenant FK guard resolves a referenced unitId through queryById.
   // Default to "found in this community"; a test can override to null to
@@ -140,7 +142,13 @@ function setupScopedMock(overrides: {
   // account, so it can adopt that row's id (issue #944). Default to "no existing
   // row" — the ordinary new-resident case; tests override it to model someone
   // pre-provisioned by another community.
-  const selectFromMock = vi.fn(async () => []);
+  const selectFromMock = vi.fn(
+    async (
+      _table: unknown,
+      _columns: unknown,
+      _additionalWhere?: unknown,
+    ): Promise<Record<string, unknown>[]> => [],
+  );
 
   const scoped = {
     query: queryMock,

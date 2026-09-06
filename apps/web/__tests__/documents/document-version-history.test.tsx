@@ -106,7 +106,7 @@ describe('DocumentVersionHistory', () => {
     expect(screen.getByText('Version 1')).toBeDefined();
 
     const downloadLinks = screen.getAllByText('Download');
-    const href = downloadLinks[0].closest('a')?.getAttribute('href');
+    const href = downloadLinks[0]!.closest('a')?.getAttribute('href');
     expect(href).toBe('/api/v1/documents/2/download?communityId=42&attachment=true');
   });
 
