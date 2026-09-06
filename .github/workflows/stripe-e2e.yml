@@ -151,7 +151,11 @@ jobs:
         if: steps.gate.outputs.configured == 'true'
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned, matching e2e.yml — `latest` is an unauthenticated API lookup
+          # that can be rate-limited by unrelated traffic (observed 2026-09-06,
+          # killing a job in 26s before any spec ran), and the CLI version is
+          # behavioural for `supabase start`. Bump both files together.
+          version: 2.116.0
 
       # Own project directory, NOT the repo root. The repo deliberately ships no
       # `supabase/` config, and writing one here would collide with whatever a

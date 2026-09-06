@@ -157,10 +157,34 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # PINNED, for two independent reasons.
+      #
+      # 1. `latest` is an unauthenticated GitHub API lookup on every run, and it
+      #    can be rate-limited by traffic that has nothing to do with this repo.
+      #    Observed 2026-09-06 on a PR that only added a dependency:
+      #
+      #      ##[error]Failed to resolve latest Supabase CLI release: rate limit exceeded
+      #
+      #    The job died in 26 seconds, before a single spec ran, and looked like
+      #    a red build on an unrelated change. A pin removes that call entirely.
+      #
+      # 2. The CLI version is BEHAVIOURAL here, not incidental. Newer CLIs
+      #    default `auto_expose_new_tables` OFF, which leaves tables created by
+      #    our migrations with no Data API grants and fails routes with
+      #    `permission denied for table … (42501)` — see the `supabase init`
+      #    step below, which exists to work around exactly that. `latest` means
+      #    a CLI release can change this job's behaviour with no commit here,
+      #    which is the opposite of what a reproducible test environment wants.
+      #
+      # 2.116.0 is the release `latest` resolved to for the runs measured on
+      # 2026-09-05/06, so this pins what is already known to work rather than
+      # adopting something new. To bump: raise it deliberately, in its own PR,
+      # and read the e2e result — that is the only place a CLI regression here
+      # would show up.
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.116.0
 
       # Own project directory, NOT the repo root: the repo deliberately ships no
       # `supabase/` config (it is gitignored, because ports get shifted per
