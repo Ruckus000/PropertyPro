@@ -13,6 +13,7 @@ import {
   findStuckCouponSyncBillingGroups,
   recalculateVolumeTier,
 } from '@/lib/billing/billing-group-service';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.COUPON_SYNC_RETRY_CRON_SECRET, process.env.CRON_SECRET);
@@ -44,5 +45,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 // One handler serves both so the scheduler's verb can never be the thing that
 // breaks the job. Neither verb reads a body or query params, so they are
 // genuinely interchangeable.
-export const GET = handler;
-export const POST = handler;
+const cronHandler = withCronJob('coupon-sync-retry', handler);
+
+export const GET = cronHandler;
+export const POST = cronHandler;

@@ -44,6 +44,7 @@ import {
   cleanupSoftDeletedSiteBlocks,
   pruneSitePublishSnapshots,
 } from '@/lib/services/site-blocks-service';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.ACCOUNT_LIFECYCLE_CRON_SECRET, process.env.CRON_SECRET);
@@ -273,5 +274,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
 // is the opposite, that this GET is destructive by default; that predates the
 // flag and is gated by requireCronSecret on an Authorization header, which no
 // prefetcher, link scanner or browser preconnect supplies.
-export const GET = handler;
-export const POST = handler;
+const cronHandler = withCronJob('account-lifecycle', handler);
+
+export const GET = cronHandler;
+export const POST = cronHandler;

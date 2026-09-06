@@ -6,6 +6,7 @@ import {
   reconcileLostCheckoutSignups,
   recoverStuckProvisioningJobs,
 } from '@/lib/services/provisioning-service';
+import { withCronJob } from '@/lib/cron/with-cron-job';
 
 function requireProvisioningWatchdogSecret(req: NextRequest): void {
   requireCronSecret(req, process.env.PROVISIONING_RETRY_SECRET, process.env.CRON_SECRET);
@@ -74,5 +75,7 @@ async function handleWatchdog(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({ data: { ...summary, reconcile } });
 }
 
-export const GET = withErrorHandler(handleWatchdog);
-export const POST = withErrorHandler(handleWatchdog);
+const cronHandler = withCronJob('provisioning-watchdog', withErrorHandler(handleWatchdog));
+
+export const GET = cronHandler;
+export const POST = cronHandler;

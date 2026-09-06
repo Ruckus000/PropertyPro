@@ -63,6 +63,7 @@
     "guard:read-entitlement": "tsx scripts/verify-read-entitlement-coverage.ts",
     "guard:admin-error-leakage": "tsx scripts/verify-admin-error-leakage.ts",
     "guard:internal-cron-auth": "tsx scripts/verify-internal-cron-auth.ts",
+    "guard:cron-job-tagging": "tsx scripts/verify-cron-job-tagging.ts",
     "guard:token-auth-routes": "tsx scripts/verify-token-auth-routes.ts",
     "guard:shared-side-effects": "tsx scripts/verify-shared-side-effects.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
