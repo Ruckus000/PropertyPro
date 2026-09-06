@@ -40,6 +40,8 @@
 import type { NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
+import { recordCronRun } from '@/lib/services/cron-run-service';
+
 import type { CronJobSlug } from './registry';
 
 /**
@@ -123,15 +125,70 @@ async function reportSummaryFailures(slug: CronJobSlug, res: Response): Promise<
   }
 }
 
+/** Longest stored failure reason. Enough to triage, short enough not to be a log. */
+const MAX_ERROR_CHARS = 300;
+
+/**
+ * Record that the job ran, and how it went.
+ *
+ * ALWAYS swallowing. A failure to record a run must never change the response
+ * or fail the job — monitoring that can cause an outage is worse than no
+ * monitoring, and this is the code most likely to be running while the database
+ * is already unhappy.
+ */
+async function recordHeartbeat(
+  slug: CronJobSlug,
+  startedAt: Date,
+  status: 'ok' | 'error',
+  error?: unknown,
+): Promise<void> {
+  try {
+    await recordCronRun(slug, {
+      status,
+      startedAt,
+      durationMs: Date.now() - startedAt.getTime(),
+      error:
+        status === 'ok'
+          ? null
+          : (error instanceof Error ? error.message : String(error ?? 'unknown')).slice(
+              0,
+              MAX_ERROR_CHARS,
+            ),
+    });
+  } catch {
+    // Deliberately silent — see the docblock.
+  }
+}
+
 export function withCronJob(slug: CronJobSlug, handler: CronRouteHandler): CronRouteHandler {
   return async function cronJobHandler(req, ...rest) {
     return Sentry.withIsolationScope(async (scope) => {
       scope.setTag('job', slug);
-      const res = await handler(req, ...rest);
-      // Inside the isolation scope, so the event carries the `job` tag and the
-      // one alert rule matches it exactly as it matches a 500.
-      await reportSummaryFailures(slug, res);
-      return res;
+      const startedAt = new Date();
+
+      try {
+        const res = await handler(req, ...rest);
+        // Inside the isolation scope, so the event carries the `job` tag and the
+        // one alert rule matches it exactly as it matches a 500.
+        await reportSummaryFailures(slug, res);
+        /*
+         * A non-2xx is NOT a success, and 401 in particular matters: the
+         * 2026-08 outage was every cron returning 401 for months, which throws
+         * `UnauthorizedError` — an `AppError` — and so never reaches Sentry at
+         * all. Recording it as a failed run is what lets the health probe see
+         * that class of outage, since `last_succeeded_at` then goes stale.
+         */
+        await recordHeartbeat(
+          slug,
+          startedAt,
+          res.ok ? 'ok' : 'error',
+          res.ok ? undefined : `HTTP ${res.status}`,
+        );
+        return res;
+      } catch (error) {
+        await recordHeartbeat(slug, startedAt, 'error', error);
+        throw error;
+      }
     });
   };
 }

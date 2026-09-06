@@ -193,6 +193,14 @@ feedback MX. This is the last missing piece.
 
 **Status:** open · **Owner:** you (monitoring)
 
+> **Update (cron alerting):** the same monitor should now also poll
+> `/api/v1/internal/cron-health`, which returns 503 when any scheduled job has not
+> succeeded inside its own window. That is the only check that catches a job which
+> STOPPED RUNNING — failure alerting cannot, because a 401'ing cron throws `AppError`
+> and never reaches Sentry, which is exactly how all seventeen stayed dead behind a
+> green dashboard in 2026-08. One monitor setup now covers readiness, `/api/health`
+> and cron freshness.
+
 `/api/v1/internal/readiness` now reports nine secrets plus email delivery, and it is
 callable in production today — both `READINESS_CHECK_SECRET` and `CRON_SECRET` are set, so
 there is no prerequisite to arrange. But **nothing reads it**, so it cannot tell anyone
