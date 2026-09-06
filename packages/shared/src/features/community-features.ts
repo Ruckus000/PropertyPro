@@ -148,3 +148,24 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasStormTools: true,
   },
 } satisfies Record<CommunityType, CommunityFeatures>;
+
+/**
+ * Every `CommunityFeatures` key, available at RUNTIME.
+ *
+ * DERIVED from `COMMUNITY_FEATURES` rather than hand-written, so it cannot
+ * drift. The `satisfies` above makes every entry exhaustive at compile time,
+ * so any one entry's keys ARE the full set — adding a flag to the interface
+ * forces it into every entry, which carries it into this list for free.
+ *
+ * Same derivation `PLAN_ID_VALUES = Object.keys(PLAN_FEATURES)` already uses
+ * for plan ids in the upgrade-requests contract.
+ *
+ * Exists because the interface is a TYPE and therefore unavailable to runtime
+ * validators. Before this, the only runtime copy was a hand-maintained list in
+ * `apps/web/src/lib/help/frontmatter-schema.ts`, kept honest by a CI guard —
+ * a list that can drift and a guard to catch it, where a derivation cannot
+ * drift at all.
+ */
+export const COMMUNITY_FEATURE_KEYS = Object.keys(
+  COMMUNITY_FEATURES.condo_718,
+) as readonly (keyof CommunityFeatures)[];
