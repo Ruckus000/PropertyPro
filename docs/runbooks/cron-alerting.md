@@ -13,7 +13,7 @@ Each catches something the others structurally cannot.
 |---|---|---|
 | `job` tag on Sentry events (#1047) | a job that throws | a job that fails behind a 200; a job that never runs |
 | `cron_job_reported_failures` (#1048) | failures reported in a 200 body | a job that never runs |
-| `cron_runs` + `/api/v1/internal/cron-health` | a job that stopped running | nothing, but it is 15 min–30 h late depending on cadence |
+| `cron_runs` + `/api/v1/internal/cron-health` | a job that stopped running | a job that returns 200 while failing internally — the heartbeat records success on HTTP status alone. Late by 20 min–32 days depending on cadence |
 
 The third exists because of a real outage: in 2026-08 **all seventeen crons
 returned 401 for months** behind a green Vercel dashboard, and that produced
@@ -58,8 +58,26 @@ the tag is — it has to reach captures made deep in a nested async service.
 
 **This is the only fingerprint in the codebase.** There was no prior convention;
 if a second one is ever added, follow this shape rather than inventing another.
-Pinned by `apps/web/__tests__/cron/with-cron-job.test.ts`, which asserts two jobs
-failing with the *same* error get different fingerprints.
+
+**What the test does and does not pin.**
+`apps/web/__tests__/cron/with-cron-job.test.ts` asserts that two jobs failing
+with the *same* error get *different* fingerprints — that is real, and it pins
+the slug discriminator. It does **not** pin the `{{ default }}` placeholder, and
+no test can: the SDK stores the array verbatim (`scope.js` `setFingerprint`) and
+concatenates it unexamined, because expansion happens server-side at ingest. So
+the assertion compares the literal in the test to the literal in the source, and
+a typo like `{{default}}` would pass everything while silently collapsing every
+error within a job into one issue. **Confirm the spelling once against a real
+grouped issue in Sentry; do not trust the suite for it.**
+
+**The cost, which is not zero.** Splitting by job means a platform-wide outage
+that breaks all seventeen with the same error produces seventeen issues and
+seventeen notifications instead of one. It also permanently separates a shared
+service's errors (`stripe-service`, `@propertypro/email`) between cron and
+non-cron callers, so resolving one does not cover the other. That is accepted:
+the alternative is two jobs sharing one issue, where resolving it silences the
+other and the notification names one job while two are down. A platform-wide
+outage also reaches you through the 503 probe regardless.
 
 ### Rule 2 — "Destructive cron circuit breaker"
 
@@ -84,6 +102,24 @@ the data is irreversible. Worth waking up for; not worth batching.
 `GET https://www.getpropertypro.com/api/v1/internal/cron-health`, no auth, alert
 on non-200, 5-minute interval. Same monitor as `docs/LAUNCH-BLOCKERS.md` §5 asks
 for — one setup covers readiness, `/api/health` and cron freshness.
+
+Four things about configuring it, each of which has a wrong default:
+
+1. **`www`, not the apex.** `getpropertypro.com` answers **307** to the `www`
+   host. A monitor that does not follow redirects, or that counts 3xx as down,
+   false-alarms forever.
+2. **GET or HEAD, both fine now — but this was broken until #1075.** HEAD
+   returned 401 while GET returned 200, because middleware's method allowlist
+   for `/api/v1/internal/` listed GET and POST only. Many monitors send HEAD by
+   default. **Never configure the monitor to accept 401 on this endpoint**: 401
+   is the signature of the 2026-08 outage it exists to catch.
+3. **Alert on non-200, not on 503.** A database failure is a **500** — this
+   route has no `withErrorHandler` — and it carries no `job` tag, so Sentry
+   Rule 1 will not match it either. 429 is also reachable: the probe sits in
+   the middleware `read` tier at 100 req/min per IP.
+4. **Do not key on a body substring. `"unhealthy"` contains `"healthy"`.** A
+   naive keyword check reports green on every 503. Key on `"status":"healthy"`
+   or `"stale_jobs":[]`, or on the status code alone.
 
 ## Triage
 
@@ -135,6 +171,37 @@ exists because the endpoint used to report 503 for a monthly job whose last real
 run predated the `cron_runs` table — sixteen of seventeen jobs green, endpoint
 red, and no fault anywhere. Expect to see this legitimately for about a month
 after any newly added infrequent job.
+
+### A non-200 that is NOT 503
+
+The probe can return statuses that say nothing about cron health, and the triage
+above does not apply to them:
+
+- **500** — the probe's own dependency failed. It reads `cron_runs` through the
+  unscoped client with no `withErrorHandler`, so an unreachable database (or a
+  missing `DATABASE_URL`, which throws at module load) escapes as a 500. It
+  carries **no `job` tag**, so Sentry Rule 1 does not match it — the uptime
+  monitor is the only thing that will tell you. Check the database before
+  looking at any cron.
+- **429** — rate limited. `/api/v1` sits in the middleware `read` tier at 100
+  req/min per IP. A monitor at a sane interval will never see this; a tight loop
+  or a shared egress IP can.
+- **404** — the monitor URL drifted off `www.`. Tenant resolution runs on
+  community subdomains and custom domains, and an unresolvable slug 404s before
+  the route is reached.
+
+### `cron_runs` is not a place to intervene
+
+Do not clear rows to silence the probe — and note that **until #1073, rows could
+be created by anyone.** Middleware waves any GET/POST under `/api/v1/internal/`
+past the session gate (deliberately; `requireCronSecret` is the real gate), and
+`withCronJob` used to write a heartbeat for the resulting 401. One anonymous
+request set `last_started_at`, which moves a job out of `awaiting_first_run` —
+which has grace — into `never_succeeded`, which has none, pinning this endpoint
+at 503 until that job's next real success. A 401 now writes nothing at all.
+
+If you see a row you cannot account for, that is worth investigating rather than
+clearing.
 
 ### Replaying a job by hand
 
