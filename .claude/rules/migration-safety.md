@@ -65,6 +65,22 @@ Constraints, each forced by the table itself — read before composing a payload
   credentials, tokens, or unrelated PII.
 - **`community_id` is NOT NULL** (`ON DELETE restrict`), so a repair spanning N
   communities writes N rows. A soft-deleted community still satisfies the FK.
+- **The template above only works on a table that HAS a `community_id`.** Test the
+  column, not the exclusions list — `communities`, `conversion_events` and
+  `demo_instances` are all in `RLS_GLOBAL_TABLE_EXCLUSIONS` and all have one.
+  Without it there is no value to supply and the insert cannot run, which you
+  discover mid-repair. Write to **`platform_admin_audit_log`** instead: same CTE,
+  omit `community_id` (nullable there), and set `admin_user_id` to the authorising
+  operator's `platform_admin_users.user_id`. That column is NOT NULL but carries no
+  FK — deliberately, pinned by `platform-admin-audit-log-migration.test.ts` — and
+  `action` has no CHECK, so `'data_repair'` is fine. This is already where every
+  community-less admin action goes. **If you cannot name a human for
+  `admin_user_id`, do not run the repair through `execute_sql`**: the tenant-scoped
+  template permits an anonymous system actor, this one does not, and that is the
+  point. `community_id = 0` is not the escape hatch — it FK-violated in production
+  and turned a successful `recoverUser` into a 500. The "both doors are shut"
+  comment at `account-lifecycle-service.ts:726-729` is about **crons**, which have
+  no actor; it concedes the platform-admin case, which is this one.
 - **`user_id` null is correct** for a repair — the column is nullable precisely so
   system actors can be recorded.
 - **Make the predicate self-limiting** (e.g. `and deleted_at = '<exact stamp>'`)
