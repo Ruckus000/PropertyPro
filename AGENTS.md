@@ -50,15 +50,22 @@ The compliance engine tracks Florida statutory obligations for condos (§718, 16
 
 ## 4. CI Enforcement Gates
 
-Seven parallel CI jobs run on every PR (`.github/workflows/ci.yml`):
+> **`.github/workflows/ci.yml` is `disabled_manually` and has been since #976**,
+> which moved CI to **localci** when GitHub Actions minutes ran out. The table
+> below is the set of checks, not a description of seven live GitHub jobs — read
+> the CI section of `CLAUDE.md` for where each one actually runs now. In short:
+> `lint` / `typecheck` / migration-ordering block the **push** (localci `gate`);
+> unit tests, `no-mock-guard`, `build` and `perf-check` run in the detached
+> localci `suite`, which reports as the `localci/suite` check and is the **only**
+> required status check on `main`.
 
-| Job | What it catches | Script |
+| Check | What it catches | Script |
 |-----|----------------|--------|
 | **lint** | TypeScript lint + DB access guard (DB001–DB005) | `pnpm lint` (includes `guard:db-access`) |
 | **typecheck** | Type errors across all packages | `pnpm typecheck` |
 | **unit-tests** | Vitest unit test failures | `pnpm test` |
 | **no-mock-guard** | `vi.mock()` / `jest.mock()` in integration tests | `scripts/verify-no-mocks-in-integration.ts` |
-| **migration-ordering** | Timestamp ordering violations, duplicate indices | `scripts/verify-migration-ordering.ts` |
+| **migration-ordering** | Timestamp ordering, duplicate indices, and an index or `when` already claimed on `origin/main` | `scripts/verify-migration-ordering.ts` — in the localci **gate**, so it blocks the push |
 | **perf-check** | Bundle size budget violations | `pnpm perf:check` |
 | **build** | Build failures (depends on all 6 above) | `pnpm build` |
 

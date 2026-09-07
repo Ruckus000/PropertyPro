@@ -141,4 +141,43 @@ describe('createMigration', () => {
     expect(sql).toContain('WHY:');
     expect(sql).toContain('statement-breakpoint');
   });
+
+  /**
+   * The 0069 shape.
+   *
+   * A branch cut before `0068_support_inbox` merged had a local journal topping
+   * out at 67, so `local maxIdx + 1` said 0068 — a number main had already
+   * taken. The author instead read main by hand and wrote 0069, which was free
+   * at 23:38 and taken by another branch at 00:03. Both readings are defensible;
+   * neither is safe. The floor has to be the union.
+   */
+  describe('the baseline floor', () => {
+    it('uses the baseline index when main is AHEAD of this branch', () => {
+      // Local journal tops out at idx 1; main has gone to 5.
+      const result = createMigration({ migrationsDir, name: 'guard_thing', baselineMaxIdx: 5 });
+
+      expect(result.idx).toBe(6);
+      expect(result.tag).toBe('0006_guard_thing');
+      expect(existsSync(join(migrationsDir, '0006_guard_thing.sql'))).toBe(true);
+      expect(existsSync(join(migrationsDir, 'meta', '0006_snapshot.json'))).toBe(true);
+    });
+
+    it('uses the LOCAL index when this branch is ahead of main', () => {
+      // The second migration on one branch: main has not seen the first yet, so
+      // deferring to the baseline would hand out the same number twice.
+      const first = createMigration({ migrationsDir, name: 'first_thing', baselineMaxIdx: 1 });
+      const second = createMigration({ migrationsDir, name: 'second_thing', baselineMaxIdx: 1 });
+
+      expect(first.idx).toBe(2);
+      expect(second.idx).toBe(3);
+    });
+
+    it('falls back to the local journal when the baseline is unknown', () => {
+      // `main()` warns loudly in this case rather than failing — scaffolding has
+      // to work offline, and the ordering guard is what blocks.
+      const result = createMigration({ migrationsDir, name: 'offline_thing' });
+
+      expect(result.idx).toBe(2);
+    });
+  });
 });

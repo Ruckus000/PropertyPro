@@ -478,7 +478,11 @@ Configure in GitHub > Settings > Branches > Branch protection rules for `main`:
 
 - [x] Require a pull request before merging
 - [x] Require status checks to pass before merging
-  - Required checks (all eight): `Lint`, `Typecheck`, `Unit Tests`,
+  - **Required check (one): `localci/suite`.** Verified live against the branch
+    protection API. The eight-job list below is what `ci.yml` required until #976
+    disabled it and moved CI to localci; those checks all still run, but as steps
+    inside `localci/suite` (plus the blocking pre-push `gate`), not as separate
+    GitHub contexts. Historical: `Lint`, `Typecheck`, `Unit Tests`,
     `no-mock-guard`, `migration-ordering`, `perf-check`, `Build`,
     `integration-tests`
 - [x] Require branches to be up to date before merging (`strict`) — every PR must
@@ -496,7 +500,10 @@ Configure in GitHub > Settings > Branches > Branch protection rules for `main`:
 
 Production deploys happen automatically when a PR is merged to `main`:
 
-1. PR passes CI checks (lint, typecheck, unit tests, no-mock-guard, migration-ordering, perf-check, Build)
+1. PR passes CI checks — these run through **localci**, not GitHub Actions: lint,
+   typecheck and migration-ordering in the blocking pre-push `gate`; unit tests,
+   no-mock-guard, Build and perf-check in the detached `suite`, which reports back
+   as `localci/suite`
 2. PR is reviewed and approved (PR previews are created by the native Vercel GitHub integration during the PR lifecycle)
 3. PR is merged to `main`
 4. `deploy.yml` triggers after CI succeeds on `main`: installs deps, then builds via Vercel CLI and deploys to production. **It deploys CODE ONLY — it does not run migrations.**

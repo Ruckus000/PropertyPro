@@ -296,7 +296,12 @@ minutes ran out (last ci.yml run: 2026-08-24). Two phases, wired as a pre-push h
 
 - **`gate`** — blocking, before the push completes: `pnpm lint` (includes the DB
   access guard and the rest of the `guard:*` set), `pnpm typecheck`,
-  `./scripts/verify-css-var-migration.sh`.
+  `./scripts/verify-css-var-migration.sh`, and
+  `MIGRATION_BASELINE_REQUIRED=1 pnpm exec tsx scripts/verify-migration-ordering.ts`.
+  That last one moved here from `suite` after index 0069 was claimed twice: the
+  only check that can see a cross-branch collision needs to run BEFORE the push,
+  and the env var makes an unreadable `origin/main` an error rather than a silent
+  no-op.
 - **`suite`** — detached after the push, 8 steps: no-mock guard →
   migration-ordering → `reset:demo` + `seed:demo` (resolve-only, against a stub
   `DATABASE_URL`) → `apps/web` vitest with coverage → the package suites + admin

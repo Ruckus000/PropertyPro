@@ -21,11 +21,29 @@ gate:
   - pnpm typecheck
   - ./scripts/verify-css-var-migration.sh
 
+  # Migration numbering has to block the PUSH, not the PR.
+  #
+  # This lived in `suite` until 0069 was claimed twice — once on main, once on a
+  # branch that was never pushed. `checkBaselineCollisions` would have caught it
+  # (run against main today it reports five errors), but every trigger it had
+  # required the branch to reach GitHub first: `suite` runs post-push, and
+  # migration-chain-guard.yml runs on `pull_request`. A number chosen wrongly and
+  # then sat on locally was unguarded.
+  #
+  # MIGRATION_BASELINE_REQUIRED=1 makes an unreadable `origin/main` an ERROR here
+  # rather than the default warning. The gate is the one context that can always
+  # see the base branch, and a check that silently no-ops is the failure this
+  # whole entry exists to remove. CI keeps the warning: a shallow clone genuinely
+  # cannot fetch the base, and failing there would report the environment, not
+  # the tree.
+  #
+  # Cost is ~0.4s: it reads JSON files plus one `git show`.
+  - MIGRATION_BASELINE_REQUIRED=1 pnpm exec tsx scripts/verify-migration-ordering.ts
+
 suite:
-  # The two guards first: seconds each, and they fail on structure rather than
-  # behaviour, so there is no reason to spend minutes before hearing about them.
+  # Structural, seconds, and fails on shape rather than behaviour — no reason to
+  # spend minutes before hearing about it.
   - pnpm exec tsx scripts/verify-no-mocks-in-integration.ts
-  - pnpm exec tsx scripts/verify-migration-ordering.ts
 
   # Resolve-only. Nightly Demo Reset was broken for ~4 months without this.
   #
