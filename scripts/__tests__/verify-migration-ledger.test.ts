@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   KNOWN_UNAPPLIED_MIGRATIONS,
+  formatReport,
   reconcile,
   type LedgerRow,
   type MigrationFile,
+  type ReconcileResult,
 } from '../verify-migration-ledger';
 
 /**
@@ -187,4 +189,108 @@ describe('degenerate ledgers', () => {
     expect(r.ledgerTip).toBe(null);
     expect(r.stranded).toEqual([]);
   });
+
+/**
+ * The WORDING, not the reconciliation.
+ *
+ * Tested because the prose caused a production incident that the logic did not.
+ * An earlier version labelled a deliberately-held migration
+ * `⚠️ EXPECTED-UNAPPLIED` and then printed, directly beneath it, "Shipping it
+ * needs a manual apply plus a hand-written ledger row" — instructions for doing
+ * the exact thing the line above forbids. A separate session read that output,
+ * opened a task called "Apply missing 0062_secret_ballot migration to
+ * production", and began working on it. That migration drops five columns live
+ * election code reads.
+ *
+ * Nothing was wrong with the numbers. So these cases pin the two properties the
+ * numbers cannot express: a held entry must refuse in the imperative, and it
+ * must not read as a procedure.
+ */
+describe('how a HELD migration is described', () => {
+  const held: MigrationFile = file('0062_secret_ballot', 1786414111600, 'zzz', 62);
+  const base: ReconcileResult = {
+    filesScanned: 70,
+    ledgerRows: 69,
+    ledgerTip: 1788797631673,
+    applied: [],
+    orphans: [],
+    unapplied: [],
+    expectedUnapplied: [{ file: held, reason: 'held deliberately, see the ADR' }],
+    stranded: [held],
+    timestampMismatches: [],
+    deadAllowlistEntries: [],
+  };
+
+  it('refuses in the imperative, and is a note rather than a problem', () => {
+    const out = formatReport(base);
+
+    expect(out.exitCode).toBe(0);
+    expect(out.problems).toEqual([]);
+    expect(out.notes).toHaveLength(1);
+    expect(out.notes[0]).toContain('DO NOT APPLY');
+    expect(out.notes[0]).toContain('recorded decision, not a finding');
+    expect(out.notes[0]).toContain('nothing to do here');
+  });
+
+  it('does not read as a procedure — the sentence that started the incident', () => {
+    const note = out(base);
+
+    // The literal wording that got acted on.
+    expect(note).not.toContain('Shipping it needs a manual apply');
+    // And the label that framed a chosen state as a warning.
+    expect(note).not.toContain('EXPECTED-UNAPPLIED');
+    // The mechanical note may still appear — it is the genuinely non-obvious
+    // fact — but only under an explicit precondition.
+    expect(note).toContain('NOT a step to take now');
+    expect(note).toContain('FIRST');
+  });
+
+  it('emits ONE block for a held migration that is also stranded', () => {
+    // It used to emit two, and the second undercut the first. Stranding is a
+    // property of the held entry, not a second finding about it.
+    const out = formatReport(base);
+    expect(out.notes).toHaveLength(1);
+    expect(out.notes.filter((n) => n.includes('0062_secret_ballot'))).toHaveLength(1);
+  });
+
+  it('omits the mechanical note when a held migration is NOT stranded', () => {
+    const note = out({ ...base, stranded: [] });
+    expect(note).toContain('DO NOT APPLY');
+    expect(note).not.toContain('NOT a step to take now');
+  });
+});
+
+describe('how an UNHELD stranded migration is described', () => {
+  it('stays a problem, and keeps the actionable framing a real finding needs', () => {
+    // The discriminating half: "do not apply" is about the ALLOWLIST, not about
+    // strandedness. An unheld one is drift and must still fail the command.
+    const stray = file('0099_stray', 1000, 'qqq', 99);
+    const out = formatReport({
+      filesScanned: 1,
+      ledgerRows: 1,
+      ledgerTip: 5000,
+      applied: [],
+      orphans: [],
+      unapplied: [stray],
+      expectedUnapplied: [],
+      stranded: [stray],
+      timestampMismatches: [],
+      deadAllowlistEntries: [],
+    });
+
+    expect(out.exitCode).toBe(1);
+    expect(out.notes).toEqual([]);
+    expect(out.problems).toHaveLength(1);
+    expect(out.problems[0]).toContain('UNAPPLIED');
+    expect(out.problems[0]).toContain('skip it silently');
+    expect(out.problems[0]).not.toContain('DO NOT APPLY');
+  });
+});
+
+/** The single rendered note, for readability in the assertions above. */
+function out(r: ReconcileResult): string {
+  const notes = formatReport(r).notes;
+  expect(notes).toHaveLength(1);
+  return notes[0]!;
+}
 });
