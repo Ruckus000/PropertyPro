@@ -312,6 +312,9 @@ describe('withCronJob reports summary failures', () => {
  * reaches Sentry at all. `last_succeeded_at` going stale is the only signal
  * that catches that, which is why a non-2xx must be recorded as a failure and
  * not quietly ignored.
+ *
+ * A 401 is the ONE exception, and it is not a softening of that rule — it is
+ * the recognition that a 401 is not this job at all. See the case below.
  */
 describe('withCronJob records a heartbeat', () => {
   it('records a success for a 2xx', async () => {
@@ -323,17 +326,49 @@ describe('withCronJob records a heartbeat', () => {
     );
   });
 
-  it('records a FAILURE for a non-2xx — the 401 case that Sentry never sees', async () => {
+  it('records a FAILURE for a non-2xx', async () => {
     const handler = withCronJob('payment-reminders', async () =>
-      NextResponse.json({ error: 'nope' }, { status: 401 }),
+      NextResponse.json({ error: 'nope' }, { status: 503 }),
     );
 
     await handler(req());
 
     expect(recordCronRunMock).toHaveBeenCalledWith(
       'payment-reminders',
-      expect.objectContaining({ status: 'error', error: 'HTTP 401' }),
+      expect.objectContaining({ status: 'error', error: 'HTTP 503' }),
     );
+  });
+
+  /**
+   * A 401 writes NOTHING — neither a heartbeat nor a registration.
+   *
+   * This case used to assert the opposite, on the reasoning that recording a
+   * 401 is what lets the probe see the 2026-08 outage. That reasoning was
+   * wrong: the probe never reads this write. It reads `last_succeeded_at`
+   * going stale, or `never_registered` when no row exists — both unaffected by
+   * skipping. So the write bought no detection and cost an unauthenticated
+   * one.
+   *
+   * Middleware waves every GET/POST under `/api/v1/internal/` past the session
+   * gate (`requireCronSecret` is the real gate), and `withErrorHandler` RETURNS
+   * the 401 rather than rethrowing, so an anonymous request used to reach this
+   * wrapper as an ordinary `res.ok === false`. One curl set `last_started_at`,
+   * moving a job out of `awaiting_first_run` — which has grace — into
+   * `never_succeeded`, which deliberately has none, pinning the health probe at
+   * 503 until that job's next real success. Up to a month for
+   * `generate-assessments`, and the repo is public with every path in
+   * vercel.json.
+   */
+  it('writes NOTHING for a 401 — an anonymous caller cannot touch the signal', async () => {
+    const handler = withCronJob('payment-reminders', async () =>
+      NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    );
+
+    const res = await handler(req());
+
+    expect(res.status).toBe(401);
+    expect(recordCronRunMock).not.toHaveBeenCalled();
+    expect(registerCronJobsMock).not.toHaveBeenCalled();
   });
 
   it('records a failure when the handler throws, and still rethrows', async () => {

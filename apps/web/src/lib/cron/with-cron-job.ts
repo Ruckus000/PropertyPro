@@ -222,17 +222,49 @@ export function withCronJob(slug: CronJobSlug, handler: CronRouteHandler): CronR
       scope.setFingerprint(['{{ default }}', slug]);
       const startedAt = new Date();
 
+      let unauthenticated = false;
+
       try {
         const res = await handler(req, ...rest);
+
+        /*
+         * A 401 means this request was not the scheduler, so nothing about it
+         * is evidence about the job — and recording it anyway was an
+         * UNAUTHENTICATED WRITE to the monitoring signal.
+         *
+         * Middleware waves every GET/POST under `/api/v1/internal/` past the
+         * session gate, deliberately: `requireCronSecret` is the real gate. So
+         * an anonymous request reaches the route and is rejected there. But
+         * this wrapper is OUTERMOST and `withErrorHandler` RETURNS the 401
+         * rather than rethrowing it, so what arrived here was an ordinary
+         * `res.ok === false` and we wrote a heartbeat for it. One curl set
+         * `last_started_at`, which moves a job out of `awaiting_first_run`
+         * (which has a grace window) into `never_succeeded` (which deliberately
+         * has none), pinning /api/v1/internal/cron-health at 503 until that
+         * job's next real success — up to a month for `generate-assessments`.
+         * The repo is public and vercel.json lists all seventeen paths, so this
+         * cost nothing to find or to do.
+         *
+         * SKIPPING COSTS NO DETECTION, which is why the previous reasoning here
+         * — "recording a 401 is what lets the probe see that outage" — was
+         * wrong rather than merely risky. The probe never reads this write. It
+         * reads `last_succeeded_at` going stale, which a skipped write cannot
+         * refresh; on a table with no rows yet it reads `never_registered`. The
+         * 2026-08 outage (every cron 401ing for months) surfaces identically
+         * either way. What is lost is one attacker-writable `last_error`.
+         */
+        if (res.status === 401) {
+          unauthenticated = true;
+          return res;
+        }
+
         // Inside the isolation scope, so the event carries the `job` tag and the
         // one alert rule matches it exactly as it matches a 500.
         await reportSummaryFailures(slug, res);
         /*
-         * A non-2xx is NOT a success, and 401 in particular matters: the
-         * 2026-08 outage was every cron returning 401 for months, which throws
-         * `UnauthorizedError` — an `AppError` — and so never reaches Sentry at
-         * all. Recording it as a failed run is what lets the health probe see
-         * that class of outage, since `last_succeeded_at` then goes stale.
+         * A non-2xx is NOT a success. Recording it as a failed run is what lets
+         * the health probe see a job that runs and fails every tick, since
+         * `last_succeeded_at` is left alone and goes stale.
          */
         await recordHeartbeat(
           slug,
@@ -253,8 +285,13 @@ export function withCronJob(slug: CronJobSlug, handler: CronRouteHandler): CronR
          * either, because `ensureJobsRegistered` swallows everything — a
          * `finally` that threw would replace the handler's error with this
          * one, which is the only way this line could do damage.
+         *
+         * Not for an unauthenticated caller: registration creates all seventeen
+         * rows and stamps `first_observed_at`, which starts every job's grace
+         * window. Letting a stranger start that clock is the same defect as the
+         * heartbeat above, one step earlier.
          */
-        await ensureJobsRegistered();
+        if (!unauthenticated) await ensureJobsRegistered();
       }
     });
   };
