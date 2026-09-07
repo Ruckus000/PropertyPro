@@ -90,10 +90,19 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
       expect(quarantineInboundPayload).not.toHaveBeenCalled();
     });
 
-    it('rejects a missing signature with 401', async () => {
+    it('rejects a missing signature with 401, and says it is MISSING', async () => {
+      // A provider that never signs (Forward Email's free tier) is a different
+      // problem from a wrong key, and the response has to say which.
       const response = await POST(request(VALID_BODY, null));
       expect(response.status).toBe(401);
+      await expect(response.json()).resolves.toEqual({ error: 'missing signature' });
       expect(persistInboundEmail).not.toHaveBeenCalled();
+    });
+
+    it('says INVALID — not missing — when a signature is present but wrong', async () => {
+      const response = await POST(request(VALID_BODY, 'deadbeef'));
+      expect(response.status).toBe(401);
+      await expect(response.json()).resolves.toEqual({ error: 'invalid signature' });
     });
 
     it('returns 500 — not 401 — when OUR secret is unset, and persists nothing', async () => {

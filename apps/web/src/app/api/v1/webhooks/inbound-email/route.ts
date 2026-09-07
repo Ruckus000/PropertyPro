@@ -51,7 +51,8 @@ type Outcome = 'success' | 'duplicate' | 'quarantined' | 'rejected' | 'failure';
 
 type ErrorCode =
   | 'SECRET_NOT_CONFIGURED'
-  | 'SIGNATURE_INVALID'
+  | 'SIGNATURE_MISSING'
+  | 'SIGNATURE_MISMATCH'
   | 'BODY_UNPARSEABLE'
   | 'SHAPE_UNRECOGNIZED'
   | 'PERSIST_FAILED';
@@ -95,11 +96,21 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
       return NextResponse.json({ error: 'not configured' }, { status: 500 });
     }
 
+    // Distinguish the two, because they call for opposite responses and
+    // collapsing them into one code made a live incident far harder to read:
+    // a MISMATCH means rotate the secret; a MISSING header means the caller
+    // does not sign at all and no secret change will help.
+    const missing =
+      error instanceof InboundEmailSignatureError && error.kind === 'missing_header';
+
     logInboundEmailEvent('warn', 'inbound email signature rejected', {
       outcome: 'rejected',
-      errorCode: 'SIGNATURE_INVALID',
+      errorCode: missing ? 'SIGNATURE_MISSING' : 'SIGNATURE_MISMATCH',
     });
-    return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
+    return NextResponse.json(
+      { error: missing ? 'missing signature' : 'invalid signature' },
+      { status: 401 },
+    );
   }
 
   let payload: unknown;
