@@ -21,8 +21,29 @@ import {
   loadRevenueSnapshotInputs,
 } from '@/lib/services/revenue-snapshot-data-service';
 import { withCronJob } from '@/lib/cron/with-cron-job';
+import { withErrorHandler } from '@/lib/api/error-handler';
 
-// DO NOT use withErrorHandler — we want explicit control over responses here.
+/*
+ * Every response this handler CHOOSES is still its own: the 401, the
+ * `compute_error` 500, the `sanity_check_failed` 500 and the warn-and-continue
+ * on Stripe reconciliation are all returned explicitly below, and
+ * `withErrorHandler` never sees them — it only ever catches a throw.
+ *
+ * It is here for the throws nobody chose. Five calls can raise
+ * (loadRevenueSnapshotInputs, getPriorSnapshotMrr, runSanityChecks,
+ * computeMrrDeltaPct, insertRevenueSnapshot), and an uncaught one escapes
+ * `Sentry.withIsolationScope` before it is captured — Next.js reports it via
+ * `captureRequestError`, by which point the async context carrying the `job`
+ * tag is gone. That is the tag-less case with-cron-job.test.ts already proves.
+ * It made revenue-snapshot the one job of seventeen whose hard failures the
+ * runbook's Rule 1 could not match.
+ *
+ * This file previously said "DO NOT use withErrorHandler — we want explicit
+ * control over responses here." That was correct when written and stopped being
+ * correct when #1047 wrapped the route in withCronJob without revisiting it:
+ * explicit control over the responses it chooses is kept, and the throws it
+ * never chose now arrive with an identity.
+ */
 async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
   try {
     requireCronSecret(req, process.env.REVENUE_SNAPSHOT_CRON_SECRET, process.env.CRON_SECRET);
@@ -146,7 +167,7 @@ async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
 // One handler serves both so the scheduler's verb can never be the thing that
 // breaks the job. Neither verb reads a body or query params, so they are
 // genuinely interchangeable.
-const cronHandler = withCronJob('revenue-snapshot', handleRevenueSnapshot);
+const cronHandler = withCronJob('revenue-snapshot', withErrorHandler(handleRevenueSnapshot));
 
 export const GET = cronHandler;
 export const POST = cronHandler;

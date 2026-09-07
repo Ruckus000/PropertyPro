@@ -200,6 +200,26 @@ export function withCronJob(slug: CronJobSlug, handler: CronRouteHandler): CronR
   return async function cronJobHandler(req, ...rest) {
     return Sentry.withIsolationScope(async (scope) => {
       scope.setTag('job', slug);
+      /*
+       * Group by job as well as by signature.
+       *
+       * Every cron 500 funnels through the single `Sentry.captureException` in
+       * error-handler.ts, so grouping is decided entirely by the error itself —
+       * and drizzle reports failures as a uniform `Failed query: <SQL>`. Two
+       * different jobs breaking the same way therefore land in ONE issue:
+       * resolving or ignoring it silences the other, and the notification names
+       * one job while two are down.
+       *
+       * `{{ default }}` keeps Sentry's normal grouping as a component and
+       * appends the job, so each cron gets its own issue without flattening
+       * distinct errors within a job into one. Set on the ISOLATION scope for
+       * the same reason the tag is: it has to reach captures made deep in a
+       * nested async service, which a `withScope` fork would not.
+       *
+       * This is the first fingerprint in the codebase — there was no existing
+       * convention to follow, so this is the one to follow.
+       */
+      scope.setFingerprint(['{{ default }}', slug]);
       const startedAt = new Date();
 
       try {

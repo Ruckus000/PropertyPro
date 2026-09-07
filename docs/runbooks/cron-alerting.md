@@ -41,6 +41,26 @@ One rule covers all seventeen jobs, and covers both shapes: an unhandled 500
 200 (`captureMessage('cron_job_reported_failures')`). Both carry the tag,
 because `withCronJob` sets it on the *isolation* scope.
 
+#### Why each job gets its own ISSUE, not just its own tag
+
+The `job` tag makes an event *filterable*; it does not participate in grouping.
+Every cron 500 funnels through the single `Sentry.captureException` in
+`error-handler.ts`, so grouping is decided by the error alone — and drizzle
+reports failures as a uniform `Failed query: <SQL>`. Two different jobs breaking
+the same way would therefore land in **one issue**: resolving or ignoring it
+silences the other, and the notification names one job while two are down.
+
+`withCronJob` sets `fingerprint: ['{{ default }}', '<slug>']` alongside the tag.
+`{{ default }}` is Sentry's placeholder for its own grouping components, kept so
+that distinct errors *within* one job are not flattened together; the slug
+splits the issue per job. It is set on the isolation scope for the same reason
+the tag is — it has to reach captures made deep in a nested async service.
+
+**This is the only fingerprint in the codebase.** There was no prior convention;
+if a second one is ever added, follow this shape rather than inventing another.
+Pinned by `apps/web/__tests__/cron/with-cron-job.test.ts`, which asserts two jobs
+failing with the *same* error get different fingerprints.
+
 ### Rule 2 — "Destructive cron circuit breaker"
 
 - **If:** tags match `job` is set **AND** the message contains `cron_purge_cap_tripped`

@@ -52,6 +52,7 @@ Sentry.init({
 
 const req = () => new Request('http://localhost/api/v1/internal/x') as unknown as NextRequest;
 const tagsOf = (i = 0) => captured[i]?.tags ?? {};
+const fingerprintOf = (i = 0) => captured[i]?.fingerprint;
 
 /**
  * Sentry assembles an event through an async pipeline, so `beforeSend` has not
@@ -126,6 +127,53 @@ describe('withCronJob stamps the job tag', () => {
 
     expect(captured).toHaveLength(1);
     expect(tagsOf().job).toBeUndefined();
+  });
+
+  it('fingerprints by job, so two jobs failing alike are two issues', async () => {
+    // Every cron 500 funnels through the single captureException in
+    // error-handler.ts, so grouping is decided by the error alone — and drizzle
+    // reports failures as a uniform `Failed query: <SQL>`. Without this, two
+    // different jobs breaking the same way become ONE issue: resolving or
+    // ignoring it silences the other, and the notification names one job while
+    // two are down.
+    const handler = withCronJob('payment-reminders', async () => {
+      Sentry.captureException(new Error('Failed query'));
+      return NextResponse.json({ data: {} });
+    });
+
+    await handler(req());
+    await settle();
+
+    expect(captured).toHaveLength(1);
+    // `{{ default }}` is Sentry's placeholder for its own grouping components,
+    // kept so distinct errors WITHIN a job are not flattened into one issue.
+    expect(fingerprintOf()).toEqual(['{{ default }}', 'payment-reminders']);
+  });
+
+  it('gives two jobs failing with the SAME error two different fingerprints', async () => {
+    // The assertion above passes for a wrapper that hard-codes any constant
+    // array. This is the one that pins the discriminator to the slug.
+    const sameError = () => new Error('Failed query: select 1');
+
+    await withCronJob('expire-demos', async () => {
+      Sentry.captureException(sameError());
+      return NextResponse.json({ data: {} });
+    })(req());
+    await withCronJob('snowbird-digest', async () => {
+      Sentry.captureException(sameError());
+      return NextResponse.json({ data: {} });
+    })(req());
+    await settle();
+
+    expect(captured).toHaveLength(2);
+    // Compared as a SET. Sentry assembles events through an async pipeline, so
+    // the order they reach `beforeSend` is not the order they were captured in —
+    // asserting positionally made this fail against correct code once already.
+    expect(fingerprintOf(0)).not.toEqual(fingerprintOf(1));
+    expect([fingerprintOf(0), fingerprintOf(1)].sort()).toEqual([
+      ['{{ default }}', 'expire-demos'],
+      ['{{ default }}', 'snowbird-digest'],
+    ]);
   });
 
   it('propagates the handler result unchanged', async () => {
