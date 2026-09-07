@@ -6,10 +6,13 @@ import { INBOUND_EMAIL_SIGNATURE_HEADER } from '@/lib/services/support-inbox/sig
 
 import forwardEmailFixture from './fixtures/forward-email-webhook.json';
 
-const { persistInboundEmail, quarantineInboundPayload } = vi.hoisted(() => ({
+const { persistInboundEmail, quarantineInboundPayload, captureException } = vi.hoisted(() => ({
   persistInboundEmail: vi.fn(),
   quarantineInboundPayload: vi.fn(),
+  captureException: vi.fn(),
 }));
+
+vi.mock('@sentry/nextjs', () => ({ captureException }));
 
 vi.mock('@/lib/services/support-inbox/inbound-email-service', () => ({
   persistInboundEmail,
@@ -194,6 +197,50 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
       expect(response.status).toBe(429);
       const body = await response.json();
       expect(body).not.toHaveProperty('received');
+    });
+
+    it('reports the WRAPPER path to Sentry — the one this change stopped reporting', async () => {
+      // Must exercise the wrapper, not the persist catch. The first version of
+      // this test used persistInboundEmail.mockRejectedValue, which routes
+      // through PERSIST_FAILED instead — so deleting the wrapper's capture left
+      // it green. It protected the wrong line.
+      quarantineInboundPayload.mockRejectedValue(new Error('jsonb rejected 0x00'));
+
+      const response = await POST(request('not json at all'));
+
+      expect(response.status).toBe(429);
+      expect(captureException).toHaveBeenCalledTimes(1);
+      expect(captureException.mock.calls[0]?.[1]).toMatchObject({
+        tags: { component: 'inbound-email-webhook' },
+      });
+    });
+
+    it('reports the PERSIST path to Sentry, or the window buys nothing', async () => {
+      // Catching these paths removed the only alerting they had: both Sentry
+      // hooks for this route (the @sentry/nextjs route wrapper and
+      // instrumentation.ts's onRequestError) fire ONLY on an uncaught error,
+      // and nothing here promotes a console line to an alert — Sentry.init is
+      // called with no integrations, so there is no captureConsoleIntegration.
+      // Without an explicit capture, Forward Email retries a broken deploy for
+      // 24-72h and the first anyone hears of it is an NDR after the window is
+      // already spent.
+      persistInboundEmail.mockRejectedValue(new Error('connection terminated'));
+
+      await POST(request(VALID_BODY));
+
+      expect(captureException).toHaveBeenCalledTimes(1);
+      expect(captureException.mock.calls[0]?.[1]).toMatchObject({
+        tags: { component: 'inbound-email-webhook' },
+      });
+    });
+
+    it('does not report a REJECTED signature to Sentry (control)', async () => {
+      // A forged or stale signature is the caller's problem and is expected
+      // during a key rotation. Paging on it would train the one operator to
+      // ignore the alert that matters.
+      await POST(request(VALID_BODY, 'deadbeef'));
+
+      expect(captureException).not.toHaveBeenCalled();
     });
 
     it('defers — does not bounce — when quarantine itself throws', async () => {

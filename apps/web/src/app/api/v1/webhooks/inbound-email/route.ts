@@ -48,6 +48,7 @@
  * source agrees on 4xx -> 421. Settling it properly means poisoning one test
  * message and reading the sender's NDR.
  */
+import * as Sentry from '@sentry/nextjs';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { normalizeForwardEmailPayload } from '@/lib/services/support-inbox/normalize';
@@ -129,9 +130,22 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
   try {
     return await handleInboundEmail(req);
   } catch (error) {
-    // Nothing below this line is expected. Defer rather than bounce, and say
-    // so loudly: instrumentation.ts reports only UNCAUGHT errors to Sentry, so
-    // catching here trades an automatic report for an explicit one.
+    /**
+     * Report BEFORE anything else in this block.
+     *
+     * Catching here removed the only alerting these paths had. Sentry reports
+     * this route two ways and both fire only on an UNCAUGHT error: the
+     * @sentry/nextjs route wrapper, and `onRequestError` in instrumentation.ts.
+     * Nothing here turns a console line into an alert — sentry.server.config.ts
+     * calls Sentry.init with no `integrations`, so there is no
+     * captureConsoleIntegration, and logInboundEmailEvent is itself a
+     * console.error.
+     *
+     * Without this line the deferral buys nothing: Forward Email would retry a
+     * broken deploy against the sender's 24-72h window while no one is told,
+     * and the first sign of trouble would be an NDR after the window is spent.
+     */
+    Sentry.captureException(error, { tags: { component: 'inbound-email-webhook' } });
     console.error('[inbound-email-webhook] unhandled', error);
     logInboundEmailEvent('error', 'inbound email handler threw', {
       outcome: 'failure',
@@ -241,6 +255,12 @@ const handleInboundEmail = async (req: NextRequest): Promise<NextResponse> => {
     // here is returned verbatim as a PERMANENT failure and the message bounces
     // on the spot; a 200 loses it silently while telling the sender it
     // arrived. Both destroy mail. Only the 4xx defers.
+    // Same reasoning as the wrapper above, and it applies harder here: this is
+    // the ordinary database-unreachable path, the one the deferral window
+    // exists for. It has never reported to Sentry — it was always caught — so
+    // this is a pre-existing gap rather than a regression, but leaving it open
+    // means the window nobody knows about expires unused.
+    Sentry.captureException(error, { tags: { component: 'inbound-email-webhook' } });
     logInboundEmailEvent('error', 'failed to store inbound email', {
       outcome: 'failure',
       errorCode: 'PERSIST_FAILED',
