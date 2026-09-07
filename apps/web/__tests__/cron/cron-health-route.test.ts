@@ -63,6 +63,7 @@ interface Body {
   status: string;
   stale_jobs: string[];
   awaiting_first_run: string[];
+  awaiting_first_success: string[];
   jobs: Array<{
     job: string;
     stale: boolean;
@@ -135,9 +136,10 @@ describe('cron-health probe', () => {
     );
   });
 
-  it('returns 503 for a job that has run but NEVER succeeded', async () => {
+  it('returns 503 for a job that has run but NEVER succeeded, once its window passes', async () => {
     // Runs every tick and fails every tick: `last_started_at` moves, so a probe
     // reading THAT would report healthy forever. This reads last_succeeded_at.
+    // The fixture is observed 400 days back, so the window is long gone.
     const rows = allFresh();
     const row = rows.find((r) => r.jobSlug === 'community-export-worker')!;
     row.lastSucceededAt = null;
@@ -267,6 +269,81 @@ describe('cron-health probe', () => {
       expect(res.status).toBe(503);
       expect(body.stale_jobs).toEqual(['community-export-worker']);
       expect(body.awaiting_first_run).toEqual([MONTHLY_JOB]);
+    });
+
+    /**
+     * The pair that matters most in this file.
+     *
+     * A job that has started and never succeeded used to short-circuit to
+     * `stale: true` with no window at all. So ONE transient 500 on a monthly
+     * job's first-ever run pinned this endpoint at 503 until its next scheduled
+     * run — 31 days for `generate-assessments`. That is the harm #1073
+     * describes an anonymous caller inflicting; #1073 closed the anonymous path
+     * and left this one, which needs no attacker.
+     *
+     * Either case alone is vacuous: the first passes against a probe that never
+     * reports anything stale, the second against the old no-grace code.
+     */
+    it('does NOT go stale on one failure inside its own window', async () => {
+      const rows = allFresh().filter((r) => r.jobSlug !== MONTHLY_JOB);
+      const tried = registeredNeverRun(MONTHLY_JOB, 24 * 60); // observed a day ago
+      tried.lastStartedAt = new Date(Date.now() - 60_000); //   fired once, a minute ago
+      tried.lastStatus = 'error';
+      tried.consecutiveFailures = 1;
+      rows.push(tried);
+      listCronRunsMock.mockResolvedValue(rows);
+
+      const res = await GET();
+      const body = (await res.json()) as Body;
+
+      expect(res.status).toBe(200);
+      expect(body.stale_jobs).toEqual([]);
+      // Reported distinctly from a job that has never fired at all: this one is
+      // worth opening Sentry for now, and the body has to say so.
+      expect(body.awaiting_first_success).toEqual([MONTHLY_JOB]);
+      expect(body.awaiting_first_run).toEqual([]);
+      expect(body.jobs.find((j) => j.job === MONTHLY_JOB)?.reason).toBe('awaiting_first_success');
+    });
+
+    it('DOES go stale once that window passes without a success', async () => {
+      const rows = allFresh().filter((r) => r.jobSlug !== MONTHLY_JOB);
+      const tried = registeredNeverRun(MONTHLY_JOB, CRON_JOBS[MONTHLY_JOB].maxAgeMinutes + 10);
+      tried.lastStartedAt = new Date(Date.now() - 60_000);
+      tried.lastStatus = 'error';
+      rows.push(tried);
+      listCronRunsMock.mockResolvedValue(rows);
+
+      const res = await GET();
+      const body = (await res.json()) as Body;
+
+      expect(res.status).toBe(503);
+      expect(body.stale_jobs).toEqual([MONTHLY_JOB]);
+      expect(body.awaiting_first_success).toEqual([]);
+      expect(body.jobs.find((j) => j.job === MONTHLY_JOB)?.reason).toBe('never_succeeded');
+    });
+
+    it('measures the failed job against its OWN window, not a global one', async () => {
+      // Same moment of first observation, same single failure, opposite verdicts:
+      // the five-minute job has burned its 20-minute window, the monthly one has
+      // not touched its 32 days.
+      const observedMinutesAgo = 60;
+      const rows = allFresh().filter(
+        (r) => r.jobSlug !== MONTHLY_JOB && r.jobSlug !== 'community-export-worker',
+      );
+      for (const slug of [MONTHLY_JOB, 'community-export-worker']) {
+        const row = registeredNeverRun(slug, observedMinutesAgo);
+        row.lastStartedAt = new Date(Date.now() - 60_000);
+        row.lastStatus = 'error';
+        rows.push(row);
+      }
+      listCronRunsMock.mockResolvedValue(rows);
+
+      const res = await GET();
+      const body = (await res.json()) as Body;
+
+      expect(res.status).toBe(503);
+      expect(body.stale_jobs).toEqual(['community-export-worker']);
+      expect(body.awaiting_first_success).toEqual([MONTHLY_JOB]);
     });
 
     it('does not let a grace window hide a genuinely overdue sibling', async () => {

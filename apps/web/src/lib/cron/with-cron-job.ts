@@ -55,8 +55,10 @@ type CronRouteHandler = (req: NextRequest, ...rest: never[]) => Promise<Response
  * Keys whose value means "some of this run's work failed".
  *
  * An explicit allowlist rather than "any key containing 'fail'", so a field
- * added later cannot silently start paging somebody at 4am. Numeric keys are
- * read as counts; array keys as lengths.
+ * added later cannot silently start paging somebody at 4am. The list names keys
+ * only — a count and a list of the same failures mean the same thing, so the
+ * VALUE's shape is read per-value by `failureCount` rather than pinned per key.
+ * Splitting the keys by expected shape is what silently dropped five jobs.
  *
  * This exists because HTTP status is not a reliable signal here. Several jobs
  * catch their own errors and return 200 with the failures in the body —
@@ -66,12 +68,46 @@ type CronRouteHandler = (req: NextRequest, ...rest: never[]) => Promise<Response
  * `sentry.server.config.ts`), so before this those counters were visible only
  * in Vercel logs nobody tails.
  */
-const NUMERIC_FAILURE_KEYS = ['failed', 'rowsFailed', 'failedCount'] as const;
-const ARRAY_FAILURE_KEYS = ['errors', 'failures'] as const;
+const FAILURE_KEYS = [
+  'failed',
+  'rowsFailed',
+  'failedCount',
+  'errors',
+  'failures',
+] as const;
 
 export interface FailureSignal {
   key: string;
   count: number;
+}
+
+/**
+ * How many failures a counter's value represents.
+ *
+ * The key names the MEANING; the shape is each service's own business. Reading
+ * it the other way round is what made five jobs fail silently: the keys used to
+ * be split into a numeric list and an array list, so `errors` — declared as an
+ * array key — was matched, failed `Array.isArray`, and hit an unconditional
+ * `continue` that skipped the numeric check entirely. Anything reporting
+ * `errors` as a COUNT was dropped on the floor.
+ *
+ * That was not a rare shape. `assessment-automation-service.ts:43,117,275`,
+ * `compliance-alert-service.ts:222` and `payment-alert-scheduler.ts:305` all
+ * declare `errors: number`, which is `assessment-overdue`, `late-fee-processor`,
+ * `generate-assessments`, `compliance-alerts` and `payment-reminders` — every
+ * one a money or statutory path, every one returning 200 with a green heartbeat
+ * while reporting failures nobody saw. The original allowlist was generalised
+ * from three routes that happened to agree with it and the other fourteen were
+ * never checked.
+ *
+ * A key nothing emits simply never fires, so `failedCount` and `failures` stay
+ * even though no cron route emits them today — dropping them would buy nothing
+ * and could silence a future emitter.
+ */
+function failureCount(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (Array.isArray(value)) return value.length;
+  return 0;
 }
 
 /** Walks a parsed summary for failure counters. Exported for tests. */
@@ -83,12 +119,9 @@ export function collectFailureSignals(value: unknown, depth = 0): FailureSignal[
 
   const signals: FailureSignal[] = [];
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (NUMERIC_FAILURE_KEYS.includes(key as (typeof NUMERIC_FAILURE_KEYS)[number])) {
-      if (typeof child === 'number' && child > 0) signals.push({ key, count: child });
-      continue;
-    }
-    if (ARRAY_FAILURE_KEYS.includes(key as (typeof ARRAY_FAILURE_KEYS)[number])) {
-      if (Array.isArray(child) && child.length > 0) signals.push({ key, count: child.length });
+    if (FAILURE_KEYS.includes(key as (typeof FAILURE_KEYS)[number])) {
+      const count = failureCount(child);
+      if (count > 0) signals.push({ key, count });
       continue;
     }
     signals.push(...collectFailureSignals(child, depth + 1));
