@@ -1,0 +1,100 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+
+interface DeleteThreadButtonProps {
+  threadId: number;
+  participantEmail: string;
+  messageCount: number;
+}
+
+/**
+ * Erase a conversation.
+ *
+ * Kept visually and physically apart from StatusControl, and available ONLY on
+ * the thread you are reading — never as a row action in the list. The status
+ * pills are a shelf you can walk back from; this is not, and a mis-click on a
+ * list row is both the likeliest and the least informed. `spam` exists so a
+ * triage click cannot destroy a statutory records request, and folding delete
+ * in beside it would undo exactly that.
+ *
+ * The dialog says two true things the operator needs before confirming: the
+ * internal notes go too (their rows are their own audit trail, so nothing
+ * survives them), and our email providers may still hold copies. The second
+ * is not decoration — Forward Email receives the inbound mail and Resend keeps
+ * outbound bodies in its sent-mail logs, so a database delete is not by itself
+ * a complete answer to "delete my data".
+ */
+export function DeleteThreadButton({
+  threadId,
+  participantEmail,
+  messageCount,
+}: DeleteThreadButtonProps) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/inbox/${threadId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        setError('Could not delete this conversation. Please try again.');
+        setDeleting(false);
+        return;
+      }
+      router.push('/inbox');
+      router.refresh();
+    } catch {
+      setError('Could not delete this conversation. Please try again.');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="rounded-md border border-edge-strong px-3 py-1.5 text-sm font-medium text-status-danger hover:bg-surface-page"
+      >
+        Delete conversation
+      </button>
+
+      {confirming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-sm rounded-lg bg-surface-card p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-content">Delete conversation</h3>
+            <p className="mt-2 text-sm text-content-tertiary">
+              Delete the conversation with <strong>{participantEmail}</strong> and all{' '}
+              {messageCount} message{messageCount === 1 ? '' : 's'}, including any internal
+              notes? This cannot be undone. Copies may remain with our email providers.
+            </p>
+            {error && <p className="mt-2 text-sm text-status-danger">{error}</p>}
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={deleting}
+                className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-md bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

@@ -24,6 +24,7 @@ We collect the following personal information that you provide directly to us:
 - **Profile information:** Role within the community association (e.g., owner, board member, property manager).
 - **Uploaded documents:** Association documents, meeting minutes, budgets, financial reports, and other files uploaded to the platform.
 - **Communications:** Messages, announcements, and other content you create or share through the platform.
+- **Support correspondence:** If you email us at support@, privacy@, or contact@getpropertypro.com, we store the message you send — including its subject, body, and sender details — so we can respond and keep a record of the request.
 
 ### 2.2 Information Collected Automatically
 

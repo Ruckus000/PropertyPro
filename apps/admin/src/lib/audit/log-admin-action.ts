@@ -83,7 +83,11 @@ export type AdminAuditAction =
   // self-auditing, and a second write would duplicate the record for no
   // recall benefit.
   | 'support_thread_replied'
-  | 'support_thread_status_changed';
+  | 'support_thread_status_changed'
+  // Hard delete. The cascade also destroys the thread's internal notes, whose
+  // rows are their own audit trail — so this entry is the last record that the
+  // conversation existed. It carries the address and counts, never content.
+  | 'support_thread_deleted';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */
