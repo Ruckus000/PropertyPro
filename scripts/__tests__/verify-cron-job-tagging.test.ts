@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeRoute, maxIntervalMinutes, slugForPath } from '../verify-cron-job-tagging';
+import {
+  analyzeRoute,
+  checkWindow,
+  maxIntervalMinutes,
+  slugForPath,
+} from '../verify-cron-job-tagging';
 
 /**
  * Unit tests for the predicates behind `pnpm guard:cron-job-tagging`.
@@ -196,4 +201,68 @@ describe('analyzeRoute — is withCronJob the OUTERMOST wrapper?', () => {
     `;
     expect(analyzeRoute('route.ts', src).outermostCall).toBeNull();
   });
+
+/**
+ * The staleness window, both ends.
+ *
+ * The lower bound was always enforced. The upper one was only ever PRINTED —
+ * the caller asserted `maxAgeMinutes > longestGap`, reported the tightest
+ * ratio, and stopped. So `maxAgeMinutes: 999999` passed a green build and the
+ * probe could never report that job stale for any reason, which is half of the
+ * contract this file's own docblock states.
+ *
+ * Two ceilings because neither sees the other's shape: a ratio catches a window
+ * wildly out of proportion to the cadence, and an absolute catches what a ratio
+ * cannot on a rare schedule — six times a monthly gap is 186 days, entirely
+ * proportionate and still no alerting for half a year.
+ */
+describe('checkWindow', () => {
+  const DAILY_GAP = 1440;
+  const MONTHLY_GAP = 44640;
+
+  it('accepts every window the registry actually ships', () => {
+    // The real pairs. If a ceiling is ever tightened past one of these, this
+    // reddens before the build does.
+    expect(checkWindow('export-worker', 20, 5, '*/5 * * * *')).toBeNull();
+    expect(checkWindow('digests', 45, 15, '*/15 * * * *')).toBeNull();
+    expect(checkWindow('watchdog', 180, 60, '15 * * * *')).toBeNull();
+    expect(checkWindow('lifecycle', 1800, DAILY_GAP, '0 4 * * *')).toBeNull();
+    expect(checkWindow('assessments', 46080, MONTHLY_GAP, '0 5 1 * *')).toBeNull();
+  });
+
+  it('rejects a window at or under the longest gap — stale between healthy runs', () => {
+    expect(checkWindow('j', DAILY_GAP, DAILY_GAP, '0 4 * * *')).toContain('does not exceed');
+    expect(checkWindow('j', DAILY_GAP - 1, DAILY_GAP, '0 4 * * *')).toContain('does not exceed');
+  });
+
+  it('rejects 999999 — the value that used to pass silently', () => {
+    const problem = checkWindow('j', 999999, DAILY_GAP, '0 4 * * *');
+    expect(problem).toContain('ceiling');
+    // The message has to name the consequence, not just the arithmetic.
+    expect(problem).toContain('694 days');
+  });
+
+  it('rejects a disproportionate window even when it is short in absolute terms', () => {
+    // 200 minutes is nothing on a clock, and 40x the cadence of a 5-minute job.
+    expect(checkWindow('j', 200, 5, '*/5 * * * *')).toContain('40.0x');
+  });
+
+  it('rejects an absolutely huge window that IS proportionate', () => {
+    // 5x a monthly gap clears the ratio ceiling and is still 155 days. This is
+    // the case the ratio bound structurally cannot see.
+    const problem = checkWindow('j', MONTHLY_GAP * 5, MONTHLY_GAP, '0 5 1 * *');
+    expect(problem).toContain('155 days');
+    expect(problem).toContain('45-day ceiling');
+  });
+
+  it('holds the boundary in both directions', () => {
+    // Exactly at each ceiling is allowed; one past is not. Without this the
+    // bounds could be off by one in the permissive direction and nothing above
+    // would notice.
+    expect(checkWindow('j', DAILY_GAP * 6, DAILY_GAP, '0 4 * * *')).toBeNull();
+    expect(checkWindow('j', DAILY_GAP * 6 + 1, DAILY_GAP, '0 4 * * *')).toContain('ceiling');
+    expect(checkWindow('j', 64800, 10800, '0 5 1 * *')).toBeNull();
+    expect(checkWindow('j', 64801, 10801, '0 5 1 * *')).toContain('45-day ceiling');
+  });
+});
 });
