@@ -16,6 +16,16 @@ const SUBJECT_PREFIX = /^\s*(re|fwd|fw|aw|sv|vs)\s*(\[\d+\])?\s*:\s*/i;
  * ingestion side's subject-based fallback matching once the prefixes push the
  * real subject past a client's truncation.
  */
+/**
+ * Subject for a reply to a message that arrived with no subject of its own.
+ *
+ * The literal `Re: (no subject)` we used to emit is a spam-filter signal in its
+ * own right — a parenthetical placeholder where a human subject belongs is a
+ * shape bulk mail has, and legitimate 1:1 replies do not. Threading does not
+ * depend on it either way: clients thread on References, which we always set.
+ */
+const NO_SUBJECT_REPLY = 'Re: your message to PropertyPro';
+
 export function buildReplySubject(parentSubject: string | null): string {
   let base = parentSubject ?? '';
   let changed = true;
@@ -25,7 +35,7 @@ export function buildReplySubject(parentSubject: string | null): string {
     changed = base !== before;
   }
   base = base.trim();
-  return base.length > 0 ? `Re: ${base}` : 'Re: (no subject)';
+  return base.length > 0 ? `Re: ${base}` : NO_SUBJECT_REPLY;
 }
 
 /**
