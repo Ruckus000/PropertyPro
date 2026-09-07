@@ -5,6 +5,7 @@
  * Redacts sensitive headers before sending events to Sentry.
  */
 import * as Sentry from '@sentry/nextjs';
+import type { ErrorEvent } from '@sentry/nextjs';
 
 /**
  * Deployment environment for Sentry.
@@ -21,6 +22,41 @@ import * as Sentry from '@sentry/nextjs';
  *      longer reports into the shared project at all.
  */
 const environment = process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development';
+
+/**
+ * Strip user data out of an event before it leaves the process.
+ *
+ * Exported so it can be tested: this is a privacy control, and a control that
+ * only exists inside a module-scope `Sentry.init` call cannot be asserted.
+ *
+ * THE PARAMS CASE IS NOT HYPOTHETICAL. drizzle-orm builds its error message as
+ * `Failed query: <sql>\nparams: <bound values>` (drizzle-orm/errors.js:11-15),
+ * so ANY query failure carries every bound value in `exception.values[].value`
+ * — for a support-inbox insert that is the sender's address, subject and full
+ * message body. Sentry retains events for 30-90 days depending on plan, so a
+ * single database blip would put third-party correspondence somewhere it was
+ * never meant to be, on a clock nobody is watching.
+ *
+ * The SQL is KEPT. It is what makes the report useful and it contains no user
+ * data; only the values after `params:` are dropped.
+ */
+export function scrubSentryEvent(event: ErrorEvent): ErrorEvent {
+  // Redact sensitive headers [acceptance criteria]
+  if (event.request?.headers) {
+    delete event.request.headers['authorization'];
+    delete event.request.headers['cookie'];
+    delete event.request.headers['x-api-key'];
+  }
+
+  for (const entry of event.exception?.values ?? []) {
+    const marker = entry.value?.indexOf('params: ');
+    if (entry.value && marker !== undefined && marker >= 0) {
+      entry.value = `${entry.value.slice(0, marker)}params: [redacted]`;
+    }
+  }
+
+  return event;
+}
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
@@ -41,13 +77,5 @@ Sentry.init({
   // Performance tracing
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
-  beforeSend(event) {
-    // Redact sensitive headers [acceptance criteria]
-    if (event.request?.headers) {
-      delete event.request.headers['authorization'];
-      delete event.request.headers['cookie'];
-      delete event.request.headers['x-api-key'];
-    }
-    return event;
-  },
+  beforeSend: scrubSentryEvent,
 });
