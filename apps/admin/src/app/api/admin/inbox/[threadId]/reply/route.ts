@@ -166,7 +166,24 @@ export const POST = withAdminErrorHandler(
 
     await db
       .from('support_inbox_threads')
-      .update({ last_message_at: now, updated_at: now })
+      /**
+       * `message_count` counts EVERY message in the thread, inbound and
+       * outbound alike — it is what the inbox list renders as "N messages".
+       * Advancing `last_message_at` without it left every replied-to thread
+       * undercounted by exactly its number of replies, which is how the two
+       * threads answered from the console came to read "1 message" and
+       * "2 messages" while holding 2 and 3.
+       *
+       * Read-then-write, matching the inbound service. Two replies racing on
+       * one thread could lose a count; with a single operator and the
+       * idempotency key above already collapsing the realistic double-send,
+       * that is not worth an RPC to close.
+       */
+      .update({
+        last_message_at: now,
+        updated_at: now,
+        message_count: thread.messageCount + 1,
+      })
       .eq('id', threadId);
 
     await logAdminAction({

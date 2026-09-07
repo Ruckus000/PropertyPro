@@ -40,7 +40,9 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: () => ({
     from: () => ({
       insert: insertMock,
-      update: () => ({ eq: updateMock }),
+      update: (payload: unknown) => ({
+        eq: (...args: unknown[]) => updateMock(payload, ...args),
+      }),
     }),
   }),
 }));
@@ -280,5 +282,21 @@ describe('POST /api/admin/inbox/[threadId]/reply', () => {
       expect(sendEmailMock).not.toHaveBeenCalled();
       expect(getThreadDetailMock).not.toHaveBeenCalled();
     });
+  });
+
+  it('counts the reply, so the thread list does not undercount it', async () => {
+    // message_count is what the inbox list renders as "N messages", and it
+    // counts inbound AND outbound. Advancing last_message_at without it left
+    // every replied-to thread short by exactly its number of replies — two
+    // real threads read "1 message" and "2 messages" while holding 2 and 3.
+    await POST(...post({ body: 'Here they are.' }));
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.message_count).toBe(THREAD.messageCount + 1);
+    // Control: the timestamps that already worked must still be written, so a
+    // regression here is distinguishable from the update being dropped.
+    expect(payload).toHaveProperty('last_message_at');
+    expect(payload).toHaveProperty('updated_at');
   });
 });
