@@ -79,6 +79,25 @@ function logInboundEmailEvent(
   else console.info(line);
 }
 
+/**
+ * U+0000, which Postgres cannot store in `text` (SQLSTATE 22021) or `jsonb`
+ * (22P05).
+ *
+ * This is stripped HERE, at the boundary, rather than in `readString` or
+ * `normalizeMessageId`, because those two cover only the normalized columns.
+ * The quarantine path writes the whole provider payload into `raw_payload`,
+ * a `jsonb` column, and neither reader runs on that route.
+ *
+ * Why it matters more than a cosmetic scrub: a NUL makes the INSERT fail with
+ * a code that is not 23505, so `persistInboundEmail` rethrows and this route
+ * returns 500 — the branch whose entire premise is that the failure is
+ * TRANSIENT (see the durability comment below). It is not. Every retry fails
+ * identically, Forward Email 421s each time, and the sender's own server
+ * holds the message for 24-72h before hard-bouncing it. One control character
+ * would turn "held, try again" into "lost, and nothing logged".
+ */
+const NUL_RE = /\u0000/g;
+
 export const POST = async (req: NextRequest): Promise<NextResponse> => {
   // Raw bytes first — everything below depends on them being untouched.
   const rawBody = await req.text();
@@ -113,14 +132,25 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     );
   }
 
+  // Only AFTER the signature check: the HMAC is computed over the bytes as
+  // sent, so scrubbing before verification would reject every honest caller.
+  //
+  // Two passes, because a NUL reaches us two different ways. A raw 0x00 byte
+  // in the body is caught here; a `\u0000` ESCAPE is six ordinary characters
+  // that this replace cannot see, and only becomes a NUL once JSON.parse
+  // decodes it — which is what the reviver below is for.
+  const safeBody = rawBody.replace(NUL_RE, '');
+
   let payload: unknown;
   try {
-    payload = JSON.parse(rawBody);
+    payload = JSON.parse(safeBody, (_key, value) =>
+      typeof value === 'string' ? value.replace(NUL_RE, '') : value,
+    );
   } catch {
     // Signature-valid but not JSON means the provider changed something. Keep
     // the bytes rather than dropping them, and 200 so it is not retried into
     // the same failure.
-    await quarantineInboundPayload(rawBody, 'body was not valid JSON');
+    await quarantineInboundPayload(safeBody, 'body was not valid JSON');
     logInboundEmailEvent('error', 'inbound email body was not JSON', {
       outcome: 'quarantined',
       errorCode: 'BODY_UNPARSEABLE',

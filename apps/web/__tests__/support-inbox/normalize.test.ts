@@ -162,3 +162,41 @@ describe('detectAttachments', () => {
     expect(detectAttachments({})).toBe(false);
   });
 });
+
+describe('mailparser falsy fields', () => {
+  it('does not turn html=false into the literal string "false"', () => {
+    // simpleParser sets `html` to FALSE — not undefined, not '' — when a
+    // message has no HTML part. Every plain-text-only sender (mutt, mail(1),
+    // monitoring) hits this. Stringifying it wrote the word "false" into
+    // html_body, which sanitizes to a truthy string, so the console offered
+    // "Show original HTML" and rendered a word nobody sent.
+    //
+    // The pre-existing optional-fields test cannot catch this: it OMITS `html`
+    // rather than setting it to false, so it exercises `undefined`.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      subject: 'Plain text only',
+      text: 'No HTML part on this one.',
+      html: false,
+    });
+
+    expect(email.htmlBody).toBeNull();
+    expect(email.textBody).toBe('No HTML part on this one.');
+  });
+
+  it('does not turn text=false or subject=false into strings either', () => {
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      subject: false,
+      text: false,
+      html: false,
+    });
+
+    expect(email.subject).toBeNull();
+    expect(email.textBody).toBeNull();
+    expect(email.htmlBody).toBeNull();
+  });
+});
+

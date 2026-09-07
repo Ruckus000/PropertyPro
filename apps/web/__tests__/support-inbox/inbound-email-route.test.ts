@@ -117,6 +117,43 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
     });
   });
 
+  describe('control characters', () => {
+    it('strips a NUL escape so the write cannot fail permanently', async () => {
+      // THE DURABILITY INVARIANT'S PRECONDITION. Postgres rejects U+0000 in a
+      // `text` column with 22021, which is not 23505 — so persistInboundEmail
+      // rethrows, the route 500s, and the 5xx branch treats a PERMANENT
+      // failure as a transient one: Forward Email 421s, the sender's server
+      // holds and retries for 24-72h, every attempt failing identically, and
+      // the message hard-bounces. A design that is safe only while failures
+      // are transient has to make the permanent ones impossible at the edge.
+      const body = JSON.stringify({
+        ...forwardEmailFixture,
+        subject: 'Records request\u0000hidden',
+        text: 'Please send\u0000the minutes',
+      });
+
+      const response = await POST(request(body));
+
+      expect(response.status).toBe(200);
+      const persisted = persistInboundEmail.mock.calls[0]?.[0];
+      expect(persisted.subject).toBe('Records requesthidden');
+      expect(persisted.textBody).toBe('Please sendthe minutes');
+      // The assertion that actually matters: nothing reaching the DB carries a
+      // NUL, whatever the field.
+      const everyString = JSON.stringify(persisted);
+      expect(everyString.includes('\u0000')).toBe(false);
+    });
+
+    it('leaves an ordinary body untouched (control)', async () => {
+      await POST(request(VALID_BODY));
+
+      expect(persistInboundEmail.mock.calls[0]?.[0]).toMatchObject({
+        from: { email: 'jane@example.com' },
+        rfcMessageId: 'reply-2@mail.example.com',
+      });
+    });
+  });
+
   describe('quarantine', () => {
     it('quarantines an unreadable payload and returns 200', async () => {
       // A retry would fail identically, so holding the message at the sender

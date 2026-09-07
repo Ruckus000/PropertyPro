@@ -55,7 +55,13 @@ function readString(value: unknown): string | null {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   }
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  // Numbers only. A BOOLEAN must not stringify: mailparser sets `html` to
+  // `false` when a message has no HTML part, and `String(false)` put the
+  // literal word "false" into html_body for every plain-text-only sender —
+  // enough to make sanitizeInboundHtml return a truthy string, so the console
+  // offered "Show original HTML" and rendered a word the sender never wrote.
+  // `text` and `subject` carry the same signal.
+  if (typeof value === 'number') return String(value);
   return null;
 }
 
