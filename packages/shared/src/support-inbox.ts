@@ -50,6 +50,22 @@ export const SUPPORT_MAILBOX_ADDRESS: Record<SupportMailbox, string> = {
 };
 
 /**
+ * The display name a reply is sent and signed under, per mailbox.
+ *
+ * Single-sourced because it appears TWICE in every reply — in the RFC 5322
+ * `From` header and again in the signature block at the foot of the body — and
+ * the two must never disagree. They did: the signature was a hardcoded literal
+ * in the email template, so a `privacy@` reply went out `From: PropertyPro
+ * Privacy` and then signed itself "PropertyPro Support", quietly undoing the
+ * per-mailbox routing the `From` had just got right.
+ */
+export const SUPPORT_MAILBOX_SENDER_NAME: Record<SupportMailbox, string> = {
+  support: 'PropertyPro Support',
+  privacy: 'PropertyPro Privacy',
+  contact: 'PropertyPro',
+};
+
+/**
  * The RFC 5322 `From` for a reply, per mailbox.
  *
  * A reply MUST be sent from the mailbox its thread arrived on — answering a
@@ -60,9 +76,9 @@ export const SUPPORT_MAILBOX_ADDRESS: Record<SupportMailbox, string> = {
  * answer.
  */
 export const SUPPORT_MAILBOX_FROM: Record<SupportMailbox, string> = {
-  support: `PropertyPro Support <${SUPPORT_MAILBOX_ADDRESS.support}>`,
-  privacy: `PropertyPro Privacy <${SUPPORT_MAILBOX_ADDRESS.privacy}>`,
-  contact: `PropertyPro <${SUPPORT_MAILBOX_ADDRESS.contact}>`,
+  support: `${SUPPORT_MAILBOX_SENDER_NAME.support} <${SUPPORT_MAILBOX_ADDRESS.support}>`,
+  privacy: `${SUPPORT_MAILBOX_SENDER_NAME.privacy} <${SUPPORT_MAILBOX_ADDRESS.privacy}>`,
+  contact: `${SUPPORT_MAILBOX_SENDER_NAME.contact} <${SUPPORT_MAILBOX_ADDRESS.contact}>`,
 };
 
 /**

@@ -24,6 +24,10 @@ import { z } from 'zod';
 
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { sendEmail, SupportReplyEmail } from '@propertypro/email';
+import {
+  SUPPORT_MAILBOX_ADDRESS,
+  SUPPORT_MAILBOX_SENDER_NAME,
+} from '@propertypro/shared';
 
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { parseAdminBody } from '@/lib/api/parse-body';
@@ -108,7 +112,8 @@ export const POST = withAdminErrorHandler(
       react: SupportReplyEmail({
         bodyText: parsed.body,
         quotedText: parent ? buildQuotedText({ textBody: parent.textBody }) : undefined,
-        mailboxAddress: from,
+        mailboxName: SUPPORT_MAILBOX_SENDER_NAME[thread.mailbox],
+        mailboxAddress: SUPPORT_MAILBOX_ADDRESS[thread.mailbox],
       }),
     });
 
