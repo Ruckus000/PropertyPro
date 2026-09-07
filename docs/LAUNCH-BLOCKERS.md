@@ -10,6 +10,13 @@ of both apps as of `aabf9727`.
 Items **6–7 are the exception**: two Website Editor feature gaps promoted to blockers on
 2026-09-02. They are code, not config, and they are sequenced last for that reason.
 
+An **Engineering backlog** was folded into the end of this file on 2026-09-07 — the
+engineering debt, coverage gaps and open GitHub items that were previously scattered
+across five unreconciled trackers. **None of it blocks launch**, and it is placed below
+the deliberate-non-blockers list so it cannot be mistaken for the checklist above. It
+carries a re-measure command beside every number, and none of those commands was run
+against a built tree; read that section's method note before acting on a row.
+
 > **6 and 7 merged 2026-09-04 — but 7 did not WORK in production until 2026-09-05.**
 > #1031 (notify on publish), #1032 (announcement expiry, migration `0064`) and #1037
 > (scheduled publishing, migration `0065`) are all merged, and **both migrations are
@@ -488,3 +495,151 @@ vercel logs "$(vercel inspect getpropertypro.com 2>&1 |
 - **`docs/gtm/03-LAUNCH-READINESS.md` is stale.** Its B1–B4 blockers are all resolved or
   deliberate: `/resources` exists, the PM tier has a real inquiry form, and the placeholder
   testimonial and logo strip are unrendered.
+
+---
+
+# Engineering backlog
+
+**Folded in 2026-09-07.** Everything above this line blocks launch. **Nothing below it
+does.** It is here because it had no other home that anyone reads: the same work was
+scattered across `docs/audits/2026-07-18-refactor-audit-and-cleanup-roadmap.md`, four
+root-level `PHASE*_EXECUTION_PLAN.md` files, `docs/issues/`, `specs/`, and the GitHub
+issue tracker, each with its own date and none of them reconciled against the others.
+
+**Method, and its limits.** Every number below is a static measurement taken at
+`ddf3469` with the command printed beside it. **No test, guard, lint or build was run** —
+`node_modules` was absent in the container that produced this. So this section can tell
+you what the tree *contains*; it cannot tell you what *passes*. Read a row that says a
+count grew as "this program is not progressing", never as "this is broken".
+
+Baselines in the "2026-07-18" column are quoted from the refactor audit's §1 headline
+table and are like-for-like: route counts are scoped to `apps/web/src/app/api/v1`
+(+ `/api/health`) as that audit scoped them.
+
+---
+
+## B1. In-flight programs, re-measured against their own baselines
+
+The structural work the July audit ranked first. Four of the eight rows are **larger**
+than the day they were written down, one is flat, and the two that improved improved
+because a *different* program (the admin design migration) was actively worked. This is
+the part of this section that argues for doing something.
+
+| Program | 2026-07-18 | 2026-09-07 | |
+|---|---|---|---|
+| Uncontracted routes (`KNOWN_UNCONTRACTED_ROUTES`) | 37 of 257 | **46 of 284** | ⬆ |
+| `contract.ts` declaring `tenantScope` | 12 | **15** | flat |
+| Contracted routes still hand-calling `resolveEffectiveCommunityId` | 121 | **150** | ⬆ |
+| `apps/web/src/middleware.ts` | 994 LOC | **1,318 LOC** | ⬆ 33% |
+| `lib/services/finance-service.ts` | 2,410 LOC | **2,548 LOC** | ⬆ |
+| Hook sources with no same-named test file | ~28 of 98 | **38 of 111** | ⬆ |
+| Design-token baseline | 1,650 in 76 files | **1,019 in 84 files** | ⬇ (admin drain) |
+| `scripts/page-padding-baseline.json` | — | **`{}`** | clean |
+
+```bash
+find apps/web/src/app/api -name route.ts | wc -l                                  # 284
+grep -rl "runRoute(" apps/web/src/app/api --include=route.ts | wc -l              # 238
+awk '/KNOWN_UNCONTRACTED_ROUTES/,/^\];/' scripts/verify-contracts.ts \
+  | grep -cE "^\s*'apps/"                                                          # 46
+grep -rl tenantScope apps/web/src/app/api --include=contract.ts | wc -l           # 15
+grep -rl "runRoute(" apps/web/src/app/api --include=route.ts \
+  | xargs grep -l resolveEffectiveCommunityId | wc -l                              # 150
+wc -l apps/web/src/middleware.ts apps/web/src/lib/services/finance-service.ts
+```
+
+238 contracted + 46 allowlisted = 284, so the allowlist is exactly the uncontracted set
+and the guard is telling the truth about coverage. What it cannot tell you is that **the
+allowlist is a hand-edited array**: `guard:contracts` fails a new uncontracted route only
+until somebody appends a line to `scripts/verify-contracts.ts`. Nine lines were appended
+in the seven weeks since the audit. Most are `internal/*` cron and webhook routes the
+runner genuinely cannot express (201/202/204, raw bodies, non-JSON) — that is the
+documented permanent tier, not backsliding — but the ratchet is a convention, not a
+mechanism, and the number it guards has only ever gone up.
+
+The same is true of every row here: nothing ratchets on route size, middleware LOC, or
+`tenantScope` adoption, so all three can drift indefinitely with the whole gate green.
+**If only one thing in this section is done, make it that** — pin today's numbers as
+ceilings in the guards that already exist. A program with no ratchet is a wish.
+
+## B2. Coverage that is absent rather than failing
+
+| Gap | Measured |
+|---|---|
+| E2E blocks never exercised on a PR | **13 of 45** — 5 Stripe signup (own workflow, needs secrets), 6 tenant-host (need `:3002`), 2 `onboarding-first-run` `test.fixme`. **Not measured here** — block counts need `playwright test --list`; quoted from `CLAUDE.md` and `docs/audits/2026-08-03-e2e-inventory.md`. What *is* measured: 15 spec files exist, and `apps/web/e2e/ci-safe-specs.json` names 8 of them with `expectedTestCount: 29` |
+| `verify-*` guards with a same-named fixture test under `scripts/__tests__/` | **9 of 40** |
+| `verify-no-mocks-in-integration.ts` `LEGACY_ALLOWLIST` — comment says it "should shrink to zero" | **16 entries** |
+| Hook sources with no same-named test | **38 of 111** |
+| `it.todo` chaos scenarios, `__tests__/api/revenue-snapshot-chaos.test.ts` | **7** — duplicate same-day snapshot, 3-day cron gap, backdated Stripe webhook, DST fallback, TZ boundary, grace boundary, future-dated `created_at` |
+| `it.skip` placeholders citing "Phase 3", `feature-flag-enforcement.integration.test.ts` | **2** — Phase 3 closed 2026-02-22; these describe work that was never scoped and will never be written as stated. Delete them |
+
+`onboarding-first-run.spec.ts` deserves its own line, because it is not a coverage gap —
+it is a **contradiction between the spec and the product, unresolved since 2026-08-03.**
+Both blocks wait on `data-testid="condo-onboarding-wizard"`. `git log -S condo-onboarding-wizard`
+(re-run 2026-09-07) puts that identifier in three files ever — the spec itself,
+`docs/audits/2026-08-03-e2e-inventory.md`, and `docs/spec-bundle/SPECIFICATIONS_COMPLETE.md`.
+It has never appeared in `apps/web/src`, and `grep -rn condo-onboarding-wizard apps/web/src`
+returns 0 today. The shipped
+`/onboarding/condo` is a different, 2-step wizard. So the spec has never been capable of
+passing, and leaving it `test.fixme` records the disagreement without settling it. Either
+the 4-step wizard is still wanted (then it is a feature, and belongs above this line) or
+it is not (then delete the spec and the phase-2 spec section together).
+
+## B3. Open on GitHub, 2026-09-07
+
+One PR, seven issues, one stranded branch. **PR #1067 is finished work that is not
+merged** — `mergeable_state: clean`, but based on `fc3dff2`, six commits behind `main`.
+
+| Item | Age | Note |
+|---|---|---|
+| **PR #1067** support-inbox: reply subject + per-mailbox signature | 1d | clean, unmerged |
+| #956 ARC withdraw skips `requireActiveSubscriptionForMutation` | 26d | |
+| #951 Sentry may buffer raw Stripe webhook bodies incl. `hosted_invoice_url` | 27d | security-shaped |
+| #950 meetings POST runs `assertNotDemoGrace` on an unauthenticated, caller-supplied `communityId` | 27d | security-shaped |
+| #947 Access-request OTP attempt cap resets on resend; orphan auth accounts need reconciliation | 27d | |
+| #771 Wave 4 follow-up: full Next/Back step-wizard for signup (B4) | 56d | |
+| #747 Nightly Demo Reset failing | 76d | a job known to be failing |
+| #526 Site-assets quota + lifecycle: 3 deferred findings need design | 102d | |
+
+Branch `fix-cron-runs-rls-registration` (`b11c50f`) is on the remote with no PR and is not
+an ancestor of `main`; its content was superseded by #1059 / #1061 / #1062. Safe to
+delete — but nothing in the repo says so, which is why it is written here.
+
+## B4. Code that is a stub rather than a feature
+
+- **Nothing is wired to analytics.** Five call sites `console.info('[analytics] …')`
+  behind `// TODO: wire to analytics service` — `components/operations/operations-hub.tsx`
+  (×3), `(authenticated)/maintenance/submit/page.tsx`,
+  `(authenticated)/maintenance/inbox/page.tsx`. There is no analytics service; those
+  events go nowhere. Decide whether the product wants them, or delete the calls — a
+  `console.info` in production reads as instrumentation to the next person and is not.
+- `packages/shared/src/http/request-context.ts:20` — `x-tenant-id` fallback marked for
+  removal "after migration window" (P2-30). No window was ever named. Still present.
+- **`docs/issues/mobile-demo-gaps.md` has never been updated.** Of its 7 issues, #1 is
+  fixed (`app/mobile/more/page.tsx` exists) and #2 is still open (no
+  `app/mobile/announcements/[id]`). The file cannot tell you which is which. Mobile is
+  out of standardization scope by decision, so this is a *tracking* defect, not a
+  product one — but a stale issue list is worse than none.
+
+## B5. Documentation that states things that are no longer true
+
+The most expensive item in this section, because it is what agents and new readers act on.
+
+| Where | Says | Actually |
+|---|---|---|
+| `.claude/rules/tenant-isolation.md:26` | `ADMIN_ROLES: board_member, board_president, cam, site_manager, property_manager_admin` | Those names were **fully retired** by ADR-006. `ADMIN_ROLES` in `packages/shared/src/access-policies.ts` is `['manager']`. This rule auto-loads for anyone writing a DB query or API route |
+| `CLAUDE.md` (api-patterns) | "233 routes contracted; 40 grandfathered" (2026-08-09) | 238 / 46 |
+| This file's header | "25/25 guards" (2026-09-01) | 29 `guard:*` scripts exist today. Whether they pass was not measured here |
+| `IMPLEMENTATION_PLAN.md` (164 KB, repo root) | "PR #33 … ready to merge to `main`" | The repo is past #1072. Historical; so are the four `PHASE*_EXECUTION_PLAN.md` files beside it |
+| `docs/gtm/03-LAUNCH-READINESS.md` | B1–B4 blockers | Already called stale above |
+
+The `tenant-isolation.md` line is a one-line fix and should just be made. The rest is one
+question, not five: **`docs/` holds ~50 top-level files plus `audits/`, `specs/`,
+`superpowers/specs/`, `agent-tasks/` and `gtm/`, with overlapping and differently-dated
+backlogs.** Every count in the table above drifted because it was written down twice.
+
+That is the argument against this section, stated so it is not skipped: folding the
+backlog in here makes *this* file the fifty-first place a number can go stale. The reason
+to do it anyway is that this file is the only one in the repo with a status discipline —
+"say what is verified and what is assumed" — and a re-measure command beside every claim.
+**Re-run the commands before trusting a row. If a row is stale, fix it or delete it; do
+not promote it.**
