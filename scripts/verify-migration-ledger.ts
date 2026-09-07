@@ -90,9 +90,14 @@ export const KNOWN_UNAPPLIED_MIGRATIONS: ReadonlyArray<{ tag: string; reason: st
       'Secret-ballot elections ship disabled (Wave 6, 2026-08-10) and this is a ' +
       'CONTRACT migration: it drops five live columns from election_ballots ' +
       '(submission_id, unit_id, voter_hash, is_proxy_vote, proxy_id) plus two FK ' +
-      'constraints and three indexes. Per the expand/contract rule it must not be ' +
-      'applied until the code that stops reading those columns is live. Recorded ' +
-      'as ON HOLD in docs/DEPLOYMENT.md §7.3.',
+      'constraints and three indexes. The expand/contract precondition — that the ' +
+      'code which stopped reading those columns is live — is now MET, so that is ' +
+      'no longer what holds this back: the remaining blocker is that e-voting has ' +
+      'not cleared attorney review (legal-risk audit F-08), and applying this ' +
+      'buys nothing while the feature is gated off. Note the ordering has ' +
+      'inverted — the live code now REQUIRES this migration, so enabling ' +
+      'electionsAttorneyReviewed without applying it first 500s the first ballot ' +
+      'cast. Recorded as ON HOLD in docs/DEPLOYMENT.md §7.3.',
   },
 ];
 

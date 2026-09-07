@@ -55,6 +55,20 @@ export const communities = pgTable('communities', {
       //
       // Toggled by platform admins via apps/admin (audit-logged per key).
       // See docs/audits/2026-08-09-legal-risk-audit.md §2a.
+
+      /**
+       * §718.128 e-voting gate (legal-risk audit F-08).
+       *
+       * ⚠️ Turning this on has a DATABASE PRECONDITION. Migration
+       * `0062_secret_ballot` is merged but deliberately unapplied in production
+       * (docs/DEPLOYMENT.md §7.3), and the live ballot code already depends on
+       * it: `castBallot` writes `election_ballot_submissions.selection_digest`,
+       * which production lacks, and inserts `election_ballots` rows without
+       * `submission_id` / `unit_id` / `voter_hash`, which are still NOT NULL
+       * there. Setting this flag before applying 0062 makes the first ballot
+       * cast fail with 42703 / 23502 — the gate hides a broken write path, it
+       * does not protect one.
+       */
       electionsAttorneyReviewed?: boolean;
       /** §718.303(3)/§720.305(2): no fine cap or fining-committee record yet (F-04). */
       violationFinesEnabled?: boolean;

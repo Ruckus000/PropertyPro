@@ -612,15 +612,47 @@ gone. That destruction is the point (§718.128 secret ballot), but applied early
 it destroys audit linkage for any election already recorded in exchange for a
 secrecy property nothing is relying on yet.
 
+**The ordering has inverted — verified against production 2026-09-07.** The
+post-migration code is live, so this is no longer a contract migration that is
+merely *safe* to defer: it is now a **precondition for enabling e-voting at
+all**. `castBallot` writes `election_ballot_submissions.selection_digest`, which
+production does not have (`42703`), and inserts into `election_ballots` without
+`submission_id` / `unit_id` / `voter_hash`, which are `NOT NULL` there with no
+default (`23502`). Setting `electionsAttorneyReviewed` on any community without
+applying this migration first means the first ballot cast 500s. That is
+invisible today only because the flag is absent on all 9 production communities.
+
+**The migration could not have been applied as merged.** It dropped two FK
+constraints by drizzle-generated names (`election_ballots_submission_id_…_fk`,
+`election_ballots_unit_id_units_id_fk`) that production does not have —
+production's elections tables came from the hand-written
+`_archive/0102_elections_schema.sql` and carry Postgres' default `_fkey` names.
+`apply_migration` would have aborted on statement 1. The migration now drops both
+spellings `IF EXISTS`, so it applies to production and to a freshly migrated
+local/CI database alike. Do not collapse those back to one name.
+
+**Nothing would be lost today.** As of 2026-09-07 `election_ballots`,
+`election_ballot_submissions`, `elections`, `election_candidates` and
+`election_proxies` are all **empty** in production, so the irreversible linkage
+destruction has no rows to destroy. That lowers the mechanical risk; it does not
+lift the gate, which is about shipping the feature, not about data.
+
 Two consequences worth stating plainly:
 
 - **`main`'s highest migration number is not the next free one.** Production has
-  applied through `0061`; `0062` sits merged-but-unapplied. Re-derive the next
-  number from the production ledger and open branches, never from `main` alone.
-- **A single `db:migrate` against a production `DATABASE_URL` applies it.** There
-  is no tooling interlock — `scripts/local-test-db.sh` runs that same command
-  legitimately, so it cannot be blocked outright. The protection is this
-  document and the warning above.
+  applied everything except `0062`, which sits merged-but-unapplied while later
+  numbers went in around it. Re-derive the next number from the production
+  ledger and open branches, never from `main` alone.
+- **`db:migrate` can no longer apply it — and that is now the risk.** This used
+  to warn that a single `db:migrate` against a production `DATABASE_URL` would
+  apply it. That is no longer true: `0062` is **stranded**. Drizzle applies a
+  migration only when `lastApplied.created_at < folderMillis`, and `0062`'s
+  journal `when` (1786414111600) sits below the production ledger tip
+  (1788797631673), so the migrator skips it in silence — no error, no output.
+  The exposure has inverted with it: the danger is no longer an accidental
+  apply, it is someone running `db:migrate`, seeing it succeed, and believing
+  `0062` went in. Shipping it takes a **manual** apply plus a hand-written
+  ledger row. `pnpm db:ledger:verify` reports the stranding on every run.
 
 **Important:** when you do migrate a local database, use the direct connection
 (port 5432), not the pooled connection (port 6543). Drizzle reads `DIRECT_URL`
@@ -636,6 +668,15 @@ curl -fsS \
 ```
 
 The readiness payload must report `schema_compatibility.status = "pass"`.
+
+> **`schema_compatibility` is narrower than its name.** It calls
+> `checkPendingSignupsSchema()` and nothing else
+> ([readiness/route.ts](../apps/web/src/app/api/v1/internal/readiness/route.ts)),
+> so it covers `pending_signups` only. A `pass` says nothing about any other
+> table — it did not, for instance, notice that the live elections code has been
+> writing to a `selection_digest` column production does not have. Treat it as a
+> single targeted canary, not a schema diff, and verify the tables your migration
+> actually touched against `information_schema` yourself.
 
 ### 7.4 Rollback
 
