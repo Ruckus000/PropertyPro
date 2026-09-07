@@ -149,8 +149,12 @@ const handleInboundEmail = async (req: NextRequest): Promise<NextResponse> => {
     verifyForwardEmailWebhookToken(rawBody, req.headers);
   } catch (error) {
     if (error instanceof InboundEmailSignatureError && error.kind === 'unconfigured') {
-      // OUR fault. 500 so it is loud and so the provider retries once fixed —
-      // the sender's server is holding the message either way.
+      // OUR fault, not the caller's — but it must still DEFER. A 500 here is
+      // returned verbatim as a permanent failure and every message bounces
+      // while the secret is being fixed, which is the opposite of loud: it is
+      // silent and lossy. 429 makes the sender hold. Not 401 either, which
+      // defers but reads as the provider's fault in their logs and forfeits
+      // the in-session retry.
       logInboundEmailEvent('error', 'inbound email webhook secret is not configured', {
         outcome: 'failure',
         errorCode: 'SECRET_NOT_CONFIGURED',

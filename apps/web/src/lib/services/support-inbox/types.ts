@@ -71,8 +71,10 @@ export class InboundEmailShapeError extends Error {
  *
  * `kind` exists because the two cases need OPPOSITE HTTP statuses and the route
  * must not have to pattern-match on a message string to tell them apart:
- *   - `unconfigured` is OUR misconfiguration -> 500, loud, and retryable once
- *     fixed (the sender's mail server holds the message meanwhile).
+ *   - `unconfigured` is OUR misconfiguration -> 429, so the sender's mail
+ *     server holds the message while the secret is fixed. NOT 500: Forward
+ *     Email returns a 5xx verbatim as a permanent failure and the message
+ *     bounces on the spot.
  *   - `missing_header` and `mismatch` are the caller's problem -> 401.
  *
  * `missing_header` and `mismatch` are separate values rather than one

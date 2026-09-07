@@ -121,13 +121,14 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
 
   describe('control characters', () => {
     it('strips a NUL escape so the write cannot fail permanently', async () => {
-      // THE DURABILITY INVARIANT'S PRECONDITION. Postgres rejects U+0000 in a
+      // THE DEFERRAL INVARIANT'S PRECONDITION. Postgres rejects U+0000 in a
       // `text` column with 22021, which is not 23505 — so persistInboundEmail
-      // rethrows, the route 500s, and the 5xx branch treats a PERMANENT
+      // rethrows and the route takes the deferral branch, treating a PERMANENT
       // failure as a transient one: Forward Email 421s, the sender's server
       // holds and retries for 24-72h, every attempt failing identically, and
-      // the message hard-bounces. A design that is safe only while failures
-      // are transient has to make the permanent ones impossible at the edge.
+      // the message hard-bounces at the end of it. A design that is safe only
+      // while failures are transient has to make the permanent ones impossible
+      // at the edge.
       const body = JSON.stringify({
         ...forwardEmailFixture,
         subject: 'Records request\u0000hidden',
