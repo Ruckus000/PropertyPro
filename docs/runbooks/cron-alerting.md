@@ -87,13 +87,34 @@ The body's `stale_jobs` names them, and each entry carries a `reason`:
 
 | reason | meaning | first thing to check |
 |---|---|---|
-| `never_run` | no row at all — the job has not run once since the heartbeat shipped | is it still in `vercel.json`? did the deploy succeed? |
+| `never_registered` | no row at all | the heartbeat itself is not writing — see below |
+| `never_run` | known, but has not run once inside its own window | is it still in `vercel.json`? did the deploy succeed? |
 | `never_succeeded` | it runs and fails every time | Sentry, filtered to that `job` tag |
 | `overdue` | it succeeded once but not recently | Sentry first; then whether Vercel is still firing it |
 
 `never_run` across **all** jobs at once means the platform is not invoking any
 cron — check `CRON_SECRET` before anything else. That is the 2026-08 shape, and
 it presents as a totally healthy dashboard.
+
+`never_registered` is a different and worse signal. `withCronJob` writes a row
+for every job in the registry on a cold start, so after one tick of ANY job
+there should be seventeen rows. A missing one means the heartbeat's own write is
+failing — check that `cron_runs` exists and that migration 0070 was applied
+before suspecting the named job.
+
+### `awaiting_first_run` — a 200 with a null timestamp
+
+A job that has been registered but has not yet run is reported with
+`reason: "awaiting_first_run"`, is listed under the top-level
+`awaiting_first_run` key, and is **not** counted as stale. It becomes
+`never_run` once its own `maxAgeMinutes` has elapsed since `first_observed_at`.
+
+This is not a way to silence the probe; the window is the same tolerance the job
+would get anyway, measured from the first moment we could have seen it. It
+exists because the endpoint used to report 503 for a monthly job whose last real
+run predated the `cron_runs` table — sixteen of seventeen jobs green, endpoint
+red, and no fault anywhere. Expect to see this legitimately for about a month
+after any newly added infrequent job.
 
 ### Replaying a job by hand
 

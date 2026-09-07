@@ -598,7 +598,7 @@ For database rollbacks, Supabase provides point-in-time recovery (PITR) on Pro p
 | `/api/v1/compliance` | GET (authed) | 200/401 |
 | `/api/v1/internal/readiness` | GET + Bearer `READINESS_CHECK_SECRET` | `healthy`/`degraded`; `schema_compatibility` must pass |
 | `/api/v1/internal/revenue-snapshot/health` | GET, **no auth** | 200 while `hours_since` < 26, else 503. The only check that proves the cron path *works* rather than that its config exists — see §4.2. |
-| `/api/v1/internal/cron-health` | GET, **no auth** | 200 while EVERY scheduled job has succeeded inside its own window, else 503 naming the stale ones. Generalises the row above from one job to all seventeen. Returns slugs and timestamps only — never `last_error`, which can carry query text. |
+| `/api/v1/internal/cron-health` | GET, **no auth** | 200 while EVERY scheduled job has succeeded inside its own window, else 503 naming the stale ones. Generalises the row above from one job to all seventeen. Returns slugs and timestamps only — never `last_error`, which can carry query text. A job registered but not yet run is reported `awaiting_first_run` and is NOT stale until its own window elapses — see [the runbook](runbooks/cron-alerting.md). |
 
 ## 9. Troubleshooting
 
