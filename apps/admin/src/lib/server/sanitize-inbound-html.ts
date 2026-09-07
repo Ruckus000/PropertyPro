@@ -64,20 +64,20 @@ const DISCARDED = [
  * So `src` is REMOVED outright rather than swapped for a placeholder: an
  * element with no `src` issues no request, and a `data:` placeholder would mean
  * re-admitting the `data:` scheme this sanitizer deliberately excludes. The
- * original is preserved in `data-blocked-src` so a "Load images" control can
- * restore it deliberately, and so the UI can style `img[data-blocked-src]`
- * rather than showing a bare broken-image icon.
+ * The original is preserved in `data-blocked-src`. Nothing renders it today —
+ * there is no "Load images" control, and the frame's `srcDoc` sandbox cannot
+ * reach a stylesheet that would target `img[data-blocked-src]` — but it is the
+ * only place a blocked tracker URL survives into the document, which is the
+ * evidence an abuse report or a records request would need. It is kept for
+ * that, not for a UI that does not exist.
+ *
+ * There is deliberately NO opt-in to restore them. An `allowRemoteImages`
+ * option lived here with no production caller and one test as its only
+ * consumer — an unused switch on the one control protecting a `privacy@`
+ * thread from confirming receipt.
  */
 
-export interface SanitizeInboundHtmlOptions {
-  /** Restore remote image sources. Only ever set from an explicit operator action. */
-  allowRemoteImages?: boolean;
-}
-
-export function sanitizeInboundHtml(
-  html: string | null,
-  options: SanitizeInboundHtmlOptions = {},
-): string {
+export function sanitizeInboundHtml(html: string | null): string {
   if (!html) return '';
 
   return sanitizeHtml(html, {
@@ -95,7 +95,7 @@ export function sanitizeInboundHtml(
       // `rel`/`target` must be listed here or the transformTags hardening
       // below is silently filtered straight back out.
       a: ['href', 'title', 'rel', 'target'],
-      img: ['src', 'alt', 'title', 'width', 'height', 'data-blocked-src'],
+      img: ['alt', 'title', 'width', 'height', 'data-blocked-src'],
       td: ['colspan', 'rowspan'],
       th: ['colspan', 'rowspan', 'scope'],
       '*': ['dir', 'lang'],
@@ -121,7 +121,6 @@ export function sanitizeInboundHtml(
         },
       }),
       img: (tagName, attribs) => {
-        if (options.allowRemoteImages) return { tagName, attribs };
         const { src, ...rest } = attribs;
         return {
           tagName,

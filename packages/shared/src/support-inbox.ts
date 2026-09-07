@@ -103,9 +103,10 @@ export const SUPPORT_MAILBOX_FROM: Record<SupportMailbox, string> = {
  * Every local part routed into the inbox, mapped to the mailbox it lands in.
  *
  * Must stay in step with the `forward-email=` alias TXT record: an alias routed
- * in DNS but missing here resolves to the fallback mailbox with a
- * `mailbox_unresolved` log line rather than being lost, but the thread lands in
- * the wrong place.
+ * in DNS but missing here resolves to the fallback mailbox rather than being
+ * lost, but the thread lands in the wrong place — SILENTLY. Nothing logs it.
+ * The arrival address is recorded on the message row as `delivered_to`, so a
+ * misroute is one query away, but it will not announce itself.
  *
  * `postmaster` and `abuse` are here because RFC 2142 expects them to accept
  * mail once a domain publishes MX, and a bounced abuse report is worse than a
@@ -150,15 +151,3 @@ export const SUPPORT_THREAD_STATUS_LABELS: Record<SupportThreadStatus, string> =
   spam: 'Spam',
 };
 
-/** Narrow an untrusted string to a mailbox. */
-export function isSupportMailbox(value: unknown): value is SupportMailbox {
-  return typeof value === 'string' && (SUPPORT_MAILBOXES as readonly string[]).includes(value);
-}
-
-/** Narrow an untrusted string to a thread status. */
-export function isSupportThreadStatus(value: unknown): value is SupportThreadStatus {
-  return (
-    typeof value === 'string' &&
-    (SUPPORT_THREAD_STATUSES as readonly string[]).includes(value)
-  );
-}

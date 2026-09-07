@@ -56,7 +56,6 @@ export function ThreadView({ thread, messages, replyFrom, replySubject }: Thread
 
       <ReplyComposer
         threadId={thread.id}
-        mailbox={thread.mailbox}
         fromAddress={replyFrom}
         toAddress={thread.participantEmail}
         subject={replySubject}

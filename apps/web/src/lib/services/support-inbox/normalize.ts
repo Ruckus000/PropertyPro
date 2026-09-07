@@ -139,7 +139,7 @@ function localPartOf(address: string): string | null {
 export interface ResolvedMailbox {
   mailbox: SupportMailbox;
   deliveredTo: string | null;
-  /** True when nothing matched and the fallback was used — the route logs this. */
+  /** True when nothing matched and the fallback was used. */
   unresolved: boolean;
 }
 

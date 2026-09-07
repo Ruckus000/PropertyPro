@@ -4,11 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Send } from 'lucide-react';
 
-import type { SupportMailbox } from '@propertypro/shared';
 
 interface ReplyComposerProps {
   threadId: number;
-  mailbox: SupportMailbox;
   /** Shown in the confirm step so the operator sees the real From. */
   fromAddress: string;
   toAddress: string;

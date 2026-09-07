@@ -351,5 +351,7 @@ function asJsonObject(value: unknown): Record<string, unknown> | null {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
-  return value === undefined ? null : { value: safeStringify(value) };
+  // No `undefined` branch: both callers pass either `req.text()`'s string or
+  // JSON.parse's result, and neither can be undefined.
+  return { value: safeStringify(value) };
 }
