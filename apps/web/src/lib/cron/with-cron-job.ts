@@ -40,9 +40,9 @@
 import type { NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
-import { recordCronRun } from '@/lib/services/cron-run-service';
+import { recordCronRun, registerCronJobs } from '@/lib/services/cron-run-service';
 
-import type { CronJobSlug } from './registry';
+import { CRON_JOB_SLUGS, type CronJobSlug } from './registry';
 
 /**
  * Next route handlers vary in arity (some take a params context, none of the
@@ -160,6 +160,42 @@ async function recordHeartbeat(
   }
 }
 
+/**
+ * Per-process, and set only on SUCCESS.
+ *
+ * Registration is a reconciliation, not a write the job needs, so doing it once
+ * per instance rather than once per tick keeps ~99% of these statements out of
+ * the busiest five-minute job. Serverless instances are short-lived and every
+ * deploy makes new ones, so a newly added job still gets its row within a cold
+ * start — which is what matters, since the grace window it grants is measured
+ * in hours or days.
+ *
+ * The flag is NOT set optimistically: if the write fails, the next tick in this
+ * instance retries. Latching on a failure would leave the instance permanently
+ * unable to register a job, and the symptom — a job stuck reporting stale — is
+ * the one this code exists to remove.
+ */
+let jobsRegistered = false;
+
+/**
+ * ALWAYS swallowing, for the same reason as the heartbeat: monitoring that can
+ * take down a cron is worse than no monitoring.
+ */
+async function ensureJobsRegistered(): Promise<void> {
+  if (jobsRegistered) return;
+  try {
+    await registerCronJobs(CRON_JOB_SLUGS);
+    jobsRegistered = true;
+  } catch {
+    // Deliberately silent — see the docblock.
+  }
+}
+
+/** Test seam: lets a case exercise the first-tick path in a warm process. */
+export function __resetJobRegistrationForTests(): void {
+  jobsRegistered = false;
+}
+
 export function withCronJob(slug: CronJobSlug, handler: CronRouteHandler): CronRouteHandler {
   return async function cronJobHandler(req, ...rest) {
     return Sentry.withIsolationScope(async (scope) => {
@@ -188,6 +224,17 @@ export function withCronJob(slug: CronJobSlug, handler: CronRouteHandler): CronR
       } catch (error) {
         await recordHeartbeat(slug, startedAt, 'error', error);
         throw error;
+      } finally {
+        /*
+         * In a `finally` so a job that throws still registers its siblings, and
+         * AFTER the heartbeat so this can never delay the run's own record.
+         *
+         * Awaiting here defers the return or the rethrow but cannot change
+         * either, because `ensureJobsRegistered` swallows everything — a
+         * `finally` that threw would replace the handler's error with this
+         * one, which is the only way this line could do damage.
+         */
+        await ensureJobsRegistered();
       }
     });
   };
