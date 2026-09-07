@@ -107,6 +107,12 @@ export interface MigrationFile {
   /** The journal `when`, which is what a correct ledger row records as created_at. */
   when: number;
   sha256: string;
+  /**
+   * Tables the migration's DDL names. Used to say WHICH tables a held migration
+   * leaves CI and production disagreeing about — the fork below is abstract
+   * until it names the tables whose tests are lying to you.
+   */
+  tables: readonly string[];
 }
 
 export interface LedgerRow {
@@ -131,6 +137,34 @@ export interface ReconcileResult {
   timestampMismatches: Array<{ tag: string; journalWhen: number; ledgerCreatedAt: number | null }>;
   /** Allowlist entries naming a tag that has no migration file. */
   deadAllowlistEntries: string[];
+}
+
+/**
+ * Tables a migration's DDL names.
+ *
+ * Deliberately a scan for the handful of statement shapes this repo writes, not
+ * a SQL parser — the output is prose for a human, so a missed exotic form costs
+ * a less specific sentence, never a wrong verdict. Comments are stripped first
+ * because every migration here carries a long prose header that names tables.
+ */
+export function tablesTouchedBy(sql: string): string[] {
+  const code = sql
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n');
+
+  const found = new Set<string>();
+  const patterns = [
+    /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?(?:public"?\.)?"?([a-z_][a-z0-9_]*)"?/gi,
+    /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(?:public"?\.)?"?([a-z_][a-z0-9_]*)"?/gi,
+    /\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?(?:public"?\.)?"?([a-z_][a-z0-9_]*)"?/gi,
+    /\bON\s+"?(?:public"?\.)?"?([a-z_][a-z0-9_]*)"?\s*(?:USING|\()/gi,
+  ];
+  for (const re of patterns) {
+    for (const m of code.matchAll(re)) found.add(m[1]!.toLowerCase());
+  }
+  return [...found].sort();
 }
 
 /**
@@ -235,11 +269,13 @@ function readMigrationFiles(): MigrationFile[] {
       );
     }
     // Hash the BYTES, exactly as the manual-apply procedure records them.
+    const bytes = readFileSync(sqlPath);
     return {
       idx: entry.idx,
       tag: entry.tag,
       when: entry.when,
-      sha256: createHash('sha256').update(readFileSync(sqlPath)).digest('hex'),
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      tables: tablesTouchedBy(bytes.toString('utf8')),
     };
   });
 }
@@ -377,6 +413,7 @@ export function formatReport(r: ReconcileResult): ReportOutput {
   }
 
   for (const { file, reason } of r.expectedUnapplied) {
+    const tables = file.tables.length > 0 ? file.tables.join(', ') : '(none parsed)';
     const lines = [
       `🔒 HELD — DO NOT APPLY  ${file.tag}`,
       `    ${reason}`,
@@ -384,6 +421,30 @@ export function formatReport(r: ReconcileResult): ReportOutput {
       '    This is a recorded decision, not a finding. There is nothing to do here,',
       '    and this command exits 0 because of it. Do not open a task to "apply the',
       '    missing migration" — it is not missing.',
+      '',
+      /*
+       * The consequence nobody writes down, and the reason a held migration can
+       * hide a production defect indefinitely.
+       *
+       * `db:test-local:reset` and the CI service container apply EVERY migration
+       * on disk. Production has only the ones somebody applied. So holding one
+       * forks the two schemas, and every test touching its tables validates a
+       * shape production does not have — in the feature most likely to be
+       * switched on later without re-testing, because it is the one that was
+       * gated.
+       *
+       * Measured on 0062_secret_ballot, 2026-09-07: CI had the five columns
+       * dropped and `selection_digest` present; prod was the exact inverse. All
+       * 173 election tests passed against a schema prod has never had, which is
+       * why an INVERTED dependency — live code needing the held migration —
+       * survived undetected until it was read by hand.
+       */
+      '    CI/PROD SCHEMA FORK. Local and CI apply every migration on disk; production',
+      '    has only what was applied to it. So tests run against a schema that INCLUDES',
+      `    this migration and production does not. Anything touching ${tables}`,
+      '    is validated against a shape prod lacks — a green suite cannot tell you what',
+      '    production will do with those tables. Re-test against prod\'s real schema',
+      '    before switching the gated feature on.',
     ];
     if (strandedTags.has(file.tag)) {
       lines.push(
