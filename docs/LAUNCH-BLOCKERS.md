@@ -155,61 +155,79 @@ secret is set or not, because the verifier returns `null` in both cases.
 
 ## 3. No MX record — `support@getpropertypro.com` bounces
 
-**Status:** DNS live; mail delivers. Portal ingestion BLOCKED on a paid plan ·
-**Owner:** you (product decision)
+**Status:** CLOSED 2026-09-07 — mail delivers AND reaches the admin Inbox ·
+**Owner:** —
 
-> **Resolved for the blocker itself:** MX and DMARC are live and verified, so
-> `support@` no longer bounces — it forwards to a real inbox. Item 4 is closed
-> with it.
+> **Measured in production 2026-09-07, not inferred:**
 >
-> **Not resolved:** mail does not reach the admin Inbox. Forward Email's free
-> plan sends webhooks unsigned (`get-settings.js` gates `webhookKey` on
-> `plan !== 'free'`), our ingress fails closed, and a 401 there fails the whole
-> SMTP delivery — the sibling forward included. See `docs/DEPLOYMENT.md` §5.5
-> for the measurement and the three options ($3/mo plan, IP allowlisting, or
-> Resend Inbound).
+> ```
+> dig getpropertypro.com MX +short   →  0 mx1.forwardemail.net.
+>                                       0 mx2.forwardemail.net.
+> apex TXT                           →  6 aliases carrying webhook URLs
+> support_inbox_messages             →  3 rows (2 inbound, 1 outbound),
+>                                       normalization_status = ok on all three,
+>                                       15:06 → 16:02 UTC
+> ```
+>
+> The outbound row matters as much as the inbound ones: it means a reply sent
+> from `/inbox` went back out through Resend, so the loop closes rather than
+> merely ingesting. Item 4 (DMARC) is closed with this one.
 
-`dig @ns1.vercel-dns.com getpropertypro.com MX` still returns SOA only. That
-address is published as the support off-ramp on `(marketing)/contact/page.tsx`
-and in the global marketing footer, so **the only human support channel on the
-site hard-bounces** until the records below exist.
+**The last thing standing was a plan tier, not code.** Forward Email's free
+plan sends webhooks **unsigned** — `helpers/get-settings.js` populates
+`webhookKey` only inside `if (domain && domain.plan !== 'free')`, and
+`helpers/on-data-mx.js` attaches `X-Webhook-Signature` only
+`if (recipient.webhookKey)`. Our ingress fails closed, so it answered 401, and
+Forward Email then failed the **entire SMTP delivery** — the sibling
+catch-all forward included. A webhook that 401s does not just miss the portal;
+it eats the message.
 
-**What is now built and waiting for them:** an ingress at
-`POST /api/v1/webhooks/inbound-email` (HMAC-verified, fails closed) and an
-**Inbox** section in the admin console at `/inbox` — threads, triage, internal
-notes, and replies sent from the mailbox the thread arrived on. Transport is
-[Forward Email](https://forwardemail.net)'s free tier (MIT-licensed, unlimited
-inbound, no mailbox to pay for); replies go out through Resend, which is
-already DKIM-verified.
+**Resolved by upgrading to Enhanced Protection** ($3/mo, unlimited domains),
+the cheapest of the three options weighed in `docs/DEPLOYMENT.md` §5.5.
+Signatures now arrive and the code works unchanged — nothing was modified to
+accommodate this.
 
-**Do this, in this order** — the full record values are in
-`docs/DEPLOYMENT.md` §5.5:
+> **Do not downgrade this domain to the free plan.** Nothing in our code would
+> change, no test would redden, and no alert would fire — inbound mail would
+> simply start failing closed again, silently, exactly as it did before. That
+> is the whole reason the source analysis above is kept rather than deleted
+> along with the blocker.
 
-1. Set `INBOUND_EMAIL_WEBHOOK_SECRET` on the web project
-   (`vercel env add … --no-sensitive`) and confirm `RESEND_API_KEY` is set on
-   the **admin** project too, then redeploy both.
-2. Add Forward Email's verification TXT, then the alias routing TXT — the
-   webhook URL **must** carry `?raw=false&attachments=false`, or a single
-   ~900 KB attachment exceeds Vercel's 4.5 MB body cap and the message vanishes
-   with no log line.
-3. Add the MX records **last**.
+**What is live:** an ingress at `POST /api/v1/webhooks/inbound-email`
+(HMAC-verified, fails closed) and an **Inbox** in the admin console at
+`/inbox` — threads, triage, internal notes, and replies sent from the mailbox
+the thread arrived on. Replies go out through Resend, which is DKIM-verified.
 
-**Verify:** `dig getpropertypro.com MX +short` returns a host, then send a real
-message from an external account and confirm the thread appears at `/inbox`.
+Two details worth preserving, because both were expensive to learn and neither
+is visible from the records themselves:
 
-**If the webhook is broken when mail arrives, nothing is lost:** it returns 5xx,
-Forward Email temp-fails the SMTP session with a 421, and the sender's own mail
-server holds the message and retries for 24-72 hours. That is why there is no
-fallback mailbox — but the window only helps if somebody notices, so point an
-uptime monitor at the readiness probe (item 5).
+- The alias routing TXT **must** carry `?raw=false&attachments=false`. A single
+  ~900 KB attachment otherwise exceeds Vercel's 4.5 MB body cap and the message
+  vanishes with no log line.
+- **If the webhook is broken when mail arrives, nothing is lost:** it returns
+  5xx, Forward Email temp-fails the SMTP session with a 421, and the sender's
+  own mail server holds and retries for 24–72 hours. That window only helps if
+  somebody notices, so it does not replace the monitor in item 5.
 
 ---
 
 ## 4. No DMARC record
 
-**Status:** open · **Owner:** you (DNS) · **Do with item 3**
+**Status:** CLOSED 2026-09-07 — record live at `p=none`; ratchet still open ·
+**Owner:** you (one DNS edit, after a week of reports)
 
-`_dmarc.getpropertypro.com` is absent at the authoritative nameserver.
+> **Verified 2026-09-07:** `dig _dmarc.getpropertypro.com TXT +short` returns a
+> `v=DMARC1; p=none; pct=100;` record with `rua=` pointed at Postmark's DMARC
+> Digests, as recommended below. The record Postmark generates also carries
+> `sp=none; aspf=r` and omits `fo=1`; that is fine at `p=none`.
+>
+> **The one thing left is not a blocker but should not be forgotten:** `p=none`
+> observes and enforces nothing. Read a week of digests, then ratchet to
+> `p=quarantine`. Doing that before reading the reports is how legitimate mail
+> starts silently going to spam.
+
+The original finding, kept for the reasoning: `_dmarc.getpropertypro.com` was
+absent at the authoritative nameserver.
 
 ```
 _dmarc  TXT  v=DMARC1; p=none; rua=mailto:<id>@dmarc.postmarkapp.com; fo=1

@@ -335,9 +335,13 @@ breaks outbound mail.
 
 ### 5.5 Inbound Mail (Forward Email)
 
-> **BLOCKER, measured in production 2026-09-06: Forward Email's free plan sends
-> webhooks UNSIGNED, and our ingress fails closed, so inbound mail does not
-> work on the free plan.**
+> **RESOLVED 2026-09-07 by upgrading to Enhanced Protection.** Kept in full,
+> because the finding is the reason the plan tier is load-bearing and a
+> downgrade would silently undo it.
+>
+> **The finding, measured in production 2026-09-06: Forward Email's free plan
+> sends webhooks UNSIGNED, and our ingress fails closed, so inbound mail does
+> not work on the free plan.**
 >
 > Their pricing page advertises "Send emails to webhooks" on the free tier, and
 > that part is true — they do POST to the endpoint. What it does not say is that
@@ -366,12 +370,21 @@ breaks outbound mail.
 > 3. **Switch to Resend Inbound** — Svix-signed on the free tier, no new vendor,
 >    but inbound counts against the same 3,000/mo quota as outbound.
 >
-> Until one is chosen, the apex carries only `forward-email=<address>`, so every
-> mailbox forwards to a normal inbox and nothing is lost.
+> **Option 1 was taken on 2026-09-07.** Signatures now arrive and the code was
+> not changed to accommodate this. Verified the same day: MX resolves to
+> `mx1`/`mx2.forwardemail.net`, the apex carries six aliases routed to the
+> webhook, and `support_inbox_messages` holds three rows — two inbound and one
+> outbound reply — all `normalization_status = ok`.
+>
+> **Do not downgrade this domain back to the free plan.** No code would change,
+> no test would redden and no alert would fire; inbound mail would just start
+> failing closed again, and the failure eats the whole SMTP delivery rather than
+> only the portal copy.
 
 
 Receiving `support@` / `privacy@` / `contact@` is what feeds the admin console's
-Inbox. Nothing here is live until these records are added, and **order matters**.
+Inbox. **These records are live as of 2026-09-07** — the sequence below is kept
+because **order matters** if they are ever rebuilt.
 
 **Add the endpoint first.** With no MX record the webhook can be deployed and
 serving 401s to the world with zero blast radius. If MX lands before the alias
