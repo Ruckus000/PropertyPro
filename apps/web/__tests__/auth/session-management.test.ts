@@ -180,6 +180,32 @@ describe('p1-22 session middleware', () => {
     expect(response.status).toBe(200);
   });
 
+  it('allows unauthenticated HEAD /api/v1/internal/* — what an uptime monitor sends', async () => {
+    // Measured in production before this passed: GET /api/v1/internal/cron-health
+    // returned 200 and HEAD returned 401, because HEAD was absent from the
+    // method list and fell through to the session gate. /api/health answered
+    // both, which is what isolated it to this rule.
+    //
+    // The cost is not cosmetic. Many monitors default to HEAD, so you either get
+    // a permanent false red or you teach the monitor to tolerate 401 — and 401
+    // is the exact signature of the 2026-08 outage this probe exists to catch.
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/internal/cron-health', {}, 'HEAD'),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it('still gates a method that is not GET, HEAD or POST', async () => {
+    // The bypass is deliberately method-scoped. Widening it to HEAD must not
+    // widen it to everything.
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/internal/expire-demos', {}, 'DELETE'),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
   it('does not extend the internal bypass to other /api/v1 paths', async () => {
     // The bypass is a prefix rule, so this is the boundary that matters: a path
     // that merely *contains* "internal" elsewhere, or any other API route, must
