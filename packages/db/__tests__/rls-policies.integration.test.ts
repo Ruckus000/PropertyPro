@@ -1604,11 +1604,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
-  describe('locked-down platform tables (0037, 0038)', () => {
-    // Four tables that held PII or integrity-critical state while reachable by
-    // anon and/or authenticated, each closed by giving it the posture eleven
-    // sibling platform tables already had: RLS enabled AND forced, zero policies
-    // (the deny-everyone default), ACL revoked, service_role retaining CRUD.
+  describe('locked-down platform tables (0037, 0038, 0053, 0069)', () => {
+    // Tables that held PII or integrity-critical state while reachable by anon
+    // and/or authenticated, each closed by giving it the posture eleven sibling
+    // platform tables already had: RLS enabled AND forced, zero policies (the
+    // deny-everyone default), ACL revoked, service_role retaining CRUD.
     //
     // Measured in production immediately before each fix:
     //   user_search_index (0037) — RLS off, anon+authenticated SELECT, over
@@ -1618,6 +1618,20 @@ describeDb('P4-55 RLS policies (integration)', () => {
     //   pending_signups (0038) — same grants; name, email, street address, zip.
     //   stripe_webhook_events (0038) — same grants; the write half mattered most,
     //     since INSERT/DELETE defeats webhook idempotency.
+    //   marketing_leads (0053) — name/email/phone from the public capture form.
+    //   cron_runs (0069) — 0067 created it reasoning only about RLS, which left
+    //     Supabase's open grant baseline in place: anon SELECT, authenticated
+    //     full CRUD. Not exploitable with zero policies, but one permissive
+    //     policy away from any logged-in resident DELETEing the monitoring
+    //     signal — and that signal is now what an uptime monitor watches.
+    //
+    // The last two were added because the revoke that closed them had nothing
+    // asserting it. A lockdown no test describes is one a later migration can
+    // undo silently, which is the same shape as the gap being closed.
+    //
+    // All six verified against production 2026-09-07 (has_table_privilege +
+    // pg_class): RLS enabled and forced, zero policies, anon and authenticated
+    // denied, service_role retaining access.
     //
     // Deny here is a HARD PERMISSION ERROR, not zero rows — the ACL rejects before
     // any policy is consulted. That is the same idiom the platform_admin_users
@@ -1628,6 +1642,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
       'users',
       'pending_signups',
       'stripe_webhook_events',
+      'marketing_leads',
+      'cron_runs',
     ] as const;
 
     it.each(LOCKED_DOWN_TABLES)('%s has RLS enabled and forced', async (tableName) => {

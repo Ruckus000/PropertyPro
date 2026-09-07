@@ -60,7 +60,14 @@ BEGIN
     -- Revoked by migration 0038, likewise a real change to prod rather than a
     -- codification: all three had RLS off, anon holding SELECT and authenticated
     -- holding SELECT/INSERT/UPDATE/DELETE. Keep this list and 0038 in sync.
-    'users', 'pending_signups', 'stripe_webhook_events'
+    'users', 'pending_signups', 'stripe_webhook_events',
+    -- Revoked by migration 0053. Its SEQUENCE needs revoking too — see the
+    -- dedicated block below, because this loop only handles tables.
+    'marketing_leads',
+    -- Revoked by migration 0069. 0067 created the table and reasoned only about
+    -- RLS, leaving the open grant baseline in place; 0069 closed it. Text
+    -- primary key, so there is no sequence to chase.
+    'cron_runs'
   ]
   LOOP
     IF EXISTS (
@@ -73,6 +80,25 @@ BEGIN
       );
     END IF;
   END LOOP;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- marketing_leads_id_seq (migration 0053) — the loop above handles TABLES only.
+--
+-- The stub's ALTER DEFAULT PRIVILEGES grants ALL ON SEQUENCES as well as tables,
+-- so re-narrowing the table alone would leave anon and authenticated holding the
+-- backing sequence: the table would look locked down while an INSERT path stayed
+-- reachable. 0053 revokes both; so must this.
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.sequences
+     WHERE sequence_schema = 'public' AND sequence_name = 'marketing_leads_id_seq'
+  ) THEN
+    REVOKE ALL ON SEQUENCE public.marketing_leads_id_seq FROM anon, authenticated;
+    GRANT USAGE, SELECT ON SEQUENCE public.marketing_leads_id_seq TO service_role;
+  END IF;
 END $$;
 
 -- ---------------------------------------------------------------------------
