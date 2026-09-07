@@ -13,6 +13,25 @@
  *
  * WHY THIS EXISTS
  *
+ * WHY THE INDEX IS NOT SIMPLY `local maxIdx + 1`
+ *
+ * It was, and that is how migration 0069 came to be claimed twice. A branch cut
+ * before `0068_support_inbox` merged had a local journal topping out at 67, so
+ * this scaffolder would have said 0068 — a number main had already taken.
+ * `.claude/rules/migration-safety.md` tells authors to consult main and the prod
+ * ledger instead, which is right for avoiding a PROD collision and is precisely
+ * what manufactures a BRANCH collision: the number it yields is a snapshot of a
+ * moving target. 0069 was free at 23:38 and taken at 00:03.
+ *
+ * So the floor is `max(local journal, origin/main journal) + 1`. That cannot
+ * hand out a number main already owns, and it is the same baseline
+ * `verify-migration-ordering.ts` checks against — a scaffolded migration is now
+ * clean by construction rather than caught after the fact.
+ *
+ * It still cannot see an unpushed sibling branch or a number applied to prod
+ * ahead of main, so it prints the reminder to check both. Prod runs AHEAD of
+ * main; that part remains a human step.
+ *
  * The journal entry's `when` used to be hand-derived by adding 60000 to the
  * previous entry. Two branches cut from the same commit therefore computed the
  * SAME value: PRs #852 and #853 both landed on when=1784511314576 (and idx 40),
@@ -42,6 +61,11 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, resolve } from 'node:path';
+
+// Shared with the guard deliberately: the scaffolder must pick its number
+// against the SAME baseline the guard later checks against, or the two can
+// disagree and a scaffolded migration fails the check that follows it.
+import { readBaselineJournal } from './verify-migration-ordering';
 
 interface JournalEntry {
   idx: number;
@@ -115,6 +139,12 @@ export function createMigration(options: {
   now?: () => number;
   /** Injectable for tests; defaults to crypto.randomUUID. */
   newId?: () => string;
+  /**
+   * Highest idx claimed on the baseline branch (`origin/main`), so the new
+   * migration cannot reuse a number main already owns. Omitted means "unknown",
+   * which falls back to the local journal alone — see the module docblock.
+   */
+  baselineMaxIdx?: number;
 }): CreateMigrationResult {
   const { migrationsDir, name } = options;
   const now = options.now ?? Date.now;
@@ -139,8 +169,11 @@ export function createMigration(options: {
     return { filesWritten: [], idx: existing.idx, tag: existing.tag, when: existing.when, skipped: true };
   }
 
-  const maxIdx = journal.entries.reduce((max, e) => Math.max(max, e.idx), -1);
-  const idx = maxIdx + 1;
+  const localMaxIdx = journal.entries.reduce((max, e) => Math.max(max, e.idx), -1);
+  // `baselineMaxIdx` is injected rather than read here so tests stay hermetic —
+  // they run against a fixture directory with no git repo behind it.
+  const baselineMaxIdx = options.baselineMaxIdx ?? -1;
+  const idx = Math.max(localMaxIdx, baselineMaxIdx) + 1;
   const tag = `${padIndex(idx)}_${name}`;
 
   const sqlPath = join(migrationsDir, `${tag}.sql`);
@@ -206,7 +239,27 @@ function main(): void {
 
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const migrationsDir = resolve(repoRoot, 'packages/db/migrations');
-  const result = createMigration({ migrationsDir, name: args[0]! });
+
+  /*
+   * Warn and proceed rather than fail: scaffolding has to work on a plane, and
+   * `verify-migration-ordering.ts` is the thing that BLOCKS on an unreadable
+   * baseline (MIGRATION_BASELINE_REQUIRED=1 in localci's gate). Here the
+   * baseline only raises the floor, so its absence degrades to the old
+   * behaviour — with the reader told, rather than silently.
+   */
+  const baseline = readBaselineJournal();
+  if (baseline === null) {
+    console.warn(
+      '⚠️  Could not read origin/main\'s journal, so the new index is based on this\n'
+        + '   branch alone. That is how 0069 was claimed twice — run `git fetch origin main`\n'
+        + '   and re-check with `pnpm exec tsx scripts/verify-migration-ordering.ts`.',
+    );
+  }
+  const baselineMaxIdx = baseline
+    ? baseline.entries.reduce((max, e) => Math.max(max, e.idx), -1)
+    : undefined;
+
+  const result = createMigration({ migrationsDir, name: args[0]!, baselineMaxIdx });
 
   if (result.skipped) {
     console.log(`✅ ${result.tag} already exists in the journal — nothing to do.`);
@@ -218,6 +271,14 @@ function main(): void {
     console.log(`   ${relative(repoRoot, path)}`);
   }
   console.log(`\n   when = ${result.when} (${new Date(result.when).toISOString()})`);
+  if (baselineMaxIdx !== undefined) {
+    console.log(`   idx  = ${result.idx} (highest on ${baseline!.ref} is ${baselineMaxIdx})`);
+  }
+  console.log(
+    '\n⚠️  PROD RUNS AHEAD OF main. This index clears main and this branch, but not a\n'
+      + '   number already applied to production or claimed by an unpushed branch.\n'
+      + '   Check: select max(created_at) from drizzle.__drizzle_migrations;',
+  );
   console.log('\nNext: write the SQL, then `pnpm exec tsx scripts/verify-migration-ordering.ts`.');
   console.log('Migrations are applied to production MANUALLY — see .claude/rules/migration-safety.md.');
 }

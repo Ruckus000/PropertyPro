@@ -188,7 +188,7 @@ export function checkBaselineCollisions(
  * the build on its own, because "cannot see main" is an environment problem,
  * not a migration problem.
  */
-function readBaselineJournal(): { entries: JournalEntry[]; ref: string } | null {
+export function readBaselineJournal(): { entries: JournalEntry[]; ref: string } | null {
   const ref = process.env.MIGRATION_BASELINE_REF ?? 'origin/main';
   const result = spawnSync(
     'git',
@@ -564,12 +564,31 @@ function main(): void {
   console.log('Checking for collisions with the baseline branch...');
   const baseline = readBaselineJournal();
   if (baseline === null) {
+    /*
+     * This is the ONLY check that can see a cross-branch collision, so when it
+     * cannot run the script is not "clean" — it is uninformed. Two different
+     * answers are appropriate depending on who is asking:
+     *
+     *   - CI on a shallow clone genuinely cannot fetch the base branch, and
+     *     failing there would be noise about the environment, not the tree.
+     *   - The pre-push gate CAN see `origin/main`, and a silent no-op there is
+     *     exactly how migration 0069 got claimed twice. `.claude/rules/
+     *     verification.md`: "I could not check, so I refuse to pass."
+     *
+     * So the default stays a warning and `MIGRATION_BASELINE_REQUIRED=1`
+     * promotes it, which is what localci's gate sets.
+     */
+    const required = process.env.MIGRATION_BASELINE_REQUIRED === '1';
     allProblems.push({
-      severity: 'warning',
-      message: 'Skipped baseline-collision check: could not read '
+      severity: required ? 'error' : 'warning',
+      message: `${required ? 'Could not run' : 'Skipped'} the baseline-collision check: could not read `
         + `${process.env.MIGRATION_BASELINE_REF ?? 'origin/main'}:packages/db/migrations/meta/_journal.json. `
         + 'A shallow clone (actions/checkout defaults to fetch-depth 1) is the usual cause — '
-        + 'this check needs the base branch fetched.',
+        + 'this check needs the base branch fetched.'
+        + (required
+          ? ' MIGRATION_BASELINE_REQUIRED=1 is set, so this is an error rather than a warning:'
+            + ' run `git fetch origin main` and retry.'
+          : ''),
     });
   } else {
     allProblems.push(...checkBaselineCollisions(journal.entries, baseline.entries));

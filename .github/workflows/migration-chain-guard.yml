@@ -5,8 +5,11 @@ name: Migration Chain Guard
 # ── Why this exists, when localci already runs the same script ──
 #
 # `localci.yml` runs `verify-migration-ordering.ts` in the pre-push GATE, against
-# the branch — where the chain is still valid. The rot this guards against is
-# created BY THE MERGE, not by the branch, so the gate cannot see it:
+# the branch — where the chain is still valid. (That was aspirational when this
+# comment was written: the step actually sat in `suite`, post-push, until index
+# 0069 was claimed twice and it was moved. The claim is now true.) The rot this
+# guards against is created BY THE MERGE, not by the branch, so the gate cannot
+# see it:
 #
 #   0033 (PRs #815/#816) and 0066 (#1034 vs #1037) both rotted the same way —
 #   two migrations developed in parallel, the second GENERATED off a baseline

@@ -1,6 +1,14 @@
 # ADR-005: Required status checks for `main`
 
-- **Status:** Accepted — applied 2026-06-06
+- **Status:** Accepted — applied 2026-06-06. **Superseded in practice 2026-08 by
+  #976**, which disabled `.github/workflows/ci.yml` and moved CI to localci when
+  GitHub Actions minutes ran out. The decision below — "a guard only prevents
+  regressions if its job is a required status check" — still stands; what changed
+  is where the jobs live. `main`'s required contexts today are a single
+  `localci/suite`, so the eight named below are no longer GitHub contexts and
+  cannot be required individually. `migration-ordering` in particular now runs in
+  localci's blocking pre-push `gate`. Recorded rather than rewritten, per ADR
+  convention.
 - **Date:** 2026-06-05 (applied 2026-06-06)
 - **Context tags:** CI, branch protection, Plan B4
 
