@@ -144,4 +144,61 @@ describeDb('cron heartbeat (db-backed integration)', () => {
     expect(rows[0]?.lastSucceededAt).toBeNull();
     expect(rows[0]?.consecutiveFailures).toBe(1);
   });
+
+  /*
+   * The upsert's two conflict-update claims, which decide whether the probe
+   * says `overdue` or `never_succeeded`.
+   *
+   * Both are raw `sql` self-references inside ON CONFLICT DO UPDATE, and both
+   * fail SILENTLY if written wrong: a plain assignment instead of the
+   * self-reference, or a literal 1 instead of `existing + 1`, produces
+   * identical green results under a mocked driver. Nothing tested either at any
+   * level — the file's own header argues exactly this point about
+   * `onConflictDoNothing` and then covered only that one statement.
+   *
+   * The consequence of the first being wrong is not abstract: erasing
+   * `last_succeeded_at` on a failure drops the job into `never_succeeded`,
+   * which is the state a whole PR was written to stop the probe over-reporting.
+   */
+  it('a FAILED run must not erase the last known success', async () => {
+    const slug = CRON_JOB_SLUGS[0]!;
+    await recordCronRun(slug, { status: 'ok', startedAt: new Date(), durationMs: 5 });
+    const succeededAt = (await listCronRuns()).find((r) => r.jobSlug === slug)!.lastSucceededAt;
+    expect(succeededAt).toBeInstanceOf(Date);
+
+    await recordCronRun(slug, {
+      status: 'error',
+      startedAt: new Date(),
+      durationMs: 9,
+      error: 'transient',
+    });
+
+    const after = (await listCronRuns()).find((r) => r.jobSlug === slug)!;
+    expect(after.lastSucceededAt?.getTime()).toBe(succeededAt!.getTime());
+    expect(after.lastStatus).toBe('error');
+    // And the start DID move, which is what makes the freshness window advance.
+    expect(after.lastStartedAt).toBeInstanceOf(Date);
+  });
+
+  it('counts consecutive failures, and resets the count on a success', async () => {
+    // The INSERT path writes a literal 1, so only a SECOND failure can tell an
+    // increment from a hard-coded value.
+    const slug = CRON_JOB_SLUGS[0]!;
+    const fail = () =>
+      recordCronRun(slug, { status: 'error', startedAt: new Date(), durationMs: 1, error: 'x' });
+
+    await fail();
+    expect((await listCronRuns()).find((r) => r.jobSlug === slug)?.consecutiveFailures).toBe(1);
+
+    await fail();
+    expect((await listCronRuns()).find((r) => r.jobSlug === slug)?.consecutiveFailures).toBe(2);
+
+    await fail();
+    expect((await listCronRuns()).find((r) => r.jobSlug === slug)?.consecutiveFailures).toBe(3);
+
+    await recordCronRun(slug, { status: 'ok', startedAt: new Date(), durationMs: 2 });
+    const after = (await listCronRuns()).find((r) => r.jobSlug === slug)!;
+    expect(after.consecutiveFailures).toBe(0);
+    expect(after.lastError).toBeNull();
+  });
 });

@@ -141,36 +141,64 @@ Four things about configuring it, each of which has a wrong default:
 
 The body's `stale_jobs` names them, and each entry carries a `reason`:
 
-| reason | meaning | first thing to check |
-|---|---|---|
-| `never_registered` | no row at all | the heartbeat itself is not writing — see below |
-| `never_run` | known, but has not run once inside its own window | is it still in `vercel.json`? did the deploy succeed? |
-| `never_succeeded` | it runs and fails every time | Sentry, filtered to that `job` tag |
-| `overdue` | it succeeded once but not recently | Sentry first; then whether Vercel is still firing it |
+| reason | stale? | meaning | first thing to check |
+|---|---|---|---|
+| `never_registered` | yes | no row at all | **`CRON_SECRET`** — see below. Then whether `cron_runs` exists |
+| `never_run` | yes | registered, never fired, and its own window has passed | is it still in `vercel.json`? did the deploy succeed? |
+| `never_succeeded` | yes | it has fired, has never succeeded, and its window has passed | Sentry, filtered to that `job` tag |
+| `overdue` | yes | it succeeded once but not recently | Sentry first; then whether Vercel is still firing it |
+| `awaiting_first_run` | no | registered, never fired, still inside its window | nothing yet |
+| `awaiting_first_success` | no | it fired, it failed, still inside its window | Sentry now — do not wait for the 503 |
 
-`never_run` across **all** jobs at once means the platform is not invoking any
-cron — check `CRON_SECRET` before anything else. That is the 2026-08 shape, and
-it presents as a totally healthy dashboard.
+### `never_registered` across all seventeen is the `CRON_SECRET` shape
 
-`never_registered` is a different and worse signal. `withCronJob` writes a row
-for every job in the registry on a cold start, so after one tick of ANY job
-there should be seventeen rows. A missing one means the heartbeat's own write is
-failing — check that `cron_runs` exists and that migration 0070 was applied
-before suspecting the named job.
+This is the correction that matters most, because the earlier version of this
+table sent you to the wrong place.
 
-### `awaiting_first_run` — a 200 with a null timestamp
+`withCronJob` skips registration for a 401 — deliberately, so an anonymous
+`curl` cannot start every job's grace clock. The consequence is that when the
+platform is invoking the crons but the **secret is wrong**, no row is ever
+written, and on a fresh table the probe reports `never_registered` for all
+seventeen. That is the 2026-08 outage shape, and it presents as a totally
+healthy Vercel dashboard.
 
-A job that has been registered but has not yet run is reported with
-`reason: "awaiting_first_run"`, is listed under the top-level
-`awaiting_first_run` key, and is **not** counted as stale. It becomes
-`never_run` once its own `maxAgeMinutes` has elapsed since `first_observed_at`.
+**So check `CRON_SECRET` first.** Only if the secret is right should you suspect
+the heartbeat's own write — that `cron_runs` exists and that migration 0070 was
+applied.
 
-This is not a way to silence the probe; the window is the same tolerance the job
-would get anyway, measured from the first moment we could have seen it. It
-exists because the endpoint used to report 503 for a monthly job whose last real
-run predated the `cron_runs` table — sixteen of seventeen jobs green, endpoint
-red, and no fault anywhere. Expect to see this legitimately for about a month
-after any newly added infrequent job.
+`never_run` across **all** jobs is close to unreachable and is not the signal to
+look for here: rows exist only once some authenticated tick has registered them,
+and that tick's own job then has a `last_started_at`, so it reports
+`never_succeeded` or `overdue` rather than `never_run`. Sixteen of seventeen is
+the most you will see.
+
+### The two `awaiting_*` states — a 200 with a null timestamp
+
+A job with no success yet is judged against its own `maxAgeMinutes`, measured
+from `first_observed_at`. Inside that window it is **not** stale and appears in
+one of two top-level keys:
+
+- **`awaiting_first_run`** — registered, never fired. Becomes `never_run` when
+  the window passes. Expect this legitimately for about a month after adding an
+  infrequent job.
+- **`awaiting_first_success`** — it fired and failed, and the window has not run
+  out. Becomes `never_succeeded` when it does. **Open Sentry for this one now**:
+  the probe is not going to escalate it for up to 32 days, and it is not meant
+  to — Sentry already captured the failure with a `job` tag the moment it
+  happened.
+
+That division of labour is the point. This probe answers *is it alive*; Sentry
+answers *did it fail*. A failed run used to make the probe stale immediately,
+with no window at all — so one transient 500 on a monthly job's first ever run
+pinned this endpoint at 503 for 31 days, which is the same harm an anonymous
+caller could inflict before #1073 closed that path. Conflating the two questions
+bought a failure signal that was already covered and made the liveness answer
+wrong.
+
+The window is not a way to silence the probe: it is the same tolerance the job
+would get anyway, measured from the first moment we could have seen it. A
+five-minute job that fails every tick exhausts its twenty-minute window in four
+ticks and goes stale normally.
 
 ### A non-200 that is NOT 503
 

@@ -239,6 +239,43 @@ describe('collectFailureSignals', () => {
     expect(collectFailureSignals({ errors: ['a', 'b'] })).toEqual([{ key: 'errors', count: 2 }]);
   });
 
+  /**
+   * Shape and key are independent, and pinning them together is what made five
+   * jobs fail silently.
+   *
+   * `errors` was on an array-only list, so a service reporting it as a COUNT
+   * matched the key, failed `Array.isArray`, and hit a `continue` that skipped
+   * the numeric check entirely. Five routes declare exactly that —
+   * `assessment-overdue`, `compliance-alerts`, `generate-assessments`,
+   * `late-fee-processor`, `payment-reminders`, all money or statutory paths —
+   * and every one returned 200 with a green heartbeat while reporting failures
+   * nobody could see. Every fixture in the suite used `errors: []` or
+   * `errors: 0`, so nothing caught it.
+   *
+   * Both directions are pinned: a count under a historically-array key, and a
+   * list under a historically-numeric one.
+   */
+  it('reads a NUMERIC value under a key that used to be array-only', () => {
+    expect(collectFailureSignals({ processed: 10, errors: 4 })).toEqual([
+      { key: 'errors', count: 4 },
+    ]);
+  });
+
+  it('reads an ARRAY value under a key that used to be numeric-only', () => {
+    expect(collectFailureSignals({ failed: ['a', 'b', 'c'] })).toEqual([
+      { key: 'failed', count: 3 },
+    ]);
+  });
+
+  it('still ignores a zero count and an empty list, whichever key carries them', () => {
+    // The quiet direction has to stay quiet, or the fix trades silence for noise.
+    expect(collectFailureSignals({ errors: 0, failed: [], rowsFailed: 0 })).toEqual([]);
+  });
+
+  it('ignores a non-numeric, non-array value rather than guessing', () => {
+    expect(collectFailureSignals({ errors: 'boom', failed: null })).toEqual([]);
+  });
+
   it('finds counters nested inside the response envelope', () => {
     // Real shape: `{ data: { summary: { errors: [...] } } }`.
     expect(collectFailureSignals({ data: { summary: { rowsFailed: 4 } } })).toEqual([

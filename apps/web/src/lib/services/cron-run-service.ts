@@ -61,8 +61,19 @@ export async function recordCronRun(jobSlug: string, outcome: CronRunOutcome): P
       target: cronRuns.jobSlug,
       set: {
         lastStartedAt: outcome.startedAt,
-        // COALESCE, not a plain assignment: a failed run must not erase the
-        // last known good timestamp, or a single blip would read as "never ran".
+        /*
+         * A SELF-REFERENCE, not a plain assignment and not `excluded.` — inside
+         * ON CONFLICT DO UPDATE, the table-qualified name is the row as it was
+         * BEFORE this statement, so this preserves it. (It is not a COALESCE,
+         * which is what this comment used to claim; the distinction matters to
+         * anyone auditing the conflict semantics, because `excluded.` here would
+         * write the incoming NULL and erase the timestamp.)
+         *
+         * Load-bearing: erasing the last success on a failure drops the job into
+         * `never_succeeded`, and a single blip would read as a dead job. Covered
+         * by a db-backed test, because a plain assignment renders identically
+         * under a mocked driver.
+         */
         lastSucceededAt: ok ? now : sql`${cronRuns.lastSucceededAt}`,
         lastStatus: outcome.status,
         lastDurationMs: outcome.durationMs,

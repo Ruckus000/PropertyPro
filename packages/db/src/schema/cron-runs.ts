@@ -2,7 +2,10 @@
  * cron_runs — one row per scheduled job, recording when it last ran.
  *
  * Platform-wide (not tenant-scoped), like `revenue_snapshots`. Written by
- * `withCronJob` on every tick; read by `/api/v1/internal/cron-health`.
+ * `withCronJob` on every AUTHENTICATED tick; read by
+ * `/api/v1/internal/cron-health`. A tick that 401s writes nothing at all —
+ * that was an unauthenticated write to a monitoring signal, and one `curl`
+ * could pin the probe red for a month.
  *
  * ## Why this table exists
  *
@@ -18,15 +21,20 @@
  *
  * ## Shape
  *
- * `job_slug` is the primary key: one row per job, upserted, bounded at
- * seventeen rows forever. No history, deliberately — this answers "is the job
+ * `job_slug` is the primary key: one row per job, upserted, bounded at one row
+ * per slug ever registered — seventeen today. Nothing prunes a slug removed
+ * from the registry, and the service takes a plain `string`, so "matches
+ * CronJobSlug" below is a convention rather than a constraint. No history, deliberately — this answers "is the job
  * alive?", not "what did it do", and an unbounded run log would need retention
  * policy for a question nothing asks.
  *
  * A row means "the heartbeat knows about this job", NOT "this job has run".
- * `withCronJob` registers every slug in the registry on a cold start, so a
- * newly deployed job gets a row — and therefore a grace window — before its
- * first tick, rather than reading as dead until it happens to run.
+ * `withCronJob` registers every slug in the registry on the first AUTHENTICATED
+ * tick of a process, so a newly deployed job gets a row — and therefore a grace
+ * window — before its own first tick, rather than reading as dead until it
+ * happens to run. If every tick 401s, nothing registers and the probe reports
+ * `never_registered` for all seventeen; see docs/runbooks/cron-alerting.md,
+ * which is the `CRON_SECRET` shape rather than a broken heartbeat.
  */
 import { integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 

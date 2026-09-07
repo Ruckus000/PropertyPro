@@ -52,8 +52,14 @@ interface JobHealth {
   minutes_since: number | null;
   max_age_minutes: number;
   stale: boolean;
-  /** Why it is stale — or, for `awaiting_first_run`, why it is not. */
-  reason?: 'never_registered' | 'never_run' | 'never_succeeded' | 'overdue' | 'awaiting_first_run';
+  /** Why it is stale — or, for the two `awaiting_*` values, why it is not. */
+  reason?:
+    | 'never_registered'
+    | 'never_run'
+    | 'never_succeeded'
+    | 'overdue'
+    | 'awaiting_first_run'
+    | 'awaiting_first_success';
   /** Only on a job that has not run yet: how long we have been watching it. */
   observed_for_minutes?: number;
 }
@@ -68,11 +74,16 @@ export async function GET() {
     const base = { job: slug, max_age_minutes: definition.maxAgeMinutes };
     const run = byslug.get(slug);
 
-    // No row at all. `withCronJob` registers every registry slug on a cold
-    // start, so after a single tick of ANY job this state means the heartbeat
-    // itself is not writing — a strictly worse problem than a late job, and
-    // never something to report as healthy. Treating an absent row as fine is
-    // precisely how the 2026-08 outage stayed invisible for months.
+    /*
+     * No row at all — never healthy, whatever the cause.
+     *
+     * `withCronJob` registers every registry slug on the first AUTHENTICATED
+     * tick of a process. So the likeliest reading of this state is NOT a broken
+     * heartbeat: it is that every tick is 401ing and registration is being
+     * skipped on purpose, which is the 2026-08 outage shape exactly. Seventeen
+     * of these at once means check `CRON_SECRET` before suspecting the table.
+     * (The runbook said the opposite until this was corrected.)
+     */
     if (!run) {
       return {
         ...base,
@@ -103,48 +114,54 @@ export async function GET() {
     }
 
     /*
-     * It RAN and has never succeeded. No grace, deliberately and unchanged: a
-     * job that starts and dies is not alive in any sense the probe should
-     * accept, and unlike the branch below there is no ambiguity to resolve —
-     * we have watched it try and fail.
-     */
-    if (run.lastStartedAt) {
-      return {
-        ...base,
-        last_succeeded_at: null,
-        minutes_since: null,
-        stale: true,
-        reason: 'never_succeeded',
-      };
-    }
-
-    /*
-     * Registered, but never started — so we cannot yet tell "dead" from "not
-     * due yet", and the honest answer depends on how long we have been able to
-     * see it. The window is the job's OWN `maxAgeMinutes`, measured from
-     * `first_observed_at`: exactly the tolerance every other job gets, applied
-     * from the only defensible starting point.
+     * No success yet — whether or not it has tried. Both cases ask the SAME
+     * question, so both get the same window: has enough time passed that this
+     * job should have succeeded by now? With no success to measure from, the
+     * only defensible origin is `first_observed_at`, the moment the heartbeat
+     * could first have seen it.
      *
-     * This branch exists because the probe got that wrong and reported 503 for
-     * a healthy platform. `cron_runs` shipped 2026-09-06; `generate-assessments`
-     * runs `0 5 1 * *`, so its last real run predated the table and its next was
-     * 24 days out. Sixteen of seventeen jobs green, endpoint red — and a probe
-     * that is red by construction is one nobody reads when it goes red for a
-     * reason. It also recurs for every job added later, which is why this is a
-     * stored fact and not a one-off constant.
+     * The started-but-never-succeeded case used to short-circuit to
+     * `stale: true` with no window at all, defended as "we have watched it try
+     * and fail". That is true of a job failing every tick and false of one that
+     * failed once — and nothing counts ticks. So a single transient 500 on a
+     * monthly job's FIRST EVER run pinned this endpoint at 503 until its next
+     * scheduled run, up to 31 days later. That is the exact harm #1073
+     * describes an anonymous caller inflicting; #1073 closed the anonymous path
+     * and left this one, which needs no attacker.
+     *
+     * A slower failure signal is correct here rather than a regression. This
+     * probe answers "is it alive". Sentry answers "did it fail" — immediately,
+     * with a `job` tag, which is what #1047 exists for. Conflating the two is
+     * what produced the no-grace rule, and it made the alive/dead answer wrong
+     * to buy a failure answer that was already covered.
+     *
+     * Deliberately NOT thresholded on `consecutive_failures`: the window
+     * already catches a frequently-failing job quickly (a five-minute job
+     * exhausts its twenty-minute window in four ticks), and a threshold would
+     * pin the probe red during a hand-replay, which is precisely when an
+     * operator is working the problem.
      */
     const observedForMinutes = (now - new Date(run.firstObservedAt).getTime()) / 60_000;
     const stale = observedForMinutes > definition.maxAgeMinutes;
+    const hasTried = run.lastStartedAt !== null;
     return {
       ...base,
       last_succeeded_at: null,
       minutes_since: null,
       observed_for_minutes: Math.round(observedForMinutes),
       stale,
-      // `never_run` once its window has passed and the grace has run out; the
-      // distinct `awaiting_first_run` before that, so a 200 carrying a null
-      // timestamp explains itself rather than looking like a bug in the probe.
-      reason: stale ? ('never_run' as const) : ('awaiting_first_run' as const),
+      /*
+       * Four labels over two facts — has it tried, and has its window passed —
+       * so a 200 carrying a null timestamp explains itself rather than looking
+       * like a bug in the probe, and a 503 says which kind of dead it is.
+       */
+      reason: stale
+        ? hasTried
+          ? ('never_succeeded' as const)
+          : ('never_run' as const)
+        : hasTried
+          ? ('awaiting_first_success' as const)
+          : ('awaiting_first_run' as const),
     };
   });
 
@@ -157,9 +174,18 @@ export async function GET() {
       // Named up front so the monitor's alert text is directly actionable
       // rather than requiring someone to diff the full list.
       stale_jobs: staleJobs.map((j) => j.job),
-      // Not stale, but not proven either. Surfaced so a green result with a
-      // null timestamp in it is self-explaining.
+      /*
+       * Not stale, but not proven either. Surfaced so a green result carrying a
+       * null timestamp is self-explaining. Two arrays rather than one because
+       * the states differ in a way an operator acts on: `awaiting_first_run`
+       * has never fired, `awaiting_first_success` fired and failed and its
+       * window has not yet elapsed — the second is worth looking at in Sentry
+       * now, the first is not.
+       */
       awaiting_first_run: jobs.filter((j) => j.reason === 'awaiting_first_run').map((j) => j.job),
+      awaiting_first_success: jobs
+        .filter((j) => j.reason === 'awaiting_first_success')
+        .map((j) => j.job),
       jobs,
     },
     { status: staleJobs.length === 0 ? 200 : 503 },
