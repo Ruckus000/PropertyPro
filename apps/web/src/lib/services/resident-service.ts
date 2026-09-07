@@ -79,7 +79,7 @@ export async function listResidentsForCommunity(
   const scoped = createScopedClient(communityId);
 
   let roleRows: Array<Record<string, unknown>>;
-  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+  // role-v3: expandTransitionRoleFilter is an identity map over the three v3 roles — it expands nothing.
   if (filter.roles && filter.roles.length > 0) {
     const expanded = [...new Set(filter.roles.flatMap((r) => expandTransitionRoleFilter(r)))];
     if (expanded.length === 0) {
@@ -90,7 +90,7 @@ export async function listResidentsForCommunity(
       {},
       inArray(userRoles.role, expanded),
     ) as Array<Record<string, unknown>>;
-  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+  // role-v3: expandTransitionRoleFilter is an identity map over the three v3 roles — it expands nothing.
   } else if (filter.role) {
     const expanded = [...expandTransitionRoleFilter(filter.role)];
     if (expanded.length === 0) {

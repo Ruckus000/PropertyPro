@@ -26,14 +26,14 @@ export async function notifyDowngrade(input: {
 
   const communityIds = groupCommunities.map((c) => c.id);
 
-  // Find all manager/pm_admin users in the remaining communities
+  // Find every management-tier user in the remaining communities
   const adminRows = await db
     .selectDistinct({ userId: userRoles.userId, communityId: userRoles.communityId })
     .from(userRoles)
     .where(
       and(
         inArray(userRoles.communityId, communityIds),
-        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        // role-v3: this role set is v3-only — ['property_manager','root_manager'].
         inArray(userRoles.role, [...ADMIN_TIER_DB_ROLES]),
       ),
     );

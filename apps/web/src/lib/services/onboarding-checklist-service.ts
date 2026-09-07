@@ -90,8 +90,9 @@ export function getItemKeysForRole(
   if (hasBoardDesignation(designation)) {
     return BOARD_MEMBER_ITEMS;
   }
-  // PM-scope roles (pm_admin / property_manager / root_manager) get the admin
-  // base set plus customize_portal — parity with the pre-3.3 PM_SCOPE branch.
+  // PM-scope roles (property_manager / root_manager — the whole of
+  // PM_SCOPE_DB_ROLES) get the admin base set plus customize_portal, parity with
+  // the pre-3.3 PM_SCOPE branch. Any other value falls through to owner/tenant.
   if ((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)) {
     return [...adminBase, ...PM_ADMIN_ITEMS];
   }

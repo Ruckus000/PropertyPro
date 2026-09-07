@@ -45,11 +45,11 @@ const MS_PER_DAY = 86_400_000;
 const CONDO_HOA_TYPES = new Set(['condo_718', 'hoa_720']);
 
 /** Roles that receive billing alerts for condo/HOA communities. */
-// BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+// role-v3: this role set is v3-only — ['property_manager','root_manager'].
 const CONDO_HOA_ADMIN_ROLES: readonly CommunityRole[] = MANAGER_TIER_DB_ROLES;
 
 /** Roles that receive billing alerts for apartment communities. */
-// BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+// role-v3: this role set is v3-only — ['property_manager','root_manager'].
 const APARTMENT_ADMIN_ROLES: readonly CommunityRole[] = ADMIN_TIER_DB_ROLES;
 
 function daysDiff(from: Date, to: Date): number {

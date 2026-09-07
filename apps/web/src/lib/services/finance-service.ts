@@ -1356,7 +1356,13 @@ export interface CommunityStatement {
 }
 
 /**
- * Builds a community-wide statement for staff roles (pm_admin, cam, board, etc.).
+ * Builds a community-wide statement for the management tier — property_manager
+ * / root_manager, admitted by `requirePermission(membership, 'finances', 'read')`
+ * on the `manager` matrix row.
+ *
+ * NOT board members: `resolveMatrixRole` never reads `designation`, so a
+ * board-designated user is still `resident` and is routed to
+ * `buildUnitStatement` (owner) or refused (tenant).
  *
  * Aggregates ledger entries and payable line items across every unit in the
  * community within the given date window. Each line item includes both

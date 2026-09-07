@@ -6,7 +6,7 @@
  * drag-and-drop). The move is written to the draft layer (spec §2.7); the
  * public site keeps serving the last-published order until the PM publishes.
  *
- * Authorization: caller must hold pm_admin or cam in the community AND the
+ * Authorization: caller must hold a management role (property_manager / root_manager) in the community AND the
  * community's plan must include hasSiteEditor — the same gate the sibling
  * blocks/hero/publish routes use. Reorder is a core editor action, so there is
  * no additional polish-block (Pro+) gate.

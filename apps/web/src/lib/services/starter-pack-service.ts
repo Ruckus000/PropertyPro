@@ -10,9 +10,11 @@
  * Idempotent: if the community already has any published site_blocks,
  * skip the apply.
  *
- * AUTHZ: caller MUST have just created the community (or verified
- * pm_admin membership). Reads platform-level catalog via unscoped client,
- * inserts via scoped client.
+ * AUTHZ: caller MUST have just created the community. That is the only path
+ * today — `createCommunityForPm` calls this immediately after inserting the
+ * creator as the community's root_manager, so there is no prior membership to
+ * verify. Reads platform-level catalog via unscoped client, inserts via
+ * scoped client.
  */
 import { createScopedClient, siteBlocks, siteStarterPacks } from '@propertypro/db';
 // AUTHZ: PR #5 starter pack lookup — siteStarterPacks is platform-level catalog; caller verifies community creation.

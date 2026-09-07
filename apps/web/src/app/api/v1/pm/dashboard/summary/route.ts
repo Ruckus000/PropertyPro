@@ -4,19 +4,22 @@
  * Cross-community portfolio dashboard for property managers. Aggregates
  * KPIs (units, occupancy, maintenance, compliance, delinquency, expiring
  * leases) plus per-community summary rows across ALL communities where the
- * caller is a PM admin. Only callable by users who are pm_admin in at
- * least one community.
+ * caller holds a management role. Only callable by users holding
+ * property_manager or root_manager in at least one non-deleted community.
  *
  * Plan A1 drain #12 — combines drain #6's PM-only session-anchored auth
  * pattern (`isPmAdminInAnyCommunity`) with drain #2's rich query schema
  * (filter / sort / pagination). Cross-community aggregation route — no
  * tenant context, no audit log.
  *
- * Auth chain preserved verbatim:
- *   requireAuthenticatedUserId
- *     → isPmAdminInAnyCommunity(userId)
+ * Auth chain — the first three steps now live inside
+ * `requirePmPortfolioAccess`, which this handler calls, so they no longer
+ * appear in this file:
+ *   requirePmPortfolioAccess
+ *     → requireAuthenticatedUserId
+ *     → isPmAdminInAnyCommunity(userId)   (inArray over PM_SCOPE_DB_ROLES)
  *     → throw ForbiddenError if !isPm
- *     → getPortfolioDashboard(userId, query)
+ *   → getPortfolioDashboard(userId, query)
  *
  * The literal ForbiddenError message
  * (`'This endpoint is only available to property managers'`) is preserved

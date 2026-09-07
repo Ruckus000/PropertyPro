@@ -24,7 +24,7 @@ import {
 
 export interface WelcomeScreenProps {
   firstName: string;
-  /** The v3 DB role (e.g. 'resident', 'manager', 'property_manager', 'root_manager', 'pm_admin'). */
+  /** The v3 DB role — a `CommunityRole`, so only 'resident', 'property_manager' or 'root_manager'. */
   role: string;
   /** Nullable board designation — the source of truth for the board distinction. */
   designation: BoardDesignation | null;
@@ -49,6 +49,8 @@ export interface WelcomeScreenProps {
  * True for any manager-tier or PM-scope v3 role. The legacy cam/site_manager
  * distinction required a presetKey; role-v3 (Phase 3.3) collapses both into the
  * single "Property Manager" label — onboarding-only, no permission change.
+ *
+ * legacy-roles:exempt — describes the retired distinction, not current behaviour.
  */
 function isManagerTier(role: string): boolean {
   return (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);

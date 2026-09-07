@@ -1,6 +1,8 @@
 /**
  * RBAC Parity Tests (role-v3 collapse, R3-01)
  *
+ * legacy-roles:exempt — asserts the collapse that retired these names.
+ *
  * The RBAC_MATRIX collapse dropped the 4 unreachable legacy role columns
  * (`board_member` / `board_president` / `cam` / `site_manager`), leaving the 3
  * rows the v3 choke point `checkPermissionV2` can ever read: `owner` /

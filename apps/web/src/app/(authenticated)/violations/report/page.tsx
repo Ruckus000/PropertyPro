@@ -8,7 +8,7 @@
  * UX by role:
  *  - Resident w/ unit association → self-report form auto-scoped to their unit(s)
  *  - Resident w/o unit association → guard state, no form
- *  - Staff (manager / pm_admin) → file-on-behalf form with scoped unit picker
+ *  - Staff (property_manager / root_manager) → file-on-behalf form with scoped unit picker
  */
 import Link from 'next/link';
 import { redirect } from 'next/navigation';

@@ -632,40 +632,73 @@ The most expensive item in this section, because it is what agents and new reade
 | `IMPLEMENTATION_PLAN.md` (164 KB, repo root) | "PR #33 … ready to merge to `main`" | The repo is past #1072. Historical; so are the four `PHASE*_EXECUTION_PLAN.md` files beside it |
 | `docs/gtm/03-LAUNCH-READINESS.md` | B1–B4 blockers | Already called stale above |
 
-**The same defect ran much wider than the rule file, and `guard:legacy-roles` cannot see
-any of it.** The guard matches *quoted* literals (`'cam'`, `'site_manager'`,
-`'property_manager_admin'`) in `.ts`/`.tsx`; every instance below is unquoted prose inside
-a comment, so it sits at zero cost forever.
+**The same defect ran far wider than the rule file, and `guard:legacy-roles` could not
+see any of it.** The guard matched *quoted* literals (`'cam'`, `'site_manager'`,
+`'property_manager_admin'`) in `.ts`/`.tsx`; every instance was unquoted prose inside a
+comment, so it sat at zero cost while ADR-006 recorded role-v3 as "fully landed".
 
-**Swept 2026-09-07 — 18 sites, each verified against the gate it describes**, not
-search-and-replaced: `schema/rls-config.ts` ×5 (three named `requireAdminRole`, **a
-function that does not exist anywhere in the repo**; the real gates are
-`requirePermission(contracts|documents|residents, write)` — and note the invitations
-table's RBAC resource is `residents`, not `invitations`), `schema/communities.ts`, five
-`(authenticated)` page docblocks, five PM route/contract docblocks, and
-`queries/pm-portfolio.ts` (whose comment still announced a "BILINGUAL … collapse to
-v3-only at Phase 4 cleanup" that has already happened — `PM_SCOPE_DB_ROLES` is v3-only).
+**CLOSED 2026-09-07 — 56 source files swept and the guard widened so there is no fifth
+pass.** Every site was traced to the gate it describes before being rewritten, which is
+what turned up the mechanism errors below; none of it was search-and-replace.
 
-**Still open: ~27 more lines across 25 files**, all of the same shape — a docblock
-asserting *current* authorization in retired names (`pm_admin or cam`,
-`property_manager_admin`), concentrated in `api/v1/pm/site/*`, `lib/api/branding.ts`,
-`lib/api/community-context.ts` and six `lib/services/*`:
+| Class | Count | Notes |
+|---|---|---|
+| Wrong about the **mechanism**, not just the vocabulary | 14 sites | the reason this was worth doing — see below |
+| Dead `BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup` markers | 17 in 13 files | every one sat over a constant that is **already** v3-only — a standing instruction to do work ADR-006 records as complete. Invisible to every earlier grep, since the string contains none of the retired names |
+| Vocabulary-only rewrites | ~32 sites | nearly all resolve to the same set, `property_manager \| root_manager` |
+| Verified legitimate, now marked `legacy-roles:exempt — <reason>` | 19 markers / 21 flagged lines | help-content vocabulary, historical notes, dev-login aliases, the parity test |
 
-```bash
-grep -rn "pm_admin or cam\|pm_admin/cam\|hold property_manager_admin\|pm_admin in " \
-  apps/*/src packages/*/src --include="*.ts" --include="*.tsx" \
-  | grep -v node_modules | grep -v __tests__ | grep -v "dev/agent-login\|dev/login"
-```
+The mechanism errors are why this was worth doing at all — a rename would have left every
+one of them in place and made it look reviewed:
 
-That pattern is narrow, so **treat 27 as a floor.** Each site needs its real gate read
-before rewriting — that is what turned up the non-existent `requireAdminRole` — so this is
-an hour of work, not a codemod.
+- **`api/v1/export/route.ts`** described the **closed vulnerability as the current gate**:
+  it claimed `settings:read` grants `owner`, which is exactly the hole legal-risk audit
+  F-07 closed. Two paragraphs above it, the same docblock described the fix correctly.
+- **`hooks/use-role-management.ts`** was **inverted** — it said the residents GET only
+  accepts legacy filter values and would 400 on `property_manager`; it accepts exactly
+  `resident|property_manager|root_manager` and would 400 on `manager`/`pm_admin`.
+- **`lib/api/branding.ts`** carried a blanket "all callers must have verified…" over a
+  module whose read path has **six unauthenticated callers** by design.
+- **`finance-service.ts`**, **`reservations/[id]/cancel/contract.ts`** and
+  **`resident-form.tsx`** each granted or categorised **board designation** as a role.
+  `resolveMatrixRole` never reads `designation`; a board member is a `resident`.
+- **`onboarding-checklist-service.ts`** asserted `pm_admin` matches `PM_SCOPE_DB_ROLES`
+  while **`create-community.ts` asserted the opposite** — the two files contradicted
+  each other, and `create-community.ts` was right.
+- Three `rls-config.ts` notes named **`requireAdminRole`, a function that exists nowhere
+  in the repo** (swept earlier the same day).
 
-**Do NOT sweep four categories that legitimately hold the old names:** comments that
-describe the vocabulary *as retired* (`packages/shared/src/index.ts`, `rbac-matrix.ts`,
-`wizard-common.ts`), the help-content viewer vocabulary (`lib/help/*`, `default-faqs.ts` —
-content, not runtime roles, and allowlisted), the transition mapping table
-(`role-transition.ts`), and the dev-login aliases (allowlisted, 404 in prod).
+**Enforcement (this is the part that matters).** `guard:legacy-roles` gained a second
+pass over **comment prose**, extracted with the TypeScript **parser** — a regex cannot
+tell a comment from a string literal or JSX text, and `pm_admin` legitimately appears in
+both. Escape hatch `legacy-roles:exempt — <reason>`; fixture test at
+`scripts/__tests__/verify-legacy-roles.test.ts` (24 cases). Verified by probe, not by
+reasoning: an injected comment fails, the exempt marker suppresses, the same name in a
+string/JSX/template/identifier does not fire, an empty root exits 2, and a **missing**
+root exits 2 — that last one was a real defect the probe found, since pass 1's
+`readdirSync` used to throw and exit 1 ("violations") for what is "could not check".
+
+> **Coverage is partial ON PURPOSE.** Bare `cam` is not matched: ~50 legitimate hits
+> (the marketing "CAM portfolio" copy — Community Association Manager is the Florida
+> licensure term — the `who-cam` asset filename, a `cam.getpropertypro.com` DNS
+> fixture). Matching it would train people to exempt rather than fix. A future
+> `// cam can do X` still lands silently. The guard also does not scan `scripts/`,
+> which is pre-existing for both passes.
+
+**Three things were deliberately NOT changed, and are the open remainder:**
+
+1. **`lib/onboarding/wizard-common.ts:33`** — a *user-facing* error string, not a comment:
+   `'Only board members, CAMs, and property managers can modify wizard state'`. It ships a
+   retired word to end users and names board members, whom the role-only check grants
+   nothing. Copy change, possibly with a snapshot test — its own decision.
+2. **The `use-role-management.ts` over-fetch.** Fixing the inverted comment does not fix
+   the behaviour: the hook still pulls the whole roster and partitions client-side, for a
+   reason that no longer exists. A server-side `roles` filter works today. That is a
+   behaviour change, not a comment fix.
+3. **`packages/db/migrations/_archive/0023` and `0024`** still assert `requireAdminRole`
+   and the retired names in the present tense. They are frozen historical artifacts;
+   rewriting archived SQL is worse than leaving it. Recorded so the next reader does not
+   re-open them.
 
 ### A dead triplet found in the same sweep
 

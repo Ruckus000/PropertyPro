@@ -10,7 +10,11 @@
  * The `preview=true` query param is required so the middleware relaxes the
  * frame headers (X-Frame-Options/frame-ancestors) to allow same-origin framing.
  *
- * Auth: pm_admin or cam in the community (same gate as the website editor).
+ * Auth: a management role (property_manager / root_manager) in the community —
+ * `hasRole(membership, PM_MANAGER_ROLES)`, which redirects rather than throwing.
+ * This is NOT the same gate as the website editor: the editor routes also
+ * require the `hasSiteEditor` plan feature and this page does not, so a PM on a
+ * plan without it can render the preview but cannot save from the editor.
  * Renders the SAME layout component the public site uses — server-side, so the
  * server-only block renderers (SoR blocks) work with the community's real data.
  */

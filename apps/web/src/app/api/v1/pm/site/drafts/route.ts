@@ -6,7 +6,7 @@
  * untouched; the editor snaps back to the live site's state. Companion to
  * POST /api/v1/pm/site/publish, which promotes the same draft set.
  *
- * Authorization: caller must hold pm_admin or cam in the community AND the
+ * Authorization: caller must hold a management role (property_manager / root_manager) in the community AND the
  * community's plan must include hasSiteEditor (same gate as the blocks
  * endpoints — anyone who can stage drafts can discard them).
  */

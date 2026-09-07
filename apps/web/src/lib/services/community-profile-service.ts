@@ -30,7 +30,8 @@ export interface UpdateCommunityNameResult {
  * Update the community's display name, emitting a `community` update audit
  * entry (old → new) when the value actually changes. No-op (no write, no
  * audit) when the name is unchanged. Caller is responsible for authorization
- * (pm_admin/cam) before invoking.
+ * (property_manager / root_manager) before invoking — the onboarding-website
+ * route does this via `ensurePmAccess`.
  */
 export async function updateCommunityName(
   communityId: number,

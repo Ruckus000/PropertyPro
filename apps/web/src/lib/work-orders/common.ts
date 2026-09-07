@@ -63,7 +63,8 @@ export function requireAmenityAdminWrite(membership: CommunityMembership): void 
 }
 
 export function requireReservationPermission(_membership: CommunityMembership): void {
-  // All roles (resident, manager, pm_admin) can make amenity reservations.
+  // Every CommunityRole (resident, property_manager, root_manager) can make
+  // amenity reservations.
   // This guard is retained for call-site compatibility.
 }
 

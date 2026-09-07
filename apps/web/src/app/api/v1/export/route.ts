@@ -8,8 +8,14 @@
  *   requireCommunityMembership → requireExportPermission (management tier or
  *   board designation — NOT `settings:read`, which admits every unit owner).
  *
- * RBAC: settings + read grants access to owner, board_member, board_president,
- * cam, site_manager, property_manager_admin. Denies tenant.
+ * RBAC: this is NOT an RBAC-matrix check. `requireExportPermission` →
+ * `isExportEligible` = `membership.isAdmin || hasBoardDesignation(designation)`
+ * — i.e. role property_manager/root_manager, OR a board_president/board_member
+ * designation on any row. A plain resident (owner OR tenant) is DENIED.
+ *
+ * Earlier versions of this line described a `settings:read` gate granting
+ * `owner`. That was the defect, not the gate — see the note above the
+ * `requireExportPermission` call below and legal-risk audit F-07.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import archiver from 'archiver';

@@ -398,7 +398,7 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
   const [roleRow] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     .where(and(eq(userRoles.communityId, communityId), inArray(userRoles.role, [...PM_SCOPE_DB_ROLES])))
     .limit(1);
 
@@ -460,7 +460,7 @@ async function stepCompleted(ctx: JobContext): Promise<void> {
   const [adminRole] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     .where(and(eq(userRoles.communityId, ctx.communityId), inArray(userRoles.role, [...PM_SCOPE_DB_ROLES])))
     .limit(1);
 

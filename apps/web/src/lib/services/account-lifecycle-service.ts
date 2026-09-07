@@ -1162,7 +1162,7 @@ export interface LifecycleAdminRecipient {
   fullName: string;
 }
 
-// BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+// role-v3: this role set is v3-only — ['property_manager','root_manager'].
 const LIFECYCLE_ADMIN_ROLES = ADMIN_TIER_DB_ROLES;
 
 /**

@@ -4,8 +4,9 @@
  *
  * AUTHZ: communities is the root tenant table (no community_id column), so reads
  * and writes go through `createUnscopedClient()` and target the row by primary
- * key. Caller authorization (pm_admin/cam membership + `hasSiteCustomDomain`
- * plan feature + not-demo-grace) is verified upstream at the route layer
+ * key. Caller authorization (a property_manager / root_manager membership +
+ * `hasSiteCustomDomain` plan feature + not-demo-grace) is verified upstream at
+ * the route layer
  * (`apps/web/src/app/api/v1/pm/site/domain/*`).
  *
  * NODE RUNTIME ONLY — depends on the Vercel Domains client which uses
@@ -13,8 +14,8 @@
  */
 import { communities, logAuditEvent } from '@propertypro/db';
 // Custom domain lives on communities, the root tenant table (no community_id
-// column); the scoped client cannot target it. Caller authz (pm_admin/cam +
-// hasSiteCustomDomain + not-demo-grace) is enforced at the route layer
+// column); the scoped client cannot target it. Caller authz (property_manager /
+// root_manager + hasSiteCustomDomain + not-demo-grace) is enforced at the route layer
 // (apps/web/src/app/api/v1/pm/site/domain/*).
 // AUTHZ: communities is the root tenant table — query/write by primary key via the unsafe client.
 import { createUnscopedClient } from '@propertypro/db/unsafe';

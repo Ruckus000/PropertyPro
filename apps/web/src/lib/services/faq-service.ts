@@ -50,6 +50,7 @@ export function isFaqVisibleToRole(
   // tagged with a v2 alias (e.g. `pm_admin`, `manager`) stays visible to the
   // canonical viewer role (`property_manager_admin`, `cam`). Callers pass the
   // already-resolved viewer role (see resolveHelpViewerRoleFromMembership).
+  // legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
   const viewerAliases = expandHelpViewerRoleAliases(role);
   return viewerAliases.some((alias) => allowedRoles.includes(alias));
 }
@@ -127,6 +128,7 @@ function buildFaqRoleVisibilityWhere(role: string | null | undefined) {
   // Match the resolved viewer role AND its v2 frontmatter aliases, so this SQL
   // path agrees with the in-memory `isFaqVisibleToRole` path. Callers pass the
   // already-resolved viewer role (see resolveHelpViewerRoleFromMembership).
+  // legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
   const aliases = expandHelpViewerRoleAliases(role);
   return or(
     globallyVisible,

@@ -12,9 +12,11 @@
  *     → requirePlanFeature('hasSiteCustomDomain')
  *
  * `permission: { resource: 'settings', action }` — `settings` IS in
- * `RBAC_RESOURCES`; the real gate is the pm_admin/cam role check in the
- * handler (documented placeholder pattern for PM-only routes, mirrors
- * `pm/branding`).
+ * `RBAC_RESOURCES`; the runner does NOT enforce it. The real gate is the
+ * `requireRole(PM_MANAGER_ROLES)` call in the handler's `gate()`
+ * (property_manager / root_manager) — the documented placeholder pattern for
+ * PM-only routes. `pm/branding` lands on the same role set a different way: it
+ * inlines `PM_SCOPE_DB_ROLES.includes(...)` instead of calling `requireRole`.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 

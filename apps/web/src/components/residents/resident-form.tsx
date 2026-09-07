@@ -23,9 +23,10 @@ interface RoleOption {
   communityTypes: readonly CommunityType[];
 }
 
-// Board designations (board_president, board_member, cam, site_manager) and
-// manager assignment now live exclusively on the Roles & Access screen (root-only).
-// This form only creates resident-tier users (owner / tenant).
+// Board designation (board_president / board_member — BOARD_DESIGNATIONS has
+// exactly those two members) and manager-role assignment both live exclusively
+// on the Roles & Access screen (root-only). This form only creates resident-tier
+// users, which differ solely by `isUnitOwner` (owner / tenant).
 const ROLE_OPTIONS: readonly RoleOption[] = [
   {
     label: 'Owner',

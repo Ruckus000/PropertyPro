@@ -51,10 +51,17 @@ export const COMMUNITY_ROSTER_KEY = (communityId: number) =>
 
 /**
  * Fetches the FULL member roster for a community
- * (`GET /api/v1/residents?communityId=<id>`). We deliberately pass NO `roles`
- * filter — the residents GET only accepts the legacy filter values
- * ({resident, manager, pm_admin}) and would 400 on `property_manager`. We
- * fetch everyone and partition client-side by `role`.
+ * (`GET /api/v1/residents?communityId=<id>`). We pass NO `roles` filter and
+ * partition client-side by `role`.
+ *
+ * The reason previously recorded here — that the route only accepts legacy
+ * filter values and would 400 on `property_manager` — is the INVERSE of the
+ * truth. `residents/route.ts` validates `roles` against `COMMUNITY_ROLES`
+ * ({resident, property_manager, root_manager}) and would 400 on `manager` /
+ * `pm_admin`. A server-side filter works today; this hook just does not use
+ * one, so fetching the whole roster is a cost, not a constraint.
+ *
+ * legacy-roles:exempt — quotes the retired names to correct an inverted claim.
  *
  * The route emits the canonical `{ data: Row[] }` envelope; `requestJson`
  * strips the outer `data`, leaving the array.

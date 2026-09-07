@@ -8,8 +8,8 @@
  * its owner via auth.uid(). The scoped client cannot target it, so reads and
  * writes go through `createUnscopedClient()` and ALWAYS filter by
  * `owner_user_id = ownerUserId` as defense-in-depth alongside RLS. Caller
- * authorization (pm_admin in ≥1 community + `hasSitePortfolioTemplates` plan
- * feature) is verified upstream at the route layer
+ * authorization (property_manager or root_manager in ≥1 community +
+ * `hasSitePortfolioTemplates` plan feature) is verified upstream at the route layer
  * (`apps/web/src/app/api/v1/pm/portfolio/templates/*`).
  *
  * NODE RUNTIME ONLY — depends on storage-copy helpers that use server-only
@@ -25,8 +25,8 @@ import {
 // site_portfolio_templates is a user-owned (NOT tenant-scoped) table — no
 // community_id column, so the scoped client cannot target it. The access-gate
 // helper additionally joins user_roles → communities (root tenant table) to
-// resolve the actor's per-community plan. Caller authz (pm_admin +
-// hasSitePortfolioTemplates) is enforced at the route layer
+// resolve the actor's per-community plan. Caller authz (property_manager or
+// root_manager + hasSitePortfolioTemplates) is enforced at the route layer
 // (apps/web/src/app/api/v1/pm/portfolio/templates/*).
 // AUTHZ: user-owned + root tenant tables — query/write by owner_user_id / primary key via the unsafe client.
 import { createUnscopedClient, findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
@@ -79,7 +79,8 @@ function toSummary(row: TemplateRow): PortfolioTemplateSummary {
 }
 
 /**
- * Returns true when the user holds `pm_admin` in ≥1 non-deleted community whose
+ * Returns true when the user holds property_manager or root_manager in ≥1
+ * non-deleted community whose
  * effective features include `hasSitePortfolioTemplates`. `findManagedCommunities
  * PortfolioUnscoped` carries no plan field, so this resolves the per-community
  * plan directly.
@@ -96,7 +97,7 @@ export async function userHasPortfolioTemplatesAccess(userId: string): Promise<b
     .where(
       and(
         eq(userRoles.userId, userId),
-        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        // role-v3: this role set is v3-only — ['property_manager','root_manager'].
         inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
         isNull(communities.deletedAt),
       ),

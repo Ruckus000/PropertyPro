@@ -19,6 +19,6 @@ export async function isMaintenanceStaffAssignee(
     {},
     eq(userRoles.userId, userId),
   ) as unknown as Array<Record<string, unknown>>;
-  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+  // role-v3: this role set is v3-only — ['property_manager','root_manager'].
   return roleRows.some((row) => (ADMIN_TIER_DB_ROLES as readonly string[]).includes(row['role'] as string));
 }

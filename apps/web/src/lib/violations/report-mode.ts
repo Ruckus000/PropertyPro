@@ -6,8 +6,9 @@ export type ViolationReportMode = 'resident' | 'resident_no_unit' | 'staff';
  * Chooses which report UI to render based on actor role and unit associations.
  * - Residents with at least one unit → standard self-report form.
  * - Residents with zero units → guard state (cannot report, missing unit link).
- * - Non-residents (manager/pm_admin and v3 property_manager/root_manager) →
- *   staff form with unit picker.
+ * - Non-residents (property_manager / root_manager — `CommunityRole` admits no
+ *   others) → staff form with unit picker. Board designation does not qualify:
+ *   a board member is `role === 'resident'` and gets the resident form.
  */
 export function resolveReportMode(
   role: CommunityRole,

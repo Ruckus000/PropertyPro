@@ -2,7 +2,7 @@
  * PR #5b · Onboarding wizard for the public community site.
  *
  * Route: /pm/onboarding/website/?communityId=X
- * Auth: pm_admin or cam required.
+ * Auth: a management role (property_manager / root_manager) required.
  *
  * All five steps are live: layout + theme chooser, identity, welcome
  * message, and confirm-publish (which stamps site_onboarding_completed_at).

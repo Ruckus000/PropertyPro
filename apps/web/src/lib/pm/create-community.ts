@@ -92,6 +92,7 @@ export async function createCommunityForPm(
   // The creator is linked as root_manager (step 2); pass that v3 role so
   // getItemKeysForRole resolves the PM-admin checklist (the legacy 'pm_admin'
   // string is not in PM_SCOPE_DB_ROLES and would fall through to owner/tenant).
+  // legacy-roles:exempt — warns about a value that no longer works.
   await createChecklistItems(communityId, input.userId, 'root_manager', null, input.communityType);
 
   // 5b. Apply starter pack (outside transaction — best-effort, idempotent)

@@ -21,9 +21,11 @@ import {
  * stored in the DB) must be supplied; the helper does NOT re-sanitize so
  * the route can choose the policy.
  *
- * AUTHZ: tenant-scoped — caller MUST have already verified the actor is a
- * property_manager_admin in this community (typically via
- * `findManagedCommunitiesPortfolioUnscoped` + membership check).
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor holds
+ * property_manager or root_manager in this community. The bulk route does this
+ * by requiring every target id to appear in
+ * `findManagedCommunitiesPortfolioUnscoped`; containment in that map IS the
+ * membership check.
  */
 export async function broadcastBulkAnnouncementToCommunity(params: {
   communityId: number;

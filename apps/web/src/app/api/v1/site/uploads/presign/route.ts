@@ -26,7 +26,7 @@ export const POST = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can upload site assets');
     }

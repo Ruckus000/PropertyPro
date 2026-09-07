@@ -10,9 +10,11 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { listDelinquentUnits } from '@/lib/services/finance-service';
 import { delinquencyGetContract } from './contract';
 
-// role-v3: admin-tier DB roles (bilingual — manager/pm_admin + property_manager/
-// root_manager). The legacy ['manager','pm_admin'] set locked every v3
-// property_manager out of delinquency, though the RBAC matrix grants them finances:read.
+// ADMIN_TIER_DB_ROLES is v3-only — ['property_manager','root_manager']. Kept as
+// its own named set because the legacy ['manager','pm_admin'] set used here once
+// locked every v3 property_manager out of delinquency, though the RBAC matrix
+// grants them finances:read.
+// legacy-roles:exempt — names the pre-v3 set to explain why this one exists.
 const DELINQUENCY_READ_ROLES = new Set<string>(ADMIN_TIER_DB_ROLES);
 
 export const GET = withErrorHandler(

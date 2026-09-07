@@ -7,7 +7,7 @@
  *
  * A1 route — all three methods use `runRoute(contract, handler)`; see
  * `./contract.ts`. The shared `gate()` runs the full auth chain
- * (auth → tenant → not-demo-grace → membership → pm_admin/cam role →
+ * (auth → tenant → not-demo-grace → membership → requireRole(PM_MANAGER_ROLES) →
  * hasSiteCustomDomain plan feature).
  */
 import { runRoute } from '@propertypro/api-contract';

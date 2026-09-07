@@ -19,8 +19,10 @@
  *         communityId, reservationId, actorUserId, canCancelAny, x-request-id)
  *
  * `canCancelAny = !isResidentRole(membership.role)` — residents can only
- * cancel reservations they own; non-resident roles (cam/site_manager/
- * pm_admin/board_*) can cancel any reservation in the community. The flag
+ * cancel reservations they own; the management tier (property_manager /
+ * root_manager) can cancel any reservation in the community. Board status is
+ * a `designation` on a `resident` row, so a board member IS a resident here
+ * and does not get `canCancelAny`. The flag
  * is computed in the handler from the membership returned by
  * `requireCommunityMembership` and threaded into the service positionally.
  *
