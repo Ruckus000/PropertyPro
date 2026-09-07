@@ -26,10 +26,21 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkCeiling } from './lib/ceiling';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
 const API_ROOT = 'apps/web/src/app/api';
+
+/**
+ * Shrink-only ceiling on contracted routes that still resolve tenancy by hand.
+ *
+ * Pinned at today's value (2026-09-07). Unlike the allowlist next door this one
+ * SHOULD reach zero — every entry is a route the B2 program means to convert to
+ * a declared `tenantScope`. It went 121 -> 150 while the whole gate stayed green,
+ * which is the entire argument for pinning it.
+ */
+const HAND_ROLLED_RESOLVER_CEILING = 150;
 
 const VALID_SCOPES = new Set(['query', 'body', 'path']);
 const SCOPE_SCHEMA_KEY: Record<string, string> = {
@@ -202,12 +213,19 @@ function main(): void {
 
   const violations: Violation[] = [];
   let scopedRoutes = 0;
+  let handRolledResolvers = 0;
 
   for (const routeFile of routeFiles) {
     const routeRel = relative(repoRoot, routeFile);
     const routeContent = safeRead(routeFile);
     const contractContent = safeRead(join(dirname(routeFile), 'contract.ts'));
     if (hasQueryOrBodyScope(`${routeContent}\n${contractContent}`)) scopedRoutes++;
+    // A route that already goes through runRoute() but still resolves tenancy by
+    // hand is the B2 migration's remaining work. Counted here because this loop
+    // already has both facts in hand.
+    if (routeContent.includes('runRoute(') && routeContent.includes('resolveEffectiveCommunityId')) {
+      handRolledResolvers++;
+    }
     violations.push(...validateRoute(routeContent, contractContent, routeRel));
   }
 
@@ -215,12 +233,29 @@ function main(): void {
     `\nScanned ${routeFiles.length} route.ts files; ${scopedRoutes} declare a query/body tenantScope.`,
   );
 
+  // Ceiling, not a target: the B2 program is meant to move this toward zero, and
+  // it went 121 -> 150 between 2026-07-18 and 2026-09-07 with the gate green.
+  const ceiling = checkCeiling(
+    'Contracted routes still hand-calling resolveEffectiveCommunityId',
+    handRolledResolvers,
+    HAND_ROLLED_RESOLVER_CEILING,
+    'Declare `tenantScope` on the contract and import runRoute from ' +
+      '`@/lib/api/run-route` so the runner injects communityId — see ' +
+      '`.claude/rules/api-patterns.md`.',
+  );
+  if (ceiling.message) {
+    console[ceiling.failed ? 'error' : 'log'](`${ceiling.failed ? '\n❌ ' : 'ℹ️  '}${ceiling.message}`);
+  }
+
   if (violations.length > 0) {
     console.error(`\n❌ ${violations.length} tenantScope problem(s):`);
     for (const v of violations) {
       console.error(`  ${v.file}`);
       console.error(`      ${v.message}`);
     }
+  }
+
+  if (violations.length > 0 || ceiling.failed) {
     process.exit(1);
   }
 

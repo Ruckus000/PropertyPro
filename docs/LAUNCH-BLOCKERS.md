@@ -527,9 +527,9 @@ the part of this section that argues for doing something.
 
 | Program | 2026-07-18 | 2026-09-07 | |
 |---|---|---|---|
-| Uncontracted routes (`KNOWN_UNCONTRACTED_ROUTES`) | 37 of 257 | **46 of 284** | ⬆ |
+| Uncontracted routes (`KNOWN_UNCONTRACTED_ROUTES`) | 37 of 257 | **46 of 284** | ⬆ · **ceiling pinned 2026-09-07** |
 | `contract.ts` declaring `tenantScope` | 12 | **15** | flat |
-| Contracted routes still hand-calling `resolveEffectiveCommunityId` | 121 | **150** | ⬆ |
+| Contracted routes still hand-calling `resolveEffectiveCommunityId` | 121 | **150** | ⬆ · **ceiling pinned 2026-09-07** |
 | `apps/web/src/middleware.ts` | 994 LOC | **1,318 LOC** | ⬆ 33% |
 | `lib/services/finance-service.ts` | 2,410 LOC | **2,548 LOC** | ⬆ |
 | Hook sources with no same-named test file | ~28 of 98 | **38 of 111** | ⬆ |
@@ -556,10 +556,18 @@ runner genuinely cannot express (201/202/204, raw bodies, non-JSON) — that is 
 documented permanent tier, not backsliding — but the ratchet is a convention, not a
 mechanism, and the number it guards has only ever gone up.
 
-The same is true of every row here: nothing ratchets on route size, middleware LOC, or
-`tenantScope` adoption, so all three can drift indefinitely with the whole gate green.
-**If only one thing in this section is done, make it that** — pin today's numbers as
-ceilings in the guards that already exist. A program with no ratchet is a wish.
+**Two of the three are now ratcheted (2026-09-07).** `guard:contracts` fails if the
+allowlist exceeds 46; `guard:tenant-scope` fails if the hand-rolled resolver count exceeds
+150. Both use a shared shrink-only helper (`scripts/lib/ceiling.ts`, 8 fixture tests) that
+copies `guard:legacy-roles`' slack hint, so coming in UNDER passes and prints the value to
+ratchet down to — ceilings tighten as work lands rather than needing a separate chore.
+
+**LOC ceilings were deliberately NOT added**, on a ponytail review: `middleware.ts` (1,318)
+and `finance-service.ts` (2,548) stay unratcheted. A line count is the one signal here that
+fires on honest work — any real feature added to middleware trips it — so it would get
+raised rather than respected. The decomposition in the July audit is the actual fix for
+those two; a ceiling would be a nag standing in for it. That is an accepted gap, not an
+oversight.
 
 ## B2. Coverage that is absent rather than failing
 

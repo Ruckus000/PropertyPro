@@ -37,6 +37,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkCeiling } from './lib/ceiling';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -46,6 +47,17 @@ const repoRoot = resolve(scriptDir, '..');
 // ---------------------------------------------------------------------------
 
 const SCAN_ROOT = 'apps/web/src/app/api';
+
+/**
+ * Shrink-only ceiling on the grandfather allowlist below.
+ *
+ * Pinned at today's value (2026-09-07). Most entries are permanently
+ * runner-blocked — internal cron and webhook routes that need 201/202/204, a raw
+ * body, or a non-JSON response — so this will not reach zero; the point is that
+ * it cannot silently GROW. It went 37 -> 46 in the seven weeks after the
+ * 2026-07-18 audit measured it, one appended line at a time.
+ */
+const ALLOWLIST_CEILING = 46;
 
 // ---------------------------------------------------------------------------
 // Adoption marker
@@ -283,14 +295,30 @@ function main(): void {
     );
   }
 
-  const hasErrors = newViolations.length > 0 || deadAllowlistEntries.length > 0;
+  // The allowlist is a hand-edited Set: without a ceiling, "add a line" is the
+  // frictionless way past this guard, and it went 37 -> 46 in the seven weeks
+  // after the 2026-07-18 audit measured it.
+  const ceiling = checkCeiling(
+    'Uncontracted-route allowlist',
+    KNOWN_UNCONTRACTED_ROUTES.size,
+    ALLOWLIST_CEILING,
+    'Contract the route through runRoute() instead of allowlisting it — see ' +
+      '`.claude/rules/api-patterns.md` for the runner constraints that make a ' +
+      'route genuinely uncontractable (201/202/204, raw bodies, non-JSON).',
+  );
+  if (ceiling.message) {
+    console[ceiling.failed ? 'error' : 'log'](`\n${ceiling.failed ? '❌' : 'ℹ️ '} ${ceiling.message}`);
+  }
+
+  const hasErrors =
+    newViolations.length > 0 || deadAllowlistEntries.length > 0 || ceiling.failed;
   if (hasErrors) {
     process.exit(1);
   }
 
   console.log(
     `\n✅ No new uncontracted routes outside the allowlist. ` +
-      `${KNOWN_UNCONTRACTED_ROUTES.size} grandfathered files remain — drain over time.`,
+      `${KNOWN_UNCONTRACTED_ROUTES.size} grandfathered files remain (ceiling ${ALLOWLIST_CEILING}) — drain over time.`,
   );
 }
 
