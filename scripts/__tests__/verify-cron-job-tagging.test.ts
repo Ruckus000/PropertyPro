@@ -51,6 +51,49 @@ describe('maxIntervalMinutes', () => {
     expect(maxIntervalMinutes('0 4 * * *')).toBe(1440);
   });
 
+  it('reads every-minute, rather than refusing the most ordinary schedule', () => {
+    expect(maxIntervalMinutes('* * * * *')).toBe(1);
+  });
+
+  it('REFUSES a day-of-month above 28 instead of halving the answer', () => {
+    // Cron does not fire on a day a month lacks and does not roll forward, so
+    // these skip whole months: D=29 -> 59 days, D=30 -> 60, D=31 -> 61 (Aug 31
+    // -> Oct 31). Answering 31 days under-reported by up to 30 and would have
+    // approved a window that reports a healthy job dead for a month — the exact
+    // failure this guard exists to prevent, committed by the guard.
+    expect(maxIntervalMinutes('0 5 29 * *')).toBeNull();
+    expect(maxIntervalMinutes('0 5 30 * *')).toBeNull();
+    expect(maxIntervalMinutes('0 5 31 * *')).toBeNull();
+    // 28 is the last day every month has, so it is still answerable.
+    expect(maxIntervalMinutes('0 5 28 * *')).toBe(31 * 1440);
+  });
+
+  it('REFUSES fields that are in shape but out of range', () => {
+    // /^\d+$/ accepts `99`. These describe jobs that can never fire at all, and
+    // each used to be handed a confident number.
+    expect(maxIntervalMinutes('0 5 32 * *')).toBeNull();
+    expect(maxIntervalMinutes('0 5 0 * *')).toBeNull();
+    expect(maxIntervalMinutes('99 * * * *')).toBeNull();
+    expect(maxIntervalMinutes('0 99 * * *')).toBeNull();
+  });
+
+  it('REFUSES an empty list element rather than reading it as minute 0', () => {
+    // `Number('')` is 0 — an integer, and in range — so `'5,'` parsed as {0,5}
+    // and returned a 55-minute widest gap for a schedule whose real answer is
+    // 60. Under-reporting is the direction that approves a broken window.
+    // NOTE the full five fields. An earlier version of this case passed bare
+    // strings like '5,', which return null from the ARITY check without ever
+    // reaching the list branch — the revert-check caught it passing against
+    // code with the validation removed.
+    expect(maxIntervalMinutes('5, * * * *')).toBeNull();
+    expect(maxIntervalMinutes(',5 * * * *')).toBeNull();
+    expect(maxIntervalMinutes('5,,20 * * * *')).toBeNull();
+    // Coercions Number() would otherwise accept.
+    expect(maxIntervalMinutes('5,0x1e * * * *')).toBeNull();
+    expect(maxIntervalMinutes('5,1e1 * * * *')).toBeNull();
+    expect(maxIntervalMinutes('5,+5 * * * *')).toBeNull();
+  });
+
   it('reads MONTHLY as 31 days, not 28 — the whole point of this function', () => {
     // `0 5 1 * *` fires on the 1st. The shortest gap is 28 days (Feb -> Mar);
     // the longest is 31. A staleness window has to survive the LONGEST quiet
