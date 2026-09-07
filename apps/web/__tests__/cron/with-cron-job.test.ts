@@ -2,10 +2,21 @@ import { NextResponse, type NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { recordCronRunMock } = vi.hoisted(() => ({ recordCronRunMock: vi.fn() }));
-vi.mock('@/lib/services/cron-run-service', () => ({ recordCronRun: recordCronRunMock }));
+const { recordCronRunMock, registerCronJobsMock } = vi.hoisted(() => ({
+  recordCronRunMock: vi.fn(),
+  registerCronJobsMock: vi.fn(),
+}));
+vi.mock('@/lib/services/cron-run-service', () => ({
+  recordCronRun: recordCronRunMock,
+  registerCronJobs: registerCronJobsMock,
+}));
 
-import { collectFailureSignals, withCronJob } from '@/lib/cron/with-cron-job';
+import {
+  __resetJobRegistrationForTests,
+  collectFailureSignals,
+  withCronJob,
+} from '@/lib/cron/with-cron-job';
+import { CRON_JOB_SLUGS } from '@/lib/cron/registry';
 
 /**
  * The `job` tag, tested against the REAL Sentry SDK.
@@ -54,6 +65,12 @@ beforeEach(() => {
   captured.length = 0;
   recordCronRunMock.mockReset();
   recordCronRunMock.mockResolvedValue(undefined);
+  registerCronJobsMock.mockReset();
+  registerCronJobsMock.mockResolvedValue(undefined);
+  // The registration latch is module state, so without this every case after
+  // the first would run against an already-registered process and the cases
+  // below would assert nothing.
+  __resetJobRegistrationForTests();
 });
 
 afterAll(async () => {
@@ -317,6 +334,101 @@ describe('withCronJob records a heartbeat', () => {
     });
 
     // The original error must survive — not be replaced by the telemetry's.
+    await expect(handler(req())).rejects.toThrow('the real failure');
+  });
+});
+
+/**
+ * Job registration (migration 0070).
+ *
+ * A row in `cron_runs` used to appear only when a job first RAN, which left the
+ * health probe unable to tell "this job died" from "this job is not due yet" —
+ * so it assumed the worse and reported 503 for a healthy monthly job for what
+ * would have been 24 days. Registering every registry slug up front gives each
+ * job a `first_observed_at`, which is what the probe measures its grace from.
+ *
+ * The safety properties are the same ones the heartbeat carries, and they are
+ * tested separately rather than assumed to transfer: this write happens on the
+ * same tick as real work, and monitoring that can break a cron is worse than no
+ * monitoring at all.
+ */
+describe('withCronJob registers the known jobs', () => {
+  it('registers every slug in the registry, not just the one that ran', async () => {
+    // The whole point: the job that is BROKEN is by definition not the one
+    // running, so a job can only be given a grace window by a sibling.
+    await withCronJob('snowbird-digest', async () => NextResponse.json({ data: {} }))(req());
+
+    expect(registerCronJobsMock).toHaveBeenCalledWith(CRON_JOB_SLUGS);
+    expect(CRON_JOB_SLUGS).toContain('generate-assessments');
+  });
+
+  it('registers once per process, not once per tick', async () => {
+    const handler = withCronJob('community-export-worker', async () =>
+      NextResponse.json({ data: {} }),
+    );
+
+    await handler(req());
+    await handler(req());
+    await handler(req());
+
+    // The busiest job runs every five minutes. Reconciling on every tick would
+    // be correct but wasteful; the latch is what keeps it off the hot path.
+    expect(registerCronJobsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries on the next tick when the write failed — the latch is not optimistic', async () => {
+    /*
+     * Latching on a failure would leave the instance permanently unable to
+     * register, and the symptom of that is a job stuck reporting stale — the
+     * exact fault this code removes. So the flag is set only on success.
+     */
+    registerCronJobsMock.mockRejectedValueOnce(new Error('cron_runs is unreachable'));
+    const handler = withCronJob('provisioning-watchdog', async () =>
+      NextResponse.json({ data: {} }),
+    );
+
+    await handler(req());
+    await handler(req());
+
+    expect(registerCronJobsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('registers even when the handler throws', async () => {
+    // In a `finally`, so a platform where every job is failing still records
+    // what jobs exist — which is when the probe's answer matters most.
+    const handler = withCronJob('late-fee-processor', async () => {
+      throw new Error('DB connection failed');
+    });
+
+    await expect(handler(req())).rejects.toThrow('DB connection failed');
+    expect(registerCronJobsMock).toHaveBeenCalledWith(CRON_JOB_SLUGS);
+  });
+
+  it('a failing registration does not change the response', async () => {
+    registerCronJobsMock.mockRejectedValue(new Error('cron_runs is unreachable'));
+    const handler = withCronJob('visitor-auto-checkout', async () =>
+      NextResponse.json({ data: { autoCheckedOut: 2 } }),
+    );
+
+    const res = await handler(req());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ data: { autoCheckedOut: 2 } });
+  });
+
+  it('a failing registration does not mask the handler’s own error', async () => {
+    /*
+     * This one is specifically about the `finally`. A `finally` that throws
+     * REPLACES the exception propagating through it, so an unswallowed
+     * rejection here would silently substitute a telemetry error for the real
+     * one — the failure would still be reported, but as the wrong thing, which
+     * is worse than not reporting it.
+     */
+    registerCronJobsMock.mockRejectedValue(new Error('cron_runs is unreachable'));
+    const handler = withCronJob('compliance-alerts', async () => {
+      throw new Error('the real failure');
+    });
+
     await expect(handler(req())).rejects.toThrow('the real failure');
   });
 });

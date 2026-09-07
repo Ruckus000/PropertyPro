@@ -73,6 +73,46 @@ export async function recordCronRun(jobSlug: string, outcome: CronRunOutcome): P
     });
 }
 
+/**
+ * Ensure a row exists for every job in the registry, without disturbing any row
+ * that is already there.
+ *
+ * ## Why the heartbeat registers jobs it has not seen run
+ *
+ * The health probe has to distinguish "this job stopped running" from "this job
+ * has not had a chance to run yet", and it cannot do that from an absent row —
+ * absence looks identical in both cases, so it must assume the worse one. That
+ * cost a real month of false alarm: `cron_runs` shipped 2026-09-06 and
+ * `generate-assessments` runs monthly, so the probe reported 503 for a job with
+ * nothing wrong with it, and would have until 2026-10-01.
+ *
+ * A registered row carries `first_observed_at`, which turns the unanswerable
+ * question into an answerable one: has this job's own window elapsed since we
+ * started watching?
+ *
+ * `onConflictDoNothing` is load-bearing, not defensive. An upsert here would
+ * push `first_observed_at` forward on every call and the grace window would
+ * never expire — a job that genuinely died would be forgiven forever, which is
+ * the exact failure this whole table exists to prevent.
+ */
+export async function registerCronJobs(jobSlugs: readonly string[]): Promise<void> {
+  if (jobSlugs.length === 0) return;
+  const db = createUnscopedClient();
+
+  await db
+    .insert(cronRuns)
+    .values(
+      jobSlugs.map((jobSlug) => ({
+        jobSlug,
+        // Explicitly null: the job is known, not run. The column was made
+        // nullable in 0070 precisely so this row does not have to invent a
+        // start time.
+        lastStartedAt: null,
+      })),
+    )
+    .onConflictDoNothing({ target: cronRuns.jobSlug });
+}
+
 /** Every recorded job. Bounded at one row per registered cron. */
 export async function listCronRuns(): Promise<CronRun[]> {
   const db = createUnscopedClient();

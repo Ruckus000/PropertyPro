@@ -15,6 +15,21 @@
  * The sibling `revenue-snapshot/health` proves this works, for exactly one job
  * of seventeen. This generalises it to all of them off one table.
  *
+ * ## What "not yet" means, and why it is not "missing"
+ *
+ * A job with no successful run is only stale once its OWN window has elapsed
+ * since `first_observed_at` — the moment the heartbeat first knew about it. The
+ * first version of this endpoint had no such notion and reported 503 for a
+ * monthly job whose last real run predated the table, which would have held the
+ * probe red until 2026-10-01 with nothing wrong. That matters beyond tidiness:
+ * this endpoint's entire purpose is to be watched by an uptime monitor
+ * (docs/LAUNCH-BLOCKERS.md item 5), and a monitor trained to ignore a red probe
+ * is worse than no monitor at all.
+ *
+ * The grace is bounded and it expires. It applies ONLY to a job that has never
+ * started; a job that has run and never succeeded is stale at once, because
+ * there the evidence is not missing — we watched it fail.
+ *
  * ## No auth, deliberately
  *
  * Health probes must be reachable by a monitor, which is the same justification
@@ -37,8 +52,10 @@ interface JobHealth {
   minutes_since: number | null;
   max_age_minutes: number;
   stale: boolean;
-  /** Why it is stale, when it is. */
-  reason?: 'never_run' | 'never_succeeded' | 'overdue';
+  /** Why it is stale — or, for `awaiting_first_run`, why it is not. */
+  reason?: 'never_registered' | 'never_run' | 'never_succeeded' | 'overdue' | 'awaiting_first_run';
+  /** Only on a job that has not run yet: how long we have been watching it. */
+  observed_for_minutes?: number;
 }
 
 export async function GET() {
@@ -48,42 +65,86 @@ export async function GET() {
 
   const jobs: JobHealth[] = CRON_JOB_SLUGS.map((slug) => {
     const definition = CRON_JOBS[slug];
+    const base = { job: slug, max_age_minutes: definition.maxAgeMinutes };
     const run = byslug.get(slug);
 
-    // A job with no row at all has never run since the heartbeat shipped.
-    // Reported as stale rather than unknown: "we have no evidence it ran" is
-    // the same operational state as "it did not run", and treating an absent
-    // row as healthy is precisely how the 2026-08 outage stayed invisible.
+    // No row at all. `withCronJob` registers every registry slug on a cold
+    // start, so after a single tick of ANY job this state means the heartbeat
+    // itself is not writing — a strictly worse problem than a late job, and
+    // never something to report as healthy. Treating an absent row as fine is
+    // precisely how the 2026-08 outage stayed invisible for months.
     if (!run) {
       return {
-        job: slug,
+        ...base,
         last_succeeded_at: null,
         minutes_since: null,
-        max_age_minutes: definition.maxAgeMinutes,
         stale: true,
-        reason: 'never_run',
+        reason: 'never_registered',
       };
     }
-    if (!run.lastSucceededAt) {
+
+    /*
+     * The success check comes FIRST, before the never-run branch below, so a
+     * job that has genuinely succeeded is judged on that success no matter what
+     * the other columns say. Ordering it the other way would let an
+     * inconsistent row (a success with no recorded start) be reported as
+     * awaiting its first run — silent, and wrong in the forgiving direction.
+     */
+    if (run.lastSucceededAt) {
+      const minutesSince = (now - new Date(run.lastSucceededAt).getTime()) / 60_000;
+      const stale = minutesSince > definition.maxAgeMinutes;
       return {
-        job: slug,
+        ...base,
+        last_succeeded_at: new Date(run.lastSucceededAt).toISOString(),
+        minutes_since: Math.round(minutesSince),
+        stale,
+        ...(stale ? { reason: 'overdue' as const } : {}),
+      };
+    }
+
+    /*
+     * It RAN and has never succeeded. No grace, deliberately and unchanged: a
+     * job that starts and dies is not alive in any sense the probe should
+     * accept, and unlike the branch below there is no ambiguity to resolve —
+     * we have watched it try and fail.
+     */
+    if (run.lastStartedAt) {
+      return {
+        ...base,
         last_succeeded_at: null,
         minutes_since: null,
-        max_age_minutes: definition.maxAgeMinutes,
         stale: true,
         reason: 'never_succeeded',
       };
     }
 
-    const minutesSince = (now - new Date(run.lastSucceededAt).getTime()) / 60_000;
-    const stale = minutesSince > definition.maxAgeMinutes;
+    /*
+     * Registered, but never started — so we cannot yet tell "dead" from "not
+     * due yet", and the honest answer depends on how long we have been able to
+     * see it. The window is the job's OWN `maxAgeMinutes`, measured from
+     * `first_observed_at`: exactly the tolerance every other job gets, applied
+     * from the only defensible starting point.
+     *
+     * This branch exists because the probe got that wrong and reported 503 for
+     * a healthy platform. `cron_runs` shipped 2026-09-06; `generate-assessments`
+     * runs `0 5 1 * *`, so its last real run predated the table and its next was
+     * 24 days out. Sixteen of seventeen jobs green, endpoint red — and a probe
+     * that is red by construction is one nobody reads when it goes red for a
+     * reason. It also recurs for every job added later, which is why this is a
+     * stored fact and not a one-off constant.
+     */
+    const observedForMinutes = (now - new Date(run.firstObservedAt).getTime()) / 60_000;
+    const stale = observedForMinutes > definition.maxAgeMinutes;
     return {
-      job: slug,
-      last_succeeded_at: new Date(run.lastSucceededAt).toISOString(),
-      minutes_since: Math.round(minutesSince),
-      max_age_minutes: definition.maxAgeMinutes,
+      ...base,
+      last_succeeded_at: null,
+      minutes_since: null,
+      observed_for_minutes: Math.round(observedForMinutes),
       stale,
-      ...(stale ? { reason: 'overdue' as const } : {}),
+      // `never_run` once its window has passed and the grace has run out; the
+      // distinct `awaiting_first_run` before that, so a 200 carrying a null
+      // timestamp explains itself rather than looking like a bug in the probe.
+      reason: stale ? ('never_run' as const) : ('awaiting_first_run' as const),
     };
   });
 
@@ -96,6 +157,9 @@ export async function GET() {
       // Named up front so the monitor's alert text is directly actionable
       // rather than requiring someone to diff the full list.
       stale_jobs: staleJobs.map((j) => j.job),
+      // Not stale, but not proven either. Surfaced so a green result with a
+      // null timestamp in it is self-explaining.
+      awaiting_first_run: jobs.filter((j) => j.reason === 'awaiting_first_run').map((j) => j.job),
       jobs,
     },
     { status: staleJobs.length === 0 ? 200 : 503 },

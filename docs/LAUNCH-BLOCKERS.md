@@ -233,6 +233,13 @@ corrected.
 > and never reaches Sentry, which is exactly how all seventeen stayed dead behind a
 > green dashboard in 2026-08. One monitor setup now covers readiness, `/api/health`
 > and cron freshness.
+>
+> Safe to wire as of 2026-09-07: the probe used to report 503 for
+> `generate-assessments`, a monthly job whose last real run predated the
+> `cron_runs` table, and would have until 2026-10-01. A monitor pointed at a
+> probe that is red by construction teaches whoever watches it to ignore the
+> alert. Migration 0070 gave the probe a grace window measured from when it
+> first knew about a job, so a 503 now means something.
 
 `/api/v1/internal/readiness` now reports nine secrets plus email delivery, and it is
 callable in production today — both `READINESS_CHECK_SECRET` and `CRON_SECRET` are set, so
