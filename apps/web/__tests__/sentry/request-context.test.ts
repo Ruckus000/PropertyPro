@@ -29,7 +29,7 @@ describe('extractSentryRequestContext', () => {
     expect(context.communityId).toBe('community_42');
   });
 
-  it('falls back to x-tenant-id for community ID', () => {
+  it('ignores the retired x-tenant-id header', () => {
     const headers = new Headers({
       'x-request-id': 'req-123',
       'x-tenant-id': 'tenant_99',
@@ -37,7 +37,7 @@ describe('extractSentryRequestContext', () => {
 
     const context = extractSentryRequestContext(headers);
 
-    expect(context.communityId).toBe('tenant_99');
+    expect(context.communityId).toBeUndefined();
   });
 
   it('extracts user ID from x-user-id', () => {
