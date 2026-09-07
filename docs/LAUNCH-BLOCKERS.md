@@ -242,12 +242,28 @@ is visible from the records themselves:
 > `send.getpropertypro.com` is only Resend's envelope MAIL FROM, which is not
 > what `p=`/`sp=` key off. So `p=quarantine` would govern **100%** of outbound.
 >
-> **The casualty candidate is password reset.**
+> **Password reset is the one path to establish, and it has TWO outcomes — only
+> one of them is a problem.**
 > `apps/web/src/lib/auth/password-reset.ts` calls
 > `supabase.auth.resetPasswordForEmail`, so Supabase composes and sends that
-> message — it never touches the DKIM-aligned Resend pipeline. The asymmetry is
+> message; it never touches the DKIM-aligned Resend pipeline. The asymmetry is
 > deliberate elsewhere: `signup.ts` uses `generateLink` *"so that Supabase does
 > NOT send its default confirmation email."* That was never applied here.
+>
+> But "outside our pipeline" is not the same as "will break":
+>
+> - **Default Supabase SMTP** — the `From` is a Supabase-owned domain, so *our*
+>   DMARC record never applies to it and ratcheting cannot affect it at all.
+>   Not a blocker.
+> - **Custom SMTP configured to send as `@getpropertypro.com`** — our record
+>   does apply, and without an SPF include and DKIM key at the apex for that
+>   provider, `p=quarantine` starts quarantining password resets. This is the
+>   only failing case.
+>
+> An earlier revision of this entry called password reset "the casualty
+> candidate" without that split, which reads as a blocker when it is a coin
+> whose second face is harmless. Establish which one it is before treating it
+> as either.
 >
 > **Three preconditions, none answerable from the repo** (the Supabase
 > management API exposes no SMTP config):
@@ -259,6 +275,23 @@ is visible from the records themselves:
 >    `send.`.
 > 3. Read one delivered message's `Authentication-Results` for
 >    `dkim=pass header.d=getpropertypro.com` and `dmarc=pass`.
+>
+> **Preconditions 2 and 3 are now satisfied**, by a real delivered reply
+> captured in #1067:
+>
+> ```
+> dkim=pass  header.i=@getpropertypro.com header.s=resend
+> spf=pass   smtp.mailfrom=…@send.getpropertypro.com
+> dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=getpropertypro.com
+> ```
+>
+> Scope that correctly. It is **one message, to one Gmail recipient, from
+> `support@`** — not a corpus. It does generalise across everything Resend
+> sends, because a DKIM key is scoped to the DOMAIN and the selector, not to a
+> `From` address: `resend._domainkey.getpropertypro.com` signs `noreply@` the
+> same way it signed `support@`. What it cannot speak to is any path that does
+> not go through Resend — which is exactly precondition 1, and why that one is
+> the whole remaining question.
 >
 > Then a week of digests, then ratchet. Note
 > `specs/phase-1-compliance-core/28-email-infrastructure.md` specifies a `mail.`
