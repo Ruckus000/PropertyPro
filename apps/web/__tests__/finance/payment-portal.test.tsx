@@ -686,4 +686,246 @@ describe('PaymentPortal', () => {
       expect(screen.getByRole('button', { name: /payment history/i })).toBeInTheDocument();
     });
   });
+
+  /*
+   * The offline-payment guidance — what a resident is told when their community
+   * has online payments switched off, which is the launch default for EVERY
+   * community (F-15).
+   *
+   * Before this, that resident saw a balance, a due date and a late-fee column
+   * with no Pay button and no explanation. The rest of the platform already
+   * knew: the charge route 403s and `applyLateFees` refuses to accrue a penalty
+   * "while the platform gives the resident no way to pay". The resident was the
+   * only party not told.
+   *
+   * Half these cases are negatives. Each one is paired with a positive that
+   * fails if the component rendered nothing at all — a suite of pure negatives
+   * passes against a blank page.
+   */
+  describe('the offline-payment guidance', () => {
+    const owedStatement = {
+      lineItems: [
+        {
+          id: 21,
+          assessmentTitle: 'Monthly Maintenance',
+          amountCents: 40000,
+          lateFeeCents: 0,
+          status: 'pending',
+          dueDate: '2026-05-01',
+          paidAt: null,
+        },
+      ],
+      paymentHistory: [],
+      unitLabel: 'Unit 301',
+    };
+
+    const settledStatement = {
+      lineItems: [
+        {
+          id: 22,
+          assessmentTitle: 'Monthly Maintenance',
+          amountCents: 40000,
+          lateFeeCents: 0,
+          status: 'paid',
+          dueDate: '2026-04-01',
+          paidAt: '2026-04-02',
+        },
+      ],
+      paymentHistory: [],
+      unitLabel: 'Unit 301',
+    };
+
+    const CONTACT = {
+      contactName: 'Sunset Management LLC',
+      contactEmail: 'office@sunset.example',
+      contactPhone: '(305) 555-0147',
+    };
+
+    it('tells a resident who owes money how to pay, naming the management contact', async () => {
+      mockBothFetches(owedStatement, { mode: 'unit' });
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal
+            communityId={42}
+            userRole="owner"
+            mode="unit"
+            unitId={303}
+            paymentsEnabled={false}
+            managementContact={CONTACT}
+          />
+        </Wrapper>,
+      );
+
+      expect(
+        await screen.findByText(/online payments aren't available for this community/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/contact sunset management llc to arrange payment/i)).toBeInTheDocument();
+
+      // The contact details are actionable, not decorative.
+      expect(screen.getByRole('link', { name: CONTACT.contactEmail })).toHaveAttribute(
+        'href',
+        'mailto:office@sunset.example',
+      );
+      // Punctuation is stripped for the `tel:` href; the label keeps it.
+      expect(screen.getByRole('link', { name: CONTACT.contactPhone })).toHaveAttribute(
+        'href',
+        'tel:3055550147',
+      );
+      expect(screen.getByRole('link', { name: /management contact/i })).toHaveAttribute(
+        'href',
+        '/help/contact?communityId=42',
+      );
+    });
+
+    it('falls back to generic copy when the community has no contact configured', async () => {
+      mockBothFetches(owedStatement, { mode: 'unit' });
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal
+            communityId={42}
+            userRole="owner"
+            mode="unit"
+            unitId={303}
+            paymentsEnabled={false}
+            managementContact={null}
+          />
+        </Wrapper>,
+      );
+
+      expect(
+        await screen.findByText(/contact your management team to arrange payment/i),
+      ).toBeInTheDocument();
+      // No contact rows to render — but the escape hatch to the contact page
+      // survives, because that page is where an admin is told to add them.
+      expect(screen.queryByRole('link', { name: /@/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /management contact/i })).toBeInTheDocument();
+    });
+
+    it('renders an unusable phone number as text rather than a dead tel: link', async () => {
+      /*
+       * `contact_phone` is free text from an admin form with no format
+       * validation, so "call the office" is a value this can receive. Stripping
+       * it to dialable characters leaves nothing, and `href="tel:"` is a link
+       * that silently does nothing when tapped.
+       */
+      mockBothFetches(owedStatement, { mode: 'unit' });
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal
+            communityId={42}
+            userRole="owner"
+            mode="unit"
+            unitId={303}
+            paymentsEnabled={false}
+            managementContact={{
+              contactName: null,
+              contactEmail: null,
+              contactPhone: 'call the office',
+            }}
+          />
+        </Wrapper>,
+      );
+
+      // Present…
+      expect(await screen.findByText('call the office')).toBeInTheDocument();
+      // …and not a link.
+      expect(screen.queryByRole('link', { name: 'call the office' })).not.toBeInTheDocument();
+    });
+
+    it('stays out of the way when payments are enabled', async () => {
+      mockBothFetches(owedStatement, { mode: 'unit' });
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal
+            communityId={42}
+            userRole="owner"
+            mode="unit"
+            unitId={303}
+            paymentsEnabled
+            managementContact={CONTACT}
+          />
+        </Wrapper>,
+      );
+
+      // The positive that makes the negative mean something: this render DID
+      // reach the payable table.
+      expect(await screen.findByRole('button', { name: /pay now/i })).toBeInTheDocument();
+      expect(
+        screen.queryByText(/online payments aren't available for this community/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('stays out of the way when the resident owes nothing', async () => {
+      mockBothFetches(settledStatement, { mode: 'unit' });
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal
+            communityId={42}
+            userRole="owner"
+            mode="unit"
+            unitId={303}
+            paymentsEnabled={false}
+            managementContact={CONTACT}
+          />
+        </Wrapper>,
+      );
+
+      // Payments are OFF here, so only the empty balance suppresses the banner.
+      expect(await screen.findByText(/all caught up!/i)).toBeInTheDocument();
+      expect(
+        screen.queryByText(/online payments aren't available for this community/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('stays out of the way for staff reading the whole community ledger', async () => {
+      /*
+       * Community mode is a manager looking at someone else's balance. They are
+       * not the person who needs to know where to send a cheque, and they are
+       * the ones who would answer the call.
+       */
+      mockBothFetches(owedStatement, { mode: 'community' });
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal
+            communityId={42}
+            userRole="pm_admin"
+            mode="community"
+            paymentsEnabled={false}
+            managementContact={CONTACT}
+          />
+        </Wrapper>,
+      );
+
+      // Reached the ledger — the same unpaid row that triggers the banner in
+      // unit mode is on screen here.
+      expect(await screen.findByText(/community balance/i)).toBeInTheDocument();
+      expect(
+        screen.queryByText(/online payments aren't available for this community/i),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

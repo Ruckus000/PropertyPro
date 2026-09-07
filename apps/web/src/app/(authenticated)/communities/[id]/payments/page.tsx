@@ -7,6 +7,7 @@ import { FeatureGate } from '@/components/billing/feature-gate';
 import { PaymentPortal } from '@/components/finance/payment-portal';
 import { AdminPaymentsTabs } from './_components/AdminPaymentsTabs';
 import { listActorUnitIds } from '@/lib/units/actor-units';
+import { getCommunityContact } from '@/lib/services/community-contact-service';
 import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
@@ -88,6 +89,16 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
     }
   }
 
+  /*
+   * Only read when the guidance banner can actually render. `PaymentPortal`
+   * shows it solely for a resident who owes money in a payments-disabled
+   * community, so fetching contact details for the enabled case would be a
+   * query whose result is discarded on every request.
+   */
+  const managementContact = membership.assessmentPaymentsEnabled
+    ? null
+    : await getCommunityContact(communityId);
+
   return (
     <FeatureGate feature="hasFinance" communityId={communityId}>
       <PaymentPortal
@@ -98,6 +109,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
         actorUnits={actorUnits}
         requiresExplicitUnitSelection={requiresExplicitUnitSelection}
         paymentsEnabled={membership.assessmentPaymentsEnabled}
+        managementContact={managementContact}
       />
     </FeatureGate>
   );
