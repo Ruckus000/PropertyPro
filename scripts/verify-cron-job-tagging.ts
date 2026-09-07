@@ -35,6 +35,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
+// Type-only, so it adds no runtime dependency. Imported rather than re-declared
+// locally behind an `as unknown as` cast: that cast meant TypeScript never
+// reconciled the two shapes, so a rename of `maxAgeMinutes` would make
+// `undefined <= gap` false (no violation), leave `margins` non-empty (so the
+// "compared zero windows" vacuity check would not fire), and exit 0 printing
+// `NaNx`. The guard has an explicit check for that category and the cast routed
+// around it.
+import type { CronJobDefinition } from '../apps/web/src/lib/cron/registry.ts';
+
 const REPO_ROOT = path.resolve(__dirname, '..');
 const VERCEL_JSON = 'apps/web/vercel.json';
 const INTERNAL_ROOT = 'apps/web/src/app/api/v1/internal';
@@ -66,6 +75,12 @@ export function slugForPath(cronPath: string): string {
  * every value in 40320 < maxAgeMinutes <= 44640 — each of which pages on every
  * 31-day month.
  *
+ * It refuses more than its predecessor did, deliberately. A day-of-month above
+ * 28 skips whole months and roughly doubles the gap; an out-of-range field
+ * describes a job that can never fire at all. Both used to be answered with a
+ * confident number. Returning `null` there is the difference between "I cannot
+ * tell" and a wrong answer in the direction that approves a broken window.
+ *
  * (The old lower bound was also wrong on its own terms for a step that does not
  * divide 60: `*\/7` fires at :56 and next at :00, a gap of 4, which it reported
  * as 7. Never bit, because this repo only uses `*\/5` and `*\/15`.)
@@ -83,6 +98,10 @@ export function maxIntervalMinutes(schedule: string): number | null {
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts as [string, string, string, string, string];
   if (month !== '*' || dayOfWeek !== '*') return null;
 
+  // `* * * * *` — every minute. The most ordinary schedule there is, and it
+  // used to return null and hard-fail the build at exit 2.
+  if (minute === '*' && hour === '*' && dayOfMonth === '*') return 1;
+
   // `*/N * * * *` — every N minutes. Minute 0 always fires, so the wrap-around
   // gap can only be shorter than N, never longer: N is the widest.
   const stepMatch = /^\*\/(\d+)$/.exec(minute);
@@ -94,21 +113,51 @@ export function maxIntervalMinutes(schedule: string): number | null {
 
   // `a,b,c * * * *` — N times an hour; the WIDEST gap, wrap included.
   if (minute.includes(',') && hour === '*' && dayOfMonth === '*') {
-    const mins = minute.split(',').map(Number);
-    if (mins.some((m) => !Number.isInteger(m) || m < 0 || m > 59)) return null;
+    // Validate the TEXT before Number(). `Number('')` is 0, which is an
+    // integer and in range, so a trailing comma used to parse as "and also
+    // minute 0": `'5,'` became {0,5} and reported a 55-minute widest gap for a
+    // schedule whose real answer is 60. Under-reporting is the direction that
+    // approves a window making a job permanently overdue.
+    const parts = minute.split(',');
+    if (parts.some((m) => !/^\d+$/.test(m))) return null;
+    const mins = parts.map(Number);
+    if (mins.some((m) => m < 0 || m > 59)) return null;
     const sorted = [...mins].sort((a, b) => a - b);
     let widest = 60 - (sorted[sorted.length - 1]! - sorted[0]!);
     for (let i = 1; i < sorted.length; i += 1) widest = Math.max(widest, sorted[i]! - sorted[i - 1]!);
     return widest;
   }
 
-  if (!/^\d+$/.test(minute)) return null;
+  // Range-check, not just shape-check. `/^\d+$/` accepts `99`, so `0 5 32 * *`
+  // and `0 5 0 * *` — schedules that can never fire at all — used to be handed
+  // a confident 44640 and blessed.
+  if (!/^\d+$/.test(minute) || Number(minute) > 59) return null;
   if (hour === '*' && dayOfMonth === '*') return 60; // `N * * * *` — hourly
-  if (/^\d+$/.test(hour) && dayOfMonth === '*') return 1440; // `N H * * *` — daily
-  // `N H D * *` — monthly. 31 days, not 28: the longest gap is what a window
-  // has to survive.
-  if (/^\d+$/.test(hour) && /^\d+$/.test(dayOfMonth)) return 31 * 1440;
-  return null;
+  if (!/^\d+$/.test(hour) || Number(hour) > 23) return null;
+  if (dayOfMonth === '*') return 1440; // `N H * * *` — daily
+  if (!/^\d+$/.test(dayOfMonth)) return null;
+
+  const dom = Number(dayOfMonth);
+  if (dom < 1 || dom > 31) return null;
+  /*
+   * `N H D * *` — monthly, and ONLY safe for D <= 28.
+   *
+   * Cron does not fire on a day a month does not have, and does not roll
+   * forward. For D <= 28 every month qualifies, so the longest gap is 31 days.
+   * Above that the job skips whole months and the gap roughly doubles:
+   *
+   *     D = 29   ->  59 days (84960)   Jan 29 -> Mar 29 in a common year
+   *     D = 30   ->  60 days (86400)   Jan 30 -> Mar 30
+   *     D = 31   ->  61 days (87840)   Aug 31 -> Oct 31
+   *
+   * Returning 31 days for those under-reported by up to 30, which would let the
+   * caller approve a window that reports a healthy job dead for a month —
+   * exactly the failure this guard exists to prevent. Refusing is the contract
+   * this file already states; the numbers above are here so teaching it is a
+   * three-line change rather than a re-derivation.
+   */
+  if (dom > 28) return null;
+  return 31 * 1440;
 }
 
 export interface RouteWrapping {
@@ -163,11 +212,6 @@ export function analyzeRoute(fileName: string, source: string): RouteWrapping {
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
-interface RegistryJob {
-  path: string;
-  schedule: string;
-  maxAgeMinutes: number;
-}
 
 /**
  * The registry is read TWICE, on purpose and by two different means.
@@ -181,10 +225,10 @@ interface RegistryJob {
  * types, so this pulls in no database client and no env access. A load failure
  * is exit 2 rather than a stack trace, matching verify-scoped-db-access.ts.
  */
-async function loadRegistryJobs(): Promise<Record<string, RegistryJob>> {
+async function loadRegistryJobs(): Promise<Record<string, CronJobDefinition>> {
   try {
     const mod = await import('../apps/web/src/lib/cron/registry.ts');
-    return mod.CRON_JOBS as unknown as Record<string, RegistryJob>;
+    return mod.CRON_JOBS;
   } catch (err) {
     couldNotCheck(`Could not import CRON_JOBS from ${REGISTRY}: ${String(err)}`);
   }
