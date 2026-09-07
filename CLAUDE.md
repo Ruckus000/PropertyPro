@@ -128,6 +128,20 @@ pnpm --filter @propertypro/web test:e2e:prod
 > dedicated `e2e.platform.admin@local` identity and its grant on demand, in
 > `development` only. `pnpm seed:demo` still leaves the table at 0 rows, and the
 > demo persona `pm.admin@sunset.local` never holds platform privilege.
+>
+> That last sentence was **aspirational until 2026-09-06** — in production
+> `pm.admin@sunset.local` held `super_admin` from 2026-03-12, on the shared
+> `DEMO_DEFAULT_PASSWORD` that `.env.example` prints. It is now enforced by
+> `0071_platform_admin_demo_identity_guard` (BEFORE INSERT OR UPDATE on
+> `platform_admin_users`, rejecting `%@%.local` and `%@demo-%`), covered by
+> `apps/web/__tests__/integration/platform-admin-demo-guard.integration.test.ts`.
+> The pattern deliberately spares `e2e.platform.admin@local` (bare `local`, no
+> dot) — broadening it to `%local%` breaks every admin e2e run.
+>
+> **There is no bootstrap path.** `POST /api/admin/platform-admins` calls
+> `requirePlatformAdmin()` first, so the console cannot grant the FIRST admin;
+> that takes manual SQL. And `0056`'s floor trigger refuses to empty the table,
+> so the order is always grant → verify → revoke.
 > **Use `localhost:3001`, never `127.0.0.1:3001`,** for admin-app specs: Supabase
 > auth cookies are host-only and Next's dev server normalises `request.url` to
 > `localhost` regardless of `--hostname`, so mixing the two silently drops the
