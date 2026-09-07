@@ -24,8 +24,12 @@ vi.mock('@sentry/nextjs', () => ({
   // `withCronJob` (the job-identity wrapper on every cron route) calls this.
   // A mock factory that omits it makes the route throw at module load —
   // the same trap CLAUDE.md documents for @propertypro/db mocks.
-  withIsolationScope: (fn: (scope: { setTag: () => void }) => unknown) =>
-    fn({ setTag: () => {} }),
+  // The stub scope must offer EVERY method withCronJob calls, not just the ones
+  // this route's assertions care about — it runs the real wrapper. Adding
+  // `setFingerprint` to withCronJob broke 21 tests across two files that stubbed
+  // only `setTag`, with a bare `scope.setFingerprint is not a function`.
+  withIsolationScope: (fn: (scope: { setTag: () => void; setFingerprint: () => void }) => unknown) =>
+    fn({ setTag: () => {}, setFingerprint: () => {} }),
 }));
 
 vi.mock('@/lib/services/provisioning-service', () => ({
