@@ -391,8 +391,10 @@ export function formatReport(r: ReconcileResult): ReportOutput {
         '    One mechanical note, for whenever that decision is deliberately reversed —',
         `    NOT a step to take now. Its \`when\` (${file.when}) is below the ledger tip`,
         `    (${r.ledgerTip}), so \`drizzle-kit migrate\` would report success and do`,
-        '    nothing. Whoever eventually ships this has to ship the code that stops',
-        '    depending on it FIRST, and only then apply by hand and record the row.',
+        '    nothing — it has to be applied by hand and the ledger row written. Note',
+        '    which way the dependency runs: the code that stopped reading those columns',
+        '    is already live and now depends on this, so whoever reverses the decision',
+        '    applies the migration FIRST and only then enables the feature.',
       );
     }
     notes.push(lines.join('\n'));
