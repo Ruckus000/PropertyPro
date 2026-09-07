@@ -342,9 +342,18 @@ const run = async () => {
   // Compile Tailwind directly rather than reading a Next build. This keeps the
   // guard runnable in `pnpm lint` (no `next build` prerequisite) and pins the
   // content to exactly the candidates, so JIT emits a rule iff the class resolves.
-  // tailwindcss/postcss are dependencies of apps/web, not of the repo root, and
-  // pnpm's isolated store means a root-level bare import cannot see them.
-  // Resolve them from apps/web explicitly instead of adding root devDependencies.
+  // tailwindcss lives in apps/web, not at the repo root, and pnpm's isolated
+  // store means a root-level bare import cannot see it. Both are resolved from
+  // apps/web explicitly so the guard compiles against the SAME tailwind the app
+  // builds with — a root copy could drift to a different version and make this
+  // guard's verdict describe a Tailwind nobody ships.
+  //
+  // `postcss` IS now a root devDependency, added deliberately and only so that
+  // `tsc -p scripts/tsconfig.json` can resolve the two `import('postcss')` TYPE
+  // references below; without it that project failed with TS2307 and `pnpm
+  // typecheck` was red on any clean install. It is pinned to apps/web's range so
+  // both resolve to one copy. The runtime path is unchanged and still goes
+  // through apps/web — do not "simplify" it to a bare import.
   const webDir = path.join(repoRoot, 'apps/web');
   const requireFromWeb = createRequire(path.join(webDir, 'package.json'));
   const resolveFromWeb = (id: string) => pathToFileURL(requireFromWeb.resolve(id)).href;
