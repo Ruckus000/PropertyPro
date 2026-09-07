@@ -215,9 +215,23 @@ function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
   // which fails closed on a missing/short/wrong Bearer token
   // (lib/api/cron-auth.ts). `guard:internal-cron-auth` enforces that invariant
   // in CI, so a future route added here cannot silently become unauthenticated.
+  //
+  // HEAD is here because an uptime monitor sends it. Measured in production
+  // before this line existed: GET /api/v1/internal/cron-health returned 200 and
+  // HEAD returned 401, while /api/health answered both — because HEAD fell off
+  // the end of this list and hit the session gate. That is the same silent
+  // wrong-method 401 described directly above, reproduced one method over by the
+  // rule written to prevent it.
+  //
+  // It matters more than a cosmetic status: a monitor configured to tolerate 401
+  // on this probe is blind to the 2026-08 outage, whose signature was every cron
+  // returning exactly that. Safe to add — Next derives HEAD from a GET-only
+  // route (/api/health exports only GET and answers HEAD 200), and every route
+  // under this prefix still calls requireCronSecret, so HEAD fails closed
+  // exactly as GET does.
   if (request.nextUrl.pathname.startsWith('/api/v1/internal/')) {
     const method = request.method.toUpperCase();
-    return method === 'GET' || method === 'POST';
+    return method === 'GET' || method === 'HEAD' || method === 'POST';
   }
   // E-sign signing routes use dynamic segments (e.g. /api/v1/esign/sign/:token)
   // so they can't use exact-path matching via TOKEN_AUTH_ROUTES.
