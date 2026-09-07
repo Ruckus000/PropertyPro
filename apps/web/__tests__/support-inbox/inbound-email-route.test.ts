@@ -105,14 +105,16 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
       await expect(response.json()).resolves.toEqual({ error: 'invalid signature' });
     });
 
-    it('returns 500 — not 401 — when OUR secret is unset, and persists nothing', async () => {
-      // Our misconfiguration, not the caller's. 500 is loud and retryable; a
-      // 401 would look like the provider's fault and hide the real cause.
+    it('returns 429 — not 401, not 500 — when OUR secret is unset, and persists nothing', async () => {
+      // Our misconfiguration, not the caller's. It must DEFER: a 5xx is
+      // returned verbatim by Forward Email as a permanent failure and the mail
+      // bounces while we fix the config. 401 would defer too, but reads as the
+      // provider's fault in their logs and forfeits the in-session retry.
       delete process.env.INBOUND_EMAIL_WEBHOOK_SECRET;
 
       const response = await POST(request(VALID_BODY));
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(429);
       expect(persistInboundEmail).not.toHaveBeenCalled();
     });
   });
@@ -176,19 +178,34 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
     });
   });
 
-  describe('the 5xx durability invariant', () => {
-    it('returns 5xx — NOT 200 — when the write fails', async () => {
-      // This is the single most important assertion in the feature. A 200 over
-      // a failed write loses the message silently while telling the sender it
-      // arrived. The 5xx makes Forward Email temp-fail the SMTP session, so the
-      // SENDER's mail server holds it and retries for 24-72 hours.
+  describe('the deferral invariant', () => {
+    it('returns 429 — NOT 200 and NOT 5xx — when the write fails', async () => {
+      // The single most important assertion in the feature, and it used to
+      // assert the opposite of what it meant. A 200 loses the message while
+      // telling the sender it arrived. A 5xx is returned VERBATIM by Forward
+      // Email as a permanent failure, so the sender bounces it immediately —
+      // which is what this route did for its whole life. Only a 4xx maps to
+      // SMTP 421 and makes the sender's own server hold and retry for 24-72h.
       persistInboundEmail.mockRejectedValue(new Error('connection terminated'));
 
       const response = await POST(request(VALID_BODY));
 
-      expect(response.status).toBeGreaterThanOrEqual(500);
+      expect(response.status).toBe(429);
       const body = await response.json();
       expect(body).not.toHaveProperty('received');
+    });
+
+    it('defers — does not bounce — when quarantine itself throws', async () => {
+      // The three paths that used to escape as a framework 500: req.text(),
+      // both quarantineInboundPayload awaits, and the non-shape rethrow. This
+      // one is the worst of them, because the payload it drops is the one
+      // quarantine exists to preserve and which exists nowhere else.
+      quarantineInboundPayload.mockRejectedValue(new Error('connection terminated'));
+
+      const response = await POST(request('not json at all'));
+
+      expect(response.status).toBe(429);
+      await expect(response.json()).resolves.not.toHaveProperty('received');
     });
 
     it('does not leak the underlying error into the response body', async () => {

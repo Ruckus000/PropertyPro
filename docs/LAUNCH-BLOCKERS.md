@@ -205,7 +205,7 @@ is visible from the records themselves:
   ~900 KB attachment otherwise exceeds Vercel's 4.5 MB body cap and the message
   vanishes with no log line.
 - **If the webhook is broken when mail arrives, nothing is lost:** it returns
-  5xx, Forward Email temp-fails the SMTP session with a 421, and the sender's
+  429, Forward Email temp-fails the SMTP session with a 421, and the sender's
   own mail server holds and retries for 24–72 hours. That window only helps if
   somebody notices, so it does not replace the monitor in item 5.
 
