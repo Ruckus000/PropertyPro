@@ -84,7 +84,7 @@ describe('verifyForwardEmailWebhookToken', () => {
     // temp-fails the SMTP session, so the sender's server holds and retries.
     delete process.env.INBOUND_EMAIL_WEBHOOK_SECRET;
     // Assert `kind`, not the message text: `kind` is what the route branches on
-    // to choose 500-over-401, so a message reword must not be able to redden
+    // to choose 429-over-401, so a message reword must not be able to redden
     // this while a changed discriminator slips through.
     expect(() => verifyForwardEmailWebhookToken(BODY, headers(sign(BODY)))).toThrow(
       expect.objectContaining({ kind: 'unconfigured' }),

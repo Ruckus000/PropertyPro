@@ -18,19 +18,37 @@
  *     is how a domain gets blocklisted. The admin reply route is the only path
  *     that calls sendEmail, and its first statement is requirePlatformAdmin().
  *
- * ── THE 5xx INVARIANT ──
+ * ── THE DEFERRAL INVARIANT ──
  *
- * On failure this returns 5xx, NEVER 200. That inverts the house pattern: the
- * Stripe and Twilio webhooks always return 200 because those providers retry
- * forever and a poison message would loop.
+ * On failure this returns 429, NEVER 200 and NEVER 5xx. It still inverts the
+ * house pattern — the Stripe and Twilio webhooks always return 200 because
+ * those providers retry forever and a poison message would loop — but the
+ * status matters, and this file used to have it backwards.
  *
- * Here the non-2xx IS the durability mechanism. Forward Email retries twice,
- * then temp-fails the SMTP session with a 421 (helpers/get-error-code.js), at
- * which point the SENDER's mail server queues the message and retries for
- * 24-72 hours. So a 5xx means "held, try again"; a 200 over a failed write
- * means the message is gone and the sender believes it arrived. There is no
- * fallback mailbox precisely because this holds.
+ * Forward Email maps our HTTP status onto the live SMTP session:
+ *
+ *   4xx, except 403/404  ->  SMTP 421  ->  the SENDER's server queues the
+ *                            message and retries for 24-72 hours
+ *   >= 500               ->  returned verbatim  ->  a PERMANENT failure, so
+ *                            the sender bounces it immediately
+ *
+ * So the 500 this route used to return on a failed write did the opposite of
+ * what its own comment claimed: it destroyed the message it was trying to
+ * protect. 429 defers. It also earns a free in-session HTTP retry, which 401
+ * does not (their retryable set is {408, 413, 429, 550}).
+ *
+ * A 200 over a failed write is still the worst outcome: the message is gone
+ * and the sender believes it arrived. There is no fallback mailbox because
+ * the sender's own queue is the fallback — but only while we defer.
+ *
+ * UNVERIFIED AGAINST THE DEPLOYED MX. This mapping was read from
+ * forwardemail.net master (helpers/get-error-code.js, is-retryable-error.js
+ * and zone-mta's bounce rules); their FAQ describes older behaviour, so one of
+ * the two is stale. 429 is the right answer under BOTH readings, because every
+ * source agrees on 4xx -> 421. Settling it properly means poisoning one test
+ * message and reading the sender's NDR.
  */
+import * as Sentry from '@sentry/nextjs';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { normalizeForwardEmailPayload } from '@/lib/services/support-inbox/normalize';
@@ -90,15 +108,54 @@ function logInboundEmailEvent(
  *
  * Why it matters more than a cosmetic scrub: a NUL makes the INSERT fail with
  * a code that is not 23505, so `persistInboundEmail` rethrows and this route
- * returns 500 — the branch whose entire premise is that the failure is
- * TRANSIENT (see the durability comment below). It is not. Every retry fails
- * identically, Forward Email 421s each time, and the sender's own server
- * holds the message for 24-72h before hard-bouncing it. One control character
- * would turn "held, try again" into "lost, and nothing logged".
+ * takes the deferral branch. Every retry then fails identically until the
+ * sender gives up, so one control character turns "held, try again" into
+ * "held, retried for three days, then lost".
  */
 const NUL_RE = /\u0000/g;
 
 export const POST = async (req: NextRequest): Promise<NextResponse> => {
+  /**
+   * Everything is inside one try/catch because this route deliberately does
+   * NOT use withErrorHandler (see the header). Without this, three paths threw
+   * straight past every deferral above and Next answered with a framework 500
+   * — a PERMANENT failure: `req.text()`, both `quarantineInboundPayload`
+   * awaits, and the non-shape rethrow.
+   *
+   * The asymmetry that created was the whole bug. With Postgres unreachable an
+   * ORDINARY message deferred and was held at the sender, while a
+   * shape-drifted or non-JSON one bounced and was gone — and that is precisely
+   * the payload that exists nowhere else, the one quarantine exists to keep.
+   */
+  try {
+    return await handleInboundEmail(req);
+  } catch (error) {
+    /**
+     * Report BEFORE anything else in this block.
+     *
+     * Catching here removed the only alerting these paths had. Sentry reports
+     * this route two ways and both fire only on an UNCAUGHT error: the
+     * @sentry/nextjs route wrapper, and `onRequestError` in instrumentation.ts.
+     * Nothing here turns a console line into an alert — sentry.server.config.ts
+     * calls Sentry.init with no `integrations`, so there is no
+     * captureConsoleIntegration, and logInboundEmailEvent is itself a
+     * console.error.
+     *
+     * Without this line the deferral buys nothing: Forward Email would retry a
+     * broken deploy against the sender's 24-72h window while no one is told,
+     * and the first sign of trouble would be an NDR after the window is spent.
+     */
+    Sentry.captureException(error, { tags: { component: 'inbound-email-webhook' } });
+    console.error('[inbound-email-webhook] unhandled', error);
+    logInboundEmailEvent('error', 'inbound email handler threw', {
+      outcome: 'failure',
+      errorCode: 'PERSIST_FAILED',
+    });
+    return NextResponse.json({ error: 'failed to store message' }, { status: 429 });
+  }
+};
+
+const handleInboundEmail = async (req: NextRequest): Promise<NextResponse> => {
   // Raw bytes first — everything below depends on them being untouched.
   const rawBody = await req.text();
 
@@ -106,13 +163,17 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     verifyForwardEmailWebhookToken(rawBody, req.headers);
   } catch (error) {
     if (error instanceof InboundEmailSignatureError && error.kind === 'unconfigured') {
-      // OUR fault. 500 so it is loud and so the provider retries once fixed —
-      // the sender's server is holding the message either way.
+      // OUR fault, not the caller's — but it must still DEFER. A 500 here is
+      // returned verbatim as a permanent failure and every message bounces
+      // while the secret is being fixed, which is the opposite of loud: it is
+      // silent and lossy. 429 makes the sender hold. Not 401 either, which
+      // defers but reads as the provider's fault in their logs and forfeits
+      // the in-session retry.
       logInboundEmailEvent('error', 'inbound email webhook secret is not configured', {
         outcome: 'failure',
         errorCode: 'SECRET_NOT_CONFIGURED',
       });
-      return NextResponse.json({ error: 'not configured' }, { status: 500 });
+      return NextResponse.json({ error: 'not configured' }, { status: 429 });
     }
 
     // Distinguish the two, because they call for opposite responses and
@@ -187,17 +248,25 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
 
     return NextResponse.json({ received: true, duplicate: result.duplicate });
   } catch (error) {
-    // THE DURABILITY INVARIANT. Do not turn this into a 200. Nothing was
-    // written (the whole persist runs in one transaction), so a 5xx makes
-    // Forward Email temp-fail the SMTP session and the sender's own server
-    // holds and retries for 24-72 hours. A 200 here loses the message silently
-    // while telling the sender it arrived.
+    // THE DEFERRAL INVARIANT. Do not turn this into a 200, and do not turn it
+    // back into a 500. Nothing was written (the whole persist runs in one
+    // transaction), so a 429 makes Forward Email temp-fail the SMTP session
+    // and the sender's own server holds and retries for 24-72 hours. A 500
+    // here is returned verbatim as a PERMANENT failure and the message bounces
+    // on the spot; a 200 loses it silently while telling the sender it
+    // arrived. Both destroy mail. Only the 4xx defers.
+    // Same reasoning as the wrapper above, and it applies harder here: this is
+    // the ordinary database-unreachable path, the one the deferral window
+    // exists for. It has never reported to Sentry — it was always caught — so
+    // this is a pre-existing gap rather than a regression, but leaving it open
+    // means the window nobody knows about expires unused.
+    Sentry.captureException(error, { tags: { component: 'inbound-email-webhook' } });
     logInboundEmailEvent('error', 'failed to store inbound email', {
       outcome: 'failure',
       errorCode: 'PERSIST_FAILED',
       mailbox: email.mailbox,
     });
     console.error('[inbound-email-webhook] persist error', error);
-    return NextResponse.json({ error: 'failed to store message' }, { status: 500 });
+    return NextResponse.json({ error: 'failed to store message' }, { status: 429 });
   }
 };

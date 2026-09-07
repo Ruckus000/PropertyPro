@@ -6,10 +6,13 @@ import { INBOUND_EMAIL_SIGNATURE_HEADER } from '@/lib/services/support-inbox/sig
 
 import forwardEmailFixture from './fixtures/forward-email-webhook.json';
 
-const { persistInboundEmail, quarantineInboundPayload } = vi.hoisted(() => ({
+const { persistInboundEmail, quarantineInboundPayload, captureException } = vi.hoisted(() => ({
   persistInboundEmail: vi.fn(),
   quarantineInboundPayload: vi.fn(),
+  captureException: vi.fn(),
 }));
+
+vi.mock('@sentry/nextjs', () => ({ captureException }));
 
 vi.mock('@/lib/services/support-inbox/inbound-email-service', () => ({
   persistInboundEmail,
@@ -105,27 +108,30 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
       await expect(response.json()).resolves.toEqual({ error: 'invalid signature' });
     });
 
-    it('returns 500 — not 401 — when OUR secret is unset, and persists nothing', async () => {
-      // Our misconfiguration, not the caller's. 500 is loud and retryable; a
-      // 401 would look like the provider's fault and hide the real cause.
+    it('returns 429 — not 401, not 500 — when OUR secret is unset, and persists nothing', async () => {
+      // Our misconfiguration, not the caller's. It must DEFER: a 5xx is
+      // returned verbatim by Forward Email as a permanent failure and the mail
+      // bounces while we fix the config. 401 would defer too, but reads as the
+      // provider's fault in their logs and forfeits the in-session retry.
       delete process.env.INBOUND_EMAIL_WEBHOOK_SECRET;
 
       const response = await POST(request(VALID_BODY));
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(429);
       expect(persistInboundEmail).not.toHaveBeenCalled();
     });
   });
 
   describe('control characters', () => {
     it('strips a NUL escape so the write cannot fail permanently', async () => {
-      // THE DURABILITY INVARIANT'S PRECONDITION. Postgres rejects U+0000 in a
+      // THE DEFERRAL INVARIANT'S PRECONDITION. Postgres rejects U+0000 in a
       // `text` column with 22021, which is not 23505 — so persistInboundEmail
-      // rethrows, the route 500s, and the 5xx branch treats a PERMANENT
+      // rethrows and the route takes the deferral branch, treating a PERMANENT
       // failure as a transient one: Forward Email 421s, the sender's server
       // holds and retries for 24-72h, every attempt failing identically, and
-      // the message hard-bounces. A design that is safe only while failures
-      // are transient has to make the permanent ones impossible at the edge.
+      // the message hard-bounces at the end of it. A design that is safe only
+      // while failures are transient has to make the permanent ones impossible
+      // at the edge.
       const body = JSON.stringify({
         ...forwardEmailFixture,
         subject: 'Records request\u0000hidden',
@@ -176,19 +182,78 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
     });
   });
 
-  describe('the 5xx durability invariant', () => {
-    it('returns 5xx — NOT 200 — when the write fails', async () => {
-      // This is the single most important assertion in the feature. A 200 over
-      // a failed write loses the message silently while telling the sender it
-      // arrived. The 5xx makes Forward Email temp-fail the SMTP session, so the
-      // SENDER's mail server holds it and retries for 24-72 hours.
+  describe('the deferral invariant', () => {
+    it('returns 429 — NOT 200 and NOT 5xx — when the write fails', async () => {
+      // The single most important assertion in the feature, and it used to
+      // assert the opposite of what it meant. A 200 loses the message while
+      // telling the sender it arrived. A 5xx is returned VERBATIM by Forward
+      // Email as a permanent failure, so the sender bounces it immediately —
+      // which is what this route did for its whole life. Only a 4xx maps to
+      // SMTP 421 and makes the sender's own server hold and retry for 24-72h.
       persistInboundEmail.mockRejectedValue(new Error('connection terminated'));
 
       const response = await POST(request(VALID_BODY));
 
-      expect(response.status).toBeGreaterThanOrEqual(500);
+      expect(response.status).toBe(429);
       const body = await response.json();
       expect(body).not.toHaveProperty('received');
+    });
+
+    it('reports the WRAPPER path to Sentry — the one this change stopped reporting', async () => {
+      // Must exercise the wrapper, not the persist catch. The first version of
+      // this test used persistInboundEmail.mockRejectedValue, which routes
+      // through PERSIST_FAILED instead — so deleting the wrapper's capture left
+      // it green. It protected the wrong line.
+      quarantineInboundPayload.mockRejectedValue(new Error('jsonb rejected 0x00'));
+
+      const response = await POST(request('not json at all'));
+
+      expect(response.status).toBe(429);
+      expect(captureException).toHaveBeenCalledTimes(1);
+      expect(captureException.mock.calls[0]?.[1]).toMatchObject({
+        tags: { component: 'inbound-email-webhook' },
+      });
+    });
+
+    it('reports the PERSIST path to Sentry, or the window buys nothing', async () => {
+      // Catching these paths removed the only alerting they had: both Sentry
+      // hooks for this route (the @sentry/nextjs route wrapper and
+      // instrumentation.ts's onRequestError) fire ONLY on an uncaught error,
+      // and nothing here promotes a console line to an alert — Sentry.init is
+      // called with no integrations, so there is no captureConsoleIntegration.
+      // Without an explicit capture, Forward Email retries a broken deploy for
+      // 24-72h and the first anyone hears of it is an NDR after the window is
+      // already spent.
+      persistInboundEmail.mockRejectedValue(new Error('connection terminated'));
+
+      await POST(request(VALID_BODY));
+
+      expect(captureException).toHaveBeenCalledTimes(1);
+      expect(captureException.mock.calls[0]?.[1]).toMatchObject({
+        tags: { component: 'inbound-email-webhook' },
+      });
+    });
+
+    it('does not report a REJECTED signature to Sentry (control)', async () => {
+      // A forged or stale signature is the caller's problem and is expected
+      // during a key rotation. Paging on it would train the one operator to
+      // ignore the alert that matters.
+      await POST(request(VALID_BODY, 'deadbeef'));
+
+      expect(captureException).not.toHaveBeenCalled();
+    });
+
+    it('defers — does not bounce — when quarantine itself throws', async () => {
+      // The three paths that used to escape as a framework 500: req.text(),
+      // both quarantineInboundPayload awaits, and the non-shape rethrow. This
+      // one is the worst of them, because the payload it drops is the one
+      // quarantine exists to preserve and which exists nowhere else.
+      quarantineInboundPayload.mockRejectedValue(new Error('connection terminated'));
+
+      const response = await POST(request('not json at all'));
+
+      expect(response.status).toBe(429);
+      await expect(response.json()).resolves.not.toHaveProperty('received');
     });
 
     it('does not leak the underlying error into the response body', async () => {
