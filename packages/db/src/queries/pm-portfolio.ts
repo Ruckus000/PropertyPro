@@ -45,10 +45,10 @@ function toCountMap<T extends { communityId: number; count: number }>(
 }
 
 /**
- * Returns true when the given user holds a PM-scope role (pm_admin /
- * property_manager / root_manager) in at
- * least one non-deleted community.  Intentionally unscoped — callers must
- * only expose this through `@propertypro/db/unsafe`.
+ * Returns true when the given user holds a PM-scope role
+ * (`PM_SCOPE_DB_ROLES` = property_manager / root_manager) in at least one
+ * non-deleted community. Intentionally unscoped — callers must only expose
+ * this through `@propertypro/db/unsafe`.
  */
 export async function isPmAdminInAnyCommunity(
   userId: string,
@@ -60,7 +60,7 @@ export async function isPmAdminInAnyCommunity(
     .where(
       and(
         eq(userRoles.userId, userId),
-        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        // v3-only: PM_SCOPE_DB_ROLES is ['property_manager','root_manager'].
         inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
         isNull(communities.deletedAt),
       ),

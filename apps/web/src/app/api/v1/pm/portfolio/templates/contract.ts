@@ -7,10 +7,11 @@
  *
  * Auth surface (all methods, enforced in the route's shared `gateUser()`):
  *   requireAuthenticatedUserId
- *     → isPmAdminInAnyCommunity (pm_admin in ≥1 community)
+ *     → isPmAdminInAnyCommunity (property_manager or root_manager in ≥1 community)
  *     → userHasPortfolioTemplatesAccess (hasSitePortfolioTemplates plan feature)
- * POST additionally checks per-community membership + pm_admin/cam role on the
- * source community before snapshotting its branding.
+ * POST additionally checks per-community membership + requireRole(PM_MANAGER_ROLES)
+ * (property_manager/root_manager) on the source community before snapshotting
+ * its branding.
  *
  * `permission: { resource: 'settings', action }` — `settings` IS in
  * `RBAC_RESOURCES`; the real gate is the PM/plan check in the handler

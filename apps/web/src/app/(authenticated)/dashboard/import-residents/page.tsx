@@ -2,7 +2,8 @@
  * Import Residents Page — bulk CSV import wizard for community residents.
  *
  * Route: /dashboard/import-residents?communityId=X
- * Auth: admin roles only (board_member, board_president, cam, site_manager, pm_admin).
+ * Auth: membership.isAdmin — the v3 admin tier (property_manager or root_manager).
+ * Board designation grants no access (ADR-006).
  */
 import { headers } from 'next/headers';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';

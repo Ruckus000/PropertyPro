@@ -5,10 +5,11 @@
  *
  * Every method runs the shared `gateUser()`:
  *   requireAuthenticatedUserId
- *     → isPmAdminInAnyCommunity (pm_admin in ≥1 community)
+ *     → isPmAdminInAnyCommunity (property_manager or root_manager in ≥1 community)
  *     → userHasPortfolioTemplatesAccess (hasSitePortfolioTemplates plan feature)
  * POST additionally authorizes the caller manages the SOURCE community
- * (requireCommunityMembership + pm_admin/cam) before snapshotting its branding.
+ * (requireCommunityMembership + requireRole(PM_MANAGER_ROLES), i.e.
+ * property_manager/root_manager) before snapshotting its branding.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';

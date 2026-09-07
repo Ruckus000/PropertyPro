@@ -632,22 +632,56 @@ The most expensive item in this section, because it is what agents and new reade
 | `IMPLEMENTATION_PLAN.md` (164 KB, repo root) | "PR #33 … ready to merge to `main`" | The repo is past #1072. Historical; so are the four `PHASE*_EXECUTION_PLAN.md` files beside it |
 | `docs/gtm/03-LAUNCH-READINESS.md` | B1–B4 blockers | Already called stale above |
 
-**The same defect survives in nine source docblocks, and `guard:legacy-roles` cannot see
-any of them.** The guard matches *quoted* literals (`'cam'`, `'site_manager'`,
-`'property_manager_admin'`) in `.ts`/`.tsx`; these are unquoted prose, so they sit at zero
-cost forever:
+**The same defect ran much wider than the rule file, and `guard:legacy-roles` cannot see
+any of it.** The guard matches *quoted* literals (`'cam'`, `'site_manager'`,
+`'property_manager_admin'`) in `.ts`/`.tsx`; every instance below is unquoted prose inside
+a comment, so it sits at zero cost forever.
+
+**Swept 2026-09-07 — 18 sites, each verified against the gate it describes**, not
+search-and-replaced: `schema/rls-config.ts` ×5 (three named `requireAdminRole`, **a
+function that does not exist anywhere in the repo**; the real gates are
+`requirePermission(contracts|documents|residents, write)` — and note the invitations
+table's RBAC resource is `residents`, not `invitations`), `schema/communities.ts`, five
+`(authenticated)` page docblocks, five PM route/contract docblocks, and
+`queries/pm-portfolio.ts` (whose comment still announced a "BILINGUAL … collapse to
+v3-only at Phase 4 cleanup" that has already happened — `PM_SCOPE_DB_ROLES` is v3-only).
+
+**Still open: ~27 more lines across 25 files**, all of the same shape — a docblock
+asserting *current* authorization in retired names (`pm_admin or cam`,
+`property_manager_admin`), concentrated in `api/v1/pm/site/*`, `lib/api/branding.ts`,
+`lib/api/community-context.ts` and six `lib/services/*`:
 
 ```bash
-grep -rn "board_member/board_president/cam\|board_member, board_president, cam" \
-  packages apps --include="*.ts" --include="*.tsx" | grep -v node_modules   # 10 hits
+grep -rn "pm_admin or cam\|pm_admin/cam\|hold property_manager_admin\|pm_admin in " \
+  apps/*/src packages/*/src --include="*.ts" --include="*.tsx" \
+  | grep -v node_modules | grep -v __tests__ | grep -v "dev/agent-login\|dev/login"
 ```
 
-One of the ten (`packages/shared/src/index.ts:11`) is correct — it describes the vocabulary
-*as retired*. The other nine assert it as current auth behaviour: `rls-config.ts` ×3 (the
-`notes` field, which is the nearest thing this repo has to an RLS design record),
-`schema/communities.ts:29`, and five `(authenticated)` page docblocks (`audit-trail`,
-`violations`, `contracts`, `dashboard/import-residents`, `dashboard/residents`). Comments,
-not runtime — but they are what the next reader believes.
+That pattern is narrow, so **treat 27 as a floor.** Each site needs its real gate read
+before rewriting — that is what turned up the non-existent `requireAdminRole` — so this is
+an hour of work, not a codemod.
+
+**Do NOT sweep four categories that legitimately hold the old names:** comments that
+describe the vocabulary *as retired* (`packages/shared/src/index.ts`, `rbac-matrix.ts`,
+`wizard-common.ts`), the help-content viewer vocabulary (`lib/help/*`, `default-faqs.ts` —
+content, not runtime roles, and allowlisted), the transition mapping table
+(`role-transition.ts`), and the dev-login aliases (allowlisted, 404 in prod).
+
+### A dead triplet found in the same sweep
+
+`apps/web/src/hooks/use-residents.ts` exports `ADMIN_ROLES_PARAM =
+'board_member,board_president,cam,site_manager,property_manager_admin'` and sends it as
+`?roles=` to `GET /api/v1/residents`, which validates every entry against
+`COMMUNITY_ROLES` and throws `ValidationError` on the first one. **It would 400 on every
+call.** It does not, because nothing calls it: `useResidents` has exactly one consumer,
+`components/maintenance/AssignmentModal.tsx`, and nothing renders that modal
+(`residents-page-client` uses a different hook). Hook, constant and modal are all dead —
+DC-03 territory.
+
+What keeps it invisible is the unit test: `hooks/__tests__/use-residents.test.tsx:36` is
+`expect(ADMIN_ROLES_PARAM).toBe('board_member,…')`. It **pins the broken value**, so the
+suite is green *because* the string is wrong. Deleting the triplet is the fix; whoever
+wires that modal up instead will get a 400 and no assignee list.
 
 The `tenant-isolation.md` line was fixed in the same change that added this section. The
 rest is one question, not five: **`docs/` holds ~50 top-level files plus `audits/`, `specs/`,

@@ -2,8 +2,8 @@
  * P3-53: Audit Trail Viewer page.
  *
  * Route: /audit-trail?communityId=X
- * Auth: community admin required (board_member, board_president, cam,
- *        site_manager, property_manager_admin).
+ * Auth: isAdminRole(membership.role) — the v3 admin tier, property_manager or
+ *        root_manager. Board designation grants no access (ADR-006).
  * Read-only: no mutation capabilities.
  */
 import { redirect } from 'next/navigation';
