@@ -64,7 +64,7 @@ export function verifyForwardEmailWebhookToken(rawBody: string, headers: Headers
 
   const provided = headers.get(INBOUND_EMAIL_SIGNATURE_HEADER);
   if (!provided) {
-    throw new InboundEmailSignatureError('rejected', 'no signature header');
+    throw new InboundEmailSignatureError('missing_header', 'no X-Webhook-Signature header');
   }
 
   const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
@@ -73,9 +73,9 @@ export function verifyForwardEmailWebhookToken(rawBody: string, headers: Headers
   // buffers rather than returning false, which would surface as a 500 instead
   // of a 401 and tell an attacker their guess was the wrong shape.
   if (expected.length !== provided.length) {
-    throw new InboundEmailSignatureError('rejected', 'signature mismatch');
+    throw new InboundEmailSignatureError('mismatch', 'signature does not match');
   }
   if (!timingSafeEqual(Buffer.from(expected), Buffer.from(provided))) {
-    throw new InboundEmailSignatureError('rejected', 'signature mismatch');
+    throw new InboundEmailSignatureError('mismatch', 'signature does not match');
   }
 }

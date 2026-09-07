@@ -58,7 +58,7 @@ describe('verifyForwardEmailWebhookToken', () => {
 
   it('rejects a missing signature header', () => {
     expect(() => verifyForwardEmailWebhookToken(BODY, headers(null))).toThrow(
-      /no signature header/,
+      /no X-Webhook-Signature header/,
     );
   });
 
@@ -98,11 +98,16 @@ describe('verifyForwardEmailWebhookToken', () => {
     );
   });
 
-  it('marks a bad signature as `rejected`, not `unconfigured`', () => {
-    // The route maps unconfigured -> 500 (our fault, loud) and rejected -> 401.
-    // Collapsing the two would hide a missing secret behind a caller error.
-    expect(() => verifyForwardEmailWebhookToken(BODY, headers('deadbeef'))).toThrow(
-      expect.objectContaining({ kind: 'rejected' }),
+  it('distinguishes a MISSING header from a MISMATCHED one', () => {
+    // These mean opposite things operationally: a mismatch says rotate the
+    // secret; a missing header says the caller does not sign at all and no
+    // secret change will help. Forward Email's free tier sends no signature,
+    // and collapsing these two into one code cost hours of live debugging.
+    expect(() => verifyForwardEmailWebhookToken(BODY, headers(null))).toThrow(
+      expect.objectContaining({ kind: 'missing_header' }),
+    );
+    expect(() => verifyForwardEmailWebhookToken(BODY, headers(sign(BODY, 'z'.repeat(48))))).toThrow(
+      expect.objectContaining({ kind: 'mismatch' }),
     );
   });
 

@@ -155,7 +155,19 @@ secret is set or not, because the verifier returns `null` in both cases.
 
 ## 3. No MX record — `support@getpropertypro.com` bounces
 
-**Status:** code shipped, **DNS still to do** · **Owner:** you (DNS)
+**Status:** DNS live; mail delivers. Portal ingestion BLOCKED on a paid plan ·
+**Owner:** you (product decision)
+
+> **Resolved for the blocker itself:** MX and DMARC are live and verified, so
+> `support@` no longer bounces — it forwards to a real inbox. Item 4 is closed
+> with it.
+>
+> **Not resolved:** mail does not reach the admin Inbox. Forward Email's free
+> plan sends webhooks unsigned (`get-settings.js` gates `webhookKey` on
+> `plan !== 'free'`), our ingress fails closed, and a 401 there fails the whole
+> SMTP delivery — the sibling forward included. See `docs/DEPLOYMENT.md` §5.5
+> for the measurement and the three options ($3/mo plan, IP allowlisting, or
+> Resend Inbound).
 
 `dig @ns1.vercel-dns.com getpropertypro.com MX` still returns SOA only. That
 address is published as the support off-ramp on `(marketing)/contact/page.tsx`

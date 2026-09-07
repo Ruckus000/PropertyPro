@@ -335,6 +335,41 @@ breaks outbound mail.
 
 ### 5.5 Inbound Mail (Forward Email)
 
+> **BLOCKER, measured in production 2026-09-06: Forward Email's free plan sends
+> webhooks UNSIGNED, and our ingress fails closed, so inbound mail does not
+> work on the free plan.**
+>
+> Their pricing page advertises "Send emails to webhooks" on the free tier, and
+> that part is true — they do POST to the endpoint. What it does not say is that
+> the signature is paid-only. From their source:
+>
+> * `helpers/get-settings.js` populates `webhookKey` only inside
+>   `if (domain && domain.plan !== 'free')`.
+> * `helpers/on-data-mx.js` attaches the header only
+>   `...(recipient.webhookKey ? { 'X-Webhook-Signature': … } : {})`.
+>
+> So on the free plan there is no signature at all, our route returns 401, and
+> Forward Email then fails the ENTIRE SMTP delivery — including any sibling
+> recipient on the same alias. Measured directly: `zzztest@` (catch-all to Gmail,
+> no webhook) delivered; `hello@` (same catch-all PLUS a webhook) delivered
+> nowhere. A webhook that 401s takes the whole message down with it.
+>
+> Three ways out, none of them free-and-signed:
+>
+> 1. **Enhanced Protection, $3/mo, unlimited domains** — signatures start
+>    arriving and the code works unchanged. Cheapest path; ~40% of one Google
+>    Workspace seat.
+> 2. **Verify by source IP instead of HMAC** — their own docs propose this
+>    ("check that the remote server's IP address is one of ours"), and they
+>    publish the list at forwardemail.net/ips. Free, weaker, and brittle: an IP
+>    they add without us refreshing fails closed again.
+> 3. **Switch to Resend Inbound** — Svix-signed on the free tier, no new vendor,
+>    but inbound counts against the same 3,000/mo quota as outbound.
+>
+> Until one is chosen, the apex carries only `forward-email=<address>`, so every
+> mailbox forwards to a normal inbox and nothing is lost.
+
+
 Receiving `support@` / `privacy@` / `contact@` is what feeds the admin console's
 Inbox. Nothing here is live until these records are added, and **order matters**.
 

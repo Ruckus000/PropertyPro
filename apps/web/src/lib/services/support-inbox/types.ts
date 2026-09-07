@@ -73,10 +73,25 @@ export class InboundEmailShapeError extends Error {
  * must not have to pattern-match on a message string to tell them apart:
  *   - `unconfigured` is OUR misconfiguration -> 500, loud, and retryable once
  *     fixed (the sender's mail server holds the message meanwhile).
- *   - `rejected` is someone else's problem -> 401. A legitimate key rotation
- *     still gets retried; a forgery just fails again, cheaply.
+ *   - `missing_header` and `mismatch` are the caller's problem -> 401.
+ *
+ * `missing_header` and `mismatch` are separate values rather than one
+ * `rejected`, because they mean COMPLETELY different things operationally and
+ * collapsing them cost real debugging time:
+ *
+ *   - `mismatch` -> the provider signed with a key that is not ours. Re-check
+ *     or rotate the shared secret.
+ *   - `missing_header` -> the provider sent NO signature at all. No secret
+ *     change can fix that; either the provider does not sign on the current
+ *     plan, or it is not the provider calling us. Forward Email's free tier
+ *     does exactly this: `helpers/get-settings.js` only populates `webhookKey`
+ *     when `domain.plan !== 'free'`, and `on-data-mx.js` attaches the header
+ *     only `if (recipient.webhookKey)`.
  */
-export type InboundEmailSignatureFailure = 'unconfigured' | 'rejected';
+export type InboundEmailSignatureFailure =
+  | 'unconfigured'
+  | 'missing_header'
+  | 'mismatch';
 
 export class InboundEmailSignatureError extends Error {
   readonly kind: InboundEmailSignatureFailure;
