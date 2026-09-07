@@ -57,8 +57,11 @@ export interface CronJobDefinition {
   /**
    * How long after its last SUCCESS a job is considered stale.
    *
-   * Must exceed the schedule's own interval, or the job would be permanently
-   * overdue by construction — asserted by the guard.
+   * Must exceed the LONGEST gap the schedule can produce, or the job would be
+   * permanently overdue by construction. Asserted by `guard:cron-job-tagging`
+   * — which for a long while only claimed to: it computed the interval and
+   * discarded it. "Longest", not "interval", because they differ for a monthly
+   * job (28 days vs 31) and that is the case a window has to survive.
    */
   maxAgeMinutes: number;
 }

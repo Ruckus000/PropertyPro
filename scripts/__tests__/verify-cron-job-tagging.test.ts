@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeRoute, minIntervalMinutes, slugForPath } from '../verify-cron-job-tagging';
+import { analyzeRoute, maxIntervalMinutes, slugForPath } from '../verify-cron-job-tagging';
 
 /**
  * Unit tests for the predicates behind `pnpm guard:cron-job-tagging`.
@@ -24,22 +24,42 @@ describe('slugForPath', () => {
   });
 });
 
-describe('minIntervalMinutes', () => {
+describe('maxIntervalMinutes', () => {
   it('reads a step schedule', () => {
-    expect(minIntervalMinutes('*/5 * * * *')).toBe(5);
-    expect(minIntervalMinutes('*/15 * * * *')).toBe(15);
+    expect(maxIntervalMinutes('*/5 * * * *')).toBe(5);
+    expect(maxIntervalMinutes('*/15 * * * *')).toBe(15);
   });
 
-  it('reads a minute LIST by its tightest gap, not its average', () => {
-    // scheduled-site-publish. The gaps are all 15, including 50 -> 05 across
-    // the hour boundary, which a naive max-min would get wrong.
-    expect(minIntervalMinutes('5,20,35,50 * * * *')).toBe(15);
+  it('reads a step that does NOT divide 60 by its widest gap, which is the step', () => {
+    // `*/7` fires at :00 .. :56 then :00 again — gaps of 7 and a short 4 at the
+    // wrap. The widest is 7. (The predecessor returned 7 here as a LOWER bound,
+    // which was wrong in the other direction: the true minimum is 4. Neither
+    // number ever mattered, because this repo only schedules */5 and */15.)
+    expect(maxIntervalMinutes('*/7 * * * *')).toBe(7);
   });
 
-  it('reads hourly, daily and monthly', () => {
-    expect(minIntervalMinutes('15 * * * *')).toBe(60);
-    expect(minIntervalMinutes('0 4 * * *')).toBe(1440);
-    expect(minIntervalMinutes('0 5 1 * *')).toBe(28 * 1440);
+  it('reads a minute LIST by its WIDEST gap, wrap included', () => {
+    // scheduled-site-publish. All gaps are 15, including 50 -> 05 across the
+    // hour boundary, which a naive last-minus-first would get wrong.
+    expect(maxIntervalMinutes('5,20,35,50 * * * *')).toBe(15);
+    // Deliberately lopsided: two firings a minute apart leave a 59-minute hole.
+    expect(maxIntervalMinutes('0,1 * * * *')).toBe(59);
+  });
+
+  it('reads hourly and daily', () => {
+    expect(maxIntervalMinutes('15 * * * *')).toBe(60);
+    expect(maxIntervalMinutes('0 4 * * *')).toBe(1440);
+  });
+
+  it('reads MONTHLY as 31 days, not 28 — the whole point of this function', () => {
+    // `0 5 1 * *` fires on the 1st. The shortest gap is 28 days (Feb -> Mar);
+    // the longest is 31. A staleness window has to survive the LONGEST quiet
+    // stretch, so 28 is the wrong bound to size against: it accepts every
+    // maxAgeMinutes in (40320, 44640], each of which pages on every 31-day
+    // month. generate-assessments sits at 46080, which clears 44640 by exactly
+    // the one day of slack its MONTHLY constant claims.
+    expect(maxIntervalMinutes('0 5 1 * *')).toBe(31 * 1440);
+    expect(maxIntervalMinutes('0 5 1 * *')).not.toBe(28 * 1440);
   });
 
   it('returns null for a shape it does not understand, rather than guessing', () => {
@@ -47,9 +67,9 @@ describe('minIntervalMinutes', () => {
     // window that makes a job permanently overdue (alert fatigue) or
     // permanently fresh (no alerting at all) — both worse than admitting it
     // cannot tell.
-    expect(minIntervalMinutes('0 0 * * MON#2')).toBeNull();
-    expect(minIntervalMinutes('0 0 1 1 *')).toBeNull();
-    expect(minIntervalMinutes('not a schedule')).toBeNull();
+    expect(maxIntervalMinutes('0 0 * * MON#2')).toBeNull();
+    expect(maxIntervalMinutes('0 0 1 1 *')).toBeNull();
+    expect(maxIntervalMinutes('not a schedule')).toBeNull();
   });
 });
 
