@@ -54,6 +54,32 @@ The wording is now pinned by tests in
 If you are editing it, keep two properties: the header refuses in the
 imperative, and the block does not read as a procedure.
 
+### Holding a migration forks CI from production
+
+This is the consequence that is easiest to miss and hardest to recover from,
+so the `HELD` block states it every run.
+
+`pnpm db:test-local:reset` and the CI service container apply **every migration
+on disk**. Production has only the ones somebody applied. So a held migration
+means the two schemas differ, and **every test touching its tables validates a
+shape production does not have** — in the feature most likely to be switched on
+later without re-testing, because it is the one that was gated.
+
+Measured on `0062_secret_ballot`, 2026-09-07:
+
+| | five dropped columns | `selection_digest` |
+|---|---|---|
+| local / CI | 0 (gone) | present |
+| production | 5 (present) | absent |
+
+The exact inverse. All 173 election tests passed against a schema production has
+never had — which is why an **inverted dependency**, live code requiring the held
+migration, survived undetected until somebody read it by hand. A green suite
+could not have caught it, and still cannot.
+
+So before switching a gated feature on, re-test against production's real schema.
+The `HELD` block names the affected tables so you know which ones those are.
+
 ### The stranding note
 
 A migration whose `when` sits **below** the ledger's highest `created_at` can

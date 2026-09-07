@@ -4,6 +4,7 @@ import {
   KNOWN_UNAPPLIED_MIGRATIONS,
   formatReport,
   reconcile,
+  tablesTouchedBy,
   type LedgerRow,
   type MigrationFile,
   type ReconcileResult,
@@ -29,12 +30,13 @@ import {
  * satisfied by a function that reports everything, and the "clean" case alone by
  * one that reports nothing.
  */
-const file = (tag: string, when: number, sha256: string, idx = 0): MigrationFile => ({
-  idx,
-  tag,
-  when,
-  sha256,
-});
+const file = (
+  tag: string,
+  when: number,
+  sha256: string,
+  idx = 0,
+  tables: readonly string[] = [],
+): MigrationFile => ({ idx, tag, when, sha256, tables });
 
 const FILES: MigrationFile[] = [
   file('0001_alpha', 1000, 'aaa', 1),
@@ -293,4 +295,116 @@ function out(r: ReconcileResult): string {
   expect(notes).toHaveLength(1);
   return notes[0]!;
 }
+
+/**
+ * Which tables a held migration leaves CI and production disagreeing about.
+ *
+ * The fork itself is the finding: `db:test-local:reset` and the CI service
+ * container apply EVERY migration on disk, production has only what was applied
+ * to it, so a held migration means tests validate a schema prod does not have.
+ * Measured on 0062 (2026-09-07): CI had the five columns dropped and
+ * `selection_digest` present, prod the exact inverse, and all 173 election tests
+ * passed against a shape prod has never had.
+ *
+ * Naming the tables is what makes that actionable rather than abstract, so the
+ * extraction has to be right about one thing in particular — see the comment
+ * case below.
+ */
+describe('tablesTouchedBy', () => {
+  it('finds tables across the statement shapes this repo writes', () => {
+    expect(
+      tablesTouchedBy(`
+        ALTER TABLE "election_ballots" DROP COLUMN "unit_id";
+        CREATE TABLE "cron_runs" ("id" bigserial);
+        DROP TABLE IF EXISTS "widgets";
+        CREATE INDEX "idx_x" ON "units" USING btree ("id");
+      `),
+    ).toEqual(['cron_runs', 'election_ballots', 'units', 'widgets']);
+  });
+
+  it('IGNORES tables named only in comments — the load-bearing case', () => {
+    /*
+     * Every migration in this repo opens with a long prose header explaining
+     * WHY, and those headers name tables freely. Without stripping, a held
+     * migration's warning would list tables its DDL never touches, and the
+     * operator would re-test the wrong things — worse than saying nothing,
+     * because it looks specific.
+     */
+    const sql = `
+      -- WHY: this supersedes the old flow on communities and users, and the
+      -- ALTER TABLE "audit_log" approach we rejected.
+      /* Discussed against ALTER TABLE "sessions" too. */
+      ALTER TABLE "election_ballots" DROP COLUMN "unit_id";
+    `;
+    expect(tablesTouchedBy(sql)).toEqual(['election_ballots']);
+  });
+
+  it('deduplicates and sorts, so the sentence reads the same every run', () => {
+    const sql = `
+      ALTER TABLE "units" ADD COLUMN a text;
+      ALTER TABLE "units" ADD COLUMN b text;
+      ALTER TABLE "amenities" ADD COLUMN c text;
+    `;
+    expect(tablesTouchedBy(sql)).toEqual(['amenities', 'units']);
+  });
+
+  it('handles the schema-qualified and unquoted spellings both appear in', () => {
+    expect(tablesTouchedBy('ALTER TABLE public."cron_runs" ENABLE ROW LEVEL SECURITY;')).toEqual([
+      'cron_runs',
+    ]);
+    expect(tablesTouchedBy('alter table units add column x text;')).toEqual(['units']);
+  });
+
+  it('returns nothing rather than guessing when it recognises no statement', () => {
+    expect(tablesTouchedBy('-- just a note\nSELECT 1;')).toEqual([]);
+  });
+});
+
+describe('the CI/prod fork warning', () => {
+  it('names the affected tables in the held block', () => {
+    const held: MigrationFile = file('0062_secret_ballot', 1786414111600, 'zzz', 62, [
+      'election_ballot_submissions',
+      'election_ballots',
+    ]);
+    const notes = formatReport({
+      filesScanned: 70,
+      ledgerRows: 69,
+      ledgerTip: 1788797631673,
+      applied: [],
+      orphans: [],
+      unapplied: [],
+      expectedUnapplied: [{ file: held, reason: 'held' }],
+      stranded: [],
+      timestampMismatches: [],
+      deadAllowlistEntries: [],
+    }).notes;
+
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('CI/PROD SCHEMA FORK');
+    expect(notes[0]).toContain('election_ballots');
+    expect(notes[0]).toContain('election_ballot_submissions');
+    // The consequence, not just the fact — this is what a reader acts on.
+    expect(notes[0]).toContain('a green suite cannot tell you');
+  });
+
+  it('degrades honestly when no table could be parsed', () => {
+    // Better to say "(none parsed)" than to print an empty list that reads as
+    // "this migration affects nothing".
+    const held: MigrationFile = file('0099_odd', 1, 'q', 99, []);
+    const note = formatReport({
+      filesScanned: 1,
+      ledgerRows: 0,
+      ledgerTip: null,
+      applied: [],
+      orphans: [],
+      unapplied: [],
+      expectedUnapplied: [{ file: held, reason: 'held' }],
+      stranded: [],
+      timestampMismatches: [],
+      deadAllowlistEntries: [],
+    }).notes[0]!;
+
+    expect(note).toContain('(none parsed)');
+  });
+});
 });
