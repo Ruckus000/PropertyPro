@@ -49,6 +49,37 @@ const VERCEL_JSON = 'apps/web/vercel.json';
 const INTERNAL_ROOT = 'apps/web/src/app/api/v1/internal';
 const REGISTRY = 'apps/web/src/lib/cron/registry.ts';
 
+/**
+ * The loose end of the window bound.
+ *
+ * The lower bound below has always been enforced: a window at or under the
+ * schedule's longest gap makes a job stale between two healthy runs. The other
+ * half of this file's stated contract — "permanently fresh (no alerting at
+ * all)" — was printed and never asserted, so `maxAgeMinutes: 999999` passed
+ * silently and the probe could never report that job stale for any reason.
+ *
+ * TWO bounds, because neither catches the other's shape:
+ *
+ *   RATIO      catches a window wildly disproportionate to the cadence. The
+ *              loosest legitimate one today is `community-export-worker` at
+ *              4.00x (20 min against a 5 min gap); 6 leaves headroom without
+ *              permitting an order of magnitude.
+ *
+ *   ABSOLUTE   catches what a ratio cannot see on an infrequent job. Six times
+ *              the monthly gap is 186 days — proportionate, and still "no
+ *              alerting at all" for half a year. The longest legitimate window
+ *              today is `generate-assessments` at 46080 min (32 days).
+ *
+ * Both are deliberately generous. They exist to catch a number that is wrong by
+ * an order of magnitude, not to litigate a judgement call — the per-job windows
+ * are a judgement, which is why registry.ts writes them down by hand. A job
+ * genuinely needing more than these should fail here loudly and have the bound
+ * raised on purpose, the same way an unrecognised schedule exits 2 rather than
+ * being guessed at.
+ */
+const MAX_WINDOW_RATIO = 6;
+const MAX_WINDOW_MINUTES = 64_800; // 45 days
+
 export interface CronEntry {
   path: string;
   schedule: string;
@@ -91,7 +122,56 @@ export function slugForPath(cronPath: string): string {
  * `maxAgeMinutes` that makes a job permanently overdue (alert fatigue) or
  * permanently fresh (no alerting at all) — both worse than admitting it cannot
  * tell.
+ *
+ * Both halves of that sentence are now enforced. The second was only ever
+ * printed: the caller asserted a lower bound and reported the tightest ratio,
+ * so `maxAgeMinutes: 999999` passed and the probe could never call that job
+ * stale. See MAX_WINDOW_RATIO / MAX_WINDOW_MINUTES.
  */
+/**
+ * Judge one job's staleness window against its own schedule.
+ *
+ * Pure and exported because this is the load-bearing judgement in the file and
+ * `main()` is testable by nothing — the reconciliation loop only ever runs in
+ * CI. Returns the violation text, or null when the window is sound.
+ *
+ * Three ways to be wrong, and the middle one went unenforced for its whole life:
+ * too tight (stale between two healthy runs), disproportionate to the cadence,
+ * and — for a rare schedule, where a ratio still reads as reasonable —
+ * absolutely too long to be alerting at all.
+ */
+export function checkWindow(
+  slug: string,
+  maxAgeMinutes: number,
+  longestGap: number,
+  schedule: string,
+): string | null {
+  if (maxAgeMinutes <= longestGap) {
+    return (
+      `'${slug}': maxAgeMinutes ${maxAgeMinutes} does not exceed the longest gap its own ` +
+      `schedule can produce (${longestGap} min for '${schedule}'), so it would read as ` +
+      `stale between two healthy runs`
+    );
+  }
+  if (maxAgeMinutes > longestGap * MAX_WINDOW_RATIO) {
+    return (
+      `'${slug}': maxAgeMinutes ${maxAgeMinutes} is ` +
+      `${(maxAgeMinutes / longestGap).toFixed(1)}x the longest gap its schedule can produce ` +
+      `(${longestGap} min for '${schedule}'), over the ${MAX_WINDOW_RATIO}x ceiling. The probe ` +
+      `could not report this job stale until it had been dead for ` +
+      `${Math.round(maxAgeMinutes / 1440)} days`
+    );
+  }
+  if (maxAgeMinutes > MAX_WINDOW_MINUTES) {
+    return (
+      `'${slug}': maxAgeMinutes ${maxAgeMinutes} is ${Math.round(maxAgeMinutes / 1440)} days, ` +
+      `over the ${MAX_WINDOW_MINUTES / 1440}-day ceiling. Proportionate to a rare schedule is ` +
+      `still too long to be alerting: nothing would report this job dead within a useful time`
+    );
+  }
+  return null;
+}
+
 export function maxIntervalMinutes(schedule: string): number | null {
   const parts = schedule.trim().split(/\s+/);
   if (parts.length !== 5) return null;
@@ -287,12 +367,9 @@ async function main(): Promise<never> {
     // the alert.
     const job = registryJobs[slug];
     if (job !== undefined) {
-      if (job.maxAgeMinutes <= longestGap) {
-        violations.push(
-          `'${slug}': maxAgeMinutes ${job.maxAgeMinutes} does not exceed the longest gap its own ` +
-            `schedule can produce (${longestGap} min for '${cron.schedule}'), so it would read as ` +
-            `stale between two healthy runs`,
-        );
+      const windowProblem = checkWindow(slug, job.maxAgeMinutes, longestGap, cron.schedule);
+      if (windowProblem !== null) {
+        violations.push(windowProblem);
       } else {
         margins.push({
           slug,
@@ -342,7 +419,17 @@ async function main(): Promise<never> {
 
   if (routesChecked === 0) couldNotCheck('Checked zero route files.');
 
-  if (margins.length === 0) couldNotCheck('Compared zero staleness windows against their schedules.');
+  /*
+   * Vacuity checks come after the violation list is built but must not pre-empt
+   * REPORTING it. A window that breaches either bound is a violation rather
+   * than a margin, so a tree where every window is wrong has `margins.length
+   * === 0` — and exiting 2 there would hide the seventeen diagnoses that
+   * explain exactly why. "Could not check" is only honest when there is nothing
+   * to say.
+   */
+  if (margins.length === 0 && violations.length === 0) {
+    couldNotCheck('Compared zero staleness windows against their schedules.');
+  }
 
   // Ranked by RATIO, not by absolute minutes. A 5-minute job with 15 minutes of
   // slack has 4x headroom; a monthly job with 1440 minutes of slack has 1.03x
@@ -350,12 +437,19 @@ async function main(): Promise<never> {
   // would name the former and hide the latter.
   const tightest = margins.reduce((a, b) => (a.window / a.gap <= b.window / b.gap ? a : b));
   const ratio = (tightest.window / tightest.gap).toFixed(2);
+  // Both ends are asserted now, so print both. The loosest is the one drifting
+  // toward "no alerting at all", and it is invisible in a tightest-only report.
+  const loosest = margins.reduce((a, b) => (a.window / a.gap >= b.window / b.gap ? a : b));
+  const loosestRatio = (loosest.window / loosest.gap).toFixed(2);
 
   const denominator =
     `crons in vercel.json: ${crons.length} · registry entries: ${registrySlugs.length} · ` +
     `routes checked: ${routesChecked} · windows compared: ${margins.length}\n` +
     `   tightest window: '${tightest.slug}' allows ${tightest.window} min against a ` +
-    `${tightest.gap} min longest gap — ${ratio}x, ${tightest.margin} min of slack`;
+    `${tightest.gap} min longest gap — ${ratio}x, ${tightest.margin} min of slack\n` +
+    `   loosest window:  '${loosest.slug}' allows ${loosest.window} min against a ` +
+    `${loosest.gap} min longest gap — ${loosestRatio}x (ceilings: ${MAX_WINDOW_RATIO}x, ` +
+    `${MAX_WINDOW_MINUTES / 1440} days)`;
 
   if (violations.length > 0) {
     console.error('✖ guard:cron-job-tagging\n');
