@@ -50,6 +50,24 @@ export const SUPPORT_MAILBOX_ADDRESS: Record<SupportMailbox, string> = {
 };
 
 /**
+ * The subject stored for a thread whose first message carried no `Subject:`.
+ *
+ * This is a DISPLAY placeholder, not a subject. It exists because
+ * `support_inbox_threads.subject` is NOT NULL while a real email's subject is
+ * optional, so the ingest has to write something.
+ *
+ * It is exported — rather than being a literal at the one write site — because
+ * the REPLY path has to recognise it and treat it as absent. It did not, and
+ * every reply to a subjectless message went out titled `Re: (no subject)`: a
+ * parenthetical where a human subject belongs, which is a shape bulk mail has
+ * and a 1:1 reply does not. The first such reply landed in Gmail's spam folder.
+ *
+ * A fix that only handled null could not work, because null is not what the
+ * reply path receives. Anything comparing against this value must import it.
+ */
+export const SUPPORT_THREAD_NO_SUBJECT = '(no subject)';
+
+/**
  * The display name a reply is sent and signed under, per mailbox.
  *
  * Single-sourced because it appears TWICE in every reply — in the RFC 5322

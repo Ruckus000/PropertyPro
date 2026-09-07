@@ -104,8 +104,23 @@ export const POST = withAdminErrorHandler(
       subject,
       category: 'transactional',
       headers,
-      // A double-click or a platform retry cannot double-send.
-      idempotencyKey: `support-reply:${threadId}:${createHash('sha256')
+      /**
+       * A double-click or a platform retry cannot double-send.
+       *
+       * The PARENT id is part of the key because the payload depends on it:
+       * subject, In-Reply-To, References and the quoted text all come from
+       * getReplyParent. Resend honours a key for 24h and rejects a DIFFERENT
+       * payload under an existing key with a 409 — so keying on the body alone
+       * meant that sending the same short reply ("Thanks!", "Noted.") after a
+       * new message had arrived threw, and the operator got a 500 with no
+       * explanation for the next 24 hours.
+       *
+       * Residual, accepted: the same body with the same parent inside 24h is
+       * still replayed by Resend — it returns the original id without sending.
+       * That is a genuine duplicate, and detecting it would mean exposing
+       * providerMessageId on InboxMessage, which is not worth the type change.
+       */
+      idempotencyKey: `support-reply:${threadId}:${parent?.id ?? 'none'}:${createHash('sha256')
         .update(parsed.body)
         .digest('hex')
         .slice(0, 16)}`,

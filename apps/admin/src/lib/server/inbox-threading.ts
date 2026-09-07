@@ -1,4 +1,8 @@
-import { SUPPORT_MAILBOX_FROM, type SupportMailbox } from '@propertypro/shared';
+import {
+  SUPPORT_MAILBOX_FROM,
+  SUPPORT_THREAD_NO_SUBJECT,
+  type SupportMailbox,
+} from '@propertypro/shared';
 
 /**
  * Reply construction for the support inbox. Pure — no PostgREST, no env, no
@@ -9,14 +13,6 @@ import { SUPPORT_MAILBOX_FROM, type SupportMailbox } from '@propertypro/shared';
 const SUBJECT_PREFIX = /^\s*(re|fwd|fw|aw|sv|vs)\s*(\[\d+\])?\s*:\s*/i;
 
 /**
- * Prefix a subject with exactly one `Re:`.
- *
- * Strips every existing prefix first, so a long exchange does not accumulate
- * "Re: Re: Re: Fwd: Re:" — which is ugly, and which also defeats the
- * ingestion side's subject-based fallback matching once the prefixes push the
- * real subject past a client's truncation.
- */
-/**
  * Subject for a reply to a message that arrived with no subject of its own.
  *
  * The literal `Re: (no subject)` we used to emit is a spam-filter signal in its
@@ -26,8 +22,23 @@ const SUBJECT_PREFIX = /^\s*(re|fwd|fw|aw|sv|vs)\s*(\[\d+\])?\s*:\s*/i;
  */
 const NO_SUBJECT_REPLY = 'Re: your message to PropertyPro';
 
+/**
+ * Prefix a subject with exactly one `Re:`.
+ *
+ * Strips every existing prefix first, so a long exchange does not accumulate
+ * "Re: Re: Re: Fwd: Re:" — which is ugly, and which also defeats the
+ * ingestion side's subject-based fallback matching once the prefixes push the
+ * real subject past a client's truncation.
+ *
+ * `SUPPORT_THREAD_NO_SUBJECT` counts as NO subject. It is what the caller
+ * actually passes for a subjectless message — the thread column is NOT NULL,
+ * so the ingest stores that placeholder and `parent?.subject ?? thread.subject`
+ * resolves to the string, never to null. Handling only null left this function
+ * emitting `Re: (no subject)` for the exact case it was written to prevent.
+ */
 export function buildReplySubject(parentSubject: string | null): string {
-  let base = parentSubject ?? '';
+  const raw = parentSubject === SUPPORT_THREAD_NO_SUBJECT ? null : parentSubject;
+  let base = raw ?? '';
   let changed = true;
   while (changed) {
     const before = base;

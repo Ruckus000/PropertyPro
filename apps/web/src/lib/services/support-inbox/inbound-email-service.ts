@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { supportInboxMessages, supportInboxThreads } from '@propertypro/db';
 import { and, desc, eq, gte, inArray, ne } from '@propertypro/db/filters';
+import { SUPPORT_THREAD_NO_SUBJECT } from '@propertypro/shared';
 import type { SupportThreadStatus } from '@propertypro/shared';
 
 import {
@@ -158,7 +159,16 @@ export async function persistInboundEmail(
     return { threadId: existing.threadId, messageId: existing.id, duplicate: true };
   }
 
-  const occurredAt = email.sentAt ?? new Date();
+  // OUR clock, never the sender's. `occurredAt` becomes first_message_at and
+  // last_message_at, and the inbox is ordered by the latter — so a Date: header
+  // claiming 1970 buried a real thread below every other one (and pushed it
+  // outside the 14-day subject-fallback window forever), while 2099 pinned it
+  // to the top of the queue. inbox.ts already states this principle for the
+  // MESSAGE rows and applies it there; the thread row was the gap.
+  //
+  // What the sender claimed is not lost: it is still recorded verbatim in the
+  // message row's sent_at, which is where a header belongs.
+  const occurredAt = new Date();
 
   try {
     return await db.transaction(async (tx) => {
@@ -220,7 +230,7 @@ async function resolveThreadId(
     .insert(supportInboxThreads)
     .values({
       mailbox: email.mailbox,
-      subject: email.subject ?? '(no subject)',
+      subject: email.subject ?? SUPPORT_THREAD_NO_SUBJECT,
       normalizedSubject: normalizeSubject(email.subject),
       participantEmail: email.from.email,
       participantName: email.from.name,
@@ -252,10 +262,7 @@ async function bumpThread(tx: UnscopedTx, threadId: number, occurredAt: Date): P
     .set({
       status: nextThreadStatus((thread?.status ?? 'open') as SupportThreadStatus),
       messageCount: (thread?.messageCount ?? 0) + 1,
-      // A sender-supplied Date can be in the past; never move the sort key
-      // backwards or a reply would bury itself below older threads.
-      lastMessageAt:
-        thread && thread.lastMessageAt > occurredAt ? thread.lastMessageAt : occurredAt,
+      lastMessageAt: occurredAt,
       updatedAt: now,
     })
     .where(eq(supportInboxThreads.id, threadId));

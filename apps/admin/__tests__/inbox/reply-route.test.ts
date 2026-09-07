@@ -299,4 +299,35 @@ describe('POST /api/admin/inbox/[threadId]/reply', () => {
     expect(payload).toHaveProperty('last_message_at');
     expect(payload).toHaveProperty('updated_at');
   });
+
+  describe('idempotency key', () => {
+    it('changes when the parent changes, so an unchanged body is not a 409', async () => {
+      // Resend honours a key for 24h. A DUPLICATE payload under an existing key
+      // is replayed without sending; a DIFFERENT payload under an existing key
+      // is rejected with 409. Subject, In-Reply-To, References and the quoted
+      // text all derive from the parent — so keying on the body alone meant a
+      // repeated short reply ("Thanks!") after a new inbound arrived changed
+      // the payload but not the key, and threw a 500 for the next 24 hours.
+      await POST(...post({ body: 'Thanks!' }));
+      const first = sendEmailMock.mock.calls[0]?.[0]?.idempotencyKey;
+
+      sendEmailMock.mockClear();
+      getReplyParentMock.mockResolvedValue({ ...PARENT, id: PARENT.id + 1 });
+      await POST(...post({ body: 'Thanks!' }));
+      const second = sendEmailMock.mock.calls[0]?.[0]?.idempotencyKey;
+
+      expect(first).toBeTruthy();
+      expect(second).not.toBe(first);
+    });
+
+    it('is stable for the same body and the same parent (double-click)', async () => {
+      // Control: the reason the key exists at all. Two submissions of the same
+      // reply against an unchanged thread must still collapse to one send.
+      await POST(...post({ body: 'Same text' }));
+      await POST(...post({ body: 'Same text' }));
+
+      const [a, b] = sendEmailMock.mock.calls.map((c) => c[0].idempotencyKey);
+      expect(a).toBe(b);
+    });
+  });
 });
