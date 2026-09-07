@@ -303,9 +303,40 @@ async function run(): Promise<number> {
   return exitCode;
 }
 
-/** Print the findings and decide the exit code. Returns 0 or 1. */
-function report(r: ReconcileResult): number {
+/**
+ * What the run has to say, split by whether it is a FINDING or a DECISION.
+ *
+ * Pure and exported so the wording itself can be tested, which is not fussiness:
+ * an earlier version of this output caused a separate session to open a task
+ * called "Apply missing 0062_secret_ballot migration to production" and start
+ * working on it. Nothing was wrong with the reconciliation — it was the prose.
+ * Two mistakes, both mine:
+ *
+ *   - A held migration was labelled `⚠️ EXPECTED-UNAPPLIED`. A warning glyph
+ *     over a passive noun phrase reads as "something is off here", when the
+ *     truth is the opposite: this is the state somebody chose.
+ *   - It then ALSO printed a `STRANDED` block ending "Shipping it needs a manual
+ *     apply plus a hand-written ledger row" — instructions for doing the exact
+ *     thing the line above forbids, printed directly underneath it.
+ *
+ * So a held entry now gets ONE block that leads with DO NOT APPLY, says outright
+ * that there is nothing to do, and subordinates the mechanical note under an
+ * explicit precondition. A stranded migration that is NOT held stays a finding
+ * and keeps its actionable framing — it is folded into that entry's own problem
+ * rather than printed twice.
+ */
+export interface ReportOutput {
+  /** Recorded decisions. Printed to stdout; do not affect the exit code. */
+  notes: string[];
+  /** Real drift. Printed to stderr; exit 1. */
+  problems: string[];
+  exitCode: 0 | 1;
+}
+
+export function formatReport(r: ReconcileResult): ReportOutput {
   const problems: string[] = [];
+  const notes: string[] = [];
+  const strandedTags = new Set(r.stranded.map((f) => f.tag));
 
   for (const row of r.orphans) {
     problems.push(
@@ -321,10 +352,16 @@ function report(r: ReconcileResult): number {
     );
   }
   for (const f of r.unapplied) {
+    // Stranding is folded in rather than printed as its own block: one entry per
+    // migration, and for an UNHELD migration this genuinely is actionable.
+    const stranded = strandedTags.has(f.tag)
+      ? ` It is also below the ledger tip (${r.ledgerTip}), so \`drizzle-kit migrate\` would ` +
+        'skip it silently rather than erroring — applying it means doing so by hand.'
+      : '';
     problems.push(
       `UNAPPLIED  ${f.tag} (when=${f.when}) is on disk with no ledger row, and is not in ` +
         'KNOWN_UNAPPLIED_MIGRATIONS. Either apply it and record the row, or add it to that ' +
-        'list with a reason.',
+        `list with a reason.${stranded}`,
     );
   }
   for (const tag of r.deadAllowlistEntries) {
@@ -334,31 +371,50 @@ function report(r: ReconcileResult): number {
     );
   }
 
+  for (const { file, reason } of r.expectedUnapplied) {
+    const lines = [
+      `🔒 HELD — DO NOT APPLY  ${file.tag}`,
+      `    ${reason}`,
+      '',
+      '    This is a recorded decision, not a finding. There is nothing to do here,',
+      '    and this command exits 0 because of it. Do not open a task to "apply the',
+      '    missing migration" — it is not missing.',
+    ];
+    if (strandedTags.has(file.tag)) {
+      lines.push(
+        '',
+        '    One mechanical note, for whenever that decision is deliberately reversed —',
+        `    NOT a step to take now. Its \`when\` (${file.when}) is below the ledger tip`,
+        `    (${r.ledgerTip}), so \`drizzle-kit migrate\` would report success and do`,
+        '    nothing. Whoever eventually ships this has to ship the code that stops',
+        '    depending on it FIRST, and only then apply by hand and record the row.',
+      );
+    }
+    notes.push(lines.join('\n'));
+  }
+
+  return { notes, problems, exitCode: problems.length > 0 ? 1 : 0 };
+}
+
+/** Print the findings and decide the exit code. Returns 0 or 1. */
+function report(r: ReconcileResult): number {
+  const { notes, problems, exitCode } = formatReport(r);
+
   console.log(
     `\nmigration files: ${r.filesScanned} · ledger rows: ${r.ledgerRows} · ` +
       `applied: ${r.applied.length} · ledger tip: ${r.ledgerTip}`,
   );
 
-  for (const { file, reason } of r.expectedUnapplied) {
-    console.log(`\n⚠️  EXPECTED-UNAPPLIED  ${file.tag}\n    ${reason}`);
-  }
-  for (const f of r.stranded) {
-    console.log(
-      `\n⚠️  STRANDED  ${f.tag} (when=${f.when}) is below the ledger tip (${r.ledgerTip}).\n` +
-        "    `drizzle-kit migrate` will SKIP it silently — it applies only when\n" +
-        '    lastApplied.created_at < folderMillis. Shipping it needs a manual apply\n' +
-        '    plus a hand-written ledger row; re-running the migrator will do nothing.',
-    );
-  }
+  for (const note of notes) console.log(`\n${note}`);
 
   if (problems.length > 0) {
     console.error(`\n❌ ${problems.length} ledger problem(s):\n`);
     for (const p of problems) console.error(`  ${p}`);
-    return 1;
+    return exitCode;
   }
 
   console.log('\n✅ Ledger reconciles with the migration files.');
-  return 0;
+  return exitCode;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

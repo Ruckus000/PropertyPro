@@ -28,24 +28,48 @@ migration files: 70 · ledger rows: 69 · applied: 69 · ledger tip: 17887976316
 | `MISMATCH` | `created_at` ≠ the file's journal `when` | drizzle's gate reads `created_at`; the two must agree. `UPDATE` the row to the journal value. |
 | `UNAPPLIED` | a file with no ledger row, not on the allowlist | apply it and record the row — or, if it is deliberately held, add it to `KNOWN_UNAPPLIED_MIGRATIONS` **with a reason**. |
 | `DEAD ENTRY` | the allowlist names a migration that no longer exists | remove it, so the list keeps meaning something. |
-| ⚠️ `EXPECTED-UNAPPLIED` | on the allowlist | nothing. Exit stays 0. |
-| ⚠️ `STRANDED` | unapplied **and** below the ledger tip | see below. Exit stays 0 when it is also allowlisted. |
+| 🔒 `HELD — DO NOT APPLY` | on the allowlist, with a recorded reason | **nothing.** Exit stays 0. This is a decision, not a finding |
 
 **Exit codes:** `0` reconciled · `1` drift · `2` could not check (no
 `DATABASE_URL`, connection failed, no migration files, empty ledger). A `2` is
 never a pass — it means the comparison did not happen.
 
-## `STRANDED` is the one that surprises people
+## `HELD` means do not apply it, and the wording is load-bearing
 
-Drizzle applies a migration only when `lastApplied.created_at < folderMillis`.
-So a migration whose `when` sits **below** the ledger's highest `created_at` can
-never be applied by `drizzle-kit migrate` again. It does not error. It does
-nothing, reports success, and moves on.
+A migration on `KNOWN_UNAPPLIED_MIGRATIONS` is absent from production **because
+somebody chose that**. The command exits 0 and prints a `🔒 HELD — DO NOT APPLY`
+block carrying the reason. There is nothing to action.
+
+That block is worded the way it is because an earlier version was not, and it
+caused an incident. It used to print `⚠️ EXPECTED-UNAPPLIED` — a warning glyph
+over a passive noun phrase — and then, directly beneath it, a separate block
+ending *"Shipping it needs a manual apply plus a hand-written ledger row."* A
+session read that, opened a task called "Apply missing 0062_secret_ballot
+migration to production", and started working on it. `0062` drops five columns
+that live election code reads. Nothing was wrong with the reconciliation; the
+prose was an instruction sitting under a label that looked like a problem.
+
+The wording is now pinned by tests in
+[`scripts/__tests__/verify-migration-ledger.test.ts`](../../scripts/__tests__/verify-migration-ledger.test.ts).
+If you are editing it, keep two properties: the header refuses in the
+imperative, and the block does not read as a procedure.
+
+### The stranding note
+
+A migration whose `when` sits **below** the ledger's highest `created_at` can
+never be applied by `drizzle-kit migrate` again — it applies only when
+`lastApplied.created_at < folderMillis`, so it does not error, it does nothing
+and reports success.
 
 Today that is `0062_secret_ballot` (`when=1786414111600`, tip `1788797631673`).
-Shipping it needs a **manual apply plus a hand-written ledger row** — re-running
-the migrator will silently skip it. That is a fact worth knowing *before* someone
-concludes the migration "didn't work".
+That fact is printed under an explicit precondition, because it matters only
+*if and when* the hold is deliberately lifted — which for a contract migration
+means shipping the code that stops depending on it first. It is not a step to
+take now, and the command says so.
+
+For a migration that is stranded and **not** on the allowlist, the framing is
+the opposite: that is real drift, it is reported as a `UNAPPLIED` problem with
+the stranding folded in, and the command exits 1.
 
 ## Why this is not in `pnpm lint`
 
