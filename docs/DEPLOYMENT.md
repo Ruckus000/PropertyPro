@@ -575,6 +575,18 @@ To apply:
 3. Record the `drizzle.__drizzle_migrations` ledger row (`hash` = sha256 of the
    migration file bytes, `created_at` = the journal `when`) so any later
    `drizzle-kit` run stays consistent.
+4. Verify that record — this is the step that catches a mistake in step 3:
+
+   ```bash
+   scripts/with-env-local.sh pnpm db:ledger:verify
+   ```
+
+   Read-only, one `SELECT`. Exit `0` reconciled · `1` drift · **`2` could not
+   check, which is not a pass**. It hashes every migration file against the
+   ledger, so it sees orphan rows, `created_at`/`when` mismatches, unapplied
+   files, and **stranded** ones — unapplied *and* below the ledger tip, which
+   `drizzle-kit migrate` will silently skip forever. See
+   [the runbook](runbooks/migration-ledger-reconciliation.md).
 
 > **Do not run `pnpm --filter @propertypro/db db:migrate` to reach production.**
 > Root `.env.local`'s `DATABASE_URL` points at **production**, so
