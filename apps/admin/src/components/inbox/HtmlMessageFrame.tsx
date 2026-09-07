@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-
 /**
  * The sandbox for rendering a received email's HTML.
  *
@@ -18,6 +16,13 @@ import { useEffect, useRef, useState } from 'react';
  * default for markup written by an anonymous party on the public internet and
  * rendered inside a `super_admin` session.
  *
+ * One consequence, recorded because it looks like a bug: the frame CANNOT
+ * grow to fit its content. `sandbox=""` puts the document in an opaque
+ * origin, so `contentDocument` is null from here and there is nothing to
+ * measure. A grow-to-fit effect lived here for a while and returned at its
+ * own null guard on every render, forever. A long message scrolls inside a
+ * fixed frame; that is the price of the sandbox, and the sandbox wins.
+ *
  * This is the SECOND layer. The HTML has already been through
  * `sanitizeInboundHtml` server-side, and the console shows plain text by
  * default. Either layer failing alone should not be enough.
@@ -30,30 +35,14 @@ interface HtmlMessageFrameProps {
 }
 
 export function HtmlMessageFrame({ sanitizedHtml }: HtmlMessageFrameProps) {
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(240);
-
-  // Grow to fit rather than scrolling a nested pane, which is miserable to read.
-  // Capped, because a hostile message should not be able to make the console
-  // page arbitrarily long.
-  useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) return;
-    const document_ = frame.contentDocument;
-    if (!document_) return;
-    const measured = document_.body?.scrollHeight ?? 0;
-    if (measured > 0) setHeight(Math.min(Math.max(measured + 24, 120), 2000));
-  }, [sanitizedHtml]);
-
   return (
     <iframe
-      ref={frameRef}
       // The empty string is the whole point — see INBOUND_HTML_SANDBOX above.
       sandbox={INBOUND_HTML_SANDBOX}
       srcDoc={sanitizedHtml}
       title="Original message"
       className="w-full rounded-md border border-edge bg-surface-card"
-      style={{ height }}
+      style={{ height: 240 }}
     />
   );
 }

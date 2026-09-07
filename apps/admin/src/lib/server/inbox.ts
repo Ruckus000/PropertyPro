@@ -3,7 +3,7 @@
  *
  * Threads and messages are platform-level (no `community_id` — whoever writes
  * to support@ is usually not a member of any community) and RLS-locked to
- * service_role by migration 0067, so this reads through the admin typed client
+ * service_role by migration 0068, so this reads through the admin typed client
  * like the other platform-scoped admin surfaces.
  *
  * Sanitizing inbound HTML deliberately lives in `sanitize-inbound-html.ts`, not
@@ -23,8 +23,6 @@ import {
 } from '@propertypro/shared';
 
 import { PLATFORM_LIST_LIMIT, wasTruncated } from '@/lib/api/list-limits';
-
-export { SUPPORT_MAILBOX_LABELS, SUPPORT_THREAD_STATUS_LABELS };
 
 export interface InboxThread {
   id: number;

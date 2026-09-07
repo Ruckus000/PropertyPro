@@ -24,6 +24,10 @@ import { z } from 'zod';
 
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { sendEmail, SupportReplyEmail } from '@propertypro/email';
+import {
+  SUPPORT_MAILBOX_ADDRESS,
+  SUPPORT_MAILBOX_SENDER_NAME,
+} from '@propertypro/shared';
 
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { parseAdminBody } from '@/lib/api/parse-body';
@@ -100,15 +104,31 @@ export const POST = withAdminErrorHandler(
       subject,
       category: 'transactional',
       headers,
-      // A double-click or a platform retry cannot double-send.
-      idempotencyKey: `support-reply:${threadId}:${createHash('sha256')
+      /**
+       * A double-click or a platform retry cannot double-send.
+       *
+       * The PARENT id is part of the key because the payload depends on it:
+       * subject, In-Reply-To, References and the quoted text all come from
+       * getReplyParent. Resend honours a key for 24h and rejects a DIFFERENT
+       * payload under an existing key with a 409 — so keying on the body alone
+       * meant that sending the same short reply ("Thanks!", "Noted.") after a
+       * new message had arrived threw, and the operator got a 500 with no
+       * explanation for the next 24 hours.
+       *
+       * Residual, accepted: the same body with the same parent inside 24h is
+       * still replayed by Resend — it returns the original id without sending.
+       * That is a genuine duplicate, and detecting it would mean exposing
+       * providerMessageId on InboxMessage, which is not worth the type change.
+       */
+      idempotencyKey: `support-reply:${threadId}:${parent?.id ?? 'none'}:${createHash('sha256')
         .update(parsed.body)
         .digest('hex')
         .slice(0, 16)}`,
       react: SupportReplyEmail({
         bodyText: parsed.body,
         quotedText: parent ? buildQuotedText({ textBody: parent.textBody }) : undefined,
-        mailboxAddress: from,
+        mailboxName: SUPPORT_MAILBOX_SENDER_NAME[thread.mailbox],
+        mailboxAddress: SUPPORT_MAILBOX_ADDRESS[thread.mailbox],
       }),
     });
 
@@ -161,7 +181,24 @@ export const POST = withAdminErrorHandler(
 
     await db
       .from('support_inbox_threads')
-      .update({ last_message_at: now, updated_at: now })
+      /**
+       * `message_count` counts EVERY message in the thread, inbound and
+       * outbound alike — it is what the inbox list renders as "N messages".
+       * Advancing `last_message_at` without it left every replied-to thread
+       * undercounted by exactly its number of replies, which is how the two
+       * threads answered from the console came to read "1 message" and
+       * "2 messages" while holding 2 and 3.
+       *
+       * Read-then-write, matching the inbound service. Two replies racing on
+       * one thread could lose a count; with a single operator and the
+       * idempotency key above already collapsing the realistic double-send,
+       * that is not worth an RPC to close.
+       */
+      .update({
+        last_message_at: now,
+        updated_at: now,
+        message_count: thread.messageCount + 1,
+      })
       .eq('id', threadId);
 
     await logAdminAction({

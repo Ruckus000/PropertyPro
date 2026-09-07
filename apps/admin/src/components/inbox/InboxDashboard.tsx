@@ -19,8 +19,6 @@ interface InboxDashboardProps {
   initialThreads: InboxThread[];
   initialStats: InboxStats;
   initialTruncated: boolean;
-  initialMailboxFilter?: string;
-  initialStatusFilter?: string;
 }
 
 const MUTED = 'text-content-tertiary';
@@ -42,14 +40,12 @@ export function InboxDashboard({
   initialThreads,
   initialStats,
   initialTruncated,
-  initialMailboxFilter = 'all',
-  initialStatusFilter = 'all',
 }: InboxDashboardProps) {
   const [threads, setThreads] = useState(initialThreads);
   const [stats, setStats] = useState(initialStats);
   const [truncated, setTruncated] = useState(initialTruncated);
-  const [mailbox, setMailbox] = useState(initialMailboxFilter);
-  const [status, setStatus] = useState(initialStatusFilter);
+  const [mailbox, setMailbox] = useState<string>('all');
+  const [status, setStatus] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

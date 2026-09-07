@@ -15,6 +15,7 @@ import { SupportReplyEmail } from '../src/templates/support-reply-email';
 const reply = (
   <SupportReplyEmail
     bodyText="Thanks for getting in touch."
+    mailboxName="PropertyPro Support"
     mailboxAddress="support@getpropertypro.com"
   />
 );

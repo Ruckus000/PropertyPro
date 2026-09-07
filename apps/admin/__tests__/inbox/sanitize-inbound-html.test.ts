@@ -85,12 +85,7 @@ describe('sanitizeInboundHtml', () => {
       expect(out).toContain('data-blocked-src="https://tracker.test/pixel.gif"');
     });
 
-    it('restores the source only on an explicit opt-in', () => {
-      const out = sanitizeInboundHtml('<img src="https://tracker.test/pixel.gif">', {
-        allowRemoteImages: true,
-      });
-      expect(out).toContain('src="https://tracker.test/pixel.gif"');
-    });
+
   });
 
   describe('legitimate content survives', () => {

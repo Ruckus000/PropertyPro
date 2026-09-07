@@ -27,6 +27,8 @@ export interface SupportReplyEmailProps {
   bodyText: string;
   /** Plain text of the message being answered, already truncated. */
   quotedText?: string;
+  /** Display name for the mailbox this reply is sent from. */
+  mailboxName: string;
   /** The mailbox this thread belongs to, e.g. `support@getpropertypro.com`. */
   mailboxAddress: string;
 }
@@ -44,6 +46,7 @@ function quote(text: string): string {
 export function SupportReplyEmail({
   bodyText,
   quotedText,
+  mailboxName,
   mailboxAddress,
 }: SupportReplyEmailProps) {
   return (
@@ -85,7 +88,7 @@ export function SupportReplyEmail({
               margin: 0,
             }}
           >
-            PropertyPro Support
+            {mailboxName}
             <br />
             {mailboxAddress}
           </Text>

@@ -1,3 +1,4 @@
+import { SUPPORT_THREAD_NO_SUBJECT } from '@propertypro/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -26,8 +27,35 @@ describe('buildReplySubject', () => {
   });
 
   it('handles a missing subject without producing a bare "Re:"', () => {
-    expect(buildReplySubject(null)).toBe('Re: (no subject)');
-    expect(buildReplySubject('   ')).toBe('Re: (no subject)');
+    expect(buildReplySubject(null)).toBe('Re: your message to PropertyPro');
+    expect(buildReplySubject('   ')).toBe('Re: your message to PropertyPro');
+  });
+
+  it('treats the stored (no subject) placeholder as no subject at all', () => {
+    // THE INPUT PRODUCTION ACTUALLY SUPPLIES. support_inbox_threads.subject is
+    // NOT NULL, so the ingest stores SUPPORT_THREAD_NO_SUBJECT and the reply
+    // route's `parent?.subject ?? thread.subject` resolves to that STRING —
+    // never to null. The first version of this fix handled only null and so
+    // never fired; production kept sending `Re: (no subject)`, and the test
+    // below passed anyway because it fed values the caller never sends.
+    expect(buildReplySubject(SUPPORT_THREAD_NO_SUBJECT)).toBe(
+      'Re: your message to PropertyPro',
+    );
+    expect(buildReplySubject(SUPPORT_THREAD_NO_SUBJECT)).not.toContain('(');
+  });
+
+  it('never emits a parenthetical placeholder as the subject', () => {
+    // The first real reply this feature ever sent went out as
+    // `Re: (no subject)` and landed in Gmail's spam folder. A parenthetical
+    // where a human subject belongs is a shape bulk mail has; a 1:1 reply
+    // should never carry one. Asserts the PROPERTY, not just the new literal,
+    // so the next person to edit the fallback cannot reintroduce the class.
+    for (const empty of [null, '', '   ', 'Re:', 'Re: Re:  ', SUPPORT_THREAD_NO_SUBJECT]) {
+      const subject = buildReplySubject(empty);
+      expect(subject).not.toMatch(/\(.*\)/);
+      expect(subject.trim()).not.toBe('Re:');
+      expect(subject.length).toBeGreaterThan('Re: '.length);
+    }
   });
 });
 

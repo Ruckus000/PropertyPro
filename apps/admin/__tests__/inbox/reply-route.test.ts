@@ -40,7 +40,9 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: () => ({
     from: () => ({
       insert: insertMock,
-      update: () => ({ eq: updateMock }),
+      update: (payload: unknown) => ({
+        eq: (...args: unknown[]) => updateMock(payload, ...args),
+      }),
     }),
   }),
 }));
@@ -279,6 +281,53 @@ describe('POST /api/admin/inbox/[threadId]/reply', () => {
       expect(response.status).toBe(403);
       expect(sendEmailMock).not.toHaveBeenCalled();
       expect(getThreadDetailMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('counts the reply, so the thread list does not undercount it', async () => {
+    // message_count is what the inbox list renders as "N messages", and it
+    // counts inbound AND outbound. Advancing last_message_at without it left
+    // every replied-to thread short by exactly its number of replies — two
+    // real threads read "1 message" and "2 messages" while holding 2 and 3.
+    await POST(...post({ body: 'Here they are.' }));
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.message_count).toBe(THREAD.messageCount + 1);
+    // Control: the timestamps that already worked must still be written, so a
+    // regression here is distinguishable from the update being dropped.
+    expect(payload).toHaveProperty('last_message_at');
+    expect(payload).toHaveProperty('updated_at');
+  });
+
+  describe('idempotency key', () => {
+    it('changes when the parent changes, so an unchanged body is not a 409', async () => {
+      // Resend honours a key for 24h. A DUPLICATE payload under an existing key
+      // is replayed without sending; a DIFFERENT payload under an existing key
+      // is rejected with 409. Subject, In-Reply-To, References and the quoted
+      // text all derive from the parent — so keying on the body alone meant a
+      // repeated short reply ("Thanks!") after a new inbound arrived changed
+      // the payload but not the key, and threw a 500 for the next 24 hours.
+      await POST(...post({ body: 'Thanks!' }));
+      const first = sendEmailMock.mock.calls[0]?.[0]?.idempotencyKey;
+
+      sendEmailMock.mockClear();
+      getReplyParentMock.mockResolvedValue({ ...PARENT, id: PARENT.id + 1 });
+      await POST(...post({ body: 'Thanks!' }));
+      const second = sendEmailMock.mock.calls[0]?.[0]?.idempotencyKey;
+
+      expect(first).toBeTruthy();
+      expect(second).not.toBe(first);
+    });
+
+    it('is stable for the same body and the same parent (double-click)', async () => {
+      // Control: the reason the key exists at all. Two submissions of the same
+      // reply against an unchanged thread must still collapse to one send.
+      await POST(...post({ body: 'Same text' }));
+      await POST(...post({ body: 'Same text' }));
+
+      const [a, b] = sendEmailMock.mock.calls.map((c) => c[0].idempotencyKey);
+      expect(a).toBe(b);
     });
   });
 });
