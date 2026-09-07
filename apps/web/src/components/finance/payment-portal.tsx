@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
@@ -36,6 +37,13 @@ interface CommunityLineItem extends UnitLineItem {
 
 type LineItem = UnitLineItem | CommunityLineItem;
 
+/** The subset of a community's contact columns this component renders. */
+export interface PaymentPortalContact {
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+}
+
 interface PaymentPortalProps {
   communityId: number;
   userRole: string;
@@ -59,6 +67,21 @@ interface PaymentPortalProps {
    * See docs/audits/2026-08-09-legal-risk-audit.md F-15.
    */
   paymentsEnabled: boolean;
+  /**
+   * The community's management contact, for the offline-payment guidance shown
+   * when `paymentsEnabled` is false. Structurally compatible with
+   * `CommunityContact` from `@/lib/services/community-contact-service`, but
+   * declared locally ON PURPOSE: that module imports `@propertypro/db`, and a
+   * client component importing it — even for a type — pulls drizzle into the
+   * bundle and throws `Missing DATABASE_URL` at module load.
+   *
+   * OPTIONAL, unlike `paymentsEnabled` above, and the difference is deliberate.
+   * A forgotten gate prop silently removes a capability; a forgotten contact
+   * prop degrades to correct generic copy ("your management team"). The
+   * argument for making the gate required does not transfer to a field whose
+   * absence is a normal state — most communities have no contact configured.
+   */
+  managementContact?: PaymentPortalContact | null;
 }
 
 /* ─────── Helpers ─────── */
@@ -105,6 +128,82 @@ function StatusBadge({ status }: { status: LineItemStatus }) {
   );
 }
 
+/**
+ * Guidance shown to a resident who owes money in a community where online
+ * payments are switched off.
+ *
+ * Until now that resident saw a balance, a due date and a late-fee column with
+ * no Pay button and no explanation — a dead end that reads as a broken page.
+ * The rest of the platform already knows payments are off: the charge route
+ * 403s, and `applyLateFees` refuses to accrue a penalty "while the platform
+ * gives the resident no way to pay" (assessment-automation-service.ts). The
+ * resident was the only party not told.
+ *
+ * Deliberately does NOT name an offline payment method. PropertyPro does not
+ * know whether an association takes a check, an ACH transfer or a lockbox
+ * coupon, and inventing one would send people to the wrong place. It names the
+ * people who do know.
+ *
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-15.
+ */
+function OfflinePaymentGuidance({
+  communityId,
+  contact,
+}: {
+  communityId: number;
+  contact: PaymentPortalContact | null;
+}) {
+  const email = contact?.contactEmail ?? null;
+  const phone = contact?.contactPhone ?? null;
+  // `contact_phone` is free text from an admin form, so a `tel:` href is only
+  // safe once it is reduced to dialable characters. Empty after stripping
+  // (someone typed "call the office") means render it as text, not a link.
+  const dialable = phone ? phone.replace(/[^\d+]/g, '') : '';
+  const who = contact?.contactName ?? 'your management team';
+
+  return (
+    <AlertBanner
+      status="info"
+      variant="subtle"
+      title="Online payments aren't available for this community."
+      description={
+        <>
+          <span>
+            Your balance is current — it just can&rsquo;t be paid through
+            PropertyPro. Contact {who} to arrange payment.
+          </span>
+          {(email || phone) && (
+            <span className="mt-1 block">
+              {email && (
+                <a className="underline underline-offset-2" href={`mailto:${email}`}>
+                  {email}
+                </a>
+              )}
+              {email && phone && <span aria-hidden="true"> · </span>}
+              {phone
+                && (dialable
+                  ? (
+                    <a className="underline underline-offset-2" href={`tel:${dialable}`}>
+                      {phone}
+                    </a>
+                  )
+                  : <span>{phone}</span>)}
+            </span>
+          )}
+        </>
+      }
+      action={
+        <Link
+          href={`/help/contact?communityId=${communityId}`}
+          className="inline-flex min-h-10 shrink-0 items-center rounded-md border border-status-info-border bg-surface-card px-3 py-2 text-xs font-medium text-content-secondary hover:bg-surface-hover"
+        >
+          Management contact
+        </Link>
+      }
+    />
+  );
+}
+
 /* ─────── Component ─────── */
 
 export function PaymentPortal({
@@ -115,6 +214,7 @@ export function PaymentPortal({
   actorUnits = [],
   requiresExplicitUnitSelection = false,
   paymentsEnabled,
+  managementContact = null,
 }: PaymentPortalProps) {
   void userRole;
   const router = useRouter();
@@ -211,6 +311,14 @@ export function PaymentPortal({
   const totalDueCents = unpaidItems.reduce((sum, li) => sum + li.amountCents + li.lateFeeCents, 0);
   const overdueCount = unpaidItems.filter((li) => li.status === 'overdue').length;
   const balanceLabel = mode === 'community' ? 'Community Balance' : 'Current Balance';
+  /*
+   * Resident-only, and only when something is actually owed. In community mode
+   * the viewer is staff reading someone else's ledger, not a person who needs
+   * to know where to send a cheque; with nothing outstanding the table already
+   * says "All caught up!" and payment guidance would be noise.
+   */
+  const showOfflinePaymentGuidance
+    = mode === 'unit' && !paymentsEnabled && unpaidItems.length > 0;
 
   return (
     <div className="space-y-6">
@@ -240,6 +348,10 @@ export function PaymentPortal({
           accent={overdueCount > 0 ? 'red' : 'green'}
         />
       </div>
+
+      {showOfflinePaymentGuidance && (
+        <OfflinePaymentGuidance communityId={communityId} contact={managementContact} />
+      )}
 
       {/* Tab Navigation + Actions */}
       <div className="flex flex-col gap-3 border-b border-edge sm:flex-row sm:items-end sm:justify-between">
