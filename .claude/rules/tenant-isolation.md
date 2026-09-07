@@ -23,6 +23,25 @@ All tenant queries MUST go through `createScopedClient()` from `@propertypro/db`
 - FKs to users: `uuid('user_id')` (matching users.id)
 - Timestamps: `timestamp('col', { withTimezone: true })` with `.notNull().defaultNow()`
 - Soft delete: `deletedAt` column on all tenant-scoped tables
-- ADMIN_ROLES: board_member, board_president, cam, site_manager, property_manager_admin
+
+## Roles in a Scoped Query
+
+`ADMIN_ROLES` (`packages/shared/src/access-policies.ts`) is **`['manager']`** — one
+`MatrixRole` row, not a list of job titles. Never gate a query by comparing role strings.
+
+- The community roles are the v3 three (ADR-006): `resident`, `property_manager`,
+  `root_manager`. `resolveMatrixRole` maps both management roles onto `manager` and
+  splits `resident` into `owner`/`tenant` via `isUnitOwner`.
+- Ask the predicate, don't read the array: `isAdminRole(role)`,
+  `isElevatedRole(role, { isUnitOwner })`, `isRestrictedRole(...)`.
+- `ELEVATED_ROLES` is `['owner', 'manager']` and governs document **read breadth only**.
+  Do NOT reuse it to authorize a mutation (#734) — writes go through
+  `requirePermission()`, and the four root-exclusive powers through
+  `requireRootManager`.
+- **Board status is not a role.** `board_member` / `board_president` are values of the
+  orthogonal `designation` column, read only by statutory features; they grant no general
+  permission. The pre-ADR-006 seven-name vocabulary (`owner`, `tenant`, `board_member`,
+  `board_president`, `cam`, `site_manager`, `property_manager_admin`) is retired and held
+  to a floor by `pnpm guard:legacy-roles`.
 
 </important>

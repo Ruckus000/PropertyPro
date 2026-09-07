@@ -626,14 +626,31 @@ The most expensive item in this section, because it is what agents and new reade
 
 | Where | Says | Actually |
 |---|---|---|
-| `.claude/rules/tenant-isolation.md:26` | `ADMIN_ROLES: board_member, board_president, cam, site_manager, property_manager_admin` | Those names were **fully retired** by ADR-006. `ADMIN_ROLES` in `packages/shared/src/access-policies.ts` is `['manager']`. This rule auto-loads for anyone writing a DB query or API route |
+| ~~`.claude/rules/tenant-isolation.md:26`~~ | ~~`ADMIN_ROLES: board_member, board_president, cam, site_manager, property_manager_admin`~~ | **FIXED 2026-09-07.** Replaced with a *Roles in a Scoped Query* section stating the real value (`['manager']`), the v3 three, the `isAdminRole`/`isElevatedRole` predicates, and that board status is a `designation`, not a role |
 | `CLAUDE.md` (api-patterns) | "233 routes contracted; 40 grandfathered" (2026-08-09) | 238 / 46 |
 | This file's header | "25/25 guards" (2026-09-01) | 29 `guard:*` scripts exist today. Whether they pass was not measured here |
 | `IMPLEMENTATION_PLAN.md` (164 KB, repo root) | "PR #33 … ready to merge to `main`" | The repo is past #1072. Historical; so are the four `PHASE*_EXECUTION_PLAN.md` files beside it |
 | `docs/gtm/03-LAUNCH-READINESS.md` | B1–B4 blockers | Already called stale above |
 
-The `tenant-isolation.md` line is a one-line fix and should just be made. The rest is one
-question, not five: **`docs/` holds ~50 top-level files plus `audits/`, `specs/`,
+**The same defect survives in nine source docblocks, and `guard:legacy-roles` cannot see
+any of them.** The guard matches *quoted* literals (`'cam'`, `'site_manager'`,
+`'property_manager_admin'`) in `.ts`/`.tsx`; these are unquoted prose, so they sit at zero
+cost forever:
+
+```bash
+grep -rn "board_member/board_president/cam\|board_member, board_president, cam" \
+  packages apps --include="*.ts" --include="*.tsx" | grep -v node_modules   # 10 hits
+```
+
+One of the ten (`packages/shared/src/index.ts:11`) is correct — it describes the vocabulary
+*as retired*. The other nine assert it as current auth behaviour: `rls-config.ts` ×3 (the
+`notes` field, which is the nearest thing this repo has to an RLS design record),
+`schema/communities.ts:29`, and five `(authenticated)` page docblocks (`audit-trail`,
+`violations`, `contracts`, `dashboard/import-residents`, `dashboard/residents`). Comments,
+not runtime — but they are what the next reader believes.
+
+The `tenant-isolation.md` line was fixed in the same change that added this section. The
+rest is one question, not five: **`docs/` holds ~50 top-level files plus `audits/`, `specs/`,
 `superpowers/specs/`, `agent-tasks/` and `gtm/`, with overlapping and differently-dated
 backlogs.** Every count in the table above drifted because it was written down twice.
 
