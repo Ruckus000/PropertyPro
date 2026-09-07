@@ -484,6 +484,13 @@
       "when": 1788792801189,
       "tag": "0070_cron_runs_first_observed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1788797631673,
+      "tag": "0071_platform_admin_demo_identity_guard",
+      "breakpoints": true
     }
   ]
 }

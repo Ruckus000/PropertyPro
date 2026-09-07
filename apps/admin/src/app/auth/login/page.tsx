@@ -7,7 +7,7 @@
  * Shows an "Access Denied" message (no redirect loop) when the user's account
  * is not in platform_admin_users.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
@@ -24,6 +24,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
 
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31,6 +32,28 @@ function LoginForm() {
     if (!url || !key) return null;
     return createBrowserClient(url, key, { cookieOptions: ADMIN_COOKIE_OPTIONS });
   }, []);
+
+  // The middleware redirects here WITHOUT signing the user out
+  // (apps/admin/src/middleware.ts:299-303), which left a live session for an
+  // account that can never pass the gate: "Return to Login" re-rendered the
+  // form, signing in again re-bounced, and nothing on screen said the ACCOUNT
+  // was the problem. That dead end is why a 2026-09-06 lockout read as "my
+  // password stopped working" when every sign-in was returning 200.
+  //
+  // Capture the identity BEFORE signing out — afterwards there is nobody left
+  // to ask, and naming the address is the whole point.
+  useEffect(() => {
+    if (!accessDenied || !supabase) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (!cancelled) setDeniedEmail(data.user?.email ?? null);
+      await supabase.auth.signOut();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessDenied, supabase]);
 
   if (accessDenied) {
     return (
@@ -44,7 +67,19 @@ function LoginForm() {
             </div>
             <h1 className="text-lg font-semibold text-content">Access Denied</h1>
             <p className="mt-2 text-sm text-content-secondary">
-              Your account does not have platform administrator privileges. Contact a super admin to be granted access.
+              {deniedEmail ? (
+                <>
+                  <span className="font-medium text-content">{deniedEmail}</span> does not have
+                  platform administrator privileges.
+                </>
+              ) : (
+                'Your account does not have platform administrator privileges.'
+              )}{' '}
+              Being a root manager of a community does not grant platform access — it is a separate
+              role. Sign in with an operator account, or ask a super admin to grant this one.
+            </p>
+            <p className="mt-3 text-xs text-content-disabled">
+              You have been signed out, so you can sign in as someone else.
             </p>
           </div>
           <a
