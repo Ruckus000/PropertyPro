@@ -225,6 +225,44 @@ is visible from the records themselves:
 > observes and enforces nothing. Read a week of digests, then ratchet to
 > `p=quarantine`. Doing that before reading the reports is how legitimate mail
 > starts silently going to spam.
+>
+> **Reviewed 2026-09-07 — do not ratchet yet, and do not add `fo=1`.**
+>
+> `fo=1` was considered and rejected: RFC 7489 makes failure-report options
+> meaningful only alongside a `ruf=` destination, Postmark's DMARC Digests is an
+> aggregate (`rua`) service, and the major receivers largely do not send failure
+> reports at all. Pointing `ruf=` at our own inbox is wrong for the same reason
+> this item already rejects `rua=mailto:dmarc@getpropertypro.com`. It would look
+> like progress and change nothing.
+>
+> **`sp=none` protects nothing here.** Every `From:` in the codebase is on the
+> **apex** — `noreply@` (`packages/email/src/send.ts`, and `RESEND_FROM` is
+> unset in production so that fallback is what ships) plus `support@` /
+> `privacy@` / `contact@` (`packages/shared/src/support-inbox.ts`).
+> `send.getpropertypro.com` is only Resend's envelope MAIL FROM, which is not
+> what `p=`/`sp=` key off. So `p=quarantine` would govern **100%** of outbound.
+>
+> **The casualty candidate is password reset.**
+> `apps/web/src/lib/auth/password-reset.ts` calls
+> `supabase.auth.resetPasswordForEmail`, so Supabase composes and sends that
+> message — it never touches the DKIM-aligned Resend pipeline. The asymmetry is
+> deliberate elsewhere: `signup.ts` uses `generateLink` *"so that Supabase does
+> NOT send its default confirmation email."* That was never applied here.
+>
+> **Three preconditions, none answerable from the repo** (the Supabase
+> management API exposes no SMTP config):
+>
+> 1. Supabase Dashboard → Auth → SMTP. If custom SMTP is on with an apex
+>    `From`, every password reset quarantines unless that provider gets an SPF
+>    include and a DKIM key at the apex.
+> 2. Resend Dashboard → Domains: confirm the **apex** is verified, not only
+>    `send.`.
+> 3. Read one delivered message's `Authentication-Results` for
+>    `dkim=pass header.d=getpropertypro.com` and `dmarc=pass`.
+>
+> Then a week of digests, then ratchet. Note
+> `specs/phase-1-compliance-core/28-email-infrastructure.md` specifies a `mail.`
+> subdomain and `p=quarantine`; neither ever shipped, so it is not precedent.
 
 The original finding, kept for the reasoning: `_dmarc.getpropertypro.com` was
 absent at the authoritative nameserver.
