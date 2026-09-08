@@ -85,6 +85,16 @@ const client =
          * the message bounces, defeating the deferral the route is built on.
          * At 10s the driver always loses the race on purpose, the catch runs,
          * and the sender holds the mail.
+         *
+         * THIS BOUNDS THE CONNECT ONLY, and that is the whole of it. postgres.js
+         * exposes no query or statement timeout, its pool queue (`max` above)
+         * has no wait timeout, and nothing in this repo sets `statement_timeout`
+         * or `lock_timeout`. So a saturated pool or a lock wait — a manual
+         * ALTER TABLE or data repair holding a lock while mail arrives — can
+         * still outrun the platform budget and produce the same 504, and the
+         * same bounce. Closing that means a global statement_timeout, which
+         * would break community-export-worker and the seed/export scripts on
+         * this same shared client: a cure worse than the disease at this stage.
          */
         connect_timeout: 10,
       });

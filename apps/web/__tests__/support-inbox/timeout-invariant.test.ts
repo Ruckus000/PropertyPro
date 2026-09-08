@@ -17,6 +17,16 @@
  * Reading the source is deliberate, and follows the precedent of
  * packages/db/__tests__/support-inbox-migration.test.ts: when the only honest
  * assertion is about an artifact rather than a behaviour, assert the artifact.
+ *
+ * INCLUDING THE PART THAT MAKES IT NOT VACUOUS. That file strips `--` comments
+ * before every assertion, because its own header discusses the things it
+ * asserts and "matching prose would let a comment satisfy an assertion the SQL
+ * does not." The first version of this file cited that precedent and dropped
+ * exactly that protection, while adding long docblocks that narrate both
+ * numbers immediately above the lines being matched. Three mutations passed
+ * green against it, the cheapest being `// connect_timeout: 10,` — commenting
+ * the option out during debugging, which silently restores the inherited 30s
+ * and the tie this whole change exists to break.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,8 +35,18 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '../../../..');
 
+/**
+ * Source with comments removed.
+ *
+ * Every match runs against this, never the raw text. Both files carry docblocks
+ * that state the exact numbers asserted below, so matching raw text lets prose
+ * stand in for the live value — the definition of a vacuous test, and the
+ * precedent this file cites strips comments for precisely that reason.
+ */
 function readSource(relative: string): string {
-  return readFileSync(join(ROOT, relative), 'utf8');
+  return readFileSync(join(ROOT, relative), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
 }
 
 describe('inbound webhook timeout invariant', () => {
@@ -35,6 +55,13 @@ describe('inbound webhook timeout invariant', () => {
 
   const connectTimeout = Number(/connect_timeout:\s*(\d+)/.exec(drizzle)?.[1]);
   const maxDuration = Number(/export const maxDuration = (\d+)/.exec(route)?.[1]);
+
+  it('strips comments without emptying either source', () => {
+    // Anti-vacuity: a strip regex that ate the file would make every assertion
+    // below pass against an empty string. Straight from the precedent.
+    expect(drizzle).toContain('postgres(databaseUrl');
+    expect(route).toContain('export const maxDuration');
+  });
 
   it('sets an explicit connect_timeout rather than inheriting the 30s default', () => {
     // Without this the driver's clock ties the platform's and always loses.
