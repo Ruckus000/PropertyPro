@@ -92,6 +92,23 @@ export async function submitAccessRequest(params: {
     const otpHash = hashOtp(otp);
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
+    // The attempt counter RESETS on resend, and that is deliberate.
+    //
+    // #947 asked for the opposite: keep the count so `guess 5 -> resend -> guess
+    // 5` is not unbounded. That was implemented and then reverted, because
+    // preserving the count while a resend also refreshes `otp_expires_at` hands
+    // anyone a permanent, unauthenticated denial vector — re-submit any address
+    // every few minutes and its counter never lapses, so `verifyOtp` throws
+    // "Too many incorrect codes" before it ever compares a code, with no admin
+    // unlock for a `pending_verification` row. It trapped honest users too:
+    // after five typos the obvious action, "resend", mails a code that is
+    // guaranteed to be rejected.
+    //
+    // The brute-force control is the RATE LIMITER, not this counter. Both
+    // `/api/v1/access-requests` and `/api/v1/access-requests/verify` are in
+    // AUTH_RATE_LIMIT_PATHS, which is Redis-backed and shared across isolates,
+    // so resend-and-retry is bounded there — where a bound cannot be turned
+    // into a lockout against a third party.
     await scoped.update(
       accessRequests,
       { otpHash, otpExpiresAt, otpAttempts: 0 },
@@ -199,7 +216,11 @@ export async function verifyOtp(params: {
 
   // Check max attempts
   if ((request['otpAttempts'] as number) >= 5) {
-    throw new ValidationError('Maximum verification attempts exceeded. Please submit a new request.');
+    // Not "submit a new request": re-submitting the same email now finds this
+    // same row and, while the code is live, keeps the exhausted counter.
+    throw new ValidationError(
+      'Too many incorrect codes. Wait for this code to expire, then request a new one.',
+    );
   }
 
   // Check expiry

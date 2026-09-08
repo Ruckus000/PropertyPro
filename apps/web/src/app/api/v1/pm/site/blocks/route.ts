@@ -6,7 +6,7 @@
  * DELETE /api/v1/pm/site/blocks                 — remove the content block at blockOrder
  *                                                 (staged via tombstone draft when published)
  *
- * Authorization: caller must hold pm_admin or cam in the community AND the
+ * Authorization: caller must hold a management role (property_manager / root_manager) in the community AND the
  * community's plan must include hasSiteEditor.
  *
  * Validation: PATCH body's `content` is validated against the per-type

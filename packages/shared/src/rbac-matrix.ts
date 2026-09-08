@@ -10,6 +10,8 @@
  * unreachable and were removed in the role-v3 RBAC_MATRIX collapse
  * (ADR-006 / R3-01).
  *
+ * legacy-roles:exempt — records the columns as removed.
+ *
  * Policy decisions:
  * - compliance: condo/HOA only (apartment → false for all roles)
  * - audit write: always false (logAuditEvent() is internal-only)
@@ -112,7 +114,10 @@ type RbacCell = Record<RbacAction, boolean>;
  * `property_manager` / `root_manager`). The legacy `board_member` /
  * `board_president` / `cam` / `site_manager` columns were unreachable and were
  * removed in the role-v3 RBAC_MATRIX collapse (ADR-006 / R3-01). This is the
- * matrix key vocabulary only — distinct from the global 7-role `CommunityRole`.
+ * matrix key vocabulary only — distinct from `CommunityRole`, which is now the
+ * three v3 roles (resident / property_manager / root_manager).
+ *
+ * legacy-roles:exempt — records the columns as removed.
  */
 export const MATRIX_ROLES = ['owner', 'tenant', 'manager'] as const;
 export type MatrixRole = (typeof MATRIX_ROLES)[number];

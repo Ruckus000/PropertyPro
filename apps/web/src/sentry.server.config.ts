@@ -44,4 +44,12 @@ Sentry.init({
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
   beforeSend: scrubServerEvent,
+  // BOTH hooks. `beforeSend` fires for ERROR events only: @sentry/core's
+  // `processBeforeSend` gates it on `event.type === undefined` and routes
+  // transactions to `beforeSendTransaction` instead. A transaction carries the
+  // same `event.request` an error does — `requestDataIntegration` is registered
+  // unconditionally on Node and its `processEvent` has no event-type check — so
+  // wiring only `beforeSend` scrubs half the traffic at `tracesSampleRate` 0.1.
+  // The browser configs (`instrumentation-client.ts`) have wired both all along.
+  beforeSendTransaction: scrubServerEvent,
 });

@@ -200,8 +200,8 @@ function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts
     return hasBoardDesignation(opts?.designation);
   }
   if (filter === 'community_admins') {
-    // Admin roles: manager + pm_admin (and their v3 generations)
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // Admin roles: the management tier.
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     return (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
   }
   if (typeof filter === 'object' && filter.type === 'specific_user') return userId === filter.userId;

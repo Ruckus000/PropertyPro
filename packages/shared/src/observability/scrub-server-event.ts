@@ -38,11 +38,24 @@ import { scrubBrowserEvent, type ScrubbableEvent } from './scrub-browser-event';
  * Capture happens only where the app consumes the body through `req.on('data')`,
  * which the integration proxies. Measured on Node 20:
  *
- *   - App Router ROUTE handlers do NOT. `NextRequestAdapter` hands the raw
- *     `IncomingMessage` to undici, which drains it via the async iterator
- *     (`'readable'` + `read()`), never `'data'`. Nothing is captured — so the
- *     Stripe webhook body, and `hosted_invoice_url` with it, never reached
- *     Sentry (issue 951).
+ *   - App Router ROUTE handlers DO, in this app — corrected 2026-09-08. Taken
+ *     in isolation `NextRequestAdapter` hands the raw `IncomingMessage` to
+ *     undici, which drains it via the async iterator (`'readable'` + `read()`),
+ *     never `'data'`; a probe of that path alone therefore captures nothing.
+ *     But MIDDLEWARE runs first and does use `'data'`: our matcher
+ *     (`apps/web/src/middleware.ts`) excludes only static assets, so every
+ *     `/api/v1/*` POST goes through `next-server.js:1250`
+ *     (`requestData.body.cloneBodyStream()`, attached at `:1320`), and
+ *     `body-streams.js:87` is a literal `input.on('data', …)` on the raw
+ *     `IncomingMessage` — exactly what the integration proxies.
+ *
+ *     Measured end-to-end on a production build, reading the transmitted
+ *     envelope: `POST /api/v1/public/pm-inquiries` — a route handler — arrived
+ *     with `event.request.data` set to the raw body string, canary included.
+ *     So the Stripe webhook body, `hosted_invoice_url` with it, DID reach
+ *     Sentry before this delete landed. The earlier note said otherwise on the
+ *     strength of a reconstruction that omitted middleware; the fix was right,
+ *     the reason was not.
  *   - SERVER ACTIONS DO. `action-handler` runs
  *     `pipeline(req.body, sizeLimitTransform)` before branching on content
  *     type, `pipeline` pipes, and `Readable.pipe` attaches a `'data'` listener.
@@ -51,9 +64,11 @@ import { scrubBrowserEvent, type ScrubbableEvent } from './scrub-browser-event';
  * a server action, so a plaintext password sits in that body. Any error
  * captured during a password reset would have carried it.
  *
- * WHY THIS IS UNCONDITIONAL rather than per-route: the safe/unsafe split above
- * lives entirely in undici and Next internals, so a dependency bump can move a
- * route from the first bullet to the second with nothing here to notice. We
+ * WHY THIS IS UNCONDITIONAL rather than per-route: the split above lives
+ * entirely in undici, Next and middleware internals, so a dependency bump — or
+ * a change to the middleware matcher — can move a route between the bullets
+ * with nothing here to notice. The correction above is precisely that failure
+ * happening once already, which is the argument against ever relying on it. We
  * have no use for request bodies in Sentry, so the cheap, stable answer is to
  * drop them all.
  */
@@ -61,7 +76,13 @@ import { scrubBrowserEvent, type ScrubbableEvent } from './scrub-browser-event';
 /** Everything after this marker in a drizzle error message is bound values. */
 const PARAMS_MARKER = 'params: ';
 
-function redactParams(value: string): string {
+/**
+ * Exported for the two places that PERSIST an error message rather than sending
+ * it to Sentry, which `beforeSend` cannot reach:
+ * `community_export_jobs.error_message` (rendered to the PM by
+ * `export-job-card.tsx:161-163`) and `provisioning_jobs.error_message`.
+ */
+export function redactParams(value: string): string {
   const marker = value.indexOf(PARAMS_MARKER);
   return marker < 0 ? value : `${value.slice(0, marker)}${PARAMS_MARKER}[redacted]`;
 }

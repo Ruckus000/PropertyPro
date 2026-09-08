@@ -184,8 +184,10 @@ export const DELETE = withErrorHandler(
     // predicate (who may view unknown/unmapped categories) and excludes
     // cam/site_manager — so it let owners delete but blocked CAM, contradicting
     // both the upload gate and the RBAC matrix. requirePermission() runs through
-    // checkPermissionV2, so role-v3 values (resident/pm_admin/root_manager/
-    // manager) resolve identically to the upload path.
+    // checkPermissionV2, so the v3 role values (resident / property_manager /
+    // root_manager) resolve identically to the upload path.
+    // legacy-roles:exempt — past-tense account of a fixed bug; the names are the
+    // vocabulary the bug was written in.
     requirePermission(membership, 'documents', 'write');
     await requireActiveSubscriptionForMutation(communityId);
 

@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must be declared before any import of the route module
@@ -209,6 +210,42 @@ describe('POST /api/v1/meetings — board-designation gate', () => {
       title: CREATED_MEETING.title,
       meetingType: CREATED_MEETING.meetingType,
     });
+  });
+
+  // --- Auth-chain ordering (#950) -------------------------------------------
+  //
+  // The documented order is requireAuthenticatedUserId -> resolve ->
+  // assertNotDemoGrace -> requireCommunityMembership
+  // (`.claude/rules/api-patterns.md`). This route ran assertNotDemoGrace FIRST,
+  // ahead of authentication, and that guard does an unscoped PK SELECT on
+  // `communities` for a caller-supplied id.
+  //
+  // Middleware 401s unauthenticated callers on /api/v1 before the handler runs,
+  // so this was never the unauthenticated read the issue title describes — but
+  // the handler must not depend on middleware for that, and the ordering is the
+  // convention every other mutation follows.
+
+  it('does NOT touch the demo-grace guard when authentication fails', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError());
+
+    // withErrorHandler converts the throw into a Response rather than rejecting.
+    const res = await POST(boardMeetingReq());
+    expect(res.status).toBe(401);
+
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+  });
+
+  it('runs the demo-grace guard BEFORE the membership check', async () => {
+    // The documented convention, asserted the documented way: a demo-grace
+    // rejection must short-circuit before membership is consulted.
+    assertNotDemoGraceMock.mockRejectedValue(new ForbiddenError('demo grace'));
+
+    const res = await POST(boardMeetingReq());
+    expect(res.status).toBe(403);
+
+    expect(requireAuthenticatedUserIdMock).toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
   });
 
   it('allows a board meeting for a management-tier caller (seam fires, does not throw)', async () => {

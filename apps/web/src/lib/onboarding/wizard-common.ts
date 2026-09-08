@@ -27,10 +27,12 @@ export interface WizardRow {
 }
 
 export function requireMutationAuthorization(role: string): void {
-    // role-v3: admin-tier DB roles (bilingual). The legacy ['manager','pm_admin']
-    // set locked every v3 property_manager out of onboarding-wizard mutations.
+    // ADMIN_TIER_DB_ROLES is v3-only — ['property_manager','root_manager'].
+    // Named here because the legacy ['manager','pm_admin'] set once locked every
+    // v3 property_manager out of onboarding-wizard mutations.
+    // legacy-roles:exempt — names the pre-v3 set to explain why this one exists.
     if (!(ADMIN_TIER_DB_ROLES as readonly string[]).includes(role)) {
-        throw new ForbiddenError('Only board members, CAMs, and property managers can modify wizard state');
+        throw new ForbiddenError('Only a property manager or root manager can modify wizard state');
     }
 }
 

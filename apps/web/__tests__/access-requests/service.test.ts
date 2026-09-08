@@ -237,6 +237,51 @@ describe('access-request-service', () => {
       expect(sendEmailMock).toHaveBeenCalledTimes(1);
     });
 
+    // --- The attempt cap is a cap (#947) ------------------------------------
+    //
+    // It used to reset unconditionally on resend, so guess-5 / resend / guess-5
+    // was unbounded. It now survives a resend while the current code is live,
+    // and resets only once that code has lapsed.
+
+
+
+
+    // Resend RESETS the counter, and a test pins that because the opposite was
+    // shipped and reverted: preserving it while the resend also refreshes the
+    // expiry let anyone hold any address in a permanent "Too many incorrect
+    // codes" state. Brute force is bounded by the Redis-backed auth-tier rate
+    // limiter instead. See the note at the update site.
+    it('RESETS otpAttempts on resend, so a third party cannot hold the lock open', async () => {
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'existing@example.com',
+            fullName: 'Existing User',
+            status: 'pending_verification',
+            otpHash: 'old-hash',
+            // Still LIVE — the case that previously kept the row locked forever.
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            otpAttempts: 5,
+          },
+        ],
+      });
+
+      await submitAccessRequest({
+        communityId: COMMUNITY_ID,
+        communitySlug: COMMUNITY_SLUG,
+        email: 'existing@example.com',
+        fullName: 'Existing User',
+        isUnitOwner: false,
+      });
+
+      const updateData = scoped.update.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(updateData['otpAttempts']).toBe(0);
+      // A fresh code is issued too, or the reset would be pointless.
+      expect(updateData['otpHash']).toEqual(expect.any(String));
+      expect(updateData['otpExpiresAt']).toBeInstanceOf(Date);
+    });
+
     it('rejects if email already belongs to a community member', async () => {
       setupScopedMock({
         userRows: [
@@ -400,7 +445,7 @@ describe('access-request-service', () => {
 
       await expect(
         verifyOtp({ requestId: 10, otp: TEST_OTP, communityId: COMMUNITY_ID }),
-      ).rejects.toThrow('Maximum verification attempts exceeded');
+      ).rejects.toThrow('Too many incorrect codes');
     });
 
     it('rejects expired OTP', async () => {

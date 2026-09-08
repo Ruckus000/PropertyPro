@@ -1,8 +1,15 @@
 /**
  * P3-47: Server-side branding helpers for white-label settings.
  *
- * All callers must have already verified the user holds property_manager_admin
- * in the target community before calling these functions.
+ * Read and write have DIFFERENT contracts — this is not one rule:
+ *   - Reads (`getBrandingForCommunity`, `getCommunityPublicInfo`) are
+ *     deliberately UNGATED. They serve the public site, public transparency,
+ *     the sitemap, the auth-page branding resolver and the demo route, none of
+ *     which has a session.
+ *   - Writes (`updateBrandingForCommunity`, `markSiteOnboardingComplete`,
+ *     `seedDefaultSiteBranding`) require the caller to have already verified a
+ *     management role (property_manager / root_manager) in the target
+ *     community. See the per-function notes below.
  */
 import { cache } from 'react';
 import { communities, siteLayoutMetadata } from '@propertypro/db';
@@ -128,8 +135,10 @@ export async function getSiteOnboardingCompletedAt(
  * wizard to completion is a fresh completion event, and only null-vs-set
  * matters to the consumers. Idempotent in effect.
  *
- * Callers must have already verified pm_admin/cam membership in the target
- * community (the publish route does this before invoking).
+ * Callers must have already verified a management role (property_manager /
+ * root_manager) in the target community. The publish route does this via
+ * `ensurePmAccess` → `requireRole(membership, PM_MANAGER_ROLES)` plus
+ * `requirePlanFeature('hasSiteEditor')` before invoking.
  */
 export async function markSiteOnboardingComplete(
   communityId: number,

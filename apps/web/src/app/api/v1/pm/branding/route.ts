@@ -7,7 +7,10 @@
  * Plan A1 drain #174 — both methods migrated to `runRoute(contract, handler)`;
  * see `./contract.ts`.
  *
- * Authorization: caller must hold property_manager_admin in the target community.
+ * Authorization: caller must hold a management role (property_manager /
+ * root_manager) in the target community. Note this route does NOT call
+ * `requireRole` — both handlers inline a `PM_SCOPE_DB_ROLES.includes(...)`
+ * membership test, so there is no alias expansion and no shared guard.
  *
  * Logo processing:
  *   The client uploads the raw file via POST /api/v1/upload (presigned URL).
@@ -86,7 +89,7 @@ export const GET = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can access branding settings');
     }
@@ -104,7 +107,7 @@ export const PATCH = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can update branding settings');
     }

@@ -14,7 +14,7 @@
  *   4. Welcome message   → (handled by /api/v1/pm/site/hero — not this endpoint)
  *   5. Confirm + publish → (handled by /api/v1/pm/site/publish — not this endpoint)
  *
- * Authorization: pm_admin or cam, with the `hasSiteEditor` plan feature
+ * Authorization: a management role (property_manager / root_manager), with the `hasSiteEditor` plan feature
  * (mirrors the editor PATCH routes from PR #8e).
  */
 import { runRoute } from '@propertypro/api-contract';

@@ -68,12 +68,12 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'compliance_checklist_items',
     policyFamily: 'tenant_admin_write',
-    notes: 'Writes restricted to site_manager/property_manager_admin via requireMutationAuthorization in onboarding routes.',
+    notes: 'Writes restricted to the admin tier (property_manager/root_manager) via requireMutationAuthorization in onboarding routes.',
   },
   {
     tableName: 'contract_bids',
     policyFamily: 'tenant_admin_write',
-    notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in contracts route.',
+    notes: 'Writes restricted via requirePermission(contracts, write) in the contracts route — the manager RBAC row, i.e. property_manager/root_manager.',
   },
   {
     tableName: 'snowbird_digest_subscriptions',
@@ -127,7 +127,7 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'contracts',
     policyFamily: 'tenant_admin_write',
-    notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in contracts route.',
+    notes: 'Writes restricted via requirePermission(contracts, write) in the contracts route — the manager RBAC row, i.e. property_manager/root_manager.',
   },
   { tableName: 'demo_seed_registry', policyFamily: 'service_only' },
   {
@@ -138,12 +138,12 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'documents',
     policyFamily: 'tenant_admin_write',
-    notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in document routes.',
+    notes: 'Writes restricted via requirePermission(documents, write) in the document routes — the manager RBAC row, i.e. property_manager/root_manager.',
   },
   {
     tableName: 'invitations',
     policyFamily: 'tenant_admin_write',
-    notes: 'Writes restricted to ADMIN_ROLES via requireAdminRole in invitations route.',
+    notes: 'Writes restricted via requirePermission(residents, write) in the invitations route — the manager RBAC row, i.e. property_manager/root_manager. The RBAC resource is residents, not invitations.',
   },
   {
     tableName: 'leases',

@@ -124,6 +124,64 @@ describe('Sentry server config', () => {
   });
 });
 
+/**
+ * `beforeSend` fires for ERROR events only.
+ *
+ * `@sentry/core`'s `processBeforeSend` gates it on `event.type === undefined`
+ * and hands transactions to `beforeSendTransaction` instead. On Node the
+ * request body reaches a transaction by the same path it reaches an error:
+ * `requestDataIntegration` is registered unconditionally, its `DEFAULT_INCLUDE`
+ * sets `data: true` outside the `sendDefaultPii` gate, and its `processEvent`
+ * has no event-type check. So the #951 body drop was only half applied while
+ * these configs wired `beforeSend` alone, with `tracesSampleRate` at 0.1 in
+ * production.
+ *
+ * The load-bearing assertion is that the hook is WIRED — the scrubber itself is
+ * type-agnostic and would have passed a transaction-shaped event all along.
+ */
+describe('transaction events are scrubbed too (#951)', () => {
+  const transactionEvent = () => ({
+    type: 'transaction',
+    transaction: 'POST /api/v1/webhooks/stripe',
+    request: {
+      url: 'https://app.example.com/api/v1/webhooks/stripe?token=supersecretvalue',
+      headers: { authorization: 'Bearer secret-token', 'content-type': 'application/json' },
+      data: { hosted_invoice_url: 'https://invoice.stripe.com/i/acct_1/live_ABC123' },
+    },
+  });
+
+  for (const configPath of [
+    '../../src/sentry.server.config',
+    '../../src/sentry.edge.config',
+  ] as const) {
+    it(`${configPath} wires beforeSendTransaction, not just beforeSend`, async () => {
+      vi.stubEnv('SENTRY_DSN', 'https://test@sentry.io/123');
+
+      vi.resetModules();
+      await import(configPath);
+
+      const config = mockInit.mock.calls[0]?.[0] as Record<string, unknown>;
+      const beforeSendTransaction = config['beforeSendTransaction'] as
+        | ((event: Record<string, unknown>) => Record<string, unknown>)
+        | undefined;
+
+      expect(beforeSendTransaction).toBeTypeOf('function');
+
+      const result = beforeSendTransaction!(transactionEvent());
+      const request = result['request'] as Record<string, unknown>;
+
+      // The body — the thing #951 is about.
+      expect(request).not.toHaveProperty('data');
+      // And the rest of the scrub, so this cannot pass on a hook that only deletes data.
+      expect(request['headers']).not.toHaveProperty('authorization');
+      expect(String(request['url'])).not.toContain('supersecretvalue');
+      // Triage value must survive, or a green test would only prove the hook ran.
+      expect(String(request['url'])).toContain('/api/v1/webhooks/stripe');
+      expect(result['transaction']).toBe('POST /api/v1/webhooks/stripe');
+    });
+  }
+});
+
 describe('Sentry client instrumentation', () => {
   it('uses NEXT_PUBLIC_SENTRY_DSN', async () => {
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', 'https://public@sentry.io/456');

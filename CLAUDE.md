@@ -48,7 +48,15 @@ docs/                   # Specs, ADRs, audits, design system
 > maps the v3 roles onto (`resident` splits owner/tenant via `isUnitOwner`). The only
 > residual legacy-name strings are non-runtime content — help-article frontmatter,
 > dev-login aliases, and test fixtures — held to a floor by `guard:legacy-roles`
-> (STRUCTURAL/BRIDGE buckets empty). See `docs/adr/ADR-006-root-manager-role-model.md`
+> (STRUCTURAL/BRIDGE buckets empty). That guard has **two passes**: quoted literals
+> (per-file ceilings) and, since 2026-09-07, retired names in **comment prose**, which
+> is where ~60 stale docblocks had accumulated invisibly — several asserting gates the
+> code does not perform. Comments are extracted with the TypeScript parser, not a regex;
+> escape hatch `legacy-roles:exempt — <reason>`. It scans app + package source only —
+> **`scripts/` is outside its roots**, so the guard tooling (including the pattern table in
+> `scripts/lib/legacy-role-comments.ts`, which necessarily names the retired terms) does not
+> police itself. Bare `cam` is deliberately not matched
+> (~50 legitimate hits, incl. the marketing copy and an asset filename). See `docs/adr/ADR-006-root-manager-role-model.md`
 > (supersedes ADR-001).
 
 ## Development Commands
@@ -220,7 +228,7 @@ pnpm --filter @propertypro/web test:e2e:prod
 pnpm guard:breadcrumbs          # Breadcrumb coverage
 pnpm guard:page-header          # PageHeader owns every page <h1>; no literal <h1> in the authenticated app
 pnpm guard:tenant-scope         # tenantScope contract well-formedness
-pnpm guard:legacy-roles         # Legacy-role vocabulary floor
+pnpm guard:legacy-roles         # Legacy-role vocabulary: quoted literals AND comment prose
 pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only baseline)
 pnpm guard:page-padding         # Page gutter single-sourced in the shell; no per-page px / nested <main>
 pnpm guard:token-coverage       # Every referenced var(--*) must be defined

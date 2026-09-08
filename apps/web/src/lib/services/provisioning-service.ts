@@ -17,6 +17,7 @@
  *   - Retry resumes from lastSuccessfulStatus — never restarts from scratch
  */
 import { createElement } from 'react';
+import { redactParams } from '@propertypro/shared/observability';
 import type Stripe from 'stripe';
 import { and, asc, eq, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
 import {
@@ -398,7 +399,7 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
   const [roleRow] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     .where(and(eq(userRoles.communityId, communityId), inArray(userRoles.role, [...PM_SCOPE_DB_ROLES])))
     .limit(1);
 
@@ -460,7 +461,7 @@ async function stepCompleted(ctx: JobContext): Promise<void> {
   const [adminRole] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     .where(and(eq(userRoles.communityId, ctx.communityId), inArray(userRoles.role, [...PM_SCOPE_DB_ROLES])))
     .limit(1);
 
@@ -613,7 +614,9 @@ export async function runProvisioning(jobId: number): Promise<void> {
         .set({
           status: 'failed',
           retryCount: sql`${provisioningJobs.retryCount} + 1`,
-          errorMessage: err instanceof Error ? err.message : String(err),
+          // Same reasoning as the export worker: persisted driver text can carry
+          // drizzle's bound `params:` (#1092). Values only; see that note.
+          errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
         })
         .where(eq(provisioningJobs.id, jobId));
 
@@ -729,7 +732,7 @@ export async function recoverStuckProvisioningJobs(
       summary.failures.push({
         jobId: row.id,
         signupRequestId: row.signupRequestId ?? null,
-        errorMessage: err instanceof Error ? err.message : String(err),
+        errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
       });
     }
   }
@@ -866,7 +869,7 @@ export async function reconcileLostCheckoutSignups(
       summary.failed += 1;
       summary.failures.push({
         signupRequestId: row.signupRequestId,
-        errorMessage: err instanceof Error ? err.message : String(err),
+        errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
       });
     }
   }

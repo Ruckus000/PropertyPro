@@ -2,6 +2,7 @@
  * Agent-friendly dev login for the admin app — development only.
  *
  * Usage: GET /dev/agent-login?as=platform_admin   (alias: ?as=pm_admin)
+ * legacy-roles:exempt — dev-login alias, 404 in production.
  *
  * Authenticates via admin-generated magic link verified server-side.
  * Sets session cookies so preview-tool browsers are immediately authenticated.
@@ -47,7 +48,8 @@ import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
  */
 const ADMIN_EMAIL = 'e2e.platform.admin@local';
 
-/** Accepted `?as=` values. `pm_admin` retained so existing callers keep working. */
+/** Accepted `?as=` values. `pm_admin` retained so existing callers keep working.
+ *  legacy-roles:exempt — dev-login alias, 404 in production. */
 const VALID_ROLES = new Set(['platform_admin', 'pm_admin']);
 
 export async function GET(request: Request) {

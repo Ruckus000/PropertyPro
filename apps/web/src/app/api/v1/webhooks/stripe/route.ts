@@ -519,7 +519,10 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
  * bank's check.
  *
  * `hosted_invoice_url` is bearer-ish and is deliberately absent from every log
- * call below. Sentry is covered too; see the note on
+ * call below. Sentry is covered too: `scrubServerEvent` deletes
+ * `event.request.data` unconditionally on both send hooks. Note the webhook
+ * body WAS reaching Sentry before that landed — see the corrected measurement
+ * in `scrub-server-event.ts` and the note on
  * `SendPaymentActionRequiredEmailOpts.authenticateUrl` (issue 951).
  */
 async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice): Promise<void> {

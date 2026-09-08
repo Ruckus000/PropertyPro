@@ -177,6 +177,23 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/access-requests/7/deny', 'POST')).not.toBe('auth');
   });
 
+  it('classifies the access-request OTP verify route as auth (#947)', () => {
+    // The OTP guessing surface. On `write` it was 30/min AND counted per
+    // isolate in memory; `auth` is 10/min and Redis-backed.
+    expect(classifyRoute('/api/v1/access-requests/verify', 'POST')).toBe('auth');
+  });
+
+  it('leaves the other access-request routes on the write tier', () => {
+    // The reason only `/verify` is listed: classifyRoute matches by PREFIX, so
+    // a bare '/api/v1/access-requests' entry would drop the authenticated admin
+    // approve/deny routes to 10/min, and approving a new community's residents
+    // is a legitimate burst. If this test ever goes red, that regression is
+    // what happened.
+    expect(classifyRoute('/api/v1/access-requests', 'POST')).toBe('write');
+    expect(classifyRoute('/api/v1/access-requests/10/approve', 'POST')).toBe('write');
+    expect(classifyRoute('/api/v1/access-requests/10/deny', 'POST')).toBe('write');
+  });
+
   it('classifies provisioning-status as public tier (polling-friendly)', () => {
     expect(classifyRoute('/api/v1/auth/provisioning-status', 'GET')).toBe('public');
   });

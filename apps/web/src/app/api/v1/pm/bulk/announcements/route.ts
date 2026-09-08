@@ -6,7 +6,8 @@
  * Plan A1 drain #168. Migrated to `runRoute(contract, handler)`; see
  * `./contract.ts`.
  *
- * Authorization: caller must hold property_manager_admin in at least one community.
+ * Authorization: caller must hold a PM-scope role (property_manager or
+ * root_manager) in at least one community — the isPmAdminInAnyCommunity gate.
  * Each communityId in the request is validated against the user's managed set.
  */
 import { runRoute } from '@propertypro/api-contract';

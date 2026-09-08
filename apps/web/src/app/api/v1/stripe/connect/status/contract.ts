@@ -8,7 +8,7 @@
  * (via parseCommunityIdFromQuery pre-migration; identical effect) →
  * requireCommunityMembership → requireFinanceEnabled →
  * requireFinanceReadPermission → CONNECT_STATUS_ROLES role check
- * (manager | pm_admin) → getConnectStatus.
+ * (property_manager / root_manager) → getConnectStatus.
  *
  * Response modeling: loose z.unknown() — `getConnectStatus` returns a
  * complex object whose shape (Stripe Connect account fields, possibly Date

@@ -31,6 +31,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
 const API_ROOT = 'apps/web/src/app/api';
 
+
 const VALID_SCOPES = new Set(['query', 'body', 'path']);
 const SCOPE_SCHEMA_KEY: Record<string, string> = {
   query: 'query:',
@@ -215,12 +216,16 @@ function main(): void {
     `\nScanned ${routeFiles.length} route.ts files; ${scopedRoutes} declare a query/body tenantScope.`,
   );
 
+
   if (violations.length > 0) {
     console.error(`\n❌ ${violations.length} tenantScope problem(s):`);
     for (const v of violations) {
       console.error(`  ${v.file}`);
       console.error(`      ${v.message}`);
     }
+  }
+
+  if (violations.length > 0) {
     process.exit(1);
   }
 

@@ -3,7 +3,8 @@
  *
  * Returns the billing group owned by the authenticated PM, creating one
  * on-demand from the PM's active portfolio when none exists yet. Only
- * callable by users who are pm_admin in at least one community.
+ * callable by users holding property_manager or root_manager in at least one
+ * non-deleted community.
  *
  * Plan A1 drain #6 (post-pilot): input validation is a no-op (no params /
  * query / body) and output validation + canonical envelope wrapping are

@@ -141,10 +141,27 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const body = (await req.json()) as Record<string, unknown>;
   const action = typeof body.action === 'string' ? body.action : 'create';
   const communityId = parseCommunityIdFromBody(req, body);
-  await assertNotDemoGrace(communityId);
   const normalizedBody = { ...body, communityId, action };
 
+  // What moved: `assertNotDemoGrace` now runs AFTER authentication. The body
+  // parse and `parseCommunityIdFromBody` above still precede it, and that is
+  // fine — they are pure parsing plus a header cross-check, with no DB read and
+  // so no oracle. The documented chain
+  // (`requireAuthenticatedUserId -> resolve -> assertNotDemoGrace -> membership`,
+  // `.claude/rules/api-patterns.md`) is about where the GUARDS sit, not where
+  // the id is parsed; stating it as the literal statement order here would
+  // overclaim, which is the defect `guard:legacy-roles` pass 2 exists to catch.
+  //
+  // This route used to run assertNotDemoGrace FIRST, ahead of authentication.
+  // That guard does an UNSCOPED primary-key SELECT on `communities` for whatever
+  // id the caller put in the body, and `resolveEffectiveCommunityId` only
+  // cross-checks the body against `x-community-id` when middleware actually
+  // stamped that header — which it does from tenant context or a
+  // `/communities/[id]/` path, not for an apex-host POST. So the read ran, and
+  // its outcome was distinguishable (403 demo-grace vs. falling through),
+  // before the handler had established anything about the caller.
   const actorUserId = await requireAuthenticatedUserId();
+  await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'meetings', 'write');
   // Statutory board-meeting *calls* require a board designation (role-v3 §3.2):

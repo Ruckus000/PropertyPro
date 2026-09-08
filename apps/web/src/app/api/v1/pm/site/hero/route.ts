@@ -4,7 +4,7 @@
  * GET  /api/v1/pm/site/hero?communityId=X   — read current hero (draft wins)
  * PATCH /api/v1/pm/site/hero                — upsert the hero draft
  *
- * Authorization: caller must hold pm_admin or cam in the target community and the
+ * Authorization: caller must hold a management role (property_manager / root_manager) in the target community and the
  * community's subscription plan must include `hasSiteEditor`.
  *
  * Slice 8e is live: PATCH writes a draft row; the public site keeps serving
@@ -80,7 +80,7 @@ export const PATCH = withErrorHandler(
 
     // Defense-in-depth: imagePathSchema only enforces the shape
     // `{numeric}/{kind}/...` — it does not bind the leading numeric segment
-    // to the editing community. A pm_admin for community 42 could otherwise
+    // to the editing community. A property_manager for community 42 could
     // PATCH a heroImagePath of `999/hero/x.webp` and the row would persist
     // a cross-tenant reference. The storage bucket is anon-readable by
     // design (no access boundary crossed), but the schema's own contract

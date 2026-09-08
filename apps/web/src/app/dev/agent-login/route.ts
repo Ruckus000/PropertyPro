@@ -170,6 +170,7 @@ export async function GET(request: Request) {
   const isAdmin = ADMIN_ROLES.has(role);
   // PM-tier users (property_manager / root_manager) land on the PM portfolio
   // dashboard. The `?as=pm_admin` alias resolves to a property_manager demo row.
+  // legacy-roles:exempt — dev-login alias, 404 in production.
   // The single-community root personas stay on the community dashboard — a
   // portfolio view is meaningless for them, and the root-exclusive surfaces
   // they exist to exercise (billing, deletion, role assignment) all live there.

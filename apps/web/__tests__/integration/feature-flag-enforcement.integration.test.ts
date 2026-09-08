@@ -7,8 +7,6 @@
  * 2. Condo onboarding is condo/HOA-only (hasCompliance)
  * 3. Compliance API is condo/HOA-only (hasCompliance)
  * 4. Feature flag consistency across community types
- *
- * Phase 3 placeholder tests for future features (voting, etc.) marked with .skip
  */
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -512,34 +510,4 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 5. Phase 3 Placeholder Tests
-  // ---------------------------------------------------------------------------
-
-  describe('Phase 3 feature flags (not yet implemented)', () => {
-    it.skip('voting routes should enforce hasVoting flag (Phase 3 not implemented)', () => {
-      // Expected behavior when Phase 3 voting features are implemented:
-      // - Apartment communities: voting disabled (hasVoting=false)
-      // - Condo/HOA communities: voting enabled (hasVoting=true)
-      //
-      // Test cases to add in Phase 3:
-      // - GET /api/v1/voting/ballots → 200 for condo/HOA, 403 for apartments
-      // - POST /api/v1/voting/cast-vote → 200 for condo/HOA, 403 for apartments
-      //
-      // Reference implementation: apps/web/src/app/api/v1/leases/route.ts
-    });
-
-    it.skip('maintenance requests should have role-based restrictions (Phase 3)', () => {
-      // Current state: hasMaintenanceRequests=true for all community types
-      // Phase 3 may add role-based restrictions:
-      // - Tenants can create but not manage
-      // - Board members can view all but not assign
-      // - Site managers can assign and close
-      //
-      // Test cases to add in Phase 3:
-      // - Verify tenants can POST but not PATCH
-      // - Verify board members can GET but not DELETE
-      // - Verify site managers have full CRUD access
-    });
-  });
 });

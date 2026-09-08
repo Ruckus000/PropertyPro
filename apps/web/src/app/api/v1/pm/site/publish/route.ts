@@ -4,7 +4,7 @@
  * POST /api/v1/pm/site/publish — runs spec §2.7's atomic publish
  * transaction. Thin wrapper around `publishCommunitySite` from PR #8a.
  *
- * Authorization: caller must hold pm_admin or cam in the target community
+ * Authorization: caller must hold a management role (property_manager / root_manager) in the target community
  * and the community's subscription plan must include `hasSiteEditor`.
  * Same `ensurePmAccess` shape used by the hero and blocks routes.
  */

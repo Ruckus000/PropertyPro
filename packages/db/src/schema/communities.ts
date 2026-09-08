@@ -26,8 +26,8 @@ export const communities = pgTable('communities', {
   branding: jsonb('branding'),
   /** P4-55f: Per-community write-restriction settings for configurable-write tables.
    *  Absent key or 'all_members' = open writes (default, backward-compatible).
-   *  'admin_only' = only admin-tier roles (board_member, board_president, cam,
-   *  site_manager, property_manager_admin) may INSERT/UPDATE/DELETE.
+   *  'admin_only' = only the admin tier (property_manager, root_manager) may
+   *  INSERT/UPDATE/DELETE. Board designation is NOT admin-tier (ADR-006).
    *  Enforced at RLS level via pp_rls_community_allows_member_writes(). */
   communitySettings: jsonb('community_settings')
     .$type<{

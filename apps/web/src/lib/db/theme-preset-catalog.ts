@@ -4,10 +4,15 @@
  * AUTHZ: Platform-level read from site_theme_presets. The table is NOT
  * tenant-scoped (catalog data managed by platform admin), but this file
  * is allowlisted in scripts/verify-scoped-db-access.ts so the unscoped
- * client can be used here. Callers MUST verify pm_admin / cam
- * membership in the target community AND the `hasSiteEditor` plan
- * feature before invoking — the rows returned are not community-
- * sensitive but the wizard surface that consumes them is gated.
+ * client can be used here. Callers verify a management role
+ * (property_manager / root_manager) in the target community before
+ * invoking — the rows returned are not community-sensitive but the
+ * wizard surface that consumes them is gated.
+ *
+ * Note what the callers do NOT do: both page callers
+ * (pm/onboarding/website, pm/site-preview) check membership + role only.
+ * The `hasSiteEditor` plan gate lives on the mutating route, not on this
+ * read path.
  */
 import { cache } from 'react';
 import { siteThemePresets } from '@propertypro/db';

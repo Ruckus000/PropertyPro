@@ -7,7 +7,7 @@
  * Security guarantees:
  * - communityId must be a positive integer (prevents injection)
  * - membership is verified server-side via requireCommunityMembership
- * - user must hold property_manager_admin role in that community
+ * - user must hold a management role (property_manager / root_manager) there
  * - returns null on any invalid/removed/non-PM access (no data leakage)
  */
 import { getFeaturesForCommunity, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
@@ -19,7 +19,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
  * @returns The target URL string when access is valid, or null when:
  *   - communityId is not a positive integer
  *   - user has no membership in the community
- *   - user does not hold property_manager_admin role
+ *   - user holds neither property_manager nor root_manager
  */
 export async function resolvePmDashboardTarget(
   userId: string,
@@ -33,7 +33,7 @@ export async function resolvePmDashboardTarget(
   try {
     const membership = await requireCommunityMembership(communityId, userId);
 
-    // Require PM-scope role (v2 pm_admin or v3 property_manager/root_manager)
+    // Require a PM-scope role — PM_SCOPE_DB_ROLES is ['property_manager','root_manager'].
     if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       return null;
     }

@@ -11,6 +11,8 @@
  * The legacy 7-role vocabulary (owner/tenant/board_member/board_president/cam/
  * site_manager/property_manager_admin) was retired in the role-v3 collapse; this
  * type now speaks the single v3 vocabulary end-to-end.
+ *
+ * legacy-roles:exempt — records the vocabulary as retired.
  */
 
 export const COMMUNITY_TYPES = ["condo_718", "hoa_720", "apartment"] as const;

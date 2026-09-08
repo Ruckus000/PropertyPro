@@ -415,7 +415,7 @@ export async function getOrCreateBillingGroupForPm(
     .where(
       and(
         eq(userRoles.userId, userId),
-        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        // role-v3: this role set is v3-only — ['property_manager','root_manager'].
         inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
         isNull(communities.deletedAt),
         // Only consider communities that aren't already in a billing group —

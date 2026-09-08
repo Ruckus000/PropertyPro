@@ -150,9 +150,6 @@
   "apps/web/src/components/help/help-docs-modal.tsx": {
     "bare-focus-ring": 3
   },
-  "apps/web/src/components/maintenance/AssignmentModal.tsx": {
-    "bare-focus-ring": 2
-  },
   "apps/web/src/components/maintenance/CommentThread.tsx": {
     "bare-focus-ring": 2
   },

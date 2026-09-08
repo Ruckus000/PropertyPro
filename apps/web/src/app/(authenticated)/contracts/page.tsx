@@ -2,8 +2,8 @@
  * P3-52: Contract & Vendor Tracking page.
  *
  * Route: /contracts?communityId=X
- * Auth: community admin required (board_member, board_president, cam,
- *        site_manager, property_manager_admin).
+ * Auth: isAdminRole(membership.role) — the v3 admin tier, property_manager or
+ *        root_manager. Board designation grants no access (ADR-006).
  * Feature gate: hasCompliance must be true (condo/HOA only).
  */
 import { redirect } from 'next/navigation';

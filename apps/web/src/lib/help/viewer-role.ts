@@ -7,6 +7,8 @@
  * - property_manager with board designation → board_president / board_member
  * - property_manager without designation → property_manager_admin (full ops)
  *
+ * legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
+ *
  * Spec: docs/superpowers/specs/2026-06-10-root-manager-role-simplification-design.md
  *
  * Frontmatter role strings come from HELP_FRONTMATTER_ROLES (guard-exempt
@@ -59,6 +61,8 @@ export function resolveHelpViewerRoleFromMembership(
 /**
  * Frontmatter role strings that should satisfy visibility for a resolved viewer role.
  * Keeps articles working when frontmatter lists transition aliases (pm_admin, manager, …).
+ *
+ * legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
  */
 export function expandHelpViewerRoleAliases(resolvedRole: string): readonly string[] {
   switch (resolvedRole) {
@@ -73,6 +77,7 @@ export function expandHelpViewerRoleAliases(resolvedRole: string): readonly stri
     case R.cam:
       return [R.cam, 'manager'];
     default:
+      // legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
       // board_president, board_member, site_manager, owner, tenant, and any
       // already-canonical role resolve to themselves.
       return [resolvedRole];
