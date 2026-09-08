@@ -119,7 +119,12 @@ function useMergedRef<T>(...refs: Array<React.Ref<T> | undefined>) {
         ;(ref as React.MutableRefObject<T | null>).current = node
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps are intentionally the spread `refs` array itself, not its
+    // elements — this is the merge-ref pattern, not a stale-closure bug.
+    // `react-hooks/exhaustive-deps` is not registered in this package's
+    // ESLint config (see packages/ui/eslint.config.mjs), so there is
+    // nothing here to suppress; if that rule is ever enabled for
+    // packages/ui, it would flag this line and the array should stay as-is.
   }, refs)
 }
 
