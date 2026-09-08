@@ -20,6 +20,20 @@
  *     → withdrawArcSubmissionForCommunity(communityId, id, actorUserId,
  *         unitIds, x-request-id)
  *
+ * NO `requireActiveSubscriptionForMutation`, DELIBERATELY (issue 956). Create,
+ * review and decide all call it and this does not, which reads like a missed
+ * line and is not one. Withdraw is the only ARC mutation that purely RETRACTS:
+ * `withdrawArcSubmissionForCommunity` refuses unless the caller is the
+ * submitter, and refuses once a submission is approved or denied. During a
+ * billing lapse the other three ARE blocked, so guarding this one too would
+ * leave a resident's own pending row with no transition available to anyone —
+ * not the resident, not a reviewer — until billing is restored. That is the
+ * same principle as the guard's own `allowResidentSelfService` carve-out: a
+ * platform-billing soft-lock should not trap a resident inside an obligation
+ * they are trying to clear. Note the guard is the exception rather than the
+ * rule repo-wide — 34 of 196 mutation route files called it on 2026-09-08 — so
+ * adding it here would not be restoring a norm so much as joining a minority.
+ *
  * SCOPED DB CALL: the in-handler `createScopedClient(communityId)` +
  * `getActorUnitIds(scoped, actorUserId)` step is preserved verbatim. The
  * resolved `unitIds: number[]` flows into the service as the 4th positional
