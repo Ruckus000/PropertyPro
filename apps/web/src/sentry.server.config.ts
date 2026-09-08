@@ -6,6 +6,8 @@
  */
 import * as Sentry from '@sentry/nextjs';
 
+import { scrubServerEvent } from '@propertypro/shared/observability';
+
 /**
  * Deployment environment for Sentry.
  *
@@ -41,13 +43,5 @@ Sentry.init({
   // Performance tracing
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
-  beforeSend(event) {
-    // Redact sensitive headers [acceptance criteria]
-    if (event.request?.headers) {
-      delete event.request.headers['authorization'];
-      delete event.request.headers['cookie'];
-      delete event.request.headers['x-api-key'];
-    }
-    return event;
-  },
+  beforeSend: scrubServerEvent,
 });
