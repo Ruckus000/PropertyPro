@@ -283,6 +283,41 @@ describe('p1-20 invitation auth flow', () => {
     expect(json.error.code).toBe('TOKEN_USED');
   });
 
+  /**
+   * PATCH is in middleware's TOKEN_AUTH_ROUTES, so it is reachable WITHOUT a
+   * session — the caller holds an invitation token instead. That makes the
+   * ordering here security-relevant in a way it is not on any other caller of
+   * this guard: `assertNotDemoGrace` used to run on a caller-supplied
+   * `communityId` before the token was looked at, so an anonymous request could
+   * pick any id and learn one bit about it (403 for a demo community in its
+   * grace window, 404 otherwise).
+   *
+   * Filed as #950, which named `meetings` POST — that route is NOT reachable
+   * unauthenticated (`/api/v1` is a protected prefix; middleware answers 401
+   * before the handler runs). This is the one route where the shape was real.
+   */
+  it('PATCH does not touch the demo-grace guard before the token is proven', async () => {
+    findInvitationByTokenMock.mockResolvedValueOnce(null);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 999999,
+        token: 'no-such-token',
+        password: 'Pass123456!',
+        termsAccepted: true,
+      }),
+    });
+
+    const res = await PATCH(req);
+
+    expect(res.status).toBe(404);
+    // The point of the case: an unauthenticated caller with a bogus token gets
+    // no read of that community at all.
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+  });
+
   it('PATCH rejects expired token', async () => {
     const token = 'exp123';
     findInvitationByTokenMock.mockResolvedValueOnce({

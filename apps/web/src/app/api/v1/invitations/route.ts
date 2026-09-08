@@ -133,7 +133,6 @@ export const POST = withErrorHandler(
 export const PATCH = withErrorHandler(
   runRoute(acceptInvitationContract, async ({ body, req }) => {
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
-    await assertNotDemoGrace(communityId);
     const { token, password } = body;
 
     const invitation = await findInvitationByToken(communityId, token);
@@ -161,6 +160,24 @@ export const PATCH = withErrorHandler(
         'TOKEN_EXPIRED',
       );
     }
+
+    /*
+     * Demo-grace AFTER the token is proven, not before.
+     *
+     * This route is in middleware's TOKEN_AUTH_ROUTES — accepting an invitation
+     * necessarily happens without a session — so unlike every other caller of
+     * this guard, `communityId` here reaches us from an UNAUTHENTICATED request.
+     * Running the guard first meant an anonymous caller could pick any id and
+     * learn one bit about it (403 for a demo community inside its grace window,
+     * 404 otherwise) with no token at all.
+     *
+     * A valid, unconsumed, unexpired invitation for this community is now
+     * required first, which is also what the guard's own docblock asks for:
+     * "call after community ID is resolved, before any write logic". It was
+     * previously before ALL logic. Nothing about the guard's purpose changes —
+     * the first write is still below it.
+     */
+    await assertNotDemoGrace(communityId);
 
     const userId = invitation.userId;
 
