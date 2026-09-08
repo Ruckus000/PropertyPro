@@ -1,4 +1,5 @@
 export * from "./ui";
+export * from "./shared";
 
 export { Badge, StatusBadge, PriorityBadge } from "./Badge";
 export type { BadgeProps, BadgeVariant, BadgeSize, StatusBadgeProps } from "./Badge";
