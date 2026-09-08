@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * Assert that every semantic token class referenced in apps/admin/src actually
- * EMITS CSS in the built stylesheet.
+ * Assert that every semantic token class referenced in apps/admin/src OR
+ * packages/ui/src actually EMITS CSS in the built stylesheet. Both roots:
+ * admin's Tailwind `content` globs packages/ui/src too, so a class that
+ * resolves to nothing there renders as no style in admin exactly like one
+ * written directly in apps/admin/src.
  *
  *   pnpm --filter @propertypro/admin build    # must run first
  *   node scripts/verify-admin-semantic-css.cjs
