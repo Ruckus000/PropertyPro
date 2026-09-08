@@ -163,13 +163,16 @@ const used = [...new Set(grep.split('\n').filter(Boolean))]
   .filter((cls) => !cls.includes('$'))
   .sort();
 
-// Zero is not a clean result here: admin is mid-migration and references
-// hundreds of semantic classes. Zero means the pattern, the search roots or
-// the migration's premise moved — every downstream check would pass vacuously.
+// Zero is not a clean result here: admin is mid-migration and references dozens
+// of DISTINCT semantic classes (69 across both roots on 2026-09-08 — the count
+// is de-duplicated, which is why it is dozens and not the thousands of raw
+// call sites). Zero means the pattern, the search roots or the migration's
+// premise moved — every downstream check would pass vacuously.
 if (used.length === 0) {
   console.error(
-    `No semantic classes found in ${SRC_ROOTS.join(' or ')}. Expected hundreds — the pattern or ` +
-      'the search roots have moved. Refusing to pass a check that examined nothing.',
+    `No semantic classes found in ${SRC_ROOTS.join(' or ')}. Expected dozens of distinct ` +
+      'classes (69 on 2026-09-08) — the pattern or the search roots have moved. ' +
+      'Refusing to pass a check that examined nothing.',
   );
   process.exit(2);
 }

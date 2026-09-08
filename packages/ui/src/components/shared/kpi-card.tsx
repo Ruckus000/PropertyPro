@@ -98,10 +98,13 @@ function KpiCard({
     </Card>
   );
 
-  const wrapperClass = cn(
-    "block w-full text-left",
-    (href || onClick) && "transition-shadow duration-quick hover:shadow-md rounded-md",
-  );
+  // Only the `href` and `onClick` branches below consume this, so the wrapper is
+  // interactive by construction and needs no `(href || onClick)` guard.
+  // `block w-full text-left` is deliberate: the wrapper is an `<a>` in one branch
+  // and a `<button>` in the other, and a bare `<button>` would otherwise
+  // shrink-wrap and centre the card's text. Do not drop these.
+  const wrapperClass =
+    "block w-full text-left transition-shadow duration-quick hover:shadow-md rounded-md";
   if (href) {
     const LinkComp = linkComponent ?? "a";
     return (
