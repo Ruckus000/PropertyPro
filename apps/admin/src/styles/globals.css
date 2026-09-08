@@ -11,6 +11,10 @@
      fallback chain used before hydration and if the font fails to load. It
      previously hard-assigned 'Inter' with nothing actually loading it. */
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Matches apps/web's root: rem-based sizing scales off this instead of the
+     browser default of 16px. */
+  font-size: 18px;
 }
 
 body {

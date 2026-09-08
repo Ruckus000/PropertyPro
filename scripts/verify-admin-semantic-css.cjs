@@ -90,13 +90,20 @@ const css = cssFiles
 const SEMANTIC_FAMILIES = 'content|surface|edge|interactive|status|nav';
 const UTILITY_PREFIXES = 'bg|text|border|ring|divide|placeholder|fill|stroke|from|via|to';
 
-const SRC_REL = 'apps/admin/src';
+// Two roots, not one: after Tasks 1-3 lifted seventeen shared components into
+// packages/ui, admin renders their classes too, and admin's Tailwind `content`
+// already globs `../../packages/ui/src/**/*.{ts,tsx}` (see tailwind.config.ts).
+// Scanning apps/admin/src alone would silently stop covering most of what
+// admin actually renders.
+const SRC_ROOTS = ['apps/admin/src', 'packages/ui/src'];
 
-if (!fs.existsSync(path.join(repoRoot, SRC_REL))) {
-  console.error(
-    `Search root '${SRC_REL}' does not exist — refusing to report success from a tree this guard cannot search.`,
-  );
-  process.exit(2);
+for (const root of SRC_ROOTS) {
+  if (!fs.existsSync(path.join(repoRoot, root))) {
+    console.error(
+      `Search root '${root}' does not exist — refusing to report success from a tree this guard cannot search.`,
+    );
+    process.exit(2);
+  }
 }
 
 // Branch on grep's real exit status, never on its stdout: 0 = matched,
@@ -107,7 +114,16 @@ let grepStatus = 0;
 try {
   grep = cp.execFileSync(
     'grep',
-    ['-rhoE', `(${UTILITY_PREFIXES})-(${SEMANTIC_FAMILIES})(-[a-z0-9]+)*`, SRC_REL],
+    // The `-\$\{[^}]*\}` alternative swallows a template-literal interpolation
+    // (`text-status-${variant}`) into the SAME match as the literal prefix,
+    // rather than stopping at `text-status` and leaving a bare, unresolvable
+    // fragment behind. packages/ui/src/constants/status.ts documents exactly
+    // this anti-pattern in a comment — `[a-z0-9]` alone can't see the `${`
+    // that follows, so without this alternative the comment's own example
+    // was extracted as a literal class `text-status`, which resolves to
+    // nothing in any Tailwind config (the `status` family has no DEFAULT
+    // shade) and reported a violation that was never real code.
+    ['-rhoE', `(${UTILITY_PREFIXES})-(${SEMANTIC_FAMILIES})(-[a-z0-9]+|-\\$\\{[^}]*\\})*`, ...SRC_ROOTS],
     { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 26 },
   );
 } catch (err) {
@@ -122,15 +138,22 @@ if (grepStatus >= 2) {
   process.exit(grepStatus);
 }
 
-const used = [...new Set(grep.split('\n').filter(Boolean))].sort();
+// Runtime-assembled class names (the swallowed `-${...}` matches above) can
+// never be checked against static CSS output — Tailwind's own source-text
+// scanner can't see them either, which is a distinct failure mode this guard
+// does not attempt to catch. Drop them here rather than testing a fragment
+// that was never a real class.
+const used = [...new Set(grep.split('\n').filter(Boolean))]
+  .filter((cls) => !cls.includes('$'))
+  .sort();
 
 // Zero is not a clean result here: admin is mid-migration and references
-// hundreds of semantic classes. Zero means the pattern, the search root or the
-// migration's premise moved — every downstream check would pass vacuously.
+// hundreds of semantic classes. Zero means the pattern, the search roots or
+// the migration's premise moved — every downstream check would pass vacuously.
 if (used.length === 0) {
   console.error(
-    `No semantic classes found in ${SRC_REL}. Expected hundreds — the pattern or ` +
-      'the search root has moved. Refusing to pass a check that examined nothing.',
+    `No semantic classes found in ${SRC_ROOTS.join(' or ')}. Expected hundreds — the pattern or ` +
+      'the search roots have moved. Refusing to pass a check that examined nothing.',
   );
   process.exit(2);
 }
@@ -144,7 +167,7 @@ const missing = used.filter((cls) => {
   return !new RegExp(`(?:\\.|\\\\:)${name}(?=[{>:,\\s.\\[])`).test(css);
 });
 
-console.log(`semantic classes referenced in apps/admin/src: ${used.length}`);
+console.log(`semantic classes referenced in ${SRC_ROOTS.join(' + ')}: ${used.length}`);
 
 if (missing.length === 0) {
   console.log('✅ all emit CSS');

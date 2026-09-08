@@ -28,6 +28,22 @@ const inter = localFont({
   variable: '--font-sans',
 });
 
+// Display serif for page titles only (font-display); body/data stay on Inter.
+// Vendored for the same reason as Inter (see above) — no italic face, since
+// font-display is only ever used at weight 500, roman. `adjustFontFallback`
+// is required here: the local loader's default fallback is Arial, and sizing
+// a serif against a sans-serif fallback makes CLS worse, not better —
+// `next/font/google` picks a fallback from the family's category
+// automatically, the local loader does not, so it has to be named.
+const fraunces = localFont({
+  src: './fonts/fraunces-latin-var.woff2',
+  weight: '100 900',
+  style: 'normal',
+  display: 'swap',
+  variable: '--font-display',
+  adjustFontFallback: 'Times New Roman',
+});
+
 export const metadata: Metadata = {
   title: 'PropertyPro Operator Console',
   description: 'PropertyPro Platform Administration',
@@ -41,7 +57,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
       <body className="bg-surface-page text-content">
         <NavigationProgress />
         {/* Mirrors apps/web/src/app/layout.tsx. The target `#main-content` is
