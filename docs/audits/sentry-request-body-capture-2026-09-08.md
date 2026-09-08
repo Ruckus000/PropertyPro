@@ -105,6 +105,31 @@ it too dangerous for `compliance_audit_log`. That raises #1092 from the P2 it wa
 to P1. The rest of the credential surface is genuinely handled — hashed, encrypted, or
 never bound — largely because `scoped.query` selects all columns and filters in JS.
 
+## Result 2 — FIXED and re-measured 2026-09-08
+
+Same harness, same probe, same canaries, against a rebuilt production bundle carrying the
+`redactQueryParams` fix (confirmed compiled in before trusting the run):
+
+```
+canary occurrences in the envelope:  4  ->  0
+event still delivered:               yes (14,893 bytes, type=event)
+`Failed query:` still present:       yes, 3 sites
+```
+
+| Location | After |
+|---|---|
+| `exception.values[1].value` | `params: [redacted]`, SQL preserved |
+| `breadcrumbs[1].message` | `params: [redacted]`, SQL preserved |
+| `breadcrumbs[1].data.arguments[1]` | `params: [redacted]`, SQL preserved |
+
+No canary anywhere in the envelope, `probe@example.com` included. The event still arriving
+with its SQL intact is the anti-vacuity half — a scrubber that dropped the event, or one
+that blanked the message, would also show zero canaries.
+
+One shape changed legitimately: `data.arguments[1]` is now a **string** rather than an
+object with `.message`/`.stack`, because `error-handler.ts` now logs a redacted string
+instead of the Error object — which is what also removes the Vercel-runtime-log copy.
+
 ## Limits of this measurement
 
 - Local `next start` on Node is **not** Vercel's Node runtime. This establishes the
