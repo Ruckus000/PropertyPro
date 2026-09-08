@@ -77,10 +77,3 @@ export async function updateRequestStatus(
   });
 }
 
-export async function assignRequest(
-  id: number,
-  communityId: number,
-  assignedToId: string | null,
-): Promise<{ data: MaintenanceRequestItem }> {
-  return updateRequestStatus(id, communityId, { assignedToId });
-}

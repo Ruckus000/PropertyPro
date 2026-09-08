@@ -188,7 +188,10 @@ const handler = withErrorHandler(async (req: NextRequest) => {
       );
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    // Redacted for the same reason as the persisted column above, and one
+    // more: `summary.errors` is returned in the RESPONSE BODY below, so raw
+    // driver text would leave the process entirely (#1092).
+    const message = redactParams(error instanceof Error ? error.message : String(error));
     summary.errors.push(`exhausted-sweep: ${message}`);
     captureException(error, {
       tags: { job: 'community-export-worker', phase: 'exhausted-sweep' },
@@ -230,7 +233,10 @@ const handler = withErrorHandler(async (req: NextRequest) => {
       }
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    // Redacted for the same reason as the persisted column above, and one
+    // more: `summary.errors` is returned in the RESPONSE BODY below, so raw
+    // driver text would leave the process entirely (#1092).
+    const message = redactParams(error instanceof Error ? error.message : String(error));
     summary.errors.push(`reaper: ${message}`);
     captureException(error, { tags: { job: 'community-export-worker', phase: 'reaper' } });
   }

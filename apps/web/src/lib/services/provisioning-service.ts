@@ -732,7 +732,7 @@ export async function recoverStuckProvisioningJobs(
       summary.failures.push({
         jobId: row.id,
         signupRequestId: row.signupRequestId ?? null,
-        errorMessage: err instanceof Error ? err.message : String(err),
+        errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
       });
     }
   }
@@ -869,7 +869,7 @@ export async function reconcileLostCheckoutSignups(
       summary.failed += 1;
       summary.failures.push({
         signupRequestId: row.signupRequestId,
-        errorMessage: err instanceof Error ? err.message : String(err),
+        errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
       });
     }
   }

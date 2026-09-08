@@ -115,11 +115,6 @@ const AUTH_RATE_LIMIT_PATHS = [
   // isolate, in memory. The auth tier is 10/min and Redis-backed, so the count
   // actually holds across instances.
   //
-  // Only `/verify`, deliberately: `getRouteCategory` matches by prefix, so a
-  // bare '/api/v1/access-requests' entry would also throttle the authenticated
-  // admin approve/deny routes to 10/min, and approving a new community's
-  // residents is a legitimate burst.
-  '/api/v1/access-requests/verify',
   '/auth/login',
   '/signup',
   '/auth/signup',

@@ -32,7 +32,7 @@ export function requireMutationAuthorization(role: string): void {
     // v3 property_manager out of onboarding-wizard mutations.
     // legacy-roles:exempt — names the pre-v3 set to explain why this one exists.
     if (!(ADMIN_TIER_DB_ROLES as readonly string[]).includes(role)) {
-        throw new ForbiddenError('Only board members, CAMs, and property managers can modify wizard state');
+        throw new ForbiddenError('Only a property manager or root manager can modify wizard state');
     }
 }
 

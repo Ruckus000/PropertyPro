@@ -243,7 +243,15 @@ describe('access-request-service', () => {
     // was unbounded. It now survives a resend while the current code is live,
     // and resets only once that code has lapsed.
 
-    it('KEEPS otpAttempts on resend while the current code is still live', async () => {
+
+
+
+    // Resend RESETS the counter, and a test pins that because the opposite was
+    // shipped and reverted: preserving it while the resend also refreshes the
+    // expiry let anyone hold any address in a permanent "Too many incorrect
+    // codes" state. Brute force is bounded by the Redis-backed auth-tier rate
+    // limiter instead. See the note at the update site.
+    it('RESETS otpAttempts on resend, so a third party cannot hold the lock open', async () => {
       const scoped = setupScopedMock({
         accessRequestRows: [
           {
@@ -252,38 +260,8 @@ describe('access-request-service', () => {
             fullName: 'Existing User',
             status: 'pending_verification',
             otpHash: 'old-hash',
-            // Not yet expired — this is the case that used to hand out a fresh
-            // allowance, and is the whole exploit.
+            // Still LIVE — the case that previously kept the row locked forever.
             otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-            otpAttempts: 4,
-          },
-        ],
-      });
-
-      await submitAccessRequest({
-        communityId: COMMUNITY_ID,
-        communitySlug: COMMUNITY_SLUG,
-        email: 'existing@example.com',
-        fullName: 'Existing User',
-        isUnitOwner: false,
-      });
-
-      const updateData = scoped.update.mock.calls[0]?.[1] as Record<string, unknown>;
-      expect(updateData).not.toHaveProperty('otpAttempts');
-      // A fresh code is still issued — the user is not left without one.
-      expect(updateData['otpHash']).toBeTruthy();
-    });
-
-    it('RESETS otpAttempts on resend once the previous code has expired', async () => {
-      const scoped = setupScopedMock({
-        accessRequestRows: [
-          {
-            id: 10,
-            email: 'existing@example.com',
-            fullName: 'Existing User',
-            status: 'pending_verification',
-            otpHash: 'old-hash',
-            otpExpiresAt: new Date(Date.now() - 60_000).toISOString(),
             otpAttempts: 5,
           },
         ],
@@ -299,39 +277,7 @@ describe('access-request-service', () => {
 
       const updateData = scoped.update.mock.calls[0]?.[1] as Record<string, unknown>;
       expect(updateData['otpAttempts']).toBe(0);
-    });
-
-    // `otp_expires_at` is a NULLABLE column and `new Date(null)` is the epoch, so
-    // a bare comparison reads NULL as "expired" and resets the counter — reopening
-    // the very hole above. No writer produces NULL today, but the `as string` cast
-    // is what stops strictNullChecks from proving that, and `verifyOtp` fails
-    // CLOSED on the same column. This pins the two together.
-    it('does NOT reset otpAttempts when the previous expiry is NULL', async () => {
-      const scoped = setupScopedMock({
-        accessRequestRows: [
-          {
-            id: 10,
-            email: 'existing@example.com',
-            fullName: 'Existing User',
-            status: 'pending_verification',
-            otpHash: 'old-hash',
-            otpExpiresAt: null,
-            otpAttempts: 5,
-          },
-        ],
-      });
-
-      await submitAccessRequest({
-        communityId: COMMUNITY_ID,
-        communitySlug: COMMUNITY_SLUG,
-        email: 'existing@example.com',
-        fullName: 'Existing User',
-        isUnitOwner: false,
-      });
-
-      const updateData = scoped.update.mock.calls[0]?.[1] as Record<string, unknown>;
-      expect(updateData).not.toHaveProperty('otpAttempts');
-      // A new code IS still issued — failing closed must not break the resend.
+      // A fresh code is issued too, or the reset would be pointless.
       expect(updateData['otpHash']).toEqual(expect.any(String));
       expect(updateData['otpExpiresAt']).toBeInstanceOf(Date);
     });

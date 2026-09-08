@@ -92,34 +92,26 @@ export async function submitAccessRequest(params: {
     const otpHash = hashOtp(otp);
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // The attempt counter survives a resend WHILE THE CURRENT CODE IS LIVE.
+    // The attempt counter RESETS on resend, and that is deliberate.
     //
-    // It used to reset unconditionally, which made the 5-attempt cap below not
-    // a cap at all: guess 5 times, re-submit the same email, guess 5 more,
-    // forever (#947). Resetting only once the previous code has expired bounds
-    // an attacker to 5 guesses per 10-minute window against a 6-digit code,
-    // while leaving the honest recovery path intact — someone who mistypes five
-    // times waits for the code to lapse and requests a new one.
+    // #947 asked for the opposite: keep the count so `guess 5 -> resend -> guess
+    // 5` is not unbounded. That was implemented and then reverted, because
+    // preserving the count while a resend also refreshes `otp_expires_at` hands
+    // anyone a permanent, unauthenticated denial vector — re-submit any address
+    // every few minutes and its counter never lapses, so `verifyOtp` throws
+    // "Too many incorrect codes" before it ever compares a code, with no admin
+    // unlock for a `pending_verification` row. It trapped honest users too:
+    // after five typos the obvious action, "resend", mails a code that is
+    // guaranteed to be rejected.
     //
-    // Never resetting at all was the issue's literal suggestion and is worse:
-    // it strands a real user permanently on a typo, with no self-service way
-    // out and no admin unlock for a `pending_verification` row.
-    //
-    // `otp_expires_at` is NULLABLE, and `new Date(null)` is the epoch — so a bare
-    // comparison would read NULL as "expired" and reset the counter, quietly
-    // reopening #947. No writer produces NULL today (one insert site, one update
-    // site, both always set it), but the `as string` cast is exactly what stops
-    // strictNullChecks from saying so, and the structurally identical read in
-    // `verifyOtp` below fails CLOSED on the same column. Match it.
-    const previousExpiry = pendingVerification['otpExpiresAt'];
-    const previousCodeExpired =
-      previousExpiry != null && new Date(previousExpiry as string | Date) <= new Date();
-
+    // The brute-force control is the RATE LIMITER, not this counter. Both
+    // `/api/v1/access-requests` and `/api/v1/access-requests/verify` are in
+    // AUTH_RATE_LIMIT_PATHS, which is Redis-backed and shared across isolates,
+    // so resend-and-retry is bounded there — where a bound cannot be turned
+    // into a lockout against a third party.
     await scoped.update(
       accessRequests,
-      previousCodeExpired
-        ? { otpHash, otpExpiresAt, otpAttempts: 0 }
-        : { otpHash, otpExpiresAt },
+      { otpHash, otpExpiresAt, otpAttempts: 0 },
       eq(accessRequests.id, pendingVerification['id'] as number),
     );
 

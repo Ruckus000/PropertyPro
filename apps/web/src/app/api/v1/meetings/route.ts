@@ -143,8 +143,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromBody(req, body);
   const normalizedBody = { ...body, communityId, action };
 
-  // Order is the documented one (`.claude/rules/api-patterns.md`):
-  //   requireAuthenticatedUserId -> resolve -> assertNotDemoGrace -> membership.
+  // What moved: `assertNotDemoGrace` now runs AFTER authentication. The body
+  // parse and `parseCommunityIdFromBody` above still precede it, and that is
+  // fine — they are pure parsing plus a header cross-check, with no DB read and
+  // so no oracle. The documented chain
+  // (`requireAuthenticatedUserId -> resolve -> assertNotDemoGrace -> membership`,
+  // `.claude/rules/api-patterns.md`) is about where the GUARDS sit, not where
+  // the id is parsed; stating it as the literal statement order here would
+  // overclaim, which is the defect `guard:legacy-roles` pass 2 exists to catch.
   //
   // This route used to run assertNotDemoGrace FIRST, ahead of authentication.
   // That guard does an UNSCOPED primary-key SELECT on `communities` for whatever

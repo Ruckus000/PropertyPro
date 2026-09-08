@@ -529,7 +529,7 @@ the part of this section that argues for doing something.
 |---|---|---|---|
 | Uncontracted routes (`KNOWN_UNCONTRACTED_ROUTES`) | 37 of 257 | **46 of 284** | ⬆ · **ceiling pinned 2026-09-07** |
 | `contract.ts` declaring `tenantScope` | 12 | **15** | flat |
-| Contracted routes still hand-calling `resolveEffectiveCommunityId` | 121 | **150** | ⬆ · **ceiling pinned 2026-09-07** |
+| Contracted routes still hand-calling `resolveEffectiveCommunityId` | 121 | **148** | ⬆ · unratcheted (ceiling removed on review — see below) |
 | `apps/web/src/middleware.ts` | 994 LOC | **1,318 LOC** | ⬆ 33% |
 | `lib/services/finance-service.ts` | 2,410 LOC | **2,548 LOC** | ⬆ |
 | Hook sources with no same-named test file | ~28 of 98 | **38 of 111** | ⬆ |
@@ -543,7 +543,7 @@ awk '/KNOWN_UNCONTRACTED_ROUTES/,/^\];/' scripts/verify-contracts.ts \
   | grep -cE "^\s*'apps/"                                                          # 46
 grep -rl tenantScope apps/web/src/app/api --include=contract.ts | wc -l           # 15
 grep -rl "runRoute(" apps/web/src/app/api --include=route.ts \
-  | xargs grep -l resolveEffectiveCommunityId | wc -l                              # 150
+  | xargs grep -lE 'resolveEffectiveCommunityId\s*\(' | wc -l                      # 148
 wc -l apps/web/src/middleware.ts apps/web/src/lib/services/finance-service.ts
 ```
 
@@ -556,11 +556,17 @@ runner genuinely cannot express (201/202/204, raw bodies, non-JSON) — that is 
 documented permanent tier, not backsliding — but the ratchet is a convention, not a
 mechanism, and the number it guards has only ever gone up.
 
-**Two of the three are now ratcheted (2026-09-07).** `guard:contracts` fails if the
-allowlist exceeds 46; `guard:tenant-scope` fails if the hand-rolled resolver count exceeds
-150. Both use a shared shrink-only helper (`scripts/lib/ceiling.ts`, 8 fixture tests) that
-copies `guard:legacy-roles`' slack hint, so coming in UNDER passes and prints the value to
-ratchet down to — ceilings tighten as work lands rather than needing a separate chore.
+**One of the three is ratcheted (2026-09-07).** `guard:contracts` fails if the allowlist
+exceeds 46, via a shared shrink-only helper (`scripts/lib/ceiling.ts`) that copies
+`guard:legacy-roles`' slack hint, so coming in UNDER passes and prints the value to ratchet
+down to.
+
+A second ceiling on `guard:tenant-scope`'s hand-rolled resolver count was added and then
+**removed on review**, for the reason stated immediately below about LOC ceilings:
+`.claude/rules/api-patterns.md` says routes that resolve tenancy differently (PM
+cross-community, token-auth, header-only) SHOULD hand-resolve — so the first correctly
+authored one fails CI and the only response is to raise the number. It fired on honest
+work, which is the test this section already applies.
 
 **LOC ceilings were deliberately NOT added**, on a ponytail review: `middleware.ts` (1,318)
 and `finance-service.ts` (2,548) stay unratcheted. A line count is the one signal here that
@@ -602,7 +608,7 @@ it is not (then delete the spec and the phase-2 spec section together).
 | ~~#956 ARC withdraw skips `requireActiveSubscriptionForMutation`~~ | 26d | **Documented, not changed.** The exemption is deliberate — gating withdraw would strand the row in `submitted` with no way out for either side. Noted in the route's docblock and at the call site |
 | ~~#951 Sentry may buffer raw Stripe webhook bodies~~ | 27d | **Fixed and MEASURED.** `scrubServerEvent` drops `request.data` (plus URLs, and headers case-insensitively) on all four server/edge configs, wired to **both** `beforeSend` and `beforeSendTransaction`. The issue's closing precondition is met: bodies **are** attached (`event.request.data` arrived as the raw body string on a production build — [audit](audits/sentry-request-body-capture-2026-09-08.md)), so the drop is load-bearing. The audit also found a **wider leak of the same data that this fix does not cover** — drizzle's `Failed query:` error carries its bound parameter values into Sentry via the chained exception and `console.error` breadcrumbs. Filed as #1092, and **now fixed and closed**: `redactQueryParams` redacts the bound values in `exception.values[]` and in console breadcrumbs, re-measured on a live envelope (canary 4 → 0, event still delivered with its SQL intact). Three residuals are recorded on the closed issue — the export-job column still shows the PM raw SQL, `invitations.token` is still plaintext at rest, and ~90 other `console.error` sites still reach Vercel logs |
 | ~~#950 meetings POST runs `assertNotDemoGrace` before authenticating~~ | 27d | **Fixed, and the title was wrong.** Not unauthenticated: `/api/v1` is in `PROTECTED_PATH_PREFIXES`, so middleware 401s first. The real gap was a pre-auth unscoped PK read for an authenticated caller |
-| #947 Access-request OTP cap / orphan auth accounts | 27d | **Part 1 fixed** (cap survives a resend while the code is live; `/verify` moved to the Redis-backed auth tier). **Part 2 measured, not automated** — production was audited by direct read-only query (below); what remains is a per-row deletion decision a human has to make, not a script |
+| #947 Access-request OTP cap / orphan auth accounts | 27d | **Part 1 closed, by reverting.** The attempt cap was made to survive a resend and then reverted: because a resend also refreshes the expiry, preserving the count let anyone hold any address in a permanent lockout. Brute force is bounded by the Redis-backed auth tier instead — which `/verify` reached via #1096, not here. **Part 2 measured, not automated** — production was audited by direct read-only query (below); what remains is a per-row deletion decision a human has to make, not a script |
 | #771 Wave 4 follow-up: full Next/Back step-wizard for signup (B4) | 56d | open |
 | #747 Nightly Demo Reset failing | 76d | open — a job known to be failing |
 | #526 Site-assets quota + lifecycle: 3 deferred findings need design | 102d | open |
@@ -655,8 +661,9 @@ delete — but nothing in the repo says so, which is why it is written here.
   `(authenticated)/maintenance/inbox/page.tsx`. There is no analytics service; those
   events go nowhere. Decide whether the product wants them, or delete the calls — a
   `console.info` in production reads as instrumentation to the next person and is not.
-- `packages/shared/src/http/request-context.ts:20` — `x-tenant-id` fallback marked for
-  removal "after migration window" (P2-30). No window was ever named. Still present.
+- ~~`packages/shared/src/http/request-context.ts:20` — `x-tenant-id` fallback marked for
+  removal "after migration window" (P2-30).~~ **Removed**; `COMMUNITY_ID_HEADERS` is now
+  `['x-community-id']` and `docs/platform-data-flow-audit.md` records M-03 as fixed.
 - **`docs/issues/mobile-demo-gaps.md` has never been updated.** Of its 7 issues, #1 is
   fixed (`app/mobile/more/page.tsx` exists) and #2 is still open (no
   `app/mobile/announcements/[id]`). The file cannot tell you which is which. Mobile is

@@ -90,7 +90,6 @@ export async function listResidentsForCommunity(
       {},
       inArray(userRoles.role, expanded),
     ) as Array<Record<string, unknown>>;
-  // role-v3: expandTransitionRoleFilter is an identity map over the three v3 roles — it expands nothing.
   } else if (filter.role) {
     const expanded = [...expandTransitionRoleFilter(filter.role)];
     if (expanded.length === 0) {
