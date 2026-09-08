@@ -63,7 +63,23 @@ import {
 } from '@/lib/services/support-inbox/types';
 
 /** A ~4 MB JSON parse plus a transaction. Cheap insurance against a cold start. */
-export const maxDuration = 30;
+/**
+ * 60, not 30, and the number matters.
+ *
+ * At 30 this tied with postgres.js's `connect_timeout` default and with Forward
+ * Email's own HTTP timeout, and the platform's clock starts first — so a DB
+ * connect hang produced a Vercel 504 rather than our 429. A 5xx is a PERMANENT
+ * failure to Forward Email, so the mail bounced instead of being held: the
+ * exact outcome this route exists to prevent, on the exact failure it names.
+ *
+ * With 60 both of the other clocks fire first. The driver gives up at 10s and
+ * we return 429; if something else stalls, Forward Email times out at ~30s,
+ * which is their own retryable path. Either beats being killed mid-request.
+ *
+ * community-export-worker/route.ts already uses 60, so this is a choice rather
+ * than a platform ceiling.
+ */
+export const maxDuration = 60;
 
 type Outcome = 'success' | 'duplicate' | 'quarantined' | 'rejected' | 'failure';
 
@@ -169,6 +185,14 @@ const handleInboundEmail = async (req: NextRequest): Promise<NextResponse> => {
       // silent and lossy. 429 makes the sender hold. Not 401 either, which
       // defers but reads as the provider's fault in their logs and forfeits
       // the in-session retry.
+      // Reported, like the other two failure branches. Without this the branch
+      // is SILENT: readiness does check the secret but is not among the crons
+      // in vercel.json, and a missing secret yields `degraded`, which returns
+      // HTTP 200 — so a status-code monitor sees green while every message to
+      // every address is held, and then bounces together 24-72h later. That is
+      // the 2026-08 cron incident repeated, where seventeen jobs returned 401
+      // for months behind a green dashboard and produced zero events.
+      Sentry.captureException(error, { tags: { component: 'inbound-email-webhook' } });
       logInboundEmailEvent('error', 'inbound email webhook secret is not configured', {
         outcome: 'failure',
         errorCode: 'SECRET_NOT_CONFIGURED',

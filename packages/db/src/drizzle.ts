@@ -68,7 +68,36 @@ const cached = globalForDb.__propertyproPgClient;
 const client =
   cached?.url === databaseUrl
     ? cached.client
-    : postgres(databaseUrl, { prepare: false, max: POOL_MAX });
+    : postgres(databaseUrl, {
+        prepare: false,
+        max: POOL_MAX,
+        /**
+         * MUST stay strictly below every route's `maxDuration`.
+         *
+         * postgres.js defaults this to 30 (postgres/src/index.js:453) and our
+         * webhook routes default to 30 too — so on a connect hang the two
+         * clocks are equal and the PLATFORM's wins, because it starts at t=0
+         * while the connect only begins after request parsing. postgres.js can
+         * never reject first, so the function is killed and Vercel answers 504.
+         *
+         * For the inbound-email webhook that is not merely a bad error page: a
+         * 5xx is returned verbatim by Forward Email as a PERMANENT failure and
+         * the message bounces, defeating the deferral the route is built on.
+         * At 10s the driver always loses the race on purpose, the catch runs,
+         * and the sender holds the mail.
+         *
+         * THIS BOUNDS THE CONNECT ONLY, and that is the whole of it. postgres.js
+         * exposes no query or statement timeout, its pool queue (`max` above)
+         * has no wait timeout, and nothing in this repo sets `statement_timeout`
+         * or `lock_timeout`. So a saturated pool or a lock wait — a manual
+         * ALTER TABLE or data repair holding a lock while mail arrives — can
+         * still outrun the platform budget and produce the same 504, and the
+         * same bounce. Closing that means a global statement_timeout, which
+         * would break community-export-worker and the seed/export scripts on
+         * this same shared client: a cure worse than the disease at this stage.
+         */
+        connect_timeout: 10,
+      });
 
 // Cache in every environment. Production re-evaluates this module rarely, but
 // serverless cold starts and script re-imports benefit from the same guard, and
