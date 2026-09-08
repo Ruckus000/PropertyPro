@@ -96,6 +96,31 @@ describe('scrubServerEvent', () => {
     expect(scrubbed.request.headers['accept']).toBe('*/*');
   });
 
+  it('drops the captured request BODY, which carries a plaintext password', () => {
+    // Shape of a real server-action POST: `updatePasswordAction(newPassword)`
+    // in apps/web/src/lib/auth/actions.ts. Next's action-handler runs
+    // `pipeline(req.body, ...)`, which pipes, and `Readable.pipe` attaches the
+    // `'data'` listener that @sentry/node-core proxies to buffer the body.
+    const event = {
+      request: {
+        url: 'https://app.example.com/reset-password',
+        headers: { accept: '*/*' },
+        data: '1:["$K1","hunter2-my-new-password"]',
+      },
+    } as never;
+
+    const scrubbed = scrubServerEvent(event) as unknown as {
+      request: { url: string; headers: Record<string, string>; data?: unknown };
+    };
+
+    expect(scrubbed.request.data).toBeUndefined();
+    expect('data' in scrubbed.request).toBe(false);
+    // Control: the rest of `request` still survives, so this is not a
+    // blanket delete of the request object.
+    expect(scrubbed.request.url).toBe('https://app.example.com/reset-password');
+    expect(scrubbed.request.headers['accept']).toBe('*/*');
+  });
+
   it('handles an event with no exception and no request', () => {
     expect(() => scrubServerEvent({} as never)).not.toThrow();
   });

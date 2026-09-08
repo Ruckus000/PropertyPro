@@ -200,12 +200,12 @@ export interface SendPaymentActionRequiredEmailOpts {
    * message. `compliance_audit_log` matters most, being board-readable and
    * append-only, so a leak there would be permanent.
    *
-   * Known residual, outside this code's control: `@sentry/nextjs` buffers
-   * incoming request bodies (`maxRequestBodySize` defaults to 'medium') and
-   * `beforeSend` in `sentry.server.config.ts` strips headers but not
-   * `event.request.data`, so an exception raised inside the Stripe webhook
-   * request may still carry the raw invoice JSON. Tracked in issue 951 — do not
-   * read this docblock as a guarantee that extends to Sentry.
+   * Sentry is covered too, on two independent grounds (issue 951, measured on
+   * Node 20). App Router route handlers never reach the `req.on('data')` that
+   * @sentry/node-core proxies to buffer a body — undici drains the request via
+   * the async iterator — so the webhook payload was never captured in the first
+   * place. And `scrubServerEvent` now deletes `event.request.data`
+   * unconditionally, so this does not rest on that internal staying true.
    */
   authenticateUrl: string | null;
 }
