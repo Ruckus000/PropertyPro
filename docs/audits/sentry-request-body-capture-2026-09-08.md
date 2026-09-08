@@ -83,8 +83,8 @@ params: probe@example.com,probe@example.com,CANARY_CO_C3D4,CANARY_NEEDLE_A1B2,
 **wider than #951**: it does not depend on the SDK buffering a body, it fires on *any*
 failed query in *any* route, and it carries the values being written — which for other
 tables is more sensitive than a marketing lead. Filed as
-[#1092](https://github.com/Ruckus000/PropertyPro/issues/1092); not in scope here and not
-fixed by anything on this branch.
+[#1092](https://github.com/Ruckus000/PropertyPro/issues/1092) — which was **fixed and
+closed on this branch**; see the re-measurement below.
 
 Two details worth carrying, both verified against installed source rather than inferred:
 the wrap is a bare `catch (e)` at every one of the six sites in
