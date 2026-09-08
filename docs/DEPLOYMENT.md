@@ -71,7 +71,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `STRIPE_SECRET_KEY` | Server only | Stripe secret key. Its `sk_live_`/`sk_test_` prefix is what the app treats as this deployment's Stripe mode. |
 | `STRIPE_WEBHOOK_SECRET` | Server only | Stripe webhook signing secret. Endpoint-specific: a mode change means a *different* endpoint and therefore a different secret. |
 | `RESEND_API_KEY` | **Both apps, server only** | Resend email API key. The admin console needs it too, since the support-inbox reply route sends from there. **Without it on `property-pro-admin`, every reply reports "Sent" and goes nowhere** — `sendEmail` resolves with a `test_N` id in that mode. The reply route surfaces this as `delivered: false`, which is the only signal, because the readiness probe lives on the web app.
-| `INBOUND_EMAIL_WEBHOOK_SECRET` | Server only, web | **Required** (min 32). HMAC for the inbound support-mail webhook. Fails **closed** — see §4.2 and `.env.example` section 14. Must match Forward Email's "Webhook Signature Payload Verification Key". |
+| `INBOUND_EMAIL_WEBHOOK_SECRET` | Server only, web | **Required** (min 32). HMAC for the inbound support-mail webhook. Fails **closed** — unlike §4.2's secrets, which fail silently. See `.env.example` section 14, and [the rotation runbook](runbooks/inbound-webhook-key-rotation.md). Must match Forward Email's "Webhook Signature Payload Verification Key". |
 | `NEXT_PUBLIC_SENTRY_DSN` | All | Sentry client DSN |
 | `SENTRY_DSN` | Server only | Sentry server DSN |
 | `SENTRY_AUTH_TOKEN` | Build only | Source map upload token |
@@ -212,8 +212,9 @@ Add them with `--no-sensitive`, for the same reason as §4.1.
 #### Verifying them
 
 `/api/v1/internal/readiness` exists to make this a monitorable signal rather
-than silence. It checks **all nine** secrets named in this section — the eight above plus
-`SUPPORT_SESSION_JWT_SECRET` from §4.1 — for presence and minimum length
+than silence. It checks **all ten** secrets named in this section — the eight above,
+`SUPPORT_SESSION_JWT_SECRET` from §4.1, and `INBOUND_EMAIL_WEBHOOK_SECRET` from the table
+in §4 — for presence and minimum length
 (`TOKEN_ENCRYPTION_KEY` by hex format instead: a length floor cannot express
 its requirement), and reports `degraded` — not `healthy` — when any is
 missing:
@@ -229,7 +230,8 @@ Each check is keyed by the lowercased variable name — `checks.cron_secret`,
 `checks.support_session_jwt_secret`,
 `checks.community_email_unsubscribe_secret`,
 `checks.snowbird_unsubscribe_secret`,
-`checks.insurance_alerts_unsubscribe_secret`.
+`checks.insurance_alerts_unsubscribe_secret`,
+`checks.inbound_email_webhook_secret`.
 
 **`checks.email_delivery` is also there, and it is the one to read first.**
 `sendEmail` does not throw when `RESEND_API_KEY` is unset — it collects the
@@ -426,6 +428,10 @@ dig _dmarc.getpropertypro.com TXT +short
 
 then send a real message to `support@getpropertypro.com` and confirm the thread
 appears at `/inbox` in the admin console.
+
+**Rotating the webhook signing key** — when it has been exposed, or on a schedule — is
+[its own runbook](runbooks/inbound-webhook-key-rotation.md). It is a two-sided edit with
+an unavoidable outage across all six addresses, and the expected failure is silent.
 
 ## 6. CI/CD Pipeline
 
