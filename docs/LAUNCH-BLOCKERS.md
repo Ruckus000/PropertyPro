@@ -108,10 +108,25 @@ read `pass`; `unknown` counts as unverified, never as green. Then a real card, p
 
 ## 2. `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` is unset in production
 
-**Status:** verified 2026-09-01 · **Owner:** you (secret creation)
+**Status:** CLOSED — measured 2026-09-08. The secret is set in production and at least
+16 characters. · **Owner:** —
 
-Every announcement, notification, digest and calendar-reminder email currently ships a
-**login-walled** unsubscribe URL while still sending `List-Unsubscribe-Post: One-Click`.
+> **How this was established, since nobody recorded fixing it.** The first run of
+> `.github/workflows/production-health.yml`
+> ([run 34181966758](https://github.com/Ruckus000/PropertyPro/actions/runs/34181966758))
+> reported `readiness status: healthy`. That is deductive, not circumstantial:
+> `readiness/route.ts:104` puts `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` in `secretRules`,
+> `:186` computes `secretsOk` as *every* rule passing, and `:190` makes `healthy` require
+> `secretsOk`. There is no path to `healthy` with this secret missing or short.
+>
+> The item below is kept because the failure it describes is real and silent, and would
+> return the moment the variable is cleared — the signer returns `null` rather than
+> throwing, so nothing would tell you.
+
+**The problem this described, for when it recurs:**
+
+While the variable was unset, every announcement, notification, digest and
+calendar-reminder email shipped a **login-walled** unsubscribe URL while still sending `List-Unsubscribe-Post: One-Click`.
 The mail advertises RFC 8058 one-click unsubscribe and cannot honour it. Gmail and Yahoo's
 bulk-sender rules treat that as a failed unsubscribe, making it a **deliverability** problem
 and not only a compliance one.
@@ -327,10 +342,15 @@ corrected.
 
 **Status:** PARTIALLY CLOSED 2026-09-08 — `.github/workflows/production-health.yml`
 polls readiness, cron-health and both `/api/health` endpoints twice daily and fails
-the run on `degraded`/503. **Requires `READINESS_CHECK_SECRET` as a repository
-secret**; until that is added the workflow fails with an explanatory error rather
-than passing silently. · **Owner:** you (the repo secret, and a real uptime service
-if you want escalation)
+the run on `degraded`/503. Verified by dispatch the same day
+([run 34181966758](https://github.com/Ruckus000/PropertyPro/actions/runs/34181966758)):
+all four probes green. · **Owner:** you, only if you want a real uptime service with
+escalation
+
+> **Correction.** This item briefly claimed the workflow needed
+> `READINESS_CHECK_SECRET` added as a repository secret. It has been one since
+> **2026-04-24**. The claim came from §3 of `DEPLOYMENT.md`, whose table does not list
+> it — the table is incomplete, not authoritative. Fixed there in the same change.
 
 > **What it does not give you.** No escalation, no history, no on-call routing — a
 > failure is a red run and whatever email GitHub sends. It runs on GitHub rather
@@ -372,7 +392,9 @@ traffic.
 > on both apps. It already exists — `apps/web/src/app/api/health/route.ts` and the admin
 > equivalent. Only the polling is missing.
 
-**Expect `degraded` on the first run** until item 2 is done. That is the probe working.
+**The first run reported `healthy`** (2026-09-08), which is what closed item 2 — see
+there. An earlier version of this line told you to expect `degraded`; that was true
+when written and is not now.
 
 ---
 

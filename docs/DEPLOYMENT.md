@@ -46,6 +46,7 @@ Configure these in GitHub repository Settings > Secrets and Variables > Actions.
 | `DIGEST_CRON_BASE_URL` | Production URL for cron invocations | `https://getpropertypro.com` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Bearer token for digest cron endpoint | Generated shared secret |
 | `COUPON_SYNC_RETRY_CRON_SECRET` | Bearer token for coupon sync retry cron endpoint | Generated shared secret |
+| `READINESS_CHECK_SECRET` | Bearer token for `/api/v1/internal/readiness` and `/api/v1/internal/cron-health`, read by `production-health.yml` | Same value as the Vercel variable of the same name |
 
 ### Repository Variables
 
