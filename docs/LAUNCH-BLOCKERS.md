@@ -252,7 +252,16 @@ is visible from the records themselves:
 > **Verified 2026-09-07:** `dig _dmarc.getpropertypro.com TXT +short` returns a
 > `v=DMARC1; p=none; pct=100;` record with `rua=` pointed at Postmark's DMARC
 > Digests, as recommended below. The record Postmark generates also carries
-> `sp=none; aspf=r` and omits `fo=1`; that is fine at `p=none`.
+> `sp=none; aspf=r` and omits `fo=1`; that is fine at `p=none` — but see the
+> `sp=` note below before ratcheting, because it does not stay fine at
+> `p=quarantine`.
+>
+> **Re-verified 2026-09-08.** Record unchanged and still live. Also confirmed at
+> the same time: `resend._domainkey.getpropertypro.com` is published on the
+> **apex**, which is what makes the absent apex SPF a non-issue — a DKIM key is
+> scoped to domain + selector, so DMARC passes on DKIM alignment alone for every
+> apex `From`. The apex carries no `v=spf1` record at all (only Forward Email
+> routing TXT), and that remains correct rather than an oversight.
 >
 > **The one thing left is not a blocker but should not be forgotten:** `p=none`
 > observes and enforces nothing. Read a week of digests, then ratchet to
@@ -274,6 +283,21 @@ is visible from the records themselves:
 > `privacy@` / `contact@` (`packages/shared/src/support-inbox.ts`).
 > `send.getpropertypro.com` is only Resend's envelope MAIL FROM, which is not
 > what `p=`/`sp=` key off. So `p=quarantine` would govern **100%** of outbound.
+>
+> **But `sp=none` is an opt-OUT, not an omission, and must be ratcheted with
+> `p=`.** Those are different things in RFC 7489: with `sp` absent, subdomains
+> inherit `p`; with `sp=none` present, they are exempt from whatever `p` says.
+> So `p=quarantine; sp=none` would still leave `From: billing@mail.getpropertypro.com`
+> entirely unenforced — the spoofing shape a ratchet is meant to close. Since no
+> legitimate `From` is on a subdomain (the paragraph above is what establishes
+> that), tightening `sp` alongside `p` costs nothing and is free coverage. Either
+> drop `sp=` so it inherits, or set it explicitly; Postmark's generated record
+> ships `sp=none` by default, so this will not fix itself.
+>
+> Note this is unrelated to the HTTP subdomain reservations added in #1103.
+> Those govern which hostnames a tenant may serve; nothing stops a spoofer
+> writing an unowned subdomain into a `From:` header, and DMARC resolves that by
+> falling back to the organizational domain's `sp=`.
 >
 > **Password reset is the one path to establish, and it has TWO outcomes — only
 > one of them is a problem.**
