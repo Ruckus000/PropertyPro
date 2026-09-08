@@ -23,7 +23,7 @@
  */
 import Stripe from 'stripe';
 import { communities, billingGroups, stripePrices } from '@propertypro/db';
-import { isNotNull } from '@propertypro/db/filters';
+import { isNotNull, isNull } from '@propertypro/db/filters';
 // AUTHZ: CLI/ops script — read-only preflight; runs out-of-band of tenant scoping with explicit operator authorization.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
@@ -125,9 +125,15 @@ async function run(): Promise<void> {
       if (!ok) staleCommunities += 1;
     }
 
+    // Soft-deleted groups are EXCLUDED, matching remediate-stale-stripe-ids.ts's
+    // own filter. `billing_groups.stripe_customer_id` is NOT NULL, so remediation
+    // cannot clear the id — it tombstones the row instead. Probing tombstones here
+    // re-counts every group step 4 just retired, and remediate then skips them, so
+    // the two steps deadlock: verify fails forever and re-running step 4 is a no-op.
     const groupRows = await db
       .select({ id: billingGroups.id, customerId: billingGroups.stripeCustomerId })
-      .from(billingGroups);
+      .from(billingGroups)
+      .where(isNull(billingGroups.deletedAt));
 
     let staleGroups = 0;
     for (const row of groupRows) {

@@ -44,7 +44,7 @@ import { eq, isNotNull, isNull, and } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { redactStripeKey, stripeKeyLivemode, describeLivemode } from '@propertypro/shared';
 import { runOpsScript } from './lib/run-ops-script';
-import { assertAcknowledged, databaseHost } from './lib/stripe-guards';
+import { assertAcknowledged, assertKeyMode, databaseHost } from './lib/stripe-guards';
 
 const ACK_FLAG = '--i-understand-this-clears-billing-state';
 
@@ -74,14 +74,25 @@ async function run(): Promise<void> {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error('STRIPE_SECRET_KEY is not set. Aborting.');
 
+  // LIVE-only, and not merely "a key whose mode we can name". This script decides
+  // what to ERASE from what the key can SEE, and it cannot distinguish "this id is
+  // stale" from "this key is the wrong mode" — both surface as `resource_missing`.
+  // Run against a test key it is destructive in one direction and useless in the
+  // other: before the cutover it reports "nothing to remediate" (every test id
+  // resolves) and step 4 silently accomplishes nothing; after it, --apply nulls the
+  // customer id, subscription id, status and plan on every PAYING community and
+  // soft-deletes every live billing group.
+  //
+  // That is not hypothetical. scripts/with-env-local.sh is how this repo reaches the
+  // production database, and it sources .env.local under `set -a` — clobbering a
+  // STRIPE_SECRET_KEY exported on the command line (the wrapper says so itself). So
+  // the natural invocation supplies the TEST key no matter what the operator typed.
+  assertKeyMode(secretKey, true, {
+    because:
+      'It erases stored billing state based on what the key can resolve, and a test key ' +
+      'cannot resolve ANY live object — so every real customer would look stale.',
+  });
   const livemode = stripeKeyLivemode(secretKey);
-  if (livemode === null) {
-    throw new Error(
-      `REFUSING TO RUN — STRIPE_SECRET_KEY (${redactStripeKey(secretKey)}) has an unrecognised ` +
-        'prefix. This script decides what to erase based on what that key can see; it will not ' +
-        'run against a key whose mode it cannot name.',
-    );
-  }
 
   if (apply) {
     assertAcknowledged(argv, ACK_FLAG, {
