@@ -1,10 +1,10 @@
 'use client';
 
-import * as React from 'react';
-import { type LucideIcon, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { Card, CardContent } from '../ui/card';
-import { Skeleton } from '../ui/skeleton';
-import { cn } from '../../utils/cn';
+import * as React from "react";
+import { type LucideIcon, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Card, CardContent } from "../ui/card";
+import { Skeleton } from "../ui/skeleton";
+import { cn } from "../../utils/cn";
 
 interface KpiCardProps {
   title: string;
@@ -12,7 +12,7 @@ interface KpiCardProps {
   delta?: number;
   /** Overrides the "vs last 30 days" caption next to the delta. */
   deltaLabel?: string;
-  trend?: 'up' | 'down' | 'neutral';
+  trend?: "up" | "down" | "neutral";
   invertTrend?: boolean;
   icon?: LucideIcon;
   href?: string;
@@ -47,17 +47,17 @@ function KpiCardSkeleton() {
 }
 
 const trendConfig = {
-  up: { icon: TrendingUp, positiveColor: 'text-status-success', negativeColor: 'text-status-danger' },
-  down: { icon: TrendingDown, positiveColor: 'text-status-danger', negativeColor: 'text-status-success' },
-  neutral: { icon: Minus, positiveColor: 'text-content-tertiary', negativeColor: 'text-content-tertiary' },
+  up: { icon: TrendingUp, positiveColor: "text-status-success", negativeColor: "text-status-danger" },
+  down: { icon: TrendingDown, positiveColor: "text-status-danger", negativeColor: "text-status-success" },
+  neutral: { icon: Minus, positiveColor: "text-content-tertiary", negativeColor: "text-content-tertiary" },
 };
 
 function KpiCard({
   title,
   value,
   delta,
-  deltaLabel = 'vs last 30 days',
-  trend = 'neutral',
+  deltaLabel = "vs last 30 days",
+  trend = "neutral",
   invertTrend = false,
   icon: Icon,
   href,
@@ -69,8 +69,8 @@ function KpiCard({
 
   const { icon: TrendIcon, positiveColor, negativeColor } = trendConfig[trend];
   const trendColor =
-    trend === 'neutral'
-      ? 'text-content-tertiary'
+    trend === "neutral"
+      ? "text-content-tertiary"
       : invertTrend
         ? negativeColor
         : positiveColor;
@@ -88,7 +88,7 @@ function KpiCard({
         </div>
         <p className="mt-3 text-2xl font-bold">{value}</p>
         {delta !== undefined && (
-          <div className={cn('mt-2 flex items-center gap-1 text-sm', trendColor)}>
+          <div className={cn("mt-2 flex items-center gap-1 text-sm", trendColor)}>
             <TrendIcon className="h-4 w-4" />
             <span>{Math.abs(delta)}%</span>
             <span className="text-content-tertiary">{deltaLabel}</span>
@@ -99,11 +99,11 @@ function KpiCard({
   );
 
   const wrapperClass = cn(
-    'block w-full text-left',
-    (href || onClick) && 'transition-shadow duration-quick hover:shadow-md rounded-md',
+    "block w-full text-left",
+    (href || onClick) && "transition-shadow duration-quick hover:shadow-md rounded-md",
   );
   if (href) {
-    const LinkComp = linkComponent ?? 'a';
+    const LinkComp = linkComponent ?? "a";
     return (
       <LinkComp href={href} className={wrapperClass}>
         {content}

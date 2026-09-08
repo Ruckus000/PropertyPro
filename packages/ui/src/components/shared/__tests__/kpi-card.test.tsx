@@ -22,4 +22,14 @@ describe('KpiCard', () => {
     expect(screen.getByText('12%')).toBeTruthy();
     expect(screen.getByText('vs. 30d')).toBeTruthy();
   });
+  it('defaults the delta caption to "vs last 30 days" when deltaLabel is omitted', () => {
+    render(<KpiCard title="Open threads" value={7} delta={4} trend="up" />);
+    expect(screen.getByText('vs last 30 days')).toBeTruthy();
+  });
+  it('renders a bare anchor with the given href when no linkComponent is supplied', () => {
+    render(<KpiCard title="MRR" value="$1" href="/billing" />);
+    const link = screen.getByRole('link', { name: /mrr/i });
+    expect(link.tagName).toBe('A');
+    expect(link.getAttribute('href')).toBe('/billing');
+  });
 });
