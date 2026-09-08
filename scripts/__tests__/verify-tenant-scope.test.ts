@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   validateRoute,
   extractDefineRouteBlocks,
+  RESOLVER_CALL_REGEX,
 } from '../verify-tenant-scope';
 
 const BOUND_IMPORT = "import { runRoute } from '@/lib/api/run-route';";
@@ -91,5 +92,39 @@ describe('extractDefineRouteBlocks', () => {
     expect(blocks).toHaveLength(2);
     expect(blocks[0]).toContain("method: 'GET'");
     expect(blocks[1]).toContain("method: 'POST'");
+  });
+});
+
+/**
+ * The hand-rolled-resolver counter feeding `HAND_ROLLED_RESOLVER_CEILING`.
+ *
+ * It used to be a bare `.includes('resolveEffectiveCommunityId')` on raw source,
+ * so COMMENTS counted. Two of the 150 it reported were migration-completion
+ * docblocks — the note an author writes when they REMOVE the hand-rolled call —
+ * which meant the counter did not register the progress it exists to track, and
+ * with the ceiling pinned at exactly that number a third such docblock would
+ * have failed the gate on a change that drained a route.
+ */
+describe('RESOLVER_CALL_REGEX — a call, not a mention', () => {
+  it('matches a real call site', () => {
+    expect(
+      RESOLVER_CALL_REGEX.test('const communityId = await resolveEffectiveCommunityId(req, id);'),
+    ).toBe(true);
+    expect(RESOLVER_CALL_REGEX.test('resolveEffectiveCommunityId (req, id)')).toBe(true);
+  });
+
+  it('does NOT match the two docblocks that inflated the count', () => {
+    // apps/web/src/app/api/v1/leases/route.ts:14
+    expect(
+      RESOLVER_CALL_REGEX.test(' *   `resolveEffectiveCommunityId` call. Per-method chain:'),
+    ).toBe(false);
+    // apps/web/src/app/api/v1/move-checklists/[id]/route.ts:29
+    expect(
+      RESOLVER_CALL_REGEX.test(' *     `resolveEffectiveCommunityId`. Behavior unchanged.'),
+    ).toBe(false);
+  });
+
+  it('is not fooled by a longer identifier that merely contains the name', () => {
+    expect(RESOLVER_CALL_REGEX.test('notResolveEffectiveCommunityId(req)')).toBe(false);
   });
 });

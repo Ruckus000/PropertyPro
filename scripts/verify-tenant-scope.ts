@@ -35,12 +35,28 @@ const API_ROOT = 'apps/web/src/app/api';
 /**
  * Shrink-only ceiling on contracted routes that still resolve tenancy by hand.
  *
- * Pinned at today's value (2026-09-07). Unlike the allowlist next door this one
+ * Pinned at today's measured value. Unlike the allowlist next door this one
  * SHOULD reach zero — every entry is a route the B2 program means to convert to
- * a declared `tenantScope`. It went 121 -> 150 while the whole gate stayed green,
+ * a declared `tenantScope`. It went 121 -> 148 while the whole gate stayed green,
  * which is the entire argument for pinning it.
+ *
+ * It was first pinned at 150, counted with a bare `.includes()`. Two of those 150
+ * were COMMENTS, and both were migration-completion docblocks — the note an author
+ * writes when they remove the hand-rolled call (`leases/route.ts`,
+ * `move-checklists/[id]/route.ts`). So the counter did not register the exact
+ * progress it exists to track, and with zero headroom a third such docblock would
+ * have failed the gate on a change that drained a route. Hence the call-site
+ * regex below.
  */
-const HAND_ROLLED_RESOLVER_CEILING = 150;
+const HAND_ROLLED_RESOLVER_CEILING = 148;
+
+/**
+ * A real call, not a mention. Same shape and same reasoning as
+ * `RUN_ROUTE_REGEX` in `verify-contracts.ts` — a `\b` name followed by `(`.
+ * Prose says "instead of an in-handler `resolveEffectiveCommunityId` call"
+ * with no paren, so it no longer counts.
+ */
+export const RESOLVER_CALL_REGEX = /\bresolveEffectiveCommunityId\s*\(/;
 
 const VALID_SCOPES = new Set(['query', 'body', 'path']);
 const SCOPE_SCHEMA_KEY: Record<string, string> = {
@@ -223,7 +239,7 @@ function main(): void {
     // A route that already goes through runRoute() but still resolves tenancy by
     // hand is the B2 migration's remaining work. Counted here because this loop
     // already has both facts in hand.
-    if (routeContent.includes('runRoute(') && routeContent.includes('resolveEffectiveCommunityId')) {
+    if (routeContent.includes('runRoute(') && RESOLVER_CALL_REGEX.test(routeContent)) {
       handRolledResolvers++;
     }
     violations.push(...validateRoute(routeContent, contractContent, routeRel));
@@ -231,6 +247,13 @@ function main(): void {
 
   console.log(
     `\nScanned ${routeFiles.length} route.ts files; ${scopedRoutes} declare a query/body tenantScope.`,
+  );
+  // Print the count even when it is exactly at the ceiling: `checkCeiling` is
+  // silent there, and a number nobody can see is the state this guard exists to
+  // end. `.claude/rules/verification.md` — print the denominator.
+  console.log(
+    `Contracted routes still hand-calling resolveEffectiveCommunityId: ` +
+      `${handRolledResolvers} (ceiling ${HAND_ROLLED_RESOLVER_CEILING}).`,
   );
 
   // Ceiling, not a target: the B2 program is meant to move this toward zero, and
