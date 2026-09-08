@@ -52,64 +52,75 @@ than a bug tracker.
 > below exist because an earlier doc did exactly that.
 
 ---
-
 ## 1. Stripe is not cut over to live — checkout cannot take real money
 
-**Status:** verified 2026-09-01 · **Owner:** you (key rotation + dashboard) · **Runbook:** [`docs/runbooks/stripe-live-cutover.md`](runbooks/stripe-live-cutover.md)
+**Status:** verified 2026-09-08 · **Owner:** you (Stripe dashboard + live keys) · **Runbook:** [`docs/runbooks/stripe-live-cutover.md`](runbooks/stripe-live-cutover.md)
 
-`scripts/with-env-local.sh pnpm tsx scripts/verify-stripe-mode.ts` exits **1 — not verified**:
+**Production serves TEST-mode keys.** This is now settled from outside, which an
+earlier revision of this entry said was impossible:
 
-| Check | Result |
+```bash
+curl -sg "https://www.getpropertypro.com/_next/static/chunks/app/(public)/signup/checkout/page-*.js" \
+  | grep -oE 'pk_(test|live)_[A-Za-z0-9]{6}'
+# -> pk_test_51Syt6
+```
+
+The 2026-09-04 check that concluded "not present in the served bundle" looked at
+the page HTML and the shared chunks. The key is read inside a `'use client'`
+component (`signup/checkout/page.tsx`) that Stripe.js loads lazily, so it is
+inlined into the **route** chunk — reachable only by extracting the chunk path
+from the HTML first.
+
+So this is the benign case: **checkout works and takes no money.** It is
+scheduled work, not an outage. (The urgent case — live keys against the test
+price ids in the database, i.e. checkout broken for everyone — is ruled out.)
+
+### Blast radius: zero real customers
+
+Measured against production 2026-09-08:
+
+| | |
 |---|---|
-| `STRIPE_SECRET_KEY` | `sk_test_…syAs` — **test mode** |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_test_…o6z6` — test, matches secret key |
-| `stripe_prices` rows | all 10 resolve against the **test** key |
-| Stored customer/subscription ids | no stale ids |
-| `STRIPE_WEBHOOK_SECRET` | **unknown** — `whsec_` carries no mode marker |
+| Communities holding a `cus_…`/`sub_…` | 5 — the 3 seeded demo communities (sharing one customer and one subscription) and 2 soft-deleted `Big Mama's House` test signups |
+| `billing_groups` | 4, all with customer ids, none tombstoned |
+| `stripe_connected_accounts` | 0 |
+| `finance_stripe_webhook_events` | 0 |
+| `access_plans` (holds `stripe_coupon_id`) | 0 |
 
-The run used the **production** database (`aws-0-us-west-2.pooler.supabase.com`), so the
-firm conclusion is: **production's `stripe_prices` table holds test-mode price IDs.**
-Stripe objects do not cross the mode boundary — a live key cannot see a test `price_…`.
+No real money has ever moved through this account. The cutover can be done in one
+sitting with no customer impact — but that is a **snapshot**, not a standing
+property. Re-measure before relying on it.
 
-The keys it read came from local `.env.local`, **not** from Vercel Production, so this is
-not proof that prod serves test keys. Either way it blocks:
+### The tooling was fixed first
 
-- If Vercel Production holds **live** keys → checkout is **broken today**: the live key
-  cannot resolve those test price IDs, and the customer sees "Unable to start checkout"
-  with nothing useful in the server logs.
-- If Vercel Production holds **test** keys → checkout works but **takes no real money**.
+An adversarial audit of the runbook against the code (2026-09-08) found two
+defects that would have broken the cutover mid-flight. Both are fixed:
 
-### 1a. First: resolve which case this is
+- `remediate-stale-stripe-ids.ts` accepted a **test** key. Combined with
+  `scripts/with-env-local.sh` clobbering an exported `STRIPE_SECRET_KEY`, step 4
+  would have reported "nothing to remediate" and done nothing — and any later
+  re-run, once real customers existed, would have nulled their billing state. It
+  now calls `assertKeyMode(secretKey, true, …)`.
+- `verify-stripe-mode.ts` counted **soft-deleted** billing groups that
+  `remediate` skips, so step 5 could never pass once step 4 had run, and
+  re-running step 4 was a no-op. The two queries now agree.
 
-Check whether Vercel Production's `STRIPE_SECRET_KEY` is `sk_live_` or `sk_test_`. If it
-is live, the price-id re-seed below is **urgent**, not scheduled.
+### Known, unfixed, and documented in the runbook
 
-> **This cannot be answered from outside.** Checked 2026-09-04: the publishable key is not
-> present in the served production bundle at all — Stripe.js only loads inside the checkout
-> flow, so the public pages carry no key to read. It is a dashboard check, not something a
-> script can settle.
+- **`verify-stripe-mode.ts` can never exit 0.** `webhookSecretCheck` returns
+  `unknown` whenever the secret is set and `isFailing` counts that as failing, so
+  the exit code carries no signal in any environment. Read the table.
+- **It reads your shell's env, not Vercel's** — `.env.local`, not what is
+  deployed.
+- **`STRIPE_SECRET_KEY` lives on two Vercel projects.** `property-pro-admin`
+  reads it for the demo→customer conversion route.
+- **The live Customer Portal is a separate dashboard object** with no API
+  equivalent here; `/billing/portal` 500s until it is configured in live mode.
+- **Step 6 cannot "purchase then refund"** — signup is a 30-day trial, so the
+  first invoice is $0. End the trial from the dashboard to force a real charge.
 
-### 1b. Then: the cutover is four surfaces, not one
-
-| Surface | Where | Needs |
-|---|---|---|
-| Secret key | `STRIPE_SECRET_KEY` | env update |
-| Publishable key | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | env update **+ redeploy** — it is inlined into the client bundle at build time |
-| Price ids | `stripe_prices` (10 rows) | `scripts/seed-stripe-live-prices.ts` |
-| Webhook secret | `STRIPE_WEBHOOK_SECRET` | a **new endpoint** in the Stripe dashboard — live and test are separate registrations with separate secrets |
-
-Two traps the runbook calls out:
-
-1. **The publishable key needs a redeploy.** Updating it in Vercel without rebuilding
-   leaves the old value baked into the served bundle. Checkout then initialises a
-   test-mode publishable key against a live session and fails *in the browser*, where
-   server logs will not show you why.
-2. **Do not "helpfully" update the CI repo secret.** `.github/workflows/stripe-e2e.yml`
-   refuses a non-`sk_test_` key on purpose — the E2E suite must stay on test mode. After
-   cutover the repo secret and the production env var are *supposed* to differ.
-
-**Verify:** re-run `verify-stripe-mode.ts` (read-only, safe against prod). Every check must
-read `pass`; `unknown` counts as unverified, never as green. Then a real card, per runbook §6.
+**Verify:** re-run `verify-stripe-mode.ts` (read-only, safe against prod) and
+read the table — the exit code is always 1. Then a real card, per runbook §6.
 
 ---
 
