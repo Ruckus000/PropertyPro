@@ -602,7 +602,7 @@ it is not (then delete the spec and the phase-2 spec section together).
 | ~~#956 ARC withdraw skips `requireActiveSubscriptionForMutation`~~ | 26d | **Documented, not changed.** The exemption is deliberate — gating withdraw would strand the row in `submitted` with no way out for either side. Noted in the route's docblock and at the call site |
 | ~~#951 Sentry may buffer raw Stripe webhook bodies~~ | 27d | **Fixed, NOT closed.** `scrubServerEvent` drops `request.data` (plus URLs, and headers case-insensitively) across all four server/edge hooks. Closing it needs the issue's own empirical check — throw in the webhook handler on a preview deploy, inspect the real event — which needs access this session did not have |
 | ~~#950 meetings POST runs `assertNotDemoGrace` before authenticating~~ | 27d | **Fixed, and the title was wrong.** Not unauthenticated: `/api/v1` is in `PROTECTED_PATH_PREFIXES`, so middleware 401s first. The real gap was a pre-auth unscoped PK read for an authenticated caller |
-| #947 Access-request OTP cap / orphan auth accounts | 27d | **Part 1 fixed** (cap survives a resend while the code is live; `/verify` moved to the Redis-backed auth tier). **Part 2 open** — `scripts/reconcile-orphan-auth-users.ts` is written and unrun; it needs production DB access |
+| #947 Access-request OTP cap / orphan auth accounts | 27d | **Part 1 fixed** (cap survives a resend while the code is live; `/verify` moved to the Redis-backed auth tier). **Part 2 measured, not automated** — production was audited by direct read-only query (below); what remains is a per-row deletion decision a human has to make, not a script |
 | #771 Wave 4 follow-up: full Next/Back step-wizard for signup (B4) | 56d | open |
 | #747 Nightly Demo Reset failing | 76d | open — a job known to be failing |
 | #526 Site-assets quota + lifecycle: 3 deferred findings need design | 102d | open |
@@ -627,8 +627,15 @@ it is not (then delete the spec and the phase-2 spec section together).
 >
 > So this is **hygiene, not an incident**: 31 auth identities that can authenticate against
 > a system with no application user behind them. Worth clearing; not worth paging anyone.
-> Deletion is still per-row and still needs a human — and `scripts/reconcile-orphan-auth-users.ts`
-> still refuses to do it.
+> Deletion is still per-row and still needs a human.
+>
+> **There is deliberately no reconciliation script.** One was written and then deleted
+> unrun, in the same session: its `= ANY(${array})` predicate renders as `ANY(($1, $2, $3))`
+> — a row constructor Postgres rejects with `42809` — which `scripts/reap-test-communities.ts:88-90`
+> already warns about; it omitted `deleted_at IS NULL`, so a soft-deleted request would have
+> printed as evidence *against* deleting an orphan; and it could not see an auth account whose
+> `public.users` row was soft-deleted, which is the very state it claimed to detect. The
+> queries above are the audit. Re-run them the same way rather than reviving the file.
 >
 > **The reverse direction turned up something the issue never mentions:** 4 `public.users`
 > rows with NO auth identity. Two are the soft-delete flow working correctly
