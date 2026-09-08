@@ -32,6 +32,7 @@
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
  */
 import { NextResponse, type NextRequest } from 'next/server';
+import { redactParams } from '@propertypro/shared/observability';
 import { captureException } from '@sentry/nextjs';
 import { COMMUNITY_EXPORT_RETENTION_DAYS } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -140,7 +141,20 @@ const handler = withErrorHandler(async (req: NextRequest) => {
         summary.yielded += 1;
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      // Redacted: this lands in `community_export_jobs.error_message`, a tenant
+      // column that `export-job-card.tsx:161-163` RENDERS TO THE PM. A drizzle
+      // failure here would otherwise show them `params: <values from the rows
+      // being exported>` (#1092) — a worse sink than Sentry, since it is
+      // persisted and user-visible.
+      //
+      // NOTE this only removes the VALUES. `site-publish-schedule-service.ts:485-493`
+      // argues a curated sentence is the right shape for this column ("raw driver
+      // text — constraint names, table internals — must not land in it"), which
+      // would also drop the SQL. That is a change to PM-visible copy and is left
+      // as a follow-up rather than made here.
+      const message = redactParams(
+        error instanceof Error ? error.message : String(error),
+      );
       // Below maxAttempts the job returns to `queued` with its CURSOR INTACT, so
       // a retry resumes rather than restarting — the difference between
       // converging and never finishing on a large association.

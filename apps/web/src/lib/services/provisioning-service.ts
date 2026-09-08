@@ -17,6 +17,7 @@
  *   - Retry resumes from lastSuccessfulStatus — never restarts from scratch
  */
 import { createElement } from 'react';
+import { redactParams } from '@propertypro/shared/observability';
 import type Stripe from 'stripe';
 import { and, asc, eq, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
 import {
@@ -613,7 +614,9 @@ export async function runProvisioning(jobId: number): Promise<void> {
         .set({
           status: 'failed',
           retryCount: sql`${provisioningJobs.retryCount} + 1`,
-          errorMessage: err instanceof Error ? err.message : String(err),
+          // Same reasoning as the export worker: persisted driver text can carry
+          // drizzle's bound `params:` (#1092). Values only; see that note.
+          errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
         })
         .where(eq(provisioningJobs.id, jobId));
 
