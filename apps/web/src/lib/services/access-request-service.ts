@@ -92,9 +92,26 @@ export async function submitAccessRequest(params: {
     const otpHash = hashOtp(otp);
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
+    // The attempt counter survives a resend WHILE THE CURRENT CODE IS LIVE.
+    //
+    // It used to reset unconditionally, which made the 5-attempt cap below not
+    // a cap at all: guess 5 times, re-submit the same email, guess 5 more,
+    // forever (#947). Resetting only once the previous code has expired bounds
+    // an attacker to 5 guesses per 10-minute window against a 6-digit code,
+    // while leaving the honest recovery path intact — someone who mistypes five
+    // times waits for the code to lapse and requests a new one.
+    //
+    // Never resetting at all was the issue's literal suggestion and is worse:
+    // it strands a real user permanently on a typo, with no self-service way
+    // out and no admin unlock for a `pending_verification` row.
+    const previousCodeExpired =
+      new Date(pendingVerification['otpExpiresAt'] as string) <= new Date();
+
     await scoped.update(
       accessRequests,
-      { otpHash, otpExpiresAt, otpAttempts: 0 },
+      previousCodeExpired
+        ? { otpHash, otpExpiresAt, otpAttempts: 0 }
+        : { otpHash, otpExpiresAt },
       eq(accessRequests.id, pendingVerification['id'] as number),
     );
 
@@ -199,7 +216,11 @@ export async function verifyOtp(params: {
 
   // Check max attempts
   if ((request['otpAttempts'] as number) >= 5) {
-    throw new ValidationError('Maximum verification attempts exceeded. Please submit a new request.');
+    // Not "submit a new request": re-submitting the same email now finds this
+    // same row and, while the code is live, keeps the exhausted counter.
+    throw new ValidationError(
+      'Too many incorrect codes. Wait for this code to expire, then request a new one.',
+    );
   }
 
   // Check expiry

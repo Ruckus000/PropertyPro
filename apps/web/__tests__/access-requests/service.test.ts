@@ -237,6 +237,70 @@ describe('access-request-service', () => {
       expect(sendEmailMock).toHaveBeenCalledTimes(1);
     });
 
+    // --- The attempt cap is a cap (#947) ------------------------------------
+    //
+    // It used to reset unconditionally on resend, so guess-5 / resend / guess-5
+    // was unbounded. It now survives a resend while the current code is live,
+    // and resets only once that code has lapsed.
+
+    it('KEEPS otpAttempts on resend while the current code is still live', async () => {
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'existing@example.com',
+            fullName: 'Existing User',
+            status: 'pending_verification',
+            otpHash: 'old-hash',
+            // Not yet expired — this is the case that used to hand out a fresh
+            // allowance, and is the whole exploit.
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            otpAttempts: 4,
+          },
+        ],
+      });
+
+      await submitAccessRequest({
+        communityId: COMMUNITY_ID,
+        communitySlug: COMMUNITY_SLUG,
+        email: 'existing@example.com',
+        fullName: 'Existing User',
+        isUnitOwner: false,
+      });
+
+      const updateData = scoped.update.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(updateData).not.toHaveProperty('otpAttempts');
+      // A fresh code is still issued — the user is not left without one.
+      expect(updateData['otpHash']).toBeTruthy();
+    });
+
+    it('RESETS otpAttempts on resend once the previous code has expired', async () => {
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'existing@example.com',
+            fullName: 'Existing User',
+            status: 'pending_verification',
+            otpHash: 'old-hash',
+            otpExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+            otpAttempts: 5,
+          },
+        ],
+      });
+
+      await submitAccessRequest({
+        communityId: COMMUNITY_ID,
+        communitySlug: COMMUNITY_SLUG,
+        email: 'existing@example.com',
+        fullName: 'Existing User',
+        isUnitOwner: false,
+      });
+
+      const updateData = scoped.update.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(updateData['otpAttempts']).toBe(0);
+    });
+
     it('rejects if email already belongs to a community member', async () => {
       setupScopedMock({
         userRows: [
@@ -400,7 +464,7 @@ describe('access-request-service', () => {
 
       await expect(
         verifyOtp({ requestId: 10, otp: TEST_OTP, communityId: COMMUNITY_ID }),
-      ).rejects.toThrow('Maximum verification attempts exceeded');
+      ).rejects.toThrow('Too many incorrect codes');
     });
 
     it('rejects expired OTP', async () => {
