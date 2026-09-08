@@ -23,7 +23,7 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
     <Card
       {...keyboardClick}
       className={cn(
-        'overflow-hidden cursor-pointer transition-shadow hover:shadow-e2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+        'overflow-hidden cursor-pointer transition-shadow hover:shadow-e1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface-page',
         selected && 'border-interactive bg-interactive-subtle'
       )}
     >

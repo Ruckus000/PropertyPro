@@ -7,11 +7,11 @@ import { useEffect, useState } from "react";
  * client render (so hydration matches), then updates once the effect runs and
  * whenever the query result changes.
  *
- * Duplicated from apps/web/src/hooks/use-media-query.ts (not moved wholesale —
- * that file is still imported directly by apps/web/src/components/pm/site-editor-v3/{Inspector,EditorShell}.tsx,
- * outside this task's scope) so the lifted `Dialog`'s `resizable` prop keeps
- * working without packages/ui depending on apps/web. Zero framework
- * dependency (React + window.matchMedia only), so this stays framework-agnostic.
+ * Single source of truth: `apps/web/src/hooks/use-media-query.ts` re-exports
+ * from here so `apps/web/src/components/pm/site-editor-v3/{Inspector,EditorShell}.tsx`
+ * (which still import the web path directly) and the lifted `Dialog`'s
+ * `resizable` prop stay in sync. Zero framework dependency (React +
+ * window.matchMedia only), so this stays framework-agnostic.
  */
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
