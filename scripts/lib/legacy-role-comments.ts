@@ -116,14 +116,24 @@ export function mergeAdjacent(hits: CommentHit[]): CommentHit[] {
 export function findCommentViolations(
   fileName: string,
   source: string,
+  /**
+   * Comments already collected AND merged for this file. `scanFile` passes what
+   * it holds, so neither the parse nor the merge is repeated; omitting it does
+   * both, which is what the tests want and what the repo-wide scan must not do.
+   */
+  premerged?: CommentHit[],
 ): CommentViolation[] | null {
-  const comments = collectComments(fileName, source);
-  if (comments === null) return null;
+  let merged = premerged;
+  if (!merged) {
+    const comments = collectComments(fileName, source);
+    if (comments === null) return null;
+    merged = mergeAdjacent(comments);
+  }
 
   const lines = source.split('\n');
   const violations: CommentViolation[] = [];
 
-  for (const c of mergeAdjacent(comments)) {
+  for (const c of merged) {
     if (!COMMENT_TERMS.some(([, re]) => re.test(c.text))) continue;
     if (EXEMPT_MARKER.test(c.text)) continue;
     const from = Math.max(0, c.line - 1 - EXEMPT_LOOKBEHIND);
@@ -149,15 +159,22 @@ export interface FileScan {
  * One file's scan: the violations plus how many comments were examined.
  * `null` when the file did not parse.
  *
- * Exists so the guard can report a denominator without parsing every file
- * twice; `findCommentViolations` is the simpler API the tests use.
+ * Exists so the guard can report a denominator without parsing every file twice;
+ * `findCommentViolations` is the simpler API the tests use.
+ *
+ * That claim was FALSE as first written — this function called `collectComments`
+ * and then `findCommentViolations`, which calls it again, so every file got two
+ * full `ts.createSourceFile` parses with parent pointers. Measured at ~1.15s of a
+ * ~4.8s warm guard run. The merged comments are now computed once and handed down.
  */
 export function scanFile(fileName: string, source: string): FileScan | null {
   const comments = collectComments(fileName, source);
   if (comments === null) return null;
-  const violations = findCommentViolations(fileName, source);
-  if (violations === null) return null;
-  return { commentCount: mergeAdjacent(comments).length, violations };
+  const merged = mergeAdjacent(comments);
+  // Non-null: `collectComments` already succeeded above, and the pre-collected
+  // path cannot re-fail.
+  const violations = findCommentViolations(fileName, source, merged) ?? [];
+  return { commentCount: merged.length, violations };
 }
 
 /**

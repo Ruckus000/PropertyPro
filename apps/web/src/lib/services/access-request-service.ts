@@ -104,8 +104,16 @@ export async function submitAccessRequest(params: {
     // Never resetting at all was the issue's literal suggestion and is worse:
     // it strands a real user permanently on a typo, with no self-service way
     // out and no admin unlock for a `pending_verification` row.
+    //
+    // `otp_expires_at` is NULLABLE, and `new Date(null)` is the epoch — so a bare
+    // comparison would read NULL as "expired" and reset the counter, quietly
+    // reopening #947. No writer produces NULL today (one insert site, one update
+    // site, both always set it), but the `as string` cast is exactly what stops
+    // strictNullChecks from saying so, and the structurally identical read in
+    // `verifyOtp` below fails CLOSED on the same column. Match it.
+    const previousExpiry = pendingVerification['otpExpiresAt'];
     const previousCodeExpired =
-      new Date(pendingVerification['otpExpiresAt'] as string) <= new Date();
+      previousExpiry != null && new Date(previousExpiry as string | Date) <= new Date();
 
     await scoped.update(
       accessRequests,

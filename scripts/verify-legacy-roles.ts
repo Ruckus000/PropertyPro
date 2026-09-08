@@ -78,7 +78,6 @@ const ALLOWLIST = new Map<string, number>([
   ['apps/web/src/app/dev/agent-login/route.ts', 2],
   ['apps/web/src/app/dev/login/route.ts', 2],
   // TEST
-  ['apps/web/src/hooks/__tests__/use-residents.test.tsx', 3],
   ['apps/web/src/lib/help/__tests__/viewer-role.test.ts', 3],
   ['apps/web/src/lib/services/__tests__/help-article-service.test.ts', 1],
   ['apps/web/src/lib/work-orders/__tests__/common.test.ts', 1],

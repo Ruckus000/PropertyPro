@@ -52,7 +52,10 @@ docs/                   # Specs, ADRs, audits, design system
 > (per-file ceilings) and, since 2026-09-07, retired names in **comment prose**, which
 > is where ~60 stale docblocks had accumulated invisibly — several asserting gates the
 > code does not perform. Comments are extracted with the TypeScript parser, not a regex;
-> escape hatch `legacy-roles:exempt — <reason>`. Bare `cam` is deliberately not matched
+> escape hatch `legacy-roles:exempt — <reason>`. It scans app + package source only —
+> **`scripts/` is outside its roots**, so the guard tooling (including the pattern table in
+> `scripts/lib/legacy-role-comments.ts`, which necessarily names the retired terms) does not
+> police itself. Bare `cam` is deliberately not matched
 > (~50 legitimate hits, incl. the marketing copy and an asset filename). See `docs/adr/ADR-006-root-manager-role-model.md`
 > (supersedes ADR-001).
 

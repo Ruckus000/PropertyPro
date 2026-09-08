@@ -301,6 +301,41 @@ describe('access-request-service', () => {
       expect(updateData['otpAttempts']).toBe(0);
     });
 
+    // `otp_expires_at` is a NULLABLE column and `new Date(null)` is the epoch, so
+    // a bare comparison reads NULL as "expired" and resets the counter — reopening
+    // the very hole above. No writer produces NULL today, but the `as string` cast
+    // is what stops strictNullChecks from proving that, and `verifyOtp` fails
+    // CLOSED on the same column. This pins the two together.
+    it('does NOT reset otpAttempts when the previous expiry is NULL', async () => {
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'existing@example.com',
+            fullName: 'Existing User',
+            status: 'pending_verification',
+            otpHash: 'old-hash',
+            otpExpiresAt: null,
+            otpAttempts: 5,
+          },
+        ],
+      });
+
+      await submitAccessRequest({
+        communityId: COMMUNITY_ID,
+        communitySlug: COMMUNITY_SLUG,
+        email: 'existing@example.com',
+        fullName: 'Existing User',
+        isUnitOwner: false,
+      });
+
+      const updateData = scoped.update.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(updateData).not.toHaveProperty('otpAttempts');
+      // A new code IS still issued — failing closed must not break the resend.
+      expect(updateData['otpHash']).toEqual(expect.any(String));
+      expect(updateData['otpExpiresAt']).toBeInstanceOf(Date);
+    });
+
     it('rejects if email already belongs to a community member', async () => {
       setupScopedMock({
         userRows: [
