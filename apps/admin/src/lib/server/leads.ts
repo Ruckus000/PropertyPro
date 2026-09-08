@@ -79,7 +79,7 @@ function throwIfError(error: { message: string } | null, context: string): void 
  * textbook ICP condo, and counting it as one puts noise in the number this
  * dashboard exists to surface.
  */
-function isInIcp(row: MarketingLeadRow): boolean {
+export function isInIcp(row: Pick<MarketingLeadRow, 'source' | 'unit_count'>): boolean {
   if (row.source !== 'compliance_checker') return false;
   return row.unit_count !== null && row.unit_count >= 25 && row.unit_count <= 149;
 }
