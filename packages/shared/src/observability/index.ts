@@ -7,3 +7,4 @@
  * `undefined` would make Sentry drop every event — silently.
  */
 export * from './scrub-browser-event';
+export * from './scrub-server-event';
