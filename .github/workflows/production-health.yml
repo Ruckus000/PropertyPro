@@ -1,0 +1,115 @@
+name: Production Health
+
+# Closes launch blocker #5: the probes existed and nothing read them.
+#
+# `/api/v1/internal/readiness` reports config drift — a missing secret keeps the
+# site serving traffic, so it answers HTTP 200 while saying `degraded`.
+# `/api/v1/internal/cron-health` answers 503 when a scheduled job has not
+# succeeded inside its own window, which is the ONLY check that catches a job
+# that stopped running: a 401ing cron throws before it reaches Sentry, which is
+# exactly how all seventeen stayed dead behind a green dashboard in 2026-08.
+#
+# WHY THIS RUNS ON GITHUB AND NOT AS A VERCEL CRON. A cron on Vercel watching
+# crons on Vercel shares the failure mode it exists to detect — the seventeen
+# that died would have taken their own monitor down with them, silently. This
+# runs somewhere else, so it still fires when the app cannot.
+#
+# It is not a replacement for a real uptime service. There is no escalation, no
+# history, and no on-call routing: a failure here is a red run and whatever
+# email GitHub sends. That is a large improvement on nothing and a poor
+# substitute for Better Stack. See docs/LAUNCH-BLOCKERS.md #5.
+
+on:
+  schedule:
+    # Twice daily, 07:00 and 19:00 UTC. Deliberately not every 15 minutes:
+    # Actions minutes are a live constraint here — #976 moved CI off GitHub
+    # when they ran out — and the failures this catches are slow. A missing
+    # secret or a stalled monthly job is not a page-at-2am problem.
+    - cron: '0 7,19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: probe-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      WEB: https://www.getpropertypro.com
+      ADMIN: https://admin.getpropertypro.com
+
+    steps:
+      - name: Liveness — both apps answer at all
+        run: |
+          set -uo pipefail
+          fail=0
+          for target in "$WEB" "$ADMIN"; do
+            code=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 20 "$target/api/health" || echo "000")
+            echo "  $target/api/health -> $code"
+            [ "$code" = "200" ] || fail=1
+          done
+          [ "$fail" = "0" ] || { echo "::error::an app is not serving /api/health"; exit 1; }
+
+      - name: Readiness — config drift
+        env:
+          READINESS_CHECK_SECRET: ${{ secrets.READINESS_CHECK_SECRET }}
+        run: |
+          set -uo pipefail
+          if [ -z "${READINESS_CHECK_SECRET:-}" ]; then
+            echo "::error::READINESS_CHECK_SECRET is not set as a repository secret."
+            echo "Add it under Settings > Secrets and variables > Actions. Until then this"
+            echo "workflow cannot read the probe, which is the gap it exists to close."
+            exit 1
+          fi
+
+          # THE HTTP STATUS IS NOT THE SIGNAL. This endpoint returns 200 for
+          # `degraded` and only 503 for `unhealthy`, precisely because a missing
+          # secret keeps serving traffic. Anything keyed on the status code
+          # reports green through the failure it is meant to catch.
+          body=$(curl -fsS --max-time 20 \
+            -H "Authorization: Bearer ${READINESS_CHECK_SECRET}" \
+            "$WEB/api/v1/internal/readiness") || {
+              echo "::error::readiness probe unreachable or rejected the token"; exit 1; }
+
+          ready_status=$(printf '%s' "$body" | jq -r '.status // "unparseable"')
+          echo "  readiness status: $ready_status"
+
+          if [ "$ready_status" != "healthy" ]; then
+            echo "::error::readiness is '$ready_status' — the failing checks follow"
+            # Names and pass/fail only. The probe does not echo secret values,
+            # and this must not start doing so.
+            printf '%s' "$body" | jq -r '
+              .checks // {} | to_entries[] | select(.value.status != "pass")
+              | "  \(.key): \(.value.status) \(.value.error // "")"'
+            exit 1
+          fi
+
+      - name: Cron freshness — jobs that stopped running
+        env:
+          READINESS_CHECK_SECRET: ${{ secrets.READINESS_CHECK_SECRET }}
+        run: |
+          set -uo pipefail
+          code=$(curl -sS -o /tmp/cron-health.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer ${READINESS_CHECK_SECRET}" \
+            "$WEB/api/v1/internal/cron-health" || echo "000")
+          echo "  cron-health -> $code"
+
+          if [ "$code" != "200" ]; then
+            echo "::error::cron-health returned $code — jobs that have not succeeded in window:"
+            # The key is `stale_jobs`, snake_case. Guessing `staleJobs` here
+            # printed the whole blob instead of the actionable list.
+            jq -r '"  stale: \(.stale_jobs // [] | join(", "))"' /tmp/cron-health.json 2>/dev/null \
+              || cat /tmp/cron-health.json
+            # Surfaced deliberately by the probe so a result carrying null
+            # timestamps explains itself rather than looking like a bug.
+            jq -r '"  awaiting first run: \(.awaiting_first_run // [] | join(", "))"' /tmp/cron-health.json 2>/dev/null || true
+            jq -r '"  awaiting first success: \(.awaiting_first_success // [] | join(", "))"' /tmp/cron-health.json 2>/dev/null || true
+            exit 1
+          fi
