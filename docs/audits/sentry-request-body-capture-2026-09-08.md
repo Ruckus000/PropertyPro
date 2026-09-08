@@ -82,8 +82,16 @@ params: probe@example.com,probe@example.com,CANARY_CO_C3D4,CANARY_NEEDLE_A1B2,
 `scrubServerEvent` only touches `event.request`, so none of this is scrubbed. This is
 **wider than #951**: it does not depend on the SDK buffering a body, it fires on *any*
 failed query in *any* route, and it carries the values being written — which for other
-tables is more sensitive than a marketing lead. It needs its own issue; it is not in scope
-here and is not fixed by anything on this branch.
+tables is more sensitive than a marketing lead. Filed as
+[#1092](https://github.com/Ruckus000/PropertyPro/issues/1092); not in scope here and not
+fixed by anything on this branch.
+
+Two details worth carrying, both verified against installed source rather than inferred:
+the wrap is a bare `catch (e)` at every one of the six sites in
+`drizzle-orm@0.45.1/pg-core/session.js:36-98`, so a constraint violation against a healthy
+production database produces the identical message — `ECONNREFUSED` is not special. And
+nothing truncates it: `prepareEvent.js:137-141` truncates `exception.value` only
+`if (maxValueLength)`, which the SDK never defaults and none of the four configs set.
 
 ## Limits of this measurement
 
