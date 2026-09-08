@@ -18,6 +18,7 @@ import { communities } from '@propertypro/db';
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { DEMO_COMMUNITIES } from './config/demo-data';
 import { runSeedSafetyChecks } from './lib/seed-safety';
+import { extractRows } from './lib/extract-rows';
 import { runDemoSeed } from './seed-demo';
 
 const db = createUnscopedClient();
@@ -78,19 +79,6 @@ interface ResetStats {
 
 interface DemoResetOptions {
   syncAuthUsers?: boolean;
-}
-
-function extractRows<T>(result: unknown): T[] {
-  if (Array.isArray(result)) {
-    return result as T[];
-  }
-
-  if (typeof result === 'object' && result !== null && 'rows' in result) {
-    const rows = (result as { rows?: unknown }).rows;
-    return Array.isArray(rows) ? (rows as T[]) : [];
-  }
-
-  return [];
 }
 
 async function resolveExistingResetTables(): Promise<string[]> {
