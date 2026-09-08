@@ -38,6 +38,19 @@
  * `pnpm lint`, where CI never builds. Porting that approach here would let this
  * guard join lint too.
  *
+ * KNOWN GAP — runtime-assembled class names. Any extracted match containing
+ * `$` (a swallowed `` `bg-status-${variant}` `` interpolation) is dropped
+ * from the checked set rather than tested, so a real runtime-constructed
+ * class name passes through this guard undetected. This is not a regression
+ * from a previous version: the old grep pattern never CAUGHT a dynamic class
+ * either — `[a-z0-9]` alone can't see a `${`, so it just stopped at the
+ * literal prefix and reported the truncated fragment (`text-status`) as a
+ * violation, an accidental false positive rather than a real detection. The
+ * gap is genuinely covered elsewhere: scripts/verify-web-class-resolution.ts
+ * scans both apps/web/src AND packages/ui/src with a TypeScript-parser-based
+ * check that specifically looks for runtime class construction. Porting that
+ * check here is the same follow-up as the paragraph above.
+ *
  * Exit codes:
  *   0 — every referenced class emits CSS
  *   1 — at least one class emits nothing
