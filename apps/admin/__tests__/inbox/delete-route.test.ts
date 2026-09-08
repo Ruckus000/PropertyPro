@@ -9,20 +9,33 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { requirePlatformAdminMock, logAdminActionMock, deleteMock, selectMock } = vi.hoisted(
+const { requirePlatformAdminMock, logAdminActionMock, deleteMock, countMock } = vi.hoisted(
   () => ({
     requirePlatformAdminMock: vi.fn(),
     logAdminActionMock: vi.fn(),
     deleteMock: vi.fn(),
-    selectMock: vi.fn(),
+    countMock: vi.fn(),
   }),
 );
 
 vi.mock('@/lib/auth/platform-admin', () => ({ requirePlatformAdmin: requirePlatformAdminMock }));
 vi.mock('@/lib/audit/log-admin-action', () => ({ logAdminAction: logAdminActionMock }));
+/**
+ * `from` takes the TABLE NAME and passes it to every spy.
+ *
+ * It used to discard the argument, which meant pointing the route at
+ * `platform_admin_audit_log` — or at `communities` — passed all six tests. A
+ * mock that cannot see which table a destructive statement runs against is not
+ * testing the destructive statement.
+ */
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: () => ({
-    from: () => ({ delete: () => ({ eq: (...args: unknown[]) => deleteMock(...args) }) }),
+    from: (table: string) => ({
+      delete: () => ({ eq: (...args: unknown[]) => deleteMock(table, ...args) }),
+      select: (columns: string, options?: unknown) => ({
+        eq: (...args: unknown[]) => countMock(table, columns, options, ...args),
+      }),
+    }),
   }),
 }));
 
@@ -52,8 +65,12 @@ describe('DELETE /api/admin/inbox/[threadId]', () => {
     requirePlatformAdminMock.mockResolvedValue(ADMIN);
     logAdminActionMock.mockResolvedValue(undefined);
     deleteMock.mockReturnValue({
-      select: selectMock.mockResolvedValue({ data: [DELETED_ROW], error: null }),
+      select: vi.fn().mockResolvedValue({ data: [DELETED_ROW], error: null }),
     });
+    // Seven rows destroyed against a thread whose own tally says three: the
+    // notes route never increments message_count, so the two MUST differ here
+    // or the assertion below cannot tell which one the route used.
+    countMock.mockResolvedValue({ count: 7, error: null });
   });
 
   it('deletes the thread and reports ok', async () => {
@@ -61,7 +78,7 @@ describe('DELETE /api/admin/inbox/[threadId]', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
-    expect(deleteMock).toHaveBeenCalledWith('id', 42);
+    expect(deleteMock).toHaveBeenCalledWith('support_inbox_threads', 'id', 42);
   });
 
   it('records the deletion in the admin audit log', async () => {
@@ -73,7 +90,25 @@ describe('DELETE /api/admin/inbox/[threadId]', () => {
       resourceType: 'support_inbox_thread',
       resourceId: 42,
       communityId: null,
-      metadata: { deleted_message_count: 3 },
+      metadata: { deleted_message_count: 7 },
+    });
+  });
+
+  it("records the rows the CASCADE destroyed, not the thread's own tally", async () => {
+    // DELETED_ROW.message_count is 3; the cascade destroys 7, because notes are
+    // messages the counter never counted. The audit entry is the last trace
+    // those notes existed, so it has to record the real figure.
+    await DELETE(...del());
+
+    expect(countMock).toHaveBeenCalledWith(
+      'support_inbox_messages',
+      'id',
+      { count: 'exact', head: true },
+      'thread_id',
+      42,
+    );
+    expect(logAdminActionMock.mock.calls[0]?.[0]).toMatchObject({
+      metadata: { deleted_message_count: 7 },
     });
   });
 

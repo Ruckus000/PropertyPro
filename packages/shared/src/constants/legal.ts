@@ -25,12 +25,6 @@
  * Do NOT bump for a typo fix. A new version means "the agreement changed", and
  * every bump widens the set of users whose accepted version differs from current.
  */
-export const CURRENT_TERMS_VERSION = '2026-08-10.1';
+export const CURRENT_TERMS_VERSION = '2026-09-07.1';
 
-/**
- * The legal documents that carry a `**Version:**` header and must stay in lockstep
- * with `CURRENT_TERMS_VERSION`. Consumed by the drift test.
- */
-export const VERSIONED_LEGAL_DOCS = ['terms', 'privacy', 'accessibility'] as const;
 
-export type VersionedLegalDoc = (typeof VERSIONED_LEGAL_DOCS)[number];

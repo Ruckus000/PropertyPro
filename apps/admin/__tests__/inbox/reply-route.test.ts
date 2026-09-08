@@ -38,10 +38,14 @@ vi.mock('@propertypro/email', () => ({
 }));
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: () => ({
-    from: () => ({
-      insert: insertMock,
+    // `from` passes the TABLE NAME through, so a route pointed at the wrong
+    // table fails loudly. It used to discard the argument, which meant the
+    // message-count assertion below would pass just as happily if the reply
+    // route updated `communities`.
+    from: (table: string) => ({
+      insert: (...args: unknown[]) => insertMock(table, ...args),
       update: (payload: unknown) => ({
-        eq: (...args: unknown[]) => updateMock(payload, ...args),
+        eq: (...args: unknown[]) => updateMock(table, payload, ...args),
       }),
     }),
   }),
@@ -292,7 +296,8 @@ describe('POST /api/admin/inbox/[threadId]/reply', () => {
     await POST(...post({ body: 'Here they are.' }));
 
     expect(updateMock).toHaveBeenCalledTimes(1);
-    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>];
+    const [table, payload] = updateMock.mock.calls[0] as [string, Record<string, unknown>];
+    expect(table).toBe('support_inbox_threads');
     expect(payload.message_count).toBe(THREAD.messageCount + 1);
     // Control: the timestamps that already worked must still be written, so a
     // regression here is distinguishable from the update being dropped.

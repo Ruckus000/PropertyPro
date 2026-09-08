@@ -52,8 +52,6 @@ export function ThreadView({ thread, messages, replyFrom, replySubject }: Thread
 
             participantEmail={thread.participantEmail}
 
-            messageCount={thread.messageCount}
-
           />
         </div>
       </div>

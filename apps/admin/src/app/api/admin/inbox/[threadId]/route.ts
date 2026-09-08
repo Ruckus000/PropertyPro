@@ -24,9 +24,16 @@
  * WHAT THE AUDIT ENTRY KEEPS, and why it is not more: `platform_admin_audit_log`
  * is append-only and admin-readable, so copying an erased body into it would
  * mean the erasure erased nothing. It records the address, the counts and the
- * timestamps — enough to evidence that a specific request was honoured, which
- * privacy §5.2 explicitly preserves — and no subject line or body, because
- * those are content.
+ * timestamps — enough to evidence that a specific request was honoured — and no
+ * subject line or body, because those are content.
+ *
+ * Privacy §5.2 discloses that retention explicitly. It did NOT when this route
+ * was first written, and this docblock claimed otherwise: the only audit
+ * carve-out there covered `compliance_audit_log`, the association-scoped
+ * statutory record under §718.111(12), whose `community_id` is NOT NULL and
+ * which therefore cannot represent a platform-operator action at all. Citing it
+ * as cover for this table was simply wrong. The policy now carries its own
+ * bullet naming exactly the fields written below.
  *
  * IT ALSO DESTROYS THE INTERNAL NOTES on the thread, and those are the one
  * thing with no other record: notes are deliberately not written to the admin
@@ -62,6 +69,25 @@ export const DELETE = withAdminErrorHandler(
     }
 
     const db = createAdminTypedClient();
+
+    /**
+     * Count the rows the cascade is about to destroy, BEFORE destroying them.
+     *
+     * `thread.message_count` is the obvious source and it is wrong: the notes
+     * route never increments it, only the reply route and the inbound service
+     * do. A thread with 3 emails and 4 notes destroys 7 rows and would record
+     * 3 — and the audit entry below is the last trace the notes existed at all,
+     * which makes this the one number that has to be right.
+     *
+     * A second query is unavoidable. The cascade runs inside the DELETE, and
+     * the `.select()` reachable after `.delete()` is the transform-builder one,
+     * which takes columns only and cannot ask for a count of another table.
+     */
+    const { count: destroyedMessages, error: countError } = await db
+      .from('support_inbox_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('thread_id', threadId);
+    assertNoDbError(countError, 'Failed to count the messages being deleted');
 
     /**
      * One round trip does the 404, the delete and the audit payload.
@@ -111,7 +137,8 @@ export const DELETE = withAdminErrorHandler(
         first_message_at: deleted.first_message_at,
         last_message_at: deleted.last_message_at,
       },
-      metadata: { deleted_message_count: deleted.message_count },
+      // The true cascade count, not the thread's own tally — see above.
+      metadata: { deleted_message_count: destroyedMessages ?? 0 },
     });
 
     return NextResponse.json({ ok: true });

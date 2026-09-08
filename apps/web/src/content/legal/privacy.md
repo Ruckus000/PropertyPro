@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version:** 2026-08-09.1 · **Effective Date:** August 9, 2026 · *Supersedes version 2026-02-14.1*
+**Version:** 2026-09-07.1 · **Effective Date:** September 7, 2026 · *Supersedes version 2026-08-09.1*
 
 ---
 
@@ -184,6 +184,6 @@ For data deletion or access requests, please include your full name, email addre
 
 ---
 
-*Version 2026-08-09.1 — last updated August 9, 2026.*
+*Version 2026-09-07.1 — last updated September 7, 2026.*
 
 *Version history is maintained in this document's revision record. When this policy is revised, the version identifier above changes and the prior version is noted as superseded.*
