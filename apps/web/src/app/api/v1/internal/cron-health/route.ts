@@ -2,7 +2,9 @@
  * GET /api/v1/internal/cron-health
  *
  * 200 when every scheduled job has SUCCEEDED within its own staleness window;
- * 503 naming the ones that have not. Wired into the external uptime monitor.
+ * 503 naming the ones that have not. Polled twice daily by
+ * .github/workflows/production-health.yml — which claimed to be wired into an
+ * external uptime monitor long before anything read it at all.
  *
  * ## Why this exists when Sentry already has the failures
  *

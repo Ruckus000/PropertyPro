@@ -325,7 +325,19 @@ corrected.
 
 ## 5. Nothing polls the readiness probe
 
-**Status:** open · **Owner:** you (monitoring)
+**Status:** PARTIALLY CLOSED 2026-09-08 — `.github/workflows/production-health.yml`
+polls readiness, cron-health and both `/api/health` endpoints twice daily and fails
+the run on `degraded`/503. **Requires `READINESS_CHECK_SECRET` as a repository
+secret**; until that is added the workflow fails with an explanatory error rather
+than passing silently. · **Owner:** you (the repo secret, and a real uptime service
+if you want escalation)
+
+> **What it does not give you.** No escalation, no history, no on-call routing — a
+> failure is a red run and whatever email GitHub sends. It runs on GitHub rather
+> than as a Vercel cron deliberately: a cron watching crons shares the failure mode
+> it exists to detect, and the seventeen that died in 2026-08 would have taken their
+> own monitor down with them. Twice daily rather than every 15 minutes because
+> Actions minutes are constrained (#976) and these failures are slow.
 
 > **Update (cron alerting):** the same monitor should now also poll
 > `/api/v1/internal/cron-health`, which returns 503 when any scheduled job has not
