@@ -1,7 +1,8 @@
 'use client';
 
 import type { DemoTemplateDefinition } from '@propertypro/shared';
-import { Card } from '@propertypro/ui';
+import { Card, useKeyboardClick } from '@propertypro/ui';
+import { cn } from '@/lib/utils';
 import { TemplateThumbnail } from './TemplateThumbnail';
 import { Check } from 'lucide-react';
 
@@ -12,14 +13,19 @@ interface TemplateCardProps {
 }
 
 export function TemplateCard({ template, selected, onSelect }: TemplateCardProps) {
+  // shadcn's Card has no `interactive`/`selected` prop — reproduced here via
+  // className plus the same `useKeyboardClick` helper the deprecated Card used
+  // internally, so Enter/Space still activate selection (`role="button"`,
+  // `tabIndex=0`) the way the old compound component did.
+  const keyboardClick = useKeyboardClick<HTMLDivElement>(onSelect);
+
   return (
     <Card
-      size="sm"
-      interactive
-      selected={selected}
-      noPadding
-      onClick={onSelect}
-      className="overflow-hidden"
+      {...keyboardClick}
+      className={cn(
+        'overflow-hidden cursor-pointer transition-shadow hover:shadow-e2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+        selected && 'border-interactive bg-interactive-subtle'
+      )}
     >
       {/* Thumbnail area */}
       <div className="h-[88px] relative overflow-hidden">
