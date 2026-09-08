@@ -594,19 +594,23 @@ it is not (then delete the spec and the phase-2 spec section together).
 
 ## B3. Open on GitHub, 2026-09-07
 
-One PR, seven issues, one stranded branch. **PR #1067 is finished work that is not
-merged** — `mergeable_state: clean`, but based on `fc3dff2`, six commits behind `main`.
+**The four ~27-day issues are addressed (2026-09-07); three remain.** PR #1067 merged as
+`225dd58` while this section was being written, which is why the line about it is gone.
 
-| Item | Age | Note |
+| Item | Age | Status |
 |---|---|---|
-| **PR #1067** support-inbox: reply subject + per-mailbox signature | 1d | clean, unmerged |
-| #956 ARC withdraw skips `requireActiveSubscriptionForMutation` | 26d | |
-| #951 Sentry may buffer raw Stripe webhook bodies incl. `hosted_invoice_url` | 27d | security-shaped |
-| #950 meetings POST runs `assertNotDemoGrace` on an unauthenticated, caller-supplied `communityId` | 27d | security-shaped |
-| #947 Access-request OTP attempt cap resets on resend; orphan auth accounts need reconciliation | 27d | |
-| #771 Wave 4 follow-up: full Next/Back step-wizard for signup (B4) | 56d | |
-| #747 Nightly Demo Reset failing | 76d | a job known to be failing |
-| #526 Site-assets quota + lifecycle: 3 deferred findings need design | 102d | |
+| ~~#956 ARC withdraw skips `requireActiveSubscriptionForMutation`~~ | 26d | **Documented, not changed.** The exemption is deliberate — gating withdraw would strand the row in `submitted` with no way out for either side. Noted in the route's docblock and at the call site |
+| ~~#951 Sentry may buffer raw Stripe webhook bodies~~ | 27d | **Fixed, NOT closed.** `scrubServerEvent` drops `request.data` (plus URLs, and headers case-insensitively) across all four server/edge hooks. Closing it needs the issue's own empirical check — throw in the webhook handler on a preview deploy, inspect the real event — which needs access this session did not have |
+| ~~#950 meetings POST runs `assertNotDemoGrace` before authenticating~~ | 27d | **Fixed, and the title was wrong.** Not unauthenticated: `/api/v1` is in `PROTECTED_PATH_PREFIXES`, so middleware 401s first. The real gap was a pre-auth unscoped PK read for an authenticated caller |
+| #947 Access-request OTP cap / orphan auth accounts | 27d | **Part 1 fixed** (cap survives a resend while the code is live; `/verify` moved to the Redis-backed auth tier). **Part 2 open** — `scripts/reconcile-orphan-auth-users.ts` is written and unrun; it needs production DB access |
+| #771 Wave 4 follow-up: full Next/Back step-wizard for signup (B4) | 56d | open |
+| #747 Nightly Demo Reset failing | 76d | open — a job known to be failing |
+| #526 Site-assets quota + lifecycle: 3 deferred findings need design | 102d | open |
+
+> **#947 part 2 is the one that needs a human, not a session.** The script reports; it
+> deliberately deletes nothing, because each row has to be confirmed a genuine orphan
+> rather than a pre-provisioned identity. Until someone runs it, the stranded accounts stay
+> wedged and the affected users still cannot log in.
 
 Branch `fix-cron-runs-rls-registration` (`b11c50f`) is on the remote with no PR and is not
 an ancestor of `main`; its content was superseded by #1059 / #1061 / #1062. Safe to
