@@ -27,6 +27,35 @@ import { scrubBrowserEvent, type ScrubbableEvent } from './scrub-browser-event';
  *
  * THE SQL IS KEPT. It is what makes a report actionable and carries no user
  * data; only the values after `params:` are dropped.
+ *
+ * REQUEST BODIES ARE A THIRD CHANNEL, AND THE WORST ONE. @sentry/node-core's
+ * `httpServerIntegration` buffers up to 10,000 bytes of every incoming request
+ * body (`maxRequestBodySize` defaults to `'medium'`; @sentry/nextjs does not
+ * override it), and `requestDataIntegration` copies it onto
+ * `event.request.data` — `DEFAULT_INCLUDE.data` is `true` and, unlike `ip`, is
+ * NOT gated behind `sendDefaultPii`.
+ *
+ * Capture happens only where the app consumes the body through `req.on('data')`,
+ * which the integration proxies. Measured on Node 20:
+ *
+ *   - App Router ROUTE handlers do NOT. `NextRequestAdapter` hands the raw
+ *     `IncomingMessage` to undici, which drains it via the async iterator
+ *     (`'readable'` + `read()`), never `'data'`. Nothing is captured — so the
+ *     Stripe webhook body, and `hosted_invoice_url` with it, never reached
+ *     Sentry (issue 951).
+ *   - SERVER ACTIONS DO. `action-handler` runs
+ *     `pipeline(req.body, sizeLimitTransform)` before branching on content
+ *     type, `pipeline` pipes, and `Readable.pipe` attaches a `'data'` listener.
+ *
+ * `updatePasswordAction(newPassword)` in `apps/web/src/lib/auth/actions.ts` is
+ * a server action, so a plaintext password sits in that body. Any error
+ * captured during a password reset would have carried it.
+ *
+ * WHY THIS IS UNCONDITIONAL rather than per-route: the safe/unsafe split above
+ * lives entirely in undici and Next internals, so a dependency bump can move a
+ * route from the first bullet to the second with nothing here to notice. We
+ * have no use for request bodies in Sentry, so the cheap, stable answer is to
+ * drop them all.
  */
 
 /** Everything after this marker in a drizzle error message is bound values. */
@@ -60,6 +89,12 @@ export function scrubServerEvent<T>(rawEvent: T): T {
       if (typeof entry?.value === 'string') {
         entry.value = redactParams(entry.value);
       }
+    }
+
+    // See "REQUEST BODIES" above. Unconditional and shape-agnostic: the SDK
+    // sets this to a string, but deleting the key is correct for any value.
+    if (event.request && 'data' in event.request) {
+      delete event.request.data;
     }
 
     if (Array.isArray(event.breadcrumbs)) {
