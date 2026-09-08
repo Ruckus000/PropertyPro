@@ -607,10 +607,34 @@ it is not (then delete the spec and the phase-2 spec section together).
 | #747 Nightly Demo Reset failing | 76d | open — a job known to be failing |
 | #526 Site-assets quota + lifecycle: 3 deferred findings need design | 102d | open |
 
-> **#947 part 2 is the one that needs a human, not a session.** The script reports; it
-> deliberately deletes nothing, because each row has to be confirmed a genuine orphan
-> rather than a pre-provisioned identity. Until someone runs it, the stranded accounts stay
-> wedged and the affected users still cannot log in.
+> **#947 part 2 — MEASURED against production 2026-09-07, and the issue's premise does not
+> hold.** The audit's queries were run read-only via Supabase MCP (the script itself needs
+> `.env.local`, which a fresh clone does not have).
+>
+> ```
+> auth.users 70 · public.users 43 · orphans (auth with no public.users) 31
+> orphans blocking a pending access request:                             0
+> ```
+>
+> **Zero wedged requests.** The issue's stated harm — "the corresponding request stays
+> wedged", users approved but unable to log in — is not occurring. Nor is any orphan a
+> stranded customer: all 31 are the owner's own test and demo residue, in four groups —
+> 12 demo-instance personas (`demo-*@demo-*.propertyprofl.com`, all 2026-03-05/06),
+> 1 `.local` seed identity, ~14 `@example.com` audit/smoke artifacts (2026-03-21 →
+> 2026-05-06), and 4 owner/QA mailboxes. Exactly one address is plausibly third-party, and
+> it is unconfirmed, has never signed in, and has no access request. 3 of the 31 have ever
+> signed in.
+>
+> So this is **hygiene, not an incident**: 31 auth identities that can authenticate against
+> a system with no application user behind them. Worth clearing; not worth paging anyone.
+> Deletion is still per-row and still needs a human — and `scripts/reconcile-orphan-auth-users.ts`
+> still refuses to do it.
+>
+> **The reverse direction turned up something the issue never mentions:** 4 `public.users`
+> rows with NO auth identity. Two are the soft-delete flow working correctly
+> (`deleted-…@redacted`, no roles). The other two are `root.manager@*.local` seed identities
+> **holding a role they cannot authenticate to use**. That is a different corruption and
+> nothing was tracking it.
 
 Branch `fix-cron-runs-rls-registration` (`b11c50f`) is on the remote with no PR and is not
 an ancestor of `main`; its content was superseded by #1059 / #1061 / #1062. Safe to
