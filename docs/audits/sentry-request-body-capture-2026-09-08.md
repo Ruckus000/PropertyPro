@@ -93,6 +93,18 @@ production database produces the identical message — `ECONNREFUSED` is not spe
 nothing truncates it: `prepareEvent.js:137-141` truncates `exception.value` only
 `if (maxValueLength)`, which the SDK never defaults and none of the four configs set.
 
+**Blast radius enumerated 2026-09-08** (in #1092's comments, not repeated here). Two
+findings change how this section should be read. First, the leak is **already live**:
+`apps/web/src/lib/cron/with-cron-job.ts:239-255` sets a Sentry fingerprint precisely
+because "drizzle reports failures as a uniform `Failed query: <SQL>`" was collapsing
+distinct cron jobs into one issue — these messages have been arriving in production Sentry
+long enough for someone to work around their grouping. Second, `invitations.token` is a
+**plaintext** account-takeover token bound in a `where` on the unauthenticated accept path
+(`invitations-service.ts:150`, `:168`), and `invitations/route.ts:117-119` already grades
+it too dangerous for `compliance_audit_log`. That raises #1092 from the P2 it was filed as
+to P1. The rest of the credential surface is genuinely handled — hashed, encrypted, or
+never bound — largely because `scoped.query` selects all columns and filters in JS.
+
 ## Limits of this measurement
 
 - Local `next start` on Node is **not** Vercel's Node runtime. This establishes the
