@@ -7,6 +7,7 @@ import type { InboxMessage, InboxThread } from '@/lib/server/inbox';
 
 import { MessageBody } from './MessageBody';
 import { NotesPanel } from './NotesPanel';
+import { DeleteThreadButton } from './DeleteThreadButton';
 import { ReplyComposer } from './ReplyComposer';
 import { StatusControl } from './StatusControl';
 
@@ -45,6 +46,13 @@ export function ThreadView({ thread, messages, replyFrom, replySubject }: Thread
             </p>
           </div>
           <StatusControl threadId={thread.id} current={thread.status} />
+          <DeleteThreadButton
+
+            threadId={thread.id}
+
+            participantEmail={thread.participantEmail}
+
+          />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Version:** 2026-08-10.1 · **Effective Date:** August 10, 2026 · *Supersedes version 2026-02-14.1*
+**Version:** 2026-09-07.1 · **Effective Date:** September 7, 2026 · *Supersedes version 2026-08-10.1*
 
 ---
 
@@ -216,6 +216,6 @@ If you have questions about these Terms of Service, please contact us at:
 
 ---
 
-*Version 2026-08-09.1 — last updated August 9, 2026.*
+*Version 2026-09-07.1 — last updated September 7, 2026.*
 
 *Version history is maintained in this document's revision record. When these terms are revised, the version identifier above changes and the prior version is noted as superseded.*

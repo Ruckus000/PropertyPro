@@ -1,6 +1,6 @@
 # Accessibility Statement
 
-**Version:** 2026-08-09.1 · **Effective Date:** August 9, 2026
+**Version:** 2026-09-07.1 · **Effective Date:** September 7, 2026
 
 ---
 
@@ -96,4 +96,4 @@ can look for an alternative or provide the information another way.
 
 ---
 
-*Version 2026-08-09.1 — last updated August 9, 2026.*
+*Version 2026-09-07.1 — last updated September 7, 2026.*

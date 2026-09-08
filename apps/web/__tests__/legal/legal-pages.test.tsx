@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
+
 import { renderMarkdown } from '../../src/lib/markdown';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -182,11 +184,17 @@ describe('Terms of Service content', () => {
   });
 
   it('includes the effective date and a version identifier', () => {
-    expect(termsContent).toContain('August 9, 2026');
+    // Symbolic, not literal. These asserted three hardcoded strings and broke on
+    // every bump, which is churn that teaches nothing — and the literals had
+    // already drifted from the file they describe. Whether the documents and the
+    // constant AGREE is now owned by legal-version-drift.test.ts; this case only
+    // asserts the identifiers are present and shaped correctly.
+    //
     // Versioning exists so we can prove WHICH terms a user accepted once §11's
     // "continued use is acceptance" clause is ever exercised. F-18.
-    expect(termsContent).toContain('**Version:** 2026-08-10.1');
-    expect(termsContent).toContain('Supersedes version 2026-02-14.1');
+    expect(termsContent).toContain(`**Version:** ${CURRENT_TERMS_VERSION}`);
+    expect(termsContent).toMatch(/\*\*Effective Date:\*\* [A-Z][a-z]+ \d+, \d{4}/);
+    expect(termsContent).toMatch(/Supersedes version \d{4}-\d{2}-\d{2}\.\d+/);
   });
 
   it('is no longer marked as draft', () => {
@@ -252,8 +260,8 @@ describe('Privacy Policy content', () => {
   });
 
   it('includes the effective date and a version identifier', () => {
-    expect(privacyContent).toContain('August 9, 2026');
-    expect(privacyContent).toContain('**Version:** 2026-08-09.1');
+    expect(privacyContent).toContain(`**Version:** ${CURRENT_TERMS_VERSION}`);
+    expect(privacyContent).toMatch(/\*\*Effective Date:\*\* [A-Z][a-z]+ \d+, \d{4}/);
   });
 
   // As with the Terms: the previous copy described a 30-day purge from backups
@@ -339,6 +347,6 @@ describe('Accessibility Statement content', () => {
   });
 
   it('carries a version identifier like the other legal documents', () => {
-    expect(accessibilityContent).toContain('**Version:** 2026-08-09.1');
+    expect(accessibilityContent).toContain(`**Version:** ${CURRENT_TERMS_VERSION}`);
   });
 });
