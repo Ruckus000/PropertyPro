@@ -632,3 +632,46 @@ Two things surfaced only in the doing:
 Consequence, stated for the record: a deadline can now land on a Saturday. That
 is the statute. The help content tells associations that post by mail to plan
 their own margin rather than have the product invent one.
+
+---
+
+## 11. The §9 residual is closed — #943 (recorded 2026-09-08)
+
+§9 ends with *"Residual, not fixed here: `users` lookups remain unscoped platform-wide
+(`getUserForInvitation`, `getResidentUserByEmail`, `getResidentUserById`), so a manager can still
+add an arbitrary known-email user to their own community."*
+
+That closed in `d6b6a230` (#943) and this document never said so, which is worth more than a
+tidy-up: a reader who believes it is open has one obvious move, and it is a regression.
+
+**The fix was a caller-side guard, not a predicate.** `apps/web/src/lib/services/user-linking.ts`
+— *"you may attach an existing user only if you can already read them"*: the actor must hold
+`residents:read` in some community the target belongs to. Wired into all three add-by-email
+paths, verified on main at `residents/route.ts:128` (hard 403),
+`onboarding-service.ts:99` (behind `POST /api/v1/residents/invite`) and
+`import-residents/route.ts:195` (soft-fails the row, not the import). Eleven cases in
+`apps/web/__tests__/services/user-linking.test.ts`, including fail-closed on auth-lookup error
+and refusing a shared community where the role lacks `residents:read`.
+
+**The three queries are still platform-wide, and must stay that way.** `users` has no
+`community_id`, so `hasTenantIsolation` returns false and `createScopedClient` cannot scope
+them — see the ⚠️ docblock on `getUserForInvitation`. Scoping them would break the person who
+owns units in two associations, and break the `public.users.id === auth.users.id` invariant that
+`access-request-service.ts:317-321` depends on. **Nothing would catch that**: all three call
+sites mock these functions at the route boundary, so the suite stays green while the
+two-association case silently breaks.
+
+**What #943 deliberately did not close** — recorded so it is not re-derived:
+
+- **Never-activated orphan rows stay claimable.** A conscious availability trade: `users.email`
+  is UNIQUE and resident removal hard-deletes only the role row, so refusing orphans would hand
+  any manager a way to permanently burn an arbitrary address.
+- **Enumeration.** The refusal itself confirms an address is registered.
+- **#944 is the genuinely open item** — *"one membership anywhere burns the address everywhere
+  else."* Its durable fix is an approve-the-link request flow: new schema, routes and UI, not a
+  predicate.
+- **`access-request-service.ts:322`** adopts an existing `users.id` platform-wide without the
+  guard. Not exploitable — the request must reach `pending`, which requires an OTP delivered to
+  the target's own mailbox — and the guard's semantics do not transfer, since there the reviewer
+  approves a request the *target* submitted. Defence-in-depth gap, not a hole; #946 hardened the
+  identity binding on that path without adding the guard.
