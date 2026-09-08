@@ -79,3 +79,49 @@ A database rebuilt from the current migration set diverges from production:
   Supabase's managed `auth` schema — a deliberate open decision.
 - The two `btree_gist` exclusion constraints above exist only in `_archive` and prod; the 0000
   squash dropped both the `CREATE EXTENSION` and the `EXCLUDE` clauses.
+
+---
+
+## Addendum — re-run 2026-09-08: the counts moved, the verdicts did not
+
+Re-ran `get_advisors(security)` against the same project. **Still zero ERROR-level
+findings.** Two accepted categories grew, because tables and functions landed after the
+original triage and nothing re-checked them against it:
+
+| Lint | Then (2026-07-27) | Now | Why it grew |
+|---|---|---|---|
+| `rls_enabled_no_policy` (0008, INFO) | 15 tables | **20** | `cron_runs` (0067), `support_inbox_threads`/`_messages` (0068), `conversion_events`, `demo_instances` |
+| `0028`/`0029` SECURITY DEFINER executable | 8 lints / 4 functions | **14 / 7** | three new functions, below |
+
+Both verdicts stand unchanged — **BY DESIGN** and **ACCEPTED** respectively. The new tables
+are platform-scoped with RLS enabled, forced, zero policies and `REVOKE ALL FROM anon,
+authenticated`, which is the same deny-everyone posture the 0008 section already describes.
+
+### The three SECURITY DEFINER functions added since
+
+| Function | Returns | Verdict |
+|---|---|---|
+| `pp_public_community_id_by_slug(text)` | `bigint` | **Intentional.** Public-site host resolution; `anon` must call it. |
+| `pp_public_community_id_by_domain(text)` | `bigint` | **Intentional.** Same, for custom domains. |
+| `pp_reject_demo_platform_admin()` | `trigger` | **Inert.** See below. |
+
+### Why no `REVOKE EXECUTE`, including on the trigger functions
+
+Two of the seven return `trigger` — `pp_reject_demo_platform_admin` (0069) and
+`sync_user_search_index`. The advisor reports them as callable by `anon` via
+`/rest/v1/rpc/…`, which is true of the **grant** and false of the **capability**. Verified
+by calling both directly as `postgres`, which holds EXECUTE:
+
+```
+sync_user_search_index          0A000  trigger functions can only be called as triggers
+pp_reject_demo_platform_admin   0A000  trigger functions can only be called as triggers
+```
+
+PostgreSQL refuses before the body runs, and a trigger firing does not consult the invoking
+role's EXECUTE. So revoking would silence four lints and change no capability.
+
+The remaining `pp_rls_*` helpers **must keep** `EXECUTE` for `authenticated`: RLS policies
+call them, and revoking would deny every policy that depends on one. That is the same
+reasoning `0039`'s header records; it is repeated here only because the count changed and a
+reader arriving at 14 warnings against a table listing 8 cannot otherwise tell a new problem
+from a known-accepted one.
