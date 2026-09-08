@@ -519,16 +519,11 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
  * bank's check.
  *
  * `hosted_invoice_url` is bearer-ish and is deliberately absent from every log
-<<<<<<< HEAD
- * call below. Sentry is covered too; see the note on
+ * call below. Sentry is covered too: `scrubServerEvent` deletes
+ * `event.request.data` unconditionally on both send hooks. Note the webhook
+ * body WAS reaching Sentry before that landed — see the corrected measurement
+ * in `scrub-server-event.ts` and the note on
  * `SendPaymentActionRequiredEmailOpts.authenticateUrl` (issue 951).
-=======
- * call below. Sentry's copy is handled separately: it does buffer the raw
- * request body (measured — docs/audits/sentry-request-body-capture-2026-09-08.md)
- * and `scrubServerEvent` now drops it on both send hooks (#951). What is NOT
- * covered is a failed DB query, whose bound parameters reach Sentry through
- * drizzle's error message and the console breadcrumbs; see the audit.
->>>>>>> eec55d5 (docs(sentry): measure whether bodies are captured — they are (#951))
  */
 async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice): Promise<void> {
   const rawSub = invoice.parent?.subscription_details?.subscription;

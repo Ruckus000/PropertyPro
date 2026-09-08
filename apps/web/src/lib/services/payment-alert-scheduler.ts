@@ -200,26 +200,20 @@ export interface SendPaymentActionRequiredEmailOpts {
    * message. `compliance_audit_log` matters most, being board-readable and
    * append-only, so a leak there would be permanent.
    *
-<<<<<<< HEAD
-   * Sentry is covered too, on two independent grounds (issue 951, measured on
-   * Node 20). App Router route handlers never reach the `req.on('data')` that
-   * @sentry/node-core proxies to buffer a body — undici drains the request via
-   * the async iterator — so the webhook payload was never captured in the first
-   * place. And `scrubServerEvent` now deletes `event.request.data`
-   * unconditionally, so this does not rest on that internal staying true.
-=======
-   * `@sentry/nextjs` DOES buffer incoming request bodies onto
-   * `event.request.data` — measured, not assumed, on this exact stack
-   * (docs/audits/sentry-request-body-capture-2026-09-08.md). `scrubServerEvent`
-   * deletes it unconditionally on both `beforeSend` and `beforeSendTransaction`,
-   * so the raw invoice JSON no longer leaves by that route (#951).
+   * Sentry is covered too (issue 951): `scrubServerEvent` deletes
+   * `event.request.data` unconditionally on both `beforeSend` and
+   * `beforeSendTransaction`, so the raw invoice JSON cannot leave that way.
    *
-   * Still true, and wider than #951: a FAILED DB QUERY carries its own bound
-   * parameters into Sentry via drizzle's `Failed query:` message — as a chained
-   * exception and as `console.error` breadcrumbs, neither of which
-   * `scrubServerEvent` touches. So this docblock is still not a guarantee that
-   * extends to Sentry; it is only a guarantee about the request body.
->>>>>>> eec55d5 (docs(sentry): measure whether bodies are captured — they are (#951))
+   * Do NOT read the earlier "route handlers never capture a body" reasoning as
+   * still standing — it was measured against a reconstruction that omitted
+   * middleware, and an end-to-end measurement on a production build showed a
+   * route handler arriving at Sentry with the body attached. The delete is the
+   * only thing holding this shut. See `scrub-server-event.ts`.
+   *
+   * Wider and NOT covered by that delete: a failed DB query carries its own
+   * bound parameters through drizzle's `Failed query:` message. The same module
+   * redacts those, but two sinks it cannot reach persist the text instead —
+   * `community_export_jobs.error_message` and `provisioning_jobs.error_message`.
    */
   authenticateUrl: string | null;
 }

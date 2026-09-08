@@ -130,6 +130,32 @@ One shape changed legitimately: `data.arguments[1]` is now a **string** rather t
 object with `.message`/`.stack`, because `error-handler.ts` now logs a redacted string
 instead of the Error object — which is what also removes the Vercel-runtime-log copy.
 
+## Reconciliation with PR #1098 (merged independently)
+
+PR #1098 closed #951 in parallel with this work, reaching the **opposite** conclusion on one
+point: that App Router route handlers never capture a body, because `NextRequestAdapter`
+hands the request to undici's async iterator. Its probe is correct about that path in
+isolation. It omitted **middleware**, which runs first: our matcher excludes only static
+assets, `next-server.js:1250` calls `cloneBodyStream()` for a request with a body, and
+`body-streams.js:87` is a literal `input.on('data', …)` — what the SDK proxies. That is why
+the end-to-end measurement above saw a route handler arrive with the body attached, and the
+reconstruction did not. The fix (an unconditional delete) is right either way; the reason
+recorded alongside it was not, and has been corrected in `scrub-server-event.ts`.
+
+#1098's server-action finding is correct and more valuable than this one: `updatePasswordAction`
+posts a plaintext password as a server-action body.
+
+## A limitation of this measurement that only surfaced later
+
+The Result-2 fix measured here was mine, and it had a hole the single probe could not see.
+`convertToPlainObject` spreads an Error's own enumerable properties, and `DrizzleQueryError`
+sets `this.params` — so the values also survive as an **array** at
+`breadcrumbs[].data.arguments[N].params`. A walk that redacts only string values skips it.
+The probe came back clean because the `error-handler.ts` change made that argument a
+redacted *string* on the probe path; the ~90 other console sites that log the raw Error
+object would still have carried it. Main's `delete crumb.data.arguments` closes it properly,
+and is what this branch now uses. **One probe on one path is not coverage of a class.**
+
 ## Limits of this measurement
 
 - Local `next start` on Node is **not** Vercel's Node runtime. This establishes the
