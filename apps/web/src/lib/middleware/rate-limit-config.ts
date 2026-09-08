@@ -96,6 +96,19 @@ const AUTH_RATE_LIMIT_PATHS = [
   '/api/v1/auth/password-reset',
   '/api/v1/auth/forgot-password',
   '/api/v1/auth/resend-verification',
+  /*
+   * Access-request OTP verification. This is a credential-guessing surface —
+   * six digits, ~900k values — and it sat in the `write` tier, which is 30/min
+   * AND in-memory per Edge isolate rather than Redis-backed, so the ceiling was
+   * whatever the isolate count made it. `auth` is 10/min per IP and IS in
+   * DISTRIBUTED_CATEGORIES, so the limit actually holds.
+   *
+   * Deliberately the /verify prefix and not '/api/v1/access-requests': the
+   * broader one also matches [id]/approve and [id]/deny, and the auth tier keys
+   * by IP, so it would throttle an admin working through a queue — and several
+   * admins behind one NAT would share the bucket.
+   */
+  '/api/v1/access-requests/verify',
   '/api/v1/reauth/verify',
   '/auth/login',
   '/signup',
