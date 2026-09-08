@@ -234,6 +234,23 @@ describe('POST /api/v1/webhooks/inbound-email', () => {
       });
     });
 
+    it('reports an UNCONFIGURED secret — the branch that used to be silent', async () => {
+      // This one failure reported nowhere. readiness/route.ts does check the
+      // secret, but it is not among the crons in vercel.json and a missing
+      // secret yields `degraded`, which returns HTTP 200 — so a status-code
+      // monitor sees green while every message to every address is held and
+      // then bounces together 24-72h later.
+      delete process.env.INBOUND_EMAIL_WEBHOOK_SECRET;
+
+      const response = await POST(request(VALID_BODY, 'anything'));
+
+      expect(response.status).toBe(429);
+      expect(captureException).toHaveBeenCalledTimes(1);
+      expect(captureException.mock.calls[0]?.[1]).toMatchObject({
+        tags: { component: 'inbound-email-webhook' },
+      });
+    });
+
     it('does not report a REJECTED signature to Sentry (control)', async () => {
       // A forged or stale signature is the caller's problem and is expected
       // during a key rotation. Paging on it would train the one operator to
