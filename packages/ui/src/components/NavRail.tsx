@@ -176,7 +176,6 @@ export function NavRail({
   collapsibleSections = false,
   sectionOpen,
   onSectionToggle,
-  sections: sectionsProp,
   groupSeparator,
   groupSeparatorAfterIndex,
 }: NavRailProps) {
