@@ -7,14 +7,16 @@
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { SUPPORT_MAILBOX_LABELS } from '@propertypro/shared';
 import type { Searcher } from '../search';
+import { sanitizeSearchTerm } from './sanitize';
 
 export const threadSearcher: Searcher = {
   key: 'threads',
   label: 'Threads',
   async search(q, limit) {
     const db = createAdminTypedClient();
-    // PostgREST `or` filter; `%` is the LIKE wildcard, the term is escaped of `,` and `%` below.
-    const term = q.replace(/[%,()]/g, ' ').trim();
+    // See sanitizeSearchTerm's docblock: this strips (not escapes) `_`, `%`
+    // and PostgREST's `or()` delimiters before they reach the ilike filter.
+    const term = sanitizeSearchTerm(q);
     const { data, error } = await db
       .from('support_inbox_threads')
       .select('id, subject, participant_email, participant_name, mailbox, status, last_message_at')

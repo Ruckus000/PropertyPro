@@ -1,0 +1,25 @@
+/**
+ * Shared sanitizer for the command-palette DB searchers (`communities.ts`,
+ * `threads.ts`, `users.ts`), each of which interpolates a user-typed term
+ * into a PostgREST `.or('col.ilike.%<term>%,...')` filter string.
+ *
+ * This is character-STRIPPING, not escaping: a stripped character is
+ * replaced with a space, not backslash-escaped, so `john_doe` becomes the
+ * search `"john doe"` rather than a literal-underscore search. Two
+ * characters this strips beyond PostgREST's own `,`/`(`/`)` filter-list
+ * delimiters:
+ *
+ * - `%` — Postgres ILIKE's multi-character wildcard.
+ * - `_` — Postgres ILIKE's single-character wildcard. Left unstripped, a
+ *   query for `john_doe` would also match `johnXdoe`, silently returning
+ *   rows the literal term never asked for.
+ *
+ * Returns `''` when the input is nothing but stripped characters (e.g.
+ * `"%%"`, `"()"`, `",,"`). Callers must never build an `ilike` pattern from
+ * an empty term — `%<empty>%` is just `%%`, which matches every row up to
+ * the query's limit. `searchAdmin` in `../search.ts` gates on this centrally
+ * so no searcher is ever invoked with such a term; see its docblock.
+ */
+export function sanitizeSearchTerm(raw: string): string {
+  return raw.replace(/[%_,()]/g, ' ').trim();
+}

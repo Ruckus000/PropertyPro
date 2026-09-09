@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { searchAdmin, type Searcher } from '@/lib/server/search';
+import { searchAdmin, SEARCHERS, type Searcher } from '@/lib/server/search';
 
 const stub = (key: Searcher['key'], hits: string[]): Searcher => ({
   key, label: key,
@@ -19,5 +19,28 @@ describe('searchAdmin', () => {
     const boom: Searcher = { key: 'threads', label: 'Threads', search: async () => { throw new Error('x'); } };
     const groups = await searchAdmin('sun', [boom, stub('clients', ['Sunset'])]);
     expect(groups.map((g) => g.key)).toEqual(['clients']);
+  });
+  it('SEARCHERS covers exactly the three DB-backed groups — no server-side "pages" duplicate', () => {
+    // Pages are static and client-only (AdminCommandPalette renders NAV_PAGES
+    // directly). A page searcher here would produce a second "Pages" heading
+    // alongside the palette's own client-side one for any query matching a
+    // nav label — see search.ts's docblock.
+    expect(SEARCHERS.map((s) => s.key).sort()).toEqual(['clients', 'people', 'threads']);
+  });
+  it('a term that sanitizes to nothing (all punctuation) returns no results and never reaches a searcher', async () => {
+    let called = false;
+    const spy: Searcher = {
+      key: 'clients',
+      label: 'Clients',
+      search: async () => {
+        called = true;
+        return [];
+      },
+    };
+    // "%%" clears the raw two-character minimum but strips to an empty term
+    // — without the guard this would reach a real searcher and build the
+    // ilike pattern `%%`, matching every row up to the limit.
+    expect(await searchAdmin('%%', [spy])).toEqual([]);
+    expect(called).toBe(false);
   });
 });
