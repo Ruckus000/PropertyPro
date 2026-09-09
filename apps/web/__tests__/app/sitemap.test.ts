@@ -152,6 +152,21 @@ describe('sitemap.ts', () => {
     expect(result).toEqual([]);
   });
 
+  // See the matching robots.ts case: `www` is reserved but is where production
+  // actually serves, so an empty sitemap there hid the entire marketing site.
+  it('lists marketing URLs on www, which is where production actually serves', async () => {
+    headersMock.mockResolvedValueOnce(new Headers({ host: 'www.getpropertypro.com' }));
+    resolveCommunityContextMock.mockReturnValueOnce({
+      source: 'host_subdomain',
+      tenantSlug: 'www',
+      isReservedSubdomain: true,
+      communityId: null,
+    });
+    const result = await sitemap();
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.map((entry) => entry.url)).toContain('https://www.getpropertypro.com/');
+  });
+
   it('lists marketing URLs on the root host', async () => {
     headersMock.mockResolvedValueOnce(new Headers({ host: 'getpropertypro.com' }));
     resolveCommunityContextMock.mockReturnValueOnce({
