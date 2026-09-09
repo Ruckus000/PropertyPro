@@ -2,54 +2,41 @@
 
 **Opened:** 2026-09-01, from the pre-launch audit.
 **Scope:** things that must be true before real Florida associations are onboarded.
+**Last re-verified end-to-end:** 2026-09-09 — every command below was re-run, every
+issue re-checked, every count re-measured.
 
-Items **1–5 are environment, DNS, or a dashboard action** — none is a code change.
-The code is in good shape: 25/25 guards, ~12,155 unit tests green, clean production build
-of both apps as of `aabf9727`.
+**One blocker is open: item 1, the Stripe live cutover.** It is a dashboard and
+key-rotation task, not code. Items 2–7 are resolved and collapsed below.
 
-Items **6–7 are the exception**: two Website Editor feature gaps promoted to blockers on
-2026-09-02. They are code, not config, and they are sequenced last for that reason.
+The code is in good shape: the `guard:*` suite passes **29/29** (measured 2026-09-09,
+`pnpm lint`), and ~12,155 unit tests plus a clean production build of both apps were
+green at `aabf9727`.
 
-An **Engineering backlog** was folded into the end of this file on 2026-09-07 — the
-engineering debt, coverage gaps and open GitHub items that were previously scattered
-across five unreconciled trackers. **None of it blocks launch**, and it is placed below
-the deliberate-non-blockers list so it cannot be mistaken for the checklist above. It
-carries a re-measure command beside every number, and none of those commands was run
-against a built tree; read that section's method note before acting on a row.
+The through-line of everything here is that it fails **silently**. None of it crashes
+anything; each degrades or no-ops while dashboards stay green. That is why it needs a
+checklist rather than a bug tracker.
 
-> **6 and 7 merged 2026-09-04 — but 7 did not WORK in production until 2026-09-05.**
-> #1031 (notify on publish), #1032 (announcement expiry, migration `0064`) and #1037
-> (scheduled publishing, migration `0065`) are all merged, and **both migrations are
-> applied to production** with drizzle ledger rows recorded by hand.
+> **How this file stays true — the rule that failed, and why.** It already said "do not
+> promote an assumption to a fact without re-running the named command", and on
+> 2026-09-09 a re-verification found ~20 stale or self-contradictory claims. The rule was
+> not the problem. **814 lines was.** Nobody re-reads that, so nothing is re-run.
 >
-> **A grep proving code exists is not evidence it runs**, and this entry previously said
-> "DONE" on that basis. Item 7 shipped **non-functional**: every raw statement in
-> `site-publish-schedule-service` bound a JS `Date` into a `sql` template, which
-> postgres-js cannot serialise, so `/api/v1/internal/scheduled-site-publish` returned
-> **500 on all ~96 daily runs from the moment it shipped**, and no schedule could even be
-> armed — `site_publish_schedules` held zero rows. Fixed in #1042 (2026-09-05). Item 6 was
-> unaffected: the manual publish route calls `notifyResidentsOfSitePublish` directly and
-> never touches the schedule service.
+> Three habits caused all of it, and the file is now shaped to make them hard:
 >
-> **The ledger note below is a RED HERRING — do not start there.** The production ledger
-> is out of numeric order — `0063 → 0066 → 0064 → 0065` — because another session applied
-> `0066` in between. That is true and harmless, and it was the first hypothesis for the
-> #1042 outage because it makes a missing column look plausible. It was wrong:
-> `lease_expires_at` is present in production, verified against `information_schema`. The
-> ordering does still mean the ledger's newest `created_at` belongs to `0066`, and
-> `drizzle-kit migrate` only applies migrations stamped after the newest applied one.
+> 1. **Do not restate a fact another system owns.** GitHub issue state, an age in days, a
+>    count a `guard:` or baseline file owns. Link to it; the link renders the truth. B3
+>    called #747 "open — a job known to be failing" when it was closed *and* had ~29
+>    consecutive green nights.
+> 2. **When an item closes, delete its body — do not update it.** A closed item's problem
+>    statement is where staleness lives. Items 5, 6 and 7 each drifted into contradicting
+>    their own status lines. Move anything durable to the code, a runbook, or
+>    `docs/audits/` first; those are the homes that outlive this file.
+> 3. **Stamp every measurement with a date or a SHA.** A dated measurement is true
+>    forever. A present-tense claim about another system is true only until it changes.
 >
-> **#1033 became #1037**: merging #1031 with `--delete-branch` auto-closed the PR stacked
-> on top of it, and a closed PR's base cannot be retargeted, so the commits were replayed
-> onto `main` under a new number.
-
-The through-line is that all of these fail **silently**. None crashes anything; each
-degrades or no-ops while dashboards stay green. That is why they need a checklist rather
-than a bug tracker.
-
-> **Status discipline:** each item says what is *verified* and what is *assumed*. Do not
-> promote an assumption to a fact without re-running the named command — several entries
-> below exist because an earlier doc did exactly that.
+> None of this is enforced. There is no guard, deliberately: this repo already has two
+> unwired documentation linters, and one of them validates a file *this* document lists
+> as stale.
 
 ---
 ## 1. Stripe is not cut over to live — checkout cannot take real money
@@ -60,16 +47,23 @@ than a bug tracker.
 earlier revision of this entry said was impossible:
 
 ```bash
-curl -sg "https://www.getpropertypro.com/_next/static/chunks/app/(public)/signup/checkout/page-*.js" \
+chunk=$(curl -s https://www.getpropertypro.com/signup/checkout \
+  | grep -oE '/_next/static/[^"]+signup/checkout/page-[a-f0-9]+\.js' | head -1)
+curl -sg "https://www.getpropertypro.com$chunk" \
   | grep -oE 'pk_(test|live)_[A-Za-z0-9]{6}'
-# -> pk_test_51Syt6
+# -> pk_test_51Syt6      (re-run 2026-09-09)
 ```
 
-The 2026-09-04 check that concluded "not present in the served bundle" looked at
-the page HTML and the shared chunks. The key is read inside a `'use client'`
-component (`signup/checkout/page.tsx`) that Stripe.js loads lazily, so it is
-inlined into the **route** chunk — reachable only by extracting the chunk path
-from the HTML first.
+The key is read inside a `'use client'` component (`signup/checkout/page.tsx`)
+that Stripe.js loads lazily, so it is inlined into the **route** chunk, whose hash
+changes every build. The path therefore has to be read out of the HTML first — which
+is why the 2026-09-04 check, looking at the page HTML and the shared chunks, concluded
+it was "not present in the served bundle".
+
+> A fixed URL cannot work here, and `curl -g` *disables* globbing, so the `page-*.js`
+> form an earlier revision of this block printed returns **404**. It shipped with
+> output pasted from a different invocation that had worked. Re-run a command before
+> printing it; a transcript beside it is not evidence that the line above produced it.
 
 So this is the benign case: **checkout works and takes no money.** It is
 scheduled work, not an outage. (The urgent case — live keys against the test
@@ -124,395 +118,62 @@ read the table — the exit code is always 1. Then a real card, per runbook §6.
 
 ---
 
-## 2. `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` is unset in production
-
-**Status:** CLOSED — measured 2026-09-08. The secret is set in production and at least
-16 characters. · **Owner:** —
-
-> **How this was established, since nobody recorded fixing it.** The first run of
-> `.github/workflows/production-health.yml`
-> ([run 34181966758](https://github.com/Ruckus000/PropertyPro/actions/runs/34181966758))
-> reported `readiness status: healthy`. That is deductive, not circumstantial:
-> `readiness/route.ts:104` puts `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` in `secretRules`,
-> `:186` computes `secretsOk` as *every* rule passing, and `:190` makes `healthy` require
-> `secretsOk`. There is no path to `healthy` with this secret missing or short.
->
-> The item below is kept because the failure it describes is real and silent, and would
-> return the moment the variable is cleared — the signer returns `null` rather than
-> throwing, so nothing would tell you.
-
-**The problem this described, for when it recurs:**
-
-While the variable was unset, every announcement, notification, digest and
-calendar-reminder email shipped a **login-walled** unsubscribe URL while still sending `List-Unsubscribe-Post: One-Click`.
-The mail advertises RFC 8058 one-click unsubscribe and cannot honour it. Gmail and Yahoo's
-bulk-sender rules treat that as a failed unsubscribe, making it a **deliverability** problem
-and not only a compliance one.
-
-Why it is silent: the signer returns `null` rather than throwing (deliberate — an unset var
-must not take down every association's mail), so
-`buildCommunityEmailUnsubscribeUrl` falls back to `/settings?communityId=…`, which sits in
-`PROTECTED_PATH_PREFIXES`. The send succeeds and nothing reports it.
-
-Affects four senders: `announcement-delivery`, `notification-service`,
-`notification-digest-processor`, `calendar-event-reminder-service`. Snowbird and
-insurance-alert unsubscribes are unaffected — their secrets are set.
-
-```bash
-openssl rand -hex 32
-vercel env add COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET production --no-sensitive
-```
-
-> **`--no-sensitive` is not optional.** `vercel env add` marks a variable Sensitive by
-> default, `vercel pull` writes it back as the literal string `[SENSITIVE]`, and
-> `deploy.yml` runs pull-then-build. The deployed HMAC key would become a publicly-known
-> constant and anyone could forge an unsubscribe token for any recipient — **worse than
-> leaving it unset.** Match the Encrypted type `SNOWBIRD_UNSUBSCRIBE_SECRET` uses.
-> See [`DEPLOYMENT.md`](DEPLOYMENT.md) §4.1.
-
-Then **redeploy** — env changes do not reach the running deployment on their own.
-
-**Verify, in this order:**
-
-1. Readiness probe — cheap, needs no send. `checks.community_email_unsubscribe_secret`
-   must read `pass`. This also catches the `[SENSITIVE]` mistake by accident: that string
-   is 11 characters, under the 16 floor, so it fails rather than reporting green over a
-   compromised key.
-2. An actual outgoing email carrying `?token=…` rather than `/settings?communityId=…` —
-   the end-to-end proof.
-
-**Probing the unsubscribe endpoint proves nothing:** a bogus token returns 400 whether the
-secret is set or not, because the verifier returns `null` in both cases.
-
----
-
-## 3. No MX record — `support@getpropertypro.com` bounces
-
-**Status:** CLOSED 2026-09-07 — mail delivers AND reaches the admin Inbox ·
-**Owner:** —
-
-> **Measured in production 2026-09-07, not inferred:**
->
-> ```
-> dig getpropertypro.com MX +short   →  0 mx1.forwardemail.net.
->                                       0 mx2.forwardemail.net.
-> apex TXT                           →  6 aliases carrying webhook URLs
-> support_inbox_messages             →  3 rows (2 inbound, 1 outbound),
->                                       normalization_status = ok on all three,
->                                       15:06 → 16:02 UTC
-> ```
->
-> The outbound row matters as much as the inbound ones: it means a reply sent
-> from `/inbox` went back out through Resend, so the loop closes rather than
-> merely ingesting. Item 4 (DMARC) is closed with this one.
-
-**The last thing standing was a plan tier, not code.** Forward Email's free
-plan sends webhooks **unsigned** — `helpers/get-settings.js` populates
-`webhookKey` only inside `if (domain && domain.plan !== 'free')`, and
-`helpers/on-data-mx.js` attaches `X-Webhook-Signature` only
-`if (recipient.webhookKey)`. Our ingress fails closed, so it answered 401, and
-Forward Email then failed the **entire SMTP delivery** — the sibling
-catch-all forward included. A webhook that 401s does not just miss the portal;
-it eats the message.
-
-**Resolved by upgrading to Enhanced Protection** ($3/mo, unlimited domains),
-the cheapest of the three options weighed in `docs/DEPLOYMENT.md` §5.5.
-Signatures now arrive and the code works unchanged — nothing was modified to
-accommodate this.
-
-> **Do not downgrade this domain to the free plan.** Nothing in our code would
-> change, no test would redden, and no alert would fire — inbound mail would
-> simply start failing closed again, silently, exactly as it did before. That
-> is the whole reason the source analysis above is kept rather than deleted
-> along with the blocker.
-
-**What is live:** an ingress at `POST /api/v1/webhooks/inbound-email`
-(HMAC-verified, fails closed) and an **Inbox** in the admin console at
-`/inbox` — threads, triage, internal notes, and replies sent from the mailbox
-the thread arrived on. Replies go out through Resend, which is DKIM-verified.
-
-Two details worth preserving, because both were expensive to learn and neither
-is visible from the records themselves:
-
-- The alias routing TXT **must** carry `?raw=false&attachments=false`. A single
-  ~900 KB attachment otherwise exceeds Vercel's 4.5 MB body cap and the message
-  vanishes with no log line.
-- **If the webhook is broken when mail arrives, nothing is lost:** it returns
-  429, Forward Email temp-fails the SMTP session with a 421, and the sender's
-  own mail server holds and retries for 24–72 hours. That window only helps if
-  somebody notices, so it does not replace the monitor in item 5.
-
----
-
-## 4. No DMARC record
-
-**Status:** CLOSED 2026-09-07 — record live at `p=none`; ratchet still open ·
-**Owner:** you (one DNS edit, after a week of reports)
-
-> **Verified 2026-09-07:** `dig _dmarc.getpropertypro.com TXT +short` returns a
-> `v=DMARC1; p=none; pct=100;` record with `rua=` pointed at Postmark's DMARC
-> Digests, as recommended below. The record Postmark generates also carries
-> `sp=none; aspf=r` and omits `fo=1`; that is fine at `p=none` — but see the
-> `sp=` note below before ratcheting, because it does not stay fine at
-> `p=quarantine`.
->
-> **Re-verified 2026-09-08.** Record unchanged and still live. Also confirmed at
-> the same time: `resend._domainkey.getpropertypro.com` is published on the
-> **apex**, which is what makes the absent apex SPF a non-issue — a DKIM key is
-> scoped to domain + selector, so DMARC passes on DKIM alignment alone for every
-> apex `From`. The apex carries no `v=spf1` record at all (only Forward Email
-> routing TXT), and that remains correct rather than an oversight.
->
-> **The one thing left is not a blocker but should not be forgotten:** `p=none`
-> observes and enforces nothing. Read a week of digests, then ratchet to
-> `p=quarantine`. Doing that before reading the reports is how legitimate mail
-> starts silently going to spam.
->
-> **Reviewed 2026-09-07 — do not ratchet yet, and do not add `fo=1`.**
->
-> `fo=1` was considered and rejected: RFC 7489 makes failure-report options
-> meaningful only alongside a `ruf=` destination, Postmark's DMARC Digests is an
-> aggregate (`rua`) service, and the major receivers largely do not send failure
-> reports at all. Pointing `ruf=` at our own inbox is wrong for the same reason
-> this item already rejects `rua=mailto:dmarc@getpropertypro.com`. It would look
-> like progress and change nothing.
->
-> **`sp=none` protects nothing here.** Every `From:` in the codebase is on the
-> **apex** — `noreply@` (`packages/email/src/send.ts`, and `RESEND_FROM` is
-> unset in production so that fallback is what ships) plus `support@` /
-> `privacy@` / `contact@` (`packages/shared/src/support-inbox.ts`).
-> `send.getpropertypro.com` is only Resend's envelope MAIL FROM, which is not
-> what `p=`/`sp=` key off. So `p=quarantine` would govern **100%** of outbound.
->
-> **But `sp=none` is an opt-OUT, not an omission, and must be ratcheted with
-> `p=`.** Those are different things in RFC 7489: with `sp` absent, subdomains
-> inherit `p`; with `sp=none` present, they are exempt from whatever `p` says.
-> So `p=quarantine; sp=none` would still leave `From: billing@mail.getpropertypro.com`
-> entirely unenforced — the spoofing shape a ratchet is meant to close. Since no
-> legitimate `From` is on a subdomain (the paragraph above is what establishes
-> that), tightening `sp` alongside `p` costs nothing and is free coverage. Either
-> drop `sp=` so it inherits, or set it explicitly; Postmark's generated record
-> ships `sp=none` by default, so this will not fix itself.
->
-> Note this is unrelated to the HTTP subdomain reservations added in #1103.
-> Those govern which hostnames a tenant may serve; nothing stops a spoofer
-> writing an unowned subdomain into a `From:` header, and DMARC resolves that by
-> falling back to the organizational domain's `sp=`.
->
-> **Password reset is the one path to establish, and it has TWO outcomes — only
-> one of them is a problem.**
-> `apps/web/src/lib/auth/password-reset.ts` calls
-> `supabase.auth.resetPasswordForEmail`, so Supabase composes and sends that
-> message; it never touches the DKIM-aligned Resend pipeline. The asymmetry is
-> deliberate elsewhere: `signup.ts` uses `generateLink` *"so that Supabase does
-> NOT send its default confirmation email."* That was never applied here.
->
-> But "outside our pipeline" is not the same as "will break":
->
-> - **Default Supabase SMTP** — the `From` is a Supabase-owned domain, so *our*
->   DMARC record never applies to it and ratcheting cannot affect it at all.
->   Not a blocker.
-> - **Custom SMTP configured to send as `@getpropertypro.com`** — our record
->   does apply, and without an SPF include and DKIM key at the apex for that
->   provider, `p=quarantine` starts quarantining password resets. This is the
->   only failing case.
->
-> An earlier revision of this entry called password reset "the casualty
-> candidate" without that split, which reads as a blocker when it is a coin
-> whose second face is harmless. Establish which one it is before treating it
-> as either.
->
-> **Three preconditions, none answerable from the repo** (the Supabase
-> management API exposes no SMTP config):
->
-> 1. Supabase Dashboard → Auth → SMTP. If custom SMTP is on with an apex
->    `From`, every password reset quarantines unless that provider gets an SPF
->    include and a DKIM key at the apex.
-> 2. Resend Dashboard → Domains: confirm the **apex** is verified, not only
->    `send.`.
-> 3. Read one delivered message's `Authentication-Results` for
->    `dkim=pass header.d=getpropertypro.com` and `dmarc=pass`.
->
-> **Preconditions 2 and 3 are now satisfied**, by a real delivered reply
-> captured in #1067:
->
-> ```
-> dkim=pass  header.i=@getpropertypro.com header.s=resend
-> spf=pass   smtp.mailfrom=…@send.getpropertypro.com
-> dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=getpropertypro.com
-> ```
->
-> Scope that correctly. It is **one message, to one Gmail recipient, from
-> `support@`** — not a corpus. It does generalise across everything Resend
-> sends, because a DKIM key is scoped to the DOMAIN and the selector, not to a
-> `From` address: `resend._domainkey.getpropertypro.com` signs `noreply@` the
-> same way it signed `support@`. What it cannot speak to is any path that does
-> not go through Resend — which is exactly precondition 1, and why that one is
-> the whole remaining question.
->
-> Then a week of digests, then ratchet. Note
-> `specs/phase-1-compliance-core/28-email-infrastructure.md` specifies a `mail.`
-> subdomain and `p=quarantine`; neither ever shipped, so it is not precedent.
-
-The original finding, kept for the reasoning: `_dmarc.getpropertypro.com` was
-absent at the authoritative nameserver.
-
-```
-_dmarc  TXT  v=DMARC1; p=none; rua=mailto:<id>@dmarc.postmarkapp.com; fo=1
-```
-
-**Point `rua=` at Postmark's free DMARC Digests**, not at an address on this
-domain. Aggregate reports arrive as gzipped XML attachments — exactly the
-payload class the inbound webhook deliberately does not store — so
-`rua=mailto:dmarc@getpropertypro.com` would deliver them somewhere that drops
-them. Postmark's service needs no account and no mailbox and emails a weekly
-summary: https://dmarc.postmarkapp.com/
-
-Start at `p=none`, read a week of reports, then ratchet to `quarantine`.
-
-The rest of email auth is already correct — DKIM (`resend._domainkey`) is live
-and `send.getpropertypro.com` carries both SPF (`v=spf1 include:amazonses.com ~all`)
-and the feedback MX. Note that `docs/DEPLOYMENT.md` §5.4 previously claimed an
-apex SPF and a `p=quarantine` DMARC that never existed; that section has been
-corrected.
-
-**Verify:** `dig _dmarc.getpropertypro.com TXT +short`.
-
----
-
-## 5. Nothing polls the readiness probe
-
-**Status:** PARTIALLY CLOSED 2026-09-08 — `.github/workflows/production-health.yml`
-polls readiness, cron-health and both `/api/health` endpoints twice daily and fails
-the run on `degraded`/503. Verified by dispatch the same day
-([run 34181966758](https://github.com/Ruckus000/PropertyPro/actions/runs/34181966758)):
-all four probes green. · **Owner:** you, only if you want a real uptime service with
-escalation
-
-> **Correction.** This item briefly claimed the workflow needed
-> `READINESS_CHECK_SECRET` added as a repository secret. It has been one since
-> **2026-04-24**. The claim came from §3 of `DEPLOYMENT.md`, whose table does not list
-> it — the table is incomplete, not authoritative. Fixed there in the same change.
-
-> **What it does not give you.** No escalation, no history, no on-call routing — a
-> failure is a red run and whatever email GitHub sends. It runs on GitHub rather
-> than as a Vercel cron deliberately: a cron watching crons shares the failure mode
-> it exists to detect, and the seventeen that died in 2026-08 would have taken their
-> own monitor down with them. Twice daily rather than every 15 minutes because
-> Actions minutes are constrained (#976) and these failures are slow.
-
-> **Update (cron alerting):** the same monitor should now also poll
-> `/api/v1/internal/cron-health`, which returns 503 when any scheduled job has not
-> succeeded inside its own window. That is the only check that catches a job which
-> STOPPED RUNNING — failure alerting cannot, because a 401'ing cron throws `AppError`
-> and never reaches Sentry, which is exactly how all seventeen stayed dead behind a
-> green dashboard in 2026-08. One monitor setup now covers readiness, `/api/health`
-> and cron freshness.
->
-> Safe to wire as of 2026-09-07: the probe used to report 503 for
-> `generate-assessments`, a monthly job whose last real run predated the
-> `cron_runs` table, and would have until 2026-10-01. A monitor pointed at a
-> probe that is red by construction teaches whoever watches it to ignore the
-> alert. Migration 0070 gave the probe a grace window measured from when it
-> first knew about a job, so a 503 now means something.
-
-`/api/v1/internal/readiness` now reports nine secrets plus email delivery, and it is
-callable in production today — both `READINESS_CHECK_SECRET` and `CRON_SECRET` are set, so
-there is no prerequisite to arrange. But **nothing reads it**, so it cannot tell anyone
-anything.
-
-```bash
-curl -H "Authorization: Bearer $READINESS_CHECK_SECRET" \
-  https://www.getpropertypro.com/api/v1/internal/readiness
-```
-
-Point an uptime monitor at it: 200 `healthy` / 200 `degraded` / 503 `unhealthy`. Alert on
-`degraded`, not only on 503 — the whole point is that a missing secret keeps serving
-traffic.
-
-> **Correction (2026-09-04):** an earlier version of this item said to *add* `/api/health`
-> on both apps. It already exists — `apps/web/src/app/api/health/route.ts` and the admin
-> equivalent. Only the polling is missing.
-
-**The first run reported `healthy`** (2026-09-08), which is what closed item 2 — see
-there. An earlier version of this line told you to expect `degraded`; that was true
-when written and is not now.
-
----
-
-## Feature blockers — Website Editor
-
-Promoted from the *Website Editor Feature Gap Audit* (25 July 2026) on 2026-09-02, after
-reconciling that audit against `main`. Its three P0 gaps and all five UX-audit risks are
-already shipped; these two P1s are the ones judged to matter before real associations
-onboard. Unlike items 1–5, these are engineering work.
-
----
-
-## 6. Publishing the site notifies nobody
-
-**Status:** ✅ DONE — merged 2026-09-04 (#1031) · **Source:** gap audit G-05
-
-A publish updates the public site and tells no one. Residents do not poll a website. The
-platform already holds the resident roster and a working email channel — DKIM and SPF are
-live (items 3–4 are about the *inbound* address) — so the missing piece is one opt-in step
-on the publish sheet, not a notification system.
-
-Why this outranks its P1 label: the product is sold against a statutory clock, and the
-clock is about residents *being informed*. A §718 notice posted where nobody looks meets
-the letter and misses the point. The first association to notice will notice during a real
-notice.
-
-Scope: an "Email residents about this update" checkbox with an editable one-line summary,
-offered when the publish includes an announcement. Not a newsletter product.
-
-**Verify (absent today):**
-
-```bash
-grep -rn "notifyResidents" apps/web/src | grep -vi package
-```
-
-Returns nothing. Note the filter: the only `notifyResidents*` symbol in the tree is
-`notifyResidentsOfPackage` in `lib/services/package-visitor-service.ts`, which is package
-delivery and unrelated. An unfiltered grep reads as a false positive and scores this done.
-
----
-
-## 7. Nothing can be scheduled; only urgent notices expire
-
-**Status:** ✅ DONE — merged 2026-09-04 (#1032 expiry, #1037 scheduling), but scheduling was
-**non-functional in production until #1042** (2026-09-05) · **Source:** gap audit G-07
-
-Half shipped, and the missing half is the half on a statutory clock. Urgent notices carry
-an `expiresAt` — it shipped alongside the mobile fast path — so a pool-closure notice can
-take itself down. But there is **no scheduled publish and no announcement expiry**: meeting
-materials that must appear a fixed number of days before a meeting depend on someone
-remembering, and every seasonal notice is removed by hand.
-
-Scope: per-publish "go live at…", and per-announcement expiry — the authoring-side
-complement to the time-window filtering the public feed sections already perform.
-
-**Verify:**
-
-```bash
-# expiry exists — for urgent notices only
-grep -n "expiresAt" apps/web/src/app/api/v1/pm/site/urgent-notice/contract.ts
-# scheduled publishing — the symbols this repo ACTUALLY uses. The earlier form of this
-# line grepped `scheduledPublishAt|goLiveAt`, names that appear nowhere in the tree, so
-# it kept returning nothing after the feature shipped and read as "still missing".
-grep -rl "scheduleSitePublish" apps/web/src
-```
-
-Existence is not function — #1042 is exactly that gap. To check it still **runs**, look at
-the worker rather than the source:
-
-```bash
-# 200 = healthy. A 500 here is the worker down again; read the `[cause]` chain, not the
-# "Failed query: <SQL>" wrapper, which names a statement Postgres may never have seen.
-vercel logs "$(vercel inspect getpropertypro.com 2>&1 |
-  grep -oE 'property-pro-[a-z0-9]+-[a-z0-9-]+\.vercel\.app' | head -1)" --json |
-  grep scheduled-site-publish | head -3
-```
+## Resolved
+
+**Item numbers are load-bearing — nothing here is renumbered.** Four places outside this
+file cite them: `.github/workflows/production-health.yml:20`,
+`apps/web/src/app/api/v1/internal/cron-health/route.ts:28`,
+`docs/runbooks/cron-alerting.md:103`, and
+`packages/db/migrations/0070_cron_runs_first_observed_at.sql:14` — all "item 5".
+
+The problem statements these items were opened with are **deleted, not updated**. Where
+the reasoning was worth keeping it was moved somewhere that outlives this file, and the
+line says where.
+
+- **2. `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` unset** — closed 2026-09-08. Established
+  deductively, since nobody recorded fixing it: readiness returns `healthy`, and
+  `readiness/route.ts:190` cannot reach `healthy` unless every `secretRules` entry passes
+  (`:104`, `:186`). Confirmed again by the scheduled run on 2026-09-09.
+
+- **3. No MX record — `support@` bounced** — closed 2026-09-07. Mail delivers and reaches
+  the admin Inbox. `dig getpropertypro.com MX +short` → `mx1`/`mx2.forwardemail.net`;
+  six aliases route to the webhook. **The reasoning lives in
+  [`DEPLOYMENT.md`](DEPLOYMENT.md) §5.5, kept in full** — including the measured finding
+  that Forward Email's *free* plan sends webhooks unsigned, our ingress fails closed, and
+  the whole SMTP delivery dies with it. That section carries the do-not-downgrade
+  tripwire; no test would catch a regression.
+
+- **4. No DMARC record** — closed 2026-09-07. Live at `p=none`, `rua=` to Postmark DMARC
+  Digests. Verified unchanged 2026-09-09.
+  **Open tail:** `p=none` enforces nothing. The digest window closes **~2026-09-14**;
+  read a week of reports first, then ratchet. Per #1104, ratchet `p=` **and `sp=`
+  together** — `sp=none` is an opt-*out*, not an omission, so `p=quarantine; sp=none`
+  leaves every subdomain `From:` unenforced. One DNS edit, yours.
+
+- **5. Nothing polls the readiness probe** — closed 2026-09-08.
+  `.github/workflows/production-health.yml` polls readiness, cron-health and both
+  `/api/health` twice daily (`0 7,19 * * *`) and fails the run on `degraded`/503. It now
+  runs **on schedule, not just by dispatch** — runs `34223418769`, `34281183441`,
+  `34349295881` (2026-09-09 12:08Z), all green. It runs on GitHub rather than as a Vercel
+  cron deliberately: a cron watching crons shares the failure mode it exists to detect.
+  **Open tail:** no escalation, no history, no on-call routing — a failure is a red run
+  and whatever email GitHub sends. Only worth closing if you want a real uptime service.
+
+- **6. Publishing the site notified nobody** — closed 2026-09-04 (#1031). A publish can
+  now email residents with a one-line summary; `notifyResidentsOfSitePublish` at
+  `apps/web/src/lib/services/site-publish-notification.ts:105`, called from
+  `api/v1/pm/site/publish/route.ts:83`.
+
+- **7. Nothing could be scheduled; only urgent notices expired** — merged 2026-09-04
+  (#1032 expiry, #1037 scheduling) but **non-functional until #1042** on 2026-09-05: every
+  raw statement bound a JS `Date` into a `sql` template, which postgres-js cannot
+  serialise, so the cron 500'd ~96×/day and no schedule could be armed. The `ts()` helper
+  at `site-publish-schedule-service.ts:82-84` carries the rationale, and
+  `guard:no-date-in-raw-sql` now prevents the class.
+
+> **A grep proving code exists is not evidence it runs.** Item 7 was marked DONE on that
+> basis while it had never once succeeded in production. That is why each line above
+> names the thing that *ran*, not the thing that merged.
 
 ---
 
@@ -541,11 +202,14 @@ scattered across `docs/audits/2026-07-18-refactor-audit-and-cleanup-roadmap.md`,
 root-level `PHASE*_EXECUTION_PLAN.md` files, `docs/issues/`, `specs/`, and the GitHub
 issue tracker, each with its own date and none of them reconciled against the others.
 
-**Method, and its limits.** Every number below is a static measurement taken at
-`ddf3469` with the command printed beside it. **No test, guard, lint or build was run** —
-`node_modules` was absent in the container that produced this. So this section can tell
-you what the tree *contains*; it cannot tell you what *passes*. Read a row that says a
-count grew as "this program is not progressing", never as "this is broken".
+**Method, and its limits.** Every number below is a static measurement taken at the
+commit named in its column header, with the command printed beside it. Read a row that
+says a count grew as "this program is not progressing", never as "this is broken".
+
+The original pass could run nothing — `node_modules` was absent in the container that
+produced it — so it could say what the tree *contained*, never what *passed*. That gap is
+now closed for the guards: **29/29 pass**, re-measured 2026-09-09 via `pnpm lint`. The
+unit-test and e2e counts are still un-rerun and stay stamped at `aabf9727`.
 
 Baselines in the "2026-07-18" column are quoted from the refactor audit's §1 headline
 table and are like-for-like: route counts are scoped to `apps/web/src/app/api/v1`
@@ -560,14 +224,13 @@ than the day they were written down, one is flat, and the two that improved impr
 because a *different* program (the admin design migration) was actively worked. This is
 the part of this section that argues for doing something.
 
-| Program | 2026-07-18 | 2026-09-07 | |
+| Program | 2026-07-18 | 2026-09-07 @ `ddf3469` | |
 |---|---|---|---|
 | Uncontracted routes (`KNOWN_UNCONTRACTED_ROUTES`) | 37 of 257 | **46 of 284** | ⬆ · **ceiling pinned 2026-09-07** |
-| `contract.ts` declaring `tenantScope` | 12 | **15** | flat |
+| `contract.ts` declaring `tenantScope` | 12 | **15** | ⬆ (the column said “flat”; 12→15 is growth) |
 | Contracted routes still hand-calling `resolveEffectiveCommunityId` | 121 | **148** | ⬆ · unratcheted (ceiling removed on review — see below) |
 | `apps/web/src/middleware.ts` | 994 LOC | **1,318 LOC** | ⬆ 33% |
 | `lib/services/finance-service.ts` | 2,410 LOC | **2,548 LOC** | ⬆ |
-| Hook sources with no same-named test file | ~28 of 98 | **38 of 111** | ⬆ |
 | Design-token baseline | 1,650 in 76 files | **1,019 in 84 files** | ⬇ (admin drain) |
 | `scripts/page-padding-baseline.json` | — | **`{}`** | clean |
 
@@ -581,6 +244,14 @@ grep -rl "runRoute(" apps/web/src/app/api --include=route.ts \
   | xargs grep -lE 'resolveEffectiveCommunityId\s*\(' | wc -l                      # 148
 wc -l apps/web/src/middleware.ts apps/web/src/lib/services/finance-service.ts
 ```
+
+> **The `ddf3469` column is a dated measurement, not a current one.** Re-measured
+> 2026-09-09: middleware.ts is **1,332** LOC, finance-service.ts **2,554**, the
+> design-token baseline **1,017 across 83 files**. Everything else in the table is flat —
+> the contract ceiling is holding at 46. The two LOC rows are the only things that grew,
+> which is what this section predicted would happen when it declined to add LOC ceilings.
+> The hook-coverage row was dropped: it printed no command, and two independent attempts
+> to reproduce it disagreed (110 vs 111 hooks).
 
 238 contracted + 46 allowlisted = 284, so the allowlist is exactly the uncontracted set
 and the guard is telling the truth about coverage. What it cannot tell you is that **the
@@ -615,11 +286,9 @@ oversight.
 | Gap | Measured |
 |---|---|
 | E2E blocks never exercised on a PR | **13 of 45** — 5 Stripe signup (own workflow, needs secrets), 6 tenant-host (need `:3002`), 2 `onboarding-first-run` `test.fixme`. **Not measured here** — block counts need `playwright test --list`; quoted from `CLAUDE.md` and `docs/audits/2026-08-03-e2e-inventory.md`. What *is* measured: 15 spec files exist, and `apps/web/e2e/ci-safe-specs.json` names 8 of them with `expectedTestCount: 29` |
-| `verify-*` guards with a same-named fixture test under `scripts/__tests__/` | **9 of 40** |
+| `verify-*` guards with a same-named fixture test under `scripts/__tests__/` | **11 of 41** (2026-09-09; was 9 of 40) |
 | `verify-no-mocks-in-integration.ts` `LEGACY_ALLOWLIST` — comment says it "should shrink to zero" | **16 entries** |
-| Hook sources with no same-named test | **38 of 111** |
 | `it.todo` chaos scenarios, `__tests__/api/revenue-snapshot-chaos.test.ts` | **7** — duplicate same-day snapshot, 3-day cron gap, backdated Stripe webhook, DST fallback, TZ boundary, grace boundary, future-dated `created_at` |
-| `it.skip` placeholders citing "Phase 3", `feature-flag-enforcement.integration.test.ts` | **2** — Phase 3 closed 2026-02-22; these describe work that was never scoped and will never be written as stated. Delete them |
 
 `onboarding-first-run.spec.ts` deserves its own line, because it is not a coverage gap —
 it is a **contradiction between the spec and the product, unresolved since 2026-08-03.**
@@ -633,20 +302,32 @@ passing, and leaving it `test.fixme` records the disagreement without settling i
 the 4-step wizard is still wanted (then it is a feature, and belongs above this line) or
 it is not (then delete the spec and the phase-2 spec section together).
 
-## B3. Open on GitHub, 2026-09-07
+## B3. Open on GitHub
 
-**The four ~27-day issues are addressed (2026-09-07); three remain.** PR #1067 merged as
-`225dd58` while this section was being written, which is why the line about it is gone.
+**[#526](https://github.com/Ruckus000/PropertyPro/issues/526) — Site-assets quota +
+lifecycle, 3 deferred findings that need design — is the only open issue in the repo**
+(`gh issue list --state open`, 2026-09-09).
 
-| Item | Age | Status |
-|---|---|---|
-| ~~#956 ARC withdraw skips `requireActiveSubscriptionForMutation`~~ | 26d | **Documented, not changed.** The exemption is deliberate — gating withdraw would strand the row in `submitted` with no way out for either side. Noted in the route's docblock and at the call site |
-| ~~#951 Sentry may buffer raw Stripe webhook bodies~~ | 27d | **Fixed and MEASURED.** `scrubServerEvent` drops `request.data` (plus URLs, and headers case-insensitively) on all four server/edge configs, wired to **both** `beforeSend` and `beforeSendTransaction`. The issue's closing precondition is met: bodies **are** attached (`event.request.data` arrived as the raw body string on a production build — [audit](audits/sentry-request-body-capture-2026-09-08.md)), so the drop is load-bearing. The audit also found a **wider leak of the same data that this fix does not cover** — drizzle's `Failed query:` error carries its bound parameter values into Sentry via the chained exception and `console.error` breadcrumbs. Filed as #1092, and **now fixed and closed**: `redactQueryParams` redacts the bound values in `exception.values[]` and in console breadcrumbs, re-measured on a live envelope (canary 4 → 0, event still delivered with its SQL intact). Three residuals are recorded on the closed issue — the export-job column still shows the PM raw SQL, `invitations.token` is still plaintext at rest, and ~90 other `console.error` sites still reach Vercel logs |
-| ~~#950 meetings POST runs `assertNotDemoGrace` before authenticating~~ | 27d | **Fixed, and the title was wrong.** Not unauthenticated: `/api/v1` is in `PROTECTED_PATH_PREFIXES`, so middleware 401s first. The real gap was a pre-auth unscoped PK read for an authenticated caller |
-| #947 Access-request OTP cap / orphan auth accounts | 27d | **Part 1 closed, by reverting.** The attempt cap was made to survive a resend and then reverted: because a resend also refreshes the expiry, preserving the count let anyone hold any address in a permanent lockout. Brute force is bounded by the Redis-backed auth tier instead — which `/verify` reached via #1096, not here. **Part 2 measured, not automated** — production was audited by direct read-only query (below); what remains is a per-row deletion decision a human has to make, not a script |
-| #771 Wave 4 follow-up: full Next/Back step-wizard for signup (B4) | 56d | open |
-| #747 Nightly Demo Reset failing | 76d | open — a job known to be failing |
-| #526 Site-assets quota + lifecycle: 3 deferred findings need design | 102d | open |
+> **This section used to restate issue state, and that is what rotted.** It said "three
+> remain" and described #747 as *"open — a job known to be failing"*. #747 closed
+> 2026-09-08, and its last failure was **2026-08-09** with ~29 consecutive green nights
+> since — so that row was false on the day it was written, not merely stale later.
+> [#771](https://github.com/Ruckus000/PropertyPro/issues/771) also closed 2026-09-08, as
+> `NOT_PLANNED`. Issue state lives on GitHub; link to it rather than copying it here.
+
+Everything the ~27-day batch (#947, #950, #951, #956) established is recorded on the
+issues themselves. Two findings from it are worth keeping here because they are *not*
+recorded anywhere a reader of this file would look:
+
+- **#951 residuals, still open.** `scrubServerEvent` drops Sentry request bodies and
+  `redactQueryParams` redacts drizzle's bound parameters, both re-measured on a live
+  envelope. Three things it does **not** cover: the export-job column still shows the PM
+  raw SQL, `invitations.token` is still plaintext at rest, and ~90 other `console.error`
+  sites still reach Vercel logs.
+- **#956 is a deliberate exemption, not an oversight.** ARC withdraw skips
+  `requireActiveSubscriptionForMutation` on purpose — gating it would strand the row in
+  `submitted` with no way out for either side. Recorded in the route docblock and at the
+  call site.
 
 > **#947 part 2 — MEASURED against production 2026-09-07, and the issue's premise does not
 > hold.** The audit's queries were run read-only via Supabase MCP (the script itself needs
@@ -690,10 +371,12 @@ delete — but nothing in the repo says so, which is why it is written here.
 
 ## B4. Code that is a stub rather than a feature
 
-- **Nothing is wired to analytics.** Five call sites `console.info('[analytics] …')`
-  behind `// TODO: wire to analytics service` — `components/operations/operations-hub.tsx`
-  (×3), `(authenticated)/maintenance/submit/page.tsx`,
-  `(authenticated)/maintenance/inbox/page.tsx`. There is no analytics service; those
+- **Nothing is wired to analytics.** **Seven** call sites `console.info('[analytics] …')`
+  behind **five** `// TODO: wire to analytics service` comments —
+  `components/operations/operations-hub.tsx` (×5), `(authenticated)/maintenance/submit/page.tsx`,
+  `(authenticated)/maintenance/inbox/page.tsx`. (This row said "five call sites"; five is
+  the count of TODO *comments*. Re-measured 2026-09-09; it was wrong at authorship, not
+  drifted.) There is no analytics service; those
   events go nowhere. Decide whether the product wants them, or delete the calls — a
   `console.info` in production reads as instrumentation to the next person and is not.
 - ~~`packages/shared/src/http/request-context.ts:20` — `x-tenant-id` fallback marked for
@@ -711,9 +394,7 @@ The most expensive item in this section, because it is what agents and new reade
 
 | Where | Says | Actually |
 |---|---|---|
-| ~~`.claude/rules/tenant-isolation.md:26`~~ | ~~`ADMIN_ROLES: board_member, board_president, cam, site_manager, property_manager_admin`~~ | **FIXED 2026-09-07.** Replaced with a *Roles in a Scoped Query* section stating the real value (`['manager']`), the v3 three, the `isAdminRole`/`isElevatedRole` predicates, and that board status is a `designation`, not a role |
-| `CLAUDE.md` (api-patterns) | "233 routes contracted; 40 grandfathered" (2026-08-09) | 238 / 46 |
-| This file's header | "25/25 guards" (2026-09-01) | 29 `guard:*` scripts exist today. Whether they pass was not measured here |
+| ~~`.claude/rules/tenant-isolation.md:26`~~ | ~~`ADMIN_ROLES: …`~~ | **FIXED 2026-09-07.** Replaced with a *Roles in a Scoped Query* section stating the real value (`['manager']`), the v3 three, the `isAdminRole`/`isElevatedRole` predicates, and that board status is a `designation`, not a role |
 | `IMPLEMENTATION_PLAN.md` (164 KB, repo root) | "PR #33 … ready to merge to `main`" | The repo is past #1072. Historical; so are the four `PHASE*_EXECUTION_PLAN.md` files beside it |
 | `docs/gtm/03-LAUNCH-READINESS.md` | B1–B4 blockers | Already called stale above |
 
@@ -770,36 +451,30 @@ root exits 2 — that last one was a real defect the probe found, since pass 1's
 > `// cam can do X` still lands silently. The guard also does not scan `scripts/`,
 > which is pre-existing for both passes.
 
-**Three things were deliberately NOT changed, and are the open remainder:**
+**Two things were deliberately NOT changed, and are the open remainder.** (A third —
+the user-facing error string in `lib/onboarding/wizard-common.ts` — was fixed in #1101;
+that line now reads *"Only a property manager or root manager can modify wizard state"*.)
 
-1. **`lib/onboarding/wizard-common.ts:33`** — a *user-facing* error string, not a comment:
-   `'Only board members, CAMs, and property managers can modify wizard state'`. It ships a
-   retired word to end users and names board members, whom the role-only check grants
-   nothing. Copy change, possibly with a snapshot test — its own decision.
-2. **The `use-role-management.ts` over-fetch.** Fixing the inverted comment does not fix
+1. **The `use-role-management.ts` over-fetch.** Fixing the inverted comment does not fix
    the behaviour: the hook still pulls the whole roster and partitions client-side, for a
    reason that no longer exists. A server-side `roles` filter works today. That is a
    behaviour change, not a comment fix.
-3. **`packages/db/migrations/_archive/0023` and `0024`** still assert `requireAdminRole`
+2. **`packages/db/migrations/_archive/0023` and `0024`** still assert `requireAdminRole`
    and the retired names in the present tense. They are frozen historical artifacts;
    rewriting archived SQL is worse than leaving it. Recorded so the next reader does not
    re-open them.
 
-### A dead triplet found in the same sweep
+### A dead triplet found in the same sweep — deleted 2026-09-08 (#1101)
 
-`apps/web/src/hooks/use-residents.ts` exports `ADMIN_ROLES_PARAM =
-'board_member,board_president,cam,site_manager,property_manager_admin'` and sends it as
-`?roles=` to `GET /api/v1/residents`, which validates every entry against
-`COMMUNITY_ROLES` and throws `ValidationError` on the first one. **It would 400 on every
-call.** It does not, because nothing calls it: `useResidents` has exactly one consumer,
-`components/maintenance/AssignmentModal.tsx`, and nothing renders that modal
-(`residents-page-client` uses a different hook). Hook, constant and modal are all dead —
-DC-03 territory.
+`use-residents.ts`, its test, and `components/maintenance/AssignmentModal.tsx` were dead:
+the hook sent a retired `?roles=` list that `GET /api/v1/residents` would have rejected
+with a 400 on every call, and nothing rendered the only consumer. Its unit test **pinned
+the broken value**, so the suite was green *because* the string was wrong — worth
+remembering as a shape, which is why this line survives the deletion.
 
-What keeps it invisible is the unit test: `hooks/__tests__/use-residents.test.tsx:36` is
-`expect(ADMIN_ROLES_PARAM).toBe('board_member,…')`. It **pins the broken value**, so the
-suite is green *because* the string is wrong. Deleting the triplet is the fix; whoever
-wires that modal up instead will get a 400 and no assignee list.
+> `ADMIN_ROLES_PARAM` now appears **only inside this file**. When that is true of a
+> symbol, the doc is the last thing in the repo referring to something that no longer
+> exists, and the row should go with it.
 
 The `tenant-isolation.md` line was fixed in the same change that added this section. The
 rest is one question, not five: **`docs/` holds ~50 top-level files plus `audits/`, `specs/`,
