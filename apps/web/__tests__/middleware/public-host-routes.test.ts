@@ -23,6 +23,7 @@ import {
   METADATA_FIRST_SEGMENTS,
   PATH_PUBLIC_SUFFIXES,
   PROTECTED_PATH_PREFIXES,
+  shouldCanonicaliseSignupHost,
 } from '@/lib/middleware/public-host-routes';
 
 describe('isPublicSitePath', () => {
@@ -200,5 +201,57 @@ describe('classifySubdomainPath', () => {
     expect(classifySubdomainPath('/About-Us')).toBe('app');
     expect(classifySubdomainPath('/-leading-hyphen')).toBe('app');
     expect(classifySubdomainPath('/manifest.webmanifest')).toBe('app');
+  });
+});
+
+/**
+ * `/signup` belongs on exactly one hostname. Before this, the wildcard served
+ * the genuine signup form on every label anyone typed — `mail.`, `pm.`, a real
+ * tenant subdomain, or a string nobody has registered (verified in production
+ * 2026-09-09). These cases pin the two exemptions that are load-bearing rather
+ * than the whole matrix.
+ */
+describe('shouldCanonicaliseSignupHost', () => {
+  const ROOT = 'getpropertypro.com';
+
+  it.each([
+    ['mail.getpropertypro.com', '/signup'],
+    ['pm.getpropertypro.com', '/signup'],
+    ['sunset-condos.getpropertypro.com', '/signup'],
+    ['zzz-nobody-registered.getpropertypro.com', '/signup'],
+    ['mail.getpropertypro.com', '/signup/checkout'],
+    ['mail.getpropertypro.com', '/signup/verify'],
+  ])('canonicalises %s%s', (host, path) => {
+    expect(shouldCanonicaliseSignupHost(path, host, ROOT)).toBe(true);
+  });
+
+  // www is where production actually serves — the apex 307s to it. Redirecting
+  // it would loop. This is the single most important case in the block.
+  it.each(['getpropertypro.com', 'www.getpropertypro.com', 'localhost:3000', '127.0.0.1:3000'])(
+    'leaves the canonical host %s alone',
+    (host) => {
+      expect(shouldCanonicaliseSignupHost('/signup', host, ROOT)).toBe(false);
+    },
+  );
+
+  // FOREIGN hosts are not ours to redirect: preview deployments would break on
+  // every PR, and a verified community custom domain is not under our root.
+  it.each([
+    'property-pro-web-abc123-ruckus000s-projects.vercel.app',
+    'www.example.com',
+    'sunsetcondos.com',
+  ])('leaves the foreign host %s alone', (host) => {
+    expect(shouldCanonicaliseSignupHost('/signup', host, ROOT)).toBe(false);
+  });
+
+  it('ignores non-signup paths, even on a redirectable host', () => {
+    for (const path of ['/', '/dashboard', '/auth/login', '/pm/dashboard/communities']) {
+      expect(shouldCanonicaliseSignupHost(path, 'mail.getpropertypro.com', ROOT)).toBe(false);
+    }
+  });
+
+  // The prefix must not over-match: `/signupfoo` is not part of the funnel.
+  it('does not match a path that merely starts with the word signup', () => {
+    expect(shouldCanonicaliseSignupHost('/signupfoo', 'mail.getpropertypro.com', ROOT)).toBe(false);
   });
 });

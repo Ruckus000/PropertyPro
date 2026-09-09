@@ -108,3 +108,60 @@ requirement is held by comments at the call sites and by this note, not by an as
 `verify-email-content` tests do guard the two `router.push` sites: they assert
 `window.location.assign`, and `useRouter` is deliberately absent from their `next/navigation` mock,
 so reintroducing `router.push` fails loudly rather than passing.
+
+---
+
+# Addendum — host handling, 2026-09-09
+
+Closing the "no host hardening" item above turned up a larger defect and one
+narrower fix. Recorded here because both start from the same root confusion:
+`RESERVED_SUBDOMAINS` mixes names **nobody should serve** (`mail`,
+`autodiscover`) with names **we serve ourselves** (`www`, `pm`, `app`, `login`),
+and different parts of the codebase read the list to mean different things.
+
+## 1. The marketing site was de-indexed (fixed)
+
+Production 307s the apex to `www`, `www` is in the reserved list, and
+`robots.ts` answered `disallow: '/'` for reserved hosts with `sitemap.ts`
+returning `[]` — on the only host anyone reaches. Live since #883 (2026-07-30);
+`www` was in the original ten-entry list, so #1103 did not cause it.
+
+Fixed by having both files consult `isApexHost`, which already encoded
+"apex or www or localhost is us" for middleware and was the one piece of
+host-policy code they never used.
+
+**Do not fix this by flipping the Vercel redirect to `www → apex`.** It needs no
+code and matches what the docs claimed, but the apex redirects *everything*
+including `/api`, so it breaks `production-health.yml` (`curl -fsS`, no `-L`)
+and the Forward Email inbound webhook, whose URL is a live DNS TXT record
+pointing at `www`. See `docs/DEPLOYMENT.md` §5.1.
+
+## 2. `/signup` was served on every hostname (fixed)
+
+Nothing on the request path ever rejected a label — the reserved flag only
+*suppresses* tenant resolution (`middleware.ts:672` is an empty block;
+`:844`/`:1072`/`:1125` only skip work), and the sole enforcement is
+`signup.ts:70`, at slug-claim time. So the genuine signup form was served, 200,
+on `mail.`, on `pm.`, on any tenant's subdomain, and on labels nobody has
+registered — each minting a `.getpropertypro.com`-scoped session.
+
+`shouldCanonicaliseSignupHost` now 307s `/signup*` to the canonical origin.
+Two exemptions are load-bearing and must not be "simplified" away:
+
+- **`isApexHost`** spares apex, `www`, `localhost`, `127.0.0.1`. `www` is where
+  production serves, so redirecting it would loop.
+- **The under-root test** spares FOREIGN hosts — `*.vercel.app` previews and
+  verified community custom domains. Removing it redirects every PR preview of
+  the signup flow to production.
+
+307 rather than 308: browsers cache a permanent redirect hard, and which host is
+canonical is still unsettled (see `DEPLOYMENT.md` §5.1).
+
+## 3. Deliberately still not done
+
+A blanket host gate for all app-class paths. `pm.getpropertypro.com/pm/dashboard/…`
+is a live authenticated surface pinned by
+`apps/web/__tests__/auth/middleware-no-tenant-redirect.test.ts:142-148`, and
+`admin.getpropertypro.com` is a separate Vercel project that never reaches this
+middleware at all. The reserved list cannot be read as "not us" without breaking
+our own surfaces — which is exactly the mistake that produced defect 1.

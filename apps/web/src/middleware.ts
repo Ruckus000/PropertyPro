@@ -60,6 +60,7 @@ import {
   classifySubdomainPath,
   HOST_NATIVE_PUBLIC_SUFFIX_ROUTES,
   isApexHost,
+  shouldCanonicaliseSignupHost,
   isPublicSitePath,
   METADATA_FIRST_SEGMENTS,
   parsePathBasedPublicRoute,
@@ -538,6 +539,18 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const pathPublic = parsePathBasedPublicRoute(pathname);
   if (pathPublic && isApexHost(request.headers.get('host'), rootDomain)) {
     return NextResponse.redirect(buildCommunityUrl(pathPublic.slug, pathPublic.path), 308);
+  }
+
+  // Collapse the signup funnel onto one hostname. 307 rather than 308: browsers
+  // cache a permanent redirect hard, and which host is canonical is a decision
+  // we may revisit. `search` must be carried — `signupRequestId` lives there,
+  // and losing it drops the user onto the missing-session screen.
+  if (shouldCanonicaliseSignupHost(pathname, request.headers.get('host'), rootDomain)) {
+    const canonical = new URL(
+      `${pathname}${request.nextUrl.search}`,
+      getWebAppOriginFromEnv(),
+    );
+    return NextResponse.redirect(canonical, 307);
   }
 
   const origin = request.headers.get('origin');
