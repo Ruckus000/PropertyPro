@@ -6,23 +6,31 @@
  * hooks (controllable `mutateAsync`) plus `next/navigation`, and drive the
  * poll/cooldown timers with fake timers.
  *
- * Behavior asserted (unchanged from pre-drain):
+ * Behavior asserted:
  * - Poll fires confirm immediately + every POLL_INTERVAL_MS (5000ms)
- * - confirm success (data.success) → router.push to /signup/checkout
- * - resend 409 alreadyVerified → router.push to /signup/checkout
+ * - confirm success (data.success) → FULL PAGE navigation to /signup/checkout
+ * - resend 409 alreadyVerified → FULL PAGE navigation to /signup/checkout
  * - resend 429 → cooldownSeconds set from cooldownRemainingSeconds + countdown
  * - resend success → showResent true then false after 4000ms
  * - resend other non-OK → exact error literal
  * - intervals cleared on unmount
+ *
+ * The two navigation cases assert `window.location.assign`, NOT `router.push`,
+ * and that is the point of them rather than an implementation detail. Checkout
+ * invokes a Server Action on mount, and Server Action ids are build-coupled, so
+ * a client-side navigation would hand it the ids from whatever bundle THIS page
+ * loaded with — stale after any deploy, and it fails silently. `useRouter` is
+ * deliberately absent from the `next/navigation` mock below, so reintroducing
+ * `router.push` fails loudly instead of passing.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, cleanup } from '@testing-library/react';
 
-const pushMock = vi.fn();
+const assignMock = vi.fn();
 const searchParams = new URLSearchParams();
 
+// No `useRouter`: the component must not navigate through the client router.
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushMock }),
   useSearchParams: () => searchParams,
 }));
 
@@ -41,8 +49,15 @@ function setParams(entries: Record<string, string>) {
   for (const [k, v] of Object.entries(entries)) searchParams.set(k, v);
 }
 
+let originalLocation: string & Location;
+
 beforeEach(() => {
-  pushMock.mockReset();
+  assignMock.mockReset();
+  originalLocation = window.location as string & Location;
+  // @ts-expect-error — replace for assertion
+  delete window.location;
+  // @ts-expect-error — minimal stub
+  window.location = { assign: assignMock };
   confirmMutateAsync.mockReset();
   resendMutateAsync.mockReset();
   confirmMutateAsync.mockResolvedValue({ ok: false, status: 400, body: {} });
@@ -58,6 +73,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.runOnlyPendingTimers();
   vi.useRealTimers();
+  window.location = originalLocation;
   cleanup();
 });
 
@@ -83,7 +99,7 @@ describe('VerifyEmailContent — poll', () => {
     expect(confirmMutateAsync).toHaveBeenCalledTimes(2);
   });
 
-  it('navigates to /signup/checkout when confirm reports success', async () => {
+  it('confirm success → full page navigation to checkout, not router.push', async () => {
     confirmMutateAsync.mockResolvedValue({
       ok: true,
       status: 200,
@@ -93,7 +109,7 @@ describe('VerifyEmailContent — poll', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(pushMock).toHaveBeenCalledWith(
+    expect(assignMock).toHaveBeenCalledWith(
       '/signup/checkout?signupRequestId=sr-1',
     );
   });
@@ -111,7 +127,7 @@ describe('VerifyEmailContent — poll', () => {
 });
 
 describe('VerifyEmailContent — resend', () => {
-  it('409 alreadyVerified → router.push to checkout', async () => {
+  it('409 alreadyVerified → full page navigation to checkout, not router.push', async () => {
     resendMutateAsync.mockResolvedValue({
       ok: false,
       status: 409,
@@ -129,7 +145,7 @@ describe('VerifyEmailContent — resend', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(pushMock).toHaveBeenCalledWith(
+    expect(assignMock).toHaveBeenCalledWith(
       '/signup/checkout?signupRequestId=sr-1',
     );
   });

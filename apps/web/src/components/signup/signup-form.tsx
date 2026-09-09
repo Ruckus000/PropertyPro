@@ -259,12 +259,21 @@ export function SignupForm({
           <p className="text-sm font-medium text-status-success">Email verified successfully.</p>
           <p className="mt-1 text-sm text-content-secondary">Your email has been confirmed. Proceed to checkout to activate your community.</p>
         </div>
-        <Link
+        {/*
+          A plain anchor, deliberately — NOT `<Link>`. `/signup/checkout` invokes
+          the `createCheckoutSession` Server Action on mount, and Server Action
+          ids are baked into the JS bundle at build time. A client-side
+          navigation would carry this page's bundle, which may be many deploys
+          old by the time someone clicks here, and the action would fail
+          silently on the payment step. See the `enterCheckout` docblock in
+          verify-email-content.tsx for the full mechanism.
+        */}
+        <a
           href={`/signup/checkout?signupRequestId=${encodeURIComponent(verificationState.signupRequestId)}`}
           className="block w-full rounded-md bg-interactive px-4 py-2.5 text-center text-sm font-semibold text-content-inverse hover:bg-interactive-hover"
         >
           Proceed to Checkout
-        </Link>
+        </a>
       </div>
     );
   }

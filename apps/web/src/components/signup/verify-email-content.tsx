@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
   useConfirmVerification,
   useResendVerification,
@@ -14,9 +14,35 @@ const DEFAULT_COOLDOWN_SECONDS = 120;
 // can still resend / continue manually from the surfaced hint.
 const MAX_POLLS = 60;
 
+/**
+ * Enter checkout with a FULL DOCUMENT LOAD — never `router.push` or `<Link>`.
+ *
+ * `/signup/checkout` invokes the `createCheckoutSession` Server Action from a
+ * mount effect, and Server Action ids are baked into the JS bundle at build
+ * time. A client-side navigation carries whatever bundle THIS page loaded with,
+ * and this is the "wait for your verification email" step — precisely where a
+ * tab sits idle. Production ships 8-18 times a day, and every deploy rotates
+ * those ids.
+ *
+ * The failure is silent, which is why it is worth a comment this long. Next
+ * does not throw for a programmatic action it cannot find; it answers 404 +
+ * `x-nextjs-action-not-found` (`action-handler.js`, "expected to occasionally
+ * happen"), the client router throws `UnrecognizedActionError`, and the
+ * checkout page's `.catch` flattens it to "Failed to start checkout." Nothing
+ * reaches Sentry. The user is told to try again on the payment step, having
+ * been given no way to.
+ *
+ * A document load re-fetches the bundle, so the ids are always current. The
+ * cost is one page load on a once-per-signup transition into a payment page.
+ */
+function enterCheckout(signupRequestId: string): void {
+  window.location.assign(
+    `/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`,
+  );
+}
+
 export function VerifyEmailContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const signupRequestId = searchParams.get('signupRequestId') ?? '';
   // Masked email passed as query param from the signup form (already masked, safe to expose).
   const maskedEmail = searchParams.get('email') || null;
@@ -51,9 +77,7 @@ export function VerifyEmailContent() {
         if (payload.data?.success) {
           setVerified(true);
           if (pollRef.current) clearInterval(pollRef.current);
-          router.push(
-            `/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`,
-          );
+          enterCheckout(signupRequestId);
         }
       } catch {
         // Network error — keep polling silently
@@ -79,7 +103,7 @@ export function VerifyEmailContent() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [signupRequestId, verified, router, confirmVerification]);
+  }, [signupRequestId, verified, confirmVerification]);
 
   // Cooldown tick
   useEffect(() => {
@@ -120,9 +144,7 @@ export function VerifyEmailContent() {
         // Already verified — redirect to checkout
         const payload = response.body;
         if (payload.data?.alreadyVerified) {
-          router.push(
-            `/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`,
-          );
+          enterCheckout(signupRequestId);
           return;
         }
       }
@@ -153,7 +175,7 @@ export function VerifyEmailContent() {
     } finally {
       setIsResending(false);
     }
-  }, [signupRequestId, isResending, cooldownSeconds, router, resendVerification]);
+  }, [signupRequestId, isResending, cooldownSeconds, resendVerification]);
 
   // Missing signupRequestId
   if (!signupRequestId) {
