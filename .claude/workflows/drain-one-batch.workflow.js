@@ -1,5 +1,5 @@
 // Per-batch pipeline for the A1 contract-drain automation.
-// Spec: docs/superpowers/specs/2026-06-02-a1-drain-automation-design.md
+// Spec: .claude/skills/drain-loop.md
 //
 // Invoked by:
 //   - drain-loop.workflow.js (the outer loop, one call per batch)

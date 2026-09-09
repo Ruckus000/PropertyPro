@@ -6,7 +6,10 @@
  * provisioning_jobs stub at status='initiated', then awaits this state machine
  * so Stripe can retry if provisioning fails before completion.
  *
- * State machine contract (PHASE2_EXECUTION_PLAN.md):
+ * State machine contract — enforced by the `status` / `last_successful_status`
+ * CHECK constraints on `provisioning_jobs`
+ * (packages/db/migrations/0000_nappy_guardian.sql:792-793), which is what
+ * rejects a value outside this sequence:
  *   community_created → user_linked → checklist_generated →
  *   categories_created → preferences_set → email_sent → completed
  *
@@ -58,7 +61,7 @@ import {
 } from '@/lib/services/stripe-webhook-service';
 
 // ---------------------------------------------------------------------------
-// State machine constants — must match PHASE2_EXECUTION_PLAN.md exactly
+// State machine constants — must match the provisioning_jobs CHECK constraints
 // ---------------------------------------------------------------------------
 
 const STEP_SEQUENCE = [

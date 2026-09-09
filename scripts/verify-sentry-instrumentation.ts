@@ -214,7 +214,7 @@ function main(): void {
       console.log(`  [${p.app}] ${p.message}`);
     }
     console.log(
-      '\nRefer to docs/audits/sentry-no-data-investigation-2026-05-06.md ' +
+      '\nRefer to docs/audits/sentry-observability-2026-05-06.md ' +
         'for the original incident.',
     );
     process.exit(1);

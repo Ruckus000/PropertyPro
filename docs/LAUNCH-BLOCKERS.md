@@ -294,7 +294,8 @@ oversight.
 it is a **contradiction between the spec and the product, unresolved since 2026-08-03.**
 Both blocks wait on `data-testid="condo-onboarding-wizard"`. `git log -S condo-onboarding-wizard`
 (re-run 2026-09-07) puts that identifier in three files ever — the spec itself,
-`docs/audits/2026-08-03-e2e-inventory.md`, and `docs/spec-bundle/SPECIFICATIONS_COMPLETE.md`.
+and `docs/audits/2026-08-03-e2e-inventory.md` (a third, `docs/spec-bundle/`, was deleted
+2026-09-09 as a fossil).
 It has never appeared in `apps/web/src`, and `grep -rn condo-onboarding-wizard apps/web/src`
 returns 0 today. The shipped
 `/onboarding/condo` is a different, 2-step wizard. So the spec has never been capable of
@@ -395,7 +396,6 @@ The most expensive item in this section, because it is what agents and new reade
 | Where | Says | Actually |
 |---|---|---|
 | ~~`.claude/rules/tenant-isolation.md:26`~~ | ~~`ADMIN_ROLES: …`~~ | **FIXED 2026-09-07.** Replaced with a *Roles in a Scoped Query* section stating the real value (`['manager']`), the v3 three, the `isAdminRole`/`isElevatedRole` predicates, and that board status is a `designation`, not a role |
-| `IMPLEMENTATION_PLAN.md` (164 KB, repo root) | "PR #33 … ready to merge to `main`" | The repo is past #1072. Historical; so are the four `PHASE*_EXECUTION_PLAN.md` files beside it |
 | `docs/gtm/03-LAUNCH-READINESS.md` | B1–B4 blockers | Already called stale above |
 
 **The same defect ran far wider than the rule file, and `guard:legacy-roles` could not
@@ -477,12 +477,18 @@ remembering as a shape, which is why this line survives the deletion.
 > exists, and the row should go with it.
 
 The `tenant-isolation.md` line was fixed in the same change that added this section. The
-rest is one question, not five: **`docs/` holds ~50 top-level files plus `audits/`, `specs/`,
-`superpowers/specs/`, `agent-tasks/` and `gtm/`, with overlapping and differently-dated
-backlogs.** Every count in the table above drifted because it was written down twice.
+rest was one question, not five: **`docs/` held overlapping, differently-dated backlogs across
+too many places.** Every count in the table above drifted because it was written down twice.
 
-That is the argument against this section, stated so it is not skipped: folding the
-backlog in here makes *this* file the fifty-first place a number can go stale. The reason
+**Acted on 2026-09-09:** 101 files were deleted — `agent-tasks/`, `spec-bundle/`, the root
+`IMPLEMENTATION_PLAN.md` and `PHASE*_EXECUTION_PLAN.md`, `AGENT.md`, and 60 of 68
+`superpowers/plans/` that were all-unchecked task lists for shipped work — together with the
+1,858 lines of tooling whose only job was validating them. `docs/` now holds 28 top-level
+files. Dated records (`audits/`, `adr/`, `specs/`, `agent-prompts/`) were deliberately left
+alone: a record cannot go stale, and one of them is cited 114 times from source.
+
+That was the argument against this section, stated so it is not skipped: folding the
+backlog in here makes *this* file one more place a number can go stale. The reason
 to do it anyway is that this file is the only one in the repo with a status discipline —
 "say what is verified and what is assumed" — and a re-measure command beside every claim.
 **Re-run the commands before trusting a row. If a row is stale, fix it or delete it; do
