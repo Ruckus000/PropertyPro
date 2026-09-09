@@ -32,9 +32,9 @@ canonical shape.
 
 ## Route Contracts (`runRoute()` from `@propertypro/api-contract`)
 
-Plan A1 lane. **233 routes contracted; 40 grandfathered files remain** on the
+Plan A1 lane. **238 routes contracted; 46 grandfathered files remain** on the
 allowlist, drainable opportunistically (measured via `pnpm guard:contracts`,
-2026-08-09 — re-run it rather than trusting this number).
+2026-09-09 — re-run it rather than trusting this number).
 
 ### Canonical contract + route shape
 

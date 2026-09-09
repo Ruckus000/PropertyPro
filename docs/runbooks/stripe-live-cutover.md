@@ -6,10 +6,17 @@ Moving a deployment from test-mode Stripe keys to live ones.
 publishable key out of the deployed bundle:
 
 ```bash
-curl -sg "https://www.getpropertypro.com/_next/static/chunks/app/(public)/signup/checkout/page-*.js" \
+chunk=$(curl -s https://www.getpropertypro.com/signup/checkout \
+  | grep -oE '/_next/static/[^"]+signup/checkout/page-[a-f0-9]+\.js' | head -1)
+curl -sg "https://www.getpropertypro.com$chunk" \
   | grep -oE 'pk_(test|live)_[A-Za-z0-9]{6}'
-# -> pk_test_51Syt6
+# -> pk_test_51Syt6      (re-run 2026-09-09)
 ```
+
+Two steps, not one: the chunk hash changes every build, so the path must come out of the
+HTML. A fixed `page-*.js` URL does **not** work — `curl -g` disables globbing, so the
+literal `*` is sent and the server returns 404. An earlier revision of this runbook
+printed exactly that, with output pasted from a different invocation.
 
 (An earlier note said this "cannot be answered from outside". It can — but only
 from the route chunk, not the page HTML: the key is read inside a `'use client'`
