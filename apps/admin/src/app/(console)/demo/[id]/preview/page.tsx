@@ -80,7 +80,7 @@ export default async function DemoPreviewPage({ params }: PageProps) {
     // layout's skip link targets. A second element with that id would be a
     // duplicate id — invalid, and `getElementById` would only ever find the
     // first.
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       {/* Header bar */}
       <div className="flex items-center justify-between border-b border-edge bg-surface-card px-4 py-2">
         <div className="flex items-center gap-3">

@@ -12,7 +12,7 @@ export function MobilePreviewClient({ src, splitPreviewHref }: MobilePreviewClie
   return (
     // No `id="main-content"` here — AdminShell owns the single one for every
     // page in the (console) group. See the sibling preview page.
-    <div className="flex h-screen flex-col bg-surface-inverse">
+    <div className="flex h-full flex-col bg-surface-inverse">
       <div className="flex items-center justify-between border-b border-edge bg-surface-card px-4 py-2">
         <Link href={splitPreviewHref} className="text-sm text-content-tertiary hover:text-content-secondary">
           ← Back to Split Preview

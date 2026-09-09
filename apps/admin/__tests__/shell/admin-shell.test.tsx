@@ -95,6 +95,35 @@ describe('AdminShell', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
+  it('skips the centred padded wrapper on full-bleed demo routes', () => {
+    for (const route of ['/demo/new', '/demo/42/preview', '/demo/42/mobile']) {
+      pathname.current = route;
+      const { container, unmount } = render(
+        <AdminShell user={user} initialSignals={signals}>
+          <p>content</p>
+        </AdminShell>,
+      );
+      const main = container.querySelector('main#main-content')!;
+      // `children` renders directly inside <main> on these routes: the <p> is
+      // main's own first element child, not wrapped in the padded div.
+      expect(main.firstElementChild?.tagName, route).toBe('P');
+      expect(main.querySelector('.max-w-7xl'), route).toBeNull();
+      unmount();
+    }
+  });
+
+  it('keeps the centred padded wrapper on an ordinary route', () => {
+    pathname.current = '/dashboard';
+    const { container } = render(
+      <AdminShell user={user} initialSignals={signals}>
+        <p>content</p>
+      </AdminShell>,
+    );
+    const main = container.querySelector('main#main-content')!;
+    expect(main.firstElementChild?.className).toContain('max-w-7xl');
+    expect(screen.getByText('content')).toBeTruthy();
+  });
+
   it('keeps exactly one main landmark once the drawer and the palette are both open', () => {
     installMatchMedia(TOUCH_PHONE);
     render(
@@ -225,6 +254,85 @@ describe('AdminShell', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     visibility.mockRestore();
+  });
+
+  it('re-polls immediately on visibilitychange, catching up a tick lost while hidden', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ data: { ...signals, counts: { ...signals.counts, inbox: 7 } } }),
+        ),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <AdminShell user={user} initialSignals={signals}>
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    // Tab goes hidden; the interval tick that falls due is lost (matches the
+    // existing "skips the poll while hidden" test above).
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Tab becomes visible again, well before the next interval tick is due.
+    visibility.mockReturnValue('visible');
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('link', { name: 'Inbox' }).textContent).toContain('7');
+    visibility.mockRestore();
+  });
+
+  it('does not start a second poll while one is still in flight', async () => {
+    vi.useFakeTimers();
+    let resolveFetch: (() => void) | null = null;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = () => resolve(new Response(JSON.stringify({ data: signals })));
+        }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <AdminShell user={user} initialSignals={signals}>
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    // The interval tick starts a fetch that does not resolve yet.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A visibilitychange fires while that request is still in flight — it
+    // must not start an overlapping second one.
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Once the in-flight request settles, a fresh visibilitychange is free
+    // to start another.
+    await act(async () => {
+      resolveFetch?.();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the last good signals when the poll fails', async () => {

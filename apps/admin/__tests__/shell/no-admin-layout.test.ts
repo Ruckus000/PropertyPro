@@ -95,8 +95,16 @@ describe('old shell is gone', () => {
     expect(layout).toContain('AdminShell');
     // The gate must run BEFORE any signal read: getShellSignals() goes through
     // the service-role client, which bypasses RLS.
-    expect(layout.indexOf('requireAdminPageSession()')).toBeLessThan(
-      layout.indexOf('getShellSignals()'),
+    //
+    // `indexOf` on the raw source is vacuous: `requireAdminPageSession()` first
+    // appears inside this file's own leading `AUTHZ:` docblock, so the string
+    // is found long before the real call regardless of what the executable
+    // code actually does. Assert adjacency of the two `const` assignments
+    // instead — this only matches the two statements back-to-back in that
+    // order, so reordering the awaits (or moving either one away from the
+    // other) breaks the match.
+    expect(layout).toMatch(
+      /const session = await requireAdminPageSession\(\);\s*\n\s*const initialSignals = await getShellSignals\(\);/,
     );
   });
 });

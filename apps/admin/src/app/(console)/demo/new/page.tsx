@@ -280,7 +280,7 @@ export default function DemoNewPage() {
     <>
       <ResizableSplit
         storageKey="demo-wizard-split"
-        className="h-[calc(100vh-64px)]"
+        className="h-full"
         left={
           <div className="flex flex-col h-full" onKeyDown={handlePanelKeyDown}>
             {/* Header */}
