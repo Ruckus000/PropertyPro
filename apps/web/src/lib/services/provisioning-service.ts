@@ -19,7 +19,7 @@
 import { createElement } from 'react';
 import { redactParams } from '@propertypro/shared/observability';
 import type Stripe from 'stripe';
-import { and, asc, eq, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from '@propertypro/db/filters';
 import {
   communities,
   complianceChecklistItems,
@@ -38,6 +38,8 @@ import {
   recalculateVolumeTier,
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
+import { ConflictError } from '@/lib/api/errors';
+import { isUniqueConstraintError } from '@/lib/db/unique-constraint-error';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import {
   getComplianceTemplate,
@@ -1237,6 +1239,71 @@ export interface MarkEmailVerifiedResult {
   currentStatus: string | null;
 }
 
+export interface ExpireStalePendingSignupsSummary {
+  /**
+   * Deliberately NOT named `failed` / `errors` / `failures` / `rowsFailed` /
+   * `failedCount`: `withCronJob` scans a 200 response body for those keys and
+   * raises a Sentry `cron_job_reported_failures` event when any is non-zero.
+   */
+  expired: number;
+}
+
+/**
+ * Expire stale pre-payment signups — the cleanup pass two other comments in
+ * this codebase already assume exists (`signup.ts` "cleanup job hasn't run
+ * yet", and `reconcileLostCheckoutSignups` below, "leave it for the normal
+ * expiry/cleanup path"). Nothing wrote `'expired'` before this, so the status
+ * was unreachable despite being named in both the partial unique index and the
+ * table's CHECK constraint.
+ *
+ * WHY THIS MATTERS — it is not tidiness, it is a 500 on the signup funnel.
+ * `checkSignupSubdomainAvailability` treats a row as blocking only while it is
+ * status-active AND (expiresAt IS NULL OR expiresAt > now()). The partial index
+ * `pending_signups_candidate_slug_active_unique` has no such expiry clause — it
+ * cannot: Postgres requires an IMMUTABLE predicate and `now()` is STABLE. So
+ * the two disagreed, and the disagreement surfaced late and badly:
+ *
+ *   1. Second user is told the subdomain is AVAILABLE (stale row is expired).
+ *   2. Their INSERT succeeds as `pending_verification` — outside the index.
+ *   3. They click the verification link, the row flips to `email_verified`,
+ *      ENTERS the index, and collides with the stale row → 23505 → HTTP 500.
+ *
+ * The predicate below is therefore the exact complement of that availability
+ * filter, so the index and the check finally agree. Two consequences are
+ * deliberate, not oversights:
+ *
+ *   - NULL `expires_at` is NOT swept. Availability treats those as blocking
+ *     too, so leaving them alone keeps the two in agreement. (One such row is
+ *     live in production.) `isNotNull` is written out even though SQL's
+ *     three-valued logic would exclude them anyway, so the invariant is
+ *     visible here and assertable in a test rather than implicit.
+ *   - Only `email_verified` / `checkout_started`. Expiring `payment_completed`
+ *     or `provisioning` would release a PAYING customer's subdomain.
+ *
+ * Must run AFTER `reconcileLostCheckoutSignups`, which is what rescues a
+ * genuinely-paid `checkout_started` row whose webhook was lost; the NOT EXISTS
+ * fence below is the same one it uses, so a signup that already has a
+ * provisioning job is never touched here.
+ */
+export async function expireStalePendingSignups(): Promise<ExpireStalePendingSignupsSummary> {
+  const db = createUnscopedClient();
+
+  const expiredRows = await db
+    .update(pendingSignups)
+    .set({ status: 'expired', updatedAt: new Date() })
+    .where(
+      and(
+        inArray(pendingSignups.status, ['email_verified', 'checkout_started']),
+        isNotNull(pendingSignups.expiresAt),
+        lt(pendingSignups.expiresAt, new Date()),
+        sql`NOT EXISTS (SELECT 1 FROM ${provisioningJobs} WHERE ${provisioningJobs.signupRequestId} = ${pendingSignups.signupRequestId})`,
+      ),
+    )
+    .returning({ id: pendingSignups.id });
+
+  return { expired: expiredRows.length };
+}
+
 /**
  * Attempt to transition a pending_signups row from `pending_verification` to
  * `email_verified`. Uses a CAS-style WHERE predicate to prevent TOCTOU
@@ -1250,19 +1317,39 @@ export async function markPendingSignupEmailVerifiedIfPending(
   signupRequestId: string,
 ): Promise<MarkEmailVerifiedResult> {
   const db = createUnscopedClient();
-  const updatedRows = await db
-    .update(pendingSignups)
-    .set({
-      status: 'email_verified',
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(pendingSignups.signupRequestId, signupRequestId),
-        eq(pendingSignups.status, 'pending_verification'),
-      ),
-    )
-    .returning({ id: pendingSignups.id });
+
+  // This UPDATE is what moves the row INTO
+  // `pending_signups_candidate_slug_active_unique`, so it is where a slug
+  // collision surfaces — not at signup time, where the user was told the
+  // subdomain was free. `expireStalePendingSignups` removes the common cause,
+  // but it cannot close the window: two people verifying into the same slug
+  // concurrently still collide. Uncaught, a raw PG error is not an `AppError`,
+  // so `withErrorHandler` returns 500 "An unexpected error occurred" — an
+  // opaque dead end at the end of the signup funnel.
+  let updatedRows: Array<{ id: bigint }>;
+  try {
+    updatedRows = await db
+      .update(pendingSignups)
+      .set({
+        status: 'email_verified',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(pendingSignups.signupRequestId, signupRequestId),
+          eq(pendingSignups.status, 'pending_verification'),
+        ),
+      )
+      .returning({ id: pendingSignups.id });
+  } catch (error) {
+    if (isUniqueConstraintError(error, 'pending_signups_candidate_slug_active_unique')) {
+      throw new ConflictError(
+        'That subdomain was claimed by another signup while you were verifying. '
+          + 'Please start a new signup and choose a different subdomain.',
+      );
+    }
+    throw error;
+  }
 
   if (updatedRows.length > 0) {
     return { updated: true, currentStatus: 'email_verified' };

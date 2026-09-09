@@ -4,12 +4,14 @@ import { NextRequest } from 'next/server';
 const {
   recoverStuckProvisioningJobsMock,
   reconcileLostCheckoutSignupsMock,
+  expireStalePendingSignupsMock,
   captureExceptionMock,
   captureMessageMock,
   withScopeMock,
 } = vi.hoisted(() => ({
   recoverStuckProvisioningJobsMock: vi.fn(),
   reconcileLostCheckoutSignupsMock: vi.fn(),
+  expireStalePendingSignupsMock: vi.fn().mockResolvedValue({ expired: 0 }),
   captureExceptionMock: vi.fn(),
   captureMessageMock: vi.fn(),
   withScopeMock: vi.fn((cb: (scope: { setTag: ReturnType<typeof vi.fn>; setUser: ReturnType<typeof vi.fn> }) => void) =>
@@ -35,6 +37,7 @@ vi.mock('@sentry/nextjs', () => ({
 vi.mock('@/lib/services/provisioning-service', () => ({
   recoverStuckProvisioningJobs: recoverStuckProvisioningJobsMock,
   reconcileLostCheckoutSignups: reconcileLostCheckoutSignupsMock,
+  expireStalePendingSignups: expireStalePendingSignupsMock,
 }));
 
 import { GET, POST } from '../../src/app/api/v1/internal/provisioning-watchdog/route';
@@ -92,6 +95,7 @@ describe('provisioning watchdog cron route', () => {
           failed: 0,
           failures: [],
         },
+        signupExpiry: { expired: 0 },
       },
     });
     expect(recoverStuckProvisioningJobsMock).toHaveBeenCalledOnce();
@@ -199,5 +203,51 @@ describe('provisioning watchdog cron route', () => {
         }),
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pending-signup expiry sweep. The ORDER is the safety property here, not an
+// implementation detail: reconcileLostCheckoutSignups is what rescues a
+// genuinely-paid `checkout_started` row whose webhook was lost, and it only
+// selects live statuses. Expiring first would hide such a row from it forever.
+// ---------------------------------------------------------------------------
+describe('provisioning watchdog — pending-signup expiry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    expireStalePendingSignupsMock.mockResolvedValue({ expired: 0 });
+  });
+
+  it('runs the expiry sweep STRICTLY AFTER the lost-checkout reconcile', async () => {
+    process.env.CRON_SECRET = 'test-secret';
+    expireStalePendingSignupsMock.mockResolvedValue({ expired: 3 });
+
+    const res = await GET(
+      new NextRequest(URL, { headers: { authorization: 'Bearer test-secret' } }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(expireStalePendingSignupsMock).toHaveBeenCalledTimes(1);
+
+    const reconcileOrder = reconcileLostCheckoutSignupsMock.mock.invocationCallOrder[0];
+    const expiryOrder = expireStalePendingSignupsMock.mock.invocationCallOrder[0];
+    expect(reconcileOrder).toBeDefined();
+    expect(expiryOrder).toBeGreaterThan(reconcileOrder as number);
+  });
+
+  it('reports the count under a key withCronJob does not read as a failure', async () => {
+    process.env.CRON_SECRET = 'test-secret';
+    expireStalePendingSignupsMock.mockResolvedValue({ expired: 2 });
+
+    const res = await GET(
+      new NextRequest(URL, { headers: { authorization: 'Bearer test-secret' } }),
+    );
+    const body = (await res.json()) as { data: Record<string, unknown> };
+
+    expect(body.data.signupExpiry).toEqual({ expired: 2 });
+    // withCronJob scans a 200 body for these and raises a Sentry error event.
+    for (const key of ['rowsFailed', 'failedCount', 'failures']) {
+      expect(body.data.signupExpiry).not.toHaveProperty(key);
+    }
   });
 });

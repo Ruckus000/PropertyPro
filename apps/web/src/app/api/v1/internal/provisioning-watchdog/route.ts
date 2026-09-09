@@ -3,6 +3,7 @@ import { captureException, captureMessage } from '@sentry/nextjs';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import {
+  expireStalePendingSignups,
   reconcileLostCheckoutSignups,
   recoverStuckProvisioningJobs,
 } from '@/lib/services/provisioning-service';
@@ -72,7 +73,15 @@ async function handleWatchdog(req: NextRequest): Promise<NextResponse> {
     });
   }
 
-  return NextResponse.json({ data: { ...summary, reconcile } });
+  // STRICTLY after the reconcile above, never before: reconcile is what rescues
+  // a genuinely-paid `checkout_started` row whose webhook was lost, and it only
+  // selects live statuses — expiring first would hide such a row from it
+  // permanently. Rows it deliberately skipped as `skippedNotComplete`
+  // ("abandoned checkout — leave it for the normal expiry/cleanup path") are
+  // exactly the ones this pass is here to clear.
+  const signupExpiry = await expireStalePendingSignups();
+
+  return NextResponse.json({ data: { ...summary, reconcile, signupExpiry } });
 }
 
 const cronHandler = withCronJob('provisioning-watchdog', withErrorHandler(handleWatchdog));
