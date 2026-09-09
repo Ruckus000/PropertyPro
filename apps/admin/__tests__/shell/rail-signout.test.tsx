@@ -29,7 +29,9 @@ vi.mock('@supabase/ssr', () => ({
   createBrowserClient: vi.fn(() => ({ auth: { signOut: signOutMock } })),
 }));
 
-import { Sidebar } from '@/components/Sidebar';
+import { RailFooter } from '@/components/shell/RailFooter';
+
+const user = { email: 'ops@getpropertypro.com', initial: 'O' };
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -68,9 +70,8 @@ afterEach(async () => {
 });
 
 async function renderAndClickSignOut() {
-  // `coolingCount` supplied so the badge effect skips its fetch.
   await act(async () => {
-    root.render(<Sidebar collapsed={false} onToggle={() => {}} coolingCount={0} />);
+    root.render(<RailFooter user={user} expanded />);
   });
 
   const button = Array.from(container.querySelectorAll('button')).find((b) =>
@@ -83,7 +84,7 @@ async function renderAndClickSignOut() {
   });
 }
 
-describe('Sidebar sign-out', () => {
+describe('RailFooter sign-out', () => {
   it('navigates to the login page when sign-out succeeds', async () => {
     signOutMock.mockResolvedValue({ error: null });
 
