@@ -19,6 +19,7 @@
  *
  * @module lib/server/search
  */
+import * as Sentry from '@sentry/nextjs';
 import type { SignalIcon } from './signals/types';
 import { communitySearcher } from './search/communities';
 import { threadSearcher } from './search/threads';
@@ -42,6 +43,19 @@ export interface SearchGroup {
 export interface Searcher {
   key: SearchGroup['key'];
   label: string;
+  /**
+   * `q` arrives to every searcher already sanitized by `searchAdmin` (see
+   * `sanitizeSearchTerm` in `./search/sanitize.ts`) — implementations build
+   * their PostgREST `.or('col.ilike.%<q>%,...')` filter directly from `q` and
+   * MUST NOT sanitize it again. Sanitizing once, centrally, in the composer
+   * is the fix for a defect that used to live here: the composer sanitized a
+   * COPY only to test for emptiness and then discarded it, forwarding the
+   * RAW query to every searcher — an implicit convention that happened to be
+   * upheld by all three existing searchers re-sanitizing on their own, but
+   * that a new searcher (e.g. Wave 3's `ticketSearcher`) could silently
+   * violate, reaching a PostgREST `.or()` filter with an unsanitized `,`,
+   * `(`, or `)` that restructures the filter instead of matching oddly.
+   */
   search(q: string, limit: number): Promise<SearchHit[]>;
 }
 
@@ -57,20 +71,28 @@ export async function searchAdmin(
 ): Promise<SearchGroup[]> {
   const q = raw.trim();
   if (q.length < 2) return [];
-  // Every remaining searcher builds a Postgres `ilike` pattern from the same
-  // sanitizeSearchTerm() output (see that module's docblock). A query that is
-  // nothing but stripped characters (`"%%"`, `"()"`, `",,"`) would otherwise
-  // reach a searcher as an empty term and become the pattern `%%`, matching
-  // every row up to the limit. Gating here — once, centrally — means no
-  // searcher is ever invoked with such a query, rather than every searcher
-  // re-deriving the same check.
-  if (sanitizeSearchTerm(q).length === 0) return [];
+  // Sanitize ONCE, here, and forward the sanitized term to every searcher
+  // (see `Searcher.search`'s docblock — searchers must not re-sanitize). This
+  // is also the empty-term gate: a query that is nothing but stripped
+  // characters (`"%%"`, `"()"`, `",,"`) would otherwise reach a searcher as
+  // an empty term and become the pattern `%%`, matching every row up to the
+  // limit.
+  const term = sanitizeSearchTerm(q);
+  if (term.length === 0) return [];
 
-  const settled = await Promise.allSettled(searchers.map((s) => s.search(q, PER_GROUP)));
+  const settled = await Promise.allSettled(searchers.map((s) => s.search(term, PER_GROUP)));
 
   return searchers.flatMap((s, i) => {
     const r = settled[i]!;
-    if (r.status === 'rejected' || r.value.length === 0) return [];
+    if (r.status === 'rejected') {
+      // Mirror shell-signals.ts's identical allSettled composition: a
+      // searcher broken by schema drift must not degrade to "No results"
+      // silently and forever on the one endpoint that reaches three tables
+      // across every tenant.
+      Sentry.captureException(r.reason, { tags: { search_searcher: s.key } });
+      return [];
+    }
+    if (r.value.length === 0) return [];
     return [{ key: s.key, label: s.label, hits: r.value }];
   });
 }

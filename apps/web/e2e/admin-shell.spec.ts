@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { loginAsPlatformAdmin } from './helpers/dev-login';
-import { clickWhenHydrated } from './helpers/hydration';
+import { clickWhenHydrated, waitForHydrated } from './helpers/hydration';
 
 const ADMIN = 'http://localhost:3001';
 
@@ -20,6 +20,12 @@ test.describe('admin shell', () => {
   test('⌘K finds a seeded community', async ({ page }) => {
     await page.goto(`${ADMIN}/dashboard`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    // The heading above is server-rendered markup, visible before hydration
+    // by definition — it is not a proxy for interactivity (see hydration.ts's
+    // docblock). The ⌘K listener is attached in AdminShell's useEffect, so on
+    // a cold CI compile the keypress can land in the pre-hydration window and
+    // be silently swallowed. Wait for a real mounted element instead.
+    await waitForHydrated(page.getByRole('button', { name: /Search clients, threads, tickets, users/ }));
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('combobox').fill('Sunset Condos');

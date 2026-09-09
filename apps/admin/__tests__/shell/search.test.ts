@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
+import { captureException } from '@sentry/nextjs';
 import { searchAdmin, SEARCHERS, type Searcher } from '@/lib/server/search';
 
 const stub = (key: Searcher['key'], hits: string[]): Searcher => ({
@@ -15,10 +17,15 @@ describe('searchAdmin', () => {
     expect(groups.map((g) => g.key)).toEqual(['clients']);
     expect(groups[0]!.hits[0]!.href).toBe('/clients/Sunset Condos');
   });
-  it('a failing searcher drops its group only', async () => {
+  it('a failing searcher drops its group only, and is reported to Sentry tagged with its key', async () => {
     const boom: Searcher = { key: 'threads', label: 'Threads', search: async () => { throw new Error('x'); } };
     const groups = await searchAdmin('sun', [boom, stub('clients', ['Sunset'])]);
     expect(groups.map((g) => g.key)).toEqual(['clients']);
+    // Mirrors shell-signals.ts: a searcher broken by schema drift must not
+    // degrade to "No results" silently and forever — see search.ts's docblock
+    // on the allSettled branch.
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error), { tags: { search_searcher: 'threads' } });
   });
   it('SEARCHERS covers exactly the three DB-backed groups — no server-side "pages" duplicate', () => {
     // Pages are static and client-only (AdminCommandPalette renders NAV_PAGES

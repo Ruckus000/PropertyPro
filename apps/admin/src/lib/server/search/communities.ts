@@ -8,7 +8,6 @@
  */
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import type { Searcher } from '../search';
-import { sanitizeSearchTerm } from './sanitize';
 import { COMMUNITY_TYPE_LABELS } from '@/lib/constants/community-labels';
 
 export const communitySearcher: Searcher = {
@@ -16,14 +15,13 @@ export const communitySearcher: Searcher = {
   label: 'Clients',
   async search(q, limit) {
     const db = createAdminTypedClient();
-    // See sanitizeSearchTerm's docblock: this strips (not escapes) `_`, `%`
-    // and PostgREST's `or()` delimiters before they reach the ilike filter.
-    const term = sanitizeSearchTerm(q);
+    // `q` arrives already sanitized by `searchAdmin` — see `Searcher.search`'s
+    // docblock in `../search.ts`. Do not sanitize again here.
     const { data, error } = await db
       .from('communities')
       .select('id, name, slug, community_type')
       .is('deleted_at', null)
-      .or(`name.ilike.%${term}%,slug.ilike.%${term}%`)
+      .or(`name.ilike.%${q}%,slug.ilike.%${q}%`)
       .limit(limit);
     if (error) throw new Error(`community search: ${error.message}`);
     return (data ?? []).map((c) => ({
