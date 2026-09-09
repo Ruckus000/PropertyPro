@@ -8,8 +8,13 @@
  * their files under `./signals/`.
  *
  * A provider that throws must never blank the rest of the shell: it is
- * caught, reported to Sentry, and named in `failed` so the UI can show that
- * one section's error state while everything else renders normally.
+ * caught, reported to Sentry, and named in `failed` — a Sentry-backed record
+ * with no UI consumer yet. Today a failed provider is indistinguishable from
+ * "nothing needs attention" (the nav badge only renders when its count is
+ * non-zero, and a thrown provider's count stays at its `ZERO` seed). Wave 3's
+ * Health surface is what will read `failed` to show a per-section error
+ * state; until then this field exists so that surface has something to build
+ * on, not because anything renders it.
  *
  * @module lib/server/shell-signals
  */
@@ -29,7 +34,12 @@ export interface ShellSignals {
   items: ShellSignalItem[];
   critical: ShellCritical | null;
   generatedAt: string;
-  /** Providers that threw. The UI shows their sections' error state; the shell never blanks. */
+  /**
+   * Providers that threw, reported to Sentry by `getShellSignals`. No UI
+   * reads this today — a failed provider just leaves that key's count at 0,
+   * so it renders identically to "nothing needs attention." Wave 3's Health
+   * surface is the intended consumer for a per-section error state.
+   */
   failed: NavSignalKey[];
 }
 

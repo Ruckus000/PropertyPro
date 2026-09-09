@@ -2,10 +2,10 @@
 
 import { useSyncExternalStore } from 'react';
 import { CloudOff } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 
 export interface OfflineBannerProps {
-  /** ISO timestamp of the last successful signal fetch. Wave 4 supplies this. */
+  /** ISO timestamp of the last successful signal fetch. `AdminShell` supplies `signals.generatedAt`. */
   cachedAt?: string | null;
 }
 
@@ -38,11 +38,20 @@ export function OfflineBanner({ cachedAt }: OfflineBannerProps) {
 
   if (online) return null;
 
+  // Absolute timestamp, not relative: this component's only re-render
+  // trigger is the online/offline events from useSyncExternalStore above, so
+  // while offline nothing ever re-renders it — `AdminShell`'s signal poll
+  // throws offline, `setSignals` never fires, and the parent never
+  // re-renders either. A relative string ("less than a minute ago") computed
+  // once at the start of an outage would keep reading as fresh for however
+  // long the outage lasts. A clock that cannot go stale beats a clock that
+  // has to be wound with a `setInterval`.
+  //
   // Built as one string (not split across JSX text nodes) so JSX's
   // newline-collapsing rules can't introduce or drop a space around the
   // interpolated clause.
   const message = `You’re offline${
-    cachedAt ? ` — showing data cached ${formatDistanceToNow(new Date(cachedAt))} ago` : ''
+    cachedAt ? ` — showing data cached as of ${format(new Date(cachedAt), 'MMM d, HH:mm')}` : ''
   }. Actions are unavailable until you reconnect.`;
 
   return (

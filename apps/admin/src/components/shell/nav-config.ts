@@ -9,6 +9,7 @@ import {
   Palette,
   Rocket,
   Settings,
+  ShieldAlert,
   Ticket,
   Trash2,
   type LucideIcon,
@@ -66,6 +67,13 @@ export const NAV_GROUPS: AdminNavGroup[] = [
     label: 'Customers',
     items: [
       { id: 'clients', label: 'Clients', href: '/clients', icon: Building2 },
+      // Task 15 removes this again: spec D9 folds this page into
+      // `/clients?filter=rootless` with its dispute queue surfaced as a
+      // Clients dispute banner. Until that filter exists, the page (and the
+      // `ReassignRootControl` dispute queue on it) needs a rail entry or it
+      // is reachable only by typing the URL — restored here after Wave 1
+      // dropped it without the redirect that was meant to replace it.
+      { id: 'rootless', label: 'Rootless Communities', href: '/communities/rootless', icon: ShieldAlert },
       { id: 'onboarding', label: 'Onboarding', href: '/onboarding', icon: Rocket, signal: 'onboarding' },
       { id: 'billing', label: 'Billing', href: '/billing', icon: CreditCard, signal: 'billing', tone: 'warning' },
       { id: 'leads', label: 'Leads', href: '/leads', icon: Mail, signal: 'leads' },

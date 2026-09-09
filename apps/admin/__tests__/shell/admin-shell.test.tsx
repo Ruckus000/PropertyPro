@@ -384,4 +384,47 @@ describe('AdminShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
     expect(screen.getByRole('button', { name: /notifications, 0 unread/i })).toBeTruthy();
   });
+
+  // Finding 6 (review): `handleMarkAllRead` used to stamp `readAt` from
+  // `new Date().toISOString()` — the OPERATOR'S BROWSER clock — instead of
+  // `signals.generatedAt`, the server's. This test simulates the browser
+  // clock running 10 minutes BEHIND the server: the system clock is pinned
+  // to 09:50, `generatedAt` (and thus the item below) sits at 09:55-10:00.
+  // Under the browser-clock bug, "Mark all read" would stamp `readAt` at
+  // 09:50 — before the item's `occurredAt` of 09:55 — so it stays unread
+  // even right after the click. The two clocks being different machines is
+  // exactly what `admin-shell.test.tsx`'s other tests never exercise (jsdom
+  // gives them the same clock for both), which is why this one exists.
+  it('marks all read using the SERVER clock even when the browser clock is skewed behind it', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-09T09:50:00.000Z'));
+
+    render(
+      <AdminShell
+        user={user}
+        initialSignals={{
+          ...signals,
+          generatedAt: '2026-09-09T10:00:00.000Z',
+          items: [
+            {
+              id: 'a',
+              tone: 'info',
+              icon: 'inbox',
+              title: 'New reply from Denise',
+              meta: 'support@',
+              href: '/inbox/1',
+              occurredAt: '2026-09-09T09:55:00.000Z',
+            },
+          ],
+        }}
+      >
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    expect(screen.getByRole('button', { name: /notifications, 1 unread/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /notifications, 1 unread/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+    expect(screen.getByRole('button', { name: /notifications, 0 unread/i })).toBeTruthy();
+  });
 });

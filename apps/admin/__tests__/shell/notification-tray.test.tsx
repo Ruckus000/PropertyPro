@@ -2,7 +2,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: any) => <a href={href} {...p}>{children}</a> }));
-import { NotificationTray } from '@/components/shell/NotificationTray';
+import { NotificationTray, countUnread } from '@/components/shell/NotificationTray';
+import type { ShellSignalItem } from '@/lib/server/signals/types';
 
 const items = [
   {
@@ -116,5 +117,40 @@ describe('NotificationTray — empty state', () => {
 
     expect(screen.getByText(/all caught up/i)).toBeTruthy();
     expect(screen.getByText(/no notifications right now/i)).toBeTruthy();
+  });
+});
+
+function item(occurredAt: string): ShellSignalItem {
+  return { id: occurredAt, tone: 'info', icon: 'inbox', title: 't', meta: 'm', href: '/x', occurredAt };
+}
+
+describe('countUnread', () => {
+  it('has no read marker: every item is unread', () => {
+    expect(countUnread([item('2026-09-08T09:14:00.000Z')], null)).toBe(1);
+  });
+
+  it('excludes an item stamped exactly at readAt (read, not unread)', () => {
+    expect(countUnread([item('2026-09-08T09:14:00.000Z')], '2026-09-08T09:14:00.000Z')).toBe(0);
+  });
+
+  // Finding 6 (review): the two timestamps come from different serializers
+  // (`occurredAt` is a PostgREST `timestamptz`; `readAt` is stamped from
+  // `signals.generatedAt`, a plain `toISOString()`), so nothing guarantees
+  // they share an offset representation. A RAW STRING comparison is only
+  // "right in practice" for the `+00:00`-vs-`Z` pair this repo happens to
+  // produce today — it breaks the moment either side uses a different (but
+  // equally valid) ISO 8601 offset, which is exactly what this asserts:
+  // `readAt` at `09:14 +05:00` (= `04:14Z`) and an item at `05:00Z` — the
+  // item is genuinely 46 minutes AFTER `readAt` once both are parsed, but
+  // `'2026-09-08T05:00:00Z' > '2026-09-08T09:14:00+05:00'` is FALSE as raw
+  // strings (comparing the hour digits `'05' < '09'` lexicographically,
+  // which says nothing about the actual instants). Reverting `countUnread`
+  // to `item.occurredAt > readAt` makes this go red (0 instead of 1) while
+  // the two tests above stay green.
+  it('compares parsed instants, not raw strings, across differing UTC offsets', () => {
+    const readAt = '2026-09-08T09:14:00+05:00'; // = 2026-09-08T04:14:00Z
+    const occurredAt = '2026-09-08T05:00:00Z'; // 46 minutes after readAt
+    expect(occurredAt > readAt).toBe(false); // the raw-string comparison the old code used
+    expect(countUnread([item(occurredAt)], readAt)).toBe(1);
   });
 });

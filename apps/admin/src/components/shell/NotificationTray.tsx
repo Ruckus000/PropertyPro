@@ -22,9 +22,20 @@ export interface NotificationTrayProps {
  * exactly at `readAt` is READ, not unread. Exported (not just used inline)
  * because Task 11 and Wave 4's push-notification dedupe both need this exact
  * boundary.
+ *
+ * Compares PARSED timestamps (`Date#getTime()`), not the raw ISO strings.
+ * `occurredAt` is a PostgREST-serialized `timestamptz` (`…+00:00`) and
+ * `readAt` is stamped from `signals.generatedAt` (also server-issued, see
+ * `AdminShell.handleMarkAllRead`) but the two are not guaranteed to share a
+ * serializer forever, and a lexicographic string comparison is only correct
+ * by accident even when they do — it breaks the instant either side's format
+ * changes (e.g. a millisecond-less `…+00:00` vs. `…Z`, or a shorter
+ * fractional-second component), with no type error to catch it.
  */
 export function countUnread(items: ShellSignalItem[], readAt: string | null): number {
-  return readAt ? items.filter((item) => item.occurredAt > readAt).length : items.length;
+  if (!readAt) return items.length;
+  const readAtMs = new Date(readAt).getTime();
+  return items.filter((item) => new Date(item.occurredAt).getTime() > readAtMs).length;
 }
 
 /**

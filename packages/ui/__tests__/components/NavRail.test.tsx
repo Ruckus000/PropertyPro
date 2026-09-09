@@ -274,6 +274,35 @@ describe("NavRail", () => {
       const compliance = screen.getByLabelText("Compliance");
       expect(compliance.querySelector(".size-2.rounded-full")).toBeTruthy();
     });
+
+    // PropertyPro admin review (Finding 7, first bullet): the expanded pill
+    // used to special-case only `badgeVariant === "danger"`, so `"warning"`
+    // fell through to the same neutral classes as an unset variant — a
+    // warning-toned nav item (e.g. Billing, Deletion requests) looked
+    // identical to one with no severity at all once the rail was expanded,
+    // even though the COLLAPSED dot (previous test) already honoured it via
+    // `badgeDotClasses`. Asserts the expanded pill gets its own solid tone
+    // too, distinct from a neutral/unset badge.
+    it("gives a warning badge its own solid tone when expanded, distinct from neutral", () => {
+      renderNavRail({
+        items: undefined,
+        sections: [
+          {
+            label: null,
+            items: [
+              { id: "billing", label: "Billing", icon: TestIcon, badge: 2, badgeVariant: "warning" },
+              { id: "settings", label: "Settings", icon: TestIcon, badge: 4 },
+            ],
+          },
+        ],
+        expanded: true,
+      });
+
+      const warningPill = screen.getByText("2");
+      const neutralPill = screen.getByText("4");
+      expect(warningPill.className).toContain("bg-[var(--status-warning)]");
+      expect(warningPill.className).not.toBe(neutralPill.className);
+    });
   });
 
   describe("Children and disclosure", () => {

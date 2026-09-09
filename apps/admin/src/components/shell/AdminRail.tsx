@@ -116,28 +116,43 @@ export function AdminRail({ activeId, counts, pinned, onPinnedChange, user }: Ad
               >
                 PropertyPro
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  onPinnedChange(!pinned);
-                  setHovered(false);
-                }}
-                aria-pressed={pinned}
-                aria-label={pinned ? 'Collapse navigation' : 'Keep navigation open'}
-                className={cn(
-                  // `focus-visible:opacity-100` covers a sighted keyboard-only user:
-                  // without it, the button stays in the tab order but is fully
-                  // transparent when tabbed to (icon, label, and the focus ring
-                  // itself all sit under `opacity-0`), so focus lands nowhere
-                  // visible. Touch discoverability doesn't route through opacity
-                  // at all here — see `forceOpen` above.
-                  'ml-auto flex size-7 items-center justify-center rounded-sm text-content-tertiary transition-opacity hover:text-content focus-visible:opacity-100',
-                  expanded ? 'opacity-100' : 'opacity-0',
-                  pinned && 'bg-surface-muted',
-                )}
-              >
-                {pinned ? <ChevronsLeft size={16} aria-hidden="true" /> : <Pin size={16} aria-hidden="true" />}
-              </button>
+              {/*
+               * Hidden entirely on a `forceOpen` (cannot-hover / touch)
+               * device: `forceOpen` feeds both `expanded` and
+               * `reservesLayout` above, so there the rail is always expanded
+               * and always open regardless of `pinned` — toggling `pinned`
+               * would change nothing visible. A control that announces a
+               * state change to assistive tech (`aria-pressed`, a relabeling
+               * to "Collapse navigation") and then does not perform it is
+               * worse than no control at all, and `onPinnedChange` writes
+               * `localStorage`, so a stray tap here would silently flip the
+               * preference governing that operator's separate desktop
+               * session. The rail itself stays fully usable without it —
+               * every label and nav item is already visible via `forceOpen`.
+               */}
+              {!forceOpen && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPinnedChange(!pinned);
+                    setHovered(false);
+                  }}
+                  aria-pressed={pinned}
+                  aria-label={pinned ? 'Collapse navigation' : 'Keep navigation open'}
+                  className={cn(
+                    // `focus-visible:opacity-100` covers a sighted keyboard-only user:
+                    // without it, the button stays in the tab order but is fully
+                    // transparent when tabbed to (icon, label, and the focus ring
+                    // itself all sit under `opacity-0`), so focus lands nowhere
+                    // visible.
+                    'ml-auto flex size-7 items-center justify-center rounded-sm text-content-tertiary transition-opacity hover:text-content focus-visible:opacity-100',
+                    expanded ? 'opacity-100' : 'opacity-0',
+                    pinned && 'bg-surface-muted',
+                  )}
+                >
+                  {pinned ? <ChevronsLeft size={16} aria-hidden="true" /> : <Pin size={16} aria-hidden="true" />}
+                </button>
+              )}
             </div>
           }
           footer={<RailFooter user={user} expanded={expanded} />}

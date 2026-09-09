@@ -6,8 +6,10 @@
  * adds tickets) comes from `GET /api/admin/search`, debounced and merged in
  * once the query is at least two characters.
  *
- * Wiring the global ⌘K shortcut and rendering this component happens in
- * Task 11 — this file only owns the dialog and its own fetch lifecycle.
+ * Task 11 wired the global ⌘K shortcut (`AdminShell`'s `isSearchShortcut`
+ * keydown listener) and rendering of this component (`open`/`onOpenChange`
+ * driven by `AdminShell`'s `searchOpen` state) — this file owns only the
+ * dialog and its own fetch lifecycle.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';

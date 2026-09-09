@@ -122,20 +122,24 @@ export function RailFooter({ user, expanded }: RailFooterProps) {
         silently landing on /auth/login would imply otherwise.
 
         This alert is rendered unconditionally on `signOutFailed` — NOT
-        gated on `expanded` too. `expanded` here is `pinned || hovered`, so
-        it can flip to false the instant the mouse leaves the rail, which
-        can happen while the sign-out request is still in flight (click →
-        move mouse away → request fails → `hovered` is now false). Gating
-        the alert on `expanded` would unmount it the moment that happens,
-        leaving the operator with only the icon turning red (see the
-        `signOutFailed` branch above, which is NOT expanded-gated and so
-        still renders) and a `title` tooltip that needs a fresh hover and
-        isn't reliably announced by assistive tech — no reliable signal
-        that they are still signed in on a shared workstation. Collapsing
-        it to `sr-only` instead of unmounting it keeps it in the a11y tree
-        (still announced via role="alert") without visually cluttering the
-        72px collapsed rail; the reddened icon above is the persistent
-        *visual* cue for a sighted mouse user who has moved away.
+        gated on `expanded` too. `expanded` here is `pinned || hovered ||
+        forceOpen` (the caller's derivation, passed down as this prop), so on
+        a device that CAN hover it can flip to false the instant the mouse
+        leaves the rail, which can happen while the sign-out request is still
+        in flight (click → move mouse away → request fails → `hovered` is
+        now false). Gating the alert on `expanded` would unmount it the
+        moment that happens, leaving the operator with only the icon turning
+        red (see the `signOutFailed` branch above, which is NOT
+        expanded-gated and so still renders) and a `title` tooltip that needs
+        a fresh hover and isn't reliably announced by assistive tech — no
+        reliable signal that they are still signed in on a shared
+        workstation. Collapsing it to `sr-only` instead of unmounting it
+        keeps it in the a11y tree (still announced via role="alert") without
+        visually cluttering the 72px collapsed rail; the reddened icon above
+        is the persistent *visual* cue for a sighted mouse user who has moved
+        away. On a `forceOpen` (touch, cannot-hover) device `expanded` never
+        goes false on its own, so the `sr-only` branch above is moot there —
+        this reasoning is specifically about the hover-leaves case.
       */}
       {signOutFailed && (
         <p role="alert" className={cn('mt-2 px-3 text-xs text-status-danger', !expanded && 'sr-only')}>

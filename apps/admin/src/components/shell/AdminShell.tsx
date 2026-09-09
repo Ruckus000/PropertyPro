@@ -169,9 +169,15 @@ export function AdminShell({ user, initialSignals, children }: AdminShellProps) 
     writePinned(next);
   }, []);
 
+  // Stamped from `signals.generatedAt` (the server's clock), not
+  // `new Date()` (the operator's browser clock). `NotificationTray`'s
+  // `countUnread` compares this against `item.occurredAt`, which is a
+  // PostgREST-serialized `timestamptz` straight from Postgres — a browser
+  // clock a few minutes slow would leave the newest items unread after this
+  // click, and a few minutes fast would mark future arrivals pre-read.
   const handleMarkAllRead = useCallback(() => {
-    setReadAt(new Date().toISOString());
-  }, []);
+    setReadAt(signals.generatedAt);
+  }, [signals.generatedAt]);
 
   const activeId = getActiveNavId(pathname);
 

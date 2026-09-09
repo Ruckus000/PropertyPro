@@ -20,8 +20,9 @@ export interface AdminTopBarProps {
 /**
  * The console's top bar: narrow-viewport menu/back/title on the left, the
  * search trigger (full on desktop, icon-only on mobile), and the
- * notification tray on the right. Layout only — this task builds the piece,
- * Task 11 wires it into the shell with real `open`/navigation state.
+ * notification tray on the right. Task 11 wired this into `AdminShell` with
+ * real `open`/navigation state — `mobile`, `showBack`, `signals`, `readAt`,
+ * and the `onOpen*`/`onMarkAllRead` callbacks below all come from there now.
  */
 export function AdminTopBar({
   mobile,

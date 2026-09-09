@@ -53,8 +53,8 @@ describe('AdminRail', () => {
   // `pinned` — itself only reachable through a button that's invisible until
   // the rail is already expanded. That's a closed loop with no discoverable
   // way in. Asserts the rail opens on its own for such a device instead, so
-  // every nav label and the pin toggle are reachable without any hover.
-  it('opens on its own for a device that cannot hover, so the pin toggle is reachable without hovering', () => {
+  // every nav label is reachable without any hover.
+  it('opens on its own for a device that cannot hover, so every nav item is reachable without hovering', () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = vi.fn().mockReturnValue({
       matches: true, // '(hover: none)' matches: no hover channel
@@ -74,8 +74,38 @@ describe('AdminRail', () => {
       const nav = container.querySelector('nav[aria-label="Main navigation"]')!;
       // Open immediately — no mouseEnter, no prior pin — breaking the closed loop.
       expect(nav.className).toContain('w-[260px]');
-      const pin = screen.getByRole('button', { name: /keep navigation open/i });
-      expect(pin.className).toContain('opacity-100');
+      expect(screen.getByRole('link', { name: 'Inbox' })).toBeTruthy();
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  // Finding 5 (review): `forceOpen` (the "cannot hover" case above) feeds
+  // BOTH `expanded` and `reservesLayout`, so the rail is always expanded and
+  // always open there regardless of `pinned` — toggling it changes nothing
+  // visible. The pin button used to still render in that state (announcing
+  // `aria-pressed` and relabeling itself "Collapse navigation" to assistive
+  // tech) while doing nothing on click, which is worse than not offering the
+  // control at all. Assert it is absent entirely — the rail above stays
+  // fully usable without it, since `forceOpen` already keeps every nav label
+  // visible with no user action required.
+  it('hides the inert pin toggle on a device that cannot hover', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true, // '(hover: none)' matches: no hover channel
+      media: '(hover: none)',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      onchange: null,
+    });
+
+    try {
+      render(<AdminRail activeId="inbox" counts={counts} pinned={false} onPinnedChange={() => {}} user={user} />);
+      expect(screen.queryByRole('button', { name: /keep navigation open/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /collapse navigation/i })).toBeNull();
     } finally {
       window.matchMedia = originalMatchMedia;
     }

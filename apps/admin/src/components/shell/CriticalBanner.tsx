@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, X } from 'lucide-react';
 import type { ShellCritical } from '@/lib/server/signals/types';
@@ -37,12 +37,28 @@ export interface CriticalBannerProps {
 /**
  * The single most urgent cross-console alert, dismissed PER FINGERPRINT
  * (not globally) so resolving one incident never hides an unrelated one
- * that fires later in the same session. Dismissals are read once on mount
- * and persisted to `sessionStorage` on dismiss — session-scoped by design:
- * a fresh operator session (or tab) starts clean.
+ * that fires later in the same session. Dismissals are persisted to
+ * `sessionStorage` on dismiss — session-scoped by design: a fresh operator
+ * session (or tab) starts clean.
+ *
+ * `dismissed` is seeded with `[]` — the value the server necessarily
+ * produces, since `sessionStorage` doesn't exist there — and corrected in an
+ * effect after mount, the same pattern `AdminShell`/`AdminRail` use for every
+ * other browser-only fact. Reading `sessionStorage` in the `useState`
+ * initializer instead (as this used to) is safe on the server (the
+ * `typeof window === 'undefined'` guard in `readDismissed` covers that pass)
+ * but NOT on the client's hydration render, where `window` already exists:
+ * a previously-dismissed fingerprint would make that first render return
+ * `null` while the server-rendered HTML still has the banner in it — a
+ * hydration mismatch on a component `(console)/layout.tsx` renders as part
+ * of the server-rendered `AdminShell` tree.
  */
 export function CriticalBanner({ critical, mobile }: CriticalBannerProps) {
-  const [dismissed, setDismissed] = useState<string[]>(() => readDismissed());
+  const [dismissed, setDismissed] = useState<string[]>([]);
+
+  useEffect(() => {
+    setDismissed(readDismissed());
+  }, []);
 
   if (!critical || dismissed.includes(critical.fingerprint)) return null;
 

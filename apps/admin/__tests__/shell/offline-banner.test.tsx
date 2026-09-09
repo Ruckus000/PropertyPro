@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, render, screen } from '@testing-library/react';
+import { format } from 'date-fns';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OfflineBanner } from '@/components/shell/OfflineBanner';
 
@@ -24,11 +25,18 @@ describe('OfflineBanner', () => {
     expect(status.textContent).not.toContain('showing data cached');
   });
 
-  it('includes the cached-at relative time when supplied', () => {
+  it('includes an absolute cached-at time when supplied, not a relative one that goes stale', () => {
+    // Finding 4 (review): the banner's only re-render trigger is the
+    // online/offline events, so a relative string ("less than a minute ago")
+    // computed once would keep reading as fresh for the whole outage. Assert
+    // the actual formatted clock time is present instead of a substring that
+    // would stay green whether the timestamp is absolute or relative.
     setOnline(false);
-    const cachedAt = new Date(Date.now() - 5 * 60_000).toISOString();
-    render(<OfflineBanner cachedAt={cachedAt} />);
-    expect(screen.getByRole('status').textContent).toContain('showing data cached');
+    const cachedAt = new Date('2026-03-01T14:32:00.000Z');
+    render(<OfflineBanner cachedAt={cachedAt.toISOString()} />);
+    const text = screen.getByRole('status').textContent ?? '';
+    expect(text).toContain('showing data cached');
+    expect(text).toContain(format(cachedAt, 'MMM d, HH:mm'));
   });
 
   it('reacts to the offline/online events after mount', () => {

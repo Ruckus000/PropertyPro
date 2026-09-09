@@ -5,8 +5,13 @@ describe('nav-config', () => {
   it('has the three design groups in order', () => {
     expect(NAV_GROUPS.map((g) => g.label)).toEqual(['Operate', 'Customers', 'Platform']);
   });
-  it('does not list Rootless Communities (folded into Clients)', () => {
-    expect(NAV_GROUPS.flatMap((g) => g.items).some((i) => i.href.includes('rootless'))).toBe(false);
+  it('lists Rootless Communities until Task 15 folds it into Clients', () => {
+    // Task 15 (spec D9) replaces this entry with a redirect to
+    // `/clients?filter=rootless`; until that filter exists, the open
+    // root-claim dispute queue needs a rail entry to stay reachable.
+    const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href.includes('rootless'));
+    expect(item).toBeDefined();
+    expect(item?.href).toBe('/communities/rootless');
   });
   it('resolves nested paths to their section by longest prefix', () => {
     expect(getActiveNavId('/clients/12')).toBe('clients');
