@@ -10,6 +10,7 @@
 export default function AuthLoading() {
   return (
     <div
+      id="main-content"
       role="status"
       aria-busy="true"
       aria-label="Loading"

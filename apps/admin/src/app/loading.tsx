@@ -52,8 +52,11 @@ export default function ConsoleRootLoading() {
           <Block className="ml-auto size-8 rounded-full" />
         </div>
 
-        {/* Coarse content skeleton. */}
-        <div className="flex-1 overflow-hidden bg-surface-page p-8">
+        {/* Coarse content skeleton. Carries `id="main-content"` because the root
+            layout's skip link targets it and `AdminShell`'s <main> — the usual
+            owner of that id — has not rendered yet while this fallback shows.
+            The two never coexist, so there is no duplicate id. */}
+        <div id="main-content" className="flex-1 overflow-hidden bg-surface-page p-8">
           <div className="mx-auto max-w-7xl space-y-4">
             <Block className="h-8 w-48" />
             <Block className="h-40 w-full rounded-2xl" />
