@@ -33,6 +33,7 @@ const {
   ascMock,
   eqMock,
   inArrayMock,
+  isNotNullMock,
   isNullMock,
   ltMock,
   orMock,
@@ -59,6 +60,7 @@ const {
     ascMock: vi.fn((col: unknown) => ({ _asc: col })),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
     inArrayMock: vi.fn((col: unknown, vals: unknown[]) => ({ _inArray: [col, vals] })),
+    isNotNullMock: vi.fn((col: unknown) => ({ _isNotNull: col })),
     isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
     ltMock: vi.fn((col: unknown, val: unknown) => ({ _lt: [col, val] })),
     orMock: vi.fn((...conditions: unknown[]) => ({ _or: conditions })),
@@ -86,6 +88,7 @@ const {
       address: 'pending_signups.address',
       candidateSlug: 'pending_signups.candidate_slug',
       status: 'pending_signups.status',
+      expiresAt: 'pending_signups.expires_at',
       updatedAt: 'pending_signups.updated_at',
       payload: 'pending_signups.payload',
     },
@@ -140,6 +143,7 @@ vi.mock('@propertypro/db/filters', () => ({
   asc: ascMock,
   eq: eqMock,
   inArray: inArrayMock,
+  isNotNull: isNotNullMock,
   isNull: isNullMock,
   lt: ltMock,
   or: orMock,
@@ -169,6 +173,8 @@ vi.mock('@/lib/services/stripe-webhook-service', () => ({
 
 // Service import must come after all vi.mock calls
 import {
+  expireStalePendingSignups,
+  markPendingSignupEmailVerifiedIfPending,
   reconcileLostCheckoutSignups,
   recoverStuckProvisioningJobs,
   runProvisioning,
@@ -939,4 +945,134 @@ describe('reconcileLostCheckoutSignups', () => {
     ]);
   });
 
+});
+
+
+// ---------------------------------------------------------------------------
+// expireStalePendingSignups — the cleanup pass two other comments in the
+// codebase already assumed existed. Nothing ever wrote `'expired'`, so the
+// status was unreachable despite being named in BOTH the partial unique index
+// and the table's CHECK constraint.
+// ---------------------------------------------------------------------------
+
+function buildExpiryDb(rows: unknown[]) {
+  const returningMock = vi.fn().mockResolvedValue(rows);
+  const whereMock = vi.fn(() => ({ returning: returningMock }));
+  const setMock = vi.fn(() => ({ where: whereMock }));
+  const updateMock = vi.fn(() => ({ set: setMock }));
+  return { db: { update: updateMock }, setMock, whereMock, updateMock };
+}
+
+describe('expireStalePendingSignups', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('expires ONLY the two pre-payment statuses', async () => {
+    const { db } = buildExpiryDb([{ id: 1n }, { id: 2n }]);
+    createUnscopedClientMock.mockReturnValue(db);
+
+    const summary = await expireStalePendingSignups();
+
+    expect(summary.expired).toBe(2);
+    expect(inArrayMock).toHaveBeenCalledWith(pendingSignupsTable.status, [
+      'email_verified',
+      'checkout_started',
+    ]);
+  });
+
+  // The control that matters: expiring either of these releases the subdomain
+  // of a customer who has ALREADY PAID.
+  it('never touches payment_completed, provisioning or completed', async () => {
+    const { db } = buildExpiryDb([]);
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await expireStalePendingSignups();
+
+    const statuses = inArrayMock.mock.calls[0]?.[1] as string[];
+    expect(statuses).not.toContain('payment_completed');
+    expect(statuses).not.toContain('provisioning');
+    expect(statuses).not.toContain('completed');
+  });
+
+  // A NULL `expires_at` is deliberately NOT swept: checkSignupSubdomainAvailability
+  // treats those as blocking too, so leaving them alone keeps the partial index
+  // and that check in agreement. One such row is live in production.
+  it('requires a non-null expires_at, so NULL-expiry rows are left alone', async () => {
+    const { db } = buildExpiryDb([]);
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await expireStalePendingSignups();
+
+    expect(isNotNullMock).toHaveBeenCalledWith(pendingSignupsTable.expiresAt);
+    expect(ltMock).toHaveBeenCalledWith(pendingSignupsTable.expiresAt, expect.any(Date));
+  });
+
+  it("writes the 'expired' status the index and CHECK constraint already allow", async () => {
+    const { db, setMock } = buildExpiryDb([]);
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await expireStalePendingSignups();
+
+    expect(setMock).toHaveBeenCalledWith({ status: 'expired', updatedAt: expect.any(Date) });
+  });
+
+  // The same fence reconcileLostCheckoutSignups uses: a signup that already has
+  // a provisioning job is committed and must never be expired out from under it.
+  it('fences on NOT EXISTS provisioning_jobs', async () => {
+    const { db } = buildExpiryDb([]);
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await expireStalePendingSignups();
+
+    const raw = sqlMock.mock.calls
+      .map((call) => Array.from(call[0] as ArrayLike<string>).join('?'))
+      .join(' | ');
+    expect(raw).toContain('NOT EXISTS');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// markPendingSignupEmailVerifiedIfPending — this UPDATE is what moves a row
+// INTO the partial slug index, so it is where a collision surfaces. The user
+// was told at signup time that the subdomain was free.
+// ---------------------------------------------------------------------------
+
+function buildRejectingCasDb(error: unknown) {
+  const returningMock = vi.fn().mockRejectedValue(error);
+  const whereMock = vi.fn(() => ({ returning: returningMock }));
+  const setMock = vi.fn(() => ({ where: whereMock }));
+  return { update: vi.fn(() => ({ set: setMock })) };
+}
+
+describe('markPendingSignupEmailVerifiedIfPending — slug collision', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('maps the slug-index 23505 to a 409, not an opaque 500', async () => {
+    createUnscopedClientMock.mockReturnValue(
+      buildRejectingCasDb({
+        code: '23505',
+        constraint: 'pending_signups_candidate_slug_active_unique',
+      }),
+    );
+
+    await expect(markPendingSignupEmailVerifiedIfPending('req_collide')).rejects.toMatchObject({
+      statusCode: 409,
+      name: 'ConflictError',
+    });
+  });
+
+  // Anti-vacuity: the catch must be targeted at that ONE constraint, not a
+  // blanket swallow reporting every database failure as a slug conflict.
+  it('rethrows an unrelated database error unchanged', async () => {
+    const unrelated = Object.assign(new Error('connection terminated'), { code: '57P01' });
+    createUnscopedClientMock.mockReturnValue(buildRejectingCasDb(unrelated));
+
+    await expect(markPendingSignupEmailVerifiedIfPending('req_other')).rejects.toBe(unrelated);
+  });
+
+  it('rethrows a 23505 from a DIFFERENT constraint unchanged', async () => {
+    const otherIndex = { code: '23505', constraint: 'pending_signups_email_normalized_unique' };
+    createUnscopedClientMock.mockReturnValue(buildRejectingCasDb(otherIndex));
+
+    await expect(markPendingSignupEmailVerifiedIfPending('req_email')).rejects.toBe(otherIndex);
+  });
 });

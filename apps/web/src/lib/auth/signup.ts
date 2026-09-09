@@ -16,6 +16,7 @@ import {
   type SignupInput,
 } from './signup-schema';
 import { getBaseUrl } from '@/lib/utils/url';
+import { isUniqueConstraintError } from '@/lib/db/unique-constraint-error';
 
 const SIGNUP_SUCCESS_MESSAGE =
   'Thanks for signing up. Check your email for a verification link before checkout.';
@@ -568,27 +569,6 @@ function isAlreadyRegisteredAuthError(message: string | undefined): boolean {
   return /already.+registered|already.+exists|already.+in use/i.test(message);
 }
 
-function isUniqueConstraintError(error: unknown, constraintName: string): boolean {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const candidate = error as {
-    code?: string;
-    constraint?: string;
-    constraint_name?: string;
-    message?: string;
-  };
-
-  if (candidate.code !== '23505') {
-    return false;
-  }
-
-  return (
-    candidate.constraint === constraintName
-    || candidate.constraint_name === constraintName
-  );
-}
 
 function getUndefinedColumnName(error: unknown): string | null {
   if (!error || typeof error !== 'object') {
