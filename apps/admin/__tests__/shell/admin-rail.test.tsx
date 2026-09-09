@@ -32,4 +32,51 @@ describe('AdminRail', () => {
     fireEvent.click(pin);
     expect(onPinnedChange).toHaveBeenCalledWith(true);
   });
+
+  // Finding 2 (review, task 8): the pin toggle is `opacity-0` whenever the
+  // rail isn't expanded, with nothing to reveal it for a keyboard-only user
+  // who tabs to it. `getComputedStyle` can't see Tailwind's compiled
+  // `:focus-visible` rule in this jsdom run (no real stylesheet is loaded),
+  // so this asserts the class the fix depends on is actually present —
+  // `node scripts/verify-admin-semantic-css.cjs` is what proves that class
+  // resolves to real CSS in this repo's Tailwind config.
+  it('carries a focus-visible reveal on the pin toggle for keyboard users', () => {
+    render(<AdminRail activeId="inbox" counts={counts} pinned={false} onPinnedChange={() => {}} user={user} />);
+    const pin = screen.getByRole('button', { name: /keep navigation open/i });
+    expect(pin.className).toContain('focus-visible:opacity-100');
+  });
+
+  // Finding 2 (review, task 8): on a device that cannot hover (`matchMedia
+  // '(hover: none)'` matches — touch with no mouse/trackpad), `hovered` can
+  // never become true, so without this fix `expanded` could only flip via
+  // `pinned` — itself only reachable through a button that's invisible until
+  // the rail is already expanded. That's a closed loop with no discoverable
+  // way in. Asserts the rail opens on its own for such a device instead, so
+  // every nav label and the pin toggle are reachable without any hover.
+  it('opens on its own for a device that cannot hover, so the pin toggle is reachable without hovering', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true, // '(hover: none)' matches: no hover channel
+      media: '(hover: none)',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      onchange: null,
+    });
+
+    try {
+      const { container } = render(
+        <AdminRail activeId="inbox" counts={counts} pinned={false} onPinnedChange={() => {}} user={user} />,
+      );
+      const nav = container.querySelector('nav[aria-label="Main navigation"]')!;
+      // Open immediately — no mouseEnter, no prior pin — breaking the closed loop.
+      expect(nav.className).toContain('w-[260px]');
+      const pin = screen.getByRole('button', { name: /keep navigation open/i });
+      expect(pin.className).toContain('opacity-100');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
 });

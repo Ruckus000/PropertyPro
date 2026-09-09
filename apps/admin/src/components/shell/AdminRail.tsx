@@ -6,6 +6,7 @@ import { ChevronsLeft, Pin } from 'lucide-react';
 import { NavRail, type NavRailSection } from '@propertypro/ui';
 import { NAV_GROUPS, type NavSignalKey } from './nav-config';
 import { RailFooter } from './RailFooter';
+import { cn } from '@/lib/utils';
 
 export interface AdminRailProps {
   activeId: string | null;
@@ -47,16 +48,34 @@ export function AdminRail({ activeId, counts, pinned, onPinnedChange, user }: Ad
       ? true
       : !window.matchMedia('(hover: none)').matches;
 
-  const expanded = pinned || hovered;
+  // A device that cannot hover (`canHover === false`, e.g. a touchscreen with
+  // no mouse/trackpad) can never set `hovered`, so `expanded` could otherwise
+  // only become true via `pinned` — which can only be toggled through a
+  // button that lives INSIDE the collapsed rail and is itself invisible until
+  // the rail is already expanded. That closed loop leaves a touch user with
+  // no discoverable way to ever open the rail. Treat "cannot hover" as
+  // permanently open instead: it's the direct touch equivalent of what a
+  // mouse user gets for free by hovering, and it's also the only layout that
+  // fits — the collapsed 72px header has room for exactly one 28px icon
+  // (the logo), not two side-by-side, so making just the pin button visible
+  // at collapsed width would visually overlap it rather than open a real path
+  // forward.
+  const forceOpen = !canHover;
+  const expanded = pinned || hovered || forceOpen;
+  // Whether the rail should reserve real layout space (vs. floating over
+  // content as a transient hover overlay). `forceOpen` behaves like `pinned`
+  // here on purpose — an always-expanded touch rail must not permanently
+  // overlay page content that the user can never move a mouse away from.
+  const reservesLayout = pinned || forceOpen;
 
   return (
     // The wrapper reserves the collapsed width; the overlay grows over content on hover (spec D8).
     <div
-      className={expanded && pinned ? 'relative h-full w-[260px] shrink-0' : 'relative h-full w-[72px] shrink-0'}
+      className={reservesLayout ? 'relative h-full w-[260px] shrink-0' : 'relative h-full w-[72px] shrink-0'}
       onMouseEnter={() => canHover && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className={['absolute inset-y-0 left-0 z-40', expanded && !pinned ? 'shadow-e3' : ''].join(' ')}>
+      <div className={cn('absolute inset-y-0 left-0 z-40', expanded && !reservesLayout && 'shadow-e3')}>
         <NavRail
           sections={toSections(counts)}
           activeView={activeId ?? ''}
@@ -76,9 +95,7 @@ export function AdminRail({ activeId, counts, pinned, onPinnedChange, user }: Ad
                 P
               </span>
               <span
-                className={['text-sm font-semibold transition-opacity', expanded ? 'opacity-100' : 'opacity-0'].join(
-                  ' ',
-                )}
+                className={cn('text-sm font-semibold transition-opacity', expanded ? 'opacity-100' : 'opacity-0')}
               >
                 PropertyPro
               </span>
@@ -90,11 +107,17 @@ export function AdminRail({ activeId, counts, pinned, onPinnedChange, user }: Ad
                 }}
                 aria-pressed={pinned}
                 aria-label={pinned ? 'Collapse navigation' : 'Keep navigation open'}
-                className={[
-                  'ml-auto flex size-7 items-center justify-center rounded-sm text-content-tertiary transition-opacity hover:text-content',
+                className={cn(
+                  // `focus-visible:opacity-100` covers a sighted keyboard-only user:
+                  // without it, the button stays in the tab order but is fully
+                  // transparent when tabbed to (icon, label, and the focus ring
+                  // itself all sit under `opacity-0`), so focus lands nowhere
+                  // visible. Touch discoverability doesn't route through opacity
+                  // at all here — see `forceOpen` above.
+                  'ml-auto flex size-7 items-center justify-center rounded-sm text-content-tertiary transition-opacity hover:text-content focus-visible:opacity-100',
                   expanded ? 'opacity-100' : 'opacity-0',
-                  pinned ? 'bg-surface-muted' : '',
-                ].join(' ')}
+                  pinned && 'bg-surface-muted',
+                )}
               >
                 {pinned ? <ChevronsLeft size={16} aria-hidden="true" /> : <Pin size={16} aria-hidden="true" />}
               </button>

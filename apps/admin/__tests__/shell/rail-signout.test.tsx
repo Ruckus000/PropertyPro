@@ -129,4 +129,34 @@ describe('RailFooter sign-out', () => {
     expect(assignedHref).toBeNull();
     expect(container.textContent).toContain('Sign out failed');
   });
+
+  // Review finding (task 8): `expanded` on the rail is `pinned || hovered`,
+  // NOT a persisted setting like the old sidebar's `collapsed` — it can flip
+  // to false while a sign-out request is still in flight (the operator moved
+  // the mouse away). The failure alert must not be gated on it, or the
+  // operator loses the ONLY reliable signal that they are still signed in.
+  // Renders with `expanded={false}` directly (not via `renderAndClickSignOut`,
+  // which always passes `expanded`) so this exercises the collapsed-rail path.
+  it('still surfaces the failure alert when the rail is collapsed (expanded=false)', async () => {
+    signOutMock.mockResolvedValue({
+      error: { name: 'AuthApiError', status: 429, message: 'Too many requests' },
+    });
+
+    await act(async () => {
+      root.render(<RailFooter user={user} expanded={false} />);
+    });
+
+    const button = container.querySelector('button[aria-label="Sign out"]');
+    expect(button, 'sign-out button should render').toBeTruthy();
+
+    await act(async () => {
+      button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+    expect(assignedHref).toBeNull();
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert, 'the alert must still be present, not unmounted, when collapsed').toBeTruthy();
+    expect(alert!.textContent).toContain('Sign out failed — you are still signed in. Try again.');
+  });
 });

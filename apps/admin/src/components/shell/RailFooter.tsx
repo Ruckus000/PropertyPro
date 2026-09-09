@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { LogOut } from 'lucide-react';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import { cn } from '@/lib/utils';
 
 interface RailFooterProps {
   user: { email: string; initial: string };
@@ -90,10 +91,10 @@ export function RailFooter({ user, expanded }: RailFooterProps) {
           {user.initial}
         </span>
         <span
-          className={[
+          className={cn(
             'min-w-0 flex-1 overflow-hidden transition-opacity',
             expanded ? 'opacity-100' : 'w-0 opacity-0',
-          ].join(' ')}
+          )}
         >
           <span className="block truncate text-sm font-medium text-content">{user.email}</span>
           <span className="block truncate text-xs text-content-tertiary">Super admin</span>
@@ -105,21 +106,39 @@ export function RailFooter({ user, expanded }: RailFooterProps) {
         disabled={signingOut}
         aria-label="Sign out"
         title={!expanded && signOutFailed ? 'Sign out failed — try again' : undefined}
-        className={[
+        className={cn(
           'mt-1 flex w-full items-center rounded-md py-2 text-sm font-medium transition-colors disabled:opacity-60',
           signOutFailed
             ? 'text-status-danger hover:bg-surface-hover'
             : 'text-content-tertiary hover:bg-surface-hover hover:text-content',
           expanded ? 'gap-2.5 px-3' : 'justify-center px-2',
-        ].join(' ')}
+        )}
       >
         <LogOut size={16} className="shrink-0" aria-hidden="true" />
         {expanded && (signingOut ? 'Signing out…' : 'Sign out')}
       </button>
-      {/* Never navigate away on failure: the session is still live, and
-          silently landing on /auth/login would imply otherwise. */}
-      {signOutFailed && expanded && (
-        <p role="alert" className="mt-2 px-3 text-xs text-status-danger">
+      {/*
+        Never navigate away on failure: the session is still live, and
+        silently landing on /auth/login would imply otherwise.
+
+        This alert is rendered unconditionally on `signOutFailed` — NOT
+        gated on `expanded` too. `expanded` here is `pinned || hovered`, so
+        it can flip to false the instant the mouse leaves the rail, which
+        can happen while the sign-out request is still in flight (click →
+        move mouse away → request fails → `hovered` is now false). Gating
+        the alert on `expanded` would unmount it the moment that happens,
+        leaving the operator with only the icon turning red (see the
+        `signOutFailed` branch above, which is NOT expanded-gated and so
+        still renders) and a `title` tooltip that needs a fresh hover and
+        isn't reliably announced by assistive tech — no reliable signal
+        that they are still signed in on a shared workstation. Collapsing
+        it to `sr-only` instead of unmounting it keeps it in the a11y tree
+        (still announced via role="alert") without visually cluttering the
+        72px collapsed rail; the reddened icon above is the persistent
+        *visual* cue for a sighted mouse user who has moved away.
+      */}
+      {signOutFailed && (
+        <p role="alert" className={cn('mt-2 px-3 text-xs text-status-danger', !expanded && 'sr-only')}>
           Sign out failed — you are still signed in. Try again.
         </p>
       )}
