@@ -404,3 +404,64 @@ describe('community subdomain — public page slugs now resolve [D1]', () => {
     expect(outcome(res).to ?? '').not.toContain('/public-site');
   });
 });
+
+/**
+ * `/signup` belongs on exactly one hostname. The wildcard previously served the
+ * genuine signup form on every label (verified in production 2026-09-09), so a
+ * user could complete the funnel — and mint a `.getpropertypro.com`-scoped
+ * session — on `mail.` or on a tenant's own subdomain.
+ */
+describe('signup host canonicalisation', () => {
+  beforeEach(() => signedIn(false));
+
+  it('307s /signup off a reserved host to the canonical origin', async () => {
+    const res = await middleware(request(`mail.${ROOT_DOMAIN}`, '/signup'));
+    expect(res.status).toBe(307);
+    const to = new URL(res.headers.get('location') ?? '');
+    expect(to.hostname).toBe(ROOT_DOMAIN);
+    expect(to.pathname).toBe('/signup');
+  });
+
+  it('307s /signup off a community subdomain too — signup is not tenant-scoped', async () => {
+    const res = await middleware(request(`sunset-condos.${ROOT_DOMAIN}`, '/signup'));
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get('location') ?? '').hostname).toBe(ROOT_DOMAIN);
+  });
+
+  // Losing the query would drop the user on the missing-session screen with
+  // their verified signup stranded, which is a silent failure rather than a
+  // loud one — so the query string is asserted, not assumed.
+  it('preserves the query string, which carries signupRequestId', async () => {
+    const res = await middleware(
+      request(`mail.${ROOT_DOMAIN}`, '/signup/checkout?signupRequestId=sr-42&plan=essentials'),
+    );
+    expect(res.status).toBe(307);
+    const to = new URL(res.headers.get('location') ?? '');
+    expect(to.pathname).toBe('/signup/checkout');
+    expect(to.searchParams.get('signupRequestId')).toBe('sr-42');
+    expect(to.searchParams.get('plan')).toBe('essentials');
+  });
+
+  // The control that keeps this from being a redirect loop: www is where
+  // production actually serves, because the apex 307s to it.
+  it.each([ROOT_DOMAIN, `www.${ROOT_DOMAIN}`])('does NOT redirect /signup on %s', async (host) => {
+    const res = await middleware(request(host, '/signup'));
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  // Preview deployments are foreign hosts; redirecting them would send every
+  // PR preview of the signup flow to production.
+  it('does NOT redirect /signup on a preview deployment host', async () => {
+    const res = await middleware(
+      request('property-pro-web-abc123-ruckus000s-projects.vercel.app', '/signup'),
+    );
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('leaves non-signup paths on a reserved host alone', async () => {
+    const res = await middleware(request(`pm.${ROOT_DOMAIN}`, '/pm/dashboard/communities'));
+    const location = res.headers.get('location');
+    expect(location === null || !location.includes('/signup')).toBe(true);
+  });
+});
+

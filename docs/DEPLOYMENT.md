@@ -279,9 +279,37 @@ already suitable for an external uptime monitor.
 **Web app (`apps/web`):**
 
 1. In Vercel Dashboard > Project > Settings > Domains, add:
-   - `getpropertypro.com` (primary apex)
-   - `www.getpropertypro.com` (optional; redirect to apex)
+   - `getpropertypro.com` (apex — **currently redirects to `www`**)
+   - `www.getpropertypro.com` (**the host that actually serves**)
    - `*.getpropertypro.com` (wildcard for tenant subdomains)
+
+> **`www` is canonical, not the apex.** This section previously said the
+> reverse ("www … optional; redirect to apex"), which did not match production.
+> Measured 2026-09-09: `https://getpropertypro.com/` returns **307** to
+> `https://www.getpropertypro.com/`, and the redirect covers **every** path
+> including `/api` (`apex/api/health` → 307, `www/api/health` → 200).
+>
+> Two things already depend on `www` answering directly, so do not flip the
+> redirect casually:
+> - `.github/workflows/production-health.yml` probes `https://www.…` with
+>   `curl -fsS` and **no `-L`**, so a 307 would fail the job.
+> - The **Forward Email inbound webhook** (§ below) is a live DNS TXT record
+>   pointing at `https://www.getpropertypro.com/api/v1/webhooks/inbound-email`.
+>   Webhook providers POST and do not follow redirects, so inbound support mail
+>   would be dropped until DNS was updated.
+>
+> **Known inconsistency, not yet resolved:** `NEXT_PUBLIC_APP_URL`,
+> `NEXT_PUBLIC_WEB_APP_URL`, `WEB_APP_BASE_URL` and the Supabase **Site URL**
+> all still name the **apex**, so `getWebAppOriginFromEnv()` returns the apex
+> and internal redirects take a second hop through Vercel. Harmless today.
+> Settling it means either pointing those at `www`, or flipping the redirect
+> *and* updating the health check and the webhook DNS record together.
+>
+> This mismatch had one real casualty: because `www` is in
+> `RESERVED_SUBDOMAINS`, `robots.ts` served `Disallow: /` and `sitemap.ts`
+> served an empty sitemap on the only host anyone reaches — the whole marketing
+> site was de-indexed. Fixed by teaching both files `isApexHost`, which already
+> treated `www` as apex-equivalent for middleware.
 
 **Admin app (`apps/admin`):**
 

@@ -287,6 +287,48 @@ export function isApexHost(host: string | null, rootDomain: string): boolean {
   return false;
 }
 
+/**
+ * `/signup` belongs on exactly one hostname.
+ *
+ * `*.getpropertypro.com` is a wildcard, and nothing in the request path ever
+ * rejected a label — RESERVED_SUBDOMAINS is consulted only to SUPPRESS tenant
+ * resolution, never to refuse. So the genuine signup form was served, HTTP 200,
+ * on every label anyone typed: `mail.`, `pm.`, a real tenant's subdomain, or a
+ * string nobody has ever registered. Verified in production 2026-09-09.
+ *
+ * Two exemptions, and both are load-bearing:
+ *
+ *  - `isApexHost` covers apex, `www`, `localhost` and `127.0.0.1`. `www` is
+ *    where production actually serves (the apex 307s to it), so redirecting it
+ *    would loop.
+ *  - The under-root test is what spares FOREIGN hosts: `*.vercel.app` preview
+ *    deployments and verified community custom domains are not under
+ *    `rootDomain`, and must be left alone. It is the same comparison
+ *    `foreignHost()` uses in subdomain-router.ts.
+ *
+ * Scoped to `/signup` deliberately. A blanket host rule is not safe here:
+ * RESERVED_SUBDOMAINS mixes names nobody should serve (`mail`, `autodiscover`)
+ * with names we serve ourselves — `pm.getpropertypro.com/pm/dashboard/…` is a
+ * live authenticated surface.
+ */
+export function shouldCanonicaliseSignupHost(
+  pathname: string,
+  host: string | null,
+  rootDomain: string,
+): boolean {
+  if (pathname !== '/signup' && !pathname.startsWith('/signup/')) return false;
+  if (isApexHost(host, rootDomain)) return false;
+  if (!host) return false;
+
+  const hostname = host.split(':')[0]?.trim().toLowerCase() ?? '';
+  const rootHost = rootDomain.split(':')[0]?.trim().toLowerCase() ?? '';
+  if (!hostname || !rootHost) return false;
+
+  // Under our own root domain → ours to canonicalise. Anything else is foreign
+  // (preview deployment, custom domain) and is not ours to redirect.
+  return hostname === rootHost || hostname.endsWith(`.${rootHost}`);
+}
+
 export function shouldRewriteHostTransparency(pathname: string): boolean {
   return pathname === '/transparency' || pathname.startsWith('/transparency/');
 }
