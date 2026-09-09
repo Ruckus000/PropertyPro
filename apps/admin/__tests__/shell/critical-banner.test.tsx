@@ -20,4 +20,9 @@ describe('CriticalBanner', () => {
     render(<CriticalBanner critical={critical} mobile />);
     expect(screen.getByRole('alert').textContent).toContain('Stripe webhook failing');
   });
+  it('renders nothing when critical is null', () => {
+    const { container } = render(<CriticalBanner critical={null} mobile={false} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(container.firstChild).toBeNull();
+  });
 });

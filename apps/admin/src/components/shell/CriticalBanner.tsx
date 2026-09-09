@@ -60,9 +60,23 @@ export function CriticalBanner({ critical, mobile }: CriticalBannerProps) {
     >
       <AlertTriangle size={16} aria-hidden="true" className="shrink-0" />
       <p className="min-w-0 flex-1 truncate">{mobile ? critical.shortText : critical.text}</p>
+      {/*
+       * `relative` + `before:` below give both controls a touch target that
+       * clears design.md's 44px (<768px) / 36px (>=768px) floor WITHOUT
+       * growing the banner's own height. This is a "slim alert bar" living
+       * outside any fixed-height chrome, so — unlike AdminTopBar's identical
+       * `size-11 md:size-9` buttons, which sit inside an already-60px header
+       * built to fit them — inflating the visible box here would inflate the
+       * banner itself (Dismiss alone would take it from ~48px to ~60px tall,
+       * as tall as the whole top bar). The invisible `::before` pseudo-element
+       * extends the CLICKABLE/TAPPABLE area beyond the rendered box via
+       * negative `inset`, leaving the visual chip exactly as designed; the
+       * hover highlight still paints only the small visible box, matching the
+       * brief's own hover treatment.
+       */}
       <Link
         href={critical.href}
-        className="shrink-0 rounded-sm border border-white/50 bg-white/20 px-2 py-1 text-xs font-semibold"
+        className="relative shrink-0 rounded-sm border border-white/50 bg-white/20 px-2 py-1 text-xs font-semibold before:absolute before:inset-x-0 before:-inset-y-3 before:content-[''] md:before:-inset-y-2"
       >
         View
       </Link>
@@ -70,7 +84,7 @@ export function CriticalBanner({ critical, mobile }: CriticalBannerProps) {
         type="button"
         onClick={handleDismiss}
         aria-label="Dismiss"
-        className="flex size-8 shrink-0 items-center justify-center rounded-sm hover:bg-white/20"
+        className="relative flex size-8 shrink-0 items-center justify-center rounded-sm hover:bg-white/20 before:absolute before:-inset-2 before:content-[''] md:before:-inset-1"
       >
         <X size={16} aria-hidden="true" />
       </button>
