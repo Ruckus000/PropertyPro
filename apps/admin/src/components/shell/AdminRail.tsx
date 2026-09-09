@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronsLeft, Pin } from 'lucide-react';
 import { NavRail, type NavRailSection } from '@propertypro/ui';
@@ -39,14 +39,31 @@ export function AdminRail({ activeId, counts, pinned, onPinnedChange, user }: Ad
   const [hovered, setHovered] = useState(false);
 
   // Hover-expand only makes sense on a device with a real hover channel.
-  // `matchMedia` is absent in this repo's jsdom test environment (and would
-  // be absent during any SSR pass), so the check is defensive on both counts
-  // — a device that cannot report hover capability is treated as "can hover"
-  // rather than crashing the render.
-  const canHover =
-    typeof window === 'undefined' || typeof window.matchMedia !== 'function'
-      ? true
-      : !window.matchMedia('(hover: none)').matches;
+  //
+  // This is read in an EFFECT, not in the render body, and seeded with the
+  // value the server necessarily produces (`true` — a server has no device to
+  // ask). Reading `window.matchMedia` during render was safe only while nothing
+  // rendered this component: `canHover` now drives `forceOpen` and
+  // `reservesLayout`, hence the rail's rendered width classes, so a render-body
+  // read would emit a 72px rail on the server and rehydrate a 260px one on a
+  // touch-only device — a genuine hydration mismatch, on exactly the device
+  // class `forceOpen` exists to help.
+  //
+  // `matchMedia` is also absent in this repo's jsdom test environment, so the
+  // feature-test below keeps a device (or environment) that cannot report hover
+  // capability on the "can hover" path rather than crashing.
+  const [canHover, setCanHover] = useState(true);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(hover: none)');
+    const sync = () => setCanHover(!query.matches);
+    sync();
+    // Hover capability is not immutable: a tablet gains it when a trackpad
+    // keyboard is attached and loses it again when detached.
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
 
   // A device that cannot hover (`canHover === false`, e.g. a touchscreen with
   // no mouse/trackpad) can never set `hovered`, so `expanded` could otherwise

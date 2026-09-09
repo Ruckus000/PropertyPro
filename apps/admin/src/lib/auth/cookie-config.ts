@@ -30,7 +30,8 @@ import type { CookieOptionsWithName } from '@supabase/ssr';
  * isolation was intended; losing `secure: true` in production was not.
  *
  * Keep this module dependency-free: two of its consumers
- * (`app/auth/login/page.tsx`, `components/Sidebar.tsx`) are client components.
+ * (`app/auth/login/page.tsx`, `components/shell/RailFooter.tsx`) are client
+ * components.
  */
 export const ADMIN_COOKIE_OPTIONS: CookieOptionsWithName = {
   name: 'sb-admin-auth-token',

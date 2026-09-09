@@ -5,7 +5,6 @@ const notFoundMock = vi.fn(() => {
 });
 
 const createAdminClientMock = vi.fn();
-const getCoolingDeletionRequestCountMock = vi.fn();
 const requireAdminPageSessionMock = vi.fn(async () => ({
   id: 'admin-1',
   email: 'admin@getpropertypro.com',
@@ -25,14 +24,6 @@ vi.mock('@/lib/request/admin-page-context', () => ({
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
-}));
-
-vi.mock('@/lib/server/deletion-requests', () => ({
-  getCoolingDeletionRequestCount: getCoolingDeletionRequestCountMock,
-}));
-
-vi.mock('@/components/AdminLayout', () => ({
-  AdminLayout: ({ children }: { children: unknown }) => children,
 }));
 
 vi.mock('@/components/clients/ClientWorkspace', () => ({
@@ -126,17 +117,18 @@ describe('ClientWorkspacePage data pass-through', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createAdminClientMock.mockReturnValue(makeDb());
-    getCoolingDeletionRequestCountMock.mockResolvedValue(5);
   });
 
   it('passes custom_domain and site_published_at through to ClientWorkspace', async () => {
-    const { default: ClientWorkspacePage } = await import('@/app/clients/[id]/page');
+    const { default: ClientWorkspacePage } = await import('@/app/(console)/clients/[id]/page');
 
+    // The (console) route-group layout renders the shell now, so the page
+    // returns the ClientWorkspace element itself rather than a wrapper.
     const pageElement = await ClientWorkspacePage({ params: Promise.resolve({ id: '42' }) }) as {
-      props?: { children?: { props?: { community?: Record<string, unknown> } } };
+      props?: { community?: Record<string, unknown> };
     };
 
-    const community = pageElement.props?.children?.props?.community;
+    const community = pageElement.props?.community;
     expect(community).toBeDefined();
 
     expect(community?.custom_domain).toBe('portal.sunsetcondo.org');
@@ -148,7 +140,7 @@ describe('ClientWorkspacePage data pass-through', () => {
   });
 
   it('calls notFound for invalid id', async () => {
-    const { default: ClientWorkspacePage } = await import('@/app/clients/[id]/page');
+    const { default: ClientWorkspacePage } = await import('@/app/(console)/clients/[id]/page');
 
     await expect(ClientWorkspacePage({ params: Promise.resolve({ id: 'abc' }) })).rejects.toThrow('NOT_FOUND');
     expect(notFoundMock).toHaveBeenCalled();
@@ -159,7 +151,7 @@ describe('ClientWorkspacePage data pass-through', () => {
   // at all, relying solely on the middleware matcher. Deleting the
   // requireAdminPageSession() call must fail here.
   it('asserts platform-admin identity before reading tenant data', async () => {
-    const { default: ClientWorkspacePage } = await import('@/app/clients/[id]/page');
+    const { default: ClientWorkspacePage } = await import('@/app/(console)/clients/[id]/page');
 
     await ClientWorkspacePage({ params: Promise.resolve({ id: '42' }) });
 
@@ -170,7 +162,7 @@ describe('ClientWorkspacePage data pass-through', () => {
     requireAdminPageSessionMock.mockRejectedValueOnce(
       Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT' }),
     );
-    const { default: ClientWorkspacePage } = await import('@/app/clients/[id]/page');
+    const { default: ClientWorkspacePage } = await import('@/app/(console)/clients/[id]/page');
 
     await expect(
       ClientWorkspacePage({ params: Promise.resolve({ id: '42' }) }),

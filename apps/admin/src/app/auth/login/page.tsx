@@ -124,7 +124,8 @@ function LoginForm() {
   }
 
   return (
-    // Skip-link target: the login page renders outside AdminLayout.
+    // Skip-link target: the login page renders outside the (console)
+    // group, so nothing else supplies #main-content here.
     <div id="main-content" className="flex min-h-screen items-center justify-center bg-surface-inverse-subtle px-4">
       <div className="w-full max-w-sm">
         {/* Header */}

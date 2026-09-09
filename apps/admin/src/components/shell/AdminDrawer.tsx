@@ -22,7 +22,11 @@ export interface AdminDrawerProps {
 export function AdminDrawer({ open, onOpenChange, activeId, counts, user }: AdminDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-[min(300px,84vw)] p-0">
+      {/* `aria-describedby={undefined}` is Radix's documented opt-out for a
+          dialog with no description. Without it Radix logs "Missing
+          `Description` or `aria-describedby`" on every open — and a nav drawer
+          genuinely has nothing to describe beyond its title. */}
+      <SheetContent side="left" aria-describedby={undefined} className="w-[min(300px,84vw)] p-0">
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <NavRail
           sections={toSections(counts)}
