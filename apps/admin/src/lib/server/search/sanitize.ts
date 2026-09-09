@@ -24,6 +24,22 @@
  * the query's limit. `searchAdmin` in `../search.ts` gates on this centrally
  * so no searcher is ever invoked with such a term; see its docblock.
  */
-export function sanitizeSearchTerm(raw: string): string {
-  return raw.replace(/[%_,()*]/g, ' ').trim();
+/**
+ * A search term that has been through `sanitizeSearchTerm`.
+ *
+ * This is a branded type, not an alias: `Searcher.search` requires one, so a
+ * searcher CANNOT be called with a raw string. That turns the "sanitize once,
+ * centrally" rule from a docblock a future author may skip into a compile
+ * error — which matters because `search.ts` invites exactly that author
+ * ("Wave 3 appends `ticketSearcher` here — one import + one array entry"),
+ * and the filter it would build reaches a PostgREST `.or()` that takes a
+ * comma-separated string with no structural escaping.
+ *
+ * Searcher IMPLEMENTATIONS may still declare their parameter as `string` —
+ * the constraint is on callers, which is where the mistake happens.
+ */
+export type SanitizedTerm = string & { readonly __sanitizedSearchTerm: unique symbol };
+
+export function sanitizeSearchTerm(raw: string): SanitizedTerm {
+  return raw.replace(/[%_,()*]/g, ' ').trim() as SanitizedTerm;
 }

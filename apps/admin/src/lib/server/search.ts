@@ -24,7 +24,7 @@ import type { SignalIcon } from './signals/types';
 import { communitySearcher } from './search/communities';
 import { threadSearcher } from './search/threads';
 import { userSearcher } from './search/users';
-import { sanitizeSearchTerm } from './search/sanitize';
+import { sanitizeSearchTerm, type SanitizedTerm } from './search/sanitize';
 
 export interface SearchHit {
   id: string;
@@ -56,7 +56,7 @@ export interface Searcher {
    * violate, reaching a PostgREST `.or()` filter with an unsanitized `,`,
    * `(`, or `)` that restructures the filter instead of matching oddly.
    */
-  search(q: string, limit: number): Promise<SearchHit[]>;
+  search(q: SanitizedTerm, limit: number): Promise<SearchHit[]>;
 }
 
 /** Wave 3 (tickets) appends `ticketSearcher` here — one import + one array entry. */

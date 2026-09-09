@@ -21,6 +21,7 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 }));
 
 import { communitySearcher } from '@/lib/server/search/communities';
+import type { SanitizedTerm } from '@/lib/server/search/sanitize';
 
 // Sanitization is `searchAdmin`'s job now (`../../src/lib/server/search.ts`),
 // not each searcher's — see `Searcher.search`'s docblock. This proves
@@ -36,7 +37,11 @@ describe('communitySearcher', () => {
   });
 
   it('builds the ilike filter directly from the given term, trusting it is already sanitized', async () => {
-    await communitySearcher.search('john_doe', 5);
+    // The cast is the point of the test, not a workaround: `search` now
+    // requires a `SanitizedTerm`, so handing it a term that still contains an
+    // underscore has to be stated explicitly. That is exactly the scenario
+    // being pinned — the searcher must pass through whatever it is given.
+    await communitySearcher.search('john_doe' as SanitizedTerm, 5);
 
     expect(orMock).toHaveBeenCalledTimes(1);
     expect(orMock.mock.calls[0]![0]).toBe('name.ilike.%john_doe%,slug.ilike.%john_doe%');
