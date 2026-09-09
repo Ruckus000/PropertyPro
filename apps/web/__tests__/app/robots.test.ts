@@ -94,6 +94,29 @@ describe('robots.ts', () => {
     expect(result.sitemap).toBeUndefined();
   });
 
+  // Production 307s the apex to `www`, so `www` is the host every visitor and
+  // crawler actually lands on. It is in RESERVED_SUBDOMAINS (correctly: nobody
+  // may CLAIM it as a slug), which made the branch above answer `Disallow: /`
+  // for the whole marketing site. Measured live 2026-09-09.
+  it('serves the MARKETING policy on www, which is where production actually serves', async () => {
+    headersMock.mockResolvedValueOnce(new Headers({ host: 'www.getpropertypro.com' }));
+    resolveCommunityContextMock.mockReturnValueOnce({
+      source: 'host_subdomain',
+      tenantSlug: 'www',
+      isReservedSubdomain: true,
+      communityId: null,
+    });
+    const result = await robots();
+    expect(result.rules).toEqual([
+      expect.objectContaining({
+        userAgent: '*',
+        allow: '/',
+        disallow: ['/api/', '/dashboard/', '/pm/'],
+      }),
+    ]);
+    expect(result.sitemap).toBe('https://www.getpropertypro.com/sitemap.xml');
+  });
+
   /**
    * Phase 11b-2, S8. `resolveCommunityContext({ host })` was called with NO
    * `rootDomain`; `foreignHost()` returns null without it, so
