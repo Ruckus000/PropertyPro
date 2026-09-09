@@ -43,7 +43,10 @@ preview_snapshot()
 >
 > An earlier version of this table listed "Sunset Condos" for six roles. That
 > was wrong for four of them. The column below is measured against
-> `pnpm seed:demo` on 2026-08-05 — treat it as a snapshot, not a guarantee.
+> `pnpm seed:demo` on 2026-08-05 and re-checked against `ROLE_EMAIL_MAP` on 2026-09-09 —
+> treat it as a snapshot, not a guarantee. The two `root_*` rows were added in #919 on
+> 2026-08-07 and this table did not catch up until 2026-09-09; if `?as=` rejects a value
+> listed here, read `apps/web/src/app/dev/agent-login/route.ts` rather than this file.
 
 | `?as=` value | Role | Member of | Lands in **without** a pin |
 |---|---|---|---|
@@ -55,6 +58,8 @@ preview_snapshot()
 | `pm_admin` | PM Company Admin | all three | `/pm/dashboard/communities` (PM tier — no community pin) |
 | `founding_admin` | Root Manager | Palm Shores | Palm Shores HOA (Essentials) |
 | `site_manager` | Site Manager | Sunset Ridge Apartments | Sunset Ridge Apartments |
+| `root_sunset` | Root Manager | Sunset Condos | Sunset Condos (Professional) |
+| `root_sunsetridge` | Root Manager | Sunset Ridge Apartments | Sunset Ridge Apartments (Operations Plus) |
 
 Seeded plans: Sunset Condos = `professional`, Palm Shores HOA = `essentials`,
 Sunset Ridge Apartments = `operations_plus`.

@@ -4,8 +4,33 @@
 
 ## Current State
 
-- Migrations were squashed to a new baseline; live migration files on `main` currently run `0000`–`0056` (`packages/db/migrations/`), with reserved gaps at `0050`/`0051` (journal idx runs 49 → 52), tolerated by the ordering guard. The old `0024` reserved gap has since been **filled** by its intended #763 trigger migration (`0024_canonicalize_onboarding_checklist_trigger`, journal idx-24 present). Historical phase mapping through the squash baseline: Phase 1 = 0014–0016, Phase 2 = 0017 storage-RLS + 0018 backfill, Phase 2b = 0019 root_claim_disputes, Phase 4.1 = 0020 role-v3 cleanup (enum rebuild + column drops; CONTRACT migration), 0021 = access_requests/community_join_requests RLS repair, 0022 = pending_signups token lifecycle, 0023 = wrong-GUC RLS policy repair, 0025 = subscription current-period-end column. **This range goes stale — re-check it before creating a migration, and note that `main`'s highest number is NOT the next free one (see the next bullet: prod runs ahead).**
-- **As of 2026-07-02, prod was APPLIED AND LEDGER-RECONCILED through `0022`** (verified against `pg_catalog` + `drizzle.__drizzle_migrations`) — a dated historical snapshot, not the current tip. The live prod ledger position is a database fact: verify it against `drizzle.__drizzle_migrations` rather than trusting a number written here. At that reconciliation: 0020 had been applied manually without a ledger record, so the reconciliation backfilled ledger rows for 0014–0020 and recorded 0021/0022 at apply time. `0021` (access_requests/community_join_requests RLS repair) and `0022` (pending_signups token lifecycle) were applied to prod ahead of their PRs merging (#752 / #757) per expand-before-code; their migration files have since landed on `main`. **NEVER derive the next free migration number from `main` alone — prod runs AHEAD of it.** Verified against prod 2026-08-19 (Supabase `list_migrations` + `SELECT` on `drizzle.__drizzle_migrations`: 60 ledger rows, tip id 89 / `created_at` 1786412347694): prod has applied `0057`–`0061` (`terms_acceptance_versioning`, `community_export_jobs`, `community_exports_bucket`, `arc_rule_reference`, `fining_committee_record`) from in-flight branches under expand-before-code, while `main`'s merged file tip is only `0056`; and `0062_secret_ballot` sits on a branch, deliberately unapplied. So `0057`–`0062` are ALL claimed even though they are absent from `main` — taking "highest on disk + 1" would collide with prod. **Next free number: `0063`.** Re-derive it before creating one by checking `packages/db/migrations/` AND the prod ledger AND open branches. The reserved gaps at `0050`/`0051` (journal idx runs 49 → 52) are expected and allowed by the ordering guard (`scripts/verify-migration-ordering.ts` passes) — prod applied `marketing_leads` under `0050`/`0051`, whereas it merged to `main` renumbered as `0053`–`0055`.
+- **How to get the next free migration number — do this, do not read a number off this page.**
+  Three sources, because prod runs AHEAD of `main` and a branch can claim a number that is on
+  neither:
+
+  ```bash
+  ls packages/db/migrations/[0-9]*.sql | tail -1     # highest file on main
+  gh pr list --state open                            # a PR may claim the next one
+  # and the prod ledger, read-only:
+  #   select count(*), max(id) from drizzle.__drizzle_migrations;
+  ```
+
+  **Measured 2026-09-09: files run `0000`–`0071` (70 of them; reserved gaps at `0050`/`0051`,
+  journal idx 49 → 52, tolerated by the ordering guard). Prod's ledger holds 69 rows — the
+  difference is `0062_secret_ballot`, merged but deliberately unapplied. No open PR and no
+  branch claims a number. So the next free number was `0072`.**
+
+  That paragraph is a snapshot and goes stale the moment anything merges — it is stamped so you
+  can see how old it is, not so you can copy the digits. The previous version of this bullet
+  said "Next free number: `0063`" while `0063`–`0071` were all merged; the localci gate's
+  `verify-migration-ordering.ts` would have caught the collision at push time, but only after
+  you had written the migration.
+- **Prod runs ahead of `main`, and that is deliberate** — expand migrations are applied before
+  the code that needs them merges. So `main`'s highest number is NOT the next free one, and the
+  prod ledger is a database fact to be queried rather than a number to be remembered. A dated
+  example of the pattern: at the 2026-07-02 reconciliation, `0020` had been applied manually
+  with no ledger record, so rows for `0014`–`0020` were backfilled and `0021`/`0022` recorded at
+  apply time; both had been applied to prod ahead of their PRs (#752 / #757) merging.
 - Pre-squash history (incl. the 0090–0106 phase-2 range) lives in `packages/db/migrations/_archive/`
 - **Migrations are applied to prod MANUALLY** (Supabase MCP `apply_migration`, then verify via `information_schema`). This is the single, deliberate apply path — do NOT rely on CI to migrate.
   - *Deploy model (corrected — verify via GH run history, not the workflow file alone):* `deploy.yml` deploys **CODE ONLY** (`vercel build --prod` + `vercel deploy --prebuilt --prod`) on CI-success on `main`. The earlier `db:migrate` gate (#683) was **removed** (`fix/deploy-pipeline-manual-migrations`): it conflicted with manual applies (ledger drift → `check_for_column_name_collision`), failed on every run, and silently **blocked all prod deploys for ~2 weeks** (last good deploy 2026-06-07). It was also unsafe for contract migrations (migrate-FIRST would drop columns the live old code still reads).
