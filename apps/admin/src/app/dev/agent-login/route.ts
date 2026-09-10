@@ -31,11 +31,25 @@
  *     so no demo can surface a super_admin.
  *   - There is no extra script for an e2e job to forget to run.
  *
- * The row is created only on a dev-only route that returns 404 whenever
- * `NODE_ENV !== 'development'`, i.e. the same blast radius that already applies to
- * this route minting sessions at all.
+ * The row is created only on a dev-only route, which returns 404 whenever
+ * `NODE_ENV !== 'development'` AND 403 whenever `NEXT_PUBLIC_SUPABASE_URL` is not
+ * a local instance.
+ *
+ * That second condition was missing until 2026-09-10, and this docblock used to
+ * argue the blast radius was "the same that already applies to this route minting
+ * sessions at all" — reasoning about `NODE_ENV`, which says how the process was
+ * started, not which project it writes to. A worktree whose `.env.local` names
+ * production runs `pnpm dev` as `development`, so the gate passed and this route
+ * created a real `super_admin` row in the production project. Revoked and audited
+ * the same day; the grant had performed no auditable action.
+ *
+ * The lesson generalises past this file: a dev-only guard must assert the TARGET,
+ * not the mode. `scripts/with-env-local-demo-db.sh` states it as "local Postgres
+ * implies local Supabase — a half-redirected env is the dangerous state, because
+ * it looks local and writes remote."
  */
 import { NextResponse } from 'next/server';
+import { isLoopbackUrl } from '@propertypro/shared';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -55,6 +69,20 @@ const VALID_ROLES = new Set(['platform_admin', 'pm_admin']);
 export async function GET(request: Request) {
   if (process.env.NODE_ENV !== 'development') {
     return new NextResponse('Not Found', { status: 404 });
+  }
+
+  // `NODE_ENV` says how this process was started, NOT which project it talks
+  // to. A worktree whose `.env.local` names production runs `pnpm dev` as
+  // `development` and writes to prod — which is how a real `super_admin` row
+  // was created in the production project on 2026-09-10. Refuse unless the
+  // Supabase URL is demonstrably local.
+  if (!isLoopbackUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)) {
+    return new NextResponse(
+      'Refusing to run: NEXT_PUBLIC_SUPABASE_URL is not a local Supabase instance. ' +
+        'This route mints sessions and grants; against a remote project that is a real write. ' +
+        'Start a local stack (`supabase start`) or use scripts/with-env-local-demo-db.sh.',
+      { status: 403 },
+    );
   }
 
   const url = new URL(request.url);

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isLoopbackUrl } from '@propertypro/shared';
 import { sql } from '@propertypro/db/filters';
 // AUTHZ: Dev reset-onboarding — resets community onboarding state (dev-only, 404 in production)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -15,6 +16,20 @@ function parseWizardType(raw: string | null): WizardType | null {
 export async function POST(request: Request) {
   if (process.env.NODE_ENV !== 'development') {
     return new NextResponse('Not Found', { status: 404 });
+  }
+
+  // `NODE_ENV` says how this process was started, NOT which project it talks
+  // to. A worktree whose `.env.local` names production runs `pnpm dev` as
+  // `development` and writes to prod — which is how a real `super_admin` row
+  // was created in the production project on 2026-09-10. Refuse unless the
+  // Supabase URL is demonstrably local.
+  if (!isLoopbackUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)) {
+    return new NextResponse(
+      'Refusing to run: NEXT_PUBLIC_SUPABASE_URL is not a local Supabase instance. ' +
+        'This route mints sessions and grants; against a remote project that is a real write. ' +
+        'Start a local stack (`supabase start`) or use scripts/with-env-local-demo-db.sh.',
+      { status: 403 },
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as {
