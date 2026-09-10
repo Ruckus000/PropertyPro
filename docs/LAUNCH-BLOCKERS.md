@@ -143,12 +143,13 @@ line says where.
   the whole SMTP delivery dies with it. That section carries the do-not-downgrade
   tripwire; no test would catch a regression.
 
-- **4. No DMARC record** — closed 2026-09-07. Live at `p=none`, `rua=` to Postmark DMARC
-  Digests. Verified unchanged 2026-09-09.
-  **Open tail:** `p=none` enforces nothing. The digest window closes **~2026-09-14**;
-  read a week of reports first, then ratchet. Per #1104, ratchet `p=` **and `sp=`
-  together** — `sp=none` is an opt-*out*, not an omission, so `p=quarantine; sp=none`
-  leaves every subdomain `From:` unenforced. One DNS edit, yours.
+- **4. No DMARC record** — closed 2026-09-07; **enforcing since 2026-09-10** at
+  `p=quarantine; sp=quarantine`. `dig _dmarc.getpropertypro.com TXT +short` reads it back.
+  **The reasoning lives in [`DEPLOYMENT.md`](DEPLOYMENT.md) §5.5 item 4, kept in full** —
+  including why the "read a week of reports first" step was skipped deliberately, and the
+  `aspf=r` tripwire that would drop SPF alignment for every sender at once if anyone
+  "tightened" it. No test would catch either.
+  **Open tail:** read the first Postmark digest (~2026-09-14), then `p=reject`.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both

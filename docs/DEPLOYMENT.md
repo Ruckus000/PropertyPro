@@ -73,6 +73,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `STRIPE_SECRET_KEY` | Server only — **both apps** | Stripe secret key. Its `sk_live_`/`sk_test_` prefix is what the app treats as this deployment's Stripe mode. Needed on `property-pro-admin` as well as `property-pro-web`: `apps/admin/src/lib/stripe.ts` uses it for the demo→customer conversion route. A cutover that updates only web leaves that route minting test-mode subscriptions. |
 | `STRIPE_WEBHOOK_SECRET` | Server only | Stripe webhook signing secret. Endpoint-specific: a mode change means a *different* endpoint and therefore a different secret. |
 | `RESEND_API_KEY` | **Both apps, server only** | Resend email API key. The admin console needs it too, since the support-inbox reply route sends from there. **Without it on `property-pro-admin`, every reply reports "Sent" and goes nowhere** — `sendEmail` resolves with a `test_N` id in that mode. The reply route surfaces this as `delivered: false`, which is the only signal, because the readiness probe lives on the web app.
+| `RESEND_FROM` | Server only, **web** | The `From:` on every sender except the admin support-inbox reply, which passes an explicit `support@`/`privacy@`/`contact@` — `apps/admin/src/app/api/admin/inbox/[threadId]/reply/route.ts` is the only `sendEmail` call site outside `apps/web`. Set in production to `PropertyPro <noreply@getpropertypro.com>`, which merely restates the hardcoded default at `packages/email/src/send.ts:6`; not set on `property-pro-admin`, correctly. **It is listed here because it is a DMARC trap, not because it needs configuring.** DKIM is published on the APEX only (`resend._domainkey`), so pointing this at a subdomain address — `@mail.` or `@send.getpropertypro.com` — would make every one of those senders fail alignment and be quarantined by `sp=quarantine`, with nothing in CI or the repo to flag it. Keep it on the apex or unset. See `.env.example` section 3, which already carries the commented default. |
 | `INBOUND_EMAIL_WEBHOOK_SECRET` | Server only, web | **Required** (min 32). HMAC for the inbound support-mail webhook. Fails **closed** — unlike §4.2's secrets, which fail silently. See `.env.example` section 14, and [the rotation runbook](runbooks/inbound-webhook-key-rotation.md). Must match Forward Email's "Webhook Signature Payload Verification Key". |
 | `NEXT_PUBLIC_SENTRY_DSN` | All | Sentry client DSN |
 | `SENTRY_DSN` | Server only | Sentry server DSN |
@@ -365,6 +366,27 @@ relaxed alignment accepts the organizational-domain match. Adding an apex SPF
 is optional hygiene, and getting it wrong (`-all` plus a forgotten sender)
 breaks outbound mail.
 
+> **Supabase Auth uses custom SMTP pointed at `smtp.resend.com`** (Dashboard →
+> Project Settings → Auth → SMTP). Recorded here because it is dashboard-only
+> config that leaves **no trace in this repo**, and it is the fact the DMARC
+> ratchet turned on.
+>
+> `auth.resetPasswordForEmail` (`apps/web/src/lib/auth/password-reset.ts:63`) is
+> the one production email Supabase sends itself — signup verification was
+> deliberately routed around it through Resend (`signup.ts:473-475`), and
+> `packages/email/src/templates/password-reset-email.tsx` is exported
+> (`packages/email/src/index.ts:18`) and unit-tested, but nothing sends it. Because
+> that SMTP is Resend, the mail is signed by the same apex `resend._domainkey` key as
+> everything else and aligns.
+>
+> **Repoint that SMTP at any other provider and password reset breaks under
+> `p=quarantine`** — silently, and only for the account-recovery path. No other
+> provider has a DKIM selector on this domain (~40 probed 2026-09-10: Google,
+> SendGrid, Mailgun, SES, Zoho, Brevo, Postmark, SparkPost, Mailchimp — only
+> `resend` exists), and SPF cannot rescue it either, since another provider's
+> envelope domain aligns with `getpropertypro.com` under neither relaxed nor
+> strict. If it must change, publish that provider's DKIM on the apex first.
+
 ### 5.5 Inbound Mail (Forward Email)
 
 > **RESOLVED 2026-09-07 by upgrading to Enhanced Protection.** Kept in full,
@@ -439,15 +461,63 @@ but now it *looks* configured, which is worse than the honest bounce.
 3. **MX last**, priority 10: `mx1.forwardemail.net`, `mx2.forwardemail.net`.
 4. **DMARC**, which closes launch blocker #4:
 
+   **Live since 2026-09-10** (Vercel DNS, `ns1/ns2.vercel-dns.com`, TTL 60):
+
    ```
-   _dmarc  TXT  v=DMARC1; p=none; rua=mailto:<id>@dmarc.postmarkapp.com; fo=1
+   _dmarc  TXT  v=DMARC1; p=quarantine; sp=quarantine; pct=100; rua=mailto:<id>@dmarc.postmarkapp.com; aspf=r;
    ```
 
    `rua=` points at Postmark's free DMARC Digests (no account, no mailbox,
    weekly summaries by email) because aggregate reports arrive as gzipped XML
    attachments — exactly the payload class the webhook deliberately does not
    store. Pointing `rua=` at our own domain would deliver them somewhere that
-   drops them. Start at `p=none`, read a week of reports, then ratchet.
+   drops them.
+
+   **`fo=1` is not in the live record, and its absence costs nothing.** `fo`
+   selects which *forensic* reports are generated, and forensic reporting
+   requires a `ruf=` address, which we deliberately do not publish — those
+   reports carry message content, which is PII we have no reason to collect.
+   An earlier revision of this block printed `fo=1`; it was inert.
+
+   **Ratcheted 2026-09-10, `p=none; sp=none` → `p=quarantine; sp=quarantine`.**
+   The instruction here used to read *"start at `p=none`, read a week of reports,
+   then ratchet"*. The reports were skipped **deliberately**, and the reasoning
+   matters more than the outcome: DMARC went live 2026-09-07 and Postmark digests
+   weekly, so the first digest was not due until ~2026-09-14 — and with zero real
+   customers it would have described almost no mail. That advice is written for
+   domains with production volume. What replaced it was a structural audit: one
+   provider, one chokepoint every sender goes through
+   (`packages/email/src/send.ts`), every `From:` on the apex, DKIM on the apex, no
+   subdomain sender, no subdomain
+   `_dmarc` to override `sp=`, and a real delivered message already showing
+   `dkim=pass`/`spf=pass`/`dmarc=pass` (#1067).
+
+   **`sp=` moves with `p=`, always.** `sp=none` is an opt-*out*, not an omission — a
+   record reading `p=quarantine; sp=none` leaves every subdomain `From:` wholly
+   unenforced, which is the half of the namespace an attacker would pick. That is why
+   the ratchet named both (#1104), and why the next move to `p=reject` must name both
+   too.
+
+   **`aspf=r` is load-bearing — do not "tighten" it to `s`.** SPF alignment for
+   every sender depends on the envelope domain `send.getpropertypro.com` matching
+   the apex `From:` under *relaxed* org-domain comparison. Strict alignment would
+   drop SPF for every sender at once; DKIM would still carry them, but the
+   second mechanism would be gone.
+
+   Still to do: read the first digest when it arrives, for the one thing a
+   structural audit cannot see — a sender nobody knew about. Then `p=reject`.
+
+   > **`propertyprofl.com` — the other domain, and now the softer target.** Verified
+   > 2026-09-10 (wildcard control empty, so these absences are real): Google Workspace MX
+   > (`aspmx.l.google.com`), SPF `v=spf1 include:_spf.google.com ~all`, **no DKIM** —
+   > `google._domainkey` is absent, so Workspace signing was never enabled — and **no
+   > DMARC at all**. It is not idle: 12 demo-instance personas carry
+   > `demo-*@demo-*.propertyprofl.com` addresses. Hardening `getpropertypro.com` makes
+   > this the easier of the two to spoof.
+   >
+   > Recorded, deliberately not acted on. With no DKIM there, a policy would rest on SPF
+   > alone, and its DNS is on **Cloudflare** (`clay`/`ulla.ns.cloudflare.com`) — a
+   > different console from every other record in this section, which is Vercel DNS.
 
 **Verify:**
 
