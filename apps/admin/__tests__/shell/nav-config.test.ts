@@ -53,7 +53,14 @@ describe('nav-config', () => {
     // `files.length > 100` and the e2e workflow's `expectedTestCount`. An exact
     // count would fail here first when a legitimate entry is added, hiding
     // whatever the missing-href assertion below actually found.
-    expect(NAV_PAGES.length).toBeGreaterThanOrEqual(13);
+    //
+    // 12, not 13: this wave folded Rootless Communities into the Clients quick
+    // filter (spec D9), removing exactly one rail entry. The floor is lowered
+    // deliberately and only by that one — it is NOT free slack. The sibling
+    // test above ("has no standalone Rootless Communities entry") pins the
+    // removal itself, so the two cannot drift apart: restoring the entry
+    // reddens that test, and deleting a DIFFERENT entry reddens this one.
+    expect(NAV_PAGES.length).toBeGreaterThanOrEqual(12);
 
     const missing = NAV_PAGES.filter(
       (page) => !existsSync(join(CONSOLE_ROOT, page.href, 'page.tsx')),
