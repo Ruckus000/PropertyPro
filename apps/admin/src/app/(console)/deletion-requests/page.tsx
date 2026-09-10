@@ -9,9 +9,15 @@ import { getDeletionRequestsData } from '@/lib/server/deletion-requests';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DeletionRequestsPage() {
+interface DeletionRequestsPageProps {
+  /** `?q=` — the inbox privacy strip links here to check whether a
+   * participant already has a deletion request open. */
+  searchParams: Promise<{ q?: string }>;
+}
+
+export default async function DeletionRequestsPage({ searchParams }: DeletionRequestsPageProps) {
   await requireAdminPageSession();
-  const { requests } = await getDeletionRequestsData();
+  const [{ requests }, params] = await Promise.all([getDeletionRequestsData(), searchParams]);
 
   return (
     <PageBody>
@@ -20,6 +26,7 @@ export default async function DeletionRequestsPage() {
         initialRequests={requests}
         initialStatusFilter="all"
         initialTypeFilter="all"
+        initialEmailFilter={params.q}
       />
     </PageBody>
   );
