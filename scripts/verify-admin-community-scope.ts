@@ -71,6 +71,33 @@
  * scopes nothing. A substring check passes that read; exact-literal matching
  * correctly flags it (it carries an exempt, for a reason recorded there).
  *
+ * …AND ONLY IN A FILTER POSITION
+ * ------------------------------
+ * Exactness alone is not enough. An earlier revision counted a marker if the
+ * exact literal appeared ANYWHERE in the chain, so a literal that merely
+ * PROJECTS or ORDERS BY the column satisfied a rule that means "filter by it".
+ * Found by injection, not theory: replacing `dashboard.ts`'s real predicate
+ * with `.order('community_id')` left the guard at exit 0 on a read that then
+ * returned every member of every demo and soft-deleted community — squarely
+ * the defect class this guard exists for. It is reachable: selecting
+ * `community_id` off a `user_roles` read is a natural thing to do, and
+ * `clients.ts:159` already passes `'community_id'` as a PROJECTION argument.
+ *
+ * So a literal counts only when it sits in one of two positions:
+ *
+ *  1. **Argument 0 of a PostgREST filter method** — `.eq()`, `.in()`, `.is()`,
+ *     … (see `FILTER_METHODS`). Argument 0 only: in `.eq('is_demo', false)`
+ *     the column is the first argument, and `false` is not a column name.
+ *  2. **The declared marker argument of a KNOWN scoping helper** — an explicit
+ *     name → argument-index table (`SCOPING_HELPERS`), never "any argument of
+ *     any call".
+ *
+ * The helper rule FAILS CLOSED: an unrecognised plain-function call
+ * contributes no markers at all, so introducing a new scoping helper makes
+ * this guard flag every one of its call sites until someone adds it to the
+ * table. A guard that silently trusts an unknown helper is the exact failure
+ * mode this rule exists to prevent.
+ *
  * Exit codes:
  *   0 — every read carries its predicate (or a reasoned exempt)
  *   1 — at least one read is unscoped
@@ -106,6 +133,44 @@ const REQUIRED_MARKERS: Record<string, readonly string[]> = {
 };
 const TABLES = Object.keys(REQUIRED_MARKERS);
 
+/**
+ * PostgREST filter methods whose ARGUMENT 0 is the column being filtered on.
+ * `.select()` and `.order()` are deliberately absent — they name a column
+ * without restricting the rows returned, which is the whole distinction this
+ * set encodes. Anything not listed here contributes no markers (fail closed).
+ */
+const FILTER_METHODS: ReadonlySet<string> = new Set([
+  'eq',
+  'neq',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'like',
+  'ilike',
+  'is',
+  'in',
+  'match',
+  'not',
+  'filter',
+]);
+
+/**
+ * Helper name → the argument index that carries the FILTER column.
+ *
+ * `fetchRowsInPages(db, table, columns, inColumn, ids, pageSize, rowBound)`
+ * (`apps/admin/src/lib/api/list-limits.ts`) — index 3 is `inColumn`, the one
+ * its body passes to `.in(inColumn, ids)`. Index 2 is `columns`, a
+ * PROJECTION, and must not count. `clients.ts:159` happens to pass
+ * `'community_id'` at BOTH indices, so the real tree cannot tell the two
+ * apart; the selftest fixture that passes a different literal at each index
+ * is what proves index 3 is the one being read.
+ *
+ * An entry here is a claim about a signature. Adding one means re-reading
+ * that signature, not guessing.
+ */
+const SCOPING_HELPERS: Record<string, number> = { fetchRowsInPages: 3 };
+
 const EXEMPT_MARKER = 'admin-community-scope:exempt';
 /** Marker + em dash + a non-empty reason. The reason is not optional. */
 const EXEMPT_WITH_REASON = /admin-community-scope:exempt\s*—\s*(\S.*)$/;
@@ -123,8 +188,12 @@ export interface TableRead {
   startLine: number;
   /** 1-based line of the chain's last character. */
   endLine: number;
-  /** Exact string-literal values appearing anywhere inside the chain. */
-  literals: string[];
+  /**
+   * Exact string-literal values appearing in a FILTER position inside the
+   * chain — NOT every literal in it. A projected or ordered-by column is
+   * absent from this list on purpose.
+   */
+  filterLiterals: string[];
   exempt: boolean;
   /** An exempt marker was present but carried no reason, so it did not apply. */
   reasonlessExempt: boolean;
@@ -176,11 +245,33 @@ function chainRoot(literal: ts.Node): ts.Node {
   return current;
 }
 
-/** Every exact string-literal value inside a subtree. */
-function literalsIn(node: ts.Node): string[] {
+/**
+ * Every exact string-literal value inside a subtree that sits in a FILTER
+ * position — argument 0 of a `FILTER_METHODS` call, or the declared marker
+ * argument of a `SCOPING_HELPERS` entry.
+ *
+ * Everything else is ignored, including a literal in a `.select(...)`
+ * projection or an `.order(...)` sort key. Both name a column; neither
+ * restricts the population returned.
+ */
+function filterLiteralsIn(node: ts.Node): string[] {
   const out: string[] = [];
+  const push = (arg: ts.Node | undefined): void => {
+    if (arg !== undefined && ts.isStringLiteralLike(arg)) out.push(arg.text);
+  };
   const walk = (n: ts.Node): void => {
-    if (ts.isStringLiteralLike(n)) out.push(n.text);
+    if (ts.isCallExpression(n)) {
+      const callee = n.expression;
+      if (ts.isPropertyAccessExpression(callee) && FILTER_METHODS.has(callee.name.text)) {
+        // `.eq('is_demo', false)` — the column is argument 0, and only 0.
+        push(n.arguments[0]);
+      } else if (ts.isIdentifier(callee)) {
+        // A plain call. Only a KNOWN helper contributes, and only at its
+        // declared index; an unknown one contributes nothing (fail closed).
+        const index = SCOPING_HELPERS[callee.text];
+        if (index !== undefined) push(n.arguments[index]);
+      }
+    }
     ts.forEachChild(n, walk);
   };
   walk(node);
@@ -205,16 +296,16 @@ export function scanSource(fileName: string, source: string): ScanResult {
       const chain = chainRoot(node);
       const startLine = lineOf(chain.getStart(sf));
       const endLine = lineOf(chain.getEnd());
-      const literals = literalsIn(chain);
+      const filterLiterals = filterLiteralsIn(chain);
       const required = REQUIRED_MARKERS[table] ?? [];
-      const missing = required.filter((marker) => !literals.includes(marker));
+      const missing = required.filter((marker) => !filterLiterals.includes(marker));
 
       // The chain's own line span, plus the line immediately above it.
       const span = lines.slice(Math.max(0, startLine - 2), endLine);
       const exempt = span.some((l) => EXEMPT_WITH_REASON.test(l));
       const reasonlessExempt = !exempt && span.some((l) => l.includes(EXEMPT_MARKER));
 
-      reads.push({ table, startLine, endLine, literals, exempt, reasonlessExempt, missing });
+      reads.push({ table, startLine, endLine, filterLiterals, exempt, reasonlessExempt, missing });
     }
     ts.forEachChild(node, visit);
   };
@@ -247,9 +338,14 @@ export function parserSelfTest(): boolean {
  * Each expects an exact violation COUNT — the `Promise.all` pair expects 1, not
  * "at least one", because that is what distinguishes chain scope from statement
  * scope.
+ *
+ * A fixture may also pin the exact `missing` markers of its single violation
+ * (the optional 4th element). A count alone cannot tell "missing `is_demo`"
+ * from "missing both", which is the distinction the projection fixtures below
+ * are making.
  */
 function selftest(): void {
-  const cases: Array<[string, string, number]> = [
+  const cases: Array<[string, string, number, string[]?]> = [
     // A `communities` read carrying both markers.
     [
       'communities: both markers',
@@ -285,6 +381,39 @@ function selftest(): void {
       `const r = await db.from('user_roles').select('user_id, community_id').in('user_id', userIds);`,
       1,
     ],
+    // FILTER POSITION, NOT MERE PRESENCE. `.order('community_id')` names the
+    // column without restricting the rows. This is the exact injection that
+    // used to leave the guard at exit 0 on a fully unscoped `user_roles` read.
+    [
+      'user_roles: community_id only in an order-by',
+      `const r = await db.from('user_roles').select('*', { count: 'exact', head: true }).order('community_id');`,
+      1,
+      ['community_id'],
+    ],
+    // …and the projection form of the same mistake. `clients.ts:159` really
+    // does pass 'community_id' as a projection, so this shape is reachable.
+    [
+      'user_roles: community_id only in a select projection',
+      `const r = await db.from('user_roles').select('community_id');`,
+      1,
+      ['community_id'],
+    ],
+    // The filtered form of the same chain must stay green — the fixture above
+    // must be reddening on POSITION, not on the literal having vanished.
+    [
+      'user_roles: community_id in a filter position',
+      `const r = await db.from('user_roles').select('community_id').in('community_id', ids);`,
+      0,
+    ],
+    // Both `communities` markers present as PROJECTED columns and nothing else.
+    // Exactly one read, missing BOTH — the 4th element is what proves neither
+    // projection was mistaken for a filter.
+    [
+      'communities: both markers only in a select projection',
+      `const r = await db.from('communities').select('id, is_demo, deleted_at').order('is_demo');`,
+      1,
+      ['is_demo', 'deleted_at'],
+    ],
     // The helper form. A guard keyed on `.from('user_roles')` would see nothing
     // here — and this is the members series, the read the remediation exists for.
     [
@@ -296,6 +425,33 @@ function selftest(): void {
       'user_roles: helper with no community_id argument',
       `const r = await fetchRowsInPages<CreatedAtRow>(db, 'user_roles', 'created_at', ids, 1000, 50000);`,
       1,
+    ],
+    // The real `clients.ts:159` shape — 'community_id' at BOTH index 2
+    // (projection) and index 3 (filter). Green, but it cannot distinguish the
+    // two indices, which is why the next fixture exists.
+    [
+      'user_roles: helper with community_id at both the projection and filter index',
+      `const r = await fetchRowsInPages(db, 'user_roles', 'community_id', 'community_id', ids, 1000, 50000);`,
+      0,
+    ],
+    // THE INDEX PROOF. 'community_id' is the PROJECTION (index 2) and the scan
+    // is filtered by 'user_id' (index 3). Reading index 2 would call this
+    // scoped; reading index 3 correctly does not. Without this fixture the
+    // helper rule is untested.
+    [
+      'user_roles: helper projecting community_id but filtering by something else',
+      `const r = await fetchRowsInPages(db, 'user_roles', 'community_id', 'user_id', ids, 1000, 50000);`,
+      1,
+      ['community_id'],
+    ],
+    // FAIL CLOSED. An unrecognised plain call contributes no markers at all, so
+    // a new scoping helper flags its call sites until it is added to
+    // `SCOPING_HELPERS` rather than being silently trusted.
+    [
+      'user_roles: unknown helper contributes no markers',
+      `const r = await someOtherHelper(db, 'user_roles', 'community_id', ids);`,
+      1,
+      ['community_id'],
     ],
     // CHAIN SCOPE, NOT STATEMENT SCOPE. Two reads in one statement: the first
     // scoped, the second not. Statement scope would let the first vouch for the
@@ -430,7 +586,7 @@ function selftest(): void {
     ['baseline sanity: an unscoped read is found at all', `db.from('user_roles');`, 1],
   ];
 
-  for (const [name, source, expected] of cases) {
+  for (const [name, source, expected, expectedMissing] of cases) {
     const { violations } = scanSource('selftest.ts', source);
     if (violations.length !== expected) {
       console.error(
@@ -438,6 +594,21 @@ function selftest(): void {
           `got ${violations.length}\n--- fixture ---\n${source}\n---------------`,
       );
       process.exit(2);
+    }
+    if (expectedMissing !== undefined) {
+      const actual = violations.length === 1 ? violations[0]!.missing : [];
+      if (
+        violations.length !== 1 ||
+        actual.length !== expectedMissing.length ||
+        !expectedMissing.every((m, i) => actual[i] === m)
+      ) {
+        console.error(
+          `guard:admin-community-scope SELFTEST FAIL [${name}] expected the single violation to be ` +
+            `missing [${expectedMissing.join(', ')}], got [${actual.join(', ')}]\n` +
+            `--- fixture ---\n${source}\n---------------`,
+        );
+        process.exit(2);
+      }
     }
   }
 
