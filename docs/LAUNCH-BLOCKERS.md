@@ -71,15 +71,20 @@ price ids in the database, i.e. checkout broken for everyone — is ruled out.)
 
 ### Blast radius: zero real customers
 
-Measured against production 2026-09-08:
+Measured against production 2026-09-10 (re-measured; the 2026-09-08 reading of
+this table said the three demo communities share "one customer and one
+subscription" — the customer yes, the subscriptions no, and one subscription
+could never be shared because `communities_stripe_subscription_id_unique` is a
+unique index):
 
 | | |
 |---|---|
-| Communities holding a `cus_…`/`sub_…` | 5 — the 3 seeded demo communities (sharing one customer and one subscription) and 2 soft-deleted `Big Mama's House` test signups |
-| `billing_groups` | 4, all with customer ids, none tombstoned |
+| Communities holding a `cus_…`/`sub_…` | 5 — the 3 seeded demo communities (one shared customer, **three distinct subscriptions**) and 2 soft-deleted `Big Mama's House` test signups |
+| `billing_groups` | 4, all with customer ids, none tombstoned — but only one (`Pat PM Demo Portfolio`) has communities attached; the other 3 are orphans |
 | `stripe_connected_accounts` | 0 |
 | `finance_stripe_webhook_events` | 0 |
 | `access_plans` (holds `stripe_coupon_id`) | 0 |
+| `stripe_webhook_events` | 278, of which **6 are permanently unprocessed** — all 2026-08-10, predating #941/#942; see the runbook's step 6 |
 
 No real money has ever moved through this account. The cutover can be done in one
 sitting with no customer impact — but that is a **snapshot**, not a standing

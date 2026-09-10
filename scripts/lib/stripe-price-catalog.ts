@@ -50,10 +50,19 @@ export interface Combo {
 /**
  * `<plan>_<communityType>_<monthly|yearly>`.
  *
- * Must stay identical to `canonicalLookupKey` in `sync-stripe-lookup-keys.ts`:
- * the `customer.subscription.updated` webhook prefers `price.lookup_key` and
- * only falls back to a DB read, so a divergence here silently moves that path
- * onto its slow branch instead of failing.
+ * Must stay identical to `canonicalLookupKey` in `sync-stripe-lookup-keys.ts`,
+ * which rewrites these keys on existing Stripe prices — two spellings of the
+ * same rule, and a divergence makes that script rename keys it should leave.
+ *
+ * What this key is NOT: a webhook fast path. An earlier version of this comment
+ * said `customer.subscription.updated` "prefers `price.lookup_key` and only
+ * falls back to a DB read", so a divergence here would push it onto its slow
+ * branch. That branch cannot fire for anything this catalog creates —
+ * `webhooks/stripe/route.ts:388` takes it only when the lookup_key is EXACTLY a
+ * `PlanId` (`PLAN_IDS.includes(lookupKey)`), and this format is always
+ * `<plan>_<type>_<interval>`, which never is. Every price here resolves through
+ * `resolvePlanIdFromStripePriceId` — the DB read — which is authoritative and
+ * correct. There is no slower branch to fall onto, because it is the only one.
  */
 export function lookupKeyFor(
   planId: PlanId,
