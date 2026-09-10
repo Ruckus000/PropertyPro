@@ -59,11 +59,7 @@ export function ThreadView({ thread, messages, replyFrom, replySubject }: Thread
         </div>
       </div>
 
-      <ThreadContextStrip
-        mailbox={thread.mailbox}
-        threadId={thread.id}
-        participantEmail={thread.participantEmail}
-      />
+      <ThreadContextStrip mailbox={thread.mailbox} threadId={thread.id} />
 
       <div className="space-y-3">
         {messages.map(({ message, sanitizedHtml }) => (

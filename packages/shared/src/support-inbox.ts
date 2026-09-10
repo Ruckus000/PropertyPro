@@ -209,18 +209,24 @@ export const SUPPORT_MAILBOX_CONTEXT: Record<SupportMailbox, SupportMailboxConte
  * operator to, RIGHT NOW.
  *
  * `support` → `/tickets/new`, created by Task 22 (Wave 3); `/tickets` is a nav
- * stub today. `privacy` → `/deletion-requests?q=`, not read by anything until
- * Task 18 adds the `?q=` filter to `DeletionRequestsDashboard`. `contact` →
- * `POST /api/admin/leads`, which ships in this same task.
+ * stub today, so this is still `false`. `privacy` → `/deletion-requests`, which
+ * Task 18 (commit `16525fbf`, this branch) taught to seed its email filter from
+ * the URL — so it is now `true`. The link carries `?thread=<id>` and the page
+ * resolves the participant's email server-side; it deliberately does NOT carry
+ * `?q=<email>`, which would put a data subject's address in Vercel access logs,
+ * browser history and Sentry navigation breadcrumbs.
  *
- * `ThreadContextStrip` reads this directly rather than hardcoding readiness
- * per mailbox, so the fix for Task 22 / Task 18 is flipping ONE boolean here —
- * not finding every place that decided a route existed. A console that offers
- * an action and then 404s is worse than one that offers it a wave later.
+ * **This flag governs two of the three mailboxes.** `ThreadContextStrip` answers
+ * `contact` with a button above the `ready` branch — `POST /api/admin/leads`
+ * shipped with the strip itself — so `contact: true` is documentation rather
+ * than a condition anything reads. For `support` and `privacy` it is the single
+ * place to flip, which is the point: a console that offers an action and then
+ * 404s is worse than one that offers it a wave later, and the previous wave left
+ * `privacy` reading "not available yet" for a destination that already worked.
  */
 export const SUPPORT_MAILBOX_CONTEXT_ACTION_READY: Record<SupportMailbox, boolean> = {
   support: false,
-  privacy: false,
+  privacy: true,
   contact: true,
 };
 

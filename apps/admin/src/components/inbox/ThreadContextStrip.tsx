@@ -14,21 +14,28 @@ import {
 interface ThreadContextStripProps {
   mailbox: SupportMailbox;
   threadId: number;
-  participantEmail: string;
 }
 
 /**
  * The "what to do next" strip for a thread's mailbox (design spec D14/D15).
  *
- * `support` and `privacy` name real destinations that don't exist yet on this
- * branch — `/tickets/new` ships in Task 22 (Wave 3), and `/deletion-requests`
- * doesn't read `?q=` until Task 18. Offering a control that 404s (support) or
- * silently ignores the filter it promised (privacy) is worse than not
- * offering it yet, so those two render as inert copy until
- * `SUPPORT_MAILBOX_CONTEXT_ACTION_READY` flips — a single source those tasks
- * update, not a condition duplicated here.
+ * `support` names a destination that does not exist yet — `/tickets/new` ships
+ * in Task 22 (Wave 3) — so it renders as inert copy until
+ * `SUPPORT_MAILBOX_CONTEXT_ACTION_READY.support` flips. `privacy` was in the
+ * same state until Task 18 taught `/deletion-requests` to seed its filter; that
+ * shipped on this branch, so the flag is now `true` and the link is live.
+ * `contact` short-circuits above the flag, so only two of the three mailboxes
+ * actually consult it (noted on the flag itself).
+ *
+ * **Both live destinations carry only the thread id.** The `privacy` link used to
+ * carry `?q=<participant email>`, which is the PII sink this branch deliberately
+ * removed from the command palette (see `lib/server/search/users.ts`: Vercel
+ * access logs, browser history and Sentry navigation breadcrumbs none of which
+ * redact a bare `q=`), on the console's most retention-sensitive correspondent.
+ * The destination resolves the email server-side from the id instead, so this
+ * component no longer receives the address at all.
  */
-export function ThreadContextStrip({ mailbox, threadId, participantEmail }: ThreadContextStripProps) {
+export function ThreadContextStrip({ mailbox, threadId }: ThreadContextStripProps) {
   const router = useRouter();
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +96,7 @@ export function ThreadContextStrip({ mailbox, threadId, participantEmail }: Thre
             href={
               mailbox === 'support'
                 ? `/tickets/new?thread=${threadId}`
-                : `/deletion-requests?q=${encodeURIComponent(participantEmail)}`
+                : `/deletion-requests?thread=${threadId}`
             }
             className="inline-flex min-h-11 items-center gap-2 rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-hover md:min-h-9"
           >
