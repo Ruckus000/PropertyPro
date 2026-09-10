@@ -55,12 +55,18 @@ import type { Searcher } from '../search';
  * community with `.is('deleted_at', null)` and calls `notFound()` when the row
  * does not parse, so a raw newest-membership pick can hand the palette a link
  * to a 404 for any user whose most recent membership is in a soft-deleted
- * community — this happened in production. Demo communities are excluded too
- * (`.eq('is_demo', false)`), for the same reason the sibling `communities.ts`
- * searcher excludes them: without it, ⌘K "People" could deep-link into a demo
- * even though ⌘K "Clients" is barred from surfacing it. A user whose
- * candidate memberships are all demo or deleted then has no surviving
- * membership and resolves to `undefined`, same as a user with none at all.
+ * community — this happened in production. A user whose candidate memberships
+ * are all soft-deleted then has no surviving membership and resolves to
+ * `undefined`, same as a user with none at all.
+ *
+ * Demo communities are NOT excluded. An earlier revision excluded them to match
+ * the sibling `communities.ts` searcher, which excluded them at the time; that
+ * searcher now labels demos instead of hiding them, because their workspace
+ * renders and hiding them made them unreachable by search. The consistency
+ * argument therefore points the other way, and excluding them here would send a
+ * demo persona to the generic `/clients` instead of the workspace that actually
+ * loads for them. Only `deleted_at` gates the destination, because only that
+ * one 404s.
  *
  * A user with no `user_roles` row (e.g. invited but never accepted) resolves
  * to `undefined`; the caller falls back to the PII-free `/clients` link
@@ -72,21 +78,21 @@ async function resolveMemberDestinations(userIds: string[]): Promise<Map<string,
 
   const db = createAdminClient();
   // This read is scoped by USER, not by community, and deliberately so. Its job
-  // is to enumerate one known set of users' memberships; the real-community
-  // filter is applied to the result by the follow-up `.from('communities')`
-  // query below (`.in('id', candidateIds).eq('is_demo', false).is('deleted_at',
-  // null)`), whose surviving ids gate which membership becomes the palette
-  // destination. Pushing that filter into this read instead would mean fetching
-  // every real community id on the platform up front purely to pass it into an
-  // `.in()` — a whole-table read to narrow a query that is already bounded by
-  // `userIds`, which is at most the palette's result limit.
+  // is to enumerate one known set of users' memberships; the destination filter
+  // is applied to the result by the follow-up `.from('communities')` query below
+  // (`.in('id', candidateIds).is('deleted_at', null)`), whose surviving ids gate
+  // which membership becomes the palette destination. Pushing that filter into
+  // this read instead would mean fetching every surviving community id on the
+  // platform up front purely to pass it into an `.in()` — a whole-table read to
+  // narrow a query that is already bounded by `userIds`, which is at most the
+  // palette's result limit.
   //
   // Note the `.select('user_id, community_id')` below is a projection, not a
   // predicate: it is one string literal that CONTAINS the guard's marker text
   // but scopes nothing. The guard matches exact literal values precisely so it
   // does not mistake this for scoping — which is why this exempt is needed and
   // is not merely paperwork.
-  // admin-community-scope:exempt — user-scoped by `.in('user_id', userIds)`; the real-community filter runs as the follow-up `.from('communities')` query below, which gates every destination
+  // admin-community-scope:exempt — user-scoped by `.in('user_id', userIds)`; the destination filter runs as the follow-up `.from('communities')` query below, which drops any soft-deleted community before one can become a palette destination
   const { data, error } = await db
     .from('user_roles')
     .select('user_id, community_id')
@@ -96,17 +102,18 @@ async function resolveMemberDestinations(userIds: string[]): Promise<Map<string,
 
   const roles = (data ?? []) as Array<{ user_id: string; community_id: number }>;
 
-  // Filter the candidate community ids down to real (non-demo, non-deleted)
-  // communities before picking each user's newest membership, so a
-  // soft-deleted or demo community can never become the palette destination.
+  // Drop soft-deleted communities from the candidate ids before picking each
+  // user's newest membership, so a community whose workspace 404s can never
+  // become the palette destination. Demos are deliberately kept — see the
+  // docblock above.
   const candidateIds = [...new Set(roles.map((row) => row.community_id))];
   if (candidateIds.length === 0) return destinations;
 
+  // admin-community-scope:exempt — destination filter for a palette hit, not a population count: it must admit every community whose workspace renders, and a demo's does. Excluding demos would hide a working destination behind the generic /clients fallback.
   const { data: communitiesData, error: communitiesError } = await db
     .from('communities')
     .select('id')
     .in('id', candidateIds)
-    .eq('is_demo', false)
     .is('deleted_at', null);
   if (communitiesError) {
     throw new Error(`user search: community lookup: ${communitiesError.message}`);

@@ -112,6 +112,11 @@ export type AdminCommunityRow = {
   // Denormalized free-access grace expiry read by the subscription guard.
   free_access_expires_at: string | null;
   deleted_at: string | null;
+  // Demo instances. Present here because the ⌘K "Clients" searcher SELECTS it —
+  // it surfaces demos with a "Demo" label rather than hiding them, so it needs
+  // the value, not just the ability to filter on it. A filter typechecks without
+  // the column being declared; a select does not.
+  is_demo: boolean;
 };
 
 // ─── Database definition for typed client ───

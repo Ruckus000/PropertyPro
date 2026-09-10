@@ -57,34 +57,38 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
       }
       if (table === 'communities') {
         return {
-          select: () => ({
-            in: (_col: string, ids: number[]) => {
-              communityInMock(ids);
-              const afterIn = communitiesData.filter((c) => ids.includes(c.id));
-              // Every stage below exposes `data`/`error` directly (in
-              // addition to the next chain method) so the query resolves
-              // correctly however many filters the production code actually
-              // calls — including fewer than the full chain, which is what
-              // the revert-check below exercises.
-              return {
-                data: afterIn,
-                error: communitiesError,
-                eq: (_col2: string, val: boolean) => {
-                  communityEqMock(val);
-                  const afterEq = afterIn.filter((c) => c.is_demo === val);
-                  return {
-                    data: afterEq,
-                    error: communitiesError,
-                    is: (_col3: string, val2: null) => {
-                      communityIsMock(val2);
-                      const afterIs = afterEq.filter((c) => c.deleted_at === val2);
-                      return { data: afterIs, error: communitiesError };
-                    },
-                  };
-                },
-              };
-            },
-          }),
+          select: () => {
+            // A self-returning chain so the query resolves whatever subset of
+            // filters production actually calls. Each stage applies a REAL
+            // predicate over `communitiesData` rather than returning a canned
+            // row set — a canned stub answers the same no matter which filter is
+            // dropped, which would make the revert-check below vacuous.
+            let current = communitiesData;
+            const chain = {
+              get data() {
+                return current;
+              },
+              get error() {
+                return communitiesError;
+              },
+              in: (_col: string, ids: number[]) => {
+                communityInMock(ids);
+                current = current.filter((c) => ids.includes(c.id));
+                return chain;
+              },
+              eq: (_col: string, val: boolean) => {
+                communityEqMock(val);
+                current = current.filter((c) => c.is_demo === val);
+                return chain;
+              },
+              is: (_col: string, val: null) => {
+                communityIsMock(val);
+                current = current.filter((c) => c.deleted_at === val);
+                return chain;
+              },
+            };
+            return chain;
+          },
         };
       }
       throw new Error(`Unexpected untyped table: ${table}`);
@@ -225,7 +229,7 @@ describe('userSearcher', () => {
     expect(hits[0]!.href).toBe('/clients/5?tab=members');
   });
 
-  it('falls back to /clients when every membership is a dead (soft-deleted or demo) community', async () => {
+  it('falls back to /clients when every membership is a soft-deleted community', async () => {
     usersData = [{ id: 'u1', email: 'alice@test.com', full_name: 'Alice' }];
     rolesData = [{ user_id: 'u1', community_id: 99 }];
     communitiesData = [{ id: 99, is_demo: false, deleted_at: '2026-01-01T00:00:00Z' }];
@@ -235,9 +239,20 @@ describe('userSearcher', () => {
     expect(hits[0]!.href).toBe('/clients');
   });
 
-  it('excludes a demo community from the destination pick, same as the sibling clients searcher', async () => {
+  /**
+   * A demo community IS a valid destination. Its workspace page renders —
+   * `clients/[id]/page.tsx` selects `is_demo` and never gates on it — so the
+   * newest membership wins even when it is a demo.
+   *
+   * This case previously asserted the opposite, on the grounds of matching the
+   * sibling clients searcher. That searcher no longer excludes demos either: it
+   * labels them, because `seed:demo` marks every seeded community a demo, so
+   * exclusion emptied the ⌘K "Clients" group everywhere but production and broke
+   * `admin-shell.spec.ts`. The consistency argument now points this way.
+   */
+  it('treats a demo community as a valid destination — only soft-deletion disqualifies', async () => {
     usersData = [{ id: 'u1', email: 'alice@test.com', full_name: 'Alice' }];
-    // Newest row (77) is a demo community; the older row (5) is real.
+    // Newest row (77) is a demo community; the older row (5) is not.
     rolesData = [
       { user_id: 'u1', community_id: 77 },
       { user_id: 'u1', community_id: 5 },
@@ -249,7 +264,9 @@ describe('userSearcher', () => {
 
     const hits = await userSearcher.search('alice' as SanitizedTerm, 5);
 
-    expect(hits[0]!.href).toBe('/clients/5?tab=members');
+    expect(hits[0]!.href).toBe('/clients/77?tab=members');
+    // `is_demo` must not be used as a predicate at all.
+    expect(communityEqMock).not.toHaveBeenCalled();
   });
 
   it('skips the communities lookup entirely when there are no candidate community ids', async () => {
