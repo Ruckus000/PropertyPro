@@ -30,10 +30,26 @@
  * structural marker for "same population", and inventing one would be novel
  * machinery guarding a single pair of files.
  *
- * It proves the weaker, structurally checkable thing: **no read of these two
- * tables is silently unscoped.** Both live defects would have failed it. A
- * future read that forgets the predicate cannot reach main without either
- * carrying it or writing down, at the call site, why it is correct without it.
+ * It proves the weaker, structurally checkable thing: **no POPULATION READ of
+ * these two tables inside `apps/admin/src/lib/server` is silently unscoped.**
+ * Both live defects would have failed it. A future read that forgets the
+ * predicate cannot reach main without either carrying it or writing down, at the
+ * call site, why it is correct without it.
+ *
+ * Both qualifiers are load-bearing, and neither is an accident:
+ *
+ *  - **Inside the server library.** Reads elsewhere in `apps/admin/src` are
+ *    unguarded. `(console)/settings/page.tsx` is one: a real-community count of
+ *    exactly the kind this guard is about, correct today and not checked here.
+ *    The root stays narrow deliberately — see `DEFAULT_ROOT_REL`.
+ *  - **A population read.** Widening to all of `apps/admin/src` would pull in
+ *    WRITES scoped by primary key, where the real-community predicate is
+ *    meaningless: `api/admin/access-plans/route.ts` updates
+ *    `free_access_expires_at` by `.eq('id', communityId)`, and
+ *    `api/admin/deletion-requests/[id]/recover/route.ts` exists precisely to set
+ *    `deleted_at: null`. Requiring the predicate there would force exempts onto
+ *    correct code, and telling a read from a write is machinery this guard does
+ *    not have.
  *
  * THE UNIT OF ANALYSIS IS THE FLUENT CALL CHAIN
  * ---------------------------------------------
@@ -97,6 +113,18 @@
  * this guard flag every one of its call sites until someone adds it to the
  * table. A guard that silently trusts an unknown helper is the exact failure
  * mode this rule exists to prevent.
+ *
+ * …AND, FOR TWO MARKERS, WITH THE RIGHT VALUE
+ * -------------------------------------------
+ * Filter position still does not say WHICH rows. An earlier revision read the
+ * column and ignored the value, so `.eq('is_demo', true)` and
+ * `.not('deleted_at', 'is', null)` both satisfied the guard — each the exact
+ * INVERSION of the rule, returning only the demo or only the soft-deleted
+ * communities. `MARKER_VALUE_RULES` pins the two markers whose polarity matters
+ * (`is_demo` via `.eq(…, false)`, `deleted_at` via `.is(…, null)`) and nothing
+ * else: `community_id` is scoped by the runtime SET it is restricted to, which
+ * no structural check can evaluate. Unlisted operator/value pairs contribute no
+ * marker, so the read is reported rather than guessed at.
  *
  * Exit codes:
  *   0 — every read carries its predicate (or a reasoned exempt)
@@ -186,6 +214,68 @@ const SCOPING_HELPERS: Record<string, ScopingHelper> = {
   },
 };
 
+/**
+ * Markers whose POLARITY matters, and the only (method, value) shapes that
+ * satisfy them.
+ *
+ * Checking the column alone was a real hole: `filterLiteralsIn` pushed argument
+ * 0 and nothing else, so `.eq('is_demo', true)` and `.not('deleted_at', 'is',
+ * null)` — the exact INVERSIONS of the predicate this guard is about, each of
+ * which returns precisely the population the real-community rule exists to
+ * exclude — both counted as scoped.
+ *
+ * A table rather than two `if`s, so a third marker is data. `community_id` has
+ * no entry on purpose: it is scoped by the SET it is restricted to
+ * (`.in('community_id', realIds)`, `.eq('community_id', id)`), and that set is a
+ * runtime value no structural check can evaluate. Any filter position counts for
+ * it, exactly as before.
+ *
+ * FAILS CLOSED, the same polarity as every other rule here: a marker listed
+ * below counts only on a listed shape. An unrecognised operator, an
+ * unrecognised value, a missing second argument, or a value that is a variable
+ * rather than a literal keyword all contribute NO marker — so the read is
+ * reported and a human decides, rather than the guard guessing.
+ */
+type MarkerValue = 'true' | 'false' | 'null';
+
+interface MarkerShape {
+  /** The PostgREST method, which must also be in `FILTER_METHODS`. */
+  readonly method: string;
+  /** The literal keyword required as its second argument. */
+  readonly value: MarkerValue;
+}
+
+const MARKER_VALUE_RULES: Record<string, readonly MarkerShape[]> = {
+  // A real community is NOT a demo. `.eq('is_demo', true)` is the inversion.
+  is_demo: [{ method: 'eq', value: 'false' }],
+  // …and NOT soft-deleted. `.not('deleted_at', 'is', null)` is the inversion,
+  // and `.is('deleted_at', null)` is the only shape PostgREST offers for a null
+  // comparison — `.eq(col, null)` does not work against Postgres.
+  deleted_at: [{ method: 'is', value: 'null' }],
+};
+
+const VALUE_MATCHERS: Record<MarkerValue, (node: ts.Node) => boolean> = {
+  true: (node) => node.kind === ts.SyntaxKind.TrueKeyword,
+  false: (node) => node.kind === ts.SyntaxKind.FalseKeyword,
+  null: (node) => node.kind === ts.SyntaxKind.NullKeyword,
+};
+
+/**
+ * Does this `(method, value)` pair satisfy the column's value rule?
+ *
+ * A column with no rule is satisfied by any filter position (see above).
+ */
+function valueSatisfiesRule(
+  column: string,
+  method: string,
+  value: ts.Node | undefined,
+): boolean {
+  const shapes = MARKER_VALUE_RULES[column];
+  if (shapes === undefined) return true;
+  if (value === undefined) return false;
+  return shapes.some((shape) => shape.method === method && VALUE_MATCHERS[shape.value](value));
+}
+
 const EXEMPT_MARKER = 'admin-community-scope:exempt';
 /** Marker + em dash + a non-empty reason. The reason is not optional. */
 const EXEMPT_WITH_REASON = /admin-community-scope:exempt\s*—\s*(\S.*)$/;
@@ -271,20 +361,37 @@ function chainRoot(literal: ts.Node): ts.Node {
  */
 function filterLiteralsIn(node: ts.Node): string[] {
   const out: string[] = [];
-  const push = (arg: ts.Node | undefined): void => {
-    if (arg !== undefined && ts.isStringLiteralLike(arg)) out.push(arg.text);
-  };
   const walk = (n: ts.Node): void => {
     if (ts.isCallExpression(n)) {
       const callee = n.expression;
       if (ts.isPropertyAccessExpression(callee) && FILTER_METHODS.has(callee.name.text)) {
-        // `.eq('is_demo', false)` — the column is argument 0, and only 0.
-        push(n.arguments[0]);
+        // `.eq('is_demo', false)` — the column is argument 0, and only 0. For a
+        // marker with a value rule the VALUE must match too, or the inversion
+        // `.eq('is_demo', true)` would satisfy the predicate it contradicts.
+        const column = n.arguments[0];
+        if (
+          column !== undefined &&
+          ts.isStringLiteralLike(column) &&
+          valueSatisfiesRule(column.text, callee.name.text, n.arguments[1])
+        ) {
+          out.push(column.text);
+        }
       } else if (ts.isIdentifier(callee)) {
         // A plain call. Only a KNOWN helper contributes, and only at its
         // declared index; an unknown one contributes nothing (fail closed).
         const helper = SCOPING_HELPERS[callee.text];
-        if (helper !== undefined) push(n.arguments[helper.index]);
+        const arg = helper === undefined ? undefined : n.arguments[helper.index];
+        // A helper argument names a column with no operator and no value beside
+        // it — `fetchRowsInPages` passes it to `.in(inColumn, ids)` — so it can
+        // never prove a POLARITY. A marker with a value rule therefore cannot be
+        // satisfied through a helper; fail closed rather than assume.
+        if (
+          arg !== undefined &&
+          ts.isStringLiteralLike(arg) &&
+          MARKER_VALUE_RULES[arg.text] === undefined
+        ) {
+          out.push(arg.text);
+        }
       }
     }
     ts.forEachChild(n, walk);
@@ -382,6 +489,63 @@ function selftest(): void {
       'communities: missing both',
       `const r = await db.from('communities').select('id, name').in('id', ids);`,
       1,
+    ],
+    // THE INVERSIONS. Both name the right column in the right position, and both
+    // return exactly the population the rule excludes: only the demos, only the
+    // soft-deleted. Before `MARKER_VALUE_RULES` these passed.
+    [
+      'communities: is_demo INVERTED (eq true)',
+      `const r = await db.from('communities').select('id').eq('is_demo', true).is('deleted_at', null);`,
+      1,
+      ['is_demo'],
+    ],
+    [
+      'communities: deleted_at INVERTED (not is null)',
+      `const r = await db.from('communities').select('id').eq('is_demo', false).not('deleted_at', 'is', null);`,
+      1,
+      ['deleted_at'],
+    ],
+    // A value that is not a literal keyword cannot be evaluated, so it must not
+    // be trusted — fail closed, like the unknown-helper rule.
+    [
+      'communities: is_demo compared to a variable',
+      `const r = await db.from('communities').select('id').eq('is_demo', includeDemos).is('deleted_at', null);`,
+      1,
+      ['is_demo'],
+    ],
+    // The right value through the WRONG operator, for each marker. `.is` on a
+    // boolean and `.eq` on null are both shapes a careless edit produces.
+    [
+      'communities: is_demo false via the wrong operator',
+      `const r = await db.from('communities').select('id').is('is_demo', false).is('deleted_at', null);`,
+      1,
+      ['is_demo'],
+    ],
+    [
+      'communities: deleted_at null via the wrong operator',
+      `const r = await db.from('communities').select('id').eq('is_demo', false).eq('deleted_at', null);`,
+      1,
+      ['deleted_at'],
+    ],
+    // `community_id` has NO value rule, so the set it is restricted to is not
+    // inspected — these must stay green, or the value rule has leaked.
+    [
+      'user_roles: community_id restricted to a variable set',
+      `const r = await db.from('user_roles').select('*').in('community_id', someSet);`,
+      0,
+    ],
+    [
+      'user_roles: community_id equal to a single id',
+      `const r = await db.from('user_roles').select('*').eq('community_id', communityId);`,
+      0,
+    ],
+    // A value-ruled marker cannot be satisfied through a helper argument: there
+    // is no operator or value beside it to check.
+    [
+      'communities: helper cannot satisfy a value-ruled marker',
+      `const r = await fetchRowsInPages(db, 'communities', 'id', 'is_demo', ids, 1000, 50000);`,
+      1,
+      ['is_demo', 'deleted_at'],
     ],
     // `user_roles` scoped by an exact 'community_id' literal.
     [
