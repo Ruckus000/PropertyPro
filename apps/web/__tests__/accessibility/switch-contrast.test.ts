@@ -22,7 +22,16 @@ import path from 'node:path';
 import twConfig from '../../tailwind.config';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
-const SWITCH_SRC = path.join(REPO_ROOT, 'apps/web/src/components/ui/switch.tsx');
+/**
+ * The implementation lives in `packages/ui` — `apps/web/src/components/ui/switch.tsx`
+ * is a re-export shim, and reading THAT file finds no classes at all. When the
+ * shadcn primitives were lifted into the shared package, this path still pointed
+ * at the shim and all four cases below failed on `undefined`. They failed loudly
+ * rather than passing vacuously, which is the anti-vacuity case doing its job,
+ * but the guard was dark until the path was corrected.
+ */
+const SWITCH_SRC = path.join(REPO_ROOT, 'packages/ui/src/components/ui/switch.tsx');
+const WEB_SWITCH_SHIM = path.join(REPO_ROOT, 'apps/web/src/components/ui/switch.tsx');
 const TOKENS_CSS = path.join(REPO_ROOT, 'packages/ui/src/styles/tokens.css');
 
 const MIN_NON_TEXT_CONTRAST = 3;
@@ -109,8 +118,17 @@ describe('Switch — state visibility (WCAG 1.4.11)', () => {
 
   // Anti-vacuity: if the extraction stops matching, fail loudly rather than
   // silently testing `undefined` against `undefined`.
+  // The file above is only the right thing to read while web re-exports it. If
+  // web ever grows its own Switch again, every contrast assertion here would be
+  // measuring a component the app does not render — passing, and meaningless.
+  it('measures the component web actually renders', () => {
+    expect(fs.readFileSync(WEB_SWITCH_SHIM, 'utf8')).toMatch(
+      /export\s*\{[^}]*\bSwitch\b[^}]*\}\s*from\s*'@propertypro\/ui'/,
+    );
+  });
+
   it('exposes a thumb colour and both track state colours', () => {
-    expect(thumbClass, 'thumb bg-* class not found in switch.tsx').toBeTruthy();
+    expect(thumbClass, 'thumb bg-* class not found in packages/ui switch.tsx').toBeTruthy();
     expect(uncheckedClass, 'unchecked track bg-* class not found').toBeTruthy();
     expect(checkedClass, 'checked track bg-* class not found').toBeTruthy();
     expect(uncheckedClass).not.toBe(checkedClass);
