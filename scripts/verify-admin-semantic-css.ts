@@ -67,11 +67,13 @@
  * stderr. Reproduced before fixing. Renaming the admin source root would have
  * left this permanently green.
  */
-const fs = require('node:fs');
-const path = require('node:path');
-const cp = require('node:child_process');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = path.resolve(__dirname, '..');
+import { extractClasses } from './verify-web-class-resolution';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cssDir = path.join(repoRoot, 'apps/admin/.next/static/css');
 
 if (!fs.existsSync(cssDir)) {
@@ -122,46 +124,60 @@ for (const root of SRC_ROOTS) {
   }
 }
 
-// Branch on grep's real exit status, never on its stdout: 0 = matched,
-// 1 = no matches, >=2 = the search itself failed. `|| true` here is what made
-// a broken search indistinguishable from a clean one.
-let grep = '';
-let grepStatus = 0;
-try {
-  grep = cp.execFileSync(
-    'grep',
-    // The `-\$\{[^}]*\}` alternative swallows a template-literal interpolation
-    // (`text-status-${variant}`) into the SAME match as the literal prefix,
-    // rather than stopping at `text-status` and leaving a bare, unresolvable
-    // fragment behind. packages/ui/src/constants/status.ts documents exactly
-    // this anti-pattern in a comment — `[a-z0-9]` alone can't see the `${`
-    // that follows, so without this alternative the comment's own example
-    // was extracted as a literal class `text-status`, which resolves to
-    // nothing in any Tailwind config (the `status` family has no DEFAULT
-    // shade) and reported a violation that was never real code.
-    ['-rhoE', `(${UTILITY_PREFIXES})-(${SEMANTIC_FAMILIES})(-[a-z0-9]+|-\\$\\{[^}]*\\})*`, ...SRC_ROOTS],
-    { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 26 },
-  );
-} catch (err) {
-  grepStatus = typeof err.status === 'number' ? err.status : 2;
-  grep = typeof err.stdout === 'string' ? err.stdout : '';
+// Extraction uses the TypeScript PARSER, via `extractClasses` from
+// verify-web-class-resolution.ts — not a regex over raw file text.
+//
+// This guard shipped with a grep, and the grep produced a false positive twice.
+// The first was `text-status` extracted from a comment in
+// packages/ui/src/constants/status.ts and patched with another regex
+// alternative. The second was `to-nav`, matched inside the ENGLISH PHRASE
+// "click-to-navigate" in a docblock — `to` is a gradient utility prefix and
+// `nav` is a semantic family, so prose spells a class name by accident. A third
+// regex patch would have been the third band-aid on the same wound.
+//
+// The sibling guard already solved this: a parser can tell a class string from
+// a comment, from JSX text, and from a regex literal, which no quote-delimited
+// pattern can. Reusing it also means one extraction implementation instead of
+// two that drift.
+const SEMANTIC_CLASS = new RegExp(`^(${UTILITY_PREFIXES})-(${SEMANTIC_FAMILIES})(-|$)`);
+
+function sourceFilesUnder(root: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(path.join(repoRoot, root), {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile()) continue;
+    if (!/\.tsx?$/.test(entry.name)) continue;
+    const dir = (entry as unknown as { parentPath?: string; path?: string }).parentPath
+      ?? (entry as unknown as { path: string }).path;
+    out.push(path.join(dir, entry.name));
+  }
+  return out;
 }
 
-if (grepStatus >= 2) {
+const usedSet = new Set<string>();
+let filesScanned = 0;
+
+for (const root of SRC_ROOTS) {
+  for (const file of sourceFilesUnder(root)) {
+    filesScanned += 1;
+    const { tokens } = extractClasses(file, fs.readFileSync(file, 'utf8'));
+    for (const token of tokens) {
+      if (SEMANTIC_CLASS.test(token)) usedSet.add(token);
+    }
+  }
+}
+
+if (filesScanned === 0) {
   console.error(
-    `grep exited ${grepStatus} — the search did not complete, so this guard proves nothing.`,
+    `No .ts/.tsx files under ${SRC_ROOTS.join(' or ')} — refusing to report success ` +
+      'from a tree this guard did not actually read.',
   );
-  process.exit(grepStatus);
+  process.exit(2);
 }
 
-// Runtime-assembled class names (the swallowed `-${...}` matches above) can
-// never be checked against static CSS output — Tailwind's own source-text
-// scanner can't see them either, which is a distinct failure mode this guard
-// does not attempt to catch. Drop them here rather than testing a fragment
-// that was never a real class.
-const used = [...new Set(grep.split('\n').filter(Boolean))]
-  .filter((cls) => !cls.includes('$'))
-  .sort();
+const used = [...usedSet].sort();
 
 // Zero is not a clean result here: admin is mid-migration and references dozens
 // of DISTINCT semantic classes (69 across both roots on 2026-09-08 — the count

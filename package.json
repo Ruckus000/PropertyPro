@@ -52,6 +52,7 @@
     "guard:legacy-roles": "tsx scripts/verify-legacy-roles.ts",
     "guard:token-coverage": "tsx scripts/verify-token-coverage.ts",
     "guard:design-tokens": "tsx scripts/verify-design-tokens.ts",
+    "guard:admin-semantic-css": "tsx scripts/verify-admin-semantic-css.ts",
     "guard:class-resolution": "tsx scripts/verify-web-class-resolution.ts",
     "guard:page-padding": "tsx scripts/verify-page-padding.ts",
     "guard:page-state-copy": "tsx scripts/verify-page-state-copy.ts",

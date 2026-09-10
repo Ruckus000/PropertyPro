@@ -104,7 +104,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   > legitimately literal.
   >
   > **After any batch, and after ANY edit to `apps/admin/tailwind.config.ts`,
-  > run `node scripts/verify-admin-semantic-css.cjs`** (needs a build first). It
+  > run `pnpm guard:admin-semantic-css`** (needs a build first). It
   > asserts every semantic class referenced in admin source actually emits CSS —
   > a failure mode `guard:design-tokens` cannot see, because it only checks that
   > raw classes are gone, not that the replacement resolves. An unrecognised
