@@ -10,13 +10,27 @@
  * (the four regions: the `StaleDemo` interface, the four `useState` hooks, the
  * resync effect + `executeDeleteDemo`, and the card + confirm-dialog JSX).
  *
- * The confirm dialog here is still the pre-image's bare, role-less `<div>` —
- * dialog semantics (role, aria-modal, focus handling, Escape) land in a
- * separate follow-up commit so the move above stays diffable against its
- * source (correction #4).
+ * The confirm dialog is upgraded here (on top of that verbatim move) to a
+ * real `AlertDialog` — role="alertdialog", aria-modal, a focus trap and
+ * Escape-to-close all come from Radix rather than being hand-rolled
+ * (correction #4's second, separate commit). The outer card also picks up
+ * `role="alert"` here, for the same reason: it is an accessibility addition,
+ * not part of the structural move.
  */
 import { useState, useCallback, useEffect } from 'react';
-import { Trash2, X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+  AlertDialogAction,
+  buttonVariants,
+} from '@propertypro/ui';
 import { COMMUNITY_TYPE_LABELS } from '@/lib/constants/community-labels';
 import { staleBadge } from '@/lib/utils/stale-badge';
 
@@ -35,7 +49,6 @@ export function StaleDemosBanner({ staleDemos }: StaleDemosBannerProps) {
   const [currentStaleDemos, setCurrentStaleDemos] = useState(staleDemos);
   const [deletingDemoIds, setDeletingDemoIds] = useState<number[]>([]);
   const [staleDemoDeleteError, setStaleDemoDeleteError] = useState<string | null>(null);
-  const [confirmDeleteDemo, setConfirmDeleteDemo] = useState<StaleDemo | null>(null);
 
   useEffect(() => {
     setCurrentStaleDemos(staleDemos);
@@ -70,90 +83,69 @@ export function StaleDemosBanner({ staleDemos }: StaleDemosBannerProps) {
     }
   }, []);
 
+  if (currentStaleDemos.length === 0) return null;
+
   return (
-    <>
-      {currentStaleDemos.length > 0 && (
-        <div className="rounded-lg border border-status-warning-border bg-surface-card p-5 shadow-e1">
-          <h2 className="mb-3 text-sm font-semibold text-content">
-            Stale Demos
-            <span className="ml-2 rounded-full bg-status-warning-subtle px-2 py-0.5 text-xs font-medium text-status-warning">
-              {currentStaleDemos.length}
-            </span>
-          </h2>
-          {staleDemoDeleteError && (
-            <p className="mb-3 text-xs font-medium text-status-danger">{staleDemoDeleteError}</p>
-          )}
-          <div className="space-y-2">
-            {currentStaleDemos.map((demo) => {
-              const badge = staleBadge(demo.created_at);
-              const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
-              const isDeleting = deletingDemoIds.includes(demo.id);
-              return (
-                <div
-                  key={demo.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-page px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <span className="truncate text-sm font-medium text-content">{demo.prospect_name}</span>
-                    <span className="ml-2 text-xs text-content-tertiary">{typeLabel}</span>
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
-                    {badge.label}
-                  </span>
+    <div role="alert" className="rounded-lg border border-status-warning-border bg-surface-card p-5 shadow-e1">
+      <h2 className="mb-3 text-sm font-semibold text-content">
+        Stale Demos
+        <span className="ml-2 rounded-full bg-status-warning-subtle px-2 py-0.5 text-xs font-medium text-status-warning">
+          {currentStaleDemos.length}
+        </span>
+      </h2>
+      {staleDemoDeleteError && (
+        <p className="mb-3 text-xs font-medium text-status-danger">{staleDemoDeleteError}</p>
+      )}
+      <div className="space-y-2">
+        {currentStaleDemos.map((demo) => {
+          const badge = staleBadge(demo.created_at);
+          const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
+          const isDeleting = deletingDemoIds.includes(demo.id);
+          return (
+            <div
+              key={demo.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-page px-3 py-2"
+            >
+              <div className="min-w-0 flex-1">
+                <span className="truncate text-sm font-medium text-content">{demo.prospect_name}</span>
+                <span className="ml-2 text-xs text-content-tertiary">{typeLabel}</span>
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                {badge.label}
+              </span>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
                   <button
                     type="button"
                     aria-label={`Delete demo for ${demo.prospect_name}`}
-                    className="shrink-0 rounded p-1 text-content-disabled transition-colors hover:bg-status-danger-bg hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-50"
+                    className="shrink-0 rounded p-1 text-content-disabled transition-colors hover:bg-status-danger-bg hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
                     disabled={isDeleting}
-                    onClick={() => setConfirmDeleteDemo(demo)}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={14} aria-hidden="true" />
                   </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {confirmDeleteDemo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="w-full max-w-md rounded-lg bg-surface-card p-6 shadow-e3">
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-base font-semibold text-content">Delete Demo</h3>
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteDemo(null)}
-                className="rounded p-1 text-content-disabled hover:text-content-secondary"
-              >
-                <X size={16} />
-              </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Demo</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Delete the demo for <strong>{demo.prospect_name}</strong>? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className={buttonVariants({ variant: 'destructive' })}
+                      onClick={() => void executeDeleteDemo(demo)}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
-            <p className="text-sm text-content-secondary mb-5">
-              Delete the demo for <strong>{confirmDeleteDemo.prospect_name}</strong>? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteDemo(null)}
-                className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void executeDeleteDemo(confirmDeleteDemo);
-                  setConfirmDeleteDemo(null);
-                }}
-                className="rounded-md bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+          );
+        })}
+      </div>
+    </div>
   );
 }
