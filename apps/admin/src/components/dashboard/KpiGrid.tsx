@@ -26,6 +26,16 @@ interface KpiDefinition {
   title: string;
   value: string | number;
   delta?: number;
+  /**
+   * Caption naming the period `delta` actually measures. Explicit per-card
+   * rather than relying on `KpiCard`'s "vs last 30 days" default — MRR's
+   * delta is day-over-day (`mrr_delta_pct` off the latest daily snapshot)
+   * and Past due's is month-over-month (`seriesDeltaPct` over the monthly
+   * `pastDue` bucket), and a caption that misstates its period is worse than
+   * none. Passed through to both the compact card and the detail dialog so
+   * the two surfaces never disagree.
+   */
+  deltaLabel?: string;
   trend?: KpiCardProps['trend'];
   invertTrend?: boolean;
   icon: KpiCardProps['icon'];
@@ -93,6 +103,7 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
       title: 'Communities',
       value: stats.overview.communities.toLocaleString(),
       delta: growthPct(stats.overview.communities, stats.deltas.communities30d),
+      deltaLabel: 'vs last 30 days',
       trend: 'up',
       icon: Building2,
       series: series.communities,
@@ -105,6 +116,7 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
       title: 'Members',
       value: stats.overview.members.toLocaleString(),
       delta: growthPct(stats.overview.members, stats.deltas.members30d),
+      deltaLabel: 'vs last 30 days',
       trend: 'up',
       icon: Users,
       series: series.members,
@@ -115,8 +127,18 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
     {
       key: 'mrr',
       title: 'MRR',
-      value: formatCurrency(latestValue(series.mrr)),
+      // The real latest MRR, not `latestValue(series.mrr)` — that reads the
+      // bucketed chart's current-month bar, which is `0` for every day of
+      // the month until the daily cron writes a snapshot (see
+      // `DashboardSeries.latestMrr` docblock). Falls back to the bucket only
+      // when there is no snapshot at all (series.latestMrr undefined/null),
+      // which also legitimately renders $0.
+      value: formatCurrency(series.latestMrr ?? latestValue(series.mrr)),
       delta: series.latestMrrDeltaPct ?? undefined,
+      // Day-over-day: `latestMrrDeltaPct` comes from `mrr_delta_pct` on the
+      // single latest daily snapshot vs. the one before it, not a 30-day or
+      // monthly comparison.
+      deltaLabel: 'vs yesterday',
       trend: 'up',
       icon: DollarSign,
       series: series.mrr,
@@ -150,6 +172,9 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
       title: 'Past due',
       value: stats.billing.past_due,
       delta: seriesDeltaPct(series.pastDue),
+      // seriesDeltaPct compares the last two points of the monthly `pastDue`
+      // bucket — a month-over-month change, not a 30-day one.
+      deltaLabel: 'vs last month',
       trend: 'up',
       invertTrend: true,
       icon: AlertTriangle,
@@ -190,6 +215,7 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
             title={card.title}
             value={card.value}
             delta={card.delta}
+            deltaLabel={card.deltaLabel}
             trend={card.trend}
             invertTrend={card.invertTrend}
             icon={card.icon}
@@ -202,6 +228,7 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
         onOpenChange={(open) => setOpenKey(open ? openKey : null)}
         title={active?.title ?? ''}
         value={active?.value ?? ''}
+        deltaLabel={active?.deltaLabel}
         delta={active?.delta}
         description={active?.description ?? ''}
         series={active?.series}

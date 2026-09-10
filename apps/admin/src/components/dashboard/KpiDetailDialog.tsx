@@ -33,6 +33,8 @@ interface KpiDetailDialogProps {
   value: string | number;
   /** Percent change; renders a colored +/- line when present. */
   delta?: number;
+  /** Caption naming the period `delta` measures. Defaults to "vs last month". */
+  deltaLabel?: string;
   description: string;
   series?: MonthPoint[];
   breakdown?: KpiDetailBreakdownRow[];
@@ -46,6 +48,7 @@ export function KpiDetailDialog({
   title,
   value,
   delta,
+  deltaLabel = 'vs last month',
   description,
   series,
   breakdown,
@@ -71,7 +74,7 @@ export function KpiDetailDialog({
                 )}
               >
                 {delta > 0 ? '+' : ''}
-                {delta}% vs. last month
+                {delta}% {deltaLabel}
               </p>
             )}
           </div>

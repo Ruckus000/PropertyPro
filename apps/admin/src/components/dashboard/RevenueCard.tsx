@@ -1,6 +1,13 @@
 /**
  * RevenueCard — latest MRR, day-over-day delta, a 12-month sparkline, ARR,
- * and a 30-day net-new figure derived from the bucketed monthly series.
+ * and a 30-day net-new figure. The headline MRR/ARR/net-new figures read
+ * `series.latestMrr`/`series.mrr30dAgo` (the real latest daily snapshot, and
+ * the snapshot nearest 30 days before it) rather than the bucketed monthly
+ * `series.mrr` — that series fills the current, still-open calendar month
+ * with `0` until the daily cron runs, and its last two points are a
+ * calendar-month comparison, not a 30-day one. `series.mrr` still backs the
+ * sparkline, where a `0` bar for an empty month is a defensible chart
+ * choice.
  */
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
@@ -27,9 +34,13 @@ function formatSignedCurrency(dollars: number): string {
 
 export function RevenueCard({ series }: RevenueCardProps) {
   const points = series.mrr;
-  const latest = points.length > 0 ? points[points.length - 1]!.value : 0;
-  const previous = points.length > 1 ? points[points.length - 2]!.value : null;
-  const netNew30d = previous !== null ? latest - previous : null;
+  // Real latest MRR from the daily snapshot, not the bucketed chart's
+  // current-month bar (which is `0` until the daily cron writes today's
+  // snapshot — see the module docblock). Falls back to the chart's last
+  // point only when there is no snapshot at all.
+  const latest = series.latestMrr ?? (points.length > 0 ? points[points.length - 1]!.value : 0);
+  const mrr30dAgo = series.mrr30dAgo ?? null;
+  const netNew30d = mrr30dAgo !== null ? latest - mrr30dAgo : null;
   const arr = latest * 12;
   const deltaPct = series.latestMrrDeltaPct ?? null;
 

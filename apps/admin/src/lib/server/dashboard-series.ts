@@ -25,7 +25,9 @@ export interface DashboardSeries {
    * to a number. `numeric` is serialized as a STRING by both drizzle and
    * PostgREST (precision safety), so an un-coerced value formats as `"12.50"`
    * and compares as a string — see the task brief's warning on this column.
-   * `null` when there is no snapshot yet, or the column itself is null.
+   * `null` when there is no snapshot yet, the column itself is null, or the
+   * stored value doesn't coerce to a finite number (a malformed value must
+   * not render as a literal `NaN%`).
    *
    * Not part of the interface the task brief sketched for `DashboardSeries`
    * (`{ mrr; pastDue; communities; members }`) — added because both the KPI
@@ -37,6 +39,29 @@ export interface DashboardSeries {
    * fixture without it (e.g. `kpi-grid.test.tsx`) still satisfies the type.
    */
   latestMrrDeltaPct?: number | null;
+  /**
+   * The true current MRR (dollars), from the most recent
+   * `revenue_snapshots` row — NOT `mrr.at(-1)`. The bucketed `mrr` series
+   * fills the current, still-open calendar month with `value: 0` until the
+   * daily cron writes today's snapshot, so from UTC midnight on the 1st
+   * until that cron runs, `mrr.at(-1)` reads as a real zero rather than
+   * "no snapshot yet". Headline consumers (KPI grid MRR card, RevenueCard's
+   * MRR/ARR/net-new) must read this field instead; `bucketByMonth` itself is
+   * unchanged because a zero chart bar for an empty month is still the right
+   * chart. `null` only when there is no snapshot at all. Optional for the
+   * same fixture-compatibility reason as `latestMrrDeltaPct`.
+   */
+  latestMrr?: number | null;
+  /**
+   * MRR (dollars) from the daily snapshot nearest 30 days before the latest
+   * one, for an actual 30-day "Net new" comparison — the bucketed `mrr`
+   * series is monthly, so comparing its last two points swings between
+   * ~1 day and ~2 months of real elapsed time depending on where in the
+   * calendar `now` falls. `null` when there is no snapshot at least one day
+   * older than the latest to compare against. Optional for the same
+   * fixture-compatibility reason as `latestMrrDeltaPct`.
+   */
+  mrr30dAgo?: number | null;
 }
 
 interface AtValueRow {
@@ -112,6 +137,28 @@ function throwIfError(error: { message: string } | null, context: string): void 
 }
 
 const SERIES_MONTHS = 12;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const NET_NEW_WINDOW_DAYS = 30;
+
+/** Coerces to a number, falling back to `null` for anything non-finite (incl. `NaN`, `null`, `undefined`). */
+function toFiniteNumberOrNull(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Among `candidates` (assumed to exclude the latest snapshot itself), the
+ * row whose `computed_at` is closest to `targetMs`. `null` if `candidates`
+ * is empty — there is nothing to compare against.
+ */
+function nearestSnapshotTo(candidates: RevenueSnapshotRow[], targetMs: number): RevenueSnapshotRow | null {
+  if (candidates.length === 0) return null;
+  return candidates.reduce((closest, row) => {
+    const rowDiff = Math.abs(new Date(row.computed_at).getTime() - targetMs);
+    const closestDiff = Math.abs(new Date(closest.computed_at).getTime() - targetMs);
+    return rowDiff < closestDiff ? row : closest;
+  });
+}
 
 export async function getDashboardSeries(): Promise<DashboardSeries> {
   const db = createAdminClient();
@@ -162,7 +209,20 @@ export async function getDashboardSeries(): Promise<DashboardSeries> {
   const latestMrrDeltaPct =
     latestSnapshot === null || latestSnapshot.mrr_delta_pct === null
       ? null
-      : Number(latestSnapshot.mrr_delta_pct);
+      : toFiniteNumberOrNull(latestSnapshot.mrr_delta_pct);
+  const latestMrr = latestSnapshot === null ? null : Number(latestSnapshot.mrr_cents ?? 0) / 100;
 
-  return { mrr, pastDue, communities, members, latestMrrDeltaPct };
+  // `snapshots` is sorted ascending (query orders by computed_at asc), so
+  // everything before the last element predates latestSnapshot.
+  const priorSnapshots = snapshots.slice(0, -1);
+  const mrr30dAgo =
+    latestSnapshot === null
+      ? null
+      : (() => {
+          const targetMs = new Date(latestSnapshot.computed_at).getTime() - NET_NEW_WINDOW_DAYS * MS_PER_DAY;
+          const nearest = nearestSnapshotTo(priorSnapshots, targetMs);
+          return nearest === null ? null : Number(nearest.mrr_cents ?? 0) / 100;
+        })();
+
+  return { mrr, pastDue, communities, members, latestMrrDeltaPct, latestMrr, mrr30dAgo };
 }
