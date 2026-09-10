@@ -10,15 +10,9 @@ import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getPlatformDashboardStats } from '@/lib/server/dashboard';
 import { getDashboardSeries } from '@/lib/server/dashboard-series';
 import { getShellSignals } from '@/lib/server/shell-signals';
+import { formatPlatformDate, greetingFor } from '@/lib/utils/platform-clock';
 
 export const dynamic = 'force-dynamic';
-
-function greetingFor(now: Date): string {
-  const hour = now.getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
 
 export default async function DashboardPage() {
   const session = await requireAdminPageSession();
@@ -28,9 +22,13 @@ export default async function DashboardPage() {
     getShellSignals(),
   ]);
 
+  // Both values are on the PLATFORM clock, not the server's. This page renders
+  // server-side and Vercel's server is UTC, so `getHours()` / an unzoned
+  // formatter showed a Florida operator tomorrow's date and the wrong greeting
+  // all evening — see `lib/utils/platform-clock.ts`.
   const now = new Date();
   const firstName = session.email.split('@')[0] || 'there';
-  const today = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(now);
+  const today = formatPlatformDate(now);
 
   return (
     <PageBody>
