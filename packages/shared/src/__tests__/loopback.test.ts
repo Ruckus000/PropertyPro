@@ -35,6 +35,28 @@ describe('isLoopbackUrl', () => {
     expect(isLoopbackUrl('https://localhost@evil.example.com')).toBe(false);
   });
 
+  it('is not fooled by a BACKSLASH faking the userinfo delimiter', () => {
+    // WHATWG treats `\` as `/` for special schemes, and the Supabase client is
+    // WHATWG-based — so the real host here is `evil.com`. With `\` absent from
+    // the credential and path character classes, this function stripped
+    // `evil.com\@` as userinfo and returned `localhost`, declaring a REMOTE
+    // project local. That is the gate opening, the one direction that fails
+    // dangerously.
+    //
+    // Asserted against `new URL(...)` rather than a hardcoded string so the two
+    // parsers cannot drift apart silently.
+    for (const url of ['https://evil.com\\@localhost/', 'https://evil.com\\@127.0.0.1/']) {
+      expect(hostFromUrl(url), url).toBe(new URL(url).host);
+      expect(isLoopbackUrl(url), url).toBe(false);
+    }
+  });
+
+  it('still treats a genuine loopback host with userinfo as local', () => {
+    // The backslash fix must not break the ordinary case.
+    expect(isLoopbackUrl('postgresql://postgres:postgres@localhost:5432/db')).toBe(true);
+    expect(isLoopbackUrl('http://user@127.0.0.1:54321')).toBe(true);
+  });
+
   it('is not fooled by a loopback host appearing elsewhere in the URL', () => {
     expect(isLoopbackUrl('https://notlocalhost.example.com')).toBe(false);
     expect(isLoopbackUrl('https://example.com/localhost')).toBe(false);

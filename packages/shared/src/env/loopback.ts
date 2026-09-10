@@ -47,7 +47,15 @@ export const LOOPBACK_HOSTS: readonly string[] = [
  * scheme-agnostic so one implementation serves `postgresql://`, `http://` and
  * `https://` alike.
  *
- * The credential strip (`^[^@/]*@`) is load-bearing, not cosmetic:
+ * A BACKSLASH counts as a path separator and terminates userinfo, because WHATWG
+ * treats `\` as `/` for special schemes and the Supabase client is WHATWG-based.
+ * Measured: `new URL('https://evil.com\\@localhost/').host` is `evil.com`, but
+ * with `\` absent from both character classes this function returned `localhost`
+ * — it stripped `evil.com\@` as though it were userinfo and declared a remote
+ * host local. That is the gate OPENING for a remote project, the one direction
+ * that fails dangerously, so the two classes below must keep their `\\`.
+ *
+ * The credential strip (`^[^@/\\]*@`) is load-bearing, not cosmetic:
  * `postgresql://user:localhost@evil.example.com/db` must resolve to
  * `evil.example.com`, not `localhost`. A naive "does it contain localhost"
  * check reads that URL as local and hands an attacker the gate. That case is
@@ -56,8 +64,8 @@ export const LOOPBACK_HOSTS: readonly string[] = [
 export function hostFromUrl(url: string): string {
   return url
     .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
-    .replace(/^[^@/]*@/, '')
-    .replace(/[/?].*$/, '')
+    .replace(/^[^@/\\]*@/, '')
+    .replace(/[/?\\].*$/, '')
     .replace(/:\d+$/, '');
 }
 
