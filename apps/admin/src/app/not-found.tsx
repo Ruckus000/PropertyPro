@@ -1,9 +1,16 @@
 /**
- * 404 page for the operator console.
+ * 404 for URLs that match no route at all.
  *
- * apps/admin calls `notFound()` in several places (an unknown community id, an
- * unknown demo id). Without this file those all rendered Next's unstyled
- * built-in 404 outside the admin shell.
+ * This is the whole-app fallback: Next.js routes an UNMATCHED url to the root
+ * `not-found`, which never enters a route group, so `(console)/layout.tsx` does
+ * not run and there is no shell to render inside. That is why this file owns
+ * `<main id="main-content">` itself — nothing else provides the skip-link
+ * landmark here.
+ *
+ * `notFound()` raised from a console page is a different case and no longer
+ * lands here: `(console)/not-found.tsx` catches it and keeps the shell. Keep
+ * the copy below about an unknown ADDRESS, and the record-not-found wording
+ * there.
  */
 import Link from 'next/link';
 
@@ -19,7 +26,7 @@ export default function NotFound() {
         Page not found
       </h1>
       <p className="mt-3 max-w-md text-sm text-content-secondary">
-        This record doesn&apos;t exist, or it may have been deleted.
+        That address doesn&apos;t match anything in the console.
       </p>
       <Link
         href="/clients"
