@@ -57,10 +57,18 @@ export function SupportAccessTab({ communityId, communitySlug }: SupportAccessTa
   const [error, setError] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [endingId, setEndingId] = useState<number | null>(null);
+  /**
+   * A failed ACTION or a partial load, as opposed to a failed sessions load.
+   * Separate from `error`, which early-returns in place of the whole tab: an
+   * "End Session" that did not end must leave the session visible, because the
+   * session is still RUNNING and the operator has to be able to try again.
+   */
+  const [actionError, setActionError] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError('');
+    setActionError('');
     try {
       const [sessionsRes, membersRes] = await Promise.all([
         fetch(`/api/admin/support/sessions?communityId=${communityId}`),
@@ -78,6 +86,20 @@ export function SupportAccessTab({ communityId, communitySlug }: SupportAccessTa
       }
 
       setSessions(sessionsData.sessions ?? []);
+
+      // The members list feeds the Start-Session dialog's target picker. Only
+      // `sessionsRes` used to be checked, so a failed members fetch rendered an
+      // EMPTY picker with no explanation — indistinguishable from a community
+      // with no members. The sessions half is usable, so this is a notice
+      // rather than a replacement for the tab.
+      if (!membersRes.ok) {
+        setActionError(
+          typeof membersData.error === 'string'
+            ? membersData.error
+            : "We couldn't load this community's members, so the Start Session picker is empty. Reload the page to try again.",
+        );
+      }
+
       setMembers(
         (membersData.members ?? []).map((member: { userId: string; email: string; role: string }) => ({
           userId: member.userId,
@@ -115,15 +137,30 @@ export function SupportAccessTab({ communityId, communitySlug }: SupportAccessTa
 
   const handleEndSession = async (id: number) => {
     setEndingId(id);
+    setActionError('');
     try {
       const res = await fetch(`/api/admin/support/sessions/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ended_reason: 'manual' }),
       });
-      if (res.ok) {
-        await fetchData();
+      if (!res.ok) {
+        // Without this branch the spinner closed and the banner stayed put
+        // while the session was still LIVE — the operator believed an
+        // impersonation session had ended when it had not.
+        const message = await res
+          .json()
+          .then((body) => (typeof body?.error === 'string' ? (body.error as string) : undefined))
+          .catch(() => undefined);
+        setActionError(
+          message ??
+            "We couldn't end this session, so it is still active. Try again; if it keeps failing, revoke it from the database.",
+        );
+        return;
       }
+      await fetchData();
+    } catch {
+      setActionError("We couldn't reach the server, so this session is still active. Check your connection and try again.");
     } finally {
       setEndingId(null);
     }
@@ -146,6 +183,8 @@ export function SupportAccessTab({ communityId, communitySlug }: SupportAccessTa
 
   return (
     <div className="space-y-6">
+      {actionError && <AlertBanner status="danger" title="Action failed" description={actionError} />}
+
       {/* Active sessions. The session list is rendered as a SIBLING of
           AlertBanner, not inside its `description` prop — that prop renders
           inside a `<p>`, and this list's buttons/divs are block content that

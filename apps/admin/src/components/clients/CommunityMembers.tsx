@@ -90,6 +90,13 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
+  /**
+   * A failed ACTION, as opposed to a failed load. Separate state because
+   * `error` early-returns in place of the whole table (right for a load that
+   * produced nothing to show); a failed removal must leave the list on screen
+   * so the operator can see what did and did not happen, and retry.
+   */
+  const [actionError, setActionError] = useState('');
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<'all' | MemberGroup>('all');
   const [sort, setSort] = useState<MemberSort>('name-asc');
@@ -227,13 +234,27 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
   }
 
   async function handleRemove(userId: string) {
+    setActionError('');
     try {
       const res = await fetch(`/api/admin/communities/${communityId}/members/${userId}`, {
         method: 'DELETE',
       });
-      if (res.ok) {
-        setMembers((prev) => prev.filter((m) => m.userId !== userId));
+      if (!res.ok) {
+        // Without this branch the row simply stayed put: the spinner closed,
+        // the confirm collapsed, and the operator had no way to tell a refused
+        // removal from a slow one.
+        const message = await res
+          .json()
+          .then((body) => (body?.error?.message as string | undefined))
+          .catch(() => undefined);
+        setActionError(
+          message ?? "We couldn't remove this member. Please try again, or reload the page to confirm the current list.",
+        );
+        return;
       }
+      setMembers((prev) => prev.filter((m) => m.userId !== userId));
+    } catch {
+      setActionError("We couldn't reach the server to remove this member. Check your connection and try again.");
     } finally {
       setRemoveConfirm(null);
     }
@@ -247,16 +268,20 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
     );
   }
 
+  const errorBox = (message: string) => (
+    <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger" role="alert">
+      {message}
+    </div>
+  );
+
   if (error) {
-    return (
-      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger" role="alert">
-        {error}
-      </div>
-    );
+    return errorBox(error);
   }
 
   return (
     <div className="space-y-4">
+      {actionError && errorBox(actionError)}
+
       {hasRootManager && (
         <AlertBanner
           status="info"
@@ -315,7 +340,13 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                 const isActive = sort.startsWith(`${column}-`);
                 const isAsc = sort === `${column}-asc`;
                 return (
-                  <th key={column} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
+                  <th
+                    key={column}
+                    // The chevron is the only VISUAL cue; `aria-sort` is the
+                    // same fact for a screen reader, which cannot see it.
+                    aria-sort={isActive ? (isAsc ? 'ascending' : 'descending') : 'none'}
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary"
+                  >
                     <button
                       type="button"
                       onClick={() => toggleSort(column)}
