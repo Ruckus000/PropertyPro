@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { format } from 'date-fns';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,11 +15,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  *    `Site live` / `Site not live` (see `WorkspaceHeader`).
  *  - `'Published Mar 26, 2026'` — the new header drops the published-date
  *    caption entirely; it isn't shown anywhere in the redesigned workspace.
- *  - The `portal.sunsetcondo.org` / `sunset-condos.getpropertypro.com` domain
- *    assertions and `'Custom domain'` / `'Default subdomain'` copy — that
- *    detail now lives on the Website tab (`WebsiteDomainCard`, slice 17c's)
- *    rather than being reachable off a single static render of Overview,
- *    now one of eight tabs rather than the page's only content.
  *  - `renderToStaticMarkup` with no `next/navigation` mock — `ClientWorkspace`
  *    now reads `useSearchParams()` for `?tab=` handling, which throws outside
  *    a request scope. Switched to RTL + `next/navigation`/`next/link` mocks,
@@ -29,10 +24,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * What's kept: site-live/not-live status still renders correctly for the
  * three billing/publish combinations that drove the original three tests —
  * just read off the new `WorkspaceHeader` badge (`Site live` / `Site not
- * live`) instead of the retired copy and the now-relocated domain details.
+ * live`) instead of the retired copy.
+ *
+ * CORRECTION (fix round 1): a prior version of this comment claimed the
+ * `portal.sunsetcondo.org` / `sunset-condos.getpropertypro.com` domain
+ * assertions and the `'Custom domain'` / `'Default subdomain'` copy had
+ * "moved to the Website tab (`WebsiteDomainCard`, slice 17c's)". That was
+ * false: no `WebsiteDomainCard` component exists anywhere in this app.
+ * `OverviewTab.tsx` renders `domainInfo.displayUrl` and that exact source
+ * copy directly, on the default-active tab — the assertions were simply
+ * deleted, not relocated, and nothing tested that rendering. (Separately,
+ * `CommunityWebsiteEditor.tsx` — the Website tab's real content, 17c's,
+ * untouched here — renders the same `getWebsiteDomainInfo()` output again
+ * for its own purposes; that duplication doesn't excuse dropping Overview's
+ * coverage of what Overview itself renders.) Restored below.
+ *
  * New coverage: the eight-tab strip in the design's order, apartments hiding
- * Compliance, exactly one `<h1>` (dispatch notes correction #1), and `?tab=`
- * validation falling back to Overview on an unrecognized value.
+ * Compliance, exactly one `<h1>` (dispatch notes correction #1), `?tab=`
+ * validation falling back to Overview on an unrecognized value, the Overview
+ * website-URL detail, and that switching tabs writes the address bar via
+ * `history.replaceState` rather than a router navigation.
  */
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
@@ -179,5 +190,40 @@ describe('ClientWorkspace', () => {
     currentSearch = 'tab=not-a-real-tab';
     render(<ClientWorkspace community={baseCommunity} />);
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('renders the website URL and source label on the default-active Overview tab, for a custom domain', () => {
+    render(<ClientWorkspace community={{ ...baseCommunity, custom_domain: 'portal.sunsetcondo.org' }} />);
+
+    expect(screen.getByText('portal.sunsetcondo.org')).toBeTruthy();
+    expect(screen.getByText('Custom domain')).toBeTruthy();
+    expect(screen.queryByText('Default subdomain')).toBeNull();
+  });
+
+  it('renders the slug-fallback website URL and source label when there is no custom domain', () => {
+    render(<ClientWorkspace community={{ ...baseCommunity, custom_domain: null }} />);
+
+    expect(screen.getByText('sunset-condos.getpropertypro.com')).toBeTruthy();
+    expect(screen.getByText('Default subdomain')).toBeTruthy();
+    expect(screen.queryByText('Custom domain')).toBeNull();
+  });
+
+  it('switches tabs by writing history.replaceState directly, without a router navigation', () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+    render(<ClientWorkspace community={baseCommunity} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Billing' }));
+
+    // The route this component lives on is `dynamic = 'force-dynamic'`, so a
+    // `router.replace()` call here would re-run the auth gate and the
+    // page's five data-fetching queries on every tab click. The tab is
+    // client state — only the address bar needs updating, via the
+    // platform history API, not the Next.js router.
+    expect(replaceMock).not.toHaveBeenCalled();
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1);
+    expect(replaceStateSpy).toHaveBeenCalledWith(null, '', expect.stringContaining('tab=billing'));
+    expect(screen.getByRole('tab', { name: 'Billing' }).getAttribute('aria-selected')).toBe('true');
+
+    replaceStateSpy.mockRestore();
   });
 });

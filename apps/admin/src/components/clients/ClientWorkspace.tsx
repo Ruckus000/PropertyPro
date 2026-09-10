@@ -10,7 +10,7 @@
  * `.superpowers/sdd/2026-09-08-admin-console-redesign/task-17a-dispatch-notes.md`.
  */
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { OverviewTab } from './OverviewTab';
 import { BillingTab } from './BillingTab';
@@ -87,7 +87,6 @@ function isKnownTab(value: string | null, allowed: readonly Tab[]): value is Tab
 }
 
 export function ClientWorkspace({ community }: ClientWorkspaceProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   // Apartments have no compliance items — hide the tab.
@@ -128,8 +127,22 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
     // dismissed it.
     params.delete('start');
     const query = params.toString();
-    const path = typeof window !== 'undefined' ? window.location.pathname : '';
-    router.replace(query ? `${path}?${query}` : path, { scroll: false });
+    // Write the address bar directly instead of `router.replace()`. The tab
+    // is client state, not a page navigation — but `[id]/page.tsx` is
+    // `dynamic = 'force-dynamic'` (0 staleTime router cache), so a Next
+    // navigation here would re-run `requireAdminPageSession()` plus the
+    // five-query `Promise.all` in page.tsx on every tab click.
+    // `window.history.replaceState` updates the URL for linkability without
+    // touching the router — the documented App Router approach now that
+    // `shallow` is gone. This only changes how the URL is WRITTEN; the READ
+    // path (the `useState` initializer and the `useEffect` above) is
+    // untouched, so a real navigation into this route with a different
+    // `?tab=` (e.g. the header's "Start support session" link) still lands
+    // on the right tab.
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      window.history.replaceState(null, '', query ? `${path}?${query}` : path);
+    }
   }
 
   const { tabListProps, getTabProps, getPanelProps } = useRovingTabs(tabs, activeTab, handleTabChange, {
