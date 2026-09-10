@@ -65,7 +65,9 @@ async function loadShellSignals(providers: SignalProvider[] = DEFAULT_PROVIDERS)
       return;
     }
     counts[key] = result.value.count;
-    items.push(...result.value.items);
+    // `key` is in hand here, so stamp it rather than making every consumer
+    // re-derive which provider a row came from.
+    items.push(...result.value.items.map((item) => ({ ...item, key })));
     if (!critical && result.value.critical) critical = result.value.critical;
   });
   // Newest first. Ties (equal `occurredAt`) fall through to 0 rather than an

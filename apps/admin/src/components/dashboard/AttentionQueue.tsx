@@ -4,11 +4,12 @@
  * AttentionQueue — the dashboard's "needs attention" list, one row per
  * `NavSignalKey` that currently has a non-zero count.
  *
- * `ShellSignalItem` carries no field naming which provider produced it (the
- * shell only needs items sorted newest-first, not grouped), so each row's
- * "top item" line is resolved here by matching an item's `href` back to the
- * nav entry that owns that signal (exact match, a nested path, or a query
- * string on the same path — the three shapes the providers actually emit).
+ * Each row's "top item" line comes from `item.key`, stamped by
+ * `getShellSignals` from the provider that produced the row. An earlier version
+ * matched an item's `href` back to the owning nav entry by string prefix; that
+ * worked only because all three live providers happen to emit an href under
+ * their nav item's path, and it would have made every provider Wave 3 adds
+ * silently responsible for a convention nothing checks.
  * Rows with no matching item fall back to a generic count line.
  *
  * Per the task brief: no per-row "signal failed" state here.
@@ -49,9 +50,7 @@ function toneOf(item: AdminNavItem): 'danger' | 'warning' | 'neutral' {
   return item.tone === 'danger' ? 'danger' : item.tone === 'warning' ? 'warning' : 'neutral';
 }
 
-function matchesNavItem(itemHref: string, navHref: string): boolean {
-  return itemHref === navHref || itemHref.startsWith(`${navHref}/`) || itemHref.startsWith(`${navHref}?`);
-}
+
 
 export function AttentionQueue({ signals }: AttentionQueueProps) {
   const rows = Array.from(SIGNAL_NAV_ITEMS.entries())
@@ -59,7 +58,7 @@ export function AttentionQueue({ signals }: AttentionQueueProps) {
       key,
       navItem,
       count: signals.counts[key],
-      topItem: signals.items.find((item) => matchesNavItem(item.href, navItem.href)),
+      topItem: signals.items.find((item) => item.key === key),
     }))
     .filter((row) => row.count > 0)
     .sort((a, b) => b.count - a.count);

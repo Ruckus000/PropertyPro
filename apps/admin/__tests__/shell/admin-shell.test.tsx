@@ -364,7 +364,8 @@ describe('AdminShell', () => {
           ...signals,
           items: [
             {
-              id: 'a',
+              key: 'inbox' as const,
+      id: 'a',
               tone: 'info',
               icon: 'inbox',
               title: 'New reply from Denise',
@@ -407,7 +408,8 @@ describe('AdminShell', () => {
           generatedAt: '2026-09-09T10:00:00.000Z',
           items: [
             {
-              id: 'a',
+              key: 'inbox' as const,
+      id: 'a',
               tone: 'info',
               icon: 'inbox',
               title: 'New reply from Denise',
