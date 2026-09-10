@@ -36,6 +36,13 @@ type Chain = {
   is: (...args: unknown[]) => Chain;
   order: (...args: unknown[]) => Chain;
   limit: (...args: unknown[]) => Chain;
+  // `getCommunitySnapshots` asks a second, narrow question —
+  // `.select('id').in('id', ids).not('snapshot', 'is', null)` — so `restorable`
+  // never pulls a snapshot payload. This stub answers any filter with the same
+  // fixture; the projection/filter assertions live in
+  // `community-snapshots.test.ts`.
+  in?: (...args: unknown[]) => Chain;
+  not?: (...args: unknown[]) => Chain;
   single?: () => Promise<{ data: unknown; error?: unknown }>;
   then?: PromiseLike<unknown>['then'];
 };
@@ -49,6 +56,8 @@ function resolvedChain(result: { data: unknown; count?: number }): Chain {
     is: () => chain,
     order: () => chain,
     limit: () => chain,
+    in: () => chain,
+    not: () => chain,
   };
   chain.then = resolved.then.bind(resolved);
   return chain;

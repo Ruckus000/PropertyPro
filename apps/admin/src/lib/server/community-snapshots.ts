@@ -15,11 +15,16 @@
  * §2. The `restorable` flag below exists so the UI can tell a still-retained
  * publish apart from a pruned one, not to gate an action.
  *
- * Bounded read: this selects `snapshot` only to test it for null (the
- * lifecycle cron prunes that column past retention — see the schema's
- * RETENTION docblock) and never forwards the payload itself to the client;
- * `SNAPSHOTS_LIMIT` caps row count so a long-lived community's full publish
- * history is never pulled in one page load.
+ * Bounded in BOTH dimensions, which the previous docblock conflated.
+ * `SNAPSHOTS_LIMIT` bounds the ROW COUNT, so a long-lived community's full
+ * publish history is never pulled in one page load. The payload is bounded
+ * separately, and was not: the list query used to select `snapshot` purely to
+ * test it for null, which transferred an entire published site's content JSON
+ * × 20 on every `force-dynamic` workspace page load — for a tab the operator
+ * may never open. `restorable` now comes from a second, narrow query that
+ * selects only the ids whose `snapshot` survives retention (the lifecycle cron
+ * prunes that column — see the schema's RETENTION docblock), so no payload
+ * crosses the wire at all.
  *
  * Deliberately its own file rather than added to `lib/server/clients.ts`
  * (owned by the Clients-grid slice, 2a) or `community-activity.ts` (17a) —
@@ -44,7 +49,6 @@ interface SnapshotRow {
   published_at: string;
   change_count: number | null;
   change_labels: string[] | null;
-  snapshot: unknown | null;
 }
 
 export async function getCommunitySnapshots(communityId: number): Promise<CommunitySnapshotEntry[]> {
@@ -52,7 +56,7 @@ export async function getCommunitySnapshots(communityId: number): Promise<Commun
 
   const { data, error } = await db
     .from('site_publish_snapshots')
-    .select('id, published_at, change_count, change_labels, snapshot')
+    .select('id, published_at, change_count, change_labels')
     .eq('community_id', communityId)
     .is('deleted_at', null)
     .order('published_at', { ascending: false })
@@ -62,11 +66,32 @@ export async function getCommunitySnapshots(communityId: number): Promise<Commun
     throw new Error(`Failed to load site publish snapshots: ${error.message}`);
   }
 
-  return ((data ?? []) as SnapshotRow[]).map((row) => ({
+  const rows = (data ?? []) as SnapshotRow[];
+  if (rows.length === 0) {
+    return [];
+  }
+
+  // Which of those rows still HAS a snapshot, asked without transferring one.
+  // `.in('id', …)` is over the ≤ SNAPSHOTS_LIMIT ids already in hand, so this
+  // needs no bound of its own; PostgREST returns the matching ids only.
+  const ids = rows.map((row) => row.id);
+  const { data: retained, error: retainedError } = await db
+    .from('site_publish_snapshots')
+    .select('id')
+    .in('id', ids)
+    .not('snapshot', 'is', null);
+
+  if (retainedError) {
+    throw new Error(`Failed to load site publish snapshot retention: ${retainedError.message}`);
+  }
+
+  const restorableIds = new Set(((retained ?? []) as { id: number }[]).map((row) => row.id));
+
+  return rows.map((row) => ({
     id: row.id,
     publishedAt: row.published_at,
     changeCount: row.change_count ?? 0,
     changeLabels: row.change_labels ?? [],
-    restorable: row.snapshot !== null,
+    restorable: restorableIds.has(row.id),
   }));
 }
