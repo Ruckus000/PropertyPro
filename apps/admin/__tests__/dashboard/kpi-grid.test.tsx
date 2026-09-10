@@ -86,5 +86,134 @@ describe('KpiGrid', () => {
     // The detail dialog must agree with the compact card for the same metric.
     fireEvent.click(mrrCard);
     expect(screen.getByRole('dialog').textContent).toContain('vs yesterday');
+
+    // This fixture's Past due is a -50% delta (4 -> 2, an improvement,
+    // since a falling past-due count is good). It must render GREEN
+    // (success), never red (danger) — this is the assertion the caption-only
+    // version of this test was missing.
+    expect(pastDueCard.innerHTML).toContain('text-status-success');
+    expect(pastDueCard.innerHTML).not.toContain('text-status-danger');
+  });
+
+  it('renders a revenue DROP as red/down, never hardcoded green growth — and the dialog agrees', () => {
+    // The exact reported defect: MRR down 8% day-over-day must show a red
+    // down arrow on the compact card, matching the red the detail dialog
+    // already computed from `delta < 0`. Before the fix, `trend` was
+    // hardcoded 'up' on every card, so this rendered a green up arrow —
+    // stating the opposite of what happened to revenue.
+    const seriesWithMrrDrop = {
+      mrr: [
+        { month: '2026-08', value: 20000 },
+        { month: '2026-09', value: 18400 },
+      ],
+      pastDue: [],
+      communities: [],
+      members: [],
+      latestMrr: 18400,
+      latestMrrDeltaPct: -8,
+    };
+    render(<KpiGrid stats={stats as any} series={seriesWithMrrDrop} signals={signals} />);
+
+    const mrrCard = screen.getByRole('button', { name: 'MRR' });
+    expect(mrrCard.textContent).toContain('8%');
+    expect(mrrCard.innerHTML).toContain('text-status-danger');
+    expect(mrrCard.innerHTML).not.toContain('text-status-success');
+
+    fireEvent.click(mrrCard);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('-8%');
+    expect(dialog.innerHTML).toContain('text-status-danger');
+    expect(dialog.innerHTML).not.toContain('text-status-success');
+  });
+
+  it('colours a rising MRR green/up, matching the dialog', () => {
+    const seriesWithMrrGrowth = {
+      mrr: [
+        { month: '2026-08', value: 18000 },
+        { month: '2026-09', value: 19620 },
+      ],
+      pastDue: [],
+      communities: [],
+      members: [],
+      latestMrr: 19620,
+      latestMrrDeltaPct: 9,
+    };
+    render(<KpiGrid stats={stats as any} series={seriesWithMrrGrowth} signals={signals} />);
+
+    const mrrCard = screen.getByRole('button', { name: 'MRR' });
+    expect(mrrCard.innerHTML).toContain('text-status-success');
+    expect(mrrCard.innerHTML).not.toContain('text-status-danger');
+
+    fireEvent.click(mrrCard);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.innerHTML).toContain('text-status-success');
+    expect(dialog.innerHTML).not.toContain('text-status-danger');
+  });
+
+  it('colours a falling Past due green (invertTrend: down is good) on both the card and its dialog', () => {
+    const seriesWithPastDueDrop = {
+      mrr: [],
+      pastDue: [
+        { month: '2026-08', value: 4 },
+        { month: '2026-09', value: 2 },
+      ],
+      communities: [],
+      members: [],
+    };
+    render(<KpiGrid stats={stats as any} series={seriesWithPastDueDrop} signals={signals} />);
+
+    const pastDueCard = screen.getByRole('button', { name: 'Past due' });
+    expect(pastDueCard.textContent).toContain('50%');
+    expect(pastDueCard.innerHTML).toContain('text-status-success');
+    expect(pastDueCard.innerHTML).not.toContain('text-status-danger');
+
+    fireEvent.click(pastDueCard);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.innerHTML).toContain('text-status-success');
+    expect(dialog.innerHTML).not.toContain('text-status-danger');
+  });
+
+  it('colours a rising Past due red (invertTrend: up is bad) on both the card and its dialog', () => {
+    const seriesWithPastDueRise = {
+      mrr: [],
+      pastDue: [
+        { month: '2026-08', value: 2 },
+        { month: '2026-09', value: 4 },
+      ],
+      communities: [],
+      members: [],
+    };
+    render(<KpiGrid stats={stats as any} series={seriesWithPastDueRise} signals={signals} />);
+
+    const pastDueCard = screen.getByRole('button', { name: 'Past due' });
+    expect(pastDueCard.innerHTML).toContain('text-status-danger');
+    expect(pastDueCard.innerHTML).not.toContain('text-status-success');
+
+    fireEvent.click(pastDueCard);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.innerHTML).toContain('text-status-danger');
+    expect(dialog.innerHTML).not.toContain('text-status-success');
+  });
+
+  it('computes the Past due delta from the true latest snapshot, not the zero current-month bucket', () => {
+    // Same defect shape `latestMrr` fixed for MRR: from UTC midnight on the
+    // 1st, the current month's `pastDue` bucket is a real 0 until the daily
+    // cron writes today's snapshot. Comparing against that phantom 0 would
+    // show a spurious ~100% swing even though the real count hasn't moved.
+    const seriesWithOpenCurrentMonth = {
+      mrr: [],
+      pastDue: [
+        { month: '2026-08', value: 4 },
+        { month: '2026-09', value: 0 }, // no snapshot yet this month
+      ],
+      communities: [],
+      members: [],
+      latestPastDue: 4, // the real current count — unchanged from last month
+    };
+    render(<KpiGrid stats={stats as any} series={seriesWithOpenCurrentMonth} signals={signals} />);
+
+    const pastDueCard = screen.getByRole('button', { name: 'Past due' });
+    expect(pastDueCard.textContent).toContain('0%');
+    expect(pastDueCard.textContent).not.toContain('100%');
   });
 });

@@ -57,11 +57,18 @@ function growthPct(total: number, newInWindow: number): number | undefined {
   return Math.round((newInWindow / priorTotal) * 100);
 }
 
-/** Percent change between a series' last two monthly points. */
-function seriesDeltaPct(points: MonthPoint[] | undefined): number | undefined {
+/**
+ * Percent change between a series' last two monthly points. `latestOverride`
+ * substitutes the true current value for the last point — the current,
+ * still-open month's bucket is a real `0` until the daily cron writes that
+ * day's snapshot (see `DashboardSeries.latestMrr` docblock), so comparing
+ * against it produces a phantom swing. `??` (not `||`) so a genuine `0`
+ * override is kept rather than falling through to the bucket.
+ */
+function seriesDeltaPct(points: MonthPoint[] | undefined, latestOverride?: number | null): number | undefined {
   if (!points || points.length < 2) return undefined;
   const previous = points[points.length - 2]!.value;
-  const latest = points[points.length - 1]!.value;
+  const latest = latestOverride ?? points[points.length - 1]!.value;
   if (previous === 0) return undefined;
   return Math.round(((latest - previous) / previous) * 100);
 }
@@ -69,6 +76,20 @@ function seriesDeltaPct(points: MonthPoint[] | undefined): number | undefined {
 function latestValue(points: MonthPoint[] | undefined): number {
   if (!points || points.length === 0) return 0;
   return points[points.length - 1]!.value;
+}
+
+/**
+ * Derives a card's arrow/colour trend from the sign of its own delta —
+ * never hardcode `trend`, or the card can state the opposite of what its
+ * delta says (a revenue drop rendering as green growth). Mirrors
+ * `deltaToTrend` in `apps/web/src/hooks/use-portfolio-dashboard.ts:94-97`.
+ * `invertTrend` (e.g. Past due, where a falling count is good) is applied by
+ * `KpiCard`/`KpiDetailDialog` themselves, not here — this only reports
+ * direction.
+ */
+function deltaToTrend(delta: number | undefined): KpiCardProps['trend'] {
+  if (delta === undefined || delta === 0) return 'neutral';
+  return delta > 0 ? 'up' : 'down';
 }
 
 function formatCurrency(dollars: number): string {
@@ -97,14 +118,27 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
     { label: 'Below 70%', value: stats.compliance.distribution.low },
   ];
 
+  const communitiesDelta = growthPct(stats.overview.communities, stats.deltas.communities30d);
+  const membersDelta = growthPct(stats.overview.members, stats.deltas.members30d);
+  // Day-over-day: `latestMrrDeltaPct` comes from `mrr_delta_pct` on the
+  // single latest daily snapshot vs. the one before it, not a 30-day or
+  // monthly comparison.
+  const mrrDelta = series.latestMrrDeltaPct ?? undefined;
+  // seriesDeltaPct compares the last two points of the monthly `pastDue`
+  // bucket — a month-over-month change, not a 30-day one. `latestPastDue`
+  // (the true current count, from the latest daily snapshot) substitutes
+  // for the current, still-open month's phantom-zero bucket value, exactly
+  // as `latestMrr` does for MRR — see `seriesDeltaPct`'s docblock.
+  const pastDueDelta = seriesDeltaPct(series.pastDue, series.latestPastDue);
+
   const cards: KpiDefinition[] = [
     {
       key: 'communities',
       title: 'Communities',
       value: stats.overview.communities.toLocaleString(),
-      delta: growthPct(stats.overview.communities, stats.deltas.communities30d),
+      delta: communitiesDelta,
       deltaLabel: 'vs last 30 days',
-      trend: 'up',
+      trend: deltaToTrend(communitiesDelta),
       icon: Building2,
       series: series.communities,
       description: `${stats.deltas.communities30d} new in the last 30 days.`,
@@ -115,9 +149,9 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
       key: 'members',
       title: 'Members',
       value: stats.overview.members.toLocaleString(),
-      delta: growthPct(stats.overview.members, stats.deltas.members30d),
+      delta: membersDelta,
       deltaLabel: 'vs last 30 days',
-      trend: 'up',
+      trend: deltaToTrend(membersDelta),
       icon: Users,
       series: series.members,
       description: `${stats.deltas.members30d} new in the last 30 days.`,
@@ -134,12 +168,9 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
       // when there is no snapshot at all (series.latestMrr undefined/null),
       // which also legitimately renders $0.
       value: formatCurrency(series.latestMrr ?? latestValue(series.mrr)),
-      delta: series.latestMrrDeltaPct ?? undefined,
-      // Day-over-day: `latestMrrDeltaPct` comes from `mrr_delta_pct` on the
-      // single latest daily snapshot vs. the one before it, not a 30-day or
-      // monthly comparison.
+      delta: mrrDelta,
       deltaLabel: 'vs yesterday',
-      trend: 'up',
+      trend: deltaToTrend(mrrDelta),
       icon: DollarSign,
       series: series.mrr,
       description: 'Monthly recurring revenue, from the latest snapshot.',
@@ -171,11 +202,11 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
       key: 'past_due',
       title: 'Past due',
       value: stats.billing.past_due,
-      delta: seriesDeltaPct(series.pastDue),
+      delta: pastDueDelta,
       // seriesDeltaPct compares the last two points of the monthly `pastDue`
       // bucket — a month-over-month change, not a 30-day one.
       deltaLabel: 'vs last month',
-      trend: 'up',
+      trend: deltaToTrend(pastDueDelta),
       invertTrend: true,
       icon: AlertTriangle,
       series: series.pastDue,
@@ -230,6 +261,7 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
         value={active?.value ?? ''}
         deltaLabel={active?.deltaLabel}
         delta={active?.delta}
+        invertTrend={active?.invertTrend}
         description={active?.description ?? ''}
         series={active?.series}
         breakdown={active?.breakdown}

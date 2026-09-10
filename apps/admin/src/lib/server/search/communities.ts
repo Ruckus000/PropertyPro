@@ -5,6 +5,13 @@
  * result that navigates to a deleted client's page is worse than no result at
  * all, and this keeps the searcher consistent with the `users` searcher, which
  * excludes soft-deleted rows for the same reason (see `users.ts`).
+ *
+ * Demo instances are excluded too (`.eq('is_demo', false)`) — every other
+ * site that means "real community" requires this (`clients.ts`, `dashboard.ts`,
+ * `dashboard-series.ts`, `settings/page.tsx`). Without it, a demo surfaced
+ * under the "Clients" heading, was absent from the portfolio grid it claims to
+ * search, and its workspace 404s "Community not found" (the Compliance route
+ * rejects demos server-side).
  */
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import type { Searcher } from '../search';
@@ -20,6 +27,7 @@ export const communitySearcher: Searcher = {
     const { data, error } = await db
       .from('communities')
       .select('id, name, slug, community_type')
+      .eq('is_demo', false)
       .is('deleted_at', null)
       .or(`name.ilike.%${q}%,slug.ilike.%${q}%`)
       .limit(limit);

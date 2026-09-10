@@ -58,6 +58,17 @@ export interface DashboardSeries {
    */
   latestMrr?: number | null;
   /**
+   * The true current past-due subscription count, from the most recent
+   * `revenue_snapshots` row — NOT `pastDue.at(-1)`. Same defect shape as
+   * `latestMrr` above: the bucketed `pastDue` series fills the current,
+   * still-open calendar month with `value: 0` until the daily cron writes
+   * today's snapshot, so a delta computed against `pastDue.at(-1)` swings to
+   * a phantom ~-100% on the 1st of every month. `null` only when there is no
+   * snapshot at all. Optional for the same fixture-compatibility reason as
+   * `latestMrrDeltaPct`.
+   */
+  latestPastDue?: number | null;
+  /**
    * MRR (dollars) from the daily snapshot nearest 30 days before the latest
    * one, for an actual 30-day "Net new" comparison — the bucketed `mrr`
    * series is monthly, so comparing its last two points swings between
@@ -242,6 +253,8 @@ export async function getDashboardSeries(): Promise<DashboardSeries> {
       ? null
       : toFiniteNumberOrNull(latestSnapshot.mrr_delta_pct);
   const latestMrr = latestSnapshot === null ? null : Number(latestSnapshot.mrr_cents ?? 0) / 100;
+  const latestPastDue =
+    latestSnapshot === null ? null : Number(latestSnapshot.past_due_subscriptions ?? 0);
 
   // `snapshots` is sorted ascending (query orders by computed_at asc), so
   // everything before the last element predates latestSnapshot.
@@ -255,5 +268,5 @@ export async function getDashboardSeries(): Promise<DashboardSeries> {
           return nearest === null ? null : Number(nearest.mrr_cents ?? 0) / 100;
         })();
 
-  return { mrr, pastDue, communities, members, latestMrrDeltaPct, latestMrr, mrr30dAgo };
+  return { mrr, pastDue, communities, members, latestMrrDeltaPct, latestMrr, latestPastDue, mrr30dAgo };
 }

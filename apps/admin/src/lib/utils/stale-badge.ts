@@ -20,7 +20,12 @@ export function staleBadge(createdAt: string): StaleBadge {
   // packages/tokens (cf. the compliance calm/aware/urgent/critical ramp, which
   // is TS-only today and emits no CSS vars).
   if (days >= STALE_DEMO_ORANGE_THRESHOLD_DAYS) return { label: `${STALE_DEMO_ORANGE_THRESHOLD_DAYS}+ days`, className: 'bg-orange-100 text-orange-700' }; // design-tokens:exempt — see note above
-  return { label: `${STALE_DEMO_YELLOW_THRESHOLD_DAYS}+ days`, className: 'bg-status-warning-subtle text-status-warning' };
+  if (days >= STALE_DEMO_YELLOW_THRESHOLD_DAYS) return { label: `${STALE_DEMO_YELLOW_THRESHOLD_DAYS}+ days`, className: 'bg-status-warning-subtle text-status-warning' };
+  // Below every threshold — not stale. Must exist: without it every row fell
+  // through to the 10+ badge above regardless of actual age, so a demo
+  // created today showed "10+ days" beside "Created: today" while the page
+  // header's `isStaleDemo`-derived count correctly said 0 stale.
+  return { label: `${days}d`, className: 'bg-status-success-subtle text-status-success' };
 }
 
 /**

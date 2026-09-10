@@ -158,6 +158,39 @@ describe('getDashboardSeries', () => {
     expect(series.mrr.at(-2)).toEqual({ month: '2026-08', value: 18640 });
   });
 
+  it('reads latestPastDue from the newest snapshot, not the zero current-month chart bucket — same defect shape as latestMrr', async () => {
+    // Same scenario as the latestMrr test above, applied to Past due: a
+    // snapshot on the last day of a month, `now` just after the month
+    // rolled over, before the day's cron has written a new snapshot row.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-01T00:05:00Z'));
+
+    mockSnapshots([
+      { computed_at: '2026-08-30T04:00:00Z', mrr_cents: 1_760_000, past_due_subscriptions: 3 },
+      { computed_at: '2026-08-31T04:00:00Z', mrr_cents: 1_864_000, past_due_subscriptions: 4 },
+    ]);
+
+    const series = await getDashboardSeries();
+
+    // The fix: the real latest past-due count is exposed directly.
+    expect(series.latestPastDue).toBe(4);
+    // Unchanged: bucketByMonth still renders a 0 bar for the still-open
+    // month — that's the chart's defensible behavior, not the bug.
+    expect(series.pastDue.at(-1)).toEqual({ month: '2026-09', value: 0 });
+    expect(series.pastDue.at(-2)).toEqual({ month: '2026-08', value: 4 });
+  });
+
+  it('latestPastDue is null when there are no snapshots at all', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-08T12:00:00Z'));
+
+    mockSnapshots([]);
+
+    const series = await getDashboardSeries();
+
+    expect(series.latestPastDue).toBeNull();
+  });
+
   it('mrr30dAgo picks the daily snapshot nearest 30 days before the latest one', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-08T12:00:00Z'));

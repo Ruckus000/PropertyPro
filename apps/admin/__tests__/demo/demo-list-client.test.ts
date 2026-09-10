@@ -45,6 +45,19 @@ describe('demo list client', () => {
     expect(html).not.toContain('animate-spin');
   });
 
+  it('shows the true below-threshold age on the row, matching the "0 stale" header — not "10+ days"', () => {
+    // DEMO is 5 days old under the pinned clock. `staleBadge()` used to have
+    // no branch below the 10-day threshold and fell through to the 10+
+    // badge unconditionally, so every row said "10+ days" beside a header
+    // that correctly said "0 stale".
+    const html = renderToStaticMarkup(
+      createElement(DemoListClient, { initialDemos: [DEMO] }),
+    );
+
+    expect(html).toContain('5d');
+    expect(html).not.toContain('10+ days');
+  });
+
   it('counts a not-yet-converted demo past the 10-day threshold as stale', () => {
     const staleDemo = { ...DEMO, created_at: '2026-01-01T00:00:00.000Z' };
     const html = renderToStaticMarkup(

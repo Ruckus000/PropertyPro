@@ -35,6 +35,15 @@ interface KpiDetailDialogProps {
   delta?: number;
   /** Caption naming the period `delta` measures. Defaults to "vs last month". */
   deltaLabel?: string;
+  /**
+   * When true, a FALLING delta is the good outcome (e.g. Past due) — flips
+   * which sign renders success/danger. Must mirror `KpiCard`'s `invertTrend`
+   * exactly: a card and the dialog it opens describe the same metric, so a
+   * mismatch here is the same defect this component was built to avoid (see
+   * the compact card's `invertTrend` prop and `trendConfig` in
+   * `packages/ui/src/components/shared/kpi-card.tsx`).
+   */
+  invertTrend?: boolean;
   description: string;
   series?: MonthPoint[];
   breakdown?: KpiDetailBreakdownRow[];
@@ -49,6 +58,7 @@ export function KpiDetailDialog({
   value,
   delta,
   deltaLabel = 'vs last month',
+  invertTrend = false,
   description,
   series,
   breakdown,
@@ -70,7 +80,15 @@ export function KpiDetailDialog({
               <p
                 className={cn(
                   'pb-1 text-sm font-medium',
-                  delta < 0 ? 'text-status-danger' : 'text-status-success',
+                  // A falling delta is good for an inverted metric (Past
+                  // due) — same "good/bad by sign, honoring invertTrend"
+                  // rule as `KpiCard`'s `trendConfig`, so this dialog can
+                  // never contradict the card that opened it.
+                  delta === 0
+                    ? 'text-content-tertiary'
+                    : (invertTrend ? delta < 0 : delta > 0)
+                      ? 'text-status-success'
+                      : 'text-status-danger',
                 )}
               >
                 {delta > 0 ? '+' : ''}
