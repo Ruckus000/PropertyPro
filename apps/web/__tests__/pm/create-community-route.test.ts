@@ -33,11 +33,15 @@ vi.mock('@/lib/billing/billing-group-service', () => ({
     stripeCustomerId: 'cus_test_123',
   }),
   createPendingAddToGroupSignup: vi.fn().mockResolvedValue(7),
+  recordAddToGroupCheckoutSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { POST } from '@/app/api/v1/pm/communities/route';
 import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
-import { getOrCreateBillingGroupForPm } from '@/lib/billing/billing-group-service';
+import {
+  getOrCreateBillingGroupForPm,
+  recordAddToGroupCheckoutSession,
+} from '@/lib/billing/billing-group-service';
 
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/v1/pm/communities', {
@@ -84,6 +88,20 @@ describe('POST /api/v1/pm/communities', () => {
         planId: 'essentials',
       }),
     );
+  });
+
+  // `createAddCommunityCheckout` has always returned a sessionId and this route
+  // discarded it, so `payload.stripeCheckoutSessionId` was never written. That
+  // is the only key `reconcileLostCheckoutSignups` can look a signup up by, so a
+  // PM who genuinely PAID but whose webhook was lost could never be recovered.
+  it('persists the Stripe session id so a lost webhook is recoverable', async () => {
+    const res = await POST(makeRequest(validBody));
+
+    expect(res.status).toBe(200);
+    expect(recordAddToGroupCheckoutSession).toHaveBeenCalledWith({
+      pendingSignupId: 7,
+      sessionId: 'cs_test_session_123',
+    });
   });
 
   it('rejects missing required fields', async () => {

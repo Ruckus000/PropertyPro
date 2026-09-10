@@ -93,13 +93,20 @@ the dashboard or `vercel project protection` — not from the repo. If it is eve
 - **`createCheckoutSession` not converted to a route handler.** That is the true structural fix —
   route handlers are URL-addressed and immune to id rotation — but it costs a contract, tests and
   `runRoute` compliance for marginally more benefit than the navigation change.
-- **No host hardening.** Separately real and unrelated to this issue: `RESERVED_SUBDOMAINS` is inert
-  on the request path (`middleware.ts:672` is an empty block; `:844`/`:1072`/`:1125` only *suppress*
-  work; the only enforcement is `signup.ts:70`, at slug-claim time), so arbitrary subdomains serve
-  the genuine `/signup` over the wildcard certificate. `#1103` did not change that.
-- **Abandoned-signup squat**, found in passing: nothing can ever set `pending_signups.status =
-  'expired'`, so an `email_verified` row holds its `candidate_slug` and email indefinitely. Its own
-  issue.
+- ~~**No host hardening.**~~ **Done by #1112 — see the addendum, §2.** As written this said
+  "arbitrary subdomains serve the genuine `/signup` over the wildcard certificate", which stopped
+  being true the same day. The addendum recorded the fix; this bullet was left asserting the old
+  state, which is the failure mode the addendum exists to prevent. The residue is narrower than
+  this bullet claimed and is stated accurately in §3: **unknown** labels are refused on protected
+  paths (`middleware.ts:696-698`), **reserved** labels are refused nowhere.
+- ~~**Abandoned-signup squat.**~~ **Superseded by #1111, and its premise was wrong.** This said
+  "nothing can ever set `pending_signups.status = 'expired'`" — true when written, false since
+  `expireStalePendingSignups` landed. It also said "Its own issue", and no issue was ever filed;
+  what the follow-up work actually found was that the framing here was wrong twice over. The
+  availability check *does* honour expiry, so the failure was never a silent squat — it was an
+  opaque HTTP 500 at the verification link (fixed by #1111). And the one row class that genuinely
+  did squat forever came from a different producer entirely: `createPendingAddToGroupSignup`
+  omitted `expires_at`, which no sweep can reach. Fixed separately; see that function's comments.
 
 ## Verification limit worth knowing
 

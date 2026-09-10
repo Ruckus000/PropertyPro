@@ -14,6 +14,7 @@ import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
 import {
   getOrCreateBillingGroupForPm,
   createPendingAddToGroupSignup,
+  recordAddToGroupCheckoutSession,
 } from '@/lib/billing/billing-group-service';
 import {
   pmCommunitiesGetContract,
@@ -49,7 +50,7 @@ export const POST = withErrorHandler(
       input: { ...body, subdomain: slugCheck.normalizedSubdomain },
     });
 
-    const { clientSecret } = await createAddCommunityCheckout({
+    const { clientSecret, sessionId } = await createAddCommunityCheckout({
       billingGroupId,
       stripeCustomerId,
       pendingSignupId,
@@ -58,6 +59,11 @@ export const POST = withErrorHandler(
       candidateSlug: slugCheck.normalizedSubdomain,
       returnBaseUrl: process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000',
     });
+
+    // `sessionId` was returned here all along and thrown away. It is what
+    // `reconcileLostCheckoutSignups` looks up to rescue a signup whose Stripe
+    // webhook never arrived — without it, a PM who PAID could not be reconciled.
+    await recordAddToGroupCheckoutSession({ pendingSignupId, sessionId });
 
     return { clientSecret, pendingSignupId, billingGroupId };
   }),

@@ -790,6 +790,9 @@ export async function reconcileLostCheckoutSignups(
 
   const rows = await db
     .select({
+      // `id` is here for the add_to_group branch below: runAddToGroupProvisioning
+      // keys on the bigserial id, not on signupRequestId.
+      id: pendingSignups.id,
       signupRequestId: pendingSignups.signupRequestId,
       payload: pendingSignups.payload,
     })
@@ -851,6 +854,76 @@ export async function reconcileLostCheckoutSignups(
         session.subscription && typeof session.subscription !== 'string'
           ? (session.subscription as Stripe.Subscription)
           : null;
+
+      // ---------------------------------------------------------------------
+      // add_to_group rows take a DIFFERENT state machine, and must divert here —
+      // before the fence, not alongside it.
+      //
+      // `runProvisioning` has no `kind` dispatch. Run on one of these rows it
+      // would adopt the community by slug (`stepCommunityCreated` is
+      // onConflictDoNothing + lookup), never call `linkCommunityToBillingGroup`
+      // or `recalculateVolumeTier`, mail the placeholder `pm-add@placeholder.local`,
+      // and — via `stepUserLinked`'s onConflictDoUpdate — rewrite the PM's real
+      // `users.terms_accepted_at` to this row's insert-time stamp, which is
+      // exactly what legal-risk audit F-18 exists to prevent.
+      //
+      // It must precede `insertProvisioningJobFence` because a job row would
+      // enroll the signup in `recoverStuckProvisioningJobs` (INNER JOIN
+      // provisioning_jobs, statuses payment_completed/provisioning), which drives
+      // the generic machine too — relocating the bug rather than fixing it. So
+      // this branch deliberately inserts NO fence.
+      const payload = row.payload as Record<string, unknown> | null;
+      if (payload?.kind === 'add_to_group') {
+        const billingGroupId = Number(payload.billingGroupId);
+        if (!stripeSubscriptionId || !Number.isFinite(billingGroupId)) {
+          throw new Error(
+            `[add_to_group] cannot reconcile ${row.signupRequestId}: missing subscription or billingGroupId`,
+          );
+        }
+
+        // One CAS doing two jobs.
+        //
+        // 1. Concurrency: a late webhook may be running runAddToGroupProvisioning
+        //    right now. Only one caller may proceed — `createCommunityForPm` is a
+        //    plain insert, so a double run 23505s on `communities.slug`.
+        // 2. Expiry protection: `expireStalePendingSignups` sweeps exactly
+        //    ['email_verified','checkout_started']. Moving off `checkout_started`
+        //    is what stops the 24h sweep releasing a PAYING customer's subdomain.
+        //    `payment_completed` is the honest status — they did pay — and it
+        //    stays inside `pending_signups_candidate_slug_active_unique`, so the
+        //    slug remains held for them.
+        const claimed = await db
+          .update(pendingSignups)
+          .set({ status: 'payment_completed', updatedAt: new Date() })
+          .where(
+            and(
+              eq(pendingSignups.id, row.id),
+              eq(pendingSignups.status, 'checkout_started'),
+            ),
+          )
+          .returning({ id: pendingSignups.id });
+
+        if (claimed.length === 0) {
+          summary.skippedNotComplete += 1;
+          continue;
+        }
+
+        // Single attempt, deliberately. A throw below lands in this loop's catch
+        // → summary.failed → withCronJob's cron_job_reported_failures Sentry
+        // event, and the row stays at `payment_completed`: slug held, never
+        // expired, and the CAS above refuses on every later pass. That is the
+        // right trade because runAddToGroupProvisioning is NOT idempotent past
+        // its first step — community created, link failed, and every retry would
+        // 23505 forever while paging each time. One loud failure, then triage.
+        await runAddToGroupProvisioning({
+          pendingSignupId: Number(row.id),
+          billingGroupId,
+          stripeSubscriptionId,
+          stripeCustomerId: stripeCustomerId ?? undefined,
+        });
+        summary.recovered += 1;
+        continue;
+      }
 
       await markPendingSignupPaymentCompleted({
         signupRequestId: row.signupRequestId,
@@ -1276,10 +1349,20 @@ export interface ExpireStalePendingSignupsSummary {
  * deliberate, not oversights:
  *
  *   - NULL `expires_at` is NOT swept. Availability treats those as blocking
- *     too, so leaving them alone keeps the two in agreement. (One such row is
- *     live in production.) `isNotNull` is written out even though SQL's
- *     three-valued logic would exclude them anyway, so the invariant is
- *     visible here and assertable in a test rather than implicit.
+ *     too, so leaving them alone keeps the two in agreement. `isNotNull` is
+ *     written out even though SQL's three-valued logic would exclude them
+ *     anyway, so the invariant is visible here and assertable in a test rather
+ *     than implicit.
+ *
+ *     This exclusion is an invariant, not a licence to produce such rows: a
+ *     status-active row with no expiry can NEVER be released by anything. An
+ *     earlier version of this comment noted "one such row is live in
+ *     production" as though it were a curiosity. It was not — a producer was
+ *     making them. `createPendingAddToGroupSignup` omitted `expires_at` while
+ *     writing `checkout_started`, so every abandoned add-to-group checkout
+ *     reserved its subdomain permanently. Fixed at that producer, which is the
+ *     only correct place: widening this predicate to catch NULLs would re-open
+ *     the index-vs-availability divergence described above.
  *   - Only `email_verified` / `checkout_started`. Expiring `payment_completed`
  *     or `provisioning` would release a PAYING customer's subdomain.
  *
