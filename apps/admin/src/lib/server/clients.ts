@@ -14,9 +14,19 @@
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 // AUTHZ: platform-admin report — cross-community read, gated by the requireAdminPageSession() platform-admin check in the page that calls this.
 import { findRootlessCommunities } from '@propertypro/db/unsafe';
-import { COMMUNITY_LIST_LIMIT } from '@/lib/api/list-limits';
+import { wasTruncated } from '@/lib/api/list-limits';
 
 const COMPLIANCE_PAGE_SIZE = 1000;
+const MEMBER_COUNT_PAGE_SIZE = 1000;
+/**
+ * Safety valve for `fetchMemberCounts`. `user_roles` holds one row per member
+ * per community, so this bounds member ROWS across every community on the
+ * platform in a single call — not the number of communities, and not any one
+ * community's membership. Sized well above any plausible real platform total;
+ * hitting it means the platform has genuinely outgrown counting this way, not
+ * that an ordinary day had more members than expected.
+ */
+const MEMBER_COUNT_ROW_BOUND = 20 * MEMBER_COUNT_PAGE_SIZE;
 
 export interface ClientRow {
   id: number;
@@ -36,7 +46,14 @@ export interface ClientRow {
   subscription_plan: string | null;
   created_at: string;
   complianceScore: number | null;
-  memberCount: number;
+  /**
+   * `null` when the platform-wide member row scan hit `MEMBER_COUNT_ROW_BOUND`
+   * before exhausting `user_roles` — see `fetchMemberCounts`. When that
+   * happens no per-community count in this batch can be trusted (there is no
+   * `ORDER BY`, so it's impossible to know which communities' rows were still
+   * unseen), so every row renders "unknown" rather than a wrong integer.
+   */
+  memberCount: number | null;
   rootless: boolean;
   disputeOpen: boolean;
 }
@@ -104,36 +121,77 @@ async function fetchAllComplianceRows(
   return allRows;
 }
 
+export interface MemberCountsResult {
+  counts: Map<number, number>;
+  /**
+   * `false` means the scan hit `MEMBER_COUNT_ROW_BOUND` before exhausting
+   * `user_roles` for these community ids — every count in `counts` is then
+   * unproven, not just the communities whose rows landed after the cutoff,
+   * because the query has no `ORDER BY` to say which rows were seen.
+   */
+  exact: boolean;
+}
+
 /**
  * `user_roles` counts per community. A `select('community_id', { count:
  * 'exact' })` per community id is N+1 for a platform with hundreds of
  * communities — instead select `community_id` for every non-demo id in one
- * query and count in memory. Capped by `COMMUNITY_LIST_LIMIT`: if the
- * platform's total membership ever exceeds that in one page, `memberCount`
- * undercounts rather than the request growing unbounded — see
- * `lib/api/list-limits.ts` for why a cap beats an open-ended read here.
+ * query and count in memory.
+ *
+ * `user_roles` holds one row PER MEMBER PER COMMUNITY, so a single capped
+ * `.limit()` read bounds member ROWS across every community at once, not
+ * communities — with no `ORDER BY`, whichever rows happen to come back first
+ * silently under-report whichever communities' rows landed after the cutoff,
+ * including possibly the first community rendered. Raising the cap only moves
+ * that cliff, it doesn't remove it.
+ *
+ * Instead this pages with `.range()` until the table is exhausted, so the
+ * common case (a platform whose membership fits within
+ * `MEMBER_COUNT_ROW_BOUND`) gets an EXACT count. Only if the platform has
+ * grown past that safety valve does it give up on exactness — see
+ * `MemberCountsResult.exact`. Exported for direct unit testing
+ * (`__tests__/clients/member-counts.test.ts`), same as `applyClientFilter`.
  */
-async function fetchMemberCounts(
+export async function fetchMemberCounts(
   db: ReturnType<typeof createAdminClient>,
   communityIds: number[],
-): Promise<Map<number, number>> {
+): Promise<MemberCountsResult> {
   const counts = new Map<number, number>();
-  if (communityIds.length === 0) return counts;
+  if (communityIds.length === 0) return { counts, exact: true };
 
-  const { data, error } = await db
-    .from('user_roles')
-    .select('community_id')
-    .in('community_id', communityIds)
-    .limit(COMMUNITY_LIST_LIMIT);
+  let from = 0;
+  let totalRows = 0;
 
-  if (error) {
-    throw new Error(`Failed to load member counts: ${error.message}`);
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await db
+      .from('user_roles')
+      .select('community_id')
+      .in('community_id', communityIds)
+      .range(from, from + MEMBER_COUNT_PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Failed to load member counts (offset ${from}): ${error.message}`);
+    }
+
+    const rows = (data ?? []) as { community_id: number }[];
+    for (const row of rows) {
+      counts.set(row.community_id, (counts.get(row.community_id) ?? 0) + 1);
+    }
+    totalRows += rows.length;
+
+    if (!wasTruncated(rows.length, MEMBER_COUNT_PAGE_SIZE)) {
+      // Last page came back short of a full page: every matching row has
+      // been seen, so the accumulated counts are exact.
+      return { counts, exact: true };
+    }
+
+    if (totalRows >= MEMBER_COUNT_ROW_BOUND) {
+      return { counts, exact: false };
+    }
+
+    from += MEMBER_COUNT_PAGE_SIZE;
   }
-
-  for (const row of (data ?? []) as { community_id: number }[]) {
-    counts.set(row.community_id, (counts.get(row.community_id) ?? 0) + 1);
-  }
-  return counts;
 }
 
 interface OpenDisputeDbRow {
@@ -180,10 +238,11 @@ export async function getClientsData(): Promise<{
   const communities = (communitiesResult.data ?? []) as unknown as CommunityDbRow[];
   const communityIds = communities.map((c) => c.id);
 
-  const [complianceRows, memberCounts] = await Promise.all([
+  const [complianceRows, memberCountsResult] = await Promise.all([
     fetchAllComplianceRows(db, communityIds),
     fetchMemberCounts(db, communityIds),
   ]);
+  const { counts: memberCounts, exact: memberCountsExact } = memberCountsResult;
 
   const byCommunity = new Map<number, { applicable: number; met: number }>();
   for (const row of complianceRows) {
@@ -224,7 +283,7 @@ export async function getClientsData(): Promise<{
     subscription_plan: c.subscription_plan,
     created_at: c.created_at,
     complianceScore: scoreMap.get(c.id) ?? null,
-    memberCount: memberCounts.get(c.id) ?? 0,
+    memberCount: memberCountsExact ? (memberCounts.get(c.id) ?? 0) : null,
     rootless: rootlessIds.has(c.id),
     disputeOpen: disputedCommunityIds.has(c.id),
   }));
