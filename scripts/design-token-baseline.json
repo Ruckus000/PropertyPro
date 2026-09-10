@@ -77,9 +77,6 @@
   "apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx": {
     "bare-focus-ring": 3
   },
-  "apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx": {
-    "bare-focus-ring": 12
-  },
   "apps/web/src/app/(authenticated)/select-community/page.tsx": {
     "raw-palette": 4
   },
@@ -131,9 +128,6 @@
   },
   "apps/web/src/components/documents/document-upload-area.tsx": {
     "bare-focus-ring": 4
-  },
-  "apps/web/src/components/esign/new-submission-form.tsx": {
-    "bare-focus-ring": 18
   },
   "apps/web/src/components/esign/signature-capture.tsx": {
     "bare-focus-ring": 3
