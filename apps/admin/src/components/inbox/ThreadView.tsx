@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
+import { SUPPORT_MAILBOX_CANNED_REPLIES } from '@propertypro/shared';
+
 import type { InboxMessage, InboxThread } from '@/lib/server/inbox';
 
 import { MessageBody } from './MessageBody';
@@ -10,6 +12,7 @@ import { NotesPanel } from './NotesPanel';
 import { DeleteThreadButton } from './DeleteThreadButton';
 import { ReplyComposer } from './ReplyComposer';
 import { StatusControl } from './StatusControl';
+import { ThreadContextStrip } from './ThreadContextStrip';
 
 interface ThreadViewProps {
   thread: InboxThread;
@@ -56,6 +59,12 @@ export function ThreadView({ thread, messages, replyFrom, replySubject }: Thread
         </div>
       </div>
 
+      <ThreadContextStrip
+        mailbox={thread.mailbox}
+        threadId={thread.id}
+        participantEmail={thread.participantEmail}
+      />
+
       <div className="space-y-3">
         {messages.map(({ message, sanitizedHtml }) => (
           <MessageBody key={message.id} message={message} sanitizedHtml={sanitizedHtml} />
@@ -67,6 +76,8 @@ export function ThreadView({ thread, messages, replyFrom, replySubject }: Thread
         fromAddress={replyFrom}
         toAddress={thread.participantEmail}
         subject={replySubject}
+        mailbox={thread.mailbox}
+        cannedReplies={SUPPORT_MAILBOX_CANNED_REPLIES[thread.mailbox]}
       />
 
       <NotesPanel threadId={thread.id} />

@@ -151,3 +151,76 @@ export const SUPPORT_THREAD_STATUS_LABELS: Record<SupportThreadStatus, string> =
   spam: 'Spam',
 };
 
+// ---------------------------------------------------------------------------
+// Canned replies
+// ---------------------------------------------------------------------------
+
+/**
+ * Three quick-insert replies per mailbox, shown as chips above the reply
+ * composer. Fixed length (3) rather than open-ended: this is a starting set an
+ * operator can paste from and edit, not a saved-reply library — see
+ * `SUPPORT_MAILBOX_CANNED_REPLIES[mb]).toHaveLength(3)` in
+ * `support-inbox-canned.test.ts`, which pins the count deliberately.
+ */
+export const SUPPORT_MAILBOX_CANNED_REPLIES: Record<SupportMailbox, readonly string[]> = {
+  support: ['Thanks — looking into it', 'Can you share a screenshot?', 'Fixed, please retry'],
+  privacy: ['Confirm identity request', 'Cooling-off period explained', 'Deletion completed'],
+  contact: ['Book a demo', 'Pricing overview', 'Refer to §718 guide'],
+};
+
+// ---------------------------------------------------------------------------
+// Thread context strip
+// ---------------------------------------------------------------------------
+
+export interface SupportMailboxContext {
+  /** Short heading for the strip. */
+  title: string;
+  /** One sentence of "why this matters" copy. */
+  text: string;
+  /** The accessible name of the strip's action control — a Link or a button, per mailbox. */
+  action: string;
+}
+
+/**
+ * The admin inbox's per-mailbox "what to do next" strip (design spec D14/D15).
+ * This copy is authored here, not copied from a spec — no prior version of it
+ * exists in the repo.
+ */
+export const SUPPORT_MAILBOX_CONTEXT: Record<SupportMailbox, SupportMailboxContext> = {
+  support: {
+    title: 'Escalate to a ticket',
+    text: "Turn this thread into a tracked support ticket so it shows up in the queue with the rest of the team's work.",
+    action: 'Create ticket',
+  },
+  privacy: {
+    title: 'Handle as a data request',
+    text: 'Privacy mail often maps to a formal deletion request. Open the deletion queue filtered to this sender to check for a matching case.',
+    action: 'Open deletion request',
+  },
+  contact: {
+    title: 'Turn this into a lead',
+    text: 'A contact@ message is usually a sales inquiry. Convert it to a lead so it enters the pipeline instead of staying stuck in the inbox.',
+    action: 'Convert to lead',
+  },
+};
+
+/**
+ * Whether a mailbox's context-strip action has a real destination to send the
+ * operator to, RIGHT NOW.
+ *
+ * `support` → `/tickets/new`, created by Task 22 (Wave 3); `/tickets` is a nav
+ * stub today. `privacy` → `/deletion-requests?q=`, not read by anything until
+ * Task 18 adds the `?q=` filter to `DeletionRequestsDashboard`. `contact` →
+ * `POST /api/admin/leads`, which ships in this same task.
+ *
+ * `ThreadContextStrip` reads this directly rather than hardcoding readiness
+ * per mailbox, so the fix for Task 22 / Task 18 is flipping ONE boolean here —
+ * not finding every place that decided a route existed. A console that offers
+ * an action and then 404s is worse than one that offers it a wave later.
+ */
+export const SUPPORT_MAILBOX_CONTEXT_ACTION_READY: Record<SupportMailbox, boolean> = {
+  support: false,
+  privacy: false,
+  contact: true,
+};
+

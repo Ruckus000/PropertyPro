@@ -16,6 +16,7 @@ import type {
   SupportInboxThreadRow,
 } from '@propertypro/db/supabase/admin-types';
 import {
+  SUPPORT_MAILBOXES,
   SUPPORT_MAILBOX_LABELS,
   SUPPORT_THREAD_STATUS_LABELS,
   type SupportMailbox,
@@ -116,6 +117,17 @@ function mapMessage(row: SupportInboxMessageRow): InboxMessage {
   };
 }
 
+/** Folds a set of already-loaded threads into the open/pending/closed/spam/total shape. */
+function computeStats(threads: InboxThread[]): InboxStats {
+  return {
+    open: threads.filter((t) => t.status === 'open').length,
+    pending: threads.filter((t) => t.status === 'pending').length,
+    closed: threads.filter((t) => t.status === 'closed').length,
+    spam: threads.filter((t) => t.status === 'spam').length,
+    total: threads.length,
+  };
+}
+
 export async function getInboxThreads(
   filters: InboxFilters = {},
 ): Promise<InboxThreadsResult> {
@@ -142,14 +154,44 @@ export async function getInboxThreads(
 
   return {
     threads,
-    stats: {
-      open: threads.filter((t) => t.status === 'open').length,
-      pending: threads.filter((t) => t.status === 'pending').length,
-      closed: threads.filter((t) => t.status === 'closed').length,
-      spam: threads.filter((t) => t.status === 'spam').length,
-      total: threads.length,
-    },
+    stats: computeStats(threads),
     truncated: wasTruncated(rows.length, PLATFORM_LIST_LIMIT),
+  };
+}
+
+export interface InboxOverview {
+  threads: InboxThread[];
+  stats: InboxStats;
+  /**
+   * Per-mailbox stats, folded from the SAME rows as `threads` — no extra
+   * round trip per mailbox. Bounded by `PLATFORM_LIST_LIMIT` like everything
+   * else here: if `truncated` is true, these are counts of the returned page,
+   * not the whole table. Callers must not present them as totals.
+   */
+  byMailbox: Record<SupportMailbox, InboxStats>;
+  truncated: boolean;
+}
+
+/**
+ * One unfiltered load of the inbox, with global AND per-mailbox stats folded
+ * in memory from the same rows — the mailbox switcher and the status tabs both
+ * read from this instead of issuing their own queries.
+ */
+export async function getInboxOverview(): Promise<InboxOverview> {
+  const { threads, truncated } = await getInboxThreads();
+
+  const byMailbox = Object.fromEntries(
+    SUPPORT_MAILBOXES.map((mailbox) => [
+      mailbox,
+      computeStats(threads.filter((t) => t.mailbox === mailbox)),
+    ]),
+  ) as Record<SupportMailbox, InboxStats>;
+
+  return {
+    threads,
+    stats: computeStats(threads),
+    byMailbox,
+    truncated,
   };
 }
 
