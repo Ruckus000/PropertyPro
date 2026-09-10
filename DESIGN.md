@@ -42,8 +42,8 @@ packages/tokens/src/          generated packages/ui/src/styles/tokens.css   pack
 | Text | `--text-tertiary` | Metadata, timestamps |
 | Text | `--text-disabled` | Disabled controls |
 | Surface | `--surface-page` | Page background — `var(--sand-50)`, #FBF7F1 |
-| Surface | `--surface-card` | Card/panel background (white) |
-| Surface | `--surface-muted` | Subdued sections (gray-100) |
+| Surface | `--surface-card` | Card/panel background — `var(--sand-0)`, #FFFEFC |
+| Surface | `--surface-muted` | Subdued sections — `var(--sand-100)`, #F6EFE6 |
 | Border | `--border-default` | Card boundaries, dividers |
 | Border | `--border-subtle` | Light separators |
 | Border | `--border-strong` | Emphasis borders |
@@ -54,7 +54,7 @@ packages/tokens/src/          generated packages/ui/src/styles/tokens.css   pack
 
 The neutral story is two scales, not one: `--gray-*` for text and borders, and the warm `sand` ramp for surfaces (`packages/tokens/src/primitives.ts`, landed 2026-07-15). `--surface-page` resolves to `var(--sand-50)`.
 
-> **`packages/ui/src/styles/tokens.css` is GENERATED from `packages/tokens/src/` and is the authority — 270 declarations.** A table here restates a generated file and will drift from it; this one did, for about eight weeks, naming a `--surface-page-warm` that exists nowhere in the codebase. Read the token values out of `tokens.css`; use this table for the vocabulary and the intent.
+> **`packages/ui/src/styles/tokens.css` is GENERATED from `packages/tokens/src/` and is the authority.** A table here restates a generated file and will drift from it; this one did, for about eight weeks, naming a `--surface-page-warm` that exists nowhere in the codebase. Read the token values out of `tokens.css`; use this table for the vocabulary and the intent.
 
 ### Spacing
 

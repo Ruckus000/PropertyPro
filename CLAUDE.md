@@ -156,9 +156,10 @@ pnpm --filter @propertypro/web test:e2e:prod
 > session (see the eighth addendum).
 >
 > **CI does not run the whole suite. It runs two disjoint sets, across two runners.**
-> Counts are deliberately not written here — they cascade every time a spec gains a
-> block, and every previous number in this paragraph was stale. Get them from
-> `playwright test --list` per config; `grep -c 'test('` gives a wrong answer.
+> **Any count here must carry the date it was measured**, because these cascade every time a
+> spec gains a block — every undated number this paragraph used to carry was stale. For a
+> current figure, run `playwright test --list` per config; `grep -c 'test('` gives a wrong
+> answer.
 >
 > 1. The **localci suite's build step** (`pnpm build` → `test:e2e:prod` →
 >    `perf:check`) runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
@@ -196,8 +197,10 @@ pnpm --filter @propertypro/web test:e2e:prod
 > the 5 Stripe signup blocks (no test-mode secrets locally) and the 2 deliberate
 > `onboarding-first-run` `test.fixme` blocks — that spec describes a 4-/5-step
 > wizard, but **both** condo and apartment ship the same 2-step one. The single
-> failure is `support-access`, which times out after 120s waiting for the admin
-> app's `popup` event after Start Session.
+> failure in *that* run was `support-access`, timing out after 120s on the admin
+> app's `popup` event — **since diagnosed and fixed** (see the paragraph above: the
+> cause was a missing admin environment, not the spec), so the 27/1/7 split is a
+> 2026-08-12 snapshot, not the current state.
 >
 > Before trusting a local number, confirm the port is clear AND
 > `ps -eo comm | grep -c vitest` is 0; also compare the CANARY TIMINGS

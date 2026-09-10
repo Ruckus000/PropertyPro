@@ -1,6 +1,7 @@
 # Deployment Runbook — PropertyPro Florida
 
-**Last Updated:** 2026-09-09 — §6 rewritten; see the dated correction notes inline.
+**Last Updated:** 2026-09-09 — §6 rewritten, plus the environment table, §4.2's opening
+line, §7.1 and the *Subdomain Not Resolving* steps. Dated correction notes are inline.
 **Phase:** P4-60
 
 ---
@@ -23,7 +24,7 @@ PR branch ──push────────────────────
 
 | Environment | URL | Branch | Auto-deploy |
 |-------------|-----|--------|-------------|
-| Production | `getpropertypro.com` | `main` | Yes (via `deploy.yml` on push to `main`, gated on Integration Tests) |
+| Production | `getpropertypro.com` | `main` | Yes (via `deploy.yml` on push to `main`, gated on Integration Tests — a `workflow_dispatch` run skips that gate; see §6.2) |
 | Preview | `*.vercel.app` (unique per PR) | PR branches | Yes (via native Vercel GitHub integration) |
 | Local dev | `localhost:3000` | Any | N/A |
 
@@ -439,24 +440,21 @@ an unavoidable outage across all six addresses, and the expected failure is sile
 ### 6.1 Workflow Overview
 
 > `ci.yml` is **`disabled_manually`** and is deliberately absent from this table (#976 moved
-> lint/typecheck/test/build to localci — see §7.1). `performance-budget-check.yml` (#804) and
-> `notification-digest-cron.yml` (#920) were deleted and are gone from it too.
+> lint/typecheck/test/build to localci — see §7.1, and `CLAUDE.md` for the step list).
+> `performance-budget-check.yml` (#804) and `notification-digest-cron.yml` (#920) were deleted
+> and are gone from it too. A former §6.2 drew `ci.yml`'s job graph; it was removed 2026-09-09,
+> because a diagram of a workflow that does not run cannot be usefully corrected.
 
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| **Deploy** | `deploy.yml` | Push to `main` (+ `workflow_dispatch`) | Production deploy, gated on Integration Tests |
+| **Deploy** | `deploy.yml` | Push to `main` | Production deploy, gated on Integration Tests |
+| **Deploy (manual)** | `deploy.yml` | `workflow_dispatch` | Same deploy, **ungated** — the Integration Tests step is `if: github.event_name == 'push'` |
 | **Integration Tests** | `integration-tests.yml` | PR + push to main | Database integration tests (requires Postgres service) |
 | **DB Access Guard** | `scoped-db-access-guard.yml` | PR + push (src changes) | Scoped DB access pattern verification |
 | **Branch Freshness** | `branch-freshness-guard.yml` | PR | Rebase enforcement (max 20 commits behind) |
 | **Demo Reset** | `reset-demo.yml` | Daily 3:00 AM ET | Nightly demo data reset |
 
-### 6.2 CI Pipeline Stages
-
-Removed 2026-09-09. This section drew the job graph of `ci.yml`, which has been
-`disabled_manually` since #976 — a diagram of a workflow that does not run cannot be
-usefully corrected. **§7.1 and `CLAUDE.md` describe the localci pipeline that replaced it.**
-
-### 6.3 Branch Protection Rules
+### 6.2 Branch Protection Rules
 
 **Do not read the settings off this page — ask GitHub:**
 
@@ -474,14 +472,16 @@ Measured 2026-09-09: `contexts: ["localci/suite"]`, `strict: false`, `reviews: n
 > API". Three of the four were not set. A checkbox is a claim about another system's state, and
 > this file cannot keep one true; the command above can.
 
-`localci/suite` is the single required check. The eight-job list that `ci.yml` required until
-#976 (`Lint`, `Typecheck`, `Unit Tests`, `no-mock-guard`, `migration-ordering`, `perf-check`,
-`Build`, `integration-tests`) still runs — as steps inside `localci/suite` and the blocking
-pre-push `gate`, not as separate GitHub contexts.
+`localci/suite` is the single required check. Seven of the eight jobs `ci.yml` required until
+#976 — `Lint`, `Typecheck`, `Unit Tests`, `no-mock-guard`, `migration-ordering`, `perf-check`,
+`Build` — still run, as steps inside `localci/suite` and the blocking pre-push `gate` rather
+than as separate GitHub contexts.
 
-`integration-tests` is a separate workflow and is **not** a required check, but production
-deploys *are* gated on it: `deploy.yml`'s `gate` job resolves that run for the exact SHA and
-every deploy job `needs:` it.
+**`integration-tests` is the exception: it is not a localci step.** `localci.yml:3` lists
+`integration` among the workflows localci does not cover, and it still runs on GitHub as its
+own workflow. It is **not** a required check for merging — but a *pushed* deploy is gated on
+it, because `deploy.yml`'s `gate` job resolves that run for the exact SHA and every deploy job
+`needs:` it. A `workflow_dispatch` deploy is not: that step is push-only.
 
 ## 7. Deployment Procedures
 
@@ -493,9 +493,14 @@ Production deploys happen automatically when a PR is merged to `main`:
    typecheck and migration-ordering in the blocking pre-push `gate`; unit tests,
    no-mock-guard, Build and perf-check in the detached `suite`, which reports back
    as `localci/suite`
-2. PR is reviewed and approved (PR previews are created by the native Vercel GitHub integration during the PR lifecycle)
+2. PR is reviewed — by convention, **not** by enforcement: branch protection records
+   `reviews: null` (§6.2). PR previews are created by the native Vercel GitHub integration
+   during the PR lifecycle
 3. PR is merged to `main`
-4. `deploy.yml` triggers after CI succeeds on `main`: installs deps, then builds via Vercel CLI and deploys to production. **It deploys CODE ONLY — it does not run migrations.**
+4. `deploy.yml` triggers on the **push to `main`** — not on a CI result; `ci.yml` has been
+   `disabled_manually` since #976. It installs deps, then builds via Vercel CLI and deploys
+   to production, gated on the Integration Tests run for that SHA (§6.2).
+   **It deploys CODE ONLY — it does not run migrations.**
 5. Smoke test verifies HTTP 200 at the deployment URL
 6. (Optional) Verify `/api/v1/internal/readiness` reports `schema_compatibility.status = "pass"`
 
