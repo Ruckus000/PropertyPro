@@ -81,6 +81,12 @@ describe('dev agent-login route', () => {
     // `https://test.supabase.co`, which is exactly the shape the gate exists to
     // block, so these cases 403'd the moment the gate landed.
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321');
+    // Also stubbed, and for the same reason: the gate now requires BOTH
+    // backends to be loopback, because this route reads through `DATABASE_URL`
+    // as well (`findUserCommunitiesUnscoped`). Stubbed explicitly rather than
+    // inherited from the runner's env so the happy path does not silently
+    // depend on how the suite was invoked.
+    vi.stubEnv('DATABASE_URL', 'postgresql://postgres:postgres@127.0.0.1:5432/propertypro_test');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key');
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
 
@@ -149,6 +155,39 @@ describe('dev agent-login route', () => {
     expect(response.status).toBe(403);
     // It must refuse BEFORE reaching GoTrue, not after — a refusal that still
     // called `generateLink` would already have touched the remote project.
+    expect(generateLinkMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses when DATABASE_URL names a remote database, even with a local Supabase', async () => {
+    // The half-redirected env: `supabase start` exports a loopback Supabase URL
+    // while `.env.local`'s `DATABASE_URL` still names production. This route's
+    // `findUserCommunitiesUnscoped` read goes over `DATABASE_URL`, and
+    // `dev/reset-onboarding`'s INSERT does too — so a Supabase-only gate passes
+    // here and touches prod.
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321');
+    vi.stubEnv(
+      'DATABASE_URL',
+      'postgresql://postgres@db.vbqobyagjzvlfpfozvmx.supabase.co:5432/postgres',
+    );
+
+    const response = await GET(
+      makeRequest('http://localhost:3000/dev/agent-login?as=pm_admin', 'application/json'),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.text()).toContain('DATABASE_URL');
+    expect(generateLinkMock).not.toHaveBeenCalled();
+    expect(findUserCommunitiesUnscopedMock).not.toHaveBeenCalled();
+  });
+
+  it('treats an absent DATABASE_URL as NOT local', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+
+    const response = await GET(
+      makeRequest('http://localhost:3000/dev/agent-login?as=pm_admin', 'application/json'),
+    );
+
+    expect(response.status).toBe(403);
     expect(generateLinkMock).not.toHaveBeenCalled();
   });
 

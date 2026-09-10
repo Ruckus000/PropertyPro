@@ -32,8 +32,10 @@
  *   - There is no extra script for an e2e job to forget to run.
  *
  * The row is created only on a dev-only route, which returns 404 whenever
- * `NODE_ENV !== 'development'` AND 403 whenever `NEXT_PUBLIC_SUPABASE_URL` is not
- * a local instance.
+ * `NODE_ENV !== 'development'` AND 403 whenever either backend is not local —
+ * `nonLocalBackendReason` requires loopback on `NEXT_PUBLIC_SUPABASE_URL` *and*
+ * `DATABASE_URL`. This route uses only the former; the rule is uniform across all
+ * four `/dev/*` routes on purpose, for the reasons in that function's docblock.
  *
  * That second condition was missing until 2026-09-10, and this docblock used to
  * argue the blast radius was "the same that already applies to this route minting
@@ -49,7 +51,7 @@
  * it looks local and writes remote."
  */
 import { NextResponse } from 'next/server';
-import { isLoopbackUrl } from '@propertypro/shared';
+import { nonLocalBackendReason } from '@propertypro/shared';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -74,16 +76,13 @@ export async function GET(request: Request) {
   // `NODE_ENV` says how this process was started, NOT which project it talks
   // to. A worktree whose `.env.local` names production runs `pnpm dev` as
   // `development` and writes to prod — which is how a real `super_admin` row
-  // was created in the production project on 2026-09-10. Refuse unless the
-  // Supabase URL is demonstrably local.
-  if (!isLoopbackUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)) {
-    return new NextResponse(
-      'Refusing to run: NEXT_PUBLIC_SUPABASE_URL is not a local Supabase instance. ' +
-        'This route mints sessions and grants; against a remote project that is a real write. ' +
-        'Start a local stack (`supabase start`) or use scripts/with-env-local-demo-db.sh.',
-      { status: 403 },
-    );
-  }
+  // was created in the production project on 2026-09-10. Refuse unless BOTH
+  // backends are demonstrably local. `nonLocalBackendReason` carries the reason
+  // the rule is uniform across all four routes rather than per-route: the
+  // half-redirected env is the dangerous state, and a reader should not have to
+  // audit this file's imports to know which backend it writes to.
+  const remote = nonLocalBackendReason(process.env);
+  if (remote) return new NextResponse(remote, { status: 403 });
 
   const url = new URL(request.url);
   const role = url.searchParams.get('as');
