@@ -144,15 +144,12 @@ line says where.
   tripwire; no test would catch a regression.
 
 - **4. No DMARC record** — closed 2026-09-07; **enforcing since 2026-09-10** at
-  `p=quarantine; sp=quarantine` (both together, per #1104 — `sp=none` is an opt-*out*, so
-  raising `p=` alone would have left every subdomain `From:` unenforced). The record, why
-  the "read a week of reports first" step was deliberately skipped, and why `aspf=r` must
-  not be tightened all live in [`DEPLOYMENT.md`](DEPLOYMENT.md) §5.5 item 4 — the home that
-  outlives this file.
-  **Open tail:** two things a structural audit cannot settle. Read the first Postmark digest
-  (~2026-09-14) for a sender nobody knew about, then move to `p=reject`. And
-  `propertyprofl.com` — Google Workspace MX, **no DMARC record at all** — is now the easier
-  spoof target of the two domains; out of scope for the product domain, unowned by anyone.
+  `p=quarantine; sp=quarantine`. `dig _dmarc.getpropertypro.com TXT +short` reads it back.
+  **The reasoning lives in [`DEPLOYMENT.md`](DEPLOYMENT.md) §5.5 item 4, kept in full** —
+  including why the "read a week of reports first" step was skipped deliberately, and the
+  `aspf=r` tripwire that would drop SPF alignment for every sender at once if anyone
+  "tightened" it. No test would catch either.
+  **Open tail:** read the first Postmark digest (~2026-09-14), then `p=reject`.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both
