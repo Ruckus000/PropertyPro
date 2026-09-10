@@ -17,16 +17,22 @@ import { findRootlessCommunities } from '@propertypro/db/unsafe';
 import { wasTruncated } from '@/lib/api/list-limits';
 
 const COMPLIANCE_PAGE_SIZE = 1000;
-const MEMBER_COUNT_PAGE_SIZE = 1000;
 /**
- * Safety valve for `fetchMemberCounts`. `user_roles` holds one row per member
- * per community, so this bounds member ROWS across every community on the
- * platform in a single call — not the number of communities, and not any one
- * community's membership. Sized well above any plausible real platform total;
- * hitting it means the platform has genuinely outgrown counting this way, not
- * that an ordinary day had more members than expected.
+ * Page size for `fetchRowsInPages` scans over `user_roles`. Exported so
+ * `dashboard-series.ts`'s members read shares the same page/bound as
+ * `fetchMemberCounts` rather than picking its own numbers.
  */
-const MEMBER_COUNT_ROW_BOUND = 20 * MEMBER_COUNT_PAGE_SIZE;
+export const MEMBER_COUNT_PAGE_SIZE = 1000;
+/**
+ * Safety valve for `fetchRowsInPages` scans over `user_roles`. `user_roles`
+ * holds one row per member per community, so this bounds member ROWS across
+ * every community on the platform in a single call — not the number of
+ * communities, and not any one community's membership. Sized well above any
+ * plausible real platform total; hitting it means the platform has genuinely
+ * outgrown counting this way, not that an ordinary day had more members than
+ * expected.
+ */
+export const MEMBER_COUNT_ROW_BOUND = 20 * MEMBER_COUNT_PAGE_SIZE;
 
 export interface ClientRow {
   id: number;
@@ -132,6 +138,73 @@ export interface MemberCountsResult {
   exact: boolean;
 }
 
+export interface PagedRowsResult<T> {
+  rows: T[];
+  /**
+   * `false` means the scan hit `rowBound` before exhausting the table for
+   * these ids — with no `ORDER BY`, every row in `rows` is then unproven
+   * (whichever rows landed after the cutoff are simply missing, and there's
+   * no way to tell which ones), not just the ones past the cutoff.
+   */
+  exact: boolean;
+}
+
+/**
+ * Pages `table.select(columns).in(inColumn, ids).range()` until a page comes
+ * back short (the table is exhausted for these ids — exact) or `rowBound`
+ * rows have been read (give up on exactness rather than silently
+ * under-reporting). No `ORDER BY` is applied, so this is only safe to use
+ * when the caller doesn't need a stable row order — an unbounded aggregate
+ * scan, not a UI page.
+ *
+ * Extracted from `fetchMemberCounts` (below) so `getDashboardSeries`'s
+ * members read (`dashboard-series.ts`) shares this truncation-safe scan
+ * instead of hand-rolling a fourth paging loop — `clients.ts` already has two
+ * (this one and `fetchAllComplianceRows`), and `dashboard.ts:128` a third.
+ */
+export async function fetchRowsInPages<T>(
+  db: ReturnType<typeof createAdminClient>,
+  table: string,
+  columns: string,
+  inColumn: string,
+  ids: number[],
+  pageSize: number,
+  rowBound: number,
+): Promise<PagedRowsResult<T>> {
+  const rows: T[] = [];
+  if (ids.length === 0) return { rows, exact: true };
+
+  let from = 0;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await db
+      .from(table)
+      .select(columns)
+      .in(inColumn, ids)
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to load ${table} (offset ${from}): ${error.message}`);
+    }
+
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+
+    if (!wasTruncated(page.length, pageSize)) {
+      // Last page came back short of a full page: every matching row has
+      // been seen, so the accumulated rows are exact.
+      return { rows, exact: true };
+    }
+
+    if (rows.length >= rowBound) {
+      return { rows, exact: false };
+    }
+
+    from += pageSize;
+  }
+}
+
 /**
  * `user_roles` counts per community. A `select('community_id', { count:
  * 'exact' })` per community id is N+1 for a platform with hundreds of
@@ -145,10 +218,10 @@ export interface MemberCountsResult {
  * including possibly the first community rendered. Raising the cap only moves
  * that cliff, it doesn't remove it.
  *
- * Instead this pages with `.range()` until the table is exhausted, so the
- * common case (a platform whose membership fits within
- * `MEMBER_COUNT_ROW_BOUND`) gets an EXACT count. Only if the platform has
- * grown past that safety valve does it give up on exactness — see
+ * Instead this pages with `.range()` until the table is exhausted (via
+ * `fetchRowsInPages`), so the common case (a platform whose membership fits
+ * within `MEMBER_COUNT_ROW_BOUND`) gets an EXACT count. Only if the platform
+ * has grown past that safety valve does it give up on exactness — see
  * `MemberCountsResult.exact`. Exported for direct unit testing
  * (`__tests__/clients/member-counts.test.ts`), same as `applyClientFilter`.
  */
@@ -159,39 +232,21 @@ export async function fetchMemberCounts(
   const counts = new Map<number, number>();
   if (communityIds.length === 0) return { counts, exact: true };
 
-  let from = 0;
-  let totalRows = 0;
+  const { rows, exact } = await fetchRowsInPages<{ community_id: number }>(
+    db,
+    'user_roles',
+    'community_id',
+    'community_id',
+    communityIds,
+    MEMBER_COUNT_PAGE_SIZE,
+    MEMBER_COUNT_ROW_BOUND,
+  );
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { data, error } = await db
-      .from('user_roles')
-      .select('community_id')
-      .in('community_id', communityIds)
-      .range(from, from + MEMBER_COUNT_PAGE_SIZE - 1);
-
-    if (error) {
-      throw new Error(`Failed to load member counts (offset ${from}): ${error.message}`);
-    }
-
-    const rows = (data ?? []) as { community_id: number }[];
-    for (const row of rows) {
-      counts.set(row.community_id, (counts.get(row.community_id) ?? 0) + 1);
-    }
-    totalRows += rows.length;
-
-    if (!wasTruncated(rows.length, MEMBER_COUNT_PAGE_SIZE)) {
-      // Last page came back short of a full page: every matching row has
-      // been seen, so the accumulated counts are exact.
-      return { counts, exact: true };
-    }
-
-    if (totalRows >= MEMBER_COUNT_ROW_BOUND) {
-      return { counts, exact: false };
-    }
-
-    from += MEMBER_COUNT_PAGE_SIZE;
+  for (const row of rows) {
+    counts.set(row.community_id, (counts.get(row.community_id) ?? 0) + 1);
   }
+
+  return { counts, exact };
 }
 
 interface OpenDisputeDbRow {

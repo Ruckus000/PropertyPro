@@ -8,6 +8,7 @@
  * @module lib/server/dashboard-series
  */
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { fetchRowsInPages, MEMBER_COUNT_PAGE_SIZE, MEMBER_COUNT_ROW_BOUND } from './clients';
 
 export interface MonthPoint {
   /** 'YYYY-MM', UTC calendar month. */
@@ -130,6 +131,11 @@ interface CreatedAtRow {
   created_at: string;
 }
 
+interface CommunityIdCreatedAtRow {
+  id: number;
+  created_at: string;
+}
+
 function throwIfError(error: { message: string } | null, context: string): void {
   if (error) {
     throw new Error(`${context}: ${error.message}`);
@@ -168,21 +174,38 @@ export async function getDashboardSeries(): Promise<DashboardSeries> {
   // down to SERIES_MONTHS.
   const cutoffIso = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - SERIES_MONTHS, 1)).toISOString();
 
-  const [snapshotsResult, communitiesResult, membersResult] = await Promise.all([
+  const [snapshotsResult, communitiesResult] = await Promise.all([
     db
       .from('revenue_snapshots')
       .select('computed_at, mrr_cents, past_due_subscriptions, mrr_delta_pct')
       .gte('computed_at', cutoffIso)
       .order('computed_at', { ascending: true }),
-    db.from('communities').select('created_at').eq('is_demo', false).is('deleted_at', null),
-    db.from('user_roles').select('created_at'),
+    db.from('communities').select('id, created_at').eq('is_demo', false).is('deleted_at', null),
   ]);
 
   throwIfError(snapshotsResult.error, 'Failed to load revenue snapshots');
   throwIfError(communitiesResult.error, 'Failed to load community creation history');
-  throwIfError(membersResult.error, 'Failed to load member creation history');
 
   const snapshots = (snapshotsResult.data ?? []) as RevenueSnapshotRow[];
+  const communityRows = (communitiesResult.data ?? []) as CommunityIdCreatedAtRow[];
+  const realCommunityIds = communityRows.map((row) => row.id);
+
+  // Scoped to the same real (non-demo, non-deleted) community set the KPI
+  // headline uses (`dashboard.ts` `realIds`, `.in('community_id', realIds)`)
+  // — otherwise the chart counts members of demo/deleted communities the
+  // headline excludes, and the chart's last point can never equal the
+  // headline. Paged via the same truncation-safe scan `fetchMemberCounts`
+  // uses for the Clients screen, because `user_roles` has no row cap and no
+  // `ORDER BY` to page safely any other way.
+  const membersResult = await fetchRowsInPages<CreatedAtRow>(
+    db,
+    'user_roles',
+    'created_at',
+    'community_id',
+    realCommunityIds,
+    MEMBER_COUNT_PAGE_SIZE,
+    MEMBER_COUNT_ROW_BOUND,
+  );
 
   const mrr = bucketByMonth(
     snapshots.map((row) => ({ at: row.computed_at, value: Number(row.mrr_cents ?? 0) / 100 })),
@@ -195,15 +218,19 @@ export async function getDashboardSeries(): Promise<DashboardSeries> {
     now,
   );
   const communities = cumulativeByMonth(
-    ((communitiesResult.data ?? []) as CreatedAtRow[]).map((row) => row.created_at),
+    communityRows.map((row) => row.created_at),
     SERIES_MONTHS,
     now,
   );
-  const members = cumulativeByMonth(
-    ((membersResult.data ?? []) as CreatedAtRow[]).map((row) => row.created_at),
-    SERIES_MONTHS,
-    now,
-  );
+  // An unproven scan (`!membersResult.exact`) makes EVERY count suspect, not
+  // just the ones after the truncation point — `user_roles` has no
+  // `ORDER BY`, so there's no way to say which rows were seen. Degrade to an
+  // empty series rather than plot a wrong number: `MiniBars`/`KpiDetailDialog`
+  // already render an empty series as "no sparkline", so this needs no
+  // component change.
+  const members = membersResult.exact
+    ? cumulativeByMonth(membersResult.rows.map((row) => row.created_at), SERIES_MONTHS, now)
+    : [];
 
   const latestSnapshot = snapshots.at(-1) ?? null;
   const latestMrrDeltaPct =

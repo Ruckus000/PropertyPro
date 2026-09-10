@@ -5,6 +5,16 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
 }));
 
+// `dashboard-series.ts` now imports the paged-scan helper from
+// `lib/server/clients.ts`, which also imports `findRootlessCommunities` from
+// `@propertypro/db/unsafe` — that module loads `./drizzle` eagerly at MODULE
+// LOAD and throws if `DATABASE_URL` is unset (true in this test environment).
+// `getDashboardSeries` never calls `findRootlessCommunities`, so a stub is
+// enough. Same trap, same fix as `__tests__/clients/member-counts.test.ts`.
+vi.mock('@propertypro/db/unsafe', () => ({
+  findRootlessCommunities: vi.fn().mockResolvedValue([]),
+}));
+
 import { bucketByMonth, cumulativeByMonth, getDashboardSeries } from '@/lib/server/dashboard-series';
 
 const now = new Date('2026-09-08T12:00:00Z');
@@ -51,7 +61,54 @@ interface SnapshotFixture {
   mrr_delta_pct?: string | number | null;
 }
 
-function mockSnapshots(snapshots: SnapshotFixture[]) {
+interface CommunityFixture {
+  id: number;
+  created_at: string;
+}
+
+interface MemberRowFixture {
+  community_id: number;
+  created_at: string;
+}
+
+/**
+ * Page-aware stub for `.from('user_roles').select('created_at').in('community_id', ids).range(from, to)`
+ * — the shape `fetchRowsInPages` (extracted from `fetchMemberCounts`) actually
+ * calls. Filtering by `.in()` here mirrors what Postgres would do, so a real
+ * community id passed through wins even if the fixture also contains rows for
+ * ids that aren't. `scopedIds` starts `null` — meaning "no `.in()` call seen
+ * yet" — and only `.range()` without a preceding `.in()` returns the FULL,
+ * unfiltered fixture, same as a real Postgrest query with no `.in()` in its
+ * chain; this matters for the revert-check below, which drops the `.in()`
+ * call and needs the stub to fail open (unfiltered) the way Postgres would,
+ * not fail closed (empty). `.range()` slices the (filtered or unfiltered) set
+ * page by page rather than returning the same page forever, so a fixture
+ * bigger than one page actually exercises the loop.
+ */
+function makeUserRolesChain(rows: MemberRowFixture[]) {
+  let scopedIds: number[] | null = null;
+  const chain = {
+    select: () => chain,
+    in: (_col: string, ids: number[]) => {
+      scopedIds = ids;
+      return chain;
+    },
+    range: (from: number, to: number) => {
+      const scoped = scopedIds === null ? rows : rows.filter((r) => scopedIds!.includes(r.community_id));
+      return Promise.resolve({ data: scoped.slice(from, to + 1), error: null });
+    },
+  };
+  return chain;
+}
+
+function mockDashboardSeriesDb(opts: {
+  snapshots?: SnapshotFixture[];
+  communities?: CommunityFixture[];
+  memberRows?: MemberRowFixture[];
+}) {
+  const snapshots = opts.snapshots ?? [];
+  const communities = opts.communities ?? [];
+  const memberRows = opts.memberRows ?? [];
   createAdminClientMock.mockReturnValue({
     from: (table: string) => {
       if (table === 'revenue_snapshots') {
@@ -64,12 +121,19 @@ function mockSnapshots(snapshots: SnapshotFixture[]) {
           })),
         );
       }
-      if (table === 'communities' || table === 'user_roles') {
-        return makeQueryResult([]);
+      if (table === 'communities') {
+        return makeQueryResult(communities);
+      }
+      if (table === 'user_roles') {
+        return makeUserRolesChain(memberRows);
       }
       throw new Error(`dashboard-series.test.ts: unexpected table "${table}"`);
     },
   });
+}
+
+function mockSnapshots(snapshots: SnapshotFixture[]) {
+  mockDashboardSeriesDb({ snapshots });
 }
 
 describe('getDashboardSeries', () => {
@@ -159,5 +223,40 @@ describe('getDashboardSeries', () => {
     expect(series.latestMrr).toBeNull();
     expect(series.mrr30dAgo).toBeNull();
     expect(series.latestMrrDeltaPct).toBeNull();
+  });
+
+  /**
+   * Regression coverage for the members-KPI/chart divergence: the headline
+   * (`dashboard.ts`'s `stats.overview.members`) is scoped to real (non-demo,
+   * non-deleted) communities, but the series used to read `user_roles` with
+   * no filter at all — so the chart's last point counted demo-community
+   * members the headline excluded and could never match it.
+   */
+  it('scopes the members series to real communities, matching the headline — a demo-community member must not appear', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const memberRows = [
+      { community_id: 1, created_at: '2026-08-15T00:00:00Z' }, // real community
+      { community_id: 2, created_at: '2026-08-20T00:00:00Z' }, // demo community — must be excluded
+    ];
+
+    mockDashboardSeriesDb({
+      // Only the real community comes back from the (already-filtered)
+      // `communities` query — id 2 (demo) never reaches the series function
+      // at all, exactly as `dashboard.ts`'s headline query behaves.
+      communities: [{ id: 1, created_at: '2026-01-01T00:00:00Z' }],
+      memberRows,
+    });
+
+    const series = await getDashboardSeries();
+
+    // Scoped: only the real-community member is counted.
+    expect(series.members.at(-1)!.value).toBe(1);
+
+    // Proof this isn't a fixture-shape accident: an UNFILTERED read of the
+    // very same rows — what the pre-fix query did — would have counted both.
+    const unfiltered = cumulativeByMonth(memberRows.map((r) => r.created_at), 12, now);
+    expect(unfiltered.at(-1)!.value).toBe(2);
   });
 });
