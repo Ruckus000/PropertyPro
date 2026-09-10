@@ -1276,10 +1276,20 @@ export interface ExpireStalePendingSignupsSummary {
  * deliberate, not oversights:
  *
  *   - NULL `expires_at` is NOT swept. Availability treats those as blocking
- *     too, so leaving them alone keeps the two in agreement. (One such row is
- *     live in production.) `isNotNull` is written out even though SQL's
- *     three-valued logic would exclude them anyway, so the invariant is
- *     visible here and assertable in a test rather than implicit.
+ *     too, so leaving them alone keeps the two in agreement. `isNotNull` is
+ *     written out even though SQL's three-valued logic would exclude them
+ *     anyway, so the invariant is visible here and assertable in a test rather
+ *     than implicit.
+ *
+ *     This exclusion is an invariant, not a licence to produce such rows: a
+ *     status-active row with no expiry can NEVER be released by anything. An
+ *     earlier version of this comment noted "one such row is live in
+ *     production" as though it were a curiosity. It was not — a producer was
+ *     making them. `createPendingAddToGroupSignup` omitted `expires_at` while
+ *     writing `checkout_started`, so every abandoned add-to-group checkout
+ *     reserved its subdomain permanently. Fixed at that producer, which is the
+ *     only correct place: widening this predicate to catch NULLs would re-open
+ *     the index-vs-availability divergence described above.
  *   - Only `email_verified` / `checkout_started`. Expiring `payment_completed`
  *     or `provisioning` would release a PAYING customer's subdomain.
  *

@@ -995,7 +995,10 @@ describe('expireStalePendingSignups', () => {
 
   // A NULL `expires_at` is deliberately NOT swept: checkSignupSubdomainAvailability
   // treats those as blocking too, so leaving them alone keeps the partial index
-  // and that check in agreement. One such row is live in production.
+  // and that check in agreement. The corollary is that no producer may write a
+  // status-active row without an expiry — one did (`createPendingAddToGroupSignup`),
+  // and it was fixed there rather than by widening this predicate. See
+  // __tests__/billing/add-to-group-signup.test.ts.
   it('requires a non-null expires_at, so NULL-expiry rows are left alone', async () => {
     const { db } = buildExpiryDb([]);
     createUnscopedClientMock.mockReturnValue(db);

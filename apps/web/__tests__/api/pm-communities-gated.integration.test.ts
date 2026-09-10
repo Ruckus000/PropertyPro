@@ -20,6 +20,9 @@ vi.mock('@/lib/billing/billing-group-service', async (original) => {
       stripeCustomerId: 'cus_test_pm',
     }),
     createPendingAddToGroupSignup: vi.fn().mockResolvedValue(7),
+    // Overridden rather than inherited from `...actual`: the real one opens an
+    // unscoped DB client, and this spec is about the route's gating contract.
+    recordAddToGroupCheckoutSession: vi.fn().mockResolvedValue(undefined),
   };
 });
 

@@ -17,11 +17,11 @@ import {
 } from './signup-schema';
 import { getBaseUrl } from '@/lib/utils/url';
 import { isUniqueConstraintError } from '@/lib/db/unique-constraint-error';
+import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 
 const SIGNUP_SUCCESS_MESSAGE =
   'Thanks for signing up. Check your email for a verification link before checkout.';
 const MIN_SIGNUP_RESPONSE_MS = 250;
-const SIGNUP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const VERIFICATION_EMAIL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
 const STRUCTURED_ADDRESS_DB_COLUMNS = new Set([
   'address_line_1',

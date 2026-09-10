@@ -2,7 +2,9 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { billingGroups, communities, pendingSignups, userRoles } from '@propertypro/db';
 import { eq, and, isNull, lt, ne, sql, inArray } from '@propertypro/db/filters';
-import { AppError } from '../api/errors';
+import { AppError, ValidationError } from '../api/errors';
+import { isUniqueConstraintError } from '../db/unique-constraint-error';
+import { SIGNUP_EXPIRY_MS } from '../auth/signup-expiry';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
 import { notifyDowngrade } from './downgrade-notifications';
@@ -552,7 +554,10 @@ export async function createPendingAddToGroupSignup(input: {
 }): Promise<number> {
   const db = createUnscopedClient();
   const signupRequestId = `add-${input.billingGroupId}-${crypto.randomUUID()}`;
-  const [row] = await db
+  const now = new Date();
+  let row: { id: bigint } | undefined;
+  try {
+    [row] = await db
     .insert(pendingSignups)
     .values({
       signupRequestId,
@@ -571,9 +576,19 @@ export async function createPendingAddToGroupSignup(input: {
       communityType: input.input.communityType as any,
       planKey: input.input.planId,
       candidateSlug: input.input.subdomain,
-      termsAcceptedAt: new Date(),
+      termsAcceptedAt: now,
       termsVersion: CURRENT_TERMS_VERSION,
       status: 'checkout_started',
+      // `checkout_started` sits INSIDE `pending_signups_candidate_slug_active_unique`,
+      // so this row reserves the subdomain from the moment it is written. Without
+      // an expiry it reserved it forever: `expireStalePendingSignups` requires
+      // `expires_at IS NOT NULL` (deliberately — see its docblock) and
+      // `checkSignupSubdomainAvailability` treats NULL as "still blocking". An
+      // abandoned checkout therefore had no automated path back out, and also sat
+      // permanently at the front of `reconcileLostCheckoutSignups`' ten-row,
+      // oldest-first window, because the skip branches there never touch
+      // `updated_at`. Stamping this is what releases both.
+      expiresAt: new Date(now.getTime() + SIGNUP_EXPIRY_MS),
       payload: {
         kind: 'add_to_group',
         billingGroupId: input.billingGroupId,
@@ -581,6 +596,62 @@ export async function createPendingAddToGroupSignup(input: {
       },
     })
     .returning({ id: pendingSignups.id });
+  } catch (error) {
+    // The caller checks availability before reaching here, so this is the TOCTOU
+    // window between that check and this insert. Without the guard the raw
+    // Postgres error escapes `withErrorHandler`, which only special-cases
+    // `AppError`, and the PM sees a 500. Mirrors `signup.ts`'s handling of the
+    // same index on the public path.
+    if (isUniqueConstraintError(error, 'pending_signups_candidate_slug_active_unique')) {
+      throw new ValidationError('That subdomain is no longer available.', {
+        field: 'subdomain',
+      });
+    }
+    throw error;
+  }
   if (!row) throw new Error('Failed to insert pending signup');
   return Number(row.id);
+}
+
+/**
+ * Persist the Stripe Checkout session id onto the pending signup.
+ *
+ * This is not bookkeeping — it is the only thing that makes an add-to-group
+ * signup recoverable. `reconcileLostCheckoutSignups` reads
+ * `payload.stripeCheckoutSessionId` and, when it is absent, counts the row as
+ * `skippedNotComplete` and moves on. So a PM who genuinely PAID but whose
+ * webhook was lost could never be reconciled: the one mechanism built to rescue
+ * that case had nothing to look up.
+ *
+ * The public signup path has always done this (`lib/actions/checkout.ts`); this
+ * path discarded the `sessionId` that `createAddCommunityCheckout` returns.
+ * Same shape deliberately — spread the existing payload rather than replacing
+ * it, and bump `updatedAt`.
+ */
+export async function recordAddToGroupCheckoutSession(input: {
+  pendingSignupId: number;
+  sessionId: string;
+}): Promise<void> {
+  const db = createUnscopedClient();
+
+  const [existing] = await db
+    .select({ payload: pendingSignups.payload })
+    .from(pendingSignups)
+    // pendingSignups.id is bigserial — must compare with BigInt.
+    .where(eq(pendingSignups.id, BigInt(input.pendingSignupId)))
+    .limit(1);
+
+  await db
+    .update(pendingSignups)
+    .set({
+      payload: {
+        ...(typeof existing?.payload === 'object' && existing.payload !== null
+          ? existing.payload
+          : {}),
+        stripeCheckoutSessionId: input.sessionId,
+      },
+      updatedAt: new Date(),
+    })
+    // pendingSignups.id is bigserial — must compare with BigInt.
+    .where(eq(pendingSignups.id, BigInt(input.pendingSignupId)));
 }
