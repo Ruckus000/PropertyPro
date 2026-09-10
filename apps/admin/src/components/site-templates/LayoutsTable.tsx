@@ -11,6 +11,7 @@
  */
 import { useState } from 'react';
 import { Star, Archive } from 'lucide-react';
+import { Badge, type BadgeVariant } from '@propertypro/ui';
 import { saveLayoutMetadata, type LayoutMetadataPatch } from '@/lib/site-templates/update-layout';
 
 export interface LayoutRow {
@@ -30,6 +31,13 @@ export interface LayoutRow {
 
 interface Props {
   layouts: LayoutRow[];
+  /**
+   * "table" (default) is the editing view — inline metadata edit form, used
+   * where this component has always lived. "cards" is the read-only summary
+   * for the site-templates hub (task-18-dispatch-notes.md correction #2/#3):
+   * no edit affordance, just the catalog at a glance.
+   */
+  variant?: 'table' | 'cards';
 }
 
 const TIERS: LayoutRow['tier'][] = ['essentials', 'professional', 'pm'];
@@ -44,6 +52,68 @@ function TierBadge({ tier }: { tier: LayoutRow['tier'] }) {
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${palette[tier]}`}>
       {tier}
     </span>
+  );
+}
+
+/**
+ * Cards-view tier badge — the hub's own mapping onto the shared status Badge
+ * (essentials→info, professional→owner, pm→warning), distinct from the
+ * table view's `TierBadge` above, which predates this component gaining a
+ * cards variant and stays as-is for the editing view.
+ */
+const CARDS_TIER_VARIANT: Record<LayoutRow['tier'], BadgeVariant> = {
+  essentials: 'info',
+  professional: 'owner',
+  pm: 'warning',
+};
+
+function LayoutCards({ layouts }: { layouts: LayoutRow[] }) {
+  if (layouts.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-edge-strong bg-surface-page px-6 py-12 text-center">
+        <p className="text-sm text-content-tertiary">No layouts configured.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {layouts.map((layout) => (
+        <div
+          key={layout.id}
+          data-testid={`layout-card-${layout.slug}`}
+          className="flex flex-col rounded-lg border border-edge bg-surface-card p-5 shadow-e0"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              {layout.isFeatured && (
+                <Star
+                  className="h-3.5 w-3.5 fill-amber-400 text-amber-400" // design-tokens:exempt — featured-star gold; status-premium is gold-800, a dark bronze that reads as a DISABLED star
+                  aria-label="Featured"
+                />
+              )}
+              <span className="font-medium text-content">{layout.displayName}</span>
+            </div>
+            <Badge variant={CARDS_TIER_VARIANT[layout.tier]} size="sm">
+              {layout.tier}
+            </Badge>
+          </div>
+          {layout.tagline && <p className="mt-1 text-sm italic text-content-secondary">{layout.tagline}</p>}
+          {layout.description && <p className="mt-2 text-xs text-content-tertiary">{layout.description}</p>}
+          <div className="mt-auto flex items-center justify-between pt-3 border-t border-edge-subtle">
+            <code className="font-mono text-xs text-content-secondary">
+              {layout.slug} · v{layout.version}
+            </code>
+            {layout.isArchived && (
+              <span className="inline-flex items-center gap-1 text-xs text-content-tertiary">
+                <Archive className="h-3 w-3" aria-hidden="true" />
+                Archived
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -179,12 +249,16 @@ function LayoutEditForm({
   );
 }
 
-export function LayoutsTable({ layouts }: Props) {
+export function LayoutsTable({ layouts, variant = 'table' }: Props) {
   const [rows, setRows] = useState<LayoutRow[]>(layouts);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
+
+  if (variant === 'cards') {
+    return <LayoutCards layouts={rows} />;
+  }
 
   async function handleSave(slug: string, draft: LayoutRow) {
     const original = rows.find((r) => r.slug === slug);
