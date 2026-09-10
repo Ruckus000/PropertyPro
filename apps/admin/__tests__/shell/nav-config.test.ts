@@ -13,13 +13,14 @@ describe('nav-config', () => {
   it('has the three design groups in order', () => {
     expect(NAV_GROUPS.map((g) => g.label)).toEqual(['Operate', 'Customers', 'Platform']);
   });
-  it('lists Rootless Communities until Task 15 folds it into Clients', () => {
-    // Task 15 (spec D9) replaces this entry with a redirect to
-    // `/clients?filter=rootless`; until that filter exists, the open
-    // root-claim dispute queue needs a rail entry to stay reachable.
+  it('has no standalone Rootless Communities entry — folded into the Clients quick filter', () => {
+    // Task 15 (spec D9) replaced this entry with a redirect at
+    // `/communities/rootless` (outside the console shell) to
+    // `/clients?filter=rootless`; the open root-claim dispute queue is now
+    // reachable via the Clients rail entry + the `rootless` quick filter, so
+    // the standalone rail item is gone.
     const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href.includes('rootless'));
-    expect(item).toBeDefined();
-    expect(item?.href).toBe('/communities/rootless');
+    expect(item).toBeUndefined();
   });
   it('resolves nested paths to their section by longest prefix', () => {
     expect(getActiveNavId('/clients/12')).toBe('clients');

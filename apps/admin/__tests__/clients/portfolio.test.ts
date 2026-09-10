@@ -3,6 +3,16 @@
  *
  * Verifies the data-fetching logic: non-demo communities only,
  * stale demo threshold at 10 days.
+ *
+ * Task 15 (spec D9) removed the Stale Demos card and its delete-confirm
+ * dialog from `ClientPortfolio` — that surface moves onto the Demos page in
+ * Task 18 (`components/demo/StaleDemosBanner.tsx`), which owns its own
+ * tests. The `stale demo removal` describe block that used to live below
+ * (a local `removeStaleDemoById` reimplementation) is removed with it;
+ * `staleBadge` itself is untouched and still covered here since Task 18
+ * reuses it. The quick-filter / search / type composition that replaced
+ * `ClientPortfolio`'s old filter dropdowns is covered separately in
+ * `client-filters.test.ts` (`applyClientFilter`, exported for testing).
  */
 import { describe, it, expect } from 'vitest';
 import { staleBadge } from '@/lib/utils/stale-badge';
@@ -78,17 +88,6 @@ function paginateCommunities(
   return communities.slice(start, start + pageSize);
 }
 
-interface StaleDemo {
-  id: number;
-  prospect_name: string;
-  template_type: string;
-  created_at: string;
-}
-
-function removeStaleDemoById(demos: StaleDemo[], staleDemoId: number): StaleDemo[] {
-  return demos.filter((demo) => demo.id !== staleDemoId);
-}
-
 describe('portfolio filtering', () => {
   const communities: Community[] = [
     { id: 1, name: 'Sunset Condos', community_type: 'condo_718', created_at: '2025-01-01T00:00:00Z' },
@@ -146,23 +145,5 @@ describe('portfolio pagination', () => {
   it('returns remaining items on last partial page', () => {
     const result = paginateCommunities(communities, 3, 2);
     expect(result.map((community) => community.id)).toEqual([5]);
-  });
-});
-
-describe('stale demo removal', () => {
-  const demos: StaleDemo[] = [
-    { id: 101, prospect_name: 'A', template_type: 'condo_718', created_at: '2025-01-01T00:00:00Z' },
-    { id: 102, prospect_name: 'B', template_type: 'hoa_720', created_at: '2025-01-02T00:00:00Z' },
-    { id: 103, prospect_name: 'C', template_type: 'apartment', created_at: '2025-01-03T00:00:00Z' },
-  ];
-
-  it('removes only the targeted stale demo id', () => {
-    const result = removeStaleDemoById(demos, 102);
-    expect(result.map((demo) => demo.id)).toEqual([101, 103]);
-  });
-
-  it('returns unchanged list when id does not exist', () => {
-    const result = removeStaleDemoById(demos, 999);
-    expect(result.map((demo) => demo.id)).toEqual([101, 102, 103]);
   });
 });

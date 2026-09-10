@@ -24,10 +24,21 @@ const SRC_ROOT = join(ADMIN_ROOT, 'src');
 const TESTS_ROOT = join(ADMIN_ROOT, '__tests__');
 const APP_ROOT = join(SRC_ROOT, 'app');
 
-/** Every directory that moved into the `(console)` group in Task 11. */
+/**
+ * Every directory that moved into the `(console)` group in Task 11.
+ *
+ * `communities` is deliberately NOT listed here: Task 15 (spec D9) folded its
+ * only page (`rootless`) into `/clients?filter=rootless` and turned
+ * `/communities/rootless` into a redirect. A redirect renders nothing and
+ * needs no session gate before it can respond, so it moved OUT of `(console)`
+ * — left inside, it would pay `(console)/layout.tsx`'s
+ * `requireAdminPageSession()` + `getShellSignals()` reads and paint the full
+ * shell from `app/loading.tsx` before immediately navigating away, which is
+ * wasted work for a page whose only job is to leave. See the dedicated
+ * assertion below and `app/communities/rootless/page.tsx`.
+ */
 const CONSOLE_DIRS = [
   'clients',
-  'communities',
   'dashboard',
   'deletion-requests',
   'demo',
@@ -87,6 +98,17 @@ describe('old shell is gone', () => {
       expect(topLevel, `${dir} must be inside (console)`).not.toContain(dir);
       expect(grouped, `${dir} must be inside (console)`).toContain(dir);
     }
+
+    // The one deliberate exception (see the CONSOLE_DIRS docblock): the
+    // redirect-only rootless page lives OUTSIDE (console), and must not have
+    // drifted back in.
+    expect(grouped, 'communities must not remain in (console) — folded into Clients').not.toContain(
+      'communities',
+    );
+    expect(
+      existsSync(join(APP_ROOT, 'communities/rootless/page.tsx')),
+      'the rootless redirect must exist outside (console)',
+    ).toBe(true);
   });
 
   it('the console group renders the shell behind the platform-admin gate', () => {

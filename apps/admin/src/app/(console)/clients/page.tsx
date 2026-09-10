@@ -1,123 +1,48 @@
 /**
  * Client Portfolio view.
  *
- * Lists all non-demo communities with search, filter, sort, and compliance filtering.
- * Also shows a "Stale Demos" card when demos are older than 10 days.
+ * Lists all non-demo communities with quick filters (all / past due / at
+ * risk / trialing / rootless), search, type, and sort. The root-claim dispute
+ * queue and the rootless report — formerly their own page at
+ * `/communities/rootless` — are folded in here (Task 15 / spec D9); that
+ * route is now a redirect to `/clients?filter=rootless`.
  */
-import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { ClientPortfolio } from '@/components/clients/ClientPortfolio';
+import { ClientPortfolio, type ClientFilter } from '@/components/clients/ClientPortfolio';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
+import { getClientsData } from '@/lib/server/clients';
 
 export const dynamic = 'force-dynamic';
 
-const COMPLIANCE_PAGE_SIZE = 1000;
+const VALID_FILTERS: ClientFilter[] = ['all', 'past_due', 'at_risk', 'trialing', 'rootless'];
 
-/** Fetch all compliance rows for given community IDs, paginating past Supabase default limit. */
-async function fetchAllComplianceRows(
-  db: ReturnType<typeof createAdminClient>,
-  communityIds: number[],
-) {
-  if (communityIds.length === 0) return [];
-  const allRows: { community_id: number; document_id: number | null; is_applicable: boolean }[] = [];
-  let from = 0;
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { data, error } = await db
-      .from('compliance_checklist_items')
-      .select('community_id, document_id, is_applicable')
-      .is('deleted_at', null)
-      .in('community_id', communityIds)
-      .range(from, from + COMPLIANCE_PAGE_SIZE - 1);
-
-    // `error` used to be discarded. A failed page yielded `rows.length === 0`,
-    // which ALSO satisfies the loop's exit condition — so a mid-pagination
-    // failure silently truncated the dataset and every community after that
-    // point was scored against missing checklist rows. A wrong compliance
-    // score shown as fact is worse than an error page.
-    if (error) {
-      throw new Error(`Failed to load compliance rows (offset ${from}): ${error.message}`);
-    }
-
-    const rows = (data ?? []) as typeof allRows;
-    allRows.push(...rows);
-    if (rows.length < COMPLIANCE_PAGE_SIZE) break;
-    from += COMPLIANCE_PAGE_SIZE;
-  }
-  return allRows;
+function parseFilter(raw: string | undefined): ClientFilter | undefined {
+  return VALID_FILTERS.find((f) => f === raw);
 }
 
-export default async function ClientsPage() {
+interface ClientsPageProps {
+  searchParams: Promise<{ filter?: string; q?: string }>;
+}
+
+export default async function ClientsPage({ searchParams }: ClientsPageProps) {
   // AUTHZ: platform-admin only. This page reads cross-tenant data with the
   // service-role client (RLS-bypassing), so it re-asserts the identity
   // middleware already verified rather than trusting the matcher alone.
   await requireAdminPageSession();
 
-  const db = createAdminClient();
-
-  // Fetch communities and stale demos in parallel
-  const [communitiesResult, staleDemosResult] = await Promise.all([
-    db.from('communities')
-      .select('id, name, slug, community_type, city, state, subscription_status, created_at')
-      .eq('is_demo', false)
-      .is('deleted_at', null)
-      .order('name'),
-    db.from('demo_instances')
-      .select('id, prospect_name, template_type, created_at')
-      .lt('created_at', new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString())
-      .order('created_at'),
+  const [{ clients, disputes, counts }, params] = await Promise.all([
+    getClientsData(),
+    searchParams,
   ]);
-
-  interface CommunityRow {
-    id: number;
-    name: string;
-    slug: string;
-    community_type: 'condo_718' | 'hoa_720' | 'apartment';
-    city: string | null;
-    state: string | null;
-    subscription_status: string | null;
-    created_at: string;
-  }
-
-  // A failed communities read used to render an empty portfolio — visually
-  // identical to a platform with no clients at all. Let it reach error.tsx.
-  if (communitiesResult.error) {
-    throw new Error(`Failed to load communities: ${communitiesResult.error.message}`);
-  }
-  const communities = (communitiesResult.data ?? []) as unknown as CommunityRow[];
-
-  // Stale demos are a secondary panel, not the page's subject: degrading to an
-  // empty list here is a deliberate choice, not an oversight. Logged so the
-  // failure is still visible.
-  if (staleDemosResult.error) {
-    console.error('[admin/clients] stale demo lookup failed:', staleDemosResult.error.message);
-  }
-  const staleDemos = staleDemosResult.error ? [] : (staleDemosResult.data ?? []);
-
-  // Fetch compliance data scoped to real communities, paginated
-  const realIds = communities.map((c) => c.id);
-  const complianceRows = await fetchAllComplianceRows(db, realIds);
-  const scoreMap = new Map<number, number>();
-
-  const byCommunity = new Map<number, { applicable: number; met: number }>();
-  for (const row of complianceRows) {
-    if (!row.is_applicable) continue;
-    const entry = byCommunity.get(row.community_id) ?? { applicable: 0, met: 0 };
-    entry.applicable++;
-    if (row.document_id !== null) entry.met++;
-    byCommunity.set(row.community_id, entry);
-  }
-  for (const [id, { applicable, met }] of byCommunity) {
-    scoreMap.set(id, applicable > 0 ? Math.round((met / applicable) * 100) : 100);
-  }
-
-  // Attach compliance scores to communities
-  const communitiesWithScores = communities.map((c) => ({
-    ...c,
-    complianceScore: scoreMap.get(c.id) ?? null,
-  }));
 
   // `ClientPortfolio` owns this screen's heading and toolbar; Wave 2 moves it
   // onto `AdminPageHeader` along with the rest of the page-body restyling.
-  return <ClientPortfolio communities={communitiesWithScores} staleDemos={staleDemos} />;
+  return (
+    <ClientPortfolio
+      clients={clients}
+      disputes={disputes}
+      counts={counts}
+      initialFilter={parseFilter(params.filter)}
+      initialSearch={params.q}
+    />
+  );
 }

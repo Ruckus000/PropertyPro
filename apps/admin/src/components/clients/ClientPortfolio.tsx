@@ -1,74 +1,97 @@
 'use client';
 
 /**
- * P1-5: Client Portfolio — interactive grid with search/filter/sort.
+ * Client Portfolio — interactive grid with quick filters, search/type/sort,
+ * and the root-claim dispute queue folded in from the old Rootless
+ * Communities page (Task 15 / spec D9).
+ *
+ * Stale-demo props and UI (the "Stale Demos" card + delete-confirm dialog)
+ * are removed here — that surface moves onto the Demos page in Task 18
+ * (`components/demo/StaleDemosBanner.tsx`), not this component.
  */
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { format } from 'date-fns';
-import { Search, ChevronDown, Trash2, X, ShieldCheck, AlertTriangle } from 'lucide-react';
-import {
-  COMMUNITY_TYPE_LABELS,
-  SUBSCRIPTION_STATUS_LABELS,
-} from '@/lib/constants/community-labels';
-import { staleBadge } from '@/lib/utils/stale-badge';
+import { useState, useMemo, useEffect } from 'react';
+import { Search, ChevronDown } from 'lucide-react';
+import { QuickFilterTabs } from '@propertypro/ui';
+import { ClientCard } from './ClientCard';
+import { DisputeBanner } from './DisputeBanner';
+import type { ClientRow, OpenDispute, ClientCounts } from '@/lib/server/clients';
 
 const PAGE_SIZE = 20;
 
-interface Community {
-  id: number;
-  name: string;
-  slug: string;
-  community_type: 'condo_718' | 'hoa_720' | 'apartment';
-  city: string | null;
-  state: string | null;
-  subscription_status: string | null;
-  created_at: string;
-  complianceScore: number | null;
-}
+export type ClientFilter = 'all' | 'past_due' | 'at_risk' | 'trialing' | 'rootless';
 
-interface StaleDemo {
-  id: number;
-  prospect_name: string;
-  template_type: string;
-  created_at: string;
+/**
+ * Pure filter/search/type composition — exported for unit tests
+ * (`__tests__/clients/client-filters.test.ts`). Search matches on community
+ * NAME only, matching the pre-existing search box behavior; widening it to
+ * slug/city/etc. is a deliberate future decision, not silently folded in here.
+ */
+export function applyClientFilter(
+  rows: ClientRow[],
+  filter: ClientFilter,
+  search: string,
+  type: string,
+): ClientRow[] {
+  let result = rows;
+
+  switch (filter) {
+    case 'past_due':
+      result = result.filter((r) => r.subscription_status === 'past_due');
+      break;
+    case 'at_risk':
+      result = result.filter((r) => r.complianceScore !== null && r.complianceScore < 70);
+      break;
+    case 'trialing':
+      result = result.filter((r) => r.subscription_status === 'trialing');
+      break;
+    case 'rootless':
+      result = result.filter((r) => r.rootless);
+      break;
+    case 'all':
+    default:
+      break;
+  }
+
+  if (type !== 'all') {
+    result = result.filter((r) => r.community_type === type);
+  }
+
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    result = result.filter((r) => r.name.toLowerCase().includes(q));
+  }
+
+  return result;
 }
 
 interface ClientPortfolioProps {
-  communities: Community[];
-  staleDemos: StaleDemo[];
+  clients: ClientRow[];
+  disputes: OpenDispute[];
+  counts: ClientCounts;
+  /** Seeds the active quick filter from `?filter=` — a dashboard queue or nav-entry deep link. */
+  initialFilter?: ClientFilter;
+  /** Seeds the search box from `?q=`. */
+  initialSearch?: string;
 }
 
-export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProps) {
-  const [search, setSearch] = useState('');
+const FILTER_TABS: { label: string; value: ClientFilter }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Past due', value: 'past_due' },
+  { label: 'At risk', value: 'at_risk' },
+  { label: 'Trialing', value: 'trialing' },
+  { label: 'Rootless', value: 'rootless' },
+];
+
+export function ClientPortfolio({ clients, disputes, counts, initialFilter, initialSearch }: ClientPortfolioProps) {
+  const [filter, setFilter] = useState<ClientFilter>(initialFilter ?? 'all');
+  const [search, setSearch] = useState(initialSearch ?? '');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sort, setSort] = useState<'name-asc' | 'name-desc' | 'created-asc' | 'created-desc' | 'compliance-asc' | 'compliance-desc'>('name-asc');
-  const [complianceFilter, setComplianceFilter] = useState<'all' | 'at-risk' | 'healthy'>('all');
   const [page, setPage] = useState(1);
-  const [currentStaleDemos, setCurrentStaleDemos] = useState(staleDemos);
-  const [deletingDemoIds, setDeletingDemoIds] = useState<number[]>([]);
-  const [staleDemoDeleteError, setStaleDemoDeleteError] = useState<string | null>(null);
-  const [confirmDeleteDemo, setConfirmDeleteDemo] = useState<StaleDemo | null>(null);
 
   const filtered = useMemo(() => {
-    let result = communities;
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter((c) => c.name.toLowerCase().includes(q));
-    }
-
-    if (typeFilter !== 'all') {
-      result = result.filter((c) => c.community_type === typeFilter);
-    }
-
-    if (complianceFilter === 'at-risk') {
-      result = result.filter((c) => c.complianceScore !== null && c.complianceScore < 70);
-    } else if (complianceFilter === 'healthy') {
-      result = result.filter((c) => c.complianceScore === null || c.complianceScore >= 70);
-    }
-
-    result = [...result].sort((a, b) => {
+    const result = applyClientFilter(clients, filter, search, typeFilter);
+    return [...result].sort((a, b) => {
       switch (sort) {
         case 'name-asc': return a.name.localeCompare(b.name);
         case 'name-desc': return b.name.localeCompare(a.name);
@@ -79,14 +102,12 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
         default: return 0;
       }
     });
-
-    return result;
-  }, [communities, search, typeFilter, complianceFilter, sort]);
+  }, [clients, filter, search, typeFilter, sort]);
 
   // Reset pagination when filters change.
   useEffect(() => {
     setPage(1);
-  }, [search, typeFilter, complianceFilter]);
+  }, [filter, search, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
@@ -96,41 +117,17 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
     }
   }, [page, totalPages]);
 
-  useEffect(() => {
-    setCurrentStaleDemos(staleDemos);
-  }, [staleDemos]);
-
-  const isFiltered = filtered.length < communities.length;
+  const isFiltered = filtered.length < clients.length;
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const showDisputes = filter === 'all' || filter === 'rootless';
 
-  const executeDeleteDemo = useCallback(async (demo: StaleDemo) => {
-    setStaleDemoDeleteError(null);
-    setDeletingDemoIds((previousIds) =>
-      previousIds.includes(demo.id)
-        ? previousIds
-        : [...previousIds, demo.id],
-    );
-
-    try {
-      const response = await fetch(`/api/admin/demos/${demo.id}`, { method: 'DELETE' });
-      if (response.ok) {
-        setCurrentStaleDemos((previousDemos) =>
-          previousDemos.filter((existingDemo) => existingDemo.id !== demo.id),
-        );
-      } else {
-        const errorData = await response.json().catch(() => null);
-        const message = errorData?.error?.message || 'Failed to delete demo. Please try again.';
-        setStaleDemoDeleteError(message);
-      }
-    } catch (error) {
-      console.error('Failed to delete demo:', error);
-      setStaleDemoDeleteError('A network error occurred. Please check your connection and try again.');
-    } finally {
-      setDeletingDemoIds((previousIds) =>
-        previousIds.filter((existingId) => existingId !== demo.id),
-      );
-    }
-  }, []);
+  const tabCounts: Record<ClientFilter, number> = {
+    all: counts.all,
+    past_due: counts.pastDue,
+    at_risk: counts.atRisk,
+    trialing: counts.trialing,
+    rootless: counts.rootless,
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -139,10 +136,20 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
         <h1 className="text-xl font-semibold text-content">Client Portfolio</h1>
         <p className="mt-0.5 text-sm text-content-tertiary">
           {isFiltered
-            ? `${filtered.length} of ${communities.length} communities`
-            : `${communities.length} communities`}
+            ? `${filtered.length} of ${clients.length} communities`
+            : `${clients.length} communities`}
         </p>
       </div>
+
+      {/* Quick filters */}
+      <QuickFilterTabs
+        tabs={FILTER_TABS.map((tab) => ({ ...tab, count: tabCounts[tab.value] }))}
+        active={filter}
+        onChange={(value) => setFilter(value as ClientFilter)}
+      />
+
+      {/* Dispute queue */}
+      {showDisputes && <DisputeBanner disputes={disputes} />}
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3">
@@ -173,20 +180,6 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-content-disabled" />
         </div>
 
-        {/* Compliance filter */}
-        <div className="relative">
-          <select
-            value={complianceFilter}
-            onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'at-risk' | 'healthy')}
-            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-          >
-            <option value="all">All compliance</option>
-            <option value="at-risk">At risk (&lt;70%)</option>
-            <option value="healthy">Healthy (≥70%)</option>
-          </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-content-disabled" />
-        </div>
-
         {/* Sort */}
         <div className="relative">
           <select
@@ -212,60 +205,10 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {paginated.map((c) => {
-              const type = COMMUNITY_TYPE_LABELS[c.community_type] ?? COMMUNITY_TYPE_LABELS.condo_718!;
-              const status = SUBSCRIPTION_STATUS_LABELS[c.subscription_status ?? ''];
-              return (
-                <Link
-                  key={c.id}
-                  href={`/clients/${c.id}`}
-                  className="flex flex-col rounded-lg border border-edge bg-surface-card p-5 shadow-e1 transition-shadow hover:shadow-e2"
-                >
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-content" title={c.name}>{c.name}</p>
-                      {(c.city || c.state) && (
-                        <p className="mt-0.5 text-xs text-content-tertiary">
-                          {[c.city, c.state].filter(Boolean).join(', ')}
-                        </p>
-                      )}
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${type.className}`}>
-                      {type.label}
-                    </span>
-                  </div>
-
-                  <div className="mt-auto flex items-center justify-between pt-3 border-t border-edge-subtle">
-                    <div className="flex items-center gap-2">
-                      {status ? (
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
-                          {status.label}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-content-disabled">—</span>
-                      )}
-                      {c.complianceScore !== null && (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                          c.complianceScore >= 70
-                            ? 'bg-status-success-subtle text-status-success'
-                            : 'bg-status-danger-subtle text-status-danger'
-                        }`}>
-                          {c.complianceScore < 70
-                            ? <AlertTriangle size={10} />
-                            : <ShieldCheck size={10} />
-                          }
-                          {c.complianceScore}%
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-content-disabled">
-                      {format(new Date(c.created_at), 'MMM d, yyyy')}
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+            {paginated.map((c) => (
+              <ClientCard key={c.id} client={c} />
+            ))}
           </div>
 
           {totalPages > 1 && (
@@ -292,91 +235,6 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
             </nav>
           )}
         </>
-      )}
-
-      {/* Stale Demos card */}
-      {currentStaleDemos.length > 0 && (
-        <div className="rounded-lg border border-status-warning-border bg-surface-card p-5 shadow-e1">
-          <h2 className="mb-3 text-sm font-semibold text-content">
-            Stale Demos
-            <span className="ml-2 rounded-full bg-status-warning-subtle px-2 py-0.5 text-xs font-medium text-status-warning">
-              {currentStaleDemos.length}
-            </span>
-          </h2>
-          {staleDemoDeleteError && (
-            <p className="mb-3 text-xs font-medium text-status-danger">{staleDemoDeleteError}</p>
-          )}
-          <div className="space-y-2">
-            {currentStaleDemos.map((demo) => {
-              const badge = staleBadge(demo.created_at);
-              const typeLabel = COMMUNITY_TYPE_LABELS[demo.template_type]?.label ?? demo.template_type;
-              const isDeleting = deletingDemoIds.includes(demo.id);
-              return (
-                <div
-                  key={demo.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-page px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <span className="truncate text-sm font-medium text-content">{demo.prospect_name}</span>
-                    <span className="ml-2 text-xs text-content-tertiary">{typeLabel}</span>
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Delete demo for ${demo.prospect_name}`}
-                    className="shrink-0 rounded p-1 text-content-disabled transition-colors hover:bg-status-danger-bg hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={isDeleting}
-                    onClick={() => setConfirmDeleteDemo(demo)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Delete confirmation dialog */}
-      {confirmDeleteDemo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="w-full max-w-md rounded-lg bg-surface-card p-6 shadow-e3">
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-base font-semibold text-content">Delete Demo</h3>
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteDemo(null)}
-                className="rounded p-1 text-content-disabled hover:text-content-secondary"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <p className="text-sm text-content-secondary mb-5">
-              Delete the demo for <strong>{confirmDeleteDemo.prospect_name}</strong>? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteDemo(null)}
-                className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void executeDeleteDemo(confirmDeleteDemo);
-                  setConfirmDeleteDemo(null);
-                }}
-                className="rounded-md bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
