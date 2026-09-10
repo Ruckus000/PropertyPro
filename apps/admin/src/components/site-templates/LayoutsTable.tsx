@@ -8,6 +8,10 @@
  * description, tier, featured + archived flags — via the
  * PATCH /api/admin/site-templates/layouts/[slug] endpoint. The layout React
  * components themselves ship via PR; only catalog metadata is editable here.
+ *
+ * Two render sites, selected by `variant` (see the prop's own docblock):
+ * `/site-templates` (the hub) passes `cards` for the read-only summary, and
+ * `/site-templates/layouts` passes `table` for the editing view.
  */
 import { useState } from 'react';
 import { Star, Archive } from 'lucide-react';
@@ -32,40 +36,43 @@ export interface LayoutRow {
 interface Props {
   layouts: LayoutRow[];
   /**
-   * "table" (default) is the editing view — inline metadata edit form, used
-   * where this component has always lived. "cards" is the read-only summary
-   * for the site-templates hub (task-18-dispatch-notes.md correction #2/#3):
-   * no edit affordance, just the catalog at a glance.
+   * Which of the two render sites this is:
+   *
+   *  - `"cards"` — the `/site-templates` hub. Read-only summary, no edit
+   *    affordance, just the catalog at a glance.
+   *  - `"table"` (default) — `/site-templates/layouts`, the editing view:
+   *    inline metadata edit form wired to
+   *    `PATCH /api/admin/site-templates/layouts/[slug]`.
+   *
+   * The default stays `"table"` so the editing view is what you get by
+   * omission; the hub is the one that opts out.
    */
   variant?: 'table' | 'cards';
 }
 
 const TIERS: LayoutRow['tier'][] = ['essentials', 'professional', 'pm'];
 
-function TierBadge({ tier }: { tier: LayoutRow['tier'] }) {
-  const palette: Record<LayoutRow['tier'], string> = {
-    essentials: 'bg-status-info-subtle text-status-info',
-    professional: 'bg-purple-100 text-purple-800', // design-tokens:exempt — categorical PLAN chip, not a status; design.md keeps plan chips on their own scale
-    pm: 'bg-status-warning-subtle text-status-warning',
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${palette[tier]}`}>
-      {tier}
-    </span>
-  );
-}
-
 /**
- * Cards-view tier badge — the hub's own mapping onto the shared status Badge
- * (essentials→info, professional→owner, pm→warning), distinct from the
- * table view's `TierBadge` above, which predates this component gaining a
- * cards variant and stays as-is for the editing view.
+ * The ONE tier→colour answer, shared by both variants. There used to be two —
+ * a hand-rolled `TierBadge` for the table and this map for the cards — which
+ * meant two answers to "what colour is professional" in one file. The map wins
+ * because it goes through the shared `Badge`, so a tier chip here matches every
+ * other chip in the console (and it retires a `design-tokens:exempt` for
+ * `bg-purple-100`).
  */
-const CARDS_TIER_VARIANT: Record<LayoutRow['tier'], BadgeVariant> = {
+const TIER_VARIANT: Record<LayoutRow['tier'], BadgeVariant> = {
   essentials: 'info',
   professional: 'owner',
   pm: 'warning',
 };
+
+function TierBadge({ tier }: { tier: LayoutRow['tier'] }) {
+  return (
+    <Badge variant={TIER_VARIANT[tier]} size="sm" className="capitalize">
+      {tier}
+    </Badge>
+  );
+}
 
 function LayoutCards({ layouts }: { layouts: LayoutRow[] }) {
   if (layouts.length === 0) {
@@ -94,9 +101,7 @@ function LayoutCards({ layouts }: { layouts: LayoutRow[] }) {
               )}
               <span className="font-medium text-content">{layout.displayName}</span>
             </div>
-            <Badge variant={CARDS_TIER_VARIANT[layout.tier]} size="sm">
-              {layout.tier}
-            </Badge>
+            <TierBadge tier={layout.tier} />
           </div>
           {layout.tagline && <p className="mt-1 text-sm italic text-content-secondary">{layout.tagline}</p>}
           {layout.description && <p className="mt-2 text-xs text-content-tertiary">{layout.description}</p>}
