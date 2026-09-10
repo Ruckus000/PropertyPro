@@ -155,27 +155,30 @@ pnpm --filter @propertypro/web test:e2e:prod
 > `localhost` regardless of `--hostname`, so mixing the two silently drops the
 > session (see the eighth addendum).
 >
-> **CI now runs 32 of the suite's 45 test blocks, across two runners.** (45 is from
-> `playwright test --list` per config — 35 default + 4 pdfjs + 6 tenant. Do not
-> count with `grep -c 'test('`; that is how an earlier note said 43.)
+> **CI does not run the whole suite. It runs two disjoint sets, across two runners.**
+> **Any count here must carry the date it was measured**, because these cascade every time a
+> spec gains a block — every undated number this paragraph used to carry was stale. For a
+> current figure, run `playwright test --list` per config; `grep -c 'test('` gives a wrong
+> answer.
 >
 > 1. The **localci suite's build step** (`pnpm build` → `test:e2e:prod` →
 >    `perf:check`) runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
->    (10 blocks) in one `test:e2e:prod` invocation. Those three are exactly the
+>    in one `test:e2e:prod` invocation. Those three are exactly the
 >    ones needing no DB, no Auth and no seed, which is what lets them run against
 >    a stub `DATABASE_URL` that was never started. This is also the only place
 >    that exercises a PRODUCTION build — do not fold it into the one below.
-> 2. **`.github/workflows/e2e.yml`** runs the 28 blocks in
+> 2. **`.github/workflows/e2e.yml`** runs the specs named in
 >    `apps/web/e2e/ci-safe-specs.json` via `playwright.ci.config.ts`, against a
 >    real Supabase stack (`supabase start` in `.supabase-ci/`, migrations,
 >    `pnpm seed:demo`) and a **dev** server — which is what `/dev/agent-login`
 >    requires, and why `next start` cannot host these. It is NOT a required
->    check, and it only fires on PRs touching app/package/e2e paths.
+>    check, and it only fires on PRs touching app/package/e2e paths. That file's
+>    `expectedTestCount` is the authority on how many blocks it expects; the
+>    workflow asserts it as a floor.
 >
-> **The remaining 13 blocks are still unexercised on a PR**: the 5 signup blocks
-> (owned by `stripe-e2e.yml` and conditional on its secrets), the 6 tenant-host
-> blocks (they need `:3002`), and the 2 `onboarding-first-run` `test.fixme`
-> blocks.
+> **Still unexercised on a PR**: the signup blocks (owned by `stripe-e2e.yml` and
+> conditional on its secrets), the tenant-host blocks (they need `:3002`), and the
+> `onboarding-first-run` `test.fixme` blocks.
 >
 > `support-access` joined the allowlist in #958. It had looked like a broken
 > spec — a 120s timeout on the admin popup — but the cause was that the admin
@@ -194,8 +197,10 @@ pnpm --filter @propertypro/web test:e2e:prod
 > the 5 Stripe signup blocks (no test-mode secrets locally) and the 2 deliberate
 > `onboarding-first-run` `test.fixme` blocks — that spec describes a 4-/5-step
 > wizard, but **both** condo and apartment ship the same 2-step one. The single
-> failure is `support-access`, which times out after 120s waiting for the admin
-> app's `popup` event after Start Session.
+> failure in *that* run was `support-access`, timing out after 120s on the admin
+> app's `popup` event — **since diagnosed and fixed** (see the paragraph above: the
+> cause was a missing admin environment, not the spec), so the 27/1/7 split is a
+> 2026-08-12 snapshot, not the current state.
 >
 > Before trusting a local number, confirm the port is clear AND
 > `ps -eo comm | grep -c vitest` is 0; also compare the CANARY TIMINGS

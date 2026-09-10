@@ -1,6 +1,7 @@
 # Deployment Runbook — PropertyPro Florida
 
-**Last Updated:** 2026-02-24
+**Last Updated:** 2026-09-09 — §6 rewritten, plus the environment table, §4.2's opening
+line, §7.1 and the *Subdomain Not Resolving* steps. Dated correction notes are inline.
 **Phase:** P4-60
 
 ---
@@ -23,7 +24,7 @@ PR branch ──push────────────────────
 
 | Environment | URL | Branch | Auto-deploy |
 |-------------|-----|--------|-------------|
-| Production | `getpropertypro.com` | `main` | Yes (via `deploy.yml` after CI passes) |
+| Production | `getpropertypro.com` | `main` | Yes (via `deploy.yml` on push to `main`, gated on Integration Tests — a `workflow_dispatch` run skips that gate; see §6.2) |
 | Preview | `*.vercel.app` (unique per PR) | PR branches | Yes (via native Vercel GitHub integration) |
 | Local dev | `localhost:3000` | Any | N/A |
 
@@ -140,7 +141,7 @@ drives the real signer and verifier and cannot pass without it.
 
 ### 4.2 The secrets that fail *silently*
 
-These three are grouped because they share a property nothing else in §4 has:
+These are grouped because they share a property nothing else in §4 has:
 **when they are missing, production keeps serving traffic and nothing reports a
 problem.** A missing `DATABASE_URL` announces itself immediately. These do not.
 
@@ -466,68 +467,49 @@ an unavoidable outage across all six addresses, and the expected failure is sile
 
 ### 6.1 Workflow Overview
 
+> `ci.yml` is **`disabled_manually`** and is deliberately absent from this table (#976 moved
+> lint/typecheck/test/build to localci — see §7.1, and `CLAUDE.md` for the step list).
+> `performance-budget-check.yml` (#804) and `notification-digest-cron.yml` (#920) were deleted
+> and are gone from it too. A former §6.2 drew `ci.yml`'s job graph; it was removed 2026-09-09,
+> because a diagram of a workflow that does not run cannot be usefully corrected.
+
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| **CI** | `ci.yml` | PR + push to main | lint → typecheck → test → build (fail-fast) |
-| **Deploy** | `deploy.yml` | Push to main CI success | Production deploy only |
+| **Deploy** | `deploy.yml` | Push to `main` | Production deploy, gated on Integration Tests |
+| **Deploy (manual)** | `deploy.yml` | `workflow_dispatch` | Same deploy, **ungated** — the Integration Tests step is `if: github.event_name == 'push'` |
 | **Integration Tests** | `integration-tests.yml` | PR + push to main | Database integration tests (requires Postgres service) |
-| **Performance Budget** | `performance-budget-check.yml` | PR (src changes) | Bundle size budget enforcement |
 | **DB Access Guard** | `scoped-db-access-guard.yml` | PR + push (src changes) | Scoped DB access pattern verification |
 | **Branch Freshness** | `branch-freshness-guard.yml` | PR | Rebase enforcement (max 20 commits behind) |
 | **Demo Reset** | `reset-demo.yml` | Daily 3:00 AM ET | Nightly demo data reset |
-| **Notification Digest** | `notification-digest-cron.yml` | Every 15 minutes | Process notification digest queue |
 
-### 6.2 CI Pipeline Stages
+### 6.2 Branch Protection Rules
 
-```
-lint ──────────────┐
-typecheck ─────────┤
-Unit Tests ────────┤── all six run in PARALLEL from t=0
-no-mock-guard ─────┤
-migration-ordering ┤
-perf-check ────────┴──► Build (assertion gate, ~4s)
+**Do not read the settings off this page — ask GitHub:**
+
+```bash
+gh api repos/Ruckus000/PropertyPro/branches/main/protection \
+  --jq '{contexts:.required_status_checks.contexts, strict:.required_status_checks.strict,
+         reviews:.required_pull_request_reviews, admins:.enforce_admins.enabled}'
 ```
 
-- **lint**: `pnpm lint` (ESLint + Turbo + DB access guard) + CSS variable migration check
-- **typecheck**: `pnpm typecheck` (TypeScript strict mode via Turbo)
-- **Unit Tests**: `vitest run --coverage` in `apps/web`, plus the package and admin
-  suites. Split into `node` and `jsdom` vitest projects — see
-  `apps/web/vitest.shared.ts` before adding test files.
-- **no-mock-guard** / **migration-ordering**: repo guards.
-- **perf-check**: **owns the only production build.** Runs `pnpm build`, the
-  PDF.js production smoke test, and `pnpm perf:check`. The bundle-size budget
-  reads the emitted build output from disk, which is why the build lives here.
-- **Build**: does **not** build. It is a required status check that asserts
-  `needs['perf-check'].result == 'success'` under `if: always()`. The assertion
-  is deliberate: GitHub treats a required check as satisfied when it is
-  "successful, **skipped**, or neutral", so a bare `needs:` would let a *skipped*
-  perf-check skip this job too and satisfy both contexts with no build having
-  run. Verified by fault injection: skipping perf-check makes this job **fail**
-  rather than skip.
+Measured 2026-09-09: `contexts: ["localci/suite"]`, `strict: false`, `reviews: null`,
+`admins: false`. **One required check, and nothing else is enforced.**
 
-Whole-run wall clock is roughly 8 minutes, bounded by Unit Tests.
+> This section previously carried four `[x]` boxes — required reviews, `strict`, and
+> no-bypass — under a note claiming it had been "verified live against the branch protection
+> API". Three of the four were not set. A checkbox is a claim about another system's state, and
+> this file cannot keep one true; the command above can.
 
-### 6.3 Branch Protection Rules
+`localci/suite` is the single required check. Seven of the eight jobs `ci.yml` required until
+#976 — `Lint`, `Typecheck`, `Unit Tests`, `no-mock-guard`, `migration-ordering`, `perf-check`,
+`Build` — still run, as steps inside `localci/suite` and the blocking pre-push `gate` rather
+than as separate GitHub contexts.
 
-Configure in GitHub > Settings > Branches > Branch protection rules for `main`:
-
-- [x] Require a pull request before merging
-- [x] Require status checks to pass before merging
-  - **Required check (one): `localci/suite`.** Verified live against the branch
-    protection API. The eight-job list below is what `ci.yml` required until #976
-    disabled it and moved CI to localci; those checks all still run, but as steps
-    inside `localci/suite` (plus the blocking pre-push `gate`), not as separate
-    GitHub contexts. Historical: `Lint`, `Typecheck`, `Unit Tests`,
-    `no-mock-guard`, `migration-ordering`, `perf-check`, `Build`,
-    `integration-tests`
-- [x] Require branches to be up to date before merging (`strict`) — every PR must
-      be rebased onto current `main`, so expect at least one rebase cycle on a
-      busy day
-- [x] Do not allow bypassing the above settings
-
-> `integration-tests` is a required check for **merging**, but it is a separate
-> workflow and `deploy.yml` triggers on `CI` alone — so it does not currently
-> gate the production **deploy**. Tracked separately.
+**`integration-tests` is the exception: it is not a localci step.** `localci.yml:3` lists
+`integration` among the workflows localci does not cover, and it still runs on GitHub as its
+own workflow. It is **not** a required check for merging — but a *pushed* deploy is gated on
+it, because `deploy.yml`'s `gate` job resolves that run for the exact SHA and every deploy job
+`needs:` it. A `workflow_dispatch` deploy is not: that step is push-only.
 
 ## 7. Deployment Procedures
 
@@ -539,9 +521,14 @@ Production deploys happen automatically when a PR is merged to `main`:
    typecheck and migration-ordering in the blocking pre-push `gate`; unit tests,
    no-mock-guard, Build and perf-check in the detached `suite`, which reports back
    as `localci/suite`
-2. PR is reviewed and approved (PR previews are created by the native Vercel GitHub integration during the PR lifecycle)
+2. PR is reviewed — by convention, **not** by enforcement: branch protection records
+   `reviews: null` (§6.2). PR previews are created by the native Vercel GitHub integration
+   during the PR lifecycle
 3. PR is merged to `main`
-4. `deploy.yml` triggers after CI succeeds on `main`: installs deps, then builds via Vercel CLI and deploys to production. **It deploys CODE ONLY — it does not run migrations.**
+4. `deploy.yml` triggers on the **push to `main`** — not on a CI result; `ci.yml` has been
+   `disabled_manually` since #976. It installs deps, then builds via Vercel CLI and deploys
+   to production, gated on the Integration Tests run for that SHA (§6.2).
+   **It deploys CODE ONLY — it does not run migrations.**
 5. Smoke test verifies HTTP 200 at the deployment URL
 6. (Optional) Verify `/api/v1/internal/readiness` reports `schema_compatibility.status = "pass"`
 
@@ -787,10 +774,12 @@ See §4.2 — and note that adding a per-route secret does **not** fix this.
 
 ### Subdomain Not Resolving
 
-1. Verify wildcard DNS record exists in Cloudflare
-2. Verify wildcard domain is added in Vercel project settings
-3. Check that Cloudflare proxy is set to "DNS only" (grey cloud)
-4. Wait up to 5 minutes for DNS propagation
+**DNS is on Vercel, not Cloudflare** — see §5.3. There is no proxy setting to get wrong, and
+no Cloudflare dashboard to check.
+
+1. Verify the wildcard domain is added in Vercel project settings
+2. `dig <slug>.getpropertypro.com` — confirm it resolves to Vercel
+3. Wait up to 5 minutes for DNS propagation
 
 ### Webhook Failures
 

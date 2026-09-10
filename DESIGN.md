@@ -41,9 +41,9 @@ packages/tokens/src/          generated packages/ui/src/styles/tokens.css   pack
 | Text | `--text-secondary` | Supporting text, descriptions |
 | Text | `--text-tertiary` | Metadata, timestamps |
 | Text | `--text-disabled` | Disabled controls |
-| Surface | `--surface-page` | Page background (`--surface-page-warm`, #F5F5F4 — a purpose-named warm neutral, not a new scale family) |
-| Surface | `--surface-card` | Card/panel background (white) |
-| Surface | `--surface-muted` | Subdued sections (gray-100) |
+| Surface | `--surface-page` | Page background — `var(--sand-50)`, #FBF7F1 |
+| Surface | `--surface-card` | Card/panel background — `var(--sand-0)`, #FFFEFC |
+| Surface | `--surface-muted` | Subdued sections — `var(--sand-100)`, #F6EFE6 |
 | Border | `--border-default` | Card boundaries, dividers |
 | Border | `--border-subtle` | Light separators |
 | Border | `--border-strong` | Emphasis borders |
@@ -52,7 +52,9 @@ packages/tokens/src/          generated packages/ui/src/styles/tokens.css   pack
 | Status | `--status-success-*` / `--status-danger-*` / `--status-warning-*` | fg/bg/border per status |
 | Accent | `--status-premium-*` | "Florida Modern" gold — Professional-tier / premium markers (see `PlanBadge`). Not a status variant (no icon); consumed via `bg-status-premium-subtle` / `text-status-premium` (or `var()` refs in shared UI). |
 
-`--surface-page-warm` is a purpose-named primitive for the page surface, not the start of a new neutral scale family. The project still uses `--gray-*` as its only neutral scale.
+The neutral story is two scales, not one: `--gray-*` for text and borders, and the warm `sand` ramp for surfaces (`packages/tokens/src/primitives.ts`, landed 2026-07-15). `--surface-page` resolves to `var(--sand-50)`.
+
+> **`packages/ui/src/styles/tokens.css` is GENERATED from `packages/tokens/src/` and is the authority.** A table here restates a generated file and will drift from it; this one did, for about eight weeks, naming a `--surface-page-warm` that exists nowhere in the codebase. Read the token values out of `tokens.css`; use this table for the vocabulary and the intent.
 
 ### Spacing
 

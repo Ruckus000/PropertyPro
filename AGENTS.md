@@ -37,7 +37,7 @@ Drizzle Kit does not auto-increment migration numbers. The pipeline has known fr
 
 ## 3. Compliance Engine (Core Differentiator)
 
-The compliance engine tracks Florida statutory obligations for condos (§718, 16 items) and HOAs (§720, 10 items). Templates live in `packages/shared/src/compliance/templates.ts`. Apartments are excluded via feature gating.
+The compliance engine tracks Florida statutory obligations for condos (§718, 17 items) and HOAs (§720, 10 items). Templates live in `packages/shared/src/compliance/templates.ts`. Apartments are excluded via feature gating.
 
 - **Status is computed at query time**, not stored — prevents stale data. Statuses: `satisfied`, `unsatisfied`, `overdue`, `not_applicable`.
 - **30-day posting rule:** Documents must be posted within 30 days of creation. Deadline math uses `date-fns` with weekend rollover (Saturday/Sunday → Monday).
@@ -114,7 +114,7 @@ The admin app is a separate Next.js application for platform administrators (PM 
 - Deletion request dashboard (intervene, recover)
 - Platform dashboard with KPI stats
 
-**Auth:** Admin routes use `requirePlatformAdmin()` which verifies `pm_admin` role. CORS is handled per-route with `corsHeaders()` from `@/lib/api/admin-cors`.
+**Auth:** Admin routes use `requirePlatformAdmin()`, which reads the Supabase session and then requires a `platform_admin_users` row parsing as `z.enum(['super_admin'])` (`apps/admin/src/lib/auth/platform-admin.ts:19`). `super_admin` is **system-scoped** and stored outside `user_roles`; no community-scoped role grants it. (This line previously said `pm_admin` — wrong role, and a name ADR-006 retired.) CORS is handled per-route with `corsHeaders()` from `@/lib/api/admin-cors`.
 
 **DB access:** The admin app uses Supabase admin client (`createAdminClient()`) for direct queries — it is NOT in the scoped client allowlist and does NOT use `createScopedClient()`.
 
