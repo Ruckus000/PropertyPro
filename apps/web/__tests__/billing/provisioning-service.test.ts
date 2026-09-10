@@ -29,6 +29,9 @@ const {
   markPendingSignupPaymentCompletedMock,
   insertProvisioningJobFenceMock,
   getProvisioningJobIdBySignupRequestIdMock,
+  linkCommunityToBillingGroupMock,
+  recalculateVolumeTierMock,
+  createCommunityForPmMock,
   andMock,
   ascMock,
   eqMock,
@@ -56,6 +59,9 @@ const {
     markPendingSignupPaymentCompletedMock: vi.fn().mockResolvedValue(undefined),
     insertProvisioningJobFenceMock: vi.fn().mockResolvedValue(undefined),
     getProvisioningJobIdBySignupRequestIdMock: vi.fn().mockResolvedValue(null),
+    linkCommunityToBillingGroupMock: vi.fn().mockResolvedValue(undefined),
+    recalculateVolumeTierMock: vi.fn().mockResolvedValue(undefined),
+    createCommunityForPmMock: vi.fn().mockResolvedValue({ communityId: 99, slug: 'oceanview' }),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     ascMock: vi.fn((col: unknown) => ({ _asc: col })),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
@@ -79,6 +85,8 @@ const {
       errorMessage: 'provisioning_jobs.error_message',
     },
     pendingSignupsTable: {
+      id: 'pending_signups.id',
+      planKey: 'pending_signups.plan_key',
       signupRequestId: 'pending_signups.signup_request_id',
       authUserId: 'pending_signups.auth_user_id',
       primaryContactName: 'pending_signups.primary_contact_name',
@@ -169,6 +177,18 @@ vi.mock('@/lib/services/stripe-webhook-service', () => ({
   markPendingSignupPaymentCompleted: markPendingSignupPaymentCompletedMock,
   insertProvisioningJobFence: insertProvisioningJobFenceMock,
   getProvisioningJobIdBySignupRequestId: getProvisioningJobIdBySignupRequestIdMock,
+}));
+
+// `runAddToGroupProvisioning` lives in the module under test, so the reconciler's
+// add_to_group branch really executes it. These three are everything it reaches
+// outside this module; provisioning-service imports nothing else from either.
+vi.mock('@/lib/billing/billing-group-service', () => ({
+  linkCommunityToBillingGroup: linkCommunityToBillingGroupMock,
+  recalculateVolumeTier: recalculateVolumeTierMock,
+}));
+
+vi.mock('@/lib/pm/create-community', () => ({
+  createCommunityForPm: createCommunityForPmMock,
 }));
 
 // Service import must come after all vi.mock calls
@@ -798,13 +818,38 @@ describe('runProvisioning', () => {
 // reconcileLostCheckoutSignups (A1 — paid-but-webhook-lost recovery)
 // ---------------------------------------------------------------------------
 
-function buildReconcileDb(rows: unknown[]) {
+function buildReconcileDb(
+  rows: unknown[],
+  options: { claimed?: unknown[]; addToGroupSignup?: unknown } = {},
+) {
   const limitMock = vi.fn().mockResolvedValue(rows);
   const orderByMock = vi.fn(() => ({ limit: limitMock }));
-  const whereMock = vi.fn(() => ({ orderBy: orderByMock }));
+  // Two select shapes share this db. The reconciler does
+  // `.where().orderBy().limit()`; `runAddToGroupProvisioning`, which the
+  // add_to_group branch really executes, does `.where().limit(1)` with no
+  // orderBy. Serving both is what lets one helper cover the whole path.
+  const signupLimitMock = vi
+    .fn()
+    .mockResolvedValue(options.addToGroupSignup ? [options.addToGroupSignup] : rows);
+  const whereMock = vi.fn(() => ({ orderBy: orderByMock, limit: signupLimitMock }));
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));
-  return { select: selectMock };
+
+  // Likewise two update shapes: the CAS calls `.returning()`, while
+  // runAddToGroupProvisioning's updates are awaited straight off `.where()`.
+  const returningMock = vi.fn().mockResolvedValue(options.claimed ?? [{ id: 7n }]);
+  const setMock = vi.fn(() => ({
+    where: vi.fn(() => {
+      const awaitable = Promise.resolve(undefined) as Promise<unknown> & {
+        returning?: typeof returningMock;
+      };
+      awaitable.returning = returningMock;
+      return awaitable;
+    }),
+  }));
+  const updateMock = vi.fn(() => ({ set: setMock }));
+
+  return { select: selectMock, update: updateMock, __spies: { setMock, updateMock } };
 }
 
 describe('reconcileLostCheckoutSignups', () => {
@@ -853,6 +898,116 @@ describe('reconcileLostCheckoutSignups', () => {
       signupRequestId: 'req_lost',
       stripeEventId: 'reconcile:cs_lost',
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // add_to_group rows take a different state machine. Before the session id was
+  // persisted for them they never got past the `!sessionId` guard; now they can,
+  // so the reconciler has to divert them.
+  // ---------------------------------------------------------------------------
+
+  const ATG_ROW = {
+    id: 7n,
+    signupRequestId: 'add-42-abc',
+    payload: { kind: 'add_to_group', billingGroupId: 42, stripeCheckoutSessionId: 'cs_atg' },
+  };
+  const ATG_SIGNUP = {
+    id: 7n,
+    authUserId: 'pm-user-1',
+    planKey: 'essentials',
+    payload: {
+      kind: 'add_to_group',
+      billingGroupId: 42,
+      fullInput: {
+        name: 'Oceanview Towers',
+        communityType: 'condo_718',
+        addressLine1: '123 Ocean Blvd',
+        city: 'Miami',
+        state: 'FL',
+        zipCode: '33139',
+        subdomain: 'oceanview',
+        timezone: 'America/New_York',
+        unitCount: 48,
+      },
+    },
+  };
+  const ATG_SESSION = {
+    status: 'complete',
+    customer: 'cus_atg',
+    subscription: { id: 'sub_atg', status: 'active' },
+  };
+
+  it('routes an add_to_group row to its own provisioning path', async () => {
+    const db = buildReconcileDb([ATG_ROW], { addToGroupSignup: ATG_SIGNUP });
+    createUnscopedClientMock.mockReturnValue(db);
+    retrieveCheckoutSessionMock.mockResolvedValue(ATG_SESSION);
+
+    const summary = await reconcileLostCheckoutSignups();
+
+    expect(summary.recovered).toBe(1);
+    expect(summary.failed).toBe(0);
+    // The two things the generic path would never do.
+    expect(createCommunityForPmMock).toHaveBeenCalled();
+    expect(linkCommunityToBillingGroupMock).toHaveBeenCalledWith(99, 42);
+    expect(recalculateVolumeTierMock).toHaveBeenCalledWith(42);
+  });
+
+  // THE assertion this branch exists for. A job row would enroll the signup in
+  // recoverStuckProvisioningJobs, which INNER JOINs provisioning_jobs and drives
+  // the GENERIC machine — making one wrong pass permanent instead of preventing it.
+  it('inserts NO provisioning job fence and never runs the generic machine', async () => {
+    const db = buildReconcileDb([ATG_ROW], { addToGroupSignup: ATG_SIGNUP });
+    createUnscopedClientMock.mockReturnValue(db);
+    retrieveCheckoutSessionMock.mockResolvedValue(ATG_SESSION);
+
+    await reconcileLostCheckoutSignups();
+
+    expect(insertProvisioningJobFenceMock).not.toHaveBeenCalled();
+    expect(markPendingSignupPaymentCompletedMock).not.toHaveBeenCalled();
+    expect(getProvisioningJobIdBySignupRequestIdMock).not.toHaveBeenCalled();
+  });
+
+  // The CAS is both the concurrency guard and the expiry guard: moving off
+  // `checkout_started` is what stops expireStalePendingSignups releasing a
+  // PAYING customer's subdomain at the 24h mark.
+  it('claims the row by moving it off checkout_started', async () => {
+    const db = buildReconcileDb([ATG_ROW], { addToGroupSignup: ATG_SIGNUP });
+    createUnscopedClientMock.mockReturnValue(db);
+    retrieveCheckoutSessionMock.mockResolvedValue(ATG_SESSION);
+
+    await reconcileLostCheckoutSignups();
+
+    expect(db.__spies.setMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'payment_completed' }),
+    );
+    expect(eqMock).toHaveBeenCalledWith(pendingSignupsTable.status, 'checkout_started');
+  });
+
+  it('provisions nothing when the CAS loses the race', async () => {
+    const db = buildReconcileDb([ATG_ROW], { addToGroupSignup: ATG_SIGNUP, claimed: [] });
+    createUnscopedClientMock.mockReturnValue(db);
+    retrieveCheckoutSessionMock.mockResolvedValue(ATG_SESSION);
+
+    const summary = await reconcileLostCheckoutSignups();
+
+    expect(summary.recovered).toBe(0);
+    expect(summary.skippedNotComplete).toBe(1);
+    expect(createCommunityForPmMock).not.toHaveBeenCalled();
+  });
+
+  // Control: an UNPAID abandoned add_to_group checkout must stay at
+  // checkout_started so the 24h sweep can still release its subdomain — which is
+  // the whole point of stamping expires_at on these rows.
+  it('leaves an abandoned add_to_group checkout at checkout_started', async () => {
+    const db = buildReconcileDb([ATG_ROW], { addToGroupSignup: ATG_SIGNUP });
+    createUnscopedClientMock.mockReturnValue(db);
+    retrieveCheckoutSessionMock.mockResolvedValue({ status: 'open' });
+
+    const summary = await reconcileLostCheckoutSignups();
+
+    expect(summary.skippedNotComplete).toBe(1);
+    expect(db.__spies.setMock).not.toHaveBeenCalled();
+    expect(createCommunityForPmMock).not.toHaveBeenCalled();
   });
 
   it('leaves an abandoned (not complete) checkout alone', async () => {
