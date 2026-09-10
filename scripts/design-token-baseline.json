@@ -15,33 +15,9 @@
     "bare-focus-ring": 4
   },
   "apps/admin/src/components/clients/ClientPortfolio.tsx": {
-    "bare-focus-ring": 12
-  },
-  "apps/admin/src/components/clients/CommunityAccess.tsx": {
-    "bare-focus-ring": 18
-  },
-  "apps/admin/src/components/clients/CommunityMembers.tsx": {
-    "bare-focus-ring": 3
-  },
-  "apps/admin/src/components/clients/CommunitySettingsEditor.tsx": {
-    "bare-focus-ring": 24
-  },
-  "apps/admin/src/components/clients/CommunityWebsiteEditor.tsx": {
-    "bare-focus-ring": 6
+    "bare-focus-ring": 9
   },
   "apps/admin/src/components/clients/StartSessionDialog.tsx": {
-    "bare-focus-ring": 9
-  },
-  "apps/admin/src/components/deletion-requests/DeletionRequestsDashboard.tsx": {
-    "bare-focus-ring": 9
-  },
-  "apps/admin/src/components/demo/BrandingFormFields.tsx": {
-    "bare-focus-ring": 6
-  },
-  "apps/admin/src/components/demo/CommunityEditSection.tsx": {
-    "bare-focus-ring": 15
-  },
-  "apps/admin/src/components/demo/ConvertDemoDialog.tsx": {
     "bare-focus-ring": 9
   },
   "apps/admin/src/components/demo/DemoEditDrawer.tsx": {
@@ -60,16 +36,10 @@
     "arbitrary-font": 2,
     "raw-hex": 3
   },
-  "apps/admin/src/components/demo/ProspectEditSection.tsx": {
-    "bare-focus-ring": 9
-  },
   "apps/admin/src/components/demo/ReviewStep.tsx": {
     "arbitrary-font": 7,
     "raw-hex": 2,
     "arbitrary-color": 2
-  },
-  "apps/admin/src/components/settings/PlatformSettings.tsx": {
-    "bare-focus-ring": 3
   },
   "apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx": {
     "bare-focus-ring": 3
