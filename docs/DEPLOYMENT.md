@@ -467,11 +467,25 @@ but now it *looks* configured, which is worse than the honest bounce.
    _dmarc  TXT  v=DMARC1; p=quarantine; sp=quarantine; pct=100; rua=mailto:<id>@dmarc.postmarkapp.com; aspf=r;
    ```
 
-   `rua=` points at Postmark's free DMARC Digests (no account, no mailbox,
-   weekly summaries by email) because aggregate reports arrive as gzipped XML
-   attachments — exactly the payload class the webhook deliberately does not
-   store. Pointing `rua=` at our own domain would deliver them somewhere that
-   drops them.
+   `rua=` points at Postmark's free DMARC Digests (weekly summaries by
+   email, and no mailbox of ours has to accept gzipped XML) because aggregate
+   reports arrive as gzipped XML attachments — exactly the payload class the
+   webhook deliberately does not store. Pointing `rua=` at our own domain would
+   deliver them somewhere that drops them.
+
+   **The weekly digest lands in `lordruckus.nb@gmail.com`** — the address
+   registered with DMARC Digests when the record went in on 2026-09-07, and the
+   only place these reports become readable. Named here because it is **not** a
+   mailbox any tooling in this repo can see, so nothing here can notice a digest
+   arriving, or failing to. Receivers emit aggregate reports roughly daily;
+   Postmark summarises them weekly.
+
+   **Do not try to confirm that registration from DNS.** Both
+   `<domain>._report._dmarc.postmarkapp.com` and its `dmarc.` sibling are
+   **wildcards** — checked 2026-09-10, they return the same answer for a domain
+   nobody owns. They authorise the reporting, which is all RFC 7489 §7.1 asks,
+   but they are not evidence of who registered it. An earlier revision of this
+   section cited one of them as though it were.
 
    **`fo=1` is not in the live record, and its absence costs nothing.** `fo`
    selects which *forensic* reports are generated, and forensic reporting
