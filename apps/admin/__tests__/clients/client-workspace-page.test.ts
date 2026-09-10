@@ -69,6 +69,8 @@ function makeDb() {
     subscription_plan: 'starter',
     subscription_current_period_end_at: '2026-04-01T00:00:00.000Z',
     custom_domain: 'portal.sunsetcondo.org',
+    custom_domain_status: 'active',
+    custom_domain_verified_at: '2026-02-01T00:00:00.000Z',
     site_published_at: '2026-03-26T12:00:00.000Z',
     transparency_enabled: true,
     community_settings: null,
@@ -97,6 +99,16 @@ function makeDb() {
       resource_id: '42',
       admin_email: 'admin@getpropertypro.com',
       created_at: '2026-03-25T00:00:00.000Z',
+    },
+  ];
+
+  const snapshotRows = [
+    {
+      id: 5,
+      published_at: '2026-03-20T00:00:00.000Z',
+      change_count: 2,
+      change_labels: ['Hero updated'],
+      snapshot: { version: 2, pages: [], blocks: [] },
     },
   ];
 
@@ -133,6 +145,10 @@ function makeDb() {
       return resolvedChain({ data: activityRows });
     }
 
+    if (table === 'site_publish_snapshots') {
+      return resolvedChain({ data: snapshotRows });
+    }
+
     throw new Error(`makeDb(): no fixture registered for table "${table}"`);
   });
 
@@ -158,6 +174,8 @@ describe('ClientWorkspacePage data pass-through', () => {
     expect(community).toBeDefined();
 
     expect(community?.custom_domain).toBe('portal.sunsetcondo.org');
+    expect(community?.custom_domain_status).toBe('active');
+    expect(community?.custom_domain_verified_at).toBe('2026-02-01T00:00:00.000Z');
     expect(community?.site_published_at).toBe('2026-03-26T12:00:00.000Z');
     expect(community?.memberCount).toBe(12);
     expect(community?.documentCount).toBe(34);
@@ -177,6 +195,15 @@ describe('ClientWorkspacePage data pass-through', () => {
         resourceId: '42',
         adminEmail: 'admin@getpropertypro.com',
         createdAt: '2026-03-25T00:00:00.000Z',
+      },
+    ]);
+    expect(community?.snapshots).toEqual([
+      {
+        id: 5,
+        publishedAt: '2026-03-20T00:00:00.000Z',
+        changeCount: 2,
+        changeLabels: ['Hero updated'],
+        restorable: true,
       },
     ]);
   });

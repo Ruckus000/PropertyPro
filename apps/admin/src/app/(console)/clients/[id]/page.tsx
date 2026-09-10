@@ -12,6 +12,7 @@ import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
 import type { CommunitySettings } from '@/components/clients/community-settings';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getCommunityActivity } from '@/lib/server/community-activity';
+import { getCommunitySnapshots } from '@/lib/server/community-snapshots';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,8 @@ const CommunityRowSchema = z.object({
   subscription_plan: z.string().nullable(),
   subscription_current_period_end_at: z.string().nullable(),
   custom_domain: z.string().nullable(),
+  custom_domain_status: z.string().nullable(),
+  custom_domain_verified_at: z.string().nullable(),
   site_published_at: z.string().nullable(),
   transparency_enabled: z.boolean(),
   community_settings: z.record(z.string(), z.unknown()).nullable(),
@@ -65,7 +68,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   // Fetch community (need it to gate 404)
   const communityResult = await db
     .from('communities')
-    .select('id, name, slug, community_type, city, state, zip_code, address_line1, timezone, subscription_status, subscription_plan, subscription_current_period_end_at, custom_domain, site_published_at, transparency_enabled, community_settings, created_at, is_demo')
+    .select('id, name, slug, community_type, city, state, zip_code, address_line1, timezone, subscription_status, subscription_plan, subscription_current_period_end_at, custom_domain, custom_domain_status, custom_domain_verified_at, site_published_at, transparency_enabled, community_settings, created_at, is_demo')
     .eq('id', communityId)
     .is('deleted_at', null)
     .single();
@@ -80,7 +83,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   // recent activity in parallel. `getCommunityActivity` throws internally on
   // a query error, matching the "throw rather than degrade to empty" policy
   // below.
-  const [membersResult, documentsResult, complianceResult, deletionResult, activity] = await Promise.all([
+  const [membersResult, documentsResult, complianceResult, deletionResult, activity, snapshots] = await Promise.all([
     db.from('user_roles').select('*', { count: 'exact', head: true }).eq('community_id', communityId),
     db.from('documents').select('*', { count: 'exact', head: true }).eq('community_id', communityId).is('deleted_at', null),
     // Use the actual table name (not the non-existent compliance_items view)
@@ -99,6 +102,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
       .order('created_at', { ascending: false })
       .limit(1),
     getCommunityActivity(communityId),
+    getCommunitySnapshots(communityId),
   ]);
 
   // These used to degrade to 0 / null on a failed query, which is
@@ -147,6 +151,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
         complianceScore,
         openDeletionRequest,
         activity,
+        snapshots,
       }}
     />
   );

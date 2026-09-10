@@ -71,6 +71,8 @@ const baseCommunity = {
   subscription_plan: 'starter',
   subscription_current_period_end_at: null,
   custom_domain: null,
+  custom_domain_status: null,
+  custom_domain_verified_at: null,
   site_published_at: null,
   timezone: 'America/New_York',
   transparency_enabled: true,
@@ -81,6 +83,7 @@ const baseCommunity = {
   complianceScore: 88,
   openDeletionRequest: null,
   activity: [],
+  snapshots: [],
 };
 
 describe('ClientWorkspace', () => {

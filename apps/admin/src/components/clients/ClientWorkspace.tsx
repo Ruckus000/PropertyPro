@@ -22,6 +22,7 @@ import { CommunityAccess } from './CommunityAccess';
 import { SupportAccessTab } from './SupportAccessTab';
 import type { CommunitySettings } from './community-settings';
 import type { CommunityActivityEntry } from '@/lib/server/community-activity';
+import type { CommunitySnapshotEntry } from '@/lib/server/community-snapshots';
 import { useRovingTabs } from '@/components/a11y/use-roving-tabs';
 
 interface Community {
@@ -37,6 +38,8 @@ interface Community {
   subscription_plan: string | null;
   subscription_current_period_end_at: string | null;
   custom_domain: string | null;
+  custom_domain_status: string | null;
+  custom_domain_verified_at: string | null;
   site_published_at: string | null;
   timezone: string;
   transparency_enabled: boolean;
@@ -52,6 +55,8 @@ interface Community {
    */
   openDeletionRequest: { id: number; status: string; coolingEndsAt: string } | null;
   activity: CommunityActivityEntry[];
+  /** Publish history for the Website tab's `SnapshotsCard` (task 17c). */
+  snapshots: CommunitySnapshotEntry[];
 }
 
 interface ClientWorkspaceProps {
@@ -189,6 +194,11 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
             communityId={community.id}
             communitySlug={community.slug}
             customDomain={community.custom_domain}
+            customDomainStatus={community.custom_domain_status}
+            customDomainVerifiedAt={community.custom_domain_verified_at}
+            sitePublishedAt={community.site_published_at}
+            subscriptionStatus={community.subscription_status}
+            snapshots={community.snapshots}
           />
         )}
 
