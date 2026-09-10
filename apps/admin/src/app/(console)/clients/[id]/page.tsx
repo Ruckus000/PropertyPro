@@ -1,8 +1,9 @@
 /**
  * Client Workspace page.
  *
- * Shows community overview with tab navigation (Overview, Members, Compliance, Settings).
- * Returns 404 if the community doesn't exist.
+ * Shows the community workspace: header + tab navigation (Overview, Billing,
+ * Members, Compliance, Access, Website, Support, Settings). Returns 404 if
+ * the community doesn't exist.
  */
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
@@ -10,6 +11,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
 import type { CommunitySettings } from '@/components/clients/community-settings';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
+import { getCommunityActivity } from '@/lib/server/community-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,12 +32,19 @@ const CommunityRowSchema = z.object({
   timezone: z.string(),
   subscription_status: z.string().nullable(),
   subscription_plan: z.string().nullable(),
+  subscription_current_period_end_at: z.string().nullable(),
   custom_domain: z.string().nullable(),
   site_published_at: z.string().nullable(),
   transparency_enabled: z.boolean(),
   community_settings: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.string(),
   is_demo: z.boolean(),
+});
+
+const DeletionRequestRowSchema = z.object({
+  id: z.number(),
+  status: z.string(),
+  cooling_ends_at: z.string(),
 });
 
 export default async function ClientWorkspacePage({ params }: PageProps) {
@@ -56,7 +65,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   // Fetch community (need it to gate 404)
   const communityResult = await db
     .from('communities')
-    .select('id, name, slug, community_type, city, state, zip_code, address_line1, timezone, subscription_status, subscription_plan, custom_domain, site_published_at, transparency_enabled, community_settings, created_at, is_demo')
+    .select('id, name, slug, community_type, city, state, zip_code, address_line1, timezone, subscription_status, subscription_plan, subscription_current_period_end_at, custom_domain, site_published_at, transparency_enabled, community_settings, created_at, is_demo')
     .eq('id', communityId)
     .is('deleted_at', null)
     .single();
@@ -67,8 +76,11 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   }
   const community = communityParse.data;
 
-  // Fetch counts and compliance score in parallel
-  const [membersResult, documentsResult, complianceResult] = await Promise.all([
+  // Fetch counts, compliance score, the open deletion request (if any), and
+  // recent activity in parallel. `getCommunityActivity` throws internally on
+  // a query error, matching the "throw rather than degrade to empty" policy
+  // below.
+  const [membersResult, documentsResult, complianceResult, deletionResult, activity] = await Promise.all([
     db.from('user_roles').select('*', { count: 'exact', head: true }).eq('community_id', communityId),
     db.from('documents').select('*', { count: 'exact', head: true }).eq('community_id', communityId).is('deleted_at', null),
     // Use the actual table name (not the non-existent compliance_items view)
@@ -76,6 +88,17 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
       .select('document_id, deadline, is_applicable')
       .eq('community_id', communityId)
       .is('deleted_at', null),
+    // `account_deletion_requests` has no per-community uniqueness constraint on
+    // an open ('cooling') request, so this takes the most recent one rather
+    // than `.single()` — a second concurrent request should never happen, but
+    // `.single()` would 500 the whole page if it somehow did.
+    db.from('account_deletion_requests')
+      .select('id, status, cooling_ends_at')
+      .eq('community_id', communityId)
+      .eq('status', 'cooling')
+      .order('created_at', { ascending: false })
+      .limit(1),
+    getCommunityActivity(communityId),
   ]);
 
   // These used to degrade to 0 / null on a failed query, which is
@@ -91,6 +114,9 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   if (complianceResult.error) {
     throw new Error(`Failed to load compliance items: ${complianceResult.error.message}`);
   }
+  if (deletionResult.error) {
+    throw new Error(`Failed to load deletion request: ${deletionResult.error.message}`);
+  }
 
   const memberCount = membersResult.count ?? 0;
   const documentCount = documentsResult.count ?? 0;
@@ -101,8 +127,14 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   const met = applicable.filter((r) => r.document_id !== null);
   const complianceScore = applicable.length > 0 ? Math.round((met.length / applicable.length) * 100) : null;
 
-  // `ClientWorkspace` owns this screen's heading and tab chrome; Wave 2 moves
-  // it onto `AdminPageHeader` along with the rest of the page-body restyling.
+  const deletionRow = deletionResult.data?.[0] ?? null;
+  const deletionParse = deletionRow ? DeletionRequestRowSchema.safeParse(deletionRow) : null;
+  const openDeletionRequest = deletionParse?.success
+    ? { id: deletionParse.data.id, status: deletionParse.data.status, coolingEndsAt: deletionParse.data.cooling_ends_at }
+    : null;
+
+  // `ClientWorkspace` owns this screen's heading (via `WorkspaceHeader` /
+  // `AdminPageHeader`) and tab chrome.
   return (
     <ClientWorkspace
       community={{
@@ -113,6 +145,8 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
         memberCount,
         documentCount,
         complianceScore,
+        openDeletionRequest,
+        activity,
       }}
     />
   );

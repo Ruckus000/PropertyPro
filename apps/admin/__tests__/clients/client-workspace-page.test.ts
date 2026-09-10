@@ -34,9 +34,25 @@ type Chain = {
   select: (...args: unknown[]) => Chain;
   eq: (...args: unknown[]) => Chain;
   is: (...args: unknown[]) => Chain;
+  order: (...args: unknown[]) => Chain;
+  limit: (...args: unknown[]) => Chain;
   single?: () => Promise<{ data: unknown; error?: unknown }>;
   then?: PromiseLike<unknown>['then'];
 };
+
+/** A resolved `{ data, error: null }` chain — every fluent method is a no-op returning itself. */
+function resolvedChain(result: { data: unknown; count?: number }): Chain {
+  const resolved = Promise.resolve({ ...result, error: null });
+  const chain: Chain = {
+    select: () => chain,
+    eq: () => chain,
+    is: () => chain,
+    order: () => chain,
+    limit: () => chain,
+  };
+  chain.then = resolved.then.bind(resolved);
+  return chain;
+}
 
 function makeDb() {
   const community = {
@@ -51,6 +67,7 @@ function makeDb() {
     timezone: 'America/New_York',
     subscription_status: 'active',
     subscription_plan: 'starter',
+    subscription_current_period_end_at: '2026-04-01T00:00:00.000Z',
     custom_domain: 'portal.sunsetcondo.org',
     site_published_at: '2026-03-26T12:00:00.000Z',
     transparency_enabled: true,
@@ -70,44 +87,53 @@ function makeDb() {
     { document_id: null, deadline: null, is_applicable: false },
   ];
 
+  const deletionRows = [{ id: 7, status: 'cooling', cooling_ends_at: '2026-04-10T00:00:00.000Z' }];
+
+  const activityRows = [
+    {
+      id: 1,
+      action: 'community_settings_changed',
+      resource_type: 'community',
+      resource_id: '42',
+      admin_email: 'admin@getpropertypro.com',
+      created_at: '2026-03-25T00:00:00.000Z',
+    },
+  ];
+
   const from = vi.fn((table: string): Chain => {
     if (table === 'communities') {
       const chain: Chain = {
         select: () => chain,
         eq: () => chain,
         is: () => chain,
+        order: () => chain,
+        limit: () => chain,
         single: async () => ({ data: community }),
       };
       return chain;
     }
 
     if (table === 'user_roles') {
-      const chain: Chain = {
-        select: () => chain,
-        eq: () => chain,
-        is: () => chain,
-      };
-      chain.then = Promise.resolve({ count: counts.members }).then.bind(Promise.resolve({ count: counts.members }));
-      return chain;
+      return resolvedChain({ data: null, count: counts.members });
     }
 
     if (table === 'documents') {
-      const chain: Chain = {
-        select: () => chain,
-        eq: () => chain,
-        is: () => chain,
-      };
-      chain.then = Promise.resolve({ count: counts.documents }).then.bind(Promise.resolve({ count: counts.documents }));
-      return chain;
+      return resolvedChain({ data: null, count: counts.documents });
     }
 
-    const chain: Chain = {
-      select: () => chain,
-      eq: () => chain,
-      is: () => chain,
-    };
-    chain.then = Promise.resolve({ data: complianceRows }).then.bind(Promise.resolve({ data: complianceRows }));
-    return chain;
+    if (table === 'compliance_checklist_items') {
+      return resolvedChain({ data: complianceRows });
+    }
+
+    if (table === 'account_deletion_requests') {
+      return resolvedChain({ data: deletionRows });
+    }
+
+    if (table === 'platform_admin_audit_log') {
+      return resolvedChain({ data: activityRows });
+    }
+
+    throw new Error(`makeDb(): no fixture registered for table "${table}"`);
   });
 
   return { from };
@@ -137,6 +163,22 @@ describe('ClientWorkspacePage data pass-through', () => {
     expect(community?.documentCount).toBe(34);
     expect(community?.complianceScore).toBe(50);
     expect(community?.community_settings).toEqual({});
+    expect(community?.subscription_current_period_end_at).toBe('2026-04-01T00:00:00.000Z');
+    expect(community?.openDeletionRequest).toEqual({
+      id: 7,
+      status: 'cooling',
+      coolingEndsAt: '2026-04-10T00:00:00.000Z',
+    });
+    expect(community?.activity).toEqual([
+      {
+        id: 1,
+        action: 'community_settings_changed',
+        resourceType: 'community',
+        resourceId: '42',
+        adminEmail: 'admin@getpropertypro.com',
+        createdAt: '2026-03-25T00:00:00.000Z',
+      },
+    ]);
   });
 
   it('calls notFound for invalid id', async () => {
