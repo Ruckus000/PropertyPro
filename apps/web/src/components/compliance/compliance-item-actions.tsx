@@ -107,7 +107,7 @@ export function ComplianceItemActions({
         Link Existing
       </Button>
       <Button
-        variant="primary"
+        variant="default"
         size="sm"
         onClick={onUpload}
         aria-label={`Upload document for ${item.title}`}

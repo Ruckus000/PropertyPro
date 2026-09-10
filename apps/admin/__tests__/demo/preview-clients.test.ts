@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   TabbedPreviewClient,
   isPublicWebsiteTab,
-} from '../../src/app/demo/[id]/preview/TabbedPreviewClient';
-import { MobilePreviewClient } from '../../src/app/demo/[id]/mobile/MobilePreviewClient';
+} from '../../src/app/(console)/demo/[id]/preview/TabbedPreviewClient';
+import { MobilePreviewClient } from '../../src/app/(console)/demo/[id]/mobile/MobilePreviewClient';
 import { DemoEditDrawer } from '../../src/components/demo/DemoEditDrawer';
 
 // `landingPageUrl` and `slug` were MISSING here. The file was outside

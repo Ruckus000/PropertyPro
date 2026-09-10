@@ -18,3 +18,6 @@ export * from "./hooks";
 
 // Constants
 export * from "./constants";
+
+// Utils
+export { cn } from "./utils/cn";

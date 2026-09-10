@@ -11,10 +11,11 @@ drifted from the real app code. Everything below is a pointer, not a copy.
 | Thing | Canonical source |
 |---|---|
 | Tokens (all) | `packages/tokens/` → generated `packages/ui/src/styles/tokens.css` |
-| Buttons, Cards, inputs, dialogs… | `apps/web/src/components/ui/` (shadcn/CVA — canonical) |
+| Buttons, Cards, inputs, dialogs… | `packages/ui/src/components/ui/` (shadcn/CVA — canonical; shared with admin). `apps/web/src/components/ui/` re-exports each, and still implements the controls not yet lifted (Checkbox, Separator, Tooltip, Popover, Tabs, Select, Table, DropdownMenu, Chart) |
 | StatusBadge / Badge (status family) | `packages/ui/src/components/Badge.tsx` |
 | Status config | `packages/ui/src/constants/status.ts` |
-| EmptyState / AlertBanner / PageHeader | `apps/web/src/components/shared/` |
+| EmptyState / AlertBanner / KpiCard / PageBody / QuickFilterTabs | `packages/ui/src/components/shared/` (re-exported from `apps/web/src/components/shared/`) |
+| PageHeader / DataTable / StatusBadge wrapper | `apps/web/src/components/shared/` |
 | Empty-state copy configs | `apps/web/src/lib/constants/empty-states.ts` |
 
 ## Design Philosophy
@@ -148,7 +149,7 @@ V2 accessibility baseline includes:
 
 | Component | Key V2 Values |
 |---|---|
-| `Button` | see the Component Dimensions table in `/DESIGN.md` (canonical: `apps/web/src/components/ui/button.tsx`) |
+| `Button` | see the Component Dimensions table in `/DESIGN.md` (canonical: `packages/ui/src/components/ui/button.tsx`) |
 | `Input` (token contract) | heights: `40 desktop / 48 mobile density`; radius `sm (6px)` |
 | `Card` | radius `md (10px)`; elevation `E0` rest, `E1` hover/interactive |
 | `Modal` | radius `lg (16px)`; elevation `E3` |

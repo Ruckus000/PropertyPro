@@ -109,6 +109,21 @@ const badgeDotClasses: Record<StatusVariant, string> = {
   board: "bg-[var(--status-board)] dark:bg-pink-300",
 };
 
+/**
+ * Expanded-state count pill, by variant. Only `danger` and `warning` get a
+ * solid tone here — the other five `StatusVariant` values are never passed
+ * as a nav item's `badgeVariant` (see `AdminNavItem.tone` in the admin app's
+ * `nav-config.ts`, which only ever sets `'danger' | 'warning' | undefined`)
+ * and fall through to the neutral pill below. `--status-warning`
+ * (`--amber-700`) keeps ~5:1 contrast against `--text-inverse` (white),
+ * matching the pre-existing `danger` treatment (`--status-danger` /
+ * `--red-700`, ~6.5:1) closely enough to reuse the same solid-bg pattern.
+ */
+const badgePillClasses: Partial<Record<StatusVariant, string>> = {
+  danger: "bg-[var(--status-danger)] text-[var(--text-inverse)]",
+  warning: "bg-[var(--status-warning)] text-[var(--text-inverse)]",
+};
+
 function ChevronRightIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -161,7 +176,6 @@ export function NavRail({
   collapsibleSections = false,
   sectionOpen,
   onSectionToggle,
-  sections: sectionsProp,
   groupSeparator,
   groupSeparatorAfterIndex,
 }: NavRailProps) {
@@ -308,9 +322,7 @@ export function NavRail({
             <span
               className={cn(
                 "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold",
-                badgeVariant === "danger"
-                  ? "bg-[var(--status-danger)] text-[var(--text-inverse)]"
-                  : "bg-[var(--nav-badge-bg)] text-[var(--nav-text-active)]",
+                badgePillClasses[badgeVariant] ?? "bg-[var(--nav-badge-bg)] text-[var(--nav-text-active)]",
               )}
             >
               {badge}

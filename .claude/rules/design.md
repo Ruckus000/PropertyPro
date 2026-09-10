@@ -7,12 +7,13 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 ## Component Tooling
 
 - Use `cn()` from `@/lib/utils` (clsx + tailwind-merge) for all class composition
-- shadcn/ui components: `apps/web/src/components/ui/` — canonical layer for standard controls, Tailwind + CVA
-- Design system components: `packages/ui/src/components/` — status Badge family, NavRail, PhoneFrame, TipTap editor. `Button`/`Card` here are `@deprecated` for web (admin-only until its migration) — use the shadcn `apps/web/src/components/ui/` versions instead
+- shadcn/ui components: canonical layer for standard controls, Tailwind + CVA. Twelve of them (Button, Card, Badge, Skeleton, Input, Textarea, Label, Switch, Dialog, AlertDialog, Sheet, Command) now live in **`packages/ui/src/components/ui/`** so both apps consume one implementation; the matching `apps/web/src/components/ui/` files are one-line re-export shims, so every existing `@/components/ui/...` import still resolves and remains the right thing for web code to write. The rest (Checkbox, Separator, Tooltip, Popover, Tabs, Select, Table, DropdownMenu, Chart, HelpTooltip) are still implemented in `apps/web/src/components/ui/`.
+- Design system components: `packages/ui/src/components/` — status Badge family, NavRail, PhoneFrame, TipTap editor. The old `@deprecated` `packages/ui` `Button`/`Card` are **deleted**; the shadcn Button/Card above are the only ones, and admin uses them too.
 - Layout primitives: `packages/ui/src/primitives/` — Stack (HStack/VStack/Center), Text, Box with polymorphic `as` prop
-- Domain patterns: implemented in `apps/web/src/components/shared/` (AlertBanner, EmptyState, PageHeader, DataTable, KpiCard, StatusBadge, Breadcrumbs, …); documented (not implemented) at `docs/design-system/README.md`
+- Domain patterns: five moved to **`packages/ui/src/components/shared/`** (AlertBanner, EmptyState, KpiCard, PageBody, QuickFilterTabs); `apps/web/src/components/shared/` re-exports them, and KpiCard/EmptyState are thin web wrappers that bind `next/link` and resolve the web-only preset keys — packages/ui has no `next` dependency. The rest (PageHeader, DataTable, StatusBadge, Breadcrumbs, …) are still implemented in `apps/web/src/components/shared/`. Documented (not implemented) at `docs/design-system/README.md`
 - Status config: canonical source `packages/ui/src/constants/status.ts`, re-exported via `apps/web/src/lib/constants/status.ts`
 - New components: Tailwind classes + CVA variants. Own the source (shadcn model), never install as a dependency.
+- **`packages/ui` declares `"sideEffects": ["**/*.css"]` — keep every module in it import-time pure.** Without that field a bundler must assume any module in the package might have import side effects, so it cannot drop unused exports, and tsup emits every component into one shared chunk: importing a single symbol retained all of them. That is what put the web site-editor route 107 KiB over its hard perf budget (771.7 → 664.6 KiB once the field landed). The value is a narrow glob, not `false`, because the package still ships CSS (`./styles.css`) and an untrue `false` would let a bundler silently drop a stylesheet import. Adding an import-time side effect — a bare `import './x'`, a stylesheet import, a global config call, a self-registering map — breaks a promise nothing type-checks: webpack drops it in production builds only, and no test fails. `packages/shared` makes the same promise and `pnpm guard:shared-side-effects` enforces it; that guard accepts `--root`, so `pnpm exec tsx scripts/verify-shared-side-effects.ts --root packages/ui/src` audits this package too. It currently reports 71 findings that are all `"use client"` directive prologues (14) and same-module `X.displayName = …` assignments (57) — both safe, and both idioms the guard has no exemption for because `packages/shared` has neither.
 
 ## Spacing
 
@@ -150,7 +151,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 ## Component Dimensions
 
-- Buttons: sm(32px) default(36px) lg(40px) icon(36px). Radius md. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `apps/web/src/components/ui/button.tsx`.
+- Buttons: sm(32px) default(36px) lg(40px) icon(36px). Radius md. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `packages/ui/src/components/ui/button.tsx` (web re-exports it from `apps/web/src/components/ui/button.tsx`).
 - Inputs: sm(36px) md(40px) lg(48px). Radius sm. 1px border, 2px on focus.
 - Cards: radius md. Padding sm(16) md(20) lg(24). E0 rest, E1 hover.
 - Modals: radius lg. E3. Widths: sm(400) md(560) lg(720) xl(960).

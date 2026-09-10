@@ -101,18 +101,18 @@ Four layers, each with a specific role:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
-| **shadcn/ui** | `apps/web/src/components/ui/` | **Canonical layer for standard controls** — form controls, dialogs, tables, tabs, buttons, cards — Tailwind + CVA |
-| **Design system** | `packages/ui/src/components/` | Status Badge family, NavRail, PhoneFrame, TipTap editor. `Button`/`Card` here are `@deprecated` for web — admin-only until its migration; do not add new `apps/web` imports |
+| **shadcn/ui** | `packages/ui/src/components/ui/` (Button, Card, Badge, Skeleton, Input, Textarea, Label, Switch, Dialog, AlertDialog, Sheet, Command) + `apps/web/src/components/ui/` (Checkbox, Separator, Tooltip, Popover, Tabs, Select, Table, DropdownMenu, Chart, HelpTooltip) | **Canonical layer for standard controls** — form controls, dialogs, tables, tabs, buttons, cards — Tailwind + CVA. The twelve lifted into `packages/ui` are shared with admin; `apps/web/src/components/ui/` keeps a one-line re-export for each, so every `@/components/ui/...` import is unchanged |
+| **Design system** | `packages/ui/src/components/` | Status Badge family, NavRail, PhoneFrame, TipTap editor. The old `@deprecated` `packages/ui` `Button`/`Card` are **deleted** — both apps now use the shadcn Button/Card above |
 | **Primitives** | `packages/ui/src/primitives/` | Layout building blocks (Stack, Text, Box) — polymorphic `as` prop |
-| **Domain patterns** | `apps/web/src/components/shared/` | App-specific compositions (AlertBanner, EmptyState, PageHeader, DataTable, KpiCard, StatusBadge, Breadcrumbs, …). Documented (not implemented) at `docs/design-system/README.md` |
+| **Domain patterns** | `packages/ui/src/components/shared/` (AlertBanner, EmptyState, KpiCard, PageBody, QuickFilterTabs) + `apps/web/src/components/shared/` (PageHeader, DataTable, StatusBadge, Breadcrumbs, …) | App-specific compositions. The five in `packages/ui` are re-exported from `apps/web/src/components/shared/`; KpiCard and EmptyState go through thin web wrappers that bind `next/link` and resolve web-only preset keys, since `packages/ui` carries no `next` dependency. Documented (not implemented) at `docs/design-system/README.md` |
 
-**When to use which:** shadcn/ui for standard controls. `packages/ui` for the non-deprecated branded/token-driven elements listed above. Primitives for layout. `apps/web/src/components/shared/` for domain-specific compositions.
+**When to use which:** shadcn/ui for standard controls. `packages/ui` for the branded/token-driven elements listed above. Primitives for layout. `apps/web/src/components/shared/` for domain-specific compositions — keep importing from the web paths; they resolve to the shared implementations.
 
 ### Component Dimensions
 
 | Component | Heights | Radius | Notes |
 |-----------|---------|--------|-------|
-| Button | sm 32 / default 36 / lg 40 / icon 36 | md (10px) | Denser scale adopted 2026-07 (Wave 2); canonical component: `apps/web/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
+| Button | sm 32 / default 36 / lg 40 / icon 36 | md (10px) | Denser scale adopted 2026-07 (Wave 2); canonical component: `packages/ui/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
 | Input | sm/md/lg 36 / 40 / 48 | sm (6px) | 1px border, 2px on focus |
 | Card | — | md (10px) | Padding: 16/20/24px. E0 rest, E1 hover |
 | Modal | — | lg (16px) | E3. Widths: 400/560/720/960px |
@@ -120,7 +120,7 @@ Four layers, each with a specific role:
 | NavRail item | 44 | md (10px) | Rail: 64px collapsed, 240px expanded |
 | Table row | 52 (body) / 40 (header) | — | Cell padding: 12px |
 
-Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table); Button dimensions live in `apps/web/src/components/ui/button.tsx`'s CVA (the deprecated packages/ui Button keeps the old 36/40/48 scale for admin).
+Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table); Button dimensions live in `packages/ui/src/components/ui/button.tsx`'s CVA. The deprecated `packages/ui` Button that kept the old 36/40/48 scale for admin is deleted — admin renders this same 32/36/40 scale.
 
 ---
 

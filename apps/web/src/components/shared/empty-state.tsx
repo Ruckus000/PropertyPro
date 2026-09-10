@@ -1,12 +1,11 @@
 /**
- * EmptyState — Placeholder for empty content areas.
+ * Web wrapper for @propertypro/ui's props-only EmptyState.
  *
- * Tailwind-based implementation of the pattern documented at
- * docs/design-system/patterns/ (see docs/design-system/README.md). This
- * component is the canonical implementation — the docs folder no longer
- * carries a duplicate .tsx copy.
- *
- * Can be used with presets from EMPTY_STATE_CONFIGS or with custom props.
+ * packages/ui's EmptyState only knows about concrete props (icon component,
+ * title, description, action, size). This wrapper keeps the two web-only
+ * ways call sites already use it — a curated `preset` key
+ * (EMPTY_STATE_CONFIGS) or a string `icon` key (ICON_MAP) — resolves either
+ * to a concrete icon/title/description, and delegates rendering.
  */
 
 import * as React from "react";
@@ -25,7 +24,7 @@ import {
   Inbox,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { EmptyState as UiEmptyState } from "@propertypro/ui";
 import {
   type EmptyStateKey,
   type EmptyStateIconKey,
@@ -48,32 +47,6 @@ const ICON_MAP: Record<EmptyStateIconKey, LucideIcon> = {
   "shield-check": ShieldCheck,
   inbox: Inbox,
 };
-
-// ── Size config ──
-
-const sizeConfig = {
-  sm: {
-    container: "py-6 px-4",
-    iconContainer: "h-14 w-14",
-    iconSize: 24,
-    title: "text-base font-semibold",
-    description: "text-sm max-w-[280px]",
-  },
-  md: {
-    container: "py-10 px-6",
-    iconContainer: "h-[72px] w-[72px]",
-    iconSize: 28,
-    title: "text-lg font-semibold",
-    description: "text-sm max-w-[320px]",
-  },
-  lg: {
-    container: "py-12 px-8",
-    iconContainer: "h-[88px] w-[88px]",
-    iconSize: 36,
-    title: "text-xl font-semibold",
-    description: "text-base max-w-[360px]",
-  },
-} as const;
 
 // ── Props ──
 
@@ -100,7 +73,7 @@ interface EmptyStatePresetProps extends EmptyStateBaseProps {
   action?: React.ReactNode;
 }
 
-type EmptyStateProps = EmptyStateCustomProps | EmptyStatePresetProps;
+export type EmptyStateProps = EmptyStateCustomProps | EmptyStatePresetProps;
 
 function isPreset(props: EmptyStateProps): props is EmptyStatePresetProps {
   return "preset" in props;
@@ -109,12 +82,7 @@ function isPreset(props: EmptyStateProps): props is EmptyStatePresetProps {
 // ── Component ──
 
 export function EmptyState(props: EmptyStateProps) {
-  const {
-    size = "md",
-    action,
-    className,
-    ...rest
-  } = props;
+  const { size = "md", action, className, ...rest } = props;
 
   let title: string;
   let description: string | undefined;
@@ -135,9 +103,10 @@ export function EmptyState(props: EmptyStateProps) {
     }
   }
 
-  const s = sizeConfig[size];
-
-  // Clean up extra props before spreading
+  // Clean up extra props before spreading — `rest` may still carry
+  // `preset`/`title`/`description`/`icon` depending on which branch of the
+  // union was passed, none of which UiEmptyState (or the DOM div it spreads
+  // onto) should receive.
   const divProps = { ...rest } as Record<string, unknown>;
   delete divProps.preset;
   delete divProps.title;
@@ -145,40 +114,14 @@ export function EmptyState(props: EmptyStateProps) {
   delete divProps.icon;
 
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center text-center",
-        s.container,
-        className
-      )}
+    <UiEmptyState
+      icon={IconComponent}
+      title={title}
+      description={description}
+      action={action}
+      size={size}
+      className={className}
       {...(divProps as React.HTMLAttributes<HTMLDivElement>)}
-    >
-      {IconComponent && (
-        <div
-          className={cn(
-            "mb-4 flex items-center justify-center rounded-full bg-surface-muted",
-            s.iconContainer
-          )}
-        >
-          <IconComponent
-            size={s.iconSize}
-            className="text-content-tertiary"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        </div>
-      )}
-
-      <div className="flex flex-col items-center gap-2">
-        <h3 className={cn("text-content", s.title)}>{title}</h3>
-        {description && (
-          <p className={cn("text-content-tertiary", s.description)}>
-            {description}
-          </p>
-        )}
-      </div>
-
-      {action && <div className="mt-4">{action}</div>}
-    </div>
+    />
   );
 }

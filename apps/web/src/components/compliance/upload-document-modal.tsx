@@ -249,7 +249,7 @@ export function UploadDocumentModal({
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="default"
             size="sm"
             onClick={handleUpload}
             disabled={!file || !title.trim() || isUploading || isLoadingCategories || resolvedCategoryId == null}

@@ -39,24 +39,24 @@ export function WizardFooter({
           <Button
             variant="secondary"
             size="lg"
-            leftIcon={<ArrowLeft />}
             onClick={onBack}
             disabled={loading}
           >
+            <ArrowLeft aria-hidden="true" />
             Back
           </Button>
         )}
         {!onCancel && !showBack && <div />}
       </div>
       <Button
-        variant="primary"
+        variant="default"
         size="lg"
-        rightIcon={!loading ? <ArrowRight /> : undefined}
         onClick={onNext}
         disabled={nextDisabled || loading}
         loading={loading}
       >
         {loading ? 'Creating...' : nextLabel}
+        {!loading && <ArrowRight aria-hidden="true" />}
       </Button>
     </div>
   );

@@ -40,7 +40,7 @@ vi.mock('next/link', () => ({
 //
 // The stub keeps the assertion intact: React.createElement records the props on
 // the element regardless of what the component type does with them.
-vi.mock('@/app/demo/[id]/preview/TabbedPreviewClient', () => ({
+vi.mock('@/app/(console)/demo/[id]/preview/TabbedPreviewClient', () => ({
   TabbedPreviewClient: function TabbedPreviewClientStub() {
     return null;
   },
@@ -90,7 +90,7 @@ describe('DemoPreviewPage URL construction', () => {
   });
 
   it('passes /demo/{slug}?preview=true public URL to TabbedPreviewClient', async () => {
-    const { default: DemoPreviewPage } = await import('@/app/demo/[id]/preview/page');
+    const { default: DemoPreviewPage } = await import('@/app/(console)/demo/[id]/preview/page');
 
     const element = (await DemoPreviewPage({ params: Promise.resolve({ id: '11' }) })) as {
       props?: { children?: unknown[] };

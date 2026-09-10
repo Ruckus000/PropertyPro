@@ -18,6 +18,18 @@
     "without opening the popup it was waiting for. It is the only spec anywhere that",
     "covers support impersonation, so it is worth the second dev server it costs.",
     "",
+    "`admin-shell` (added with the Wave 1 admin console redesign) is UNMEASURED",
+    "against this stack — the worktree that authored it had no local Supabase and",
+    "`.env.local` resolves to production, so running it there was out of the",
+    "question. Its three locators (rail link + aria-current, the ⌘K command",
+    "palette, the notification tray) were instead verified by reading the",
+    "components they target (NavRail.tsx, AdminCommandPalette.tsx,",
+    "NotificationTray.tsx, lib/server/search/communities.ts) and cross-checked",
+    "against this same admin app's own jsdom unit tests (command-palette.test.tsx",
+    "confirms the cmdk combobox/option roles this spec relies on). The real",
+    "measurement is this job's own run on the PR that adds it — a failure there",
+    "is the gate doing its job, not a broken addition to this list.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -32,6 +44,7 @@
   "specs": [
     "activation-smoke.spec.ts",
     "add-community.spec.ts",
+    "admin-shell.spec.ts",
     "demo-flows.spec.ts",
     "esign-and-documents-flow.spec.ts",
     "marketing-smoke.spec.ts",
@@ -39,5 +52,5 @@
     "phase1-roadmap-smoke.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 29
+  "expectedTestCount": 32
 }

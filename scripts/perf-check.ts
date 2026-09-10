@@ -86,10 +86,23 @@ const APPS: readonly AppSpec[] = [
   {
     app: 'admin',
     nextRoot: join(process.cwd(), 'apps', 'admin', '.next'),
+    // Each group lists the `(console)` route-group form FIRST and the bare form
+    // as a fallback, the same shape the web spec above uses. Admin's pages moved
+    // into `app/(console)/` when the shell layout landed; a route group does not
+    // change the URL but it DOES change the manifest key, so the bare paths alone
+    // matched nothing and the check failed with "could not resolve any
+    // representative routes" — which is the honest failure, but only because
+    // `perf-check` refuses to pass on an empty match. Keep both forms so moving a
+    // page in or out of the group degrades to a fallback instead of a hard failure.
     groups: {
-      dashboard: ['/dashboard/page'],
-      communities: ['/communities/page', '/clients/page'],
-      'deletion-requests': ['/deletion-requests/page'],
+      dashboard: ['/(console)/dashboard/page', '/dashboard/page'],
+      communities: [
+        '/(console)/clients/page',
+        '/(console)/communities/page',
+        '/clients/page',
+        '/communities/page',
+      ],
+      'deletion-requests': ['/(console)/deletion-requests/page', '/deletion-requests/page'],
     },
     // Admin is server-first; per-route budgets are the signal we need today.
     aggregateBudgetBytes: null,

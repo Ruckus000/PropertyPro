@@ -1,0 +1,148 @@
+/**
+ * Rootless Communities page — non-deleted communities with NO root_manager,
+ * plus the open root-claim disputes queue (role-v3 Phase 2b).
+ *
+ * Until the claim-root flow runs, every backfilled community is rootless; this
+ * report is how platform admins track convergence. Open disputes surface here
+ * with an inline reassign-root control.
+ */
+import { PageBody } from '@propertypro/ui';
+import { ReassignRootControl } from '@/components/communities/ReassignRootControl';
+import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
+// AUTHZ: platform-admin report — cross-community read, gated by the requireAdminPageSession() platform-admin check at the top of this page.
+import { findRootlessCommunities } from '@propertypro/db/unsafe';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
+
+export const dynamic = 'force-dynamic';
+
+interface OpenDisputeRow {
+  id: number;
+  community_id: number;
+  claimed_user_id: string;
+  disputed_by_user_id: string;
+  created_at: string;
+  communityName: string;
+}
+
+async function fetchOpenDisputes(): Promise<OpenDisputeRow[]> {
+  const db = createAdminClient();
+  const { data: disputes } = await db
+    .from('root_claim_disputes')
+    .select('id, community_id, claimed_user_id, disputed_by_user_id, created_at')
+    .eq('status', 'open')
+    .order('created_at', { ascending: false });
+
+  const rows = (disputes ?? []) as Array<Omit<OpenDisputeRow, 'communityName'>>;
+  if (rows.length === 0) return [];
+
+  const communityIds = Array.from(new Set(rows.map((r) => r.community_id)));
+  const { data: communities } = await db
+    .from('communities')
+    .select('id, name')
+    .in('id', communityIds);
+  const nameById = new Map(
+    ((communities ?? []) as Array<{ id: number; name: string }>).map((c) => [c.id, c.name]),
+  );
+
+  return rows.map((r) => ({ ...r, communityName: nameById.get(r.community_id) ?? `#${r.community_id}` }));
+}
+
+export default async function RootlessCommunitiesPage() {
+  await requireAdminPageSession();
+  const [communities, openDisputes] = await Promise.all([
+    findRootlessCommunities(),
+    fetchOpenDisputes(),
+  ]);
+
+  // `spacing="none"` + an explicit `space-y-10`: the page gutter is now the
+  // shell's (PageBody adds none), but this page's own 40px section rhythm is
+  // preserved rather than quietly retuned — Wave 2 owns page-body restyling.
+  return (
+    <PageBody spacing="none" className="space-y-10">
+      <section>
+        <div className="mb-6">
+          <AdminPageHeader
+            title="Open Root-Claim Disputes"
+            description={
+              openDisputes.length === 0
+                ? 'No open disputes.'
+                : `${openDisputes.length} open ${openDisputes.length === 1 ? 'dispute' : 'disputes'}. Reassign root to an existing property manager to resolve.`
+            }
+          />
+        </div>
+
+        {openDisputes.length === 0 ? (
+          <div className="rounded-md border border-edge bg-surface-card p-8 text-center text-sm text-content-tertiary">
+            No open root-claim disputes.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+            <table className="min-w-full divide-y divide-edge text-sm">
+              <thead className="bg-surface-page">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-content-tertiary">Community</th>
+                  <th className="px-4 py-3 text-left font-medium text-content-tertiary">Claimed by</th>
+                  <th className="px-4 py-3 text-left font-medium text-content-tertiary">Disputed by</th>
+                  <th className="px-4 py-3 text-left font-medium text-content-tertiary">Reassign root</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-edge-subtle">
+                {openDisputes.map((dispute) => (
+                  <tr key={dispute.id}>
+                    <td className="px-4 py-3 text-content">{dispute.communityName}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-content-secondary">{dispute.claimed_user_id}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-content-secondary">{dispute.disputed_by_user_id}</td>
+                    <td className="px-4 py-3">
+                      <ReassignRootControl communityId={dispute.community_id} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-content">Rootless Communities</h2>
+          <p className="mt-1 text-sm text-content-tertiary">
+            {communities.length === 0
+              ? 'Every community has a root manager.'
+              : `${communities.length} ${communities.length === 1 ? 'community has' : 'communities have'} no root manager.`}
+          </p>
+        </div>
+
+        {communities.length === 0 ? (
+          <div className="rounded-md border border-edge bg-surface-card p-8 text-center text-sm text-content-tertiary">
+            No rootless communities.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+            <table className="min-w-full divide-y divide-edge text-sm">
+              <thead className="bg-surface-page">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-content-tertiary">Name</th>
+                  <th className="px-4 py-3 text-left font-medium text-content-tertiary">Slug</th>
+                  <th className="px-4 py-3 text-left font-medium text-content-tertiary">Reassign root</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-edge-subtle">
+                {communities.map((community) => (
+                  <tr key={community.id}>
+                    <td className="px-4 py-3 text-content">{community.name}</td>
+                    <td className="px-4 py-3 font-mono text-content-secondary">{community.slug}</td>
+                    <td className="px-4 py-3">
+                      <ReassignRootControl communityId={community.id} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </PageBody>
+  );
+}

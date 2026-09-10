@@ -1,12 +1,12 @@
 {
+  "apps/admin/src/app/(console)/demo/new/page.tsx": {
+    "raw-hex": 3
+  },
   "apps/admin/src/app/api/admin/demos/preview/route.ts": {
     "raw-hex": 3
   },
   "apps/admin/src/app/auth/login/page.tsx": {
     "bare-focus-ring": 6
-  },
-  "apps/admin/src/app/demo/new/page.tsx": {
-    "raw-hex": 3
   },
   "apps/admin/src/app/error.tsx": {
     "bare-focus-ring": 8
@@ -70,9 +70,6 @@
   },
   "apps/admin/src/components/settings/PlatformSettings.tsx": {
     "bare-focus-ring": 3
-  },
-  "apps/admin/src/components/Sidebar.tsx": {
-    "raw-palette": 15
   },
   "apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx": {
     "bare-focus-ring": 3
