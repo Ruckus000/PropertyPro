@@ -50,6 +50,18 @@ import type { Searcher } from '../search';
  * toward a recent addition rather than an alphabetically arbitrary community
  * that may be years stale for them.
  *
+ * The destination is the newest membership **in a real community** — not
+ * simply the newest membership. `(console)/clients/[id]/page.tsx` fetches the
+ * community with `.is('deleted_at', null)` and calls `notFound()` when the row
+ * does not parse, so a raw newest-membership pick can hand the palette a link
+ * to a 404 for any user whose most recent membership is in a soft-deleted
+ * community — this happened in production. Demo communities are excluded too
+ * (`.eq('is_demo', false)`), for the same reason the sibling `communities.ts`
+ * searcher excludes them: without it, ⌘K "People" could deep-link into a demo
+ * even though ⌘K "Clients" is barred from surfacing it. A user whose
+ * candidate memberships are all demo or deleted then has no surviving
+ * membership and resolves to `undefined`, same as a user with none at all.
+ *
  * A user with no `user_roles` row (e.g. invited but never accepted) resolves
  * to `undefined`; the caller falls back to the PII-free `/clients` link
  * rather than a broken deep link.
@@ -66,10 +78,32 @@ async function resolveMemberDestinations(userIds: string[]): Promise<Map<string,
     .order('id', { ascending: false });
   if (error) throw new Error(`user search: member lookup: ${error.message}`);
 
+  const roles = (data ?? []) as Array<{ user_id: string; community_id: number }>;
+
+  // Filter the candidate community ids down to real (non-demo, non-deleted)
+  // communities before picking each user's newest membership, so a
+  // soft-deleted or demo community can never become the palette destination.
+  const candidateIds = [...new Set(roles.map((row) => row.community_id))];
+  if (candidateIds.length === 0) return destinations;
+
+  const { data: communitiesData, error: communitiesError } = await db
+    .from('communities')
+    .select('id')
+    .in('id', candidateIds)
+    .eq('is_demo', false)
+    .is('deleted_at', null);
+  if (communitiesError) {
+    throw new Error(`user search: community lookup: ${communitiesError.message}`);
+  }
+  const realCommunityIds = new Set(
+    ((communitiesData ?? []) as Array<{ id: number }>).map((c) => c.id),
+  );
+
   // Rows arrive newest-first (`id desc`); keep only the first row seen per
-  // user — i.e. their most recently created membership.
-  for (const row of (data ?? []) as Array<{ user_id: string; community_id: number }>) {
-    if (!destinations.has(row.user_id)) {
+  // user whose community survived the real-community filter — i.e. their
+  // most recently created membership in a community that still exists.
+  for (const row of roles) {
+    if (!destinations.has(row.user_id) && realCommunityIds.has(row.community_id)) {
       destinations.set(row.user_id, row.community_id);
     }
   }
