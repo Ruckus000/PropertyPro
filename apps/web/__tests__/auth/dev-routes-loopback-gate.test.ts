@@ -1,11 +1,13 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Every `/dev/*` route that mints a session or a grant must refuse a
- * non-loopback Supabase target.
+ * Every `/dev/*` route must refuse unless BOTH backends are loopback — the
+ * Supabase project (`NEXT_PUBLIC_SUPABASE_URL`) and the database
+ * (`DATABASE_URL`). Requiring both in every route is deliberate; the reasoning
+ * lives on `nonLocalBackendReason` in `packages/shared/src/env/loopback.ts`.
  *
  * Why this is a source-reading test rather than four route tests: the routes
  * live in two apps and need very different mock scaffolding, but the invariant
@@ -32,8 +34,8 @@ const GATED_DEV_ROUTES = [
   'apps/admin/src/app/dev/agent-login/route.ts',
 ];
 
-describe('dev routes are gated on a loopback Supabase target', () => {
-  it.each(GATED_DEV_ROUTES)('%s consults isLoopbackUrl and refuses', (rel) => {
+describe('dev routes are gated on loopback Supabase AND database targets', () => {
+  it.each(GATED_DEV_ROUTES)('%s consults nonLocalBackendReason and refuses', (rel) => {
     const abs = join(REPO_ROOT, rel);
     // Anti-vacuity: a missing file would make every assertion below pass by
     // reading an empty string. A renamed or moved route must fail loudly here
@@ -43,10 +45,15 @@ describe('dev routes are gated on a loopback Supabase target', () => {
     expect(src.length).toBeGreaterThan(200);
 
     expect(src, `${rel} does not import the shared predicate`).toContain(
-      "isLoopbackUrl",
+      'nonLocalBackendReason',
     );
-    expect(src, `${rel} does not test NEXT_PUBLIC_SUPABASE_URL against it`).toMatch(
-      /!isLoopbackUrl\(\s*process\.env\.NEXT_PUBLIC_SUPABASE_URL\s*\)/,
+    // The whole env object, not a hand-picked variable. `nonLocalBackendReason`
+    // requires loopback on BOTH `NEXT_PUBLIC_SUPABASE_URL` and `DATABASE_URL`,
+    // so passing `process.env` is what makes the rule uniform — and a route that
+    // narrowed it back to one variable (the original defect: `reset-onboarding`
+    // gated on Supabase while writing over `DATABASE_URL`) fails here.
+    expect(src, `${rel} does not pass process.env to the shared predicate`).toMatch(
+      /nonLocalBackendReason\(\s*process\.env\s*\)/,
     );
     // The refusal must be a 403, not a 404: a 404 is the production gate and
     // says "no such route", which is a different and misleading answer for an
@@ -54,15 +61,47 @@ describe('dev routes are gated on a loopback Supabase target', () => {
     expect(src, `${rel} does not refuse with 403`).toMatch(/status:\s*403/);
   });
 
-  it('covers every dev route that exists, so the list cannot silently shrink', () => {
-    // The list above is hand-maintained. If a new `/dev/*` route appears, it
-    // must either be added here or be a deliberate exception — this catches the
-    // case where someone adds a fifth session-minting route and nobody notices.
-    const devRouteDirs = [
-      'apps/web/src/app/dev',
-      'apps/admin/src/app/dev',
-    ].filter((d) => existsSync(join(REPO_ROOT, d)));
-    expect(devRouteDirs.length).toBe(2);
-    expect(GATED_DEV_ROUTES.length).toBe(4);
+  /**
+   * The list above is hand-maintained, so it must be *forced* to grow. The
+   * version of this case that shipped first asserted `devRouteDirs.length === 2`
+   * and `GATED_DEV_ROUTES.length === 4` — both constants, so a fifth
+   * session-minting route could not fail it, and correctly adding one to the list
+   * BROKE it (5 !== 4), training the next author to edit the assertion instead of
+   * thinking. Its docblock claimed it caught exactly the case it could not see.
+   *
+   * This version enumerates the files on disk instead. Adding any `route.ts`
+   * under either `app/dev` now fails until it is listed above, which is also the
+   * moment to decide whether it needs the gate.
+   */
+  it('discovers every dev route on disk and requires it to be listed', () => {
+    const DEV_ROUTE_DIRS = ['apps/web/src/app/dev', 'apps/admin/src/app/dev'];
+
+    function collectRouteFiles(relDir: string): string[] {
+      const abs = join(REPO_ROOT, relDir);
+      // Anti-vacuity: a renamed `app/dev` directory must fail here, not quietly
+      // contribute zero discovered routes and leave the comparison trivially
+      // satisfied by the hand-maintained list.
+      expect(existsSync(abs), `dev route directory is missing: ${relDir}`).toBe(true);
+      const out: string[] = [];
+      for (const entry of readdirSync(abs, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          out.push(...collectRouteFiles(`${relDir}/${entry.name}`));
+        } else if (entry.name === 'route.ts' || entry.name === 'route.tsx') {
+          out.push(`${relDir}/${entry.name}`);
+        }
+      }
+      return out;
+    }
+
+    const discovered = DEV_ROUTE_DIRS.flatMap(collectRouteFiles).sort();
+
+    // Non-zero denominator: a walk that examined nothing must not pass.
+    expect(discovered.length).toBeGreaterThan(0);
+    // Sorted arrays, so the failure message names the offending path rather than
+    // reporting a length mismatch.
+    expect(
+      discovered,
+      'a /dev/* route exists that is not in GATED_DEV_ROUTES (or was removed from disk)',
+    ).toEqual([...GATED_DEV_ROUTES].sort());
   });
 });
