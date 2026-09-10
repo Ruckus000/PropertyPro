@@ -8,7 +8,11 @@
  * @module lib/server/dashboard-series
  */
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { fetchRowsInPages, MEMBER_COUNT_PAGE_SIZE, MEMBER_COUNT_ROW_BOUND } from './clients';
+import {
+  fetchRowsInPages,
+  MEMBER_COUNT_PAGE_SIZE,
+  MEMBER_COUNT_ROW_BOUND,
+} from '@/lib/api/list-limits';
 
 export interface MonthPoint {
   /** 'YYYY-MM', UTC calendar month. */

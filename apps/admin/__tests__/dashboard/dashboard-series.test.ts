@@ -5,16 +5,6 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
 }));
 
-// `dashboard-series.ts` now imports the paged-scan helper from
-// `lib/server/clients.ts`, which also imports `findRootlessCommunities` from
-// `@propertypro/db/unsafe` — that module loads `./drizzle` eagerly at MODULE
-// LOAD and throws if `DATABASE_URL` is unset (true in this test environment).
-// `getDashboardSeries` never calls `findRootlessCommunities`, so a stub is
-// enough. Same trap, same fix as `__tests__/clients/member-counts.test.ts`.
-vi.mock('@propertypro/db/unsafe', () => ({
-  findRootlessCommunities: vi.fn().mockResolvedValue([]),
-}));
-
 import { bucketByMonth, cumulativeByMonth, getDashboardSeries } from '@/lib/server/dashboard-series';
 
 const now = new Date('2026-09-08T12:00:00Z');
