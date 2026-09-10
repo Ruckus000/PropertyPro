@@ -46,12 +46,18 @@ export interface AdminNavGroup {
 }
 
 /**
- * Design nav structure for the redesigned console shell. Four hrefs below
- * (`/tickets`, `/health`, `/onboarding`, `/billing`) name routes that Wave 3
- * has not created yet — that is deliberate, not a bug: this config is the
- * single source every later shell task (rail, search, breadcrumbs) reads, and
- * shipping it ahead of those routes lets those pages 404 gracefully in the
- * meantime rather than being invisible from the nav once they exist.
+ * Design nav structure for the redesigned console shell — the single source the
+ * rail, the mobile drawer and the command palette all read.
+ *
+ * EVERY href here must resolve to a page inside `app/(console)`. The four Wave 3
+ * entries (`/tickets`, `/health`, `/onboarding`, `/billing`) shipped ahead of
+ * their routes on the theory that they would "404 gracefully" in the meantime.
+ * They cannot, and the reason is structural: Next.js sends an UNMATCHED url to
+ * the ROOT `not-found`, which never enters this route group, so
+ * `(console)/layout.tsx` does not run — the rail, the top bar and the palette
+ * all vanish and the only way back is the browser. Each of the four now has a
+ * placeholder page under `(console)`, and `__tests__/shell/nav-config.test.ts`
+ * fails on any href that has none.
  */
 export const NAV_GROUPS: AdminNavGroup[] = [
   {
