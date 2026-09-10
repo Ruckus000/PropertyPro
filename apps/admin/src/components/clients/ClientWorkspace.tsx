@@ -199,6 +199,11 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
               transparency_enabled: community.transparency_enabled,
               community_settings: community.community_settings,
             }}
+            // `community.openDeletionRequest` was threaded onto this component's
+            // props by task 17a specifically for this — see the field's
+            // docblock above — so the Settings tab's Danger Zone (task 17b) can
+            // render it without a second fetch.
+            openDeletionRequest={community.openDeletionRequest}
           />
         )}
       </div>

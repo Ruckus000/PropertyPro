@@ -2,13 +2,25 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Save, RotateCcw } from 'lucide-react';
+import { Save, RotateCcw, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 import {
   COMMUNITY_FEATURES,
   PLAN_IDS,
   type CommunityType,
   type CommunityFeatures,
 } from '@propertypro/shared';
+import {
+  AlertBanner,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Switch,
+} from '@propertypro/ui';
 import type {
   CommunitySettings,
   CommunityWriteSettings,
@@ -31,8 +43,18 @@ interface CommunityData {
   community_settings: CommunitySettings;
 }
 
+interface DeletionRequestSummary {
+  id: number;
+  status: string;
+  coolingEndsAt: string;
+}
+
 interface CommunitySettingsEditorProps {
   community: CommunityData;
+  /** The community's open ('cooling') deletion request, if any — Danger Zone
+   * links to it rather than offering a request button here (spec §1
+   * non-goal: this screen does not initiate deletion). */
+  openDeletionRequest?: DeletionRequestSummary | null;
 }
 
 interface WriteLevelConfig {
@@ -96,6 +118,9 @@ const US_TIMEZONES = [
   'Pacific/Honolulu',
 ] as const;
 
+const selectClassName =
+  'flex h-9 w-full rounded-md border border-edge bg-transparent px-3 py-1 text-sm shadow-sm transition-colors duration-quick focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50';
+
 function getVisibleWriteLevelToggles(communityType: CommunityType): WriteLevelConfig[] {
   const features = COMMUNITY_FEATURES[communityType];
   return WRITE_LEVEL_CONFIG.filter(
@@ -103,7 +128,7 @@ function getVisibleWriteLevelToggles(communityType: CommunityType): WriteLevelCo
   );
 }
 
-export function CommunitySettingsEditor({ community: initial }: CommunitySettingsEditorProps) {
+export function CommunitySettingsEditor({ community: initial, openDeletionRequest }: CommunitySettingsEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState({
     name: initial.name,
@@ -215,241 +240,261 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
 
   return (
     <form onSubmit={handleSave} className="space-y-6">
-      {/* Metadata */}
-      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-        <h2 className="mb-4 text-sm font-semibold text-content-secondary">Community Metadata</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-xs font-medium text-content-tertiary mb-1">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => handleChange('name', e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-content-tertiary mb-1">Timezone</label>
-            <select
-              value={form.timezone}
-              onChange={(e) => handleChange('timezone', e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-            >
-              {US_TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>{tz.replace('America/', '').replace('Pacific/', '').replace(/_/g, ' ')}</option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-content-tertiary mb-1">Address</label>
-            <input
-              type="text"
-              value={form.address_line1}
-              onChange={(e) => handleChange('address_line1', e.target.value)}
-              placeholder="Street address"
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-content-tertiary mb-1">City</label>
-            <input
-              type="text"
-              value={form.city}
-              onChange={(e) => handleChange('city', e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-content-tertiary mb-1">State</label>
-              <input
-                type="text"
-                value={form.state}
-                onChange={(e) => handleChange('state', e.target.value)}
-                maxLength={2}
-                placeholder="FL"
-                className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-content-tertiary mb-1">ZIP</label>
-              <input
-                type="text"
-                value={form.zip_code}
-                onChange={(e) => handleChange('zip_code', e.target.value)}
-                maxLength={10}
-                className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Subscription */}
-      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-        <h2 className="mb-4 text-sm font-semibold text-content-secondary">Subscription</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-xs font-medium text-content-tertiary mb-1">Plan</label>
-            <select
-              value={form.subscription_plan}
-              onChange={(e) => handleChange('subscription_plan', e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-            >
-              <option value="">Not set</option>
-              {PLAN_IDS.map((planId) => (
-                <option key={planId} value={planId}>{PLAN_LABELS[planId]}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-content-tertiary mb-1">Status</label>
-            <select
-              value={form.subscription_status}
-              onChange={(e) => handleChange('subscription_status', e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-            >
-              <option value="">Not set</option>
-              {SUBSCRIPTION_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s.replace('_', ' ')}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Legal gates — one audited toggle per legally-exposed capability. */}
-      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-        <h2 className="mb-1 text-sm font-semibold text-content-secondary">Legal Readiness Gates</h2>
-        <p className="mb-4 text-xs text-content-disabled">
-          Each of these controls a feature with statutory or regulatory exposure. All
-          default to <strong>off</strong>. Every change is recorded individually in the
-          admin audit log.
-        </p>
-        <div className="space-y-4">
-          {LEGAL_GATES.map((gate) => {
-            const enabled = form.community_settings[gate.key] === true;
-            return (
-              <div
-                key={gate.key}
-                className="flex items-start justify-between gap-4 border-t border-edge pt-4 first:border-t-0 first:pt-0"
-              >
-                <div>
-                  <h3 className="text-sm font-medium text-content-secondary">{gate.title}</h3>
-                  <p className="mt-0.5 text-xs text-content-disabled">{gate.description}</p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={enabled}
-                  aria-label={`${gate.title} — ${enabled ? 'enabled' : 'disabled'}`}
-                  onClick={() => handleLegalGateChange(gate.key, !enabled)}
-                  className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                    enabled ? 'bg-interactive' : 'bg-interactive-disabled'
-                  }`}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Left column: Community fields + Who can write */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Community Metadata</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 pt-0 sm:grid-cols-2">
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label htmlFor="settings-name">Name</Label>
+                <Input
+                  id="settings-name"
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="settings-timezone">Timezone</Label>
+                <select
+                  id="settings-timezone"
+                  value={form.timezone}
+                  onChange={(e) => handleChange('timezone', e.target.value)}
+                  className={selectClassName}
                 >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-card shadow ring-0 transition-transform ${
-                      enabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
+                  {US_TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz.replace('America/', '').replace('Pacific/', '').replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label htmlFor="settings-address">Address</Label>
+                <Input
+                  id="settings-address"
+                  type="text"
+                  value={form.address_line1}
+                  onChange={(e) => handleChange('address_line1', e.target.value)}
+                  placeholder="Street address"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="settings-city">City</Label>
+                <Input
+                  id="settings-city"
+                  type="text"
+                  value={form.city}
+                  onChange={(e) => handleChange('city', e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="settings-state">State</Label>
+                  <Input
+                    id="settings-state"
+                    type="text"
+                    value={form.state}
+                    onChange={(e) => handleChange('state', e.target.value)}
+                    maxLength={2}
+                    placeholder="FL"
                   />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Write-Level Restrictions */}
-      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-        <h2 className="mb-1 text-sm font-semibold text-content-secondary">Write-Level Restrictions</h2>
-        <p className="mb-4 text-xs text-content-disabled">
-          Control whether all community members or only admin roles (board members, CAM, site manager, PM admin) can create and edit content in each area. Default is &ldquo;All Members&rdquo;.
-        </p>
-        <div className="space-y-3">
-          {visibleToggles.map(({ key, label, helpText }) => {
-            const value = form.community_settings[key] ?? 'all_members';
-            return (
-              <div key={key} className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-page px-4 py-3">
-                <div className="min-w-0 mr-4">
-                  <span className="text-sm text-content-secondary">{label}</span>
-                  <p className="text-xs text-content-disabled mt-0.5">{helpText}</p>
                 </div>
-                <div className="flex gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleWriteLevel(key, 'all_members')}
-                    className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                      value === 'all_members'
-                        ? 'bg-coral-600 text-white'
-                        : 'bg-surface-card text-content-tertiary border border-edge hover:bg-surface-muted'
-                    }`}
-                  >
-                    All Members
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleWriteLevel(key, 'admin_only')}
-                    className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                      value === 'admin_only'
-                        ? 'bg-status-warning text-content-inverse'
-                        : 'bg-surface-card text-content-tertiary border border-edge hover:bg-surface-muted'
-                    }`}
-                  >
-                    Admin Only
-                  </button>
+                <div className="space-y-1.5">
+                  <Label htmlFor="settings-zip">ZIP</Label>
+                  <Input
+                    id="settings-zip"
+                    type="text"
+                    value={form.zip_code}
+                    onChange={(e) => handleChange('zip_code', e.target.value)}
+                    maxLength={10}
+                  />
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            </CardContent>
+          </Card>
 
-      {/* Transparency */}
-      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-content-secondary">Public Transparency Page</h2>
-            <p className="mt-0.5 text-xs text-content-disabled">
-              When enabled, a public compliance page is visible to non-members.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => handleChange('transparency_enabled', !form.transparency_enabled)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              form.transparency_enabled ? 'bg-interactive' : 'bg-interactive-disabled'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-card shadow ring-0 transition-transform ${
-                form.transparency_enabled ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
+          <Card>
+            <CardHeader>
+              <CardTitle>Subscription</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 pt-0 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="settings-plan">Plan</Label>
+                <select
+                  id="settings-plan"
+                  value={form.subscription_plan}
+                  onChange={(e) => handleChange('subscription_plan', e.target.value)}
+                  className={selectClassName}
+                >
+                  <option value="">Not set</option>
+                  {PLAN_IDS.map((planId) => (
+                    <option key={planId} value={planId}>{PLAN_LABELS[planId]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="settings-status">Status</Label>
+                <select
+                  id="settings-status"
+                  value={form.subscription_status}
+                  onChange={(e) => handleChange('subscription_status', e.target.value)}
+                  className={selectClassName}
+                >
+                  <option value="">Not set</option>
+                  {SUBSCRIPTION_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                  ))}
+                </select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Who Can Write</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <p className="mb-4 text-xs text-content-disabled">
+                Control whether all community members or only admin roles (property manager,
+                root manager, board designees) can create and edit content in each area. Default
+                is &ldquo;All Members&rdquo;.
+              </p>
+              <div className="space-y-3">
+                {visibleToggles.map(({ key, label, helpText }) => {
+                  const value = form.community_settings[key] ?? 'all_members';
+                  return (
+                    <div key={key} className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-page px-4 py-3">
+                      <div className="min-w-0 mr-4">
+                        <span className="text-sm text-content-secondary">{label}</span>
+                        <p className="text-xs text-content-disabled mt-0.5">{helpText}</p>
+                      </div>
+                      <div className="flex gap-1 shrink-0" role="group" aria-label={`${label} write access`}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={value === 'all_members' ? 'default' : 'outline'}
+                          aria-pressed={value === 'all_members'}
+                          onClick={() => handleWriteLevel(key, 'all_members')}
+                        >
+                          All Members
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={value === 'admin_only' ? 'default' : 'outline'}
+                          aria-pressed={value === 'admin_only'}
+                          onClick={() => handleWriteLevel(key, 'admin_only')}
+                        >
+                          Admin Only
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right column: Legal gates + Danger zone */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Legal Readiness Gates</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <p className="mb-4 text-xs text-content-disabled">
+                Each of these controls a feature with statutory or regulatory exposure. All
+                default to <strong>off</strong>. Every change is recorded individually in the
+                admin audit log.
+              </p>
+              <div className="space-y-4">
+                {LEGAL_GATES.map((gate) => {
+                  const enabled = form.community_settings[gate.key] === true;
+                  return (
+                    <div
+                      key={gate.key}
+                      className="flex items-start justify-between gap-4 border-t border-edge pt-4 first:border-t-0 first:pt-0"
+                    >
+                      <div>
+                        <h3 className="text-sm font-medium text-content-secondary">{gate.title}</h3>
+                        <p className="mt-0.5 text-xs text-content-disabled">{gate.description}</p>
+                      </div>
+                      <Switch
+                        className="mt-0.5"
+                        checked={enabled}
+                        onCheckedChange={(value) => handleLegalGateChange(gate.key, value)}
+                        aria-label={`${gate.title} — ${enabled ? 'enabled' : 'disabled'}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Public Transparency Page</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-content-disabled">
+                  When enabled, a public compliance page is visible to non-members.
+                </p>
+                <Switch
+                  checked={form.transparency_enabled}
+                  onCheckedChange={(value) => handleChange('transparency_enabled', value)}
+                  aria-label={`Public transparency page — ${form.transparency_enabled ? 'enabled' : 'disabled'}`}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-status-danger-border">
+            <CardHeader>
+              <CardTitle className="text-status-danger">Danger Zone</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {openDeletionRequest ? (
+                <AlertBanner
+                  status="danger"
+                  title="Deletion request in progress"
+                  description={`This community is in its cooling-off period, ending ${new Date(openDeletionRequest.coolingEndsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`}
+                  action={
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/deletion-requests">
+                        View request
+                        <ExternalLink size={14} aria-hidden="true" />
+                      </Link>
+                    </Button>
+                  }
+                />
+              ) : (
+                <p className="text-sm text-content-tertiary">
+                  No deletion request is in progress for this community. Requesting deletion is
+                  handled from the <Link href="/deletion-requests" className="text-content-link hover:text-content-link-hover underline underline-offset-2">Deletion Requests</Link> screen.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50"
-        >
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+        <Button type="submit" loading={saving}>
+          <Save size={14} aria-hidden="true" />
           Save Changes
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex items-center gap-2 rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
-        >
-          <RotateCcw size={14} />
+        </Button>
+        <Button type="button" variant="outline" onClick={handleReset}>
+          <RotateCcw size={14} aria-hidden="true" />
           Reset
-        </button>
-        {error && <p className="text-sm text-status-danger">{error}</p>}
+        </Button>
+        {error && <p className="text-sm text-status-danger" role="alert">{error}</p>}
         {success && <p className="text-sm text-status-success">Saved successfully</p>}
       </div>
     </form>
