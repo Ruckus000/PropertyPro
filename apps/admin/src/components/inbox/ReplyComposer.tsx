@@ -192,7 +192,7 @@ export function ReplyComposer({
               type="button"
               onClick={() => void send()}
               disabled={sending}
-              className="inline-flex items-center gap-2 rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md bg-interactive px-3 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60 md:min-h-9"
             >
               {sending ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -205,7 +205,7 @@ export function ReplyComposer({
               type="button"
               onClick={() => setConfirming(false)}
               disabled={sending}
-              className="rounded-md border border-edge-strong px-3 py-1.5 text-sm text-content-secondary hover:bg-surface-hover"
+              className="inline-flex min-h-11 items-center rounded-md border border-edge-strong px-3 text-sm text-content-secondary hover:bg-surface-hover md:min-h-9"
             >
               Cancel
             </button>
@@ -216,7 +216,7 @@ export function ReplyComposer({
           type="button"
           onClick={() => (asNote ? void send() : setConfirming(true))}
           disabled={trimmed.length === 0 || sending}
-          className="mt-3 inline-flex items-center gap-2 rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60"
+          className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md bg-interactive px-3 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60 md:min-h-9"
         >
           {sending ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

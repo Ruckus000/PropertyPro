@@ -61,7 +61,7 @@ export function StatusControl({ threadId, current }: StatusControlProps) {
             onClick={() => void change(value)}
             aria-pressed={status === value}
             disabled={pending}
-            className={`rounded-full px-3 py-1 text-sm disabled:opacity-60 ${
+            className={`inline-flex min-h-11 items-center rounded-full px-3 text-sm disabled:opacity-60 md:min-h-9 ${
               status === value
                 ? 'bg-interactive text-content-inverse'
                 : 'bg-surface-muted text-content-secondary hover:bg-surface-hover'
