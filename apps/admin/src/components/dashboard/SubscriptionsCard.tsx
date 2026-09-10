@@ -13,20 +13,24 @@ interface SubscriptionsCardProps {
 type BillingKey = keyof PlatformDashboardStats['billing'];
 
 interface StatusRow {
+  /**
+   * Doubles as the Billing filter value in the row's href — there used to be a
+   * separate `status` field holding a byte-identical copy in all five rows, i.e.
+   * two places to change one fact.
+   */
   key: BillingKey;
   label: string;
-  status: string;
   barClass: string;
   textClass: string;
 }
 
 /** Written out per status in full — a computed `bg-status-${status}` class name is invisible to the class-resolution guard's static scan. */
 const STATUS_ROWS: StatusRow[] = [
-  { key: 'active', label: 'Active', status: 'active', barClass: 'bg-status-success', textClass: 'text-status-success' },
-  { key: 'trialing', label: 'Trialing', status: 'trialing', barClass: 'bg-status-info', textClass: 'text-status-info' },
-  { key: 'past_due', label: 'Past due', status: 'past_due', barClass: 'bg-status-warning', textClass: 'text-status-warning' },
-  { key: 'canceled', label: 'Canceled', status: 'canceled', barClass: 'bg-status-neutral', textClass: 'text-status-neutral' },
-  { key: 'none', label: 'No subscription', status: 'none', barClass: 'bg-surface-muted', textClass: 'text-content-tertiary' },
+  { key: 'active', label: 'Active', barClass: 'bg-status-success', textClass: 'text-status-success' },
+  { key: 'trialing', label: 'Trialing', barClass: 'bg-status-info', textClass: 'text-status-info' },
+  { key: 'past_due', label: 'Past due', barClass: 'bg-status-warning', textClass: 'text-status-warning' },
+  { key: 'canceled', label: 'Canceled', barClass: 'bg-status-neutral', textClass: 'text-status-neutral' },
+  { key: 'none', label: 'No subscription', barClass: 'bg-surface-muted', textClass: 'text-content-tertiary' },
 ];
 
 export function SubscriptionsCard({ billing }: SubscriptionsCardProps) {
@@ -56,7 +60,7 @@ export function SubscriptionsCard({ billing }: SubscriptionsCardProps) {
           {rows.map((row) => (
             <li key={row.key}>
               <Link
-                href={`/billing?status=${row.status}`}
+                href={`/billing?status=${row.key}`}
                 className="flex min-h-[44px] items-center justify-between py-2 hover:bg-surface-hover md:min-h-[36px]"
               >
                 <span className="flex items-center gap-2 text-sm text-content-secondary">

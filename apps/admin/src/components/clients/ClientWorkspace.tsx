@@ -5,9 +5,12 @@
  *
  * Renders `WorkspaceHeader` (the screen's only `<h1>`), the tab strip, and
  * whichever panel is active. Panels beyond Overview/Billing (Members,
- * Compliance, Access, Website, Support, Settings) are implemented in their
- * own files, unchanged by this slice (task-17a) — see
- * `.superpowers/sdd/2026-09-08-admin-console-redesign/task-17a-dispatch-notes.md`.
+ * Compliance, Access, Website, Support, Settings) are implemented in their own
+ * files — this file owns only the frame. Task 17a introduced that split (see
+ * `.superpowers/sdd/2026-09-08-admin-console-redesign/task-17a-dispatch-notes.md`);
+ * four of those panels were then changed by `04606b6a`, so the note this
+ * docblock used to carry — "unchanged by this slice" — no longer described
+ * anything true.
  */
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';

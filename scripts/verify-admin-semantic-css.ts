@@ -7,7 +7,7 @@
  * written directly in apps/admin/src.
  *
  *   pnpm --filter @propertypro/admin build    # must run first
- *   node scripts/verify-admin-semantic-css.cjs
+ *   pnpm guard:admin-semantic-css
  *
  * WHY THIS EXISTS — it catches a failure mode `guard:design-tokens` structurally
  * cannot. That guard checks that raw palette classes are GONE; it has no opinion

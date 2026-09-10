@@ -4,7 +4,11 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
-import { SUPPORT_THREAD_STATUSES, SUPPORT_THREAD_STATUS_LABELS } from '@propertypro/shared';
+import {
+  SUPPORT_MAILBOXES,
+  SUPPORT_THREAD_STATUSES,
+  SUPPORT_THREAD_STATUS_LABELS,
+} from '@propertypro/shared';
 
 import type { InboxOverview } from '@/lib/server/inbox';
 
@@ -14,13 +18,29 @@ import { ThreadList } from './ThreadList';
 
 interface InboxDashboardProps {
   overview: InboxOverview;
-  /** Initial values read from the URL (`?mailbox=&status=`) by the server page. */
+  /**
+   * Initial values read from the URL (`?mailbox=&status=`) by the server page.
+   * Unvalidated at this boundary on purpose — `knownOr` below is the one place
+   * that decides what an unrecognised value means.
+   */
   initialMailbox: string;
   initialStatus: string;
   /** The thread rendered by `detail`, so its row can be highlighted in the list. */
   activeThreadId?: number;
   /** `/inbox/[threadId]` passes the sanitized `ThreadView`; `/inbox` passes nothing. */
   detail?: ReactNode;
+}
+
+/**
+ * `?mailbox=` / `?status=` are untrusted input — a bookmark, a shared link, a
+ * hand-edited URL — so each is validated against its known list and falls back
+ * to 'all', the same discipline `ClientWorkspace` applies to `?tab=`. Without
+ * it, `?mailbox=foo` rendered an empty thread list with no active chip and no
+ * explanation: nothing matched the filter, and no tab was highlighted to say
+ * which filter was in force.
+ */
+function knownOr(value: string, allowed: readonly string[]): string {
+  return allowed.includes(value) ? value : 'all';
 }
 
 /**
@@ -41,8 +61,8 @@ export function InboxDashboard({
 }: InboxDashboardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [mailbox, setMailbox] = useState(initialMailbox);
-  const [status, setStatus] = useState(initialStatus);
+  const [mailbox, setMailbox] = useState(() => knownOr(initialMailbox, SUPPORT_MAILBOXES));
+  const [status, setStatus] = useState(() => knownOr(initialStatus, SUPPORT_THREAD_STATUSES));
 
   function updateFilters(next: { mailbox?: string; status?: string }) {
     const nextMailbox = next.mailbox ?? mailbox;

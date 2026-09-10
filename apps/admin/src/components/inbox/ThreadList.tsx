@@ -65,7 +65,7 @@ export function ThreadList({ threads, activeThreadId, truncated, mailbox, status
             <li key={thread.id}>
               <Link
                 href={query ? `/inbox/${thread.id}?${query}` : `/inbox/${thread.id}`}
-                aria-current={isActive ? 'true' : undefined}
+                aria-current={isActive ? 'page' : undefined}
                 className={`block min-h-11 px-3 py-2.5 hover:bg-surface-hover md:min-h-9 ${
                   isActive ? 'bg-surface-muted' : ''
                 }`}

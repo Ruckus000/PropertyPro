@@ -269,7 +269,7 @@ export function BrandingFormFields({
                 onClick={handleRemoveLogo}
                 className="inline-flex items-center gap-1 text-xs text-[var(--status-danger)] hover:opacity-80"
               >
-                <X size={12} /> Remove
+                <X size={12} aria-hidden="true" /> Remove
               </button>
             </div>
           </div>

@@ -131,7 +131,11 @@ export function ClientPortfolio({ clients, disputes, counts, initialFilter, init
   };
 
   return (
-    <div className="p-6 space-y-6">
+    // No root padding: the `(console)` shell already applies
+    // `mx-auto max-w-7xl px-4 py-6 md:px-8` (`AdminShell.tsx`), so a `p-6` here
+    // double-gutters the page. Every other surface this wave restyled roots in
+    // `PageBody` or a bare `space-y-*`.
+    <div className="space-y-6">
       <AdminPageHeader
         title="Client Portfolio"
         description={

@@ -31,8 +31,15 @@ const INPUT = 'rounded-md border border-edge-strong';
  * send is the only moment the operator can catch a reply going to the wrong
  * thread.
  *
- * There is no Dialog primitive in this repo; the inline panel below follows
- * `components/clients/StartSessionDialog.tsx`.
+ * Deliberately an INLINE panel, not a modal. `Dialog`/`AlertDialog` from
+ * `@propertypro/ui` do exist (this branch uses them in `KpiDetailDialog` and
+ * `StaleDemosBanner`) — an earlier version of this note claimed otherwise, which
+ * was false and would have authorised the next hand-rolled panel. They are the
+ * right primitive for a confirm that REPLACES the screen; this one has to sit
+ * beneath the draft it is confirming, because the operator is checking the
+ * From/To/Subject against the text they just wrote, and a modal overlay would
+ * cover exactly that. Same reasoning as `components/clients/StartSessionDialog.tsx`,
+ * whose own panel this follows.
  *
  * "Add as internal note" switches the SAME draft to the notes route instead
  * of the reply route — nothing is emailed, so the confirm step (which exists

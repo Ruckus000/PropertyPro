@@ -9,8 +9,13 @@
  * The mode rule itself comes from `@propertypro/shared` — one implementation,
  * shared with the Stripe webhook's mode guard.
  */
-import { describeLivemode, redactStripeKey, stripeKeyLivemode } from '@propertypro/shared';
-import { hostFromUrl, isLoopbackUrl } from '@propertypro/shared';
+import {
+  describeLivemode,
+  hostFromUrl,
+  isLoopbackUrl,
+  redactStripeKey,
+  stripeKeyLivemode,
+} from '@propertypro/shared';
 
 /**
  * Assert `key` is a usable secret key in the expected mode.

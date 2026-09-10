@@ -42,7 +42,7 @@ export default async function ThreadPage({ params, searchParams }: ThreadPagePro
 
   // No `AdminPageHeader` on this route — `ThreadView` owns this screen's own
   // `<h1>` (the thread subject), so wrapping it in the header'd `/inbox` chrome
-  // would produce two `<h1>`s. Wave 2 decides whether that changes.
+  // would produce two `<h1>`s. Wave 2 decided: no header here.
   return (
     <InboxDashboard
       overview={overview}

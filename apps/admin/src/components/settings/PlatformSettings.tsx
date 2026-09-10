@@ -113,7 +113,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
               className="flex items-center gap-4 rounded-lg border border-edge bg-surface-card p-5 shadow-e1"
             >
               <div className="rounded-lg bg-surface-muted p-2.5 text-content-secondary">
-                <Icon size={20} />
+                <Icon size={20} aria-hidden="true" />
               </div>
               <div>
                 <p className="text-2xl font-semibold text-content">{value}</p>
