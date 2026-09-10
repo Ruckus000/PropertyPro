@@ -7,9 +7,10 @@ import {
   Shield,
   Plus,
   Trash2,
-  Loader2,
   X,
 } from 'lucide-react';
+import { Badge, Button, Input, PageBody } from '@propertypro/ui';
+import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 
 interface PlatformAdmin {
   userId: string;
@@ -97,8 +98,8 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
   ];
 
   return (
-    <div className="p-6 space-y-8">
-      <h1 className="text-xl font-semibold text-content">Platform Settings</h1>
+    <PageBody spacing="loose">
+      <AdminPageHeader title="Settings" description="Platform administrators, alerts and integrations." />
 
       {/* Stats */}
       <section>
@@ -130,13 +131,10 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
             Platform Administrators
           </h2>
           {!showAddForm && (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-coral-700 transition-colors"
-            >
-              <Plus size={14} />
+            <Button size="sm" onClick={() => setShowAddForm(true)}>
+              <Plus size={14} aria-hidden="true" />
               Add Admin
-            </button>
+            </Button>
           )}
         </div>
 
@@ -144,118 +142,99 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
         {showAddForm && (
           <form onSubmit={handleAdd} className="mb-4 flex items-start gap-3">
             <div className="flex-1">
-              <input
+              <Input
                 type="email"
                 placeholder="Email address"
                 value={addEmail}
                 onChange={(e) => setAddEmail(e.target.value)}
                 required
-                className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
               />
               {addError && (
                 <p className="mt-1 text-xs text-status-danger">{addError}</p>
               )}
             </div>
-            <button
-              type="submit"
-              disabled={addLoading}
-              className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50 transition-colors"
-            >
-              {addLoading && <Loader2 size={14} className="animate-spin" />}
+            <Button type="submit" size="sm" loading={addLoading}>
               Add
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
               onClick={() => { setShowAddForm(false); setAddError(''); setAddEmail(''); }}
-              className="rounded-md p-2 text-content-disabled hover:bg-surface-muted hover:text-content-secondary transition-colors"
+              aria-label="Cancel adding an admin"
             >
-              <X size={16} />
-            </button>
+              <X size={16} aria-hidden="true" />
+            </Button>
           </form>
         )}
 
-        {/* Admin table */}
-        <div className="overflow-hidden rounded-lg border border-edge bg-surface-card shadow-e1">
-          <table className="min-w-full divide-y divide-edge">
-            <thead className="bg-surface-page">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
-                  Email
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
-                  Role
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
-                  Added
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-content-tertiary">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-edge">
-              {admins.map((admin) => {
-                const isSelf = admin.userId === currentAdmin.id;
-                return (
-                  <tr
-                    key={admin.userId}
-                    className={isSelf ? 'bg-coral-50/50' : 'hover:bg-surface-page'}
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content">
-                      {admin.email}
-                      {isSelf && (
-                        <span className="ml-2 rounded bg-status-info-subtle px-1.5 py-0.5 text-xs font-medium text-status-info">
-                          you
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-tertiary capitalize">
-                      {admin.role.replace('_', ' ')}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-tertiary">
-                      {new Date(admin.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      {isSelf ? (
-                        <span className="text-xs text-content-disabled">—</span>
-                      ) : removeId === admin.userId ? (
-                        <div className="inline-flex items-center gap-2">
-                          <span className="text-xs text-content-tertiary">Remove?</span>
-                          <button
-                            onClick={() => handleRemove(admin.userId)}
-                            disabled={removeLoading}
-                            className="text-xs font-medium text-status-danger hover:text-status-danger disabled:opacity-50"
-                          >
-                            {removeLoading ? 'Removing…' : 'Yes'}
-                          </button>
-                          <button
-                            onClick={() => setRemoveId(null)}
-                            className="text-xs font-medium text-content-tertiary hover:text-content-secondary"
-                          >
-                            No
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setRemoveId(admin.userId)}
-                          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-content-disabled hover:bg-status-danger-bg hover:text-status-danger transition-colors"
-                        >
-                          <Trash2 size={12} />
-                          Remove
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {/* Admin list */}
+        <div className="divide-y divide-edge overflow-hidden rounded-lg border border-edge bg-surface-card shadow-e1">
+          {admins.map((admin) => {
+            const isSelf = admin.userId === currentAdmin.id;
+            return (
+              <div
+                key={admin.userId}
+                className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${isSelf ? 'bg-coral-50/50' : 'hover:bg-surface-page'}`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-content">{admin.email}</span>
+                    {isSelf && (
+                      <Badge variant="info" size="sm">
+                        You
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-content-tertiary">
+                    <span className="capitalize">{admin.role.replace('_', ' ')}</span>
+                    {' · Added '}
+                    {new Date(admin.createdAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  {isSelf ? (
+                    <span className="text-xs text-content-disabled">—</span>
+                  ) : removeId === admin.userId ? (
+                    <div className="inline-flex items-center gap-2">
+                      <span className="text-xs text-content-tertiary">Remove?</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto px-2 py-1 text-status-danger hover:bg-status-danger-bg hover:text-status-danger"
+                        disabled={removeLoading}
+                        onClick={() => handleRemove(admin.userId)}
+                      >
+                        {removeLoading ? 'Removing…' : 'Yes'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto px-2 py-1"
+                        onClick={() => setRemoveId(null)}
+                      >
+                        No
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button variant="ghost" size="sm" onClick={() => setRemoveId(admin.userId)}>
+                      <Trash2 size={12} aria-hidden="true" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
-    </div>
+
+      {/* Wave 4: AlertPrefsSection, InstallAppSection, IntegrationsSection */}
+    </PageBody>
   );
 }
