@@ -1,5 +1,5 @@
 // Multi-batch outer loop for the A1 contract-drain automation.
-// Spec: docs/superpowers/specs/2026-06-02-a1-drain-automation-design.md
+// Spec: .claude/skills/drain-loop.md
 //
 // Pure in-memory orchestration. State flows in via args (from the skill)
 // and out via the return value (back to the skill, which persists it).
