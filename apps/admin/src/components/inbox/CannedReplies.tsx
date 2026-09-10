@@ -19,7 +19,7 @@ export function CannedReplies({ replies, onInsert, disabled }: CannedRepliesProp
           type="button"
           disabled={disabled}
           onClick={() => onInsert(reply)}
-          className="min-h-9 rounded-full border border-edge-strong bg-surface-muted px-2.5 py-1 text-xs text-content-secondary hover:bg-surface-hover disabled:opacity-60 md:min-h-0"
+          className="min-h-11 rounded-full border border-edge-strong bg-surface-muted px-2.5 py-1 text-xs text-content-secondary hover:bg-surface-hover disabled:opacity-60 md:min-h-9"
         >
           {reply}
         </button>

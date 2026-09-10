@@ -14,6 +14,10 @@ interface ThreadListProps {
   /** Highlights the open thread when this list sits next to a detail pane. */
   activeThreadId?: number;
   truncated: boolean;
+  /** Current `?mailbox=&status=` filters, appended to each thread link so the
+   *  detail page reopens with the same filters instead of resetting to All/All. */
+  mailbox: string;
+  status: string;
 }
 
 const STATUS_STYLES: Record<SupportThreadStatus, { className: string; icon: typeof Clock }> = {
@@ -28,7 +32,12 @@ const STATUS_STYLES: Record<SupportThreadStatus, { className: string; icon: type
  * of rows, not a table — the column is `minmax(300px,380px)` (see
  * `InboxSplit`), too narrow for the old dashboard's five-column table.
  */
-export function ThreadList({ threads, activeThreadId, truncated }: ThreadListProps) {
+export function ThreadList({ threads, activeThreadId, truncated, mailbox, status }: ThreadListProps) {
+  const params = new URLSearchParams();
+  if (mailbox !== 'all') params.set('mailbox', mailbox);
+  if (status !== 'all') params.set('status', status);
+  const query = params.toString();
+
   if (threads.length === 0) {
     return (
       <EmptyState
@@ -55,7 +64,7 @@ export function ThreadList({ threads, activeThreadId, truncated }: ThreadListPro
           return (
             <li key={thread.id}>
               <Link
-                href={`/inbox/${thread.id}`}
+                href={query ? `/inbox/${thread.id}?${query}` : `/inbox/${thread.id}`}
                 aria-current={isActive ? 'true' : undefined}
                 className={`block min-h-11 px-3 py-2.5 hover:bg-surface-hover md:min-h-9 ${
                   isActive ? 'bg-surface-muted' : ''

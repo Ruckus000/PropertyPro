@@ -79,7 +79,7 @@ export function ThreadContextStrip({ mailbox, threadId, participantEmail }: Thre
             type="button"
             onClick={() => void convertToLead()}
             disabled={converting}
-            className="inline-flex min-h-9 items-center gap-2 rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:opacity-60 md:min-h-9"
           >
             {converting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {context.action}
@@ -91,7 +91,7 @@ export function ThreadContextStrip({ mailbox, threadId, participantEmail }: Thre
                 ? `/tickets/new?thread=${threadId}`
                 : `/deletion-requests?q=${encodeURIComponent(participantEmail)}`
             }
-            className="inline-flex min-h-9 items-center gap-2 rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-hover"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-hover md:min-h-9"
           >
             {context.action}
           </Link>

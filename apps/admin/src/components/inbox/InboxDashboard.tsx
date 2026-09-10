@@ -87,7 +87,15 @@ export function InboxDashboard({
       </div>
 
       <InboxSplit
-        list={<ThreadList threads={filtered} activeThreadId={activeThreadId} truncated={overview.truncated} />}
+        list={
+          <ThreadList
+            threads={filtered}
+            activeThreadId={activeThreadId}
+            truncated={overview.truncated}
+            mailbox={mailbox}
+            status={status}
+          />
+        }
         detail={detail ?? null}
       />
     </div>
