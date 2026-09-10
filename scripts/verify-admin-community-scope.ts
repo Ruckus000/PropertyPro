@@ -169,7 +169,22 @@ const FILTER_METHODS: ReadonlySet<string> = new Set([
  * An entry here is a claim about a signature. Adding one means re-reading
  * that signature, not guessing.
  */
-const SCOPING_HELPERS: Record<string, number> = { fetchRowsInPages: 3 };
+interface ScopingHelper {
+  /** Argument index carrying the filter column. */
+  readonly index: number;
+  /** The parameter's name at that index, re-read from the declaration below. */
+  readonly param: string;
+  /** Repo-relative file declaring the helper. */
+  readonly declaredIn: string;
+}
+
+const SCOPING_HELPERS: Record<string, ScopingHelper> = {
+  fetchRowsInPages: {
+    index: 3,
+    param: 'inColumn',
+    declaredIn: 'apps/admin/src/lib/api/list-limits.ts',
+  },
+};
 
 const EXEMPT_MARKER = 'admin-community-scope:exempt';
 /** Marker + em dash + a non-empty reason. The reason is not optional. */
@@ -268,8 +283,8 @@ function filterLiteralsIn(node: ts.Node): string[] {
       } else if (ts.isIdentifier(callee)) {
         // A plain call. Only a KNOWN helper contributes, and only at its
         // declared index; an unknown one contributes nothing (fail closed).
-        const index = SCOPING_HELPERS[callee.text];
-        if (index !== undefined) push(n.arguments[index]);
+        const helper = SCOPING_HELPERS[callee.text];
+        if (helper !== undefined) push(n.arguments[helper.index]);
       }
     }
     ts.forEachChild(n, walk);
@@ -622,12 +637,65 @@ function selftest(): void {
 
 // ── Run ──────────────────────────────────────────────────────────────────────
 
+/**
+ * Prove every `SCOPING_HELPERS` index still names the parameter it claims.
+ *
+ * The index is a hand-written assertion about somebody else's signature, and
+ * nothing type-checks it. That matters because of WHICH WAY it fails:
+ * if a reorder moves a non-literal (`ids`) into the slot, the helper
+ * contributes no marker and the guard flags its call sites — loud, harmless.
+ * But if a reorder swaps `columns` and `inColumn`, the slot holds a PROJECTION
+ * and the guard silently accepts an unscoped read, which is precisely the hole
+ * this revision was written to close. `fetchRowsInPages` takes seven
+ * positional parameters, so a refactor to an options object is a realistic
+ * thing to expect rather than a hypothetical.
+ *
+ * So re-read the declaration on every invocation and refuse to run when it has
+ * moved. Returns an error string, or `null` when every entry checks out.
+ */
+function helperSignatureSelfTest(): string | null {
+  for (const [name, helper] of Object.entries(SCOPING_HELPERS)) {
+    const abs = path.join(repoRoot, helper.declaredIn);
+    if (!fs.existsSync(abs)) {
+      return `${helper.declaredIn} does not exist, so the '${name}' argument index cannot be checked.`;
+    }
+    const sf = ts.createSourceFile(abs, fs.readFileSync(abs, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+
+    let params: ts.NodeArray<ts.ParameterDeclaration> | undefined;
+    const find = (n: ts.Node): void => {
+      if (ts.isFunctionDeclaration(n) && n.name?.text === name) params = n.parameters;
+      if (params === undefined) ts.forEachChild(n, find);
+    };
+    find(sf);
+
+    if (params === undefined) {
+      return `no function named '${name}' was found in ${helper.declaredIn}; its argument index cannot be checked.`;
+    }
+    const at = params[helper.index];
+    const actual = at !== undefined && ts.isIdentifier(at.name) ? at.name.text : undefined;
+    if (actual !== helper.param) {
+      return (
+        `'${name}' argument ${helper.index} is named '${actual ?? "(absent)"}' in ${helper.declaredIn}, ` +
+        `not '${helper.param}'. The signature moved. If argument ${helper.index} is now a projection ` +
+        'rather than the filter column, this guard would silently accept unscoped reads — update ' +
+        'SCOPING_HELPERS against the real signature before trusting it again.'
+      );
+    }
+  }
+  return null;
+}
+
 // ESM main-detection (POSIX only — matches the other guards). Importing this
 // module from a unit test must not scan the tree or exit the runner; the
 // selftest and the parser proof still run on every real invocation, before any
 // scan result is trusted.
 if (import.meta.url === `file://${process.argv[1]}`) {
   selftest();
+
+  const helperSignatureError = helperSignatureSelfTest();
+  if (helperSignatureError !== null) {
+    fail(helperSignatureError);
+  }
 
   if (!parserSelfTest()) {
     fail(
