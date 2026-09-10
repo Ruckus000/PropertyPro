@@ -136,6 +136,16 @@ export async function getDeletionRequestsData(
   }
 
   if (communityIds.length > 0) {
+    // This read is a NAME LOOKUP, not a population count: `communityIds` is
+    // already the exact set of communities named by the deletion requests just
+    // fetched, and the query only maps each id to its display name. Filtering
+    // `is_demo` / `deleted_at` the way every other `communities` read here does
+    // would blank the precise rows this screen exists to show — a community
+    // deletion request that has reached `soft_deleted` has `deleted_at` set by
+    // definition, and demo communities are exactly what an operator expiring a
+    // demo is looking at. The row would drop out of `communityMap` and the
+    // request would render with no community name at all.
+    // admin-community-scope:exempt — display-name lookup keyed by the request rows' own community ids; a soft-deleted or demo community is the subject of the request, so excluding it would blank the row
     const { data: communities, error: communitiesError } = await (db
       .from('communities')
       .select('id, name')

@@ -71,6 +71,22 @@ async function resolveMemberDestinations(userIds: string[]): Promise<Map<string,
   if (userIds.length === 0) return destinations;
 
   const db = createAdminClient();
+  // This read is scoped by USER, not by community, and deliberately so. Its job
+  // is to enumerate one known set of users' memberships; the real-community
+  // filter is applied to the result by the follow-up `.from('communities')`
+  // query below (`.in('id', candidateIds).eq('is_demo', false).is('deleted_at',
+  // null)`), whose surviving ids gate which membership becomes the palette
+  // destination. Pushing that filter into this read instead would mean fetching
+  // every real community id on the platform up front purely to pass it into an
+  // `.in()` — a whole-table read to narrow a query that is already bounded by
+  // `userIds`, which is at most the palette's result limit.
+  //
+  // Note the `.select('user_id, community_id')` below is a projection, not a
+  // predicate: it is one string literal that CONTAINS the guard's marker text
+  // but scopes nothing. The guard matches exact literal values precisely so it
+  // does not mistake this for scoping — which is why this exempt is needed and
+  // is not merely paperwork.
+  // admin-community-scope:exempt — user-scoped by `.in('user_id', userIds)`; the real-community filter runs as the follow-up `.from('communities')` query below, which gates every destination
   const { data, error } = await db
     .from('user_roles')
     .select('user_id, community_id')
