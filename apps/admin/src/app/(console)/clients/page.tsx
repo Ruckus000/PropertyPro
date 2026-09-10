@@ -34,8 +34,9 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
     searchParams,
   ]);
 
-  // `ClientPortfolio` owns this screen's heading and toolbar; Wave 2 moves it
-  // onto `AdminPageHeader` along with the rest of the page-body restyling.
+  // `ClientPortfolio` renders its own `AdminPageHeader` — its description is
+  // the live filtered/unfiltered community count, so it stays with the
+  // client component's filter state rather than being hoisted here.
   return (
     <ClientPortfolio
       clients={clients}

@@ -12,6 +12,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
 import { QuickFilterTabs } from '@propertypro/ui';
+import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { ClientCard } from './ClientCard';
 import { DisputeBanner } from './DisputeBanner';
 import type { ClientRow, OpenDispute, ClientCounts } from '@/lib/server/clients';
@@ -131,15 +132,14 @@ export function ClientPortfolio({ clients, disputes, counts, initialFilter, init
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-content">Client Portfolio</h1>
-        <p className="mt-0.5 text-sm text-content-tertiary">
-          {isFiltered
+      <AdminPageHeader
+        title="Client Portfolio"
+        description={
+          isFiltered
             ? `${filtered.length} of ${clients.length} communities`
-            : `${clients.length} communities`}
-        </p>
-      </div>
+            : `${clients.length} communities`
+        }
+      />
 
       {/* Quick filters */}
       <QuickFilterTabs
