@@ -6,6 +6,7 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 }));
 
 import { bucketByMonth, cumulativeByMonth, getDashboardSeries } from '@/lib/server/dashboard-series';
+import { COMMUNITY_SCAN_PAGE_SIZE } from '@/lib/api/list-limits';
 
 const now = new Date('2026-09-08T12:00:00Z');
 describe('dashboard series', () => {
@@ -91,6 +92,32 @@ function makeUserRolesChain(rows: MemberRowFixture[]) {
   return chain;
 }
 
+/**
+ * Page-aware stub for the `communities` read, i.e.
+ * `.select('id, created_at').eq('is_demo', false).is('deleted_at', null).order('id').range(from, to)`.
+ *
+ * `.range()` slices page by page, so a fixture larger than one page actually
+ * exercises the paging loop. The thenable fallback — what an UNPAGED
+ * `.select()…` resolves to, which is what this read used to be — deliberately
+ * emulates PostgREST's `db-max-rows`: it caps at `COMMUNITY_SCAN_PAGE_SIZE`
+ * rows with NO error, exactly as Supabase does. That is what makes the
+ * revert-check below fail for the real reason (1000 of 1001 communities,
+ * silently) rather than for a missing stub method.
+ */
+function makeCommunitiesChain(rows: CommunityFixture[]) {
+  const chain = {
+    select: () => chain,
+    eq: () => chain,
+    is: () => chain,
+    order: () => chain,
+    range: (from: number, to: number) =>
+      Promise.resolve({ data: rows.slice(from, to + 1), error: null }),
+    then: (resolve: (v: { data: CommunityFixture[]; error: null }) => unknown, reject?: (e: unknown) => unknown) =>
+      Promise.resolve({ data: rows.slice(0, COMMUNITY_SCAN_PAGE_SIZE), error: null }).then(resolve, reject),
+  };
+  return chain;
+}
+
 function mockDashboardSeriesDb(opts: {
   snapshots?: SnapshotFixture[];
   communities?: CommunityFixture[];
@@ -112,7 +139,7 @@ function mockDashboardSeriesDb(opts: {
         );
       }
       if (table === 'communities') {
-        return makeQueryResult(communities);
+        return makeCommunitiesChain(communities);
       }
       if (table === 'user_roles') {
         return makeUserRolesChain(memberRows);
@@ -281,5 +308,33 @@ describe('getDashboardSeries', () => {
     // very same rows — what the pre-fix query did — would have counted both.
     const unfiltered = cumulativeByMonth(memberRows.map((r) => r.created_at), 12, now);
     expect(unfiltered.at(-1)!.value).toBe(2);
+  });
+  it('pages past PostgREST\'s 1000-row cap — the 1001st community is counted', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    // One row past a single page. An unpaged `.select()` would come back with
+    // exactly COMMUNITY_SCAN_PAGE_SIZE rows and no error, so the chart would
+    // report 1000 communities as fact and the members scan would be restricted
+    // to those 1000 ids — which is also how this set could stop matching
+    // `dashboard.ts`'s headline set, the divergence `guard:admin-community-scope`
+    // exists for.
+    const total = COMMUNITY_SCAN_PAGE_SIZE + 1;
+    const communities = Array.from({ length: total }, (_, i) => ({
+      id: i + 1,
+      created_at: '2026-01-01T00:00:00Z',
+    }));
+
+    mockDashboardSeriesDb({
+      communities,
+      // The 1001st community's member only shows up if that community's id
+      // reached the members scan, i.e. only if the second page was fetched.
+      memberRows: [{ community_id: total, created_at: '2026-08-15T00:00:00Z' }],
+    });
+
+    const series = await getDashboardSeries();
+
+    expect(series.communities.at(-1)!.value).toBe(total);
+    expect(series.members.at(-1)!.value).toBe(1);
   });
 });

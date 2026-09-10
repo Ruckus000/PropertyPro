@@ -9,6 +9,9 @@
  */
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
+  COMMUNITY_SCAN_PAGE_SIZE,
+  COMMUNITY_SCAN_ROW_BOUND,
+  fetchAllRowsInPages,
   fetchRowsInPages,
   MEMBER_COUNT_PAGE_SIZE,
   MEMBER_COUNT_ROW_BOUND,
@@ -189,20 +192,38 @@ export async function getDashboardSeries(): Promise<DashboardSeries> {
   // down to SERIES_MONTHS.
   const cutoffIso = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - SERIES_MONTHS, 1)).toISOString();
 
-  const [snapshotsResult, communitiesResult] = await Promise.all([
+  const [snapshotsResult, communityRows] = await Promise.all([
     db
       .from('revenue_snapshots')
       .select('computed_at, mrr_cents, past_due_subscriptions, mrr_delta_pct')
       .gte('computed_at', cutoffIso)
       .order('computed_at', { ascending: true }),
-    db.from('communities').select('id, created_at').eq('is_demo', false).is('deleted_at', null),
+    // Paged, and completed-or-thrown — `dashboard.ts` builds this same real
+    // community set for the Members HEADLINE, and an unpaged `.select()` is cut
+    // at PostgREST's `db-max-rows` (1000) with no error. Two unordered 1000-row
+    // pages of one query need not hold the same 1000 rows, so past 1000
+    // communities the chart and the headline could count different populations
+    // with both reads carrying the predicate and
+    // `guard:admin-community-scope` green — the exact divergence that guard was
+    // written for.
+    fetchAllRowsInPages<CommunityIdCreatedAtRow>(
+      'the community creation history',
+      (from, to) =>
+        db
+          .from('communities')
+          .select('id, created_at')
+          .eq('is_demo', false)
+          .is('deleted_at', null)
+          .order('id')
+          .range(from, to),
+      COMMUNITY_SCAN_PAGE_SIZE,
+      COMMUNITY_SCAN_ROW_BOUND,
+    ),
   ]);
 
   throwIfError(snapshotsResult.error, 'Failed to load revenue snapshots');
-  throwIfError(communitiesResult.error, 'Failed to load community creation history');
 
   const snapshots = (snapshotsResult.data ?? []) as RevenueSnapshotRow[];
-  const communityRows = (communitiesResult.data ?? []) as CommunityIdCreatedAtRow[];
   const realCommunityIds = communityRows.map((row) => row.id);
 
   // Scoped to the same real (non-demo, non-deleted) community set the KPI

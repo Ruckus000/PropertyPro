@@ -1,4 +1,9 @@
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import {
+  COMMUNITY_SCAN_PAGE_SIZE,
+  COMMUNITY_SCAN_ROW_BOUND,
+  fetchAllRowsInPages,
+} from '@/lib/api/list-limits';
 
 const PAGE_SIZE = 1000;
 
@@ -145,17 +150,29 @@ async function fetchAllComplianceRows(
 export async function getPlatformDashboardStats(): Promise<PlatformDashboardStats> {
   const db = createAdminClient();
 
-  const { data: realCommunities, error: realCommunitiesError } = await db
-    .from('communities')
-    .select('id')
-    .eq('is_demo', false)
-    .is('deleted_at', null);
+  // Paged, and completed-or-thrown. An unpaged `.select()` is truncated at
+  // PostgREST's `db-max-rows` (1000) with no error, and `realIds` is the set
+  // every other number below is scoped to — members, documents, compliance.
+  // Worse, `dashboard-series.ts` builds the SAME set for the Members chart:
+  // two unordered 1000-row pages of one query need not be the same 1000 rows,
+  // which is exactly the headline-vs-chart divergence
+  // `guard:admin-community-scope` exists for, with both reads carrying the
+  // predicate and the guard green.
+  const realCommunities = await fetchAllRowsInPages<{ id: number }>(
+    'the real-community id set',
+    (from, to) =>
+      db
+        .from('communities')
+        .select('id')
+        .eq('is_demo', false)
+        .is('deleted_at', null)
+        .order('id')
+        .range(from, to),
+    COMMUNITY_SCAN_PAGE_SIZE,
+    COMMUNITY_SCAN_ROW_BOUND,
+  );
 
-  throwIfError(realCommunitiesError, 'Failed to load communities');
-
-  const realIds = (realCommunities ?? []).map((community) => (
-    community as { id: number }
-  ).id);
+  const realIds = realCommunities.map((community) => community.id);
 
   const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -163,7 +180,7 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     demosResult,
     membersResult,
     documentsResult,
-    subscriptionResult,
+    subscriptionRows,
     complianceRows,
     activeAccessResult,
     coolingDeletionsResult,
@@ -177,10 +194,22 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     realIds.length > 0
       ? db.from('documents').select('*', { count: 'exact', head: true }).is('deleted_at', null).in('community_id', realIds)
       : Promise.resolve({ count: 0, error: null }),
-    db.from('communities')
-      .select('subscription_status')
-      .eq('is_demo', false)
-      .is('deleted_at', null),
+    // Paged for the same reason as the id scan above: the billing breakdown is
+    // folded in memory over every real community's row, so a silent 1000-row
+    // cut would under-report every status at once.
+    fetchAllRowsInPages<SubscriptionRow>(
+      'the subscription-status breakdown',
+      (from, to) =>
+        db
+          .from('communities')
+          .select('subscription_status')
+          .eq('is_demo', false)
+          .is('deleted_at', null)
+          .order('id')
+          .range(from, to),
+      COMMUNITY_SCAN_PAGE_SIZE,
+      COMMUNITY_SCAN_ROW_BOUND,
+    ),
     fetchAllComplianceRows(db, realIds),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (db.from('access_plans')
@@ -208,7 +237,6 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
   throwIfError(demosResult.error, 'Failed to load demo count');
   throwIfError(membersResult.error, 'Failed to load member count');
   throwIfError(documentsResult.error, 'Failed to load document count');
-  throwIfError(subscriptionResult.error, 'Failed to load subscription summary');
   throwIfError(activeAccessResult.error, 'Failed to load active access plan count');
   throwIfError(coolingDeletionsResult.error, 'Failed to load pending deletion count');
   throwIfError(communities30dResult.error, 'Failed to load new-community count');
@@ -221,7 +249,7 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
       members: membersResult.count ?? 0,
       documents: documentsResult.count ?? 0,
     },
-    billing: buildBillingSummary((subscriptionResult.data ?? []) as SubscriptionRow[]),
+    billing: buildBillingSummary(subscriptionRows),
     compliance: buildComplianceSummary(complianceRows),
     lifecycle: {
       activeFreeAccess: activeAccessResult.count ?? 0,

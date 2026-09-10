@@ -15,10 +15,12 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 // AUTHZ: platform-admin report — cross-community read, gated by the requireAdminPageSession() platform-admin check in the page that calls this.
 import { findRootlessCommunities } from '@propertypro/db/unsafe';
 import {
+  COMMUNITY_SCAN_PAGE_SIZE,
+  COMMUNITY_SCAN_ROW_BOUND,
+  fetchAllRowsInPages,
   fetchRowsInPages,
   MEMBER_COUNT_PAGE_SIZE,
   MEMBER_COUNT_ROW_BOUND,
-  wasTruncated,
 } from '@/lib/api/list-limits';
 
 const COMPLIANCE_PAGE_SIZE = 1000;
@@ -186,15 +188,29 @@ export async function getClientsData(): Promise<{
 }> {
   const db = createAdminClient();
 
-  const [communitiesResult, rootlessRows, disputesResult] = await Promise.all([
-    db
-      .from('communities')
-      .select(
-        'id, name, slug, community_type, city, state, subscription_status, subscription_plan, created_at',
-      )
-      .eq('is_demo', false)
-      .is('deleted_at', null)
-      .order('name'),
+  const [communities, rootlessRows, disputesResult] = await Promise.all([
+    // Paged rather than a bare `.select()`: PostgREST caps an unpaged read at
+    // `db-max-rows` (1000 on Supabase) and says nothing, which would present
+    // 1000 of N communities — with `counts.all` reported as fact and the
+    // compliance/member scans below computed over only those ids.
+    // `.order('id')` is the paging tiebreaker; `.order('name')` stays the
+    // display order.
+    fetchAllRowsInPages<CommunityDbRow>(
+      'the client portfolio',
+      (from, to) =>
+        db
+          .from('communities')
+          .select(
+            'id, name, slug, community_type, city, state, subscription_status, subscription_plan, created_at',
+          )
+          .eq('is_demo', false)
+          .is('deleted_at', null)
+          .order('name')
+          .order('id')
+          .range(from, to),
+      COMMUNITY_SCAN_PAGE_SIZE,
+      COMMUNITY_SCAN_ROW_BOUND,
+    ),
     findRootlessCommunities(),
     db
       .from('root_claim_disputes')
@@ -204,15 +220,13 @@ export async function getClientsData(): Promise<{
   ]);
 
   // A failed communities read used to render an empty portfolio — visually
-  // identical to a platform with no clients at all. Let it reach error.tsx.
-  if (communitiesResult.error) {
-    throw new Error(`Failed to load communities: ${communitiesResult.error.message}`);
-  }
+  // identical to a platform with no clients at all. `fetchAllRowsInPages`
+  // throws for both halves of that (a failed page, and a scan that could not
+  // be completed), so it reaches error.tsx either way.
   if (disputesResult.error) {
     throw new Error(`Failed to load open disputes: ${disputesResult.error.message}`);
   }
 
-  const communities = (communitiesResult.data ?? []) as unknown as CommunityDbRow[];
   const communityIds = communities.map((c) => c.id);
 
   const [complianceRows, memberCountsResult] = await Promise.all([
