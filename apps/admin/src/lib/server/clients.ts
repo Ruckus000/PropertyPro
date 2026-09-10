@@ -25,18 +25,22 @@ import {
 
 const COMPLIANCE_PAGE_SIZE = 1000;
 
+/** `communities.community_type`. Named once so the row types below cannot drift apart. */
+export type CommunityType = 'condo_718' | 'hoa_720' | 'apartment';
+
 export interface ClientRow {
   id: number;
   name: string;
   slug: string;
-  // Widened to `string` rather than the `'condo_718' | 'hoa_720' | 'apartment'`
-  // union `CommunityDbRow` uses: `client-filters.test.ts`'s `row()` fixture
-  // builds this type through a `Partial<any>` spread, which widens every
-  // property TS can't prove the spread won't touch — pinning this to a union
-  // here would make that (brief-specified, verbatim) test fixture fail to
-  // compile against a real production line rather than fail for the behavior
-  // under test.
-  community_type: string;
+  /**
+   * The same union `CommunityDbRow` uses, which is where every value in this
+   * field comes from. It was briefly widened to `string` so a test fixture
+   * built through a `Partial<any>` spread would keep compiling — the ladder
+   * runs the other way, so the fixture was typed instead
+   * (`client-filters.test.ts`). The consequence of the widening was a second,
+   * LYING fallback in `ClientCard` (an unknown type rendered as "Condo §718").
+   */
+  community_type: CommunityType;
   city: string | null;
   state: string | null;
   subscription_status: string | null;
@@ -76,7 +80,7 @@ interface CommunityDbRow {
   id: number;
   name: string;
   slug: string;
-  community_type: 'condo_718' | 'hoa_720' | 'apartment';
+  community_type: CommunityType;
   city: string | null;
   state: string | null;
   subscription_status: string | null;

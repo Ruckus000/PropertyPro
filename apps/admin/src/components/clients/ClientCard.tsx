@@ -18,7 +18,12 @@ interface ClientCardProps {
 
 /** Design's client card: name, location · type, status badge, compliance bar, plan · members footer, and a rootless/dispute warning line. */
 export function ClientCard({ client }: ClientCardProps) {
-  const type = COMMUNITY_TYPE_LABELS[client.community_type] ?? COMMUNITY_TYPE_LABELS.condo_718!;
+  // One fallback, and the honest one — the same shape `OverviewTab` uses. This
+  // used to be `?? COMMUNITY_TYPE_LABELS.condo_718!`, which rendered an unknown
+  // type as "Condo §718": a wrong label presented as fact. `COMMUNITY_TYPE_LABELS`
+  // is keyed by `string`, so `noUncheckedIndexedAccess` still requires a fallback
+  // even now that `community_type` carries its union.
+  const typeLabel = COMMUNITY_TYPE_LABELS[client.community_type]?.label ?? client.community_type;
   const statusEntry = client.subscription_status
     ? SUBSCRIPTION_STATUS_LABELS[client.subscription_status]
     : undefined;
@@ -40,7 +45,7 @@ export function ClientCard({ client }: ClientCardProps) {
               {client.name}
             </p>
             <p className="mt-0.5 truncate text-xs text-content-tertiary">
-              {location || '—'} · {type.label}
+              {location || '—'} · {typeLabel}
             </p>
           </div>
           {statusEntry ? (

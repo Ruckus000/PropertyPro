@@ -31,3 +31,23 @@ describe('ClientCard member count', () => {
     expect(html).not.toMatch(/>\s*\d+\s*members?\s*</);
   });
 });
+
+describe('ClientCard community-type label', () => {
+  it('labels a known type from the shared map', () => {
+    const html = renderToStaticMarkup(<ClientCard client={{ ...baseClient, community_type: 'hoa_720' }} />);
+    expect(html).toContain('HOA');
+  });
+
+  it('falls back to the raw value, not to "Condo §718", for a type it has no label for', () => {
+    // `community_type` carries a union now, so this cast is the only way to
+    // reach the fallback — which is the point: the DB can grow a fourth type
+    // before this app learns its label. The old fallback was
+    // `?? COMMUNITY_TYPE_LABELS.condo_718!`, which rendered such a community as
+    // "Condo §718": a wrong label presented as fact.
+    const unknownType = { ...baseClient, community_type: 'coop_719' } as unknown as ClientRow;
+    const html = renderToStaticMarkup(<ClientCard client={unknownType} />);
+
+    expect(html).toContain('coop_719');
+    expect(html).not.toContain('Condo');
+  });
+});
