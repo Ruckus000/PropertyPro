@@ -32,10 +32,22 @@ export interface PlatformDashboardStats {
     averageScore: number | null;
     atRiskCount: number;
     totalTracked: number;
+    /** Communities bucketed by compliance score: >=90 / 80-89 / 70-79 / <70. */
+    distribution: {
+      top: number;
+      high: number;
+      mid: number;
+      low: number;
+    };
   };
   lifecycle: {
     activeFreeAccess: number;
     pendingDeletions: number;
+  };
+  /** Count of rows created in the trailing 30 days, for the KPI grid's delta chips. */
+  deltas: {
+    communities30d: number;
+    members30d: number;
   };
 }
 
@@ -77,12 +89,21 @@ function buildComplianceSummary(
     applicable > 0 ? Math.round((met / applicable) * 100) : 100
   ));
 
+  const distribution = { top: 0, high: 0, mid: 0, low: 0 };
+  for (const score of complianceScores) {
+    if (score >= 90) distribution.top += 1;
+    else if (score >= 80) distribution.high += 1;
+    else if (score >= 70) distribution.mid += 1;
+    else distribution.low += 1;
+  }
+
   return {
     averageScore: complianceScores.length > 0
       ? Math.round(complianceScores.reduce((sum, score) => sum + score, 0) / complianceScores.length)
       : null,
     atRiskCount: complianceScores.filter((score) => score < 70).length,
     totalTracked: complianceScores.length,
+    distribution,
   };
 }
 
@@ -136,6 +157,8 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     community as { id: number }
   ).id);
 
+  const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
   const [
     demosResult,
     membersResult,
@@ -144,6 +167,8 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     complianceRows,
     activeAccessResult,
     coolingDeletionsResult,
+    communities30dResult,
+    members30dResult,
   ] = await Promise.all([
     db.from('demo_instances').select('*', { count: 'exact', head: true }),
     realIds.length > 0
@@ -167,6 +192,17 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     (db.from('account_deletion_requests')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'cooling') as any),
+    db.from('communities')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_demo', false)
+      .is('deleted_at', null)
+      .gte('created_at', thirtyDaysAgoIso),
+    realIds.length > 0
+      ? db.from('user_roles')
+        .select('*', { count: 'exact', head: true })
+        .in('community_id', realIds)
+        .gte('created_at', thirtyDaysAgoIso)
+      : Promise.resolve({ count: 0, error: null }),
   ]);
 
   throwIfError(demosResult.error, 'Failed to load demo count');
@@ -175,6 +211,8 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
   throwIfError(subscriptionResult.error, 'Failed to load subscription summary');
   throwIfError(activeAccessResult.error, 'Failed to load active access plan count');
   throwIfError(coolingDeletionsResult.error, 'Failed to load pending deletion count');
+  throwIfError(communities30dResult.error, 'Failed to load new-community count');
+  throwIfError(members30dResult.error, 'Failed to load new-member count');
 
   return {
     overview: {
@@ -188,6 +226,10 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     lifecycle: {
       activeFreeAccess: activeAccessResult.count ?? 0,
       pendingDeletions: coolingDeletionsResult.count ?? 0,
+    },
+    deltas: {
+      communities30d: communities30dResult.count ?? 0,
+      members30d: members30dResult.count ?? 0,
     },
   };
 }

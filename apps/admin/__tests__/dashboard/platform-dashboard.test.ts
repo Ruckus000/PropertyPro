@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -26,12 +27,34 @@ describe('platform dashboard', () => {
             averageScore: 88,
             atRiskCount: 1,
             totalTracked: 12,
+            distribution: { top: 9, high: 2, mid: 0, low: 1 },
           },
           lifecycle: {
             activeFreeAccess: 2,
             pendingDeletions: 4,
           },
+          deltas: {
+            communities30d: 1,
+            members30d: 6,
+          },
         },
+        series: {
+          mrr: [{ month: '2026-09', value: 18640 }],
+          pastDue: [{ month: '2026-09', value: 1 }],
+          communities: [{ month: '2026-09', value: 12 }],
+          members: [{ month: '2026-09', value: 240 }],
+          latestMrrDeltaPct: 12.5,
+        },
+        signals: {
+          counts: { inbox: 0, tickets: 0, health: 0, onboarding: 0, billing: 0, leads: 0, deletion: 4 },
+          items: [],
+          critical: null,
+          generatedAt: '2026-09-08T12:00:00Z',
+          failed: [],
+        },
+        greeting: 'Good morning',
+        firstName: 'Ruckus',
+        today: 'Tuesday, September 8',
       }),
     );
 
@@ -65,6 +88,7 @@ describe('platform dashboard', () => {
       averageScore: 75,
       atRiskCount: 1,
       totalTracked: 2,
+      distribution: { top: 1, high: 0, mid: 0, low: 1 },
     });
   });
 });

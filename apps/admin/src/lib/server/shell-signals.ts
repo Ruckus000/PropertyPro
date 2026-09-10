@@ -18,6 +18,7 @@
  *
  * @module lib/server/shell-signals
  */
+import { cache } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import type { NavSignalKey } from '@/components/shell/nav-config';
 import type { ShellCritical, ShellSignalItem, SignalProvider } from './signals/types';
@@ -50,7 +51,7 @@ export const DEFAULT_PROVIDERS: SignalProvider[] = [
 
 const ZERO: Record<NavSignalKey, number> = { inbox: 0, tickets: 0, health: 0, onboarding: 0, billing: 0, leads: 0, deletion: 0 };
 
-export async function getShellSignals(providers: SignalProvider[] = DEFAULT_PROVIDERS): Promise<ShellSignals> {
+async function loadShellSignals(providers: SignalProvider[] = DEFAULT_PROVIDERS): Promise<ShellSignals> {
   const settled = await Promise.allSettled(providers.map((p) => p.load()));
   const counts = { ...ZERO };
   const items: ShellSignalItem[] = [];
@@ -74,3 +75,16 @@ export async function getShellSignals(providers: SignalProvider[] = DEFAULT_PROV
   items.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : a.occurredAt > b.occurredAt ? -1 : 0));
   return { counts, items: items.slice(0, 12), critical, generatedAt: new Date().toISOString(), failed };
 }
+
+/**
+ * Wrapped in React's `cache()` so the console layout (shell chrome) and any
+ * page that also needs signals (the dashboard) share one load per request
+ * instead of running all seven providers twice. Both call sites invoke this
+ * with no arguments, so they share the same cache key regardless of the
+ * `providers` default applied inside `loadShellSignals`.
+ *
+ * Outside an active Server Component render — this file's own tests, or any
+ * plain call from Node — React's client build makes `cache()` a no-op
+ * passthrough, so this has no effect there.
+ */
+export const getShellSignals = cache(loadShellSignals);
