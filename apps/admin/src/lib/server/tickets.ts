@@ -278,6 +278,38 @@ async function loadCommunityNames(ids: number[]): Promise<Map<number, string>> {
   return new Map((data ?? []).map((row) => [row.id, row.name]));
 }
 
+/**
+ * The communities a NEW ticket may be filed against.
+ *
+ * Unlike `loadCommunityNames` above, this IS a population read: it enumerates
+ * the choices an operator is offered rather than naming ids a row already
+ * pins. So it carries the real-community predicate — non-demo and not
+ * soft-deleted — which `guard:admin-community-scope` requires of exactly this
+ * shape. Filing a ticket against a seeded demo would put work in the queue for
+ * a community nobody is paying for; filing one against a soft-deleted community
+ * would deep-link the detail page to a `/clients/[id]` that calls `notFound()`.
+ *
+ * Ordered by name because the form renders a flat `<select>` an operator scans
+ * alphabetically, not by recency.
+ */
+export interface TicketCommunityOption {
+  id: number;
+  name: string;
+}
+
+export async function listTicketCommunities(): Promise<TicketCommunityOption[]> {
+  const db = createAdminTypedClient();
+  const { data, error } = await db
+    .from('communities')
+    .select('id, name')
+    .eq('is_demo', false)
+    .is('deleted_at', null)
+    .order('name', { ascending: true })
+    .limit(PLATFORM_LIST_LIMIT);
+  throwIfError(error, 'Failed to load communities for the ticket form');
+  return (data ?? []).map((row) => ({ id: row.id, name: row.name }));
+}
+
 async function loadThreadSubjects(ids: number[]): Promise<Map<number, string>> {
   if (ids.length === 0) return new Map();
   const db = createAdminTypedClient();
