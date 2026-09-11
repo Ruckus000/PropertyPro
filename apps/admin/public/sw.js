@@ -2,8 +2,12 @@
  * PropertyPro Operator Console — service worker.
  *
  * Scope: install + READ-ONLY offline. This worker never queues a write for
- * later replay and never caches an authenticated API response. See
- * `../src/lib/pwa/sw-cache-policy.ts` for the reasoning behind both.
+ * later replay and never caches an authenticated API response. It DOES cache
+ * authenticated console DOCUMENTS — that is what read-only offline is — and
+ * that exception is bounded three ways: the cache is cleared on sign-out
+ * (`../src/lib/pwa/clear-offline-cache.ts`), a stored document expires after
+ * `NAVIGATION_MAX_AGE_MS` and is deleted on read, and the thread detail is
+ * never stored at all. See `../src/lib/pwa/sw-cache-policy.ts` for all of it.
  *
  * Served straight from `public/`, so it is a plain script: no TypeScript, no
  * imports, no build step. That is why `classifyRequest` below is duplicated.
@@ -26,6 +30,23 @@ const CACHED_AT_HEADER = 'x-ppro-cached-at';
 // ---------------------------------------------------------------------------
 const STATIC_PREFIXES = ['/_next/static/', '/fonts/', '/icons/'];
 
+// Documents that must never be written to disk. `/inbox/<threadId>` renders the
+// full body of somebody's correspondence with us — see the policy module.
+const NEVER_STORE_PATTERNS = [/^\/inbox\/[^/]+/];
+
+// How long a stored console document may still be served offline: one hour,
+// matching the Supabase access-token lifetime. Checked on READ, so an entry that
+// aged out while the device was offline is discarded rather than served.
+const NAVIGATION_MAX_AGE_MS = 60 * 60 * 1000;
+
+function isCachedDocumentFresh(cachedAt, now) {
+  if (!cachedAt) return false;
+  const stored = Date.parse(cachedAt);
+  if (!Number.isFinite(stored)) return false;
+  if (stored > now) return false;
+  return now - stored < NAVIGATION_MAX_AGE_MS;
+}
+
 function classifyRequest(req, origin) {
   if (req.method !== 'GET') return 'bypass';
 
@@ -44,7 +65,11 @@ function classifyRequest(req, origin) {
     return 'static-cache-first';
   }
 
-  if (req.mode === 'navigate') return 'navigation-network-first';
+  if (req.mode === 'navigate') {
+    return NEVER_STORE_PATTERNS.some((pattern) => pattern.test(pathname))
+      ? 'navigation-network-only'
+      : 'navigation-network-first';
+  }
 
   return 'bypass';
 }
@@ -145,19 +170,34 @@ async function handleStatic(request) {
   return response;
 }
 
-async function handleNavigation(request) {
+/**
+ * Network-first for a console document.
+ *
+ * `store` is false for `navigation-network-only` — the thread detail, which
+ * renders full support-email bodies and must not exist on disk at all. Such a
+ * request is fetched live, never written, and falls to `/offline` rather than to
+ * a stale copy.
+ *
+ * A stored hit is served only while `isCachedDocumentFresh` allows it. An
+ * expired entry is DELETED rather than merely skipped: leaving it would keep an
+ * authenticated document on disk for a page the operator may never open again.
+ */
+async function handleNavigation(request, store) {
   const cache = await caches.open(CACHE);
   try {
     const response = await fetch(request);
-    await putStamped(cache, request, response);
+    if (store) await putStamped(cache, request, response);
     return response;
   } catch {
-    const hit = await cache.match(request);
+    const hit = store ? await cache.match(request) : undefined;
     if (hit) {
       const cachedAt = cachedAtOf(hit);
-      // Do not block the response on telling the window about it.
-      void announceServedFromCache(request.url, cachedAt);
-      return hit;
+      if (isCachedDocumentFresh(cachedAt, Date.now())) {
+        // Do not block the response on telling the window about it.
+        void announceServedFromCache(request.url, cachedAt);
+        return hit;
+      }
+      await cache.delete(request);
     }
     const fallback = await cache.match(OFFLINE_URL);
     if (fallback) return fallback;
@@ -293,5 +333,5 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(handleNavigation(event.request));
+  event.respondWith(handleNavigation(event.request, policy === 'navigation-network-first'));
 });

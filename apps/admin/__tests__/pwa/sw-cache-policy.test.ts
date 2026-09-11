@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { classifyRequest } from '@/lib/pwa/sw-cache-policy';
+import {
+  NAVIGATION_MAX_AGE_MS,
+  classifyRequest,
+  isCachedDocumentFresh,
+} from '@/lib/pwa/sw-cache-policy';
 
 const o = 'https://admin.getpropertypro.com';
 
@@ -107,6 +111,29 @@ describe('classifyRequest', () => {
     );
   });
 
+  // A thread detail renders the full body of somebody's correspondence with us.
+  // It is the one document no freshness window makes acceptable to leave on a
+  // shared device, so it is fetched live and NEVER written — which is a
+  // different decision from `bypass`: the worker still answers, with the offline
+  // page rather than the browser's own error screen.
+  it.each(['/inbox/123', '/inbox/123/', '/inbox/abc?from=tray'])(
+    'never stores %s, the document that carries support-email bodies',
+    (path) => {
+      expect(classifyRequest({ method: 'GET', url: `${o}${path}`, mode: 'navigate' }, o)).toBe(
+        'navigation-network-only',
+      );
+    },
+  );
+
+  // The inbox LIST is deliberately still cacheable: it carries subjects and
+  // participants, which the tray on every other console page already carries,
+  // so excluding it would buy nothing and remove the offline case.
+  it('still caches the inbox list, which carries no message bodies', () => {
+    expect(classifyRequest({ method: 'GET', url: `${o}/inbox`, mode: 'navigate' }, o)).toBe(
+      'navigation-network-first',
+    );
+  });
+
   it('sw.js mirrors the policy verbatim', async () => {
     const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
     for (const needle of [
@@ -114,9 +141,56 @@ describe('classifyRequest', () => {
       "'/_next/static/'",
       "mode === 'navigate'",
       "method !== 'GET'",
+      'NEVER_STORE_PATTERNS',
+      "'navigation-network-only'",
+      'NAVIGATION_MAX_AGE_MS',
+      'isCachedDocumentFresh',
     ]) {
       expect(sw).toContain(needle);
     }
+  });
+
+  // The TTL is only real if it is honoured on READ: an entry written an hour ago
+  // is already on disk, and a device that has been offline the whole time never
+  // gets a write-side chance to drop it.
+  it('sw.js expires a stored document on read and deletes it', () => {
+    const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
+    expect(sw).toMatch(/isCachedDocumentFresh\(cachedAt, Date\.now\(\)\)/);
+    expect(sw).toMatch(/await cache\.delete\(request\)/);
+  });
+
+  // `store` false is what makes `navigation-network-only` mean anything; without
+  // it the branch above would classify correctly and cache anyway.
+  it('sw.js only stores a navigation when the policy is network-FIRST', () => {
+    const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
+    expect(sw).toMatch(/handleNavigation\(event\.request, policy === 'navigation-network-first'\)/);
+    expect(sw).toMatch(/if \(store\) await putStamped\(cache, request, response\);/);
+  });
+});
+
+describe('isCachedDocumentFresh', () => {
+  const now = Date.parse('2026-09-11T12:00:00Z');
+  const stamp = (msAgo: number) => new Date(now - msAgo).toISOString();
+
+  it('serves a document stored inside the window', () => {
+    expect(isCachedDocumentFresh(stamp(0), now)).toBe(true);
+    expect(isCachedDocumentFresh(stamp(NAVIGATION_MAX_AGE_MS - 1000), now)).toBe(true);
+  });
+
+  it('refuses one stored at or past the window', () => {
+    expect(isCachedDocumentFresh(stamp(NAVIGATION_MAX_AGE_MS), now)).toBe(false);
+    expect(isCachedDocumentFresh(stamp(NAVIGATION_MAX_AGE_MS * 24), now)).toBe(false);
+  });
+
+  // Fails CLOSED. An entry with no usable stamp is from an older worker or was
+  // hand-crafted; neither is a thing to trust with an authenticated page. This
+  // is the case that would otherwise make the whole TTL a no-op.
+  it.each([null, '', 'not a date'])('refuses an entry stamped %p', (cachedAt) => {
+    expect(isCachedDocumentFresh(cachedAt, now)).toBe(false);
+  });
+
+  it('refuses a stamp in the future rather than treating it as eternally fresh', () => {
+    expect(isCachedDocumentFresh(new Date(now + 60_000).toISOString(), now)).toBe(false);
   });
 
   // The mirror comment is the only thing telling a future reader that editing

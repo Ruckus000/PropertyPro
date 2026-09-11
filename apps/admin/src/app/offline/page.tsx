@@ -29,8 +29,9 @@ export default function OfflinePage() {
         </div>
         <h1 className="text-xl font-semibold text-content">You&rsquo;re offline</h1>
         <p className="mt-2 text-sm text-content-secondary">
-          This page isn&rsquo;t available without a connection. Pages you&rsquo;ve already opened
-          stay readable, but nothing can be changed until you reconnect.
+          This page isn&rsquo;t available without a connection. Pages you opened in the last hour
+          stay readable, but nothing can be changed until you reconnect. Support threads always
+          need a connection, and signing out clears everything held on this device.
         </p>
         <p className="mt-4 text-sm text-content-tertiary">
           Reconnect and reload to open the console.
