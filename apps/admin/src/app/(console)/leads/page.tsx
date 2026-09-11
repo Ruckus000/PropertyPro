@@ -19,7 +19,7 @@ export default async function LeadsPage() {
     <PageBody>
       <AdminPageHeader
         title="Leads"
-        description="Inbound from the §718 compliance checker on the marketing site."
+        description="Inbound from the §718 compliance checker and the portfolio inquiry form."
       />
       <LeadsDashboard initialLeads={leads} initialStats={stats} initialStatusFilter="all" />
     </PageBody>

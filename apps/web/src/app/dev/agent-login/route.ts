@@ -15,6 +15,7 @@
  * Returns 404 in production.
  */
 import { NextResponse } from 'next/server';
+import { nonLocalBackendReason } from '@propertypro/shared';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -62,6 +63,17 @@ export async function GET(request: Request) {
   if (process.env.NODE_ENV !== 'development') {
     return new NextResponse('Not Found', { status: 404 });
   }
+
+  // `NODE_ENV` says how this process was started, NOT which project it talks
+  // to. A worktree whose `.env.local` names production runs `pnpm dev` as
+  // `development` and writes to prod — which is how a real `super_admin` row
+  // was created in the production project on 2026-09-10. Refuse unless BOTH
+  // backends are demonstrably local. `nonLocalBackendReason` carries the reason
+  // the rule is uniform across all four routes rather than per-route: the
+  // half-redirected env is the dangerous state, and a reader should not have to
+  // audit this file's imports to know which backend it writes to.
+  const remote = nonLocalBackendReason(process.env);
+  if (remote) return new NextResponse(remote, { status: 403 });
 
   const url = new URL(request.url);
   const role = url.searchParams.get('as');

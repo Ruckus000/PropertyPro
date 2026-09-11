@@ -1,32 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { COMMUNITY_TYPE_DISPLAY_NAMES, type CommunityType } from '@propertypro/shared';
+import { Badge, Button, PageBody } from '@propertypro/ui';
 import type { DemoInstanceRow } from '@/lib/db/demo-queries';
 import { getClientDemoLandingUrl } from '@/lib/demo-client-url';
+import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
+import { StaleDemosBanner } from '@/components/demo/StaleDemosBanner';
+import { ConvertDemoDialog } from '@/components/demo/ConvertDemoDialog';
+import { staleBadge, getStaleDemos } from '@/lib/utils/stale-badge';
 
 interface DemoListClientProps {
   initialDemos: DemoInstanceRow[];
-}
-
-function getAgeDays(createdAt: string): number {
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function AgeBadge({ createdAt }: { createdAt: string }) {
-  const days = getAgeDays(createdAt);
-  let color = 'bg-status-success-subtle text-status-success';
-  if (days >= 30) color = 'bg-status-danger-subtle text-status-danger';
-  // design-tokens:exempt — middle tier of a three-step staleness escalation; the token layer has only danger/warning. Same gap as lib/utils/stale-badge.ts.
-  else if (days >= 20) color = 'bg-orange-100 text-orange-800'; // design-tokens:exempt — see note above
-  else if (days >= 10) color = 'bg-status-warning-subtle text-status-warning';
-
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {days}d
-    </span>
-  );
 }
 
 function TypeBadge({ type }: { type: string }) {
@@ -48,6 +34,9 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
   const [deleting, setDeleting] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [convertingDemo, setConvertingDemo] = useState<DemoInstanceRow | null>(null);
+
+  const staleCount = useMemo(() => getStaleDemos(demos).length, [demos]);
 
   const copyClientLink = useCallback(async (slug: string) => {
     const url = getClientDemoLandingUrl(slug);
@@ -81,21 +70,18 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
   };
 
   return (
-    <div className="px-6 py-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-content">Demos</h1>
-          <p className="mt-1 text-sm text-content-tertiary">
-            {demos.length} demo{demos.length !== 1 ? 's' : ''} created
-          </p>
-        </div>
-        <Link
-          href="/demo/new"
-          className="rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700"
-        >
-          Create Demo
-        </Link>
-      </div>
+    <PageBody>
+      <AdminPageHeader
+        title="Demos"
+        description={`${demos.length} demo instances · ${staleCount} stale`}
+        actions={
+          <Button asChild size="sm">
+            <Link href="/demo/new">Create Demo</Link>
+          </Button>
+        }
+      />
+
+      <StaleDemosBanner staleDemos={getStaleDemos(demos)} />
 
       {demos.length === 0 && (
         <div className="mt-12 text-center">
@@ -110,7 +96,7 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
       )}
 
       {demos.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-edge bg-surface-card">
+        <div className="overflow-hidden rounded-lg border border-edge bg-surface-card">
           <table className="min-w-full divide-y divide-edge">
             <thead className="bg-surface-page">
               <tr>
@@ -138,104 +124,114 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-edge">
-              {demos.map((demo) => (
-                <tr key={demo.id} className="hover:bg-surface-page">
-                  <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-content">
-                      {demo.prospect_name}
-                    </div>
-                    {demo.prospect_notes && (
-                      <div className="mt-0.5 max-w-xs truncate text-xs text-content-disabled" title={demo.prospect_notes}>
-                        {demo.prospect_notes}
+              {demos.map((demo) => {
+                const badge = staleBadge(demo.created_at);
+                return (
+                  <tr key={demo.id} className="hover:bg-surface-page">
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-content">
+                        {demo.prospect_name}
                       </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <TypeBadge type={demo.template_type} />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-content-tertiary">
-                    {new Date(demo.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <AgeBadge createdAt={demo.created_at} />
-                  </td>
-                  <td className="px-4 py-3">
-                    {demo.is_converted ? (
-                      <span className="inline-block rounded-full bg-status-success-subtle px-2 py-0.5 text-xs font-medium text-status-success">
-                        Converted
-                      </span>
-                    ) : (
-                      <span className="inline-block rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
-                        Demo
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 max-w-[14rem]">
-                    {!demo.is_converted ? (
-                      <div className="flex flex-col gap-1">
-                        <span
-                          className="truncate text-xs text-content-secondary font-mono"
-                          title={getClientDemoLandingUrl(demo.slug)}
-                        >
-                          {getClientDemoLandingUrl(demo.slug)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => { void copyClientLink(demo.slug); }}
-                          className="self-start text-xs font-medium text-coral-700 hover:text-coral-700"
-                        >
-                          {copiedSlug === demo.slug
-                            ? 'Copied'
-                            : copiedSlug === `error:${demo.slug}`
-                              ? 'Copy failed'
-                              : 'Copy link'}
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-content-disabled">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link
-                        href={`/demo/${demo.id}/preview`}
-                        className="rounded px-2 py-1 text-xs font-medium text-coral-700 hover:bg-coral-50"
-                        title="Split-screen preview"
-                      >
-                        Preview
-                      </Link>
-                      <Link
-                        href={`/demo/${demo.id}/mobile`}
-                        className="rounded px-2 py-1 text-xs font-medium text-coral-700 hover:bg-coral-50"
-                        title="Mobile preview"
-                      >
-                        Mobile
-                      </Link>
-                      {demo.external_crm_url && (
-                        <a
-                          href={demo.external_crm_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded px-2 py-1 text-xs font-medium text-content-secondary hover:bg-surface-muted"
-                          title="Open CRM link"
-                        >
-                          CRM
-                        </a>
+                      {demo.prospect_notes && (
+                        <div className="mt-0.5 max-w-xs truncate text-xs text-content-disabled" title={demo.prospect_notes}>
+                          {demo.prospect_notes}
+                        </div>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setDeleteId(demo.id)}
-                        className="rounded px-2 py-1 text-xs font-medium text-status-danger hover:bg-status-danger-bg"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-3">
+                      <TypeBadge type={demo.template_type} />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-content-tertiary">
+                      {new Date(demo.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={demo.is_converted ? 'success' : 'neutral'} size="sm" outlined>
+                        {demo.is_converted ? 'Converted' : 'Demo'}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 max-w-[14rem]">
+                      {!demo.is_converted ? (
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className="truncate text-xs text-content-secondary font-mono"
+                            title={getClientDemoLandingUrl(demo.slug)}
+                          >
+                            {getClientDemoLandingUrl(demo.slug)}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            className="h-auto self-start px-0 py-0 text-xs"
+                            onClick={() => { void copyClientLink(demo.slug); }}
+                          >
+                            {copiedSlug === demo.slug
+                              ? 'Copied'
+                              : copiedSlug === `error:${demo.slug}`
+                                ? 'Copy failed'
+                                : 'Copy link'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-content-disabled">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button asChild variant="ghost" size="sm" title="Split-screen preview">
+                          <Link href={`/demo/${demo.id}/preview`}>Preview</Link>
+                        </Button>
+                        <Button asChild variant="ghost" size="sm" title="Mobile preview">
+                          <Link href={`/demo/${demo.id}/mobile`}>Mobile</Link>
+                        </Button>
+                        {demo.external_crm_url && (
+                          <Button asChild variant="ghost" size="sm" title="Open CRM link">
+                            <a href={demo.external_crm_url} target="_blank" rel="noopener noreferrer">
+                              CRM
+                            </a>
+                          </Button>
+                        )}
+                        {!demo.is_converted && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setConvertingDemo(demo)}
+                          >
+                            Convert
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-status-danger hover:bg-status-danger-bg hover:text-status-danger"
+                          onClick={() => setDeleteId(demo.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {convertingDemo && (
+        <ConvertDemoDialog
+          isOpen
+          onClose={() => setConvertingDemo(null)}
+          slug={convertingDemo.slug}
+          prospectName={convertingDemo.prospect_name}
+        />
       )}
 
       {deleteId !== null && (
@@ -251,26 +247,21 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
               <p className="mt-2 text-sm text-status-danger">{deleteError}</p>
             )}
             <div className="mt-4 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteId(null)}
-                disabled={deleting}
-                className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
-              >
+              <Button variant="outline" size="sm" disabled={deleting} onClick={() => setDeleteId(null)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(deleteId)}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
                 disabled={deleting}
-                className="rounded-md bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 disabled:opacity-50"
+                onClick={() => { void handleDelete(deleteId); }}
               >
                 {deleting ? 'Deleting...' : 'Delete'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </PageBody>
   );
 }

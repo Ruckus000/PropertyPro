@@ -10,6 +10,7 @@ import {
   MinusCircle,
   Filter,
 } from 'lucide-react';
+import { Badge, type BadgeVariant } from '@propertypro/ui';
 
 type ComplianceStatus = 'met' | 'overdue' | 'pending' | 'not_applicable';
 
@@ -40,31 +41,11 @@ interface CommunityComplianceProps {
   communityId: number;
 }
 
-const STATUS_CONFIG: Record<ComplianceStatus, { label: string; icon: typeof CheckCircle; className: string; badgeClass: string }> = {
-  met: {
-    label: 'Met',
-    icon: CheckCircle,
-    className: 'text-status-success',
-    badgeClass: 'bg-status-success-subtle text-status-success',
-  },
-  overdue: {
-    label: 'Overdue',
-    icon: AlertTriangle,
-    className: 'text-status-danger',
-    badgeClass: 'bg-status-danger-subtle text-status-danger',
-  },
-  pending: {
-    label: 'Pending',
-    icon: Clock,
-    className: 'text-status-warning',
-    badgeClass: 'bg-status-warning-subtle text-status-warning',
-  },
-  not_applicable: {
-    label: 'N/A',
-    icon: MinusCircle,
-    className: 'text-content-disabled',
-    badgeClass: 'bg-surface-muted text-content-tertiary',
-  },
+const STATUS_CONFIG: Record<ComplianceStatus, { label: string; icon: typeof CheckCircle; variant: BadgeVariant }> = {
+  met: { label: 'Met', icon: CheckCircle, variant: 'success' },
+  overdue: { label: 'Overdue', icon: AlertTriangle, variant: 'danger' },
+  pending: { label: 'Pending', icon: Clock, variant: 'warning' },
+  not_applicable: { label: 'N/A', icon: MinusCircle, variant: 'neutral' },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -75,6 +56,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   contracts: 'Contracts & Bids',
 };
 
+// Nudge/Export actions from the design brief are omitted here — no backing
+// endpoint exists for either (ladder rung 1: necessity). Add them back once
+// there is something for them to call.
 export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
   const [items, setItems] = useState<ComplianceItem[]>([]);
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
@@ -106,14 +90,14 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <Loader2 size={20} className="animate-spin text-content-disabled" />
+        <Loader2 size={20} className="animate-spin text-content-disabled" aria-hidden="true" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger" role="alert">
         {error}
       </div>
     );
@@ -139,7 +123,7 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
+      {/* Summary chips — also filter buttons */}
       <div className="grid gap-3 sm:grid-cols-5">
         <div className="rounded-lg border border-edge bg-surface-card p-4 text-center shadow-e1">
           <p className="text-2xl font-semibold text-content">{scorePercent}%</p>
@@ -148,6 +132,7 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
         {(['met', 'overdue', 'pending', 'not_applicable'] as ComplianceStatus[]).map((status) => {
           const config = STATUS_CONFIG[status];
           const Icon = config.icon;
+          const isActive = statusFilter === status;
           const count = status === 'met' ? summary.met
             : status === 'overdue' ? summary.overdue
             : status === 'pending' ? summary.pending
@@ -156,13 +141,14 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
             <button
               key={status}
               type="button"
-              onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
-              className={`rounded-lg border p-4 text-center transition-colors ${
-                statusFilter === status ? 'border-coral-300 bg-coral-50' : 'border-edge bg-surface-card hover:bg-surface-page'
-              } shadow-e1`}
+              aria-pressed={isActive}
+              onClick={() => setStatusFilter(isActive ? 'all' : status)}
+              className={`min-h-11 rounded-lg border p-4 text-center transition-colors md:min-h-9 ${
+                isActive ? 'border-interactive bg-interactive-subtle' : 'border-edge bg-surface-card hover:bg-surface-hover'
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus`}
             >
               <div className="flex items-center justify-center gap-1.5">
-                <Icon size={14} className={config.className} />
+                <Icon size={14} className="text-content-secondary" aria-hidden="true" />
                 <p className="text-2xl font-semibold text-content">{count}</p>
               </div>
               <p className="text-xs text-content-tertiary">{config.label}</p>
@@ -173,11 +159,12 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
 
       {/* Filters */}
       <div className="flex items-center gap-3">
-        <Filter size={14} className="text-content-disabled" />
+        <Filter size={14} className="text-content-disabled" aria-hidden="true" />
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="rounded border border-edge-strong px-2 py-1 text-xs text-content-secondary"
+          aria-label="Filter by category"
+          className="rounded border border-edge-strong px-2 py-1 text-xs text-content-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         >
           <option value="all">All Categories</option>
           {categories.map((cat) => (
@@ -190,7 +177,7 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
           <button
             type="button"
             onClick={() => { setStatusFilter('all'); setCategoryFilter('all'); }}
-            className="text-xs text-coral-700 hover:text-coral-700"
+            className="rounded-sm text-xs text-content-brand hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             Clear filters
           </button>
@@ -220,10 +207,10 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
               return (
                 <tr key={item.id} className="hover:bg-surface-page">
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${config.badgeClass}`}>
-                      <Icon size={12} />
-                      {config.label}
-                    </span>
+                    <Badge variant={config.variant} size="sm">
+                      <Badge.Icon><Icon /></Badge.Icon>
+                      <Badge.Label>{config.label}</Badge.Label>
+                    </Badge>
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-content">{item.title}</p>

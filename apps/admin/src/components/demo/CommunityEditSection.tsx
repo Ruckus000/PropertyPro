@@ -8,6 +8,7 @@
  */
 import { useState, useEffect } from 'react';
 import { Loader2, Save, RotateCcw } from 'lucide-react';
+import { Button, Input } from '@propertypro/ui';
 
 interface CommunityEditSectionProps {
   demoId: number;
@@ -145,79 +146,71 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
       {/* Name */}
       <div>
         <label className="block text-xs text-content-tertiary mb-1">Community Name</label>
-        <input
+        <Input
           type="text"
           value={form.name}
           onChange={(e) => handleChange('name', e.target.value)}
           maxLength={200}
-          className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+          className="h-8 py-1.5"
         />
       </div>
 
       {/* Address */}
       <div>
         <label className="block text-xs text-content-tertiary mb-1">Address</label>
-        <input
+        <Input
           type="text"
           value={form.address_line1}
           onChange={(e) => handleChange('address_line1', e.target.value)}
           maxLength={500}
           placeholder="Street address"
-          className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+          className="h-8 py-1.5"
         />
       </div>
 
       <div className="grid grid-cols-5 gap-2">
         <div className="col-span-2">
           <label className="block text-xs text-content-tertiary mb-1">City</label>
-          <input
+          <Input
             type="text"
             value={form.city}
             onChange={(e) => handleChange('city', e.target.value)}
             maxLength={100}
-            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="h-8 py-1.5"
           />
         </div>
         <div>
           <label className="block text-xs text-content-tertiary mb-1">State</label>
-          <input
+          <Input
             type="text"
             value={form.state}
             onChange={(e) => handleChange('state', e.target.value.toUpperCase())}
             maxLength={2}
-            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm uppercase focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="h-8 py-1.5 uppercase"
           />
         </div>
         <div className="col-span-2">
           <label className="block text-xs text-content-tertiary mb-1">ZIP</label>
-          <input
+          <Input
             type="text"
             value={form.zip_code}
             onChange={(e) => handleChange('zip_code', e.target.value)}
             maxLength={10}
-            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="h-8 py-1.5"
           />
         </div>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-coral-700 disabled:opacity-50"
-        >
-          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <Save size={12} aria-hidden="true" />}
           Save
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex items-center gap-1.5 rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary hover:bg-surface-page"
-        >
-          <RotateCcw size={12} />
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={handleReset}>
+          <RotateCcw size={12} aria-hidden="true" />
           Reset
-        </button>
+        </Button>
         {error && <p className="text-xs text-status-danger">{error}</p>}
         {success && <p className="text-xs text-status-success">Saved</p>}
       </div>

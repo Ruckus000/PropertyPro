@@ -5,7 +5,8 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: any) => <a hre
 import { AdminTopBar } from '@/components/shell/AdminTopBar';
 
 const signals = { counts: { inbox: 1, tickets: 0, health: 0, onboarding: 0, billing: 0, leads: 0, deletion: 0 }, items: [
-  { id: 'a', tone: 'info' as const, icon: 'inbox' as const, title: 'New reply from Denise', meta: 'support@', href: '/inbox/1', occurredAt: '2026-09-08T09:14:00Z' },
+  { key: 'inbox' as const,
+      id: 'a', tone: 'info' as const, icon: 'inbox' as const, title: 'New reply from Denise', meta: 'support@', href: '/inbox/1', occurredAt: '2026-09-08T09:14:00Z' },
 ], critical: null, generatedAt: 'x', failed: [] };
 
 describe('AdminTopBar', () => {

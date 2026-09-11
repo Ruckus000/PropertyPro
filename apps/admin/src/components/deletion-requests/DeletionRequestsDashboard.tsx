@@ -1,20 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 import {
   Loader2,
   Trash2,
   Clock,
+  X,
   XCircle,
   RotateCcw,
   ShieldAlert,
   User,
   Building2,
   CheckCircle,
-  X,
-  AlertTriangle,
 } from 'lucide-react';
+import { AlertBanner, Badge, Button, Input, type BadgeVariant } from '@propertypro/ui';
 import type { AdminDeletionRequest } from '@/lib/server/deletion-requests';
 
 /* ---------- types ---------- */
@@ -25,16 +25,19 @@ interface DeletionRequestsDashboardProps {
   initialRequests: AdminDeletionRequest[];
   initialStatusFilter?: string;
   initialTypeFilter?: string;
+  /** Seeds the requester-email filter from `?q=` — the inbox privacy strip's
+   * "does this person have a deletion request open?" link. */
+  initialEmailFilter?: string;
 }
 
 /* ---------- status styling ---------- */
 
-const STATUS_STYLES: Record<DeletionStatus, { className: string; icon: typeof Clock; label: string }> = {
-  cooling: { className: 'bg-status-warning-subtle text-status-warning', icon: Clock, label: 'Cooling Off' },
-  soft_deleted: { className: 'bg-status-danger-subtle text-status-danger', icon: Trash2, label: 'Soft Deleted' },
-  purged: { className: 'bg-surface-muted text-content-secondary', icon: XCircle, label: 'Purged' },
-  cancelled: { className: 'bg-status-info-subtle text-status-info', icon: CheckCircle, label: 'Cancelled' },
-  recovered: { className: 'bg-status-success-subtle text-status-success', icon: RotateCcw, label: 'Recovered' },
+const STATUS_CONFIG: Record<DeletionStatus, { variant: BadgeVariant; icon: typeof Clock; label: string }> = {
+  cooling: { variant: 'warning', icon: Clock, label: 'Cooling Off' },
+  soft_deleted: { variant: 'danger', icon: Trash2, label: 'Soft Deleted' },
+  purged: { variant: 'neutral', icon: XCircle, label: 'Purged' },
+  cancelled: { variant: 'info', icon: CheckCircle, label: 'Cancelled' },
+  recovered: { variant: 'success', icon: RotateCcw, label: 'Recovered' },
 };
 
 /* ---------- component ---------- */
@@ -43,12 +46,14 @@ export function DeletionRequestsDashboard({
   initialRequests,
   initialStatusFilter = 'all',
   initialTypeFilter = 'all',
+  initialEmailFilter = '',
 }: DeletionRequestsDashboardProps) {
   const [requests, setRequests] = useState<AdminDeletionRequest[]>(initialRequests);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
   const [typeFilter, setTypeFilter] = useState<string>(initialTypeFilter);
+  const [emailFilter, setEmailFilter] = useState(initialEmailFilter);
   const hasHydrated = useRef(false);
 
   // Dialog states
@@ -88,7 +93,13 @@ export function DeletionRequestsDashboard({
     void fetchRequests();
   }, [fetchRequests]);
 
-  const coolingCount = requests.filter((r) => r.status === 'cooling').length;
+  const visibleRequests = useMemo(() => {
+    const q = emailFilter.trim().toLowerCase();
+    if (!q) return requests;
+    return requests.filter((r) => r.requesterEmail?.toLowerCase().includes(q));
+  }, [requests, emailFilter]);
+
+  const coolingRequests = requests.filter((r) => r.status === 'cooling');
 
   if (loading) {
     return (
@@ -108,19 +119,22 @@ export function DeletionRequestsDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Alert banner for cooling requests */}
-      {coolingCount > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-4 py-3">
-          <AlertTriangle size={16} className="text-status-warning shrink-0" aria-hidden="true" />
-          <p className="text-sm text-status-warning">
-            <span className="font-medium">{coolingCount}</span>{' '}
-            {coolingCount === 1 ? 'request is' : 'requests are'} in the cooling-off period and can be intervened.
-          </p>
-        </div>
+      {coolingRequests.length > 0 && (
+        <AlertBanner
+          status="warning"
+          variant="subtle"
+          title={`${coolingRequests.length} ${coolingRequests.length === 1 ? 'request is' : 'requests are'} in the cooling-off period`}
+          description={coolingRequests
+            .map((r) => {
+              const target = r.requestType === 'community' ? r.communityName ?? `Community #${r.communityId}` : r.requesterEmail ?? 'User account';
+              return `${target} (ends ${format(new Date(r.coolingEndsAt), 'MMM d, yyyy')})`;
+            })
+            .join(', ')}
+        />
       )}
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <label htmlFor="status-filter" className="text-xs font-medium text-content-tertiary uppercase tracking-wide">
             Status
@@ -129,7 +143,7 @@ export function DeletionRequestsDashboard({
             id="status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             <option value="all">All</option>
             <option value="cooling">Cooling Off</option>
@@ -148,7 +162,7 @@ export function DeletionRequestsDashboard({
             id="type-filter"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             <option value="all">All</option>
             <option value="user">User</option>
@@ -156,13 +170,27 @@ export function DeletionRequestsDashboard({
           </select>
         </div>
 
+        <div className="flex items-center gap-2">
+          <label htmlFor="email-filter" className="text-xs font-medium text-content-tertiary uppercase tracking-wide">
+            Requester
+          </label>
+          <Input
+            id="email-filter"
+            type="search"
+            value={emailFilter}
+            onChange={(e) => setEmailFilter(e.target.value)}
+            placeholder="Filter by email…"
+            className="h-8 w-56 py-1.5 text-sm"
+          />
+        </div>
+
         <span className="ml-auto text-xs text-content-disabled">
-          {requests.length} {requests.length === 1 ? 'request' : 'requests'}
+          {visibleRequests.length} {visibleRequests.length === 1 ? 'request' : 'requests'}
         </span>
       </div>
 
       {/* Table */}
-      {requests.length === 0 ? (
+      {visibleRequests.length === 0 ? (
         <div className="rounded-lg border border-edge bg-surface-card p-8 text-center">
           <ShieldAlert size={24} className="mx-auto mb-2 text-content-disabled" aria-hidden="true" />
           <p className="text-sm text-content-tertiary">No deletion requests found.</p>
@@ -184,9 +212,9 @@ export function DeletionRequestsDashboard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge-subtle">
-                {requests.map((req) => {
-                  const style = STATUS_STYLES[req.status];
-                  const StatusIcon = style.icon;
+                {visibleRequests.map((req) => {
+                  const config = STATUS_CONFIG[req.status];
+                  const StatusIcon = config.icon;
 
                   return (
                     <tr key={req.id} className="hover:bg-surface-page">
@@ -201,10 +229,12 @@ export function DeletionRequestsDashboard({
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${style.className}`}>
-                          <StatusIcon size={12} aria-hidden="true" />
-                          {style.label}
-                        </span>
+                        <Badge variant={config.variant} size="sm">
+                          <Badge.Icon>
+                            <StatusIcon aria-hidden="true" />
+                          </Badge.Icon>
+                          <Badge.Label>{config.label}</Badge.Label>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3">
                         <div>
@@ -232,24 +262,16 @@ export function DeletionRequestsDashboard({
                       </td>
                       <td className="px-4 py-3 text-right">
                         {req.status === 'cooling' && (
-                          <button
-                            type="button"
-                            onClick={() => setShowIntervene(req.id)}
-                            className="inline-flex items-center gap-1 rounded border border-status-warning-border px-2 py-1 text-xs font-medium text-status-warning hover:bg-status-warning-bg transition-colors"
-                          >
+                          <Button variant="outline" size="sm" onClick={() => setShowIntervene(req.id)}>
                             <ShieldAlert size={12} aria-hidden="true" />
                             Intervene
-                          </button>
+                          </Button>
                         )}
                         {req.status === 'soft_deleted' && (
-                          <button
-                            type="button"
-                            onClick={() => setShowRecover(req.id)}
-                            className="inline-flex items-center gap-1 rounded border border-status-success-border px-2 py-1 text-xs font-medium text-status-success hover:bg-status-success-bg transition-colors"
-                          >
+                          <Button variant="outline" size="sm" onClick={() => setShowRecover(req.id)}>
                             <RotateCcw size={12} aria-hidden="true" />
                             Recover
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>
@@ -340,7 +362,7 @@ function InterveneDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Reason for intervention..."
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           />
         </div>
 
@@ -351,21 +373,12 @@ function InterveneDialog({
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-status-warning px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 disabled:opacity-50 transition-colors"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+          </Button>
+          <Button type="submit" size="sm" loading={saving}>
             Intervene
-          </button>
+          </Button>
         </div>
       </form>
     </DialogOverlay>
@@ -426,22 +439,12 @@ function RecoverDialog({
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-status-success px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 disabled:opacity-50 transition-colors"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+          </Button>
+          <Button type="button" size="sm" loading={saving} onClick={handleConfirm}>
             Recover Account
-          </button>
+          </Button>
         </div>
       </div>
     </DialogOverlay>
@@ -465,14 +468,16 @@ function DialogOverlay({
         aria-hidden="true"
       />
       <div className="relative w-full max-w-md rounded-lg bg-surface-card p-6 shadow-xl">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={onClose}
-          className="absolute right-3 top-3 text-content-disabled hover:text-content-secondary"
           aria-label="Close dialog"
+          className="absolute right-3 top-3 h-auto w-auto p-1 text-content-disabled hover:text-content-secondary"
         >
-          <X size={16} />
-        </button>
+          <X size={16} aria-hidden="true" />
+        </Button>
         {children}
       </div>
     </div>

@@ -5,7 +5,7 @@
  * pattern established in portfolio.test.ts.
  */
 import { describe, it, expect } from 'vitest';
-import { displayRole } from '@/components/clients/CommunityMembers';
+import { displayRole, memberGroupOf } from '@/components/clients/CommunityMembers';
 import type { Member, MemberSort } from '@/components/clients/CommunityMembers';
 
 // ---------------------------------------------------------------------------
@@ -166,6 +166,26 @@ describe('community members sort by joined', () => {
 
   it('sorts joined descending', () => {
     expect(ids(filterAndSortMembers(members, '', 'joined-desc'))).toEqual(['u3', 'u1', 'u2', 'u4']);
+  });
+});
+
+describe('memberGroupOf (QuickFilterTabs bucketing)', () => {
+  it('buckets property_manager and root_manager as managers', () => {
+    expect(memberGroupOf({ role: 'property_manager', designation: null, isUnitOwner: false })).toBe('managers');
+    expect(memberGroupOf({ role: 'root_manager', designation: null, isUnitOwner: false })).toBe('managers');
+  });
+
+  it('buckets a board designation as managers even for a resident role', () => {
+    expect(memberGroupOf({ role: 'resident', designation: 'board_president', isUnitOwner: true })).toBe('managers');
+    expect(memberGroupOf({ role: 'resident', designation: 'board_member', isUnitOwner: false })).toBe('managers');
+  });
+
+  it('buckets a non-board resident owner as owners', () => {
+    expect(memberGroupOf({ role: 'resident', designation: null, isUnitOwner: true })).toBe('owners');
+  });
+
+  it('buckets a non-board resident non-owner as tenants', () => {
+    expect(memberGroupOf({ role: 'resident', designation: null, isUnitOwner: false })).toBe('tenants');
   });
 });
 

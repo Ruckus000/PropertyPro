@@ -8,9 +8,14 @@
  * description, tier, featured + archived flags — via the
  * PATCH /api/admin/site-templates/layouts/[slug] endpoint. The layout React
  * components themselves ship via PR; only catalog metadata is editable here.
+ *
+ * Two render sites, selected by `variant` (see the prop's own docblock):
+ * `/site-templates` (the hub) passes `cards` for the read-only summary, and
+ * `/site-templates/layouts` passes `table` for the editing view.
  */
 import { useState } from 'react';
 import { Star, Archive } from 'lucide-react';
+import { Badge, type BadgeVariant } from '@propertypro/ui';
 import { saveLayoutMetadata, type LayoutMetadataPatch } from '@/lib/site-templates/update-layout';
 
 export interface LayoutRow {
@@ -30,20 +35,90 @@ export interface LayoutRow {
 
 interface Props {
   layouts: LayoutRow[];
+  /**
+   * Which of the two render sites this is:
+   *
+   *  - `"cards"` — the `/site-templates` hub. Read-only summary, no edit
+   *    affordance, just the catalog at a glance.
+   *  - `"table"` (default) — `/site-templates/layouts`, the editing view:
+   *    inline metadata edit form wired to
+   *    `PATCH /api/admin/site-templates/layouts/[slug]`.
+   *
+   * The default stays `"table"` so the editing view is what you get by
+   * omission; the hub is the one that opts out.
+   */
+  variant?: 'table' | 'cards';
 }
 
 const TIERS: LayoutRow['tier'][] = ['essentials', 'professional', 'pm'];
 
+/**
+ * The ONE tier→colour answer, shared by both variants. There used to be two —
+ * a hand-rolled `TierBadge` for the table and this map for the cards — which
+ * meant two answers to "what colour is professional" in one file. The map wins
+ * because it goes through the shared `Badge`, so a tier chip here matches every
+ * other chip in the console (and it retires a `design-tokens:exempt` for the
+ * raw purple palette pair the hand-rolled badge used for `professional`).
+ */
+const TIER_VARIANT: Record<LayoutRow['tier'], BadgeVariant> = {
+  essentials: 'info',
+  professional: 'owner',
+  pm: 'warning',
+};
+
 function TierBadge({ tier }: { tier: LayoutRow['tier'] }) {
-  const palette: Record<LayoutRow['tier'], string> = {
-    essentials: 'bg-status-info-subtle text-status-info',
-    professional: 'bg-purple-100 text-purple-800', // design-tokens:exempt — categorical PLAN chip, not a status; design.md keeps plan chips on their own scale
-    pm: 'bg-status-warning-subtle text-status-warning',
-  };
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${palette[tier]}`}>
+    <Badge variant={TIER_VARIANT[tier]} size="sm" className="capitalize">
       {tier}
-    </span>
+    </Badge>
+  );
+}
+
+function LayoutCards({ layouts }: { layouts: LayoutRow[] }) {
+  if (layouts.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-edge-strong bg-surface-page px-6 py-12 text-center">
+        <p className="text-sm text-content-tertiary">No layouts configured.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {layouts.map((layout) => (
+        <div
+          key={layout.id}
+          data-testid={`layout-card-${layout.slug}`}
+          className="flex flex-col rounded-lg border border-edge bg-surface-card p-5 shadow-e0"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              {layout.isFeatured && (
+                <Star
+                  className="h-3.5 w-3.5 fill-amber-400 text-amber-400" // design-tokens:exempt — featured-star gold; status-premium is gold-800, a dark bronze that reads as a DISABLED star
+                  aria-label="Featured"
+                />
+              )}
+              <span className="font-medium text-content">{layout.displayName}</span>
+            </div>
+            <TierBadge tier={layout.tier} />
+          </div>
+          {layout.tagline && <p className="mt-1 text-sm italic text-content-secondary">{layout.tagline}</p>}
+          {layout.description && <p className="mt-2 text-xs text-content-tertiary">{layout.description}</p>}
+          <div className="mt-auto flex items-center justify-between pt-3 border-t border-edge-subtle">
+            <code className="font-mono text-xs text-content-secondary">
+              {layout.slug} · v{layout.version}
+            </code>
+            {layout.isArchived && (
+              <span className="inline-flex items-center gap-1 text-xs text-content-tertiary">
+                <Archive className="h-3 w-3" aria-hidden="true" />
+                Archived
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -179,12 +254,16 @@ function LayoutEditForm({
   );
 }
 
-export function LayoutsTable({ layouts }: Props) {
+export function LayoutsTable({ layouts, variant = 'table' }: Props) {
   const [rows, setRows] = useState<LayoutRow[]>(layouts);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
+
+  if (variant === 'cards') {
+    return <LayoutCards layouts={rows} />;
+  }
 
   async function handleSave(slug: string, draft: LayoutRow) {
     const original = rows.find((r) => r.slug === slug);

@@ -17,6 +17,14 @@
 import { spawn } from 'node:child_process';
 import { cpus } from 'node:os';
 
+// Deliberately NOT here: `guard:admin-semantic-css`. It reads admin's BUILT
+// stylesheet (`apps/admin/.next/static/css`) and correctly exits 2 —
+// "I could not check, so I refuse to pass" — when that output is absent.
+// `pnpm lint` runs in trees that have not built (it is the blocking pre-push
+// gate), so adding it here would fail lint on a fresh clone. Making it skip
+// instead would turn a refuse-to-pass guard into a silently-passing one, which
+// is the failure mode `.claude/rules/verification.md` exists to prevent. It
+// belongs in the wave/release gate, AFTER a build: `pnpm guard:admin-semantic-css`.
 const GUARDS = [
   'guard:db-access',
   'guard:no-date-in-raw-sql',
@@ -47,6 +55,7 @@ const GUARDS = [
   'guard:cron-job-tagging',
   'guard:token-auth-routes',
   'guard:shared-side-effects',
+  'guard:admin-community-scope',
 ];
 
 // Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.

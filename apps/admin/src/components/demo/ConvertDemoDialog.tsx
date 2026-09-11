@@ -11,6 +11,7 @@
  */
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { PLAN_IDS, PLAN_FEATURES } from '@propertypro/shared';
+import { Input } from '@propertypro/ui';
 
 const PLAN_OPTIONS = PLAN_IDS.map((id) => ({
   id,
@@ -129,7 +130,7 @@ export function ConvertDemoDialog({
             id="convert-plan"
             value={planId}
             onChange={(e) => setPlanId(e.target.value)}
-            className="mt-1 block w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)]/20"
+            className="mt-1 block w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             {PLAN_OPTIONS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -144,14 +145,14 @@ export function ConvertDemoDialog({
           <label htmlFor="convert-email" className="block text-sm font-medium text-[var(--text-primary)]">
             Customer Email
           </label>
-          <input
+          <Input
             id="convert-email"
             type="email"
             required
             value={customerEmail}
             onChange={(e) => setCustomerEmail(e.target.value)}
             placeholder="customer@example.com"
-            className="mt-1 block w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)]/20"
+            className="mt-1"
           />
         </div>
 
@@ -160,14 +161,14 @@ export function ConvertDemoDialog({
           <label htmlFor="convert-name" className="block text-sm font-medium text-[var(--text-primary)]">
             Customer Name
           </label>
-          <input
+          <Input
             id="convert-name"
             type="text"
             required
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
             placeholder="Association name"
-            className="mt-1 block w-full rounded-[6px] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--interactive-primary)]/20"
+            className="mt-1"
           />
         </div>
 

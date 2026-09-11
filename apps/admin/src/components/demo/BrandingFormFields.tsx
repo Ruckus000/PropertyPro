@@ -10,6 +10,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { Loader2, Upload, X } from 'lucide-react';
 import { ALLOWED_FONTS, THEME_PRESETS, presetToBranding } from '@propertypro/theme';
+import { Input } from '@propertypro/ui';
 
 // ---------------------------------------------------------------------------
 // Magic-byte validation (matches admin upload route)
@@ -206,13 +207,13 @@ export function BrandingFormFields({
               />
               <div className="flex-1">
                 <label className="block text-xs text-[var(--text-secondary)]">{label}</label>
-                <input
+                <Input
                   type="text"
                   value={value[key]}
                   onChange={(e) => handleFieldChange(key, e.target.value)}
                   pattern="^#[0-9a-fA-F]{6}$"
                   maxLength={7}
-                  className="w-full rounded border border-[var(--border-strong)] px-2 py-1 font-mono text-xs focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--interactive-primary)]"
+                  className="h-7 py-1 font-mono text-xs"
                 />
               </div>
             </div>
@@ -233,7 +234,7 @@ export function BrandingFormFields({
               <select
                 value={value[key]}
                 onChange={(e) => handleFieldChange(key, e.target.value)}
-                className="w-full rounded border border-[var(--border-strong)] px-2 py-1.5 text-xs focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--interactive-primary)]"
+                className="w-full rounded border border-[var(--border-strong)] px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               >
                 {ALLOWED_FONTS.map((font) => (
                   <option key={font} value={font}>{font}</option>
@@ -268,7 +269,7 @@ export function BrandingFormFields({
                 onClick={handleRemoveLogo}
                 className="inline-flex items-center gap-1 text-xs text-[var(--status-danger)] hover:opacity-80"
               >
-                <X size={12} /> Remove
+                <X size={12} aria-hidden="true" /> Remove
               </button>
             </div>
           </div>

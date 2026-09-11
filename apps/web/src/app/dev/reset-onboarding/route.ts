@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { nonLocalBackendReason } from '@propertypro/shared';
 import { sql } from '@propertypro/db/filters';
 // AUTHZ: Dev reset-onboarding — resets community onboarding state (dev-only, 404 in production)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -16,6 +17,17 @@ export async function POST(request: Request) {
   if (process.env.NODE_ENV !== 'development') {
     return new NextResponse('Not Found', { status: 404 });
   }
+
+  // `NODE_ENV` says how this process was started, NOT which project it talks
+  // to. A worktree whose `.env.local` names production runs `pnpm dev` as
+  // `development` and writes to prod — which is how a real `super_admin` row
+  // was created in the production project on 2026-09-10. Refuse unless BOTH
+  // backends are demonstrably local. `nonLocalBackendReason` carries the reason
+  // the rule is uniform across all four routes rather than per-route: the
+  // half-redirected env is the dangerous state, and a reader should not have to
+  // audit this file's imports to know which backend it writes to.
+  const remote = nonLocalBackendReason(process.env);
+  if (remote) return new NextResponse(remote, { status: 403 });
 
   const body = (await request.json().catch(() => ({}))) as {
     slug?: string;

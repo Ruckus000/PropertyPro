@@ -13,22 +13,125 @@
  * goes through the deletion-requests list, not this palette, so it does not
  * need this searcher to surface soft-deleted rows.
  *
- * The hit links to `/clients` with no query string. It used to link to
- * `/clients?q=<email>` — that put a raw email address in the URL (a PII sink:
- * Vercel access logs, browser history, and Sentry's client-side navigation
- * breadcrumbs, none of which redact a bare `q=<email>` param) for a
- * destination nothing reads besides. The natural fix is a same-query nested
- * select (`user_roles(community_id)`) to link straight to the user's
- * community, but that is not expressible against `createAdminTypedClient()`'s
- * schema today: `AdminDatabase` (`packages/db/src/supabase/admin-types.ts`)
- * is a hand-maintained shim with no `user_roles` entry and `Relationships: []`
- * on every table by design, so there is no typed embed to build against, and
- * this task's constraints forbid reaching a database to verify one
- * empirically. `/clients` is the documented fallback: no PII, and a landing
- * page that exists and works, rather than a guaranteed-empty destination.
+ * The hit links to `/clients/{communityId}?tab=members` — the Members tab of
+ * the user's community workspace, resolved via `resolveMemberDestinations`
+ * below. It used to link to `/clients?q=<email>` — that put a raw email
+ * address in the URL (a PII sink: Vercel access logs, browser history, and
+ * Sentry's client-side navigation breadcrumbs, none of which redact a bare
+ * `q=<email>` param) for a destination that matched nothing besides, since
+ * the clients grid filters community *names*. It was parked on `/clients`
+ * because the Members tab did not exist yet and tabs were not deep-linkable
+ * — both are now true (task 17a's `?tab=` reader) and task 17b's Members
+ * panel is this searcher's real destination.
  */
-import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { createAdminClient, createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import type { Searcher } from '../search';
+
+/**
+ * Resolves each matched user id to the community whose Members tab the
+ * palette hit should open, via the untyped admin client.
+ *
+ * `user_roles` is deliberately absent from the hand-maintained `AdminDatabase`
+ * shim (`packages/db/src/supabase/admin-types.ts`) — every table there has a
+ * uniform `Relationships: []`, so there is no typed embed to build a
+ * `users(...)`-style nested select against. `(console)/clients/[id]/page.tsx`
+ * already reaches `user_roles` the same way, via the untyped
+ * `createAdminClient()`, rather than extending the shim.
+ *
+ * Tiebreak for a user who belongs to more than one community (a multi-community
+ * PM or unit owner): link to the community from their MOST RECENTLY CREATED
+ * `user_roles` row (`id desc` — `id` is a monotonic `bigserial`, so ordering by
+ * it is stable under concurrent inserts, unlike ordering communities by NAME,
+ * which silently reorders whenever a community is seeded or renamed — see the
+ * `?as=` role table's "lands in without a pin" trap documented in
+ * `.claude/rules/agent-testing.md`, which is exactly that footgun). Newest
+ * membership best matches an operator's likely intent when searching for a
+ * person by name from the palette: "where is this person NOW", which skews
+ * toward a recent addition rather than an alphabetically arbitrary community
+ * that may be years stale for them.
+ *
+ * The destination is the newest membership **in a real community** — not
+ * simply the newest membership. `(console)/clients/[id]/page.tsx` fetches the
+ * community with `.is('deleted_at', null)` and calls `notFound()` when the row
+ * does not parse, so a raw newest-membership pick can hand the palette a link
+ * to a 404 for any user whose most recent membership is in a soft-deleted
+ * community — this happened in production. A user whose candidate memberships
+ * are all soft-deleted then has no surviving membership and resolves to
+ * `undefined`, same as a user with none at all.
+ *
+ * Demo communities are NOT excluded. An earlier revision excluded them to match
+ * the sibling `communities.ts` searcher, which excluded them at the time; that
+ * searcher now labels demos instead of hiding them, because their workspace
+ * renders and hiding them made them unreachable by search. The consistency
+ * argument therefore points the other way, and excluding them here would send a
+ * demo persona to the generic `/clients` instead of the workspace that actually
+ * loads for them. Only `deleted_at` gates the destination, because only that
+ * one 404s.
+ *
+ * A user with no `user_roles` row (e.g. invited but never accepted) resolves
+ * to `undefined`; the caller falls back to the PII-free `/clients` link
+ * rather than a broken deep link.
+ */
+async function resolveMemberDestinations(userIds: string[]): Promise<Map<string, number>> {
+  const destinations = new Map<string, number>();
+  if (userIds.length === 0) return destinations;
+
+  const db = createAdminClient();
+  // This read is scoped by USER, not by community, and deliberately so. Its job
+  // is to enumerate one known set of users' memberships; the destination filter
+  // is applied to the result by the follow-up `.from('communities')` query below
+  // (`.in('id', candidateIds).is('deleted_at', null)`), whose surviving ids gate
+  // which membership becomes the palette destination. Pushing that filter into
+  // this read instead would mean fetching every surviving community id on the
+  // platform up front purely to pass it into an `.in()` — a whole-table read to
+  // narrow a query that is already bounded by `userIds`, which is at most the
+  // palette's result limit.
+  //
+  // Note the `.select('user_id, community_id')` below is a projection, not a
+  // predicate: it is one string literal that CONTAINS the guard's marker text
+  // but scopes nothing. The guard matches exact literal values precisely so it
+  // does not mistake this for scoping — which is why this exempt is needed and
+  // is not merely paperwork.
+  // admin-community-scope:exempt — user-scoped by `.in('user_id', userIds)`; the destination filter runs as the follow-up `.from('communities')` query below, which drops any soft-deleted community before one can become a palette destination
+  const { data, error } = await db
+    .from('user_roles')
+    .select('user_id, community_id')
+    .in('user_id', userIds)
+    .order('id', { ascending: false });
+  if (error) throw new Error(`user search: member lookup: ${error.message}`);
+
+  const roles = (data ?? []) as Array<{ user_id: string; community_id: number }>;
+
+  // Drop soft-deleted communities from the candidate ids before picking each
+  // user's newest membership, so a community whose workspace 404s can never
+  // become the palette destination. Demos are deliberately kept — see the
+  // docblock above.
+  const candidateIds = [...new Set(roles.map((row) => row.community_id))];
+  if (candidateIds.length === 0) return destinations;
+
+  // admin-community-scope:exempt — destination filter for a palette hit, not a population count: it must admit every community whose workspace renders, and a demo's does. Excluding demos would hide a working destination behind the generic /clients fallback.
+  const { data: communitiesData, error: communitiesError } = await db
+    .from('communities')
+    .select('id')
+    .in('id', candidateIds)
+    .is('deleted_at', null);
+  if (communitiesError) {
+    throw new Error(`user search: community lookup: ${communitiesError.message}`);
+  }
+  const realCommunityIds = new Set(
+    ((communitiesData ?? []) as Array<{ id: number }>).map((c) => c.id),
+  );
+
+  // Rows arrive newest-first (`id desc`); keep only the first row seen per
+  // user whose community survived the real-community filter — i.e. their
+  // most recently created membership in a community that still exists.
+  for (const row of roles) {
+    if (!destinations.has(row.user_id) && realCommunityIds.has(row.community_id)) {
+      destinations.set(row.user_id, row.community_id);
+    }
+  }
+  return destinations;
+}
 
 export const userSearcher: Searcher = {
   key: 'people',
@@ -44,12 +147,19 @@ export const userSearcher: Searcher = {
       .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
       .limit(limit);
     if (error) throw new Error(`user search: ${error.message}`);
-    return (data ?? []).map((u) => ({
-      id: `user-${u.id}`,
-      label: u.full_name,
-      meta: u.email,
-      href: '/clients',
-      icon: 'user' as const,
-    }));
+
+    const users = data ?? [];
+    const destinations = await resolveMemberDestinations(users.map((u) => u.id));
+
+    return users.map((u) => {
+      const communityId = destinations.get(u.id);
+      return {
+        id: `user-${u.id}`,
+        label: u.full_name,
+        meta: u.email,
+        href: communityId !== undefined ? `/clients/${communityId}?tab=members` : '/clients',
+        icon: 'user' as const,
+      };
+    });
   },
 };

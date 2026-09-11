@@ -20,5 +20,31 @@ export function staleBadge(createdAt: string): StaleBadge {
   // packages/tokens (cf. the compliance calm/aware/urgent/critical ramp, which
   // is TS-only today and emits no CSS vars).
   if (days >= STALE_DEMO_ORANGE_THRESHOLD_DAYS) return { label: `${STALE_DEMO_ORANGE_THRESHOLD_DAYS}+ days`, className: 'bg-orange-100 text-orange-700' }; // design-tokens:exempt — see note above
-  return { label: `${STALE_DEMO_YELLOW_THRESHOLD_DAYS}+ days`, className: 'bg-status-warning-subtle text-status-warning' };
+  if (days >= STALE_DEMO_YELLOW_THRESHOLD_DAYS) return { label: `${STALE_DEMO_YELLOW_THRESHOLD_DAYS}+ days`, className: 'bg-status-warning-subtle text-status-warning' };
+  // Below every threshold — not stale. Must exist: without it every row fell
+  // through to the 10+ badge above regardless of actual age, so a demo
+  // created today showed "10+ days" beside "Created: today" while the page
+  // header's `isStaleDemo`-derived count correctly said 0 stale.
+  return { label: `${days}d`, className: 'bg-status-success-subtle text-status-success' };
+}
+
+/**
+ * A demo counts as "stale" once it clears the youngest badge threshold and
+ * hasn't converted to a paying customer — the same cutoff the deleted
+ * `clients/page.tsx` query used (`created_at < now() - 10 days`), minus the
+ * conversion check that query was missing (deleting a converted demo would
+ * cascade a live customer's community; the DELETE route already refuses
+ * this server-side, but the banner shouldn't offer it in the first place).
+ * Single-sourced here so the Demos header count and `StaleDemosBanner`'s
+ * caller agree with the badge shown on each row.
+ */
+export function isStaleDemo(demo: { created_at: string; is_converted?: boolean }): boolean {
+  if (demo.is_converted) return false;
+  return differenceInDays(new Date(), new Date(demo.created_at)) >= STALE_DEMO_YELLOW_THRESHOLD_DAYS;
+}
+
+export function getStaleDemos<T extends { created_at: string; is_converted?: boolean }>(
+  demos: T[],
+): T[] {
+  return demos.filter(isStaleDemo);
 }

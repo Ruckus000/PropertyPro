@@ -87,7 +87,10 @@ export type AdminAuditAction =
   // Hard delete. The cascade also destroys the thread's internal notes, whose
   // rows are their own audit trail — so this entry is the last record that the
   // conversation existed. It carries the address and counts, never content.
-  | 'support_thread_deleted';
+  | 'support_thread_deleted'
+  // A contact@ thread converted into a marketing_leads row. Community-less —
+  // a lead has no community yet, which is the entire point of the table.
+  | 'lead_created_from_thread';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */

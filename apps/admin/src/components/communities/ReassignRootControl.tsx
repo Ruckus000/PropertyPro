@@ -57,13 +57,13 @@ export function ReassignRootControl({ communityId }: ReassignRootControlProps) {
           value={newUserId}
           onChange={(e) => setNewUserId(e.target.value)}
           placeholder="property_manager user id"
-          className="w-72 rounded-md border border-edge-strong px-2 py-1 text-sm"
+          className="h-11 w-72 rounded-md border border-edge-strong px-2 text-sm md:h-9"
         />
         <button
           type="button"
           onClick={submit}
           disabled={status === 'saving'}
-          className="rounded-md bg-interactive px-3 py-1 text-sm font-medium text-content-inverse disabled:opacity-50"
+          className="h-11 shrink-0 rounded-md bg-interactive px-3 text-sm font-medium text-content-inverse disabled:opacity-50 md:h-9"
         >
           {status === 'saving' ? 'Reassigning…' : 'Reassign root'}
         </button>

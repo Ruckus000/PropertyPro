@@ -26,6 +26,7 @@ export async function resolveAndVerifyCommunity(
     );
   }
 
+  // admin-community-scope:exempt — single-community resolve by PRIMARY KEY, not a population read: `is_demo` is selected and gated in JS against the caller's `allowDemo` (some callers legitimately resolve a demo), so it is deliberately a projection here rather than a SQL filter. `deleted_at` IS filtered, because a deleted community has no workspace to resolve to.
   const { data } = await db
     .from('communities')
     .select('id, is_demo')

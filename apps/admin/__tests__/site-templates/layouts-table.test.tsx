@@ -6,11 +6,11 @@ import { LayoutsTable, diffLayout, type LayoutRow } from '@/components/site-temp
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-async function renderTable(layouts: LayoutRow[]): Promise<string> {
+async function renderTable(layouts: LayoutRow[], variant?: 'table' | 'cards'): Promise<string> {
   const container = document.createElement('div');
   const root = createRoot(container);
   await act(async () => {
-    root.render(<LayoutsTable layouts={layouts} />);
+    root.render(<LayoutsTable layouts={layouts} variant={variant} />);
   });
   const html = container.innerHTML;
   await act(async () => {
@@ -91,6 +91,28 @@ describe('LayoutsTable', () => {
     const html = await renderTable([SAMPLE, second]);
     expect(html).toContain('Tidewater');
     expect(html).toContain('Boulevard');
+  });
+});
+
+describe('LayoutsTable cards variant', () => {
+  it('renders cards with tier, tagline, and slug · version — no edit affordance', async () => {
+    const html = await renderTable([SAMPLE], 'cards');
+    expect(html).toContain('Tidewater');
+    expect(html).toContain('essentials');
+    expect(html).toContain('Coastal editorial · for the waterfront');
+    expect(html).toContain('tidewater · v1.0.0');
+    expect(html).not.toContain('Edit');
+    expect(html).not.toContain('layout-edit-form');
+  });
+
+  it('renders an empty state with no layouts', async () => {
+    const html = await renderTable([], 'cards');
+    expect(html).toContain('No layouts configured');
+  });
+
+  it('defaults to the table variant when none is given', async () => {
+    const html = await renderTable([SAMPLE]);
+    expect(html).toContain('data-testid="layout-edit-tidewater"');
   });
 });
 

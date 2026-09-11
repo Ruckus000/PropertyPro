@@ -7,7 +7,8 @@ import type { ShellSignalItem } from '@/lib/server/signals/types';
 
 const items = [
   {
-    id: 'a',
+    key: 'inbox' as const,
+      id: 'a',
     tone: 'info' as const,
     icon: 'inbox' as const,
     title: 'New reply from Denise',
@@ -121,7 +122,7 @@ describe('NotificationTray — empty state', () => {
 });
 
 function item(occurredAt: string): ShellSignalItem {
-  return { id: occurredAt, tone: 'info', icon: 'inbox', title: 't', meta: 'm', href: '/x', occurredAt };
+  return { key: 'inbox', id: occurredAt, tone: 'info', icon: 'inbox', title: 't', meta: 'm', href: '/x', occurredAt };
 }
 
 describe('countUnread', () => {

@@ -13,13 +13,14 @@ describe('nav-config', () => {
   it('has the three design groups in order', () => {
     expect(NAV_GROUPS.map((g) => g.label)).toEqual(['Operate', 'Customers', 'Platform']);
   });
-  it('lists Rootless Communities until Task 15 folds it into Clients', () => {
-    // Task 15 (spec D9) replaces this entry with a redirect to
-    // `/clients?filter=rootless`; until that filter exists, the open
-    // root-claim dispute queue needs a rail entry to stay reachable.
+  it('has no standalone Rootless Communities entry — folded into the Clients quick filter', () => {
+    // Task 15 (spec D9) replaced this entry with a redirect at
+    // `/communities/rootless` (outside the console shell) to
+    // `/clients?filter=rootless`; the open root-claim dispute queue is now
+    // reachable via the Clients rail entry + the `rootless` quick filter, so
+    // the standalone rail item is gone.
     const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href.includes('rootless'));
-    expect(item).toBeDefined();
-    expect(item?.href).toBe('/communities/rootless');
+    expect(item).toBeUndefined();
   });
   it('resolves nested paths to their section by longest prefix', () => {
     expect(getActiveNavId('/clients/12')).toBe('clients');
@@ -52,7 +53,14 @@ describe('nav-config', () => {
     // `files.length > 100` and the e2e workflow's `expectedTestCount`. An exact
     // count would fail here first when a legitimate entry is added, hiding
     // whatever the missing-href assertion below actually found.
-    expect(NAV_PAGES.length).toBeGreaterThanOrEqual(13);
+    //
+    // 12, not 13: this wave folded Rootless Communities into the Clients quick
+    // filter (spec D9), removing exactly one rail entry. The floor is lowered
+    // deliberately and only by that one — it is NOT free slack. The sibling
+    // test above ("has no standalone Rootless Communities entry") pins the
+    // removal itself, so the two cannot drift apart: restoring the entry
+    // reddens that test, and deleting a DIFFERENT entry reddens this one.
+    expect(NAV_PAGES.length).toBeGreaterThanOrEqual(12);
 
     const missing = NAV_PAGES.filter(
       (page) => !existsSync(join(CONSOLE_ROOT, page.href, 'page.tsx')),

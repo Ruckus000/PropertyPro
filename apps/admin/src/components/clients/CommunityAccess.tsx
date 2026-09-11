@@ -11,8 +11,21 @@ import {
   CalendarPlus,
   AlertTriangle,
   CheckCircle,
-  X,
 } from 'lucide-react';
+import {
+  AlertBanner,
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+  Textarea,
+  type BadgeVariant,
+} from '@propertypro/ui';
 
 /* ---------- types ---------- */
 
@@ -41,12 +54,12 @@ interface CommunityAccessProps {
 
 /* ---------- status styling ---------- */
 
-const STATUS_STYLES: Record<PlanStatus, { className: string; icon: typeof CheckCircle; label: string }> = {
-  active: { className: 'bg-status-success-subtle text-status-success', icon: CheckCircle, label: 'Active' },
-  in_grace: { className: 'bg-status-warning-subtle text-status-warning', icon: Clock, label: 'Grace Period' },
-  expired: { className: 'bg-surface-muted text-content-secondary', icon: XCircle, label: 'Expired' },
-  revoked: { className: 'bg-status-danger-subtle text-status-danger', icon: XCircle, label: 'Revoked' },
-  converted: { className: 'bg-status-info-subtle text-status-info', icon: CheckCircle, label: 'Converted' },
+const STATUS_STYLES: Record<PlanStatus, { variant: BadgeVariant; icon: typeof CheckCircle; label: string }> = {
+  active: { variant: 'success', icon: CheckCircle, label: 'Active' },
+  in_grace: { variant: 'warning', icon: Clock, label: 'Grace Period' },
+  expired: { variant: 'neutral', icon: XCircle, label: 'Expired' },
+  revoked: { variant: 'danger', icon: XCircle, label: 'Revoked' },
+  converted: { variant: 'info', icon: CheckCircle, label: 'Converted' },
 };
 
 /* ---------- component ---------- */
@@ -85,7 +98,7 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <Loader2 size={20} className="animate-spin text-content-disabled" />
+        <Loader2 size={20} className="animate-spin text-content-disabled" aria-hidden="true" />
       </div>
     );
   }
@@ -114,14 +127,10 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
           <div className="rounded-lg border border-edge bg-surface-card p-8 text-center">
             <ShieldCheck size={24} className="mx-auto mb-2 text-content-disabled" aria-hidden="true" />
             <p className="text-sm text-content-tertiary">No access plans have been granted yet.</p>
-            <button
-              type="button"
-              onClick={() => setShowGrant(true)}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-2 text-sm font-medium text-white hover:bg-coral-700 transition-colors"
-            >
+            <Button type="button" size="sm" className="mt-3" onClick={() => setShowGrant(true)}>
               <Plus size={14} aria-hidden="true" />
               Grant Free Access
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-edge bg-surface-card shadow-e1">
@@ -144,10 +153,10 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
                   return (
                     <tr key={plan.id} className="hover:bg-surface-page">
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${style.className}`}>
-                          <StatusIcon size={12} aria-hidden="true" />
-                          {style.label}
-                        </span>
+                        <Badge variant={style.variant} size="sm">
+                          <Badge.Icon><StatusIcon /></Badge.Icon>
+                          <Badge.Label>{style.label}</Badge.Label>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm text-content">
                         {plan.durationMonths} {plan.durationMonths === 1 ? 'month' : 'months'}
@@ -172,24 +181,20 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
                       <td className="px-4 py-3 text-right">
                         {(plan.status === 'active' || plan.status === 'in_grace') && (
                           <div className="inline-flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setShowExtend(plan.id)}
-                              className="rounded border border-edge-strong px-2 py-1 text-xs text-content-secondary hover:bg-surface-page transition-colors"
-                              title="Extend plan"
-                            >
-                              <CalendarPlus size={12} className="inline mr-1" aria-hidden="true" />
+                            <Button type="button" variant="outline" size="sm" onClick={() => setShowExtend(plan.id)}>
+                              <CalendarPlus size={12} aria-hidden="true" />
                               Extend
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-status-danger-border text-status-danger hover:bg-status-danger-bg"
                               onClick={() => setShowRevoke(plan.id)}
-                              className="rounded border border-status-danger-border px-2 py-1 text-xs text-status-danger hover:bg-status-danger-bg transition-colors"
-                              title="Revoke plan"
                             >
-                              <XCircle size={12} className="inline mr-1" aria-hidden="true" />
+                              <XCircle size={12} aria-hidden="true" />
                               Revoke
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </td>
@@ -202,7 +207,9 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
         )}
       </div>
 
-      {/* Dialogs */}
+      {/* Dialogs — conditionally MOUNTED (not just visually hidden), so each
+          open starts from fresh form state rather than whatever was typed
+          the last time it was open. */}
       {showGrant && (
         <GrantAccessDialog
           communityId={communityId}
@@ -250,14 +257,10 @@ function AccessStatusCard({
               <p className="text-xs text-content-tertiary">This community does not have a free access plan.</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onGrant}
-            className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-2 text-sm font-medium text-white hover:bg-coral-700 transition-colors"
-          >
+          <Button type="button" size="sm" onClick={onGrant}>
             <Plus size={14} aria-hidden="true" />
             Grant Free Access
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -278,9 +281,7 @@ function AccessStatusCard({
               <p className="text-sm font-medium text-content">
                 {plan.status === 'active' ? 'Active Free Access' : 'Grace Period'}
               </p>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${style.className}`}>
-                {style.label}
-              </span>
+              <Badge variant={style.variant} size="sm">{style.label}</Badge>
             </div>
             <p className="text-xs text-content-tertiary">
               Expires {format(new Date(plan.expiresAt), 'MMM d, yyyy')}
@@ -351,80 +352,65 @@ function GrantAccessDialog({
   }
 
   return (
-    <DialogOverlay onClose={onClose}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <h3 className="text-lg font-semibold text-content">Grant Free Access</h3>
-
-        <div>
-          <label htmlFor="grant-duration" className="block text-sm font-medium text-content-secondary mb-1">
-            Duration (months) <span className="text-status-danger">*</span>
-          </label>
-          <input
-            id="grant-duration"
-            type="number"
-            min="1"
-            max="24"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            required
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="grant-grace" className="block text-sm font-medium text-content-secondary mb-1">
-            Grace period (days)
-          </label>
-          <input
-            id="grant-grace"
-            type="number"
-            min="0"
-            max="90"
-            value={graceDays}
-            onChange={(e) => setGraceDays(e.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="grant-notes" className="block text-sm font-medium text-content-secondary mb-1">
-            Notes
-          </label>
-          <textarea
-            id="grant-notes"
-            rows={3}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional notes about this access grant..."
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-          />
-        </div>
-
-        {error && (
-          <div className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger" role="alert">
-            {error}
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Grant Free Access</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="grant-duration">
+              Duration (months) <span className="text-status-danger">*</span>
+            </Label>
+            <Input
+              id="grant-duration"
+              type="number"
+              min="1"
+              max="24"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              required
+            />
           </div>
-        )}
 
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50 transition-colors"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-            Grant Access
-          </button>
-        </div>
-      </form>
-    </DialogOverlay>
+          <div className="space-y-1.5">
+            <Label htmlFor="grant-grace">Grace period (days)</Label>
+            <Input
+              id="grant-grace"
+              type="number"
+              min="0"
+              max="90"
+              value={graceDays}
+              onChange={(e) => setGraceDays(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="grant-notes">Notes</Label>
+            <Textarea
+              id="grant-notes"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes about this access grant..."
+            />
+          </div>
+
+          {error && (
+            <AlertBanner status="danger" title={error} />
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={saving}>
+              Grant Access
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -471,52 +457,42 @@ function RevokeAccessDialog({
   }
 
   return (
-    <DialogOverlay onClose={onClose}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <h3 className="text-lg font-semibold text-content">Revoke Access Plan</h3>
-        <p className="text-sm text-content-tertiary">
-          This will immediately end the community&apos;s free access. This cannot be undone.
-        </p>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Revoke Access Plan</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <p className="text-sm text-content-tertiary">
+            This will immediately end the community&apos;s free access. This cannot be undone.
+          </p>
 
-        <div>
-          <label htmlFor="revoke-reason" className="block text-sm font-medium text-content-secondary mb-1">
-            Reason
-          </label>
-          <textarea
-            id="revoke-reason"
-            rows={3}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Optional reason for revoking access..."
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-          />
-        </div>
-
-        {error && (
-          <div className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger" role="alert">
-            {error}
+          <div className="space-y-1.5">
+            <Label htmlFor="revoke-reason">Reason</Label>
+            <Textarea
+              id="revoke-reason"
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Optional reason for revoking access..."
+            />
           </div>
-        )}
 
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 disabled:opacity-50 transition-colors"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-            Revoke Access
-          </button>
-        </div>
-      </form>
-    </DialogOverlay>
+          {error && (
+            <AlertBanner status="danger" title={error} />
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="destructive" loading={saving}>
+              Revoke Access
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -567,97 +543,52 @@ function ExtendAccessDialog({
   }
 
   return (
-    <DialogOverlay onClose={onClose}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <h3 className="text-lg font-semibold text-content">Extend Access Plan</h3>
-
-        <div>
-          <label htmlFor="extend-months" className="block text-sm font-medium text-content-secondary mb-1">
-            Additional months <span className="text-status-danger">*</span>
-          </label>
-          <input
-            id="extend-months"
-            type="number"
-            min="1"
-            max="24"
-            value={months}
-            onChange={(e) => setMonths(e.target.value)}
-            required
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="extend-notes" className="block text-sm font-medium text-content-secondary mb-1">
-            Notes
-          </label>
-          <textarea
-            id="extend-notes"
-            rows={3}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional notes about this extension..."
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-          />
-        </div>
-
-        {error && (
-          <div className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger" role="alert">
-            {error}
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Extend Access Plan</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="extend-months">
+              Additional months <span className="text-status-danger">*</span>
+            </Label>
+            <Input
+              id="extend-months"
+              type="number"
+              min="1"
+              max="24"
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+              required
+            />
           </div>
-        )}
 
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50 transition-colors"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-            Extend Access
-          </button>
-        </div>
-      </form>
-    </DialogOverlay>
-  );
-}
+          <div className="space-y-1.5">
+            <Label htmlFor="extend-notes">Notes</Label>
+            <Textarea
+              id="extend-notes"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes about this extension..."
+            />
+          </div>
 
-/* ---------- Dialog Overlay ---------- */
+          {error && (
+            <AlertBanner status="danger" title={error} />
+          )}
 
-function DialogOverlay({
-  onClose,
-  children,
-}: {
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      {/* Dialog */}
-      <div className="relative w-full max-w-md rounded-lg bg-surface-card p-6 shadow-xl">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-3 top-3 text-content-disabled hover:text-content-secondary"
-          aria-label="Close dialog"
-        >
-          <X size={16} />
-        </button>
-        {children}
-      </div>
-    </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={saving}>
+              Extend Access
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

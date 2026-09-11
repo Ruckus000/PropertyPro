@@ -286,6 +286,23 @@ const config: Config = {
         error: 'var(--border-error)',
       },
 
+      // ── Motion: transition durations ──
+      // Mirrors web's block (`apps/web/tailwind.config.ts`). Without it
+      // `duration-quick` emitted NO CSS in admin — harmless only by
+      // coincidence, since Tailwind's own default is also 150ms. It is used by
+      // `MailboxSwitcher`, `CommunitySettingsEditor` and every packages/ui
+      // primitive admin compiles (Button, Badge, Input, Switch,
+      // QuickFilterTabs). `guard:admin-semantic-css` cannot see this class:
+      // its pattern covers only the semantic COLOUR families.
+      transitionDuration: {
+        instant: 'var(--motion-duration-instant)',
+        micro: 'var(--motion-duration-micro)',
+        quick: 'var(--motion-duration-quick)',
+        standard: 'var(--motion-duration-standard)',
+        slow: 'var(--motion-duration-slow)',
+        expressive: 'var(--motion-duration-expressive)',
+      },
+
       boxShadow: {
         e0: 'none',
         e1: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',

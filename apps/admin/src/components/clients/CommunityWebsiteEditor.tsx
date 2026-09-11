@@ -5,6 +5,10 @@
  *
  * Allows platform admins to customise a community's public-facing landing page
  * branding: colors, fonts, and logo. Includes theme preset quick-picks.
+ *
+ * Domain display (URL, live/not-live, custom-domain status) moved to
+ * `WebsiteDomainCard` (task 17c) — this component owns branding only, so the
+ * domain isn't rendered twice in the same tab from two divergent call sites.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, Save, RotateCcw, Upload, X } from 'lucide-react';
@@ -16,7 +20,7 @@ import {
   presetToBranding,
   darkenHex,
 } from '@propertypro/theme';
-import { getWebsiteDomainInfo } from '@/lib/clients/website';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '@propertypro/ui';
 
 // ---------------------------------------------------------------------------
 // Magic-byte validation (client-side, matches admin upload route)
@@ -44,7 +48,6 @@ function detectImageMime(buf: Uint8Array): string | null {
 interface CommunityWebsiteEditorProps {
   communityId: number;
   communitySlug: string;
-  customDomain: string | null;
 }
 
 interface BrandingForm {
@@ -57,6 +60,13 @@ interface BrandingForm {
 }
 
 const MAX_LOGO_SIZE = 5 * 1024 * 1024; // 5 MB
+
+// Native `<select>` has no shared packages/ui equivalent (Select lives only
+// in apps/web/src/components/ui, not the cross-app package) — styled to match
+// Input's focus-visible-aware treatment rather than the bare focus ring this
+// component used to carry. Mirrors CommunitySettingsEditor's `selectClassName`.
+const selectClassName =
+  'w-full rounded-md border border-edge-strong bg-transparent px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus';
 
 function brandingToForm(b: CommunityBranding): BrandingForm {
   return {
@@ -76,7 +86,6 @@ function brandingToForm(b: CommunityBranding): BrandingForm {
 export function CommunityWebsiteEditor({
   communityId,
   communitySlug,
-  customDomain,
 }: CommunityWebsiteEditorProps) {
   const [form, setForm] = useState<BrandingForm>(brandingToForm({}));
   const [initial, setInitial] = useState<BrandingForm>(brandingToForm({}));
@@ -262,7 +271,6 @@ export function CommunityWebsiteEditor({
   // ---------------------------------------------------------------------------
 
   const currentLogoSrc = logoPreviewUrl ?? logoPublicUrl ?? null;
-  const domainInfo = getWebsiteDomainInfo({ slug: communitySlug, customDomain });
 
   if (loading) {
     return (
@@ -276,36 +284,42 @@ export function CommunityWebsiteEditor({
   return (
     <form onSubmit={handleSave} className="space-y-6">
       {/* Theme Presets */}
-      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-        <h2 className="mb-1 text-sm font-semibold text-content-secondary">Theme Presets</h2>
-        <p className="mb-4 text-xs text-content-disabled">Quick-start with a curated palette, then customize.</p>
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {THEME_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => handlePresetClick(preset.id)}
-              className="group rounded-md border border-edge p-2.5 text-left transition-colors hover:border-coral-400 hover:bg-coral-50/40"
-            >
-              <div className="mb-1.5 flex gap-1">
-                <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.primaryColor }} />
-                <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.secondaryColor }} />
-                <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.accentColor }} />
-              </div>
-              <p className="text-xs font-medium text-content-secondary">{preset.name}</p>
-            </button>
-          ))}
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Theme Presets</CardTitle>
+          <p className="text-xs text-content-tertiary">Quick-start with a curated palette, then customize.</p>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {THEME_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handlePresetClick(preset.id)}
+                className="group min-h-11 rounded-md border border-edge p-2.5 text-left transition-colors hover:border-interactive hover:bg-interactive-subtle md:min-h-9"
+              >
+                <div className="mb-1.5 flex gap-1">
+                  <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.primaryColor }} />
+                  <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.secondaryColor }} />
+                  <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.accentColor }} />
+                </div>
+                <p className="text-xs font-medium text-content-secondary">{preset.name}</p>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Form + Preview side-by-side */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Left: Form */}
         <div className="space-y-6">
           {/* Colors */}
-          <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-            <h2 className="mb-4 text-sm font-semibold text-content-secondary">Brand Colors</h2>
-            <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Brand Colors</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
               {([
                 ['primaryColor', 'Primary'] as const,
                 ['secondaryColor', 'Secondary'] as const,
@@ -314,85 +328,102 @@ export function CommunityWebsiteEditor({
                 <div key={key} className="flex items-center gap-3">
                   <input
                     type="color"
+                    aria-label={`${label} color picker`}
                     value={form[key]}
                     onChange={(e) => handleChange(key, e.target.value)}
                     className="h-9 w-9 cursor-pointer rounded border border-edge p-0.5"
                   />
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-content-tertiary mb-1">{label}</label>
-                    <input
+                    <Label htmlFor={`website-${key}`} className="mb-1 block text-xs font-medium text-content-tertiary">
+                      {label}
+                    </Label>
+                    <Input
+                      id={`website-${key}`}
                       type="text"
                       value={form[key]}
                       onChange={(e) => handleChange(key, e.target.value)}
                       pattern="^#[0-9a-fA-F]{6}$"
                       maxLength={7}
-                      className="w-full rounded-md border border-edge-strong px-3 py-1.5 font-mono text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+                      className="font-mono text-sm"
                     />
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Fonts */}
-          <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-            <h2 className="mb-4 text-sm font-semibold text-content-secondary">Typography</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {([
-                ['fontHeading', 'Heading Font'] as const,
-                ['fontBody', 'Body Font'] as const,
-              ]).map(([key, label]) => (
-                <div key={key}>
-                  <label className="block text-xs font-medium text-content-tertiary mb-1">{label}</label>
-                  <select
-                    value={form[key]}
-                    onChange={(e) => handleChange(key, e.target.value)}
-                    className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
-                  >
-                    {ALLOWED_FONTS.map((font) => (
-                      <option key={font} value={font}>{font}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Typography</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {([
+                  ['fontHeading', 'Heading Font'] as const,
+                  ['fontBody', 'Body Font'] as const,
+                ]).map(([key, label]) => (
+                  <div key={key}>
+                    <Label htmlFor={`website-${key}`} className="mb-1 block text-xs font-medium text-content-tertiary">
+                      {label}
+                    </Label>
+                    <select
+                      id={`website-${key}`}
+                      value={form[key]}
+                      onChange={(e) => handleChange(key, e.target.value)}
+                      className={selectClassName}
+                    >
+                      {ALLOWED_FONTS.map((font) => (
+                        <option key={font} value={font}>{font}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Logo */}
-          <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-            <h2 className="mb-4 text-sm font-semibold text-content-secondary">Logo</h2>
-            {currentLogoSrc ? (
-              <div className="flex items-center gap-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={currentLogoSrc} alt="Logo" className="h-16 w-16 rounded-lg border border-edge object-cover" />
-                <div className="flex flex-col gap-1">
-                  <p className="text-xs text-content-tertiary">
-                    {uploading ? 'Uploading...' : 'Logo uploaded'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleRemoveLogo}
-                    className="inline-flex items-center gap-1 text-xs text-status-danger hover:text-status-danger"
-                  >
-                    <X size={12} /> Remove
-                  </button>
+          <Card>
+            <CardHeader>
+              <CardTitle>Logo</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {currentLogoSrc ? (
+                <div className="flex items-center gap-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={currentLogoSrc} alt="Logo" className="h-16 w-16 rounded-lg border border-edge object-cover" />
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs text-content-tertiary">
+                      {uploading ? 'Uploading...' : 'Logo uploaded'}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={handleRemoveLogo}
+                      className="h-auto p-0 text-status-danger hover:text-status-danger"
+                    >
+                      <X size={12} aria-hidden="true" /> Remove
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-edge-strong p-6 transition-colors hover:border-coral-400 hover:bg-coral-50/30">
-                <Upload size={20} className="text-content-disabled" />
-                <span className="text-xs text-content-tertiary">
-                  PNG, JPEG, or WebP &middot; max 5 MB
-                </span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={handleLogoSelect}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
+              ) : (
+                <label className="flex min-h-11 cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-edge-strong p-6 transition-colors hover:border-interactive hover:bg-interactive-subtle md:min-h-9">
+                  <Upload size={20} className="text-content-disabled" aria-hidden="true" />
+                  <span className="text-xs text-content-tertiary">
+                    PNG, JPEG, or WebP &middot; max 5 MB
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleLogoSelect}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right: Live Preview */}
@@ -493,43 +524,19 @@ export function CommunityWebsiteEditor({
               ))}
             </div>
           </div>
-
-          {/* Public URL info */}
-          <div className="rounded-lg border border-edge bg-surface-card p-4 shadow-e1">
-            <p className="text-xs font-medium text-content-tertiary">Website URL</p>
-            <p className="mt-1 font-mono text-sm text-content-secondary">
-              {domainInfo.displayUrl}
-            </p>
-            <p className="mt-1 text-xs text-content-tertiary">
-              {domainInfo.urlSource === 'custom_domain' ? 'Custom domain' : 'Default subdomain'}
-            </p>
-            {domainInfo.ignoredInvalidCustomDomain && (
-              <p className="mt-1 text-xs text-status-warning">
-                Saved custom domain is invalid and is ignored for display.
-              </p>
-            )}
-          </div>
         </div>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving || uploading}
-          className="inline-flex items-center gap-2 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50"
-        >
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+        <Button type="submit" loading={saving || uploading}>
+          <Save size={14} aria-hidden="true" />
           Save Branding
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex items-center gap-2 rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
-        >
-          <RotateCcw size={14} />
+        </Button>
+        <Button type="button" variant="outline" onClick={handleReset}>
+          <RotateCcw size={14} aria-hidden="true" />
           Reset
-        </button>
+        </Button>
         {error && <p className="text-sm text-status-danger">{error}</p>}
         {success && <p className="text-sm text-status-success">Branding saved</p>}
       </div>

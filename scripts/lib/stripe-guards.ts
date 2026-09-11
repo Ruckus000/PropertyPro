@@ -9,7 +9,13 @@
  * The mode rule itself comes from `@propertypro/shared` — one implementation,
  * shared with the Stripe webhook's mode guard.
  */
-import { describeLivemode, redactStripeKey, stripeKeyLivemode } from '@propertypro/shared';
+import {
+  describeLivemode,
+  hostFromUrl,
+  isLoopbackUrl,
+  redactStripeKey,
+  stripeKeyLivemode,
+} from '@propertypro/shared';
 
 /**
  * Assert `key` is a usable secret key in the expected mode.
@@ -45,27 +51,17 @@ export function assertKeyMode(
   }
 }
 
-const LOOPBACK_HOSTS = [
-  'localhost',
-  '127.0.0.1',
-  '::1',
-  '[::1]',
-  '0.0.0.0',
-  'host.docker.internal',
-];
-
-/** Extract the bare host from a postgres URL, without pulling in a URL parser. */
-export function databaseHost(url: string): string {
-  return url
-    .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
-    .replace(/^[^@/]*@/, '')
-    .replace(/[/?].*$/, '')
-    .replace(/:\d+$/, '');
-}
+/**
+ * Host extraction and the loopback allowlist now live in
+ * `@propertypro/shared` (`src/env/loopback.ts`), because the `/dev/*` login
+ * routes need the same predicate against `NEXT_PUBLIC_SUPABASE_URL` and a
+ * second copy is how the two drift apart. Behaviour is unchanged — these
+ * remain the names this module's callers and tests already use.
+ */
+export const databaseHost = hostFromUrl;
 
 export function isLoopbackDatabase(url: string | undefined): boolean {
-  if (!url) return false;
-  return LOOPBACK_HOSTS.includes(databaseHost(url));
+  return isLoopbackUrl(url);
 }
 
 /** Assert `DATABASE_URL` points at a local database. */

@@ -160,6 +160,12 @@ export * from './support-inbox';
 // a gate that exists only in the client is a suggestion.
 export * from './site-diff/index';
 
+// Is a URL local or remote? Gates both destructive CLI tooling (`DATABASE_URL`)
+// and the `/dev/*` login routes (`NEXT_PUBLIC_SUPABASE_URL`). Shared because
+// gating on `NODE_ENV` alone cannot tell "developing" from "developing against
+// production" — see the module docblock for the incident that proved it.
+export * from './env/loopback';
+
 // NOTE: the HTTP error hierarchy and Sentry request-context helper are NOT
 // re-exported here. They live behind the `@propertypro/shared/http` subpath on
 // purpose — see packages/shared/src/http/index.ts for why putting them in this

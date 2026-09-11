@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Save } from 'lucide-react';
+import { Button, Input, Textarea } from '@propertypro/ui';
 
 interface ProspectEditSectionProps {
   demoId: number;
@@ -114,12 +115,11 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
         <label className="block text-xs font-medium text-content-secondary mb-1">
           Prospect Name <span className="text-status-danger">*</span>
         </label>
-        <input
+        <Input
           type="text"
           value={form.prospect_name}
           onChange={(e) => handleChange('prospect_name', e.target.value)}
           placeholder="e.g. Sunset Condos HOA"
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content placeholder-content-placeholder focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
@@ -128,12 +128,11 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
           CRM Link
           <span className="ml-1 text-content-disabled font-normal">(optional)</span>
         </label>
-        <input
+        <Input
           type="url"
           value={form.external_crm_url}
           onChange={(e) => handleChange('external_crm_url', e.target.value)}
           placeholder="https://crm.example.com/deal/123"
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content placeholder-content-placeholder focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
@@ -142,12 +141,12 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
           Notes
           <span className="ml-1 text-content-disabled font-normal">(optional)</span>
         </label>
-        <textarea
+        <Textarea
           value={form.prospect_notes}
           onChange={(e) => handleChange('prospect_notes', e.target.value)}
           placeholder="Add any notes about this prospect…"
           rows={4}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content placeholder-content-placeholder focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500 resize-none"
+          className="resize-none"
         />
       </div>
 
@@ -155,29 +154,24 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
         <p className="text-xs text-status-danger">{errorMessage}</p>
       )}
 
-      <button
-        type="button"
-        onClick={() => { void handleSave(); }}
-        disabled={saveState === 'saving'}
-        className="flex items-center gap-2 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-      >
+      <Button type="button" size="sm" onClick={() => { void handleSave(); }} disabled={saveState === 'saving'}>
         {saveState === 'saving' ? (
           <>
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
             Saving…
           </>
         ) : saveState === 'saved' ? (
           <>
-            <Save size={14} />
+            <Save size={14} aria-hidden="true" />
             Saved
           </>
         ) : (
           <>
-            <Save size={14} />
+            <Save size={14} aria-hidden="true" />
             Save Changes
           </>
         )}
-      </button>
+      </Button>
     </div>
   );
 }

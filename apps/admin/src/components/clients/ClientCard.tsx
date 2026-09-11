@@ -1,0 +1,106 @@
+import Link from 'next/link';
+import { AlertTriangle } from 'lucide-react';
+import { Badge, type BadgeVariant } from '@propertypro/ui';
+import { COMMUNITY_TYPE_LABELS, SUBSCRIPTION_STATUS_LABELS } from '@/lib/constants/community-labels';
+import { ReassignRootControl } from '@/components/communities/ReassignRootControl';
+import type { ClientRow } from '@/lib/server/clients';
+
+const STATUS_BADGE_VARIANT: Record<string, BadgeVariant> = {
+  active: 'success',
+  trialing: 'info',
+  past_due: 'warning',
+  canceled: 'neutral',
+};
+
+interface ClientCardProps {
+  client: ClientRow;
+}
+
+/** Design's client card: name, location · type, status badge, compliance bar, plan · members footer, and a rootless/dispute warning line. */
+export function ClientCard({ client }: ClientCardProps) {
+  // One fallback, and the honest one — the same shape `OverviewTab` uses. This
+  // used to be `?? COMMUNITY_TYPE_LABELS.condo_718!`, which rendered an unknown
+  // type as "Condo §718": a wrong label presented as fact. `COMMUNITY_TYPE_LABELS`
+  // is keyed by `string`, so `noUncheckedIndexedAccess` still requires a fallback
+  // even now that `community_type` carries its union.
+  const typeLabel = COMMUNITY_TYPE_LABELS[client.community_type]?.label ?? client.community_type;
+  const statusEntry = client.subscription_status
+    ? SUBSCRIPTION_STATUS_LABELS[client.subscription_status]
+    : undefined;
+  const statusVariant = client.subscription_status
+    ? (STATUS_BADGE_VARIANT[client.subscription_status] ?? 'neutral')
+    : 'neutral';
+  const score = client.complianceScore;
+  const planLabel = client.subscription_plan
+    ? client.subscription_plan.replace(/_/g, ' ')
+    : '—';
+  const location = [client.city, client.state].filter(Boolean).join(', ');
+
+  return (
+    <div className="flex flex-col rounded-lg border border-edge bg-surface-card shadow-e1 transition-shadow hover:shadow-e2">
+      <Link href={`/clients/${client.id}`} className="flex flex-1 flex-col gap-3 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate font-medium text-content" title={client.name}>
+              {client.name}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-content-tertiary">
+              {location || '—'} · {typeLabel}
+            </p>
+          </div>
+          {statusEntry ? (
+            <Badge variant={statusVariant} size="sm" className="shrink-0">
+              {statusEntry.label}
+            </Badge>
+          ) : (
+            <span className="shrink-0 text-xs text-content-disabled">—</span>
+          )}
+        </div>
+
+        {score !== null && (
+          <div className="space-y-1">
+            <div className="h-1.5 rounded-full bg-surface-muted">
+              <div
+                className={`h-1.5 rounded-full ${score >= 70 ? 'bg-status-success' : 'bg-status-danger'}`}
+                style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+              />
+            </div>
+            <p className="text-xs text-content-tertiary">{score}% compliant</p>
+          </div>
+        )}
+
+        <div className="mt-auto flex items-center justify-between border-t border-edge-subtle pt-3 text-xs text-content-tertiary">
+          <span className="capitalize">{planLabel}</span>
+          <span>
+            {client.memberCount === null
+              ? 'Members unknown'
+              : `${client.memberCount} ${client.memberCount === 1 ? 'member' : 'members'}`}
+          </span>
+        </div>
+
+        {(client.rootless || client.disputeOpen) && (
+          <p className="flex items-center gap-1.5 text-xs font-medium text-status-warning">
+            <AlertTriangle size={12} aria-hidden="true" />
+            {client.disputeOpen ? 'Root claim disputed' : 'No root manager'}
+          </p>
+        )}
+      </Link>
+
+      {/*
+        Rootless communities need a reassign entry point on the card itself —
+        the old table-based rootless page had a "Reassign root" column for
+        every rootless row, not just disputed ones (see git history at
+        26f54d68^). `ReassignRootControl` renders an <input>/<button>, so it
+        must sit OUTSIDE the <Link> above rather than nested inside it —
+        interactive controls nested inside an anchor are invalid HTML and
+        would fight the card's own click-to-navigate behavior.
+      */}
+      {client.rootless && (
+        <div className="border-t border-edge-subtle px-5 py-3">
+          <p className="mb-1.5 text-xs font-medium text-content-tertiary">Reassign root</p>
+          <ReassignRootControl communityId={client.id} />
+        </div>
+      )}
+    </div>
+  );
+}

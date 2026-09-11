@@ -1,4 +1,9 @@
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import {
+  COMMUNITY_SCAN_PAGE_SIZE,
+  COMMUNITY_SCAN_ROW_BOUND,
+  fetchAllRowsInPages,
+} from '@/lib/api/list-limits';
 
 const PAGE_SIZE = 1000;
 
@@ -32,10 +37,22 @@ export interface PlatformDashboardStats {
     averageScore: number | null;
     atRiskCount: number;
     totalTracked: number;
+    /** Communities bucketed by compliance score: >=90 / 80-89 / 70-79 / <70. */
+    distribution: {
+      top: number;
+      high: number;
+      mid: number;
+      low: number;
+    };
   };
   lifecycle: {
     activeFreeAccess: number;
     pendingDeletions: number;
+  };
+  /** Count of rows created in the trailing 30 days, for the KPI grid's delta chips. */
+  deltas: {
+    communities30d: number;
+    members30d: number;
   };
 }
 
@@ -77,12 +94,21 @@ function buildComplianceSummary(
     applicable > 0 ? Math.round((met / applicable) * 100) : 100
   ));
 
+  const distribution = { top: 0, high: 0, mid: 0, low: 0 };
+  for (const score of complianceScores) {
+    if (score >= 90) distribution.top += 1;
+    else if (score >= 80) distribution.high += 1;
+    else if (score >= 70) distribution.mid += 1;
+    else distribution.low += 1;
+  }
+
   return {
     averageScore: complianceScores.length > 0
       ? Math.round(complianceScores.reduce((sum, score) => sum + score, 0) / complianceScores.length)
       : null,
     atRiskCount: complianceScores.filter((score) => score < 70).length,
     totalTracked: complianceScores.length,
+    distribution,
   };
 }
 
@@ -124,26 +150,42 @@ async function fetchAllComplianceRows(
 export async function getPlatformDashboardStats(): Promise<PlatformDashboardStats> {
   const db = createAdminClient();
 
-  const { data: realCommunities, error: realCommunitiesError } = await db
-    .from('communities')
-    .select('id')
-    .eq('is_demo', false)
-    .is('deleted_at', null);
+  // Paged, and completed-or-thrown. An unpaged `.select()` is truncated at
+  // PostgREST's `db-max-rows` (1000) with no error, and `realIds` is the set
+  // every other number below is scoped to — members, documents, compliance.
+  // Worse, `dashboard-series.ts` builds the SAME set for the Members chart:
+  // two unordered 1000-row pages of one query need not be the same 1000 rows,
+  // which is exactly the headline-vs-chart divergence
+  // `guard:admin-community-scope` exists for, with both reads carrying the
+  // predicate and the guard green.
+  const realCommunities = await fetchAllRowsInPages<{ id: number }>(
+    'the real-community id set',
+    (from, to) =>
+      db
+        .from('communities')
+        .select('id')
+        .eq('is_demo', false)
+        .is('deleted_at', null)
+        .order('id')
+        .range(from, to),
+    COMMUNITY_SCAN_PAGE_SIZE,
+    COMMUNITY_SCAN_ROW_BOUND,
+  );
 
-  throwIfError(realCommunitiesError, 'Failed to load communities');
+  const realIds = realCommunities.map((community) => community.id);
 
-  const realIds = (realCommunities ?? []).map((community) => (
-    community as { id: number }
-  ).id);
+  const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
     demosResult,
     membersResult,
     documentsResult,
-    subscriptionResult,
+    subscriptionRows,
     complianceRows,
     activeAccessResult,
     coolingDeletionsResult,
+    communities30dResult,
+    members30dResult,
   ] = await Promise.all([
     db.from('demo_instances').select('*', { count: 'exact', head: true }),
     realIds.length > 0
@@ -152,10 +194,22 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     realIds.length > 0
       ? db.from('documents').select('*', { count: 'exact', head: true }).is('deleted_at', null).in('community_id', realIds)
       : Promise.resolve({ count: 0, error: null }),
-    db.from('communities')
-      .select('subscription_status')
-      .eq('is_demo', false)
-      .is('deleted_at', null),
+    // Paged for the same reason as the id scan above: the billing breakdown is
+    // folded in memory over every real community's row, so a silent 1000-row
+    // cut would under-report every status at once.
+    fetchAllRowsInPages<SubscriptionRow>(
+      'the subscription-status breakdown',
+      (from, to) =>
+        db
+          .from('communities')
+          .select('subscription_status')
+          .eq('is_demo', false)
+          .is('deleted_at', null)
+          .order('id')
+          .range(from, to),
+      COMMUNITY_SCAN_PAGE_SIZE,
+      COMMUNITY_SCAN_ROW_BOUND,
+    ),
     fetchAllComplianceRows(db, realIds),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (db.from('access_plans')
@@ -167,14 +221,26 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     (db.from('account_deletion_requests')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'cooling') as any),
+    db.from('communities')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_demo', false)
+      .is('deleted_at', null)
+      .gte('created_at', thirtyDaysAgoIso),
+    realIds.length > 0
+      ? db.from('user_roles')
+        .select('*', { count: 'exact', head: true })
+        .in('community_id', realIds)
+        .gte('created_at', thirtyDaysAgoIso)
+      : Promise.resolve({ count: 0, error: null }),
   ]);
 
   throwIfError(demosResult.error, 'Failed to load demo count');
   throwIfError(membersResult.error, 'Failed to load member count');
   throwIfError(documentsResult.error, 'Failed to load document count');
-  throwIfError(subscriptionResult.error, 'Failed to load subscription summary');
   throwIfError(activeAccessResult.error, 'Failed to load active access plan count');
   throwIfError(coolingDeletionsResult.error, 'Failed to load pending deletion count');
+  throwIfError(communities30dResult.error, 'Failed to load new-community count');
+  throwIfError(members30dResult.error, 'Failed to load new-member count');
 
   return {
     overview: {
@@ -183,11 +249,15 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
       members: membersResult.count ?? 0,
       documents: documentsResult.count ?? 0,
     },
-    billing: buildBillingSummary((subscriptionResult.data ?? []) as SubscriptionRow[]),
+    billing: buildBillingSummary(subscriptionRows),
     compliance: buildComplianceSummary(complianceRows),
     lifecycle: {
       activeFreeAccess: activeAccessResult.count ?? 0,
       pendingDeletions: coolingDeletionsResult.count ?? 0,
+    },
+    deltas: {
+      communities30d: communities30dResult.count ?? 0,
+      members30d: members30dResult.count ?? 0,
     },
   };
 }

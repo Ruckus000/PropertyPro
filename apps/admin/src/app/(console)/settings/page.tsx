@@ -70,9 +70,10 @@ export default async function SettingsPage() {
     throw new Error(`Failed to count demo instances: ${demoResult.error.message}`);
   }
 
-  // `PlatformSettings` owns this screen's heading and section chrome; Wave 2
-  // moves it onto `AdminPageHeader` along with the rest of the page-body
-  // restyling.
+  // `PlatformSettings` renders its own `AdminPageHeader` (it's a client
+  // component that also owns the add/remove-admin interaction state, so its
+  // header lives alongside that rather than being hoisted onto this server
+  // page — same reasoning as DemoListClient).
   return (
     <PlatformSettings
       currentAdmin={{ id: currentAdmin.id, email: currentAdmin.email, role: currentAdmin.role }}
