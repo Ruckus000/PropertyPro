@@ -198,6 +198,22 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/auth/provisioning-status', 'GET')).toBe('public');
   });
 
+  it('matches /signup EXACTLY, so its sub-paths are not on the auth tier', () => {
+    // `/signup` used to be a PREFIX entry, which swept `/signup/verify` and
+    // `/signup/checkout` — ordinary page navigations in the middle of a paid
+    // signup — into the 10/min-per-IP auth bucket. Everyone behind one NAT
+    // shares that, and a 429 on a navigation renders RATE_LIMITED_HTML, whose
+    // only link is /dashboard: useless to a signed-out visitor.
+    expect(classifyRoute('/signup', 'GET')).toBe('auth');
+    expect(classifyRoute('/signup', 'POST')).toBe('auth');
+
+    expect(classifyRoute('/signup/verify', 'GET')).toBe('page');
+    expect(classifyRoute('/signup/checkout', 'GET')).toBe('page');
+
+    // The API signup route is a separate entry and is unaffected by the change.
+    expect(classifyRoute('/api/v1/auth/signup', 'POST')).toBe('auth');
+  });
+
   it('classifies webhook routes as exempt', () => {
     expect(classifyRoute('/api/v1/webhooks/stripe', 'POST')).toBe('webhook');
     expect(classifyRoute('/api/webhooks/stripe', 'POST')).toBe('webhook');

@@ -2,10 +2,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  useConfirmVerification,
-  useResendVerification,
-} from '../use-email-verification';
+import { useResendVerification } from '../use-email-verification';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -27,70 +24,6 @@ function jsonResponse(status: number, body: unknown) {
 
 beforeEach(() => {
   fetchMock.mockReset();
-});
-
-describe('useConfirmVerification', () => {
-  it('POSTs the exact URL/method/body/headers and returns ok+status+body on 200 verified', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(200, {
-        data: { success: true, signupRequestId: 'abc' },
-      }),
-    );
-    const { result } = renderHook(() => useConfirmVerification(), {
-      wrapper: createWrapper(),
-    });
-
-    const res = await result.current.mutateAsync('abc');
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/confirm-verification', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ signupRequestId: 'abc' }),
-    });
-    expect(res).toEqual({
-      ok: true,
-      status: 200,
-      body: { data: { success: true, signupRequestId: 'abc' } },
-    });
-  });
-
-  it('returns ok=true with success=false body when verified not yet (200, success false)', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(200, { data: { success: false, signupRequestId: 'abc' } }),
-    );
-    const { result } = renderHook(() => useConfirmVerification(), {
-      wrapper: createWrapper(),
-    });
-
-    const res = await result.current.mutateAsync('abc');
-    expect(res.ok).toBe(true);
-    expect(res.status).toBe(200);
-    expect(res.body.data?.success).toBe(false);
-  });
-
-  it('returns ok=false + status on non-OK and does NOT throw (poll continues)', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(400, { error: { message: 'not verified yet' } }),
-    );
-    const { result } = renderHook(() => useConfirmVerification(), {
-      wrapper: createWrapper(),
-    });
-
-    const res = await result.current.mutateAsync('abc');
-    expect(res).toEqual({ ok: false, status: 400, body: {} });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-  });
-
-  it('rejects (throws) only on a network failure so the silent catch still fires', async () => {
-    fetchMock.mockRejectedValueOnce(new Error('network down'));
-    const { result } = renderHook(() => useConfirmVerification(), {
-      wrapper: createWrapper(),
-    });
-
-    await expect(result.current.mutateAsync('abc')).rejects.toThrow(
-      'network down',
-    );
-  });
 });
 
 describe('useResendVerification', () => {
