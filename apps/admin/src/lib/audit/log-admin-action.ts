@@ -101,7 +101,17 @@ export type AdminAuditAction =
   // `created_at`, so it is self-auditing, and a second write would duplicate
   // the record for no recall benefit.
   | 'ticket_created'
-  | 'ticket_updated';
+  | 'ticket_updated'
+  // A scheduled job fired by hand from the Health board. `communityId: null` —
+  // a cron job belongs to no community.
+  //
+  // This one is audited for a different reason than the rest: every other entry
+  // records a change to OUR data, while this records the console causing a
+  // privileged endpoint on the WEB app to run. `/api/v1/internal/*` routes
+  // authenticate with the platform-wide `CRON_SECRET` and their own work is
+  // audited per-community at best, so without this entry there is no record
+  // anywhere of who made `expire-demos` or `late-fee-processor` run off-schedule.
+  | 'cron_job_retried';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */
