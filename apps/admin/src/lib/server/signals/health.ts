@@ -18,9 +18,24 @@
  * of the shell intact — which is why `getHealthReport` swallowing its own probe
  * failures is correct and this file adds no second layer of catching.
  *
+ * ## The report is READ THROUGH A CACHE here, and only here
+ *
+ * `getShellSignals()` is awaited by the `(console)` layout, so this `load()`
+ * runs on every page navigation, and again on every 60-second poll of
+ * `/api/admin/shell/signals`. `getHealthReport()` is six outbound probes and
+ * three privileged reads, so uncached that is ~60 Resend, ~60 Sentry and ~60
+ * Stripe calls an hour per open tab plus up to four seconds on every render.
+ * `withHealthCache` bounds it at one probe set per minute per process; see
+ * `health-cache.ts` for why sixty seconds and for why the `/health` page and
+ * `GET /api/admin/health` deliberately bypass it.
+ *
+ * A cache MISS still propagates a failure, because the cache does not store
+ * rejections — so the throwing contract above is unchanged.
+ *
  * @module lib/server/signals/health
  */
 import { deriveCritical, getHealthReport } from '../health';
+import { withHealthCache } from '../health-cache';
 import type { SignalProvider } from './types';
 
 /**
@@ -38,7 +53,7 @@ const TRAY_ISSUE_LIMIT = 3;
 export const healthSignals: SignalProvider = {
   key: 'health',
   async load() {
-    const report = await getHealthReport();
+    const report = await withHealthCache(() => getHealthReport());
 
     const serviceItems = report.services
       .filter((service) => service.state === 'degraded' || service.state === 'down')

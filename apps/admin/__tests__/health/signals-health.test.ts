@@ -19,6 +19,8 @@ vi.mock('@/lib/server/health', async (importOriginal) => {
   return { ...actual, getHealthReport: () => getHealthReport() };
 });
 
+import { invalidateBillingCache } from '@/lib/server/billing-cache';
+import { HEALTH_CACHE_TTL_MS, invalidateHealthCache } from '@/lib/server/health-cache';
 import { healthSignals } from '@/lib/server/signals/health';
 
 const report = (over: Partial<HealthReport> = {}): HealthReport => ({
@@ -43,6 +45,10 @@ const issue = (over: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  // The signal provider reads THROUGH a module-level TTL cache, so without this
+  // the first test's report would be served to every later one and each of them
+  // would be asserting on a fixture it did not set.
+  invalidateHealthCache();
   getHealthReport.mockResolvedValue(report());
 });
 
@@ -106,6 +112,10 @@ describe('healthSignals', () => {
     getHealthReport.mockResolvedValue(report({ errorsLastHour: 9, errors: [issue()] }));
     expect((await healthSignals.load()).critical).toBeNull();
 
+    // Two DIFFERENT readings inside one test, so the cached first one has to go
+    // — otherwise the second assertion would be re-reading the nine-error report
+    // and the boundary this test names would not be measured at all.
+    invalidateHealthCache();
     getHealthReport.mockResolvedValue(report({ errorsLastHour: 10, errors: [issue()] }));
     expect((await healthSignals.load()).critical).toMatchObject({
       fingerprint: 'errors:PP-1',
@@ -119,5 +129,69 @@ describe('healthSignals', () => {
     // rejection, which is the behaviour worth keeping.
     getHealthReport.mockRejectedValue(new Error('cron_runs read failed'));
     await expect(healthSignals.load()).rejects.toThrow('cron_runs read failed');
+  });
+});
+
+/**
+ * The cache is the reason this provider is affordable to put in the shell.
+ *
+ * Uncached, `load()` ran six outbound probes and three privileged reads on every
+ * console page navigation AND on every 60-second poll, for every open tab. These
+ * cases assert the three properties that claim rests on — a second call inside
+ * the TTL does not re-probe, concurrent callers share one load, and a failure is
+ * not remembered — against the real `withHealthCache`, not a stub.
+ */
+describe('healthSignals caching', () => {
+  it('does not re-probe within the TTL', async () => {
+    await healthSignals.load();
+    await healthSignals.load();
+    await healthSignals.load();
+
+    expect(getHealthReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('collapses concurrent callers into ONE load', async () => {
+    // The page and the shell signal provider rendering in the same request tick
+    // is the exact access pattern that motivated the cache: without in-flight
+    // deduplication both miss and both probe.
+    await Promise.all([healthSignals.load(), healthSignals.load(), healthSignals.load()]);
+
+    expect(getHealthReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-probes after the TTL expires', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-08T12:00:00Z'));
+      await healthSignals.load();
+
+      vi.setSystemTime(new Date(Date.parse('2026-09-08T12:00:00Z') + HEALTH_CACHE_TTL_MS + 1));
+      await healthSignals.load();
+
+      expect(getHealthReport).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not cache a failure — a transient outage is not remembered', async () => {
+    getHealthReport.mockRejectedValueOnce(new Error('cron_runs read failed'));
+    await expect(healthSignals.load()).rejects.toThrow('cron_runs read failed');
+
+    // The next caller gets a real attempt, not the remembered rejection.
+    const result = await healthSignals.load();
+    expect(result.count).toBe(0);
+    expect(getHealthReport).toHaveBeenCalledTimes(2);
+  });
+
+  it('is NOT dropped by a billing invalidation', async () => {
+    // Separate instances, and this is the semantic reason for them: a plan
+    // change fires `invalidateBillingCache()` and says nothing whatsoever about
+    // whether Resend is up. A shared generation counter would couple them.
+    await healthSignals.load();
+    invalidateBillingCache();
+    await healthSignals.load();
+
+    expect(getHealthReport).toHaveBeenCalledTimes(1);
   });
 });
