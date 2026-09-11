@@ -31,12 +31,17 @@
  * ## Idempotency, stated accurately
  *
  * Each action's Stripe call carries a key derived from (subscription, action,
- * input, 60-second bucket) — see `billing-actions.ts` §2. Two DISTINCT intents
- * for the same action inside one minute therefore collide, and the second
- * silently replays the first. Nothing in this dialog invites that: Confirm is
- * disabled while a request is in flight, a success closes the dialog, and a
- * failure offers no retry button. The UI deliberately says nothing about the
- * window rather than saying something imprecise about it.
+ * request input) — see `billing-actions.ts` §2, which is the authority. Four of
+ * the five add a 60-second bucket, so two DISTINCT intents for one of those
+ * actions inside one minute collide and the second silently replays the first.
+ * `change-plan` has no bucket at all, so a repeat of the SAME plan change
+ * replays for a full 24 hours; that is deliberate, because its duplicate is a
+ * second proration invoice.
+ *
+ * Nothing in this dialog invites either collision: Confirm is disabled while a
+ * request is in flight, a success closes the dialog, and a failure offers no
+ * retry button. The UI deliberately says nothing about the window rather than
+ * saying something imprecise about it.
  */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';

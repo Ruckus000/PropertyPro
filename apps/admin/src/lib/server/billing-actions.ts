@@ -41,25 +41,46 @@
  *
  * Every call passes an explicit `idempotencyKey`. Stripe replays the original
  * response for a repeated key within 24 hours, so a double-submit, a proxy
- * retry, or an operator's second click cannot produce a second charge — which for
- * `changePlan` (`proration_behavior: 'always_invoice'`) means a second invoice,
- * collected immediately.
+ * retry, or an operator's second click cannot produce a second charge.
  *
- * Two rules the keys follow, and they pull in opposite directions:
+ * **Rule 1, which holds for all five: a key is built from REQUEST INPUT** — the
+ * subscription id, the action, and the values the operator actually submitted —
+ * and never from a clock, a uuid, a counter, or a value THIS ACTION WRITES.
+ * That last clause is not decoration. `extendTrial` used to key on the trial end
+ * it was about to set, so a retry arriving after the first write committed
+ * re-read the new end, computed a different key, and granted a second
+ * extension: a key derived from a value the action writes is self-invalidating,
+ * and protects nothing while claiming to. It keys on `input.days` instead. If a
+ * key ever needs a value that is not in the request, take it from a field the
+ * action does not touch (`changePlan`'s `priceId` resolves from `input.planId`
+ * and the subscription's cadence, neither of which it changes).
  *
- *  - **Attempt-stable.** The key is derived from the subscription id and the
- *    payload, never from a clock, a uuid or a counter. A key that varied
- *    per-attempt would protect nothing, which is the failure this repo has
- *    already been bitten by on charge-adjacent paths.
- *  - **Payload-derived.** A key that did NOT vary with the payload would make a
- *    different request replay the first one's response — a plan change to
- *    Essentials silently answering with the Professional result.
+ * **Rule 2, which is per-action: whether the key carries the 60-second bucket**
+ * from `IDEMPOTENCY_WINDOW_MS`. The split is deliberate and the two halves are
+ * protecting against opposite harms:
  *
- * The accepted cost: re-doing the SAME action on the SAME subscription inside 24
- * hours (pause → resume → pause) replays rather than re-applies. For money, a
- * swallowed duplicate is the safe side of that trade and a lost re-do is
- * recoverable from the Stripe dashboard. Do not "fix" this by adding a timestamp
- * to a key.
+ *  - **`changePlan` — NO window. The key is stable for the whole 24 hours.**
+ *    `proration_behavior: 'always_invoice'` bills the difference immediately, so
+ *    a duplicate raises a second invoice collected against a real card. Its
+ *    payload does not move between attempts, so a stable key genuinely protects.
+ *    The accepted cost is that Essentials → Professional → Essentials →
+ *    Professional inside one day replays the first move rather than re-applying
+ *    it. For money a swallowed re-do is the safe side of that trade, and it is
+ *    recoverable from the Stripe dashboard.
+ *  - **`extendTrial`, `applyCoupon`, `pauseSubscription`, `cancelSubscription` —
+ *    WINDOWED.** None of these charges anybody for a duplicate: re-applying the
+ *    same coupon, or setting `pause_collection` to the value it already holds,
+ *    changes nothing. So here the SILENT NO-OP is the real harm — pause a
+ *    subscription, resume it, pause it again the same afternoon, and without a
+ *    bucket the second pause returns the first pause's response having changed
+ *    nothing, which is a money action reporting success while doing nothing. The
+ *    bucket lets a deliberate repeat actually run, while a retry of ONE
+ *    submission (a double-click, a proxy retry) still lands in the same bucket
+ *    and still replays.
+ *
+ * So: do not add a window to `changePlan`, and do not remove one from the other
+ * four. Neither is a cleanup. Each is the protection the other side does not
+ * need and this side does.
  *
  * ## 3. What is read, what is written
  *
@@ -124,8 +145,8 @@ const MS_PER_DAY = 86_400_000;
  * DELIBERATE repeat of the same action a silent no-op: pause a subscription,
  * resume it, pause it again the same afternoon, and the second pause returns the
  * first pause's response having changed nothing. A money action that reports
- * success while doing nothing is the worst failure shape available, so the key
- * carries a coarse time bucket as well.
+ * success while doing nothing is the worst failure shape available, so four of
+ * the five keys carry a coarse time bucket as well.
  *
  * The trade-off, stated rather than hidden: a network retry of one submission
  * replays (which is the protection we want) unless it straddles a bucket
@@ -134,6 +155,11 @@ const MS_PER_DAY = 86_400_000;
  * under any plausible "change my mind" interval. Every action already requires
  * an explicit confirm dialog, so an accidental double submission is a retry of
  * one click rather than two decisions.
+ *
+ * **`changePlan` deliberately does NOT use this** — it is the one action whose
+ * duplicate costs real money, so it keeps one key for Stripe's full 24 hours.
+ * See §2 of the module docblock for the whole split; it is per-action on
+ * purpose and neither half is a cleanup opportunity.
  */
 const IDEMPOTENCY_WINDOW_MS = 60_000;
 
@@ -386,7 +412,9 @@ export async function changePlan(
       items: [{ id: item.itemId, price: priceId }],
       proration_behavior: 'always_invoice',
     },
-    { idempotencyKey: `admin:change-plan:${subscriptionId}:${priceId}:${idempotencyWindow()}` },
+    // NO window — see §2. A duplicate here raises a second proration invoice,
+    // so the key must stay identical for Stripe's full 24-hour replay period.
+    { idempotencyKey: `admin:change-plan:${subscriptionId}:${priceId}` },
   );
 
   invalidateBillingCache();
@@ -429,7 +457,10 @@ export async function extendTrial(
   await stripe.subscriptions.update(
     subscriptionId,
     { trial_end: trialEnd, proration_behavior: 'none' },
-    { idempotencyKey: `admin:extend-trial:${subscriptionId}:${trialEnd}:${idempotencyWindow()}` },
+    // `input.days`, NOT `trialEnd` — see §2. `trialEnd` is the value this call
+    // is about to WRITE, so a retry arriving after the first write committed
+    // read the new end, computed a different key, and extended a second time.
+    { idempotencyKey: `admin:extend-trial:${subscriptionId}:${input.days}:${idempotencyWindow()}` },
   );
 
   invalidateBillingCache();

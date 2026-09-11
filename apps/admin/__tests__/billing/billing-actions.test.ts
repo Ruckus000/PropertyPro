@@ -21,7 +21,7 @@
  * which price row was looked up measure something rather than trusting a
  * chainable that returns a fixture no matter what it was asked.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => {
   interface FromCall {
@@ -156,12 +156,29 @@ function matchedTestMode(): void {
   process.env.STRIPE_EXPECTED_LIVEMODE = 'false';
 }
 
+/**
+ * One frozen instant for the whole file.
+ *
+ * Four key assertions used to build their expected string with a LIVE
+ * `idempotencyWindow()` evaluated after the action had already computed its own.
+ * If the 60-second bucket rolled between the two the test failed, which makes it
+ * a clock race rather than a measurement. Freezing here removes the race from
+ * every case at once instead of from the one that happened to be noticed.
+ */
+const FROZEN_NOW = new Date('2026-09-08T12:00:00Z');
+
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FROZEN_NOW);
   h.fromCalls.length = 0;
   h.fixtures.communities = { data: { ...COMMUNITY }, error: null };
   h.fixtures.stripe_prices = { data: { stripe_price_id: 'price_pro_m' }, error: null };
   matchedTestMode();
   invalidateBillingCache();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 /** Every Stripe call that WRITES. A refusal must leave all of them at zero. */
@@ -256,8 +273,26 @@ describe('changePlan', () => {
         items: [{ id: 'si_1', price: 'price_pro_m' }],
         proration_behavior: 'always_invoice',
       }),
-      { idempotencyKey: `admin:change-plan:sub_1:price_pro_m:${idempotencyWindow()}` },
+      // NO window: a duplicate change-plan raises a second proration invoice, so
+      // the key must be identical for Stripe's full 24-hour replay period. The
+      // other four actions carry the bucket; this one must not.
+      { idempotencyKey: 'admin:change-plan:sub_1:price_pro_m' },
     );
+  });
+
+  it('keeps ONE key across a bucket boundary, because a duplicate here invoices', async () => {
+    await changePlan(1, { planId: 'professional' }, actor);
+    const first = h.subscriptionsUpdate.mock.calls.at(-1)![2];
+
+    // A minute later — a different bucket for every other action, and the same
+    // key for this one. That difference IS the design (see billing-actions §2),
+    // so it is asserted rather than left to a docblock.
+    vi.setSystemTime(new Date(FROZEN_NOW.getTime() + 90_000));
+    await changePlan(1, { planId: 'professional' }, actor);
+    const second = h.subscriptionsUpdate.mock.calls.at(-1)![2];
+
+    expect(second).toEqual(first);
+    expect(second).toEqual({ idempotencyKey: 'admin:change-plan:sub_1:price_pro_m' });
   });
 
   it('looks the price up by the subscription’s CURRENT interval and community type', async () => {
@@ -332,11 +367,9 @@ describe('changePlan', () => {
 
 describe('extendTrial', () => {
   it('adds days to NOW when the current trial end is already past', async () => {
-    vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-08T00:00:00Z'));
     // The fixture's trial_end (1760000000 = 2025-10-09) is in the past.
     await extendTrial(1, { days: 14 }, actor);
-    vi.useRealTimers();
 
     const params = h.subscriptionsUpdate.mock.calls.at(-1)![1] as {
       trial_end: number;
@@ -348,7 +381,6 @@ describe('extendTrial', () => {
   });
 
   it('adds days to the CURRENT trial end when that is still in the future', async () => {
-    vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-08T00:00:00Z'));
     h.subscriptionsRetrieve.mockResolvedValueOnce({
       id: 'sub_1',
@@ -360,7 +392,6 @@ describe('extendTrial', () => {
     });
 
     await extendTrial(1, { days: 7 }, actor);
-    vi.useRealTimers();
 
     const params = h.subscriptionsUpdate.mock.calls.at(-1)![1] as { trial_end: number };
     // From 2026-09-20, not from 2026-09-08 — otherwise a 7-day extension of a
@@ -387,23 +418,68 @@ describe('extendTrial', () => {
     expect(idempotencyWindow(t0)).not.toBe(idempotencyWindow(t0 + 60_000));
   });
 
-  it('keys on the computed trial end, so a retry cannot extend twice', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-08T00:00:00Z'));
-    await extendTrial(1, { days: 30 }, actor);
-    vi.useRealTimers();
+  /**
+   * The defect the key shape closes, measured across TWO calls.
+   *
+   * The previous version of this test called `extendTrial` ONCE under a frozen
+   * clock and asserted the key string. That cannot observe the property its
+   * title claimed: the old key carried the computed `trial_end`, which is the
+   * value the action WRITES, so a retry arriving after the first write
+   * committed read the NEW end, built a different key, and Stripe ran it — a
+   * second 30-day extension. A single frozen call cannot see a value that only
+   * drifts between calls.
+   *
+   * So this one applies the write between the two attempts, which is exactly
+   * what a real retry sees, and asserts the two keys are IDENTICAL. Identical
+   * keys inside Stripe's 24-hour replay window are what makes the second
+   * attempt a replay rather than a second extension.
+   */
+  it('keys on the requested days, so a retry after the write commits replays instead of extending again', async () => {
+    const t0 = Date.parse('2026-09-08T00:00:00Z');
+    vi.setSystemTime(new Date(t0));
 
-    const expected = Math.floor(Date.parse('2026-10-08T00:00:00Z') / 1000);
-    // The window is derived from the clock the ACTION saw, not the clock this
-    // assertion runs under — `vi.useRealTimers()` above already restored it, so
-    // a bare `idempotencyWindow()` here would read wall-clock and never match.
-    // Pinning it to the faked instant is also what proves the bucket is
-    // genuinely time-derived rather than a constant.
-    expect(h.subscriptionsUpdate.mock.calls.at(-1)![2]).toEqual({
-      idempotencyKey:
-        `admin:extend-trial:sub_1:${expected}:` +
-        idempotencyWindow(Date.parse('2026-09-08T00:00:00Z')),
+    await extendTrial(1, { days: 30 }, actor);
+    const firstKey = h.subscriptionsUpdate.mock.calls.at(-1)![2];
+
+    // The retry reads POST-write state: trial_end is now 30 days further out.
+    h.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: 'sub_1',
+      trial_end: Math.floor(Date.parse('2026-10-08T00:00:00Z') / 1000),
+      cancel_at_period_end: false,
+      pause_collection: null,
+      discounts: [],
+      items: { data: [{ id: 'si_1', price: { id: 'price_ess_m', recurring: { interval: 'month' } } }] },
     });
+    // Five seconds later: same submission, same 60-second bucket.
+    vi.setSystemTime(new Date(t0 + 5_000));
+    await extendTrial(1, { days: 30 }, actor);
+    const retryKey = h.subscriptionsUpdate.mock.calls.at(-1)![2];
+
+    expect(retryKey).toEqual(firstKey);
+    expect(retryKey).toEqual({
+      idempotencyKey: `admin:extend-trial:sub_1:30:${idempotencyWindow(t0)}`,
+    });
+
+    // The second call DID compute a further-out trial end from the post-write
+    // read — so the assertion above passes because the KEY is stable, not
+    // because the action quietly did the same thing twice.
+    const params = h.subscriptionsUpdate.mock.calls.at(-1)![1] as { trial_end: number };
+    expect(params.trial_end).toBe(Math.floor(Date.parse('2026-11-07T00:00:00Z') / 1000));
+  });
+
+  it('gives a DELIBERATE repeat a minute later a different key', async () => {
+    const t0 = Date.parse('2026-09-08T00:00:00Z');
+    vi.setSystemTime(new Date(t0));
+    await extendTrial(1, { days: 30 }, actor);
+    const first = h.subscriptionsUpdate.mock.calls.at(-1)![2];
+
+    vi.setSystemTime(new Date(t0 + 90_000));
+    await extendTrial(1, { days: 30 }, actor);
+    const later = h.subscriptionsUpdate.mock.calls.at(-1)![2];
+
+    // Same inputs, a different bucket — so the operator's SECOND decision runs
+    // rather than replaying the first as a silent no-op.
+    expect(later).not.toEqual(first);
   });
 });
 
