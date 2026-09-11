@@ -87,9 +87,9 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   `apps/web/src/styles/mobile.css` + `components/mobile/` + `app/mobile/`
   (out of standardization scope until their own migration programs).
 
-  > **`apps/admin` is NO LONGER frozen — its migration (audit item P3-6) is
-  > under way and is roughly half done.** Admin's Tailwind config now maps the
-  > full semantic families (`content` / `surface` / `edge` / `interactive` /
+  > **`apps/admin` is NO LONGER frozen, and its migration (audit item P3-6) is
+  > DONE.** Admin's Tailwind config maps the full semantic families
+  > (`content` / `surface` / `edge` / `interactive` /
   > `status` / `nav`) to the token custom properties, so new admin code MUST use
   > semantic classes. Admin **adopts Florida Modern**: surfaces and borders
   > resolve through the warm `sand` ramp (page `#FBF7F1`, cards `#FFFEFC`,
@@ -97,11 +97,14 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   > below about "informational blue status badges … intentionally kept blue" is
   > superseded for every migrated file.
   >
-  > **Raw-palette drain is COMPLETE except the dark `Sidebar.tsx` internals
-  > (15).** Admin went 1,088 → 15 raw-palette violations; the 33 that remain in
-  > the baseline are `raw-hex`/`arbitrary-font`/`arbitrary-color` in the
-  > demo-preview mockups, which render user-supplied branding and are
-  > legitimately literal.
+  > **Raw-palette drain is COMPLETE — admin went 1,088 → 0.** The last 15 were
+  > the dark `Sidebar.tsx` internals, and wave 1 of the console redesign
+  > (`348bdb4e`, #1109) **deleted that file** along with `AdminLayout.tsx`; the
+  > same commit dropped its baseline entry. What remains frozen for admin is 12
+  > files: 33 `raw-hex`/`arbitrary-font`/`arbitrary-color` in the demo-preview
+  > mockups (which render user-supplied branding and are legitimately literal)
+  > plus 36 `bare-focus-ring` in five files — a later rule (#1004), not
+  > un-drained palette.
   >
   > **After any batch, and after ANY edit to `apps/admin/tailwind.config.ts`,
   > run `pnpm guard:admin-semantic-css`** (needs a build first). It
@@ -112,11 +115,16 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   > that twice: `bg-status-owner-subtle` (admin's config mirrored web's status
   > family, which omits `owner`/`board`) and `bg-surface-card/30`.
   >
-  > The sidebar is a genuine gap, not leftover work —
-  > the token layer is single-theme light and its whole dark vocabulary is
-  > `surface-inverse{,-subtle}` + `text-inverse`, with no dark border or
-  > muted-text token. Giving admin a dark-chrome vocabulary is a decision for
-  > packages/tokens.
+  > **Admin no longer needs a dark-chrome vocabulary, so do not go build one.**
+  > The old note here said the dark sidebar was a genuine token-layer gap. The
+  > redesign resolved it by removing the dark chrome rather than by extending the
+  > tokens: `components/shell/AdminRail.tsx` is light, on the ordinary semantic
+  > families — `bg-surface-muted`, `text-content-tertiary`, `hover:text-content`,
+  > `border-edge-subtle`, and `bg-interactive` + `text-content-inverse` for the
+  > active pip. It uses **no** raw palette classes and, despite the config
+  > declaring a `nav-*` family, none of those either. The token layer is still
+  > single-theme light with only `surface-inverse{,-subtle}` + `text-inverse` for
+  > dark, and that is now a limitation nothing in admin is waiting on.
   >
   > Known limitation, same class: the token layer ships a semantic **status**
   > scale but no **categorical** palette. Community-type chips, plan/block
@@ -125,9 +133,10 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   > colour and lie about meaning (`status-owner` is violet and means unit
   > ownership). A categorical palette in packages/tokens would close these.
   >
-  > Use `node scripts/admin-token-codemod.mjs [--dry] <path...>` for the
-  > remaining files — it encodes the mapping table and reports what it declines
-  > to map rather than approximating.
+  > `node scripts/admin-token-codemod.mjs [--dry] <path...>` is kept for anything
+  > that arrives on raw palette classes later — it encodes the mapping table and
+  > reports what it declines to map rather than approximating. There is no
+  > remaining backlog for it to run over.
 
   **Historical note:** admin's *brand* hue was migrated tech-blue →
   "Florida Modern" coral for cross-surface brand consistency (`coral-*` classes,
@@ -141,8 +150,9 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   brand hue already flows through the coral `--interactive-primary`/`--theme-primary`
   tokens. Also frozen:
   `dark:` raw-palette variants layered on semantic base classes
-  (select-community/page.tsx, app/layout.tsx, CommandItem.tsx,
-  announcement-feed/toolbar.tsx, ui/chart.tsx) — dark mode is explicitly out of
+  (select-community/page.tsx, app/layout.tsx, CommandItem.tsx —
+  `announcement-feed/toolbar.tsx` and `ui/chart.tsx` no longer carry a baseline
+  entry and were dropped from this list) — dark mode is explicitly out of
   scope per the spec
   (docs/superpowers/specs/2026-07-13-design-system-standardization-design.md,
   "the token layer must not pretend to theme"); these are the app's only
@@ -203,6 +213,13 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   hatch `// page-header:exempt — <reason>`, reserved for outcome headlines that
   ARE the content (`payments/success`) and rail-less orientation pages
   (`select-community`).
+- **This whole section is about `apps/web` only.** `guard:page-header` and
+  `guard:breadcrumbs` both root at `apps/web/src/app/(authenticated)`. The admin
+  console has no breadcrumb trail, so it took the opposite decision and **paints**
+  its titles: use `AdminPageHeader`
+  (`apps/admin/src/components/shell/AdminPageHeader.tsx`), which renders a visible
+  Fraunces `<h1>` plus optional `description` / `eyebrow` / `backHref` / `actions`.
+  Do not import web's `PageHeader` into admin or make the two agree.
 - Parent-crumb labels are derived from route segments in
   `apps/web/src/lib/breadcrumbs/segment-labels.ts`. Section labels that map to a
   sidebar nav item are pulled from `nav-config.ts` by id (single source — a

@@ -2,8 +2,18 @@
 
 **Opened:** 2026-09-05, closing the gap left by #1042.
 
-Seventeen scheduled jobs run in production (`apps/web/vercel.json`). This is how
-you find out when one of them stops working, and what to do about it.
+**Updated:** 2026-09-11 — the jobs now live in **two** `vercel.json` files.
+
+**Eighteen** scheduled jobs run in production, across two Vercel projects:
+**seventeen** on web (`apps/web/vercel.json`) and, since wave 4 of the admin
+console redesign (#1123), **one** on admin (`apps/admin/vercel.json`) — that
+project's first cron. This is how you find out when one of them stops working,
+and what to do about it.
+
+**Everything below is about the seventeen web jobs unless it says otherwise.**
+The eighteenth is deliberately outside all three mechanisms; it has its own
+section at the end, and you should read it before assuming this runbook covers
+it.
 
 ## Why there are three mechanisms and not one
 
@@ -36,10 +46,14 @@ ever recreated, rebuild these from this section.
 - **Then:** send a notification
 - **Action interval:** 30 minutes
 
-One rule covers all seventeen jobs, and covers both shapes: an unhandled 500
-(`captureException` through `withErrorHandler`) and a failure reported behind a
-200 (`captureMessage('cron_job_reported_failures')`). Both carry the tag,
+One rule covers all seventeen **web** jobs, and covers both shapes: an unhandled
+500 (`captureException` through `withErrorHandler`) and a failure reported behind
+a 200 (`captureMessage('cron_job_reported_failures')`). Both carry the tag,
 because `withCronJob` sets it on the *isolation* scope.
+
+It does **not** cover the admin push-dispatch job: that route does not go through
+`withCronJob`, and the one event it emits is tagged `cron`, not `job`. See
+"The eighteenth job" below.
 
 #### Why each job gets its own ISSUE, not just its own tag
 
@@ -244,6 +258,92 @@ curl -sS -X POST -H "authorization: Bearer $CRON_SECRET" \
 A successful replay updates `cron_runs`, so `cron-health` goes green on its own
 once the underlying cause is fixed. Do **not** clear rows in `cron_runs` to
 silence the probe — that removes the evidence and the alert both.
+
+**There is now a button for this.** The admin console's Health page
+(`/health`, wave 3) lists failed cron runs and unprocessed Stripe webhook events,
+and each failed cron row carries a **`Retry`** (plus `Retry all`). It issues
+exactly the curl above: `POST ${WEB_APP_ORIGIN}/api/v1/internal/<slug>` with the
+platform `CRON_SECRET`, through
+`apps/admin/src/app/api/admin/health/jobs/[slug]/retry/route.ts`. Two things to
+know before you reach for it:
+
+- **Stripe rows have no Retry, and that is correct** — there is no internal
+  endpoint that replays a Stripe event; replay is a Stripe-dashboard action.
+  `retryable` comes from the report, not the component, so a button that could
+  not work is never rendered.
+- **Read the inline result, it distinguishes four outcomes.** Succeeded; *not
+  delivered — 404* (the path does not exist, so nothing ran and Sentry will be
+  empty); *not delivered — 401/403* (a `CRON_SECRET` mismatch **between the two
+  deployments** — the 2026-08 outage shape, and the admin project needs the same
+  value as web); and *the job ran and failed*, which is the only one where Sentry
+  is the right next stop.
+
+The route refuses rather than guesses when `WEB_APP_ORIGIN` is unset or is not an
+http(s) origin — otherwise a client-supplied `Host` header would choose what it
+calls.
+
+## The eighteenth job — `push-dispatch`, on the ADMIN project
+
+Wave 4 of the admin console redesign (#1123) added
+`POST|GET /api/admin/internal/push-dispatch`, every 15 minutes, declared in
+**`apps/admin/vercel.json`**. It delivers web-push notifications to platform
+admins who opted in from Settings.
+
+**It is outside all three mechanisms above, knowingly.** `verify-cron-job-tagging`
+pins `apps/web/vercel.json`, so this job has no registry entry, no schedule
+cross-check and **no `cron_runs` heartbeat** — which means neither the console's
+own Health board nor `/api/v1/internal/cron-health` can see it. A heartbeat row
+would be the stronger control, but `cron_runs` is registry-driven and
+`guard:cron-job-tagging` reconciles that registry against `apps/web/vercel.json`
+in both directions, so adding an admin slug means teaching that guard a second
+root first. That work was deliberately deferred, not forgotten.
+
+**What you do get: THREE event shapes, under two different tag keys.** This is the
+part to get right, because a rule written against only the first one looks like
+coverage and is not.
+
+| what happened | where | tag |
+|---|---|---|
+| an unauthenticated call was rejected | the route's `reportRejection` | `cron: push-dispatch`, `outcome: unauthorized` |
+| a push to one subscription failed | `dispatchPush`, `push.ts:492` | `push_dispatch: send` |
+| one admin's whole dispatch threw | `dispatchPush`, `push.ts:526` | `push_dispatch: admin` |
+
+Only the first carries a `cron` tag. The other two — the ones that mean
+notifications are **not being delivered** — carry `push_dispatch` and no `cron`
+or `job` tag at all.
+
+The rejection capture is throttled to one event per hour per process, with
+`cronSecretConfigured` and `hasAuthorizationHeader` as extras (never the secret):
+the route is session-less by design, so an uncapped capture would let a stranger
+burn the Sentry quota. The two delivery captures are not throttled, because they
+are only reachable by an authenticated tick.
+
+Consequences to hold onto:
+
+- **Sentry Rule 1 does not match any of them.** That rule keys on `job` being
+  set; none of these carry it. A rule on `cron is set` catches **only the
+  unauthenticated probe** — it is blind to every actual delivery failure. To be
+  paged for delivery, the rule needs `push_dispatch is set` as well, or search
+  `tags[push_dispatch]:send` by hand.
+- **The probe event is the least important of the three** and the easiest to
+  alert on, which is exactly the trap: a stranger hitting the endpoint pages you,
+  while a push service returning 500s to every subscription does not.
+- **A stopped scheduler is invisible.** A cron that never fires is never rejected
+  either, so silence here means nothing. Confirm registration with
+  `vercel crons ls` against the **admin** project — and remember registration is
+  not evidence of execution; that is the whole premise of this runbook.
+- **Its failure cases answer 200 on purpose.** Unconfigured VAPID keys return
+  `{ configured: false }` with a 200, because a non-2xx cron response is retried
+  indefinitely and "no keys installed yet" is a deployment state retrying cannot
+  fix. An unauthenticated call still gets a 401.
+- **It needs `CRON_SECRET` on the admin project**, plus
+  **`SENTRY_DSN`** — without which the warning described below is never emitted at
+  all, in a section whose whole point is that this job sits outside the other
+  three mechanisms — plus
+  `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (and optionally
+  `VAPID_SUBJECT`). Add them with `vercel env add --no-sensitive`: a Sensitive
+  variable is written by `vercel pull` as the literal `[SENSITIVE]` and inlined
+  into the client bundle.
 
 ## What is deliberately NOT alerted
 

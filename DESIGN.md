@@ -81,7 +81,9 @@ the offending line (email-template hex, chart/canvas internals).
 
 **Fonts:** Inter (sans-serif, body/data), JetBrains Mono (monospace), Fraunces (display serif — `--font-display`, applied to page-title `h1`s via `globals.css` to echo the marketing landing page; body, tables, and section headings stay on Inter).
 
-> **Page titles are not painted.** Per the PropertyPro design prototype ("the rail already says which page you are on"), `PageHeader` renders its `h1` visually hidden and does not paint `description`; the header is a toolbar. The `h1` still exists for the breadcrumb leaf and assistive tech. Consequence, accepted 2026-09-02: Fraunces now shows only on pages that still render a standalone visible `h1`, until those migrate onto `PageHeader`.
+> **Page titles are not painted — in `apps/web`.** Per the PropertyPro design prototype ("the rail already says which page you are on"), `PageHeader` renders its `h1` visually hidden and does not paint `description`; the header is a toolbar. The `h1` still exists for the breadcrumb leaf and assistive tech. Consequence, accepted 2026-09-02: Fraunces now shows only on pages that still render a standalone visible `h1`, until those migrate onto `PageHeader`.
+>
+> **`apps/admin` made the opposite decision, on purpose.** The console has no breadcrumb trail, so a screen's `h1` is the only thing that names it: `apps/admin/src/components/shell/AdminPageHeader.tsx` paints a visible Fraunces `h1` (`font-display text-2xl md:text-3xl`) plus an optional `description`, `eyebrow`, `backHref` and `actions`. Do not reconcile the two components or mimic one in the other app — they answer different questions. (`guard:page-header` polices only web's `(authenticated)/**`, so nothing stops admin painting its titles.)
 
 | Token | Size | Usage |
 |-------|------|-------|
