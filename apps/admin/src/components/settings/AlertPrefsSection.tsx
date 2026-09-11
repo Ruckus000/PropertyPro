@@ -129,14 +129,24 @@ export function AlertPrefsSection({ initial }: AlertPrefsSectionProps) {
     }
   }, []);
 
+  /**
+   * Mirrors `commitThreshold` below: capture the previous value, set state, then
+   * call `save` from the callback BODY.
+   *
+   * `save` was previously called from inside the `setPrefs` updater. React
+   * double-invokes updater functions under StrictMode, and `next.config.ts` does
+   * not set `reactStrictMode`, so it takes Next 15's default of `true` — every
+   * toggle fired two PUTs in development. The requests are idempotent so nothing
+   * corrupted, but a state updater is not where a network call belongs, and the
+   * network panel stopped describing what the component does.
+   */
   const toggle = useCallback(
     (key: AlertPrefKey, next: boolean) => {
-      setPrefs((current) => {
-        void save({ [key]: next } as Partial<AlertPrefs>, current);
-        return { ...current, [key]: next };
-      });
+      const previous = prefs;
+      setPrefs({ ...prefs, [key]: next });
+      void save({ [key]: next } as Partial<AlertPrefs>, previous);
     },
-    [save],
+    [prefs, save],
   );
 
   const commitThreshold = useCallback(() => {

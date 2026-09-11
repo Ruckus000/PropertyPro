@@ -1,5 +1,5 @@
 /**
- * `healthSignals` — the nav badge, the tray rows, and the critical banner.
+ * The health signal provider — the nav badge, the tray rows, and the critical banner.
  *
  * `getHealthReport` is mocked wholesale: its probes are covered in
  * `health-probes.test.ts`, and what these cases are about is the mapping from a
@@ -21,7 +21,19 @@ vi.mock('@/lib/server/health', async (importOriginal) => {
 
 import { invalidateBillingCache } from '@/lib/server/billing-cache';
 import { HEALTH_CACHE_TTL_MS, invalidateHealthCache } from '@/lib/server/health-cache';
-import { createHealthSignals, healthSignals } from '@/lib/server/signals/health';
+import { createHealthSignals } from '@/lib/server/signals/health';
+
+/**
+ * The default-threshold instance these tests pin.
+ *
+ * Built here rather than imported: `healthSignals` used to be a named export of
+ * the module, kept alive by a docblock naming "a caller with no operator in
+ * hand" that did not exist — every real composition goes through
+ * `createHealthSignals(errorsPerHour)` in `buildDefaultProviders`. The property
+ * being pinned is that `createHealthSignals()` with NO argument is the exact
+ * pre-wave-4 behaviour, and that is exactly what this line exercises.
+ */
+const healthSignals = createHealthSignals();
 import { DEFAULT_ALERT_PREFS } from '@/lib/preferences/alert-prefs';
 
 const report = (over: Partial<HealthReport> = {}): HealthReport => ({

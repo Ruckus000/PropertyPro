@@ -23,19 +23,22 @@
  * only after a failed delivery — it is not a reason to create them.
  */
 
-/** Thrown for the states the UI has to explain rather than retry. */
-export type PushSubscribeFailure =
-  | 'unsupported'
-  | 'not-configured'
-  | 'permission-denied'
-  | 'failed';
-
+/**
+ * Thrown for the states the UI has to explain rather than retry.
+ *
+ * MESSAGE-ONLY, deliberately. This carried a `reason` discriminant
+ * (`'unsupported' | 'not-configured' | 'permission-denied' | 'failed'`) that
+ * nothing ever read — `PushToggle` renders `caught.message` — and whose
+ * `permission-denied` variant was never constructed, because the denied case is
+ * handled by `Notification.requestPermission()` in the component and never
+ * reaches this module. A discriminant with no consumer and an unreachable member
+ * is a type that describes an intention rather than the code. If a caller ever
+ * needs to branch, add the union back with the branch that needs it.
+ */
 export class PushSubscribeError extends Error {
-  readonly reason: PushSubscribeFailure;
-  constructor(reason: PushSubscribeFailure, message: string) {
+  constructor(message: string) {
     super(message);
     this.name = 'PushSubscribeError';
-    this.reason = reason;
   }
 }
 
@@ -66,7 +69,7 @@ export function serializeSubscription(subscription: PushSubscription): {
   const json = subscription.toJSON();
   const keys = json.keys ?? {};
   if (!json.endpoint || !keys.p256dh || !keys.auth) {
-    throw new PushSubscribeError('failed', 'The browser returned an incomplete subscription.');
+    throw new PushSubscribeError('The browser returned an incomplete subscription.');
   }
   return { endpoint: json.endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } };
 }
@@ -93,12 +96,11 @@ export async function subscribeToPush(
 ): Promise<void> {
   if (!vapidPublicKey) {
     throw new PushSubscribeError(
-      'not-configured',
       'This deployment has no VAPID public key, so a subscription could not be delivered to.',
     );
   }
   if (!registration.pushManager) {
-    throw new PushSubscribeError('unsupported', 'This browser does not support push messaging.');
+    throw new PushSubscribeError('This browser does not support push messaging.');
   }
 
   const subscription = await registration.pushManager.subscribe({
@@ -116,7 +118,7 @@ export async function subscribeToPush(
   if (!ok) {
     // Leave both sides agreeing that push is off — see the module docblock.
     await subscription.unsubscribe().catch(() => {});
-    throw new PushSubscribeError('failed', 'We could not register this device for notifications.');
+    throw new PushSubscribeError('We could not register this device for notifications.');
   }
 }
 
@@ -140,7 +142,6 @@ export async function unsubscribeFromPush(
 
   if (!res.ok) {
     throw new PushSubscribeError(
-      'failed',
       'We could not stop notifications for this device. Please try again.',
     );
   }

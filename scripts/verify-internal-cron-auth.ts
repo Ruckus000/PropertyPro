@@ -20,7 +20,12 @@
  * The prefix rules are only safe while the invariant below holds, so it is
  * enforced here rather than left to review:
  *
- *   Every `route.ts` under an internal root must call `requireCronSecret(...)`.
+ *   Every route handler under an internal root must call `requireCronSecret(...)`.
+ *
+ * "Route handler" is every filename Next's App Router accepts — `route.ts`,
+ * `.tsx`, `.js`, `.jsx`, `.mts`, `.mjs` (`ROUTE_FILENAME`). Matching the literal
+ * string `route.ts` left five of those routed, exempted by the middleware prefix
+ * and invisible here.
  *
  * `requireCronSecret` (`apps/web/src/lib/api/cron-auth.ts`, and admin's
  * deliberate copy at `apps/admin/src/lib/api/cron-auth.ts`) fails closed — a
@@ -37,9 +42,9 @@
  * - `0` clean
  * - `1` violations
  * - `2` **could not check** — a root directory is missing, unreadable, or
- *   contains no `route.ts` at all. A scan that examined nothing must not pass:
- *   before this, `walkRouteFiles` swallowed a missing directory and the guard
- *   printed `Scanned 0 internal route.ts files` and exited 0. Renaming either
+ *   contains no route handler at all. A scan that examined nothing must not
+ *   pass: before this, `walkRouteFiles` swallowed a missing directory and the
+ *   guard printed `Scanned 0 internal route files` and exited 0. Renaming either
  *   root — or adding a third one and typo'ing its path — would have removed the
  *   entire check silently, which is the failure mode the guard is about.
  */
@@ -52,14 +57,14 @@ const repoRoot = resolve(scriptDir, '..');
 
 /** A deliberately unauthenticated route, with the reason it is safe. */
 export interface RootExemption {
-  /** Repo-relative path to the `route.ts`. */
+  /** Repo-relative path to the route handler. */
   file: string;
   reason: string;
 }
 
 /** One middleware prefix rule, and the routes it waves past the session gate. */
 export interface InternalRoot {
-  /** Repo-relative directory every `route.ts` below is scanned from. */
+  /** Repo-relative directory every route handler below is scanned from. */
   dir: string;
   /** The middleware prefix this root is reachable under, for the message. */
   urlPrefix: string;
@@ -120,6 +125,17 @@ export interface Violation {
 /** Thrown for the exit-2 cases: the guard could not perform its check. */
 export class CannotCheckError extends Error {}
 
+/**
+ * Every filename Next's App Router accepts as a route handler.
+ *
+ * Matching the literal string `route.ts` was the whole check: a
+ * `route.tsx`/`route.js`/`route.mjs` under an internal root is routed by Next,
+ * waved past the session gate by the middleware prefix, and was INVISIBLE to
+ * this guard — the exact regression it exists to make impossible, one character
+ * away.
+ */
+const ROUTE_FILENAME = /^route\.(ts|tsx|js|jsx|mts|mjs)$/;
+
 function walkRouteFiles(dir: string, out: string[]): void {
   let entries: string[];
   try {
@@ -140,7 +156,7 @@ function walkRouteFiles(dir: string, out: string[]): void {
     }
     if (stats.isDirectory()) {
       walkRouteFiles(full, out);
-    } else if (entry === 'route.ts') {
+    } else if (ROUTE_FILENAME.test(entry)) {
       out.push(full);
     }
   }
@@ -186,7 +202,7 @@ export function scanRoot(root: InternalRoot): { scanned: number; violations: Vio
   // with its last route; neither is a pass.
   if (routeFiles.length === 0) {
     throw new CannotCheckError(
-      `No route.ts files under ${root.dir}, so nothing was checked. If the last route ` +
+      `No route files under ${root.dir}, so nothing was checked. If the last route ` +
         `under ${root.urlPrefix} was removed, remove the prefix rule in ${root.middleware} ` +
         'and this root together. Refusing to pass.',
     );
@@ -252,13 +268,13 @@ function main(): void {
     // Print the denominator per root, so a root that quietly stopped matching
     // anything is visible in the output rather than only in the exit code.
     console.log(
-      `  ${root.dir}: ${result.scanned} route.ts file(s), ` +
+      `  ${root.dir}: ${result.scanned} route file(s), ` +
         `${root.exemptions.length} documented exemption(s).`,
     );
   }
 
   console.log(
-    `\nScanned ${totalScanned} internal route.ts files across ${INTERNAL_ROOTS.length} roots; ` +
+    `\nScanned ${totalScanned} internal route files across ${INTERNAL_ROOTS.length} roots; ` +
       `${totalExemptions} documented exemption(s).`,
   );
 

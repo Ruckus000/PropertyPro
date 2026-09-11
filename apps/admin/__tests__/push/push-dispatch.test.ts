@@ -282,6 +282,9 @@ describe('dispatchPush', () => {
       title: 'Payment problem',
       body: 'Bayview is 19 days past due — $240',
       url: '/clients/1?tab=billing',
+      // The worker's `tag`. NOT the url — three alerts can share a destination
+      // (`/deletion-requests`, `/billing`), and tagging on it collapsed them.
+      fingerprint: 'billing-1',
     });
   });
 

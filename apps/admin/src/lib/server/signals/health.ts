@@ -103,12 +103,3 @@ export function createHealthSignals(
     },
   };
 }
-
-/**
- * The default-threshold instance.
- *
- * Kept as a named export because it is what a caller with no operator in hand
- * wants, and because `createHealthSignals()` with no argument is the exact
- * pre-wave-4 behaviour — which is the property its tests pin.
- */
-export const healthSignals: SignalProvider = createHealthSignals();

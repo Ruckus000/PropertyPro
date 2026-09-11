@@ -20,10 +20,29 @@
  * so the constraint turns "somebody wrote a bad row" into a failed INSERT
  * instead of an outbound request to an attacker-chosen host.
  *
- * `failureCount` and `lastSuccessAt` are the reaping inputs. A push endpoint
- * dies silently when the browser is uninstalled or the subscription is revoked;
- * the delivery path increments the count on a 404/410 and the row is pruned
- * once it is clearly dead, so the cron is not forever POSTing into the void.
+ * ## What actually prunes a dead endpoint, and what these two columns do not
+ *
+ * A push endpoint dies silently when the browser is uninstalled or the
+ * subscription is revoked. The delivery path handles that in ONE step: a
+ * `404`/`410` marks the endpoint gone, skips it for the rest of the tick, and
+ * DELETES the row at the end of the operator's batch (`lib/server/push.ts`).
+ * There is no counting, no threshold and no reaper.
+ *
+ * So, precisely:
+ *
+ * - `failureCount` records NON-gone failures only — a push service 500, a
+ *   network blip — and is incremented by `recordFailure`, which is the only
+ *   thing that ever reads it (to compute `current + 1`). Nothing queries it,
+ *   nothing thresholds on it. It is diagnostic, and currently unread.
+ * - `lastSuccessAt` is written by nothing at all and is permanently NULL.
+ *   Reserved, not wired.
+ *
+ * Stated this bluntly on purpose: the previous version of this paragraph called
+ * both columns "the reaping inputs" and described an increment-on-404 and a
+ * prune-when-dead that the code does not perform — a docblock asserting a gate
+ * nothing runs, which is the exact class of rot `guard:legacy-roles` grew a
+ * comment pass to catch. If a future change gives either column a consumer, say
+ * what it is here; if nothing ever does, they should be dropped.
  *
  * NOT tenant-scoped and no `community_id`: a platform admin has no community
  * membership. RLS posture is 0072's verbatim — enabled and FORCEd, ZERO

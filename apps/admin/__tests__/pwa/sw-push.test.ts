@@ -82,7 +82,12 @@ async function firePush(data: unknown): Promise<ReturnType<typeof loadWorker>> {
 describe('sw.js push handler', () => {
   it('shows the notification the server sent', async () => {
     const { showNotification } = await firePush({
-      json: () => ({ title: 'Payment problem', body: 'Bayview is 19 days past due', url: '/clients/1' }),
+      json: () => ({
+        title: 'Payment problem',
+        body: 'Bayview is 19 days past due',
+        url: '/clients/1',
+        fingerprint: 'past-due-sub_123',
+      }),
     });
 
     expect(showNotification).toHaveBeenCalledWith('Payment problem', {
@@ -90,9 +95,62 @@ describe('sw.js push handler', () => {
       data: { url: '/clients/1' },
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      tag: '/clients/1',
+      tag: 'past-due-sub_123',
     });
   });
+
+  /**
+   * Review M1. `tag` collapses notifications that share it, and it used to be
+   * `payload.url` — the DESTINATION, not the alert. Three scheduled deletions
+   * all carry `href: '/deletion-requests'`, so the console's ledger decided
+   * three alerts were each worth sending and the worker showed one.
+   */
+  it('collapses on the ALERT, so two alerts sharing a destination both survive', async () => {
+    const worker = loadWorker();
+    const handler = worker.listeners.get('push')!;
+
+    for (const fingerprint of ['deletion-7', 'deletion-8']) {
+      let waited: unknown;
+      handler({
+        data: {
+          json: () => ({
+            title: 'Deletion scheduled',
+            body: 'Account deletion cooling ends Sep 14',
+            url: '/deletion-requests',
+            fingerprint,
+          }),
+        },
+        waitUntil: (promise: unknown) => {
+          waited = promise;
+        },
+      });
+      await waited;
+    }
+
+    const tags = worker.showNotification.mock.calls.map(([, options]) => options.tag);
+    expect(tags).toEqual(['deletion-7', 'deletion-8']);
+  });
+
+  // A notification minted by an older worker carries no fingerprint. Falling
+  // back to `url` is the pre-fingerprint behaviour, not a new failure mode.
+  it('falls back to the url when a payload carries no fingerprint', async () => {
+    const { showNotification } = await firePush({
+      json: () => ({ title: 'Deletion scheduled', body: 'x', url: '/deletion-requests' }),
+    });
+
+    expect(showNotification.mock.calls[0]![1].tag).toBe('/deletion-requests');
+  });
+
+  it.each([42, { nested: true }, null])(
+    'falls back to the url when the fingerprint is %j rather than a string',
+    async (fingerprint) => {
+      const { showNotification } = await firePush({
+        json: () => ({ title: 't', body: 'b', url: '/billing', fingerprint }),
+      });
+
+      expect(showNotification.mock.calls[0]![1].tag).toBe('/billing');
+    },
+  );
 
   it('still shows SOMETHING when the push carries no data at all', async () => {
     const { showNotification } = await firePush(null);

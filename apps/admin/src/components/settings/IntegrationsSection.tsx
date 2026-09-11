@@ -41,10 +41,12 @@
  *
  * Each row carries a state ICON, the state WORD, and a colour
  * (`.claude/rules/design.md`). Any one of the three is enough to read the row.
- * Tone classes are written out per state rather than composed from a template,
- * because `guard:class-resolution` cannot see `bg-status-${state}` and Tailwind
- * emits no rule for a class its scanner never found — the badge would render
- * with no colour at all and every check would stay green.
+ * State is carried by a `BadgeVariant` PROP (`STATE_PRESENTATION`,
+ * `MODE_PRESENTATION`) — never by an interpolated class name — and `Badge` owns
+ * the classes. The rule behind that is repo-wide rather than about this file:
+ * `guard:class-resolution` cannot see `bg-status-${state}`, and Tailwind emits
+ * no rule for a class its scanner never found, so the badge would render with no
+ * colour at all while every check stayed green.
  */
 import {
   AlertTriangle,

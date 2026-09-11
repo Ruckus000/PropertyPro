@@ -38,6 +38,7 @@ import type { AdminPreferences, AlertPrefKey, AlertPrefs } from '@/lib/preferenc
 import { getPreferences } from '@/lib/server/preferences';
 import { getShellSignals, type ShellSignals } from '@/lib/server/shell-signals';
 import type { ShellSignalItem } from '@/lib/server/signals/types';
+import type { NavSignalKey } from '@/components/shell/nav-config';
 
 /** One notification we would send, before the already-sent ledger is consulted. */
 export interface PushCandidate {
@@ -111,7 +112,13 @@ function trayText(item: ShellSignalItem): string {
  * beyond a name", and the console is one tap away.
  */
 const ITEM_SIGNALS: Partial<
-  Record<string, { prefKey: AlertPrefKey; title: string; body: (item: ShellSignalItem) => string }>
+  Record<
+    // Keyed on `NavSignalKey`, not `string`: `item.key` is that union, the
+    // docblock's whole argument is about WHICH of the seven keys are absent, and
+    // a misspelled key in a `string` map is a signal that silently never pushes.
+    NavSignalKey,
+    { prefKey: AlertPrefKey; title: string; body: (item: ShellSignalItem) => string }
+  >
 > = {
   inbox: {
     prefKey: 'newSupportThreads',
@@ -276,6 +283,19 @@ export interface PushPayload {
   title: string;
   body: string;
   url: string;
+  /**
+   * What the worker collapses repeats on (`tag`), and the reason it is here.
+   *
+   * The worker used `url`, which is the DESTINATION, not the alert: three
+   * scheduled deletions all carry `href: '/deletion-requests'` and every orphan
+   * past-due row carries `/billing`, so three distinct alerts the ledger had
+   * just decided were each worth sending arrived as one — the last replacing
+   * the first two. A candidate's fingerprint is the stable identity of the THING
+   * being reported, which is what `tag` is supposed to mean. `sw.js` falls back
+   * to `url` when this is absent, so a notification minted by an older worker
+   * still behaves.
+   */
+  fingerprint: string;
 }
 
 /**
@@ -453,6 +473,7 @@ export async function dispatchPush(deps?: Partial<PushDeps>): Promise<PushDispat
           title: candidate.title,
           body: candidate.body,
           url: candidate.url,
+          fingerprint: candidate.fingerprint,
         };
         const serialized = JSON.stringify(payload);
 

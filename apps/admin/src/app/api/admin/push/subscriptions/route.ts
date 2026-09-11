@@ -19,6 +19,11 @@
  * service, useful for diagnosing a provider-wide failure) and nothing else —
  * never the path, never either key.
  *
+ * The POST additionally records `displacedUserId` when the registration takes an
+ * endpoint off another operator. The upsert is keyed on `endpoint` alone, so
+ * that is a thing this route can do; without the field, the trail named only the
+ * admin who acted and the operator whose alerts stopped appeared nowhere.
+ *
  * It is `bestEffort`, unlike the destructive actions in that log. The row is
  * already written by the time the audit entry is attempted, and the toggle
  * reverts on a non-2xx: throwing here would show an operator "we could not
@@ -38,9 +43,43 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 export const dynamic = 'force-dynamic';
 
 /**
+ * The four push services a real `pushManager.subscribe()` can return.
+ *
+ * `https://` alone (the table's CHECK, and the refine below) bounds the SCHEME
+ * and not the HOST — and `web-push` POSTs a signed request to whatever string it
+ * is handed, from the cron process, every fifteen minutes. That made an
+ * authenticated operator able to point the server at any https host. It is blind
+ * (no response body is returned or logged) and every actor here is already
+ * `super_admin`, so it was never a privilege boundary — but a browser cannot
+ * mint anything outside this list, so nothing legitimate is lost by saying so.
+ *
+ * Adding a service is one line. A rejection is a 400 naming the host, not a
+ * silent failure, so a push service we have not met is diagnosable from the
+ * response rather than from a subscription that never delivers.
+ */
+const PUSH_SERVICE_HOSTS = [
+  /^fcm\.googleapis\.com$/, // Chrome, Edge, and every other Chromium
+  /^([a-z0-9-]+\.)*push\.services\.mozilla\.com$/, // Firefox
+  /^([a-z0-9-]+\.)*notify\.windows\.com$/, // Windows / WNS
+  /^([a-z0-9-]+\.)*push\.apple\.com$/, // Safari, iOS/iPadOS
+];
+
+export function isKnownPushService(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  return PUSH_SERVICE_HOSTS.some((pattern) => pattern.test(url.hostname));
+}
+
+/**
  * `https://` is asserted here as well as by the table's CHECK constraint.
  * `web-push` POSTs to whatever string it is handed, so the bound is on where we
- * will send — a DB error is a 500, and this is a 400 that says why.
+ * will send — a DB error is a 500, and this is a 400 that says why. The host is
+ * bounded too; see `PUSH_SERVICE_HOSTS`.
  */
 const endpointSchema = z
   .string()
@@ -48,6 +87,9 @@ const endpointSchema = z
   .max(2048)
   .refine((value) => value.startsWith('https://'), {
     message: 'endpoint must be an https:// URL',
+  })
+  .refine(isKnownPushService, {
+    message: 'endpoint must be a known push service',
   });
 
 const subscribeSchema = z
@@ -79,6 +121,26 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
 
   const db = createAdminTypedClient();
 
+  // Who, if anyone, is about to lose this endpoint.
+  //
+  // The upsert below is keyed on `endpoint` ALONE, so an operator who knows
+  // another's endpoint can re-point that row at themselves and silently end the
+  // other operator's alerts. That is deliberate — a device handed to a different
+  // operator should move with it — but the audit entry named only the ACTING
+  // admin, so the displaced one appeared nowhere in the trail and "why did my
+  // alerts stop" was unanswerable. Everyone here is `super_admin`, so this
+  // crosses no privilege boundary; it is a record, not a gate.
+  //
+  // Read BEFORE the write, and never fatal: a failed read costs a field in the
+  // metadata, and must not cost the operator their subscription.
+  const { data: previous } = await db
+    .from('platform_admin_push_subscriptions')
+    .select('user_id')
+    .eq('endpoint', parsed.endpoint)
+    .maybeSingle();
+  const previousUserId = (previous as { user_id?: string } | null)?.user_id ?? null;
+  const displacedUserId = previousUserId && previousUserId !== admin.id ? previousUserId : null;
+
   // Upsert on `endpoint`, the natural key: re-subscribing from the same browser
   // must replace the row rather than accumulate duplicates that each deliver
   // the same notification. `user_id` is part of the written row, so a device
@@ -105,7 +167,11 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     admin,
     action: 'push_subscription_added',
     resourceType: 'platform_admin_push_subscriptions',
-    metadata: { pushService: endpointOrigin(parsed.endpoint) },
+    metadata: {
+      pushService: endpointOrigin(parsed.endpoint),
+      // Only present when this registration took the endpoint off someone else.
+      ...(displacedUserId ? { displacedUserId } : {}),
+    },
     bestEffort: true,
   });
 

@@ -1,6 +1,7 @@
 /**
- * `getShellSignals` is `cache()`d on its first argument, so its three real call
- * sites must pass the SAME expression or the cache silently stops working.
+ * `getShellSignals` is `cache()`d on its first argument, so the call sites that
+ * serve one REQUEST must pass the SAME expression or the cache silently stops
+ * working.
  *
  * This is the failure mode the wrapper exists to prevent and that nothing else
  * can see: a literal `10` in one of them, or a bare `getShellSignals()`, still
@@ -16,7 +17,16 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = join(import.meta.dirname, '../../src');
 
-/** Every place that composes the shell signals for a real request. */
+/**
+ * Every place that composes the shell signals for a real request.
+ *
+ * A FOURTH call site exists and is deliberately not here: `lib/server/push.ts`
+ * (`getSignals: (errorsPerHour) => getShellSignals(errorsPerHour)`), the
+ * 15-minute cron. It forwards a variable rather than naming a preference path,
+ * so there is no literal for this file to pin — and it is correct as written:
+ * it runs per operator, outside any request, where `cache()` has nothing to
+ * dedupe anyway.
+ */
 const CALL_SITES = [
   'app/(console)/layout.tsx',
   'app/(console)/dashboard/page.tsx',
@@ -40,6 +50,10 @@ describe('getShellSignals cache key', () => {
     expect(source).not.toMatch(/getShellSignals\(\s*\)/);
   });
 
+  // A source-reading test that matched nothing would pass vacuously, so the
+  // denominator is asserted. Three is the number of REQUEST-scoped call sites,
+  // not the number of callers in the app — the cron is a fourth, excluded for
+  // the reason in the docblock above.
   it('checked a non-zero population', () => {
     expect(CALL_SITES.length).toBe(3);
   });

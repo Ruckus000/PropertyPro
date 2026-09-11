@@ -25,7 +25,7 @@
  *
  * | condition                          | what it shows                          |
  * |------------------------------------|----------------------------------------|
- * | no service worker / no PushManager | why this browser cannot                |
+ * | no service worker / no PushManager / no worker REGISTERED here | why this browser cannot |
  * | no VAPID key on this deployment    | that push is not configured here       |
  * | `Notification.permission === 'denied'` | that the block is in browser settings, which a page cannot undo |
  * | otherwise                          | the switch                             |
@@ -34,6 +34,10 @@
  * instantly with `denied` and shows nothing, so a switch there is a control
  * that visibly does nothing. Only the browser's own site settings can reverse
  * it.
+ *
+ * `'pending'` renders nothing, so every path out of the effect MUST reach one of
+ * the four — see the `getRegistration()` note in the effect for the one that
+ * previously did not.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { AlertBanner, Switch } from '@propertypro/ui';
@@ -77,8 +81,26 @@ export function PushToggle() {
         return;
       }
 
-      // `ready` resolves once a worker controls this page. Registration happens
-      // elsewhere (the PWA bootstrap); this only waits for it.
+      // `navigator.serviceWorker.ready` NEVER SETTLES when no worker is
+      // registered — it is not a "has one?" query, it is "wait until one
+      // controls this page". `ServiceWorkerRegistration` only registers when
+      // `NODE_ENV === 'production'` and swallows failures, so in development, in
+      // a storage-disabled private window, and under an enterprise policy that
+      // blocks workers, awaiting it directly left `support` on `'pending'`
+      // forever and this component returned `null`. The `unsupported` state —
+      // "why this browser cannot" — never rendered in precisely the cases it
+      // exists to explain, and the section was silently absent instead.
+      //
+      // So ASK first. `getRegistration()` always settles, and `undefined` is the
+      // honest answer: nothing is registered here.
+      const registered = await navigator.serviceWorker.getRegistration();
+      if (cancelled) return;
+      if (!registered) {
+        setSupport('unsupported');
+        return;
+      }
+
+      // Now `ready` is guaranteed to settle: a registration exists.
       const registration = await navigator.serviceWorker.ready;
       const existing = await registration.pushManager.getSubscription();
       if (cancelled) return;
@@ -146,8 +168,9 @@ export function PushToggle() {
       <div className="rounded-lg border border-edge bg-surface-card p-4 shadow-e1">
         {support === 'unsupported' && (
           <p className="text-sm text-content-secondary">
-            This browser cannot receive push notifications. Chrome, Edge and Android browsers
-            can; on an iPhone or iPad, add the console to your Home Screen first.
+            This browser can&rsquo;t receive push notifications here. Chrome, Edge and Android
+            browsers can; on an iPhone or iPad, add the console to your Home Screen first. A
+            private window, or a browser with site data blocked, cannot in any case.
           </p>
         )}
 

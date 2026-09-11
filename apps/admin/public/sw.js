@@ -216,13 +216,14 @@ async function handleNavigation(request, store) {
 // Web push
 //
 // The payload is written by `src/lib/server/push.ts` (`PushPayload`): a JSON
-// object of `{ title, body, url }`. Keep the two in step.
+// object of `{ title, body, url, fingerprint }`. Keep the two in step.
 // ---------------------------------------------------------------------------
 
 const PUSH_FALLBACK = {
   title: 'PropertyPro console',
   body: 'Something needs your attention.',
   url: '/',
+  fingerprint: '',
 };
 
 /**
@@ -248,6 +249,9 @@ function readPushPayload(event) {
         typeof data.url === 'string' && data.url.startsWith('/') && !data.url.startsWith('//')
           ? data.url
           : PUSH_FALLBACK.url,
+      // Optional: a notification minted by an older worker has no fingerprint,
+      // and the tag falls back to `url` below.
+      fingerprint: typeof data.fingerprint === 'string' ? data.fingerprint : '',
     };
   } catch {
     return PUSH_FALLBACK;
@@ -262,10 +266,17 @@ self.addEventListener('push', (event) => {
       data: { url: payload.url },
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      // Collapse repeats of the same alert rather than stacking them: the
+      // Collapse repeats of the same ALERT rather than stacking them: the
       // dispatch ledger already prevents re-sending, but a re-subscribed second
       // device can legitimately produce a duplicate.
-      tag: payload.url,
+      //
+      // The fingerprint, NOT the url. `url` is the destination: three scheduled
+      // deletions all point at `/deletion-requests` and every orphan past-due
+      // row points at `/billing`, so tagging on it threw away two of every three
+      // such alerts — the console decided they were each worth sending and the
+      // worker silently collapsed them. Falls back to `url` for a payload minted
+      // by an older worker, which is the pre-fingerprint behaviour.
+      tag: payload.fingerprint || payload.url,
     }),
   );
 });

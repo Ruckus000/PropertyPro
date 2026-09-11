@@ -9,7 +9,7 @@
  * a Sentry REST call, and reads of `cron_runs`, `stripe_webhook_events` and a
  * liveness ping.
  *
- * `healthSignals` is first in `DEFAULT_PROVIDERS`, and `getShellSignals()` is
+ * The health provider is first in `buildDefaultProviders`, and `getShellSignals()` is
  * awaited by the `(console)` layout — so uncached that whole set ran on EVERY
  * console page navigation, and again on every 60-second poll of
  * `/api/admin/shell/signals` for as long as any tab stayed open. `React.cache()`
