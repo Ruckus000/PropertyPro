@@ -132,7 +132,19 @@ export type AdminAuditAction =
   // relabelled. The direction is the action, not a boolean inside the payload.
   | 'subscription_paused'
   | 'subscription_resumed'
-  | 'subscription_canceled';
+  | 'subscription_canceled'
+  // Web push, one entry per BROWSER registered or dropped (wave 4). Recorded
+  // because the set of devices that receive platform alerts is operational
+  // state someone may later need to explain — "why did nobody see the error
+  // spike" is answered by this trail. `communityId: null`; a push subscription
+  // belongs to an operator, not a community.
+  //
+  // The payload carries the push service's ORIGIN and nothing else. The
+  // endpoint path plus `p256dh`/`auth` are together enough to deliver a
+  // notification to that operator's device, and this table is append-only, so
+  // a leak here could never be redacted.
+  | 'push_subscription_added'
+  | 'push_subscription_removed';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */

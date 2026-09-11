@@ -77,8 +77,8 @@ const MIGRATIONS_DIR = join(repoRoot, 'packages/db/migrations');
 /**
  * Migrations deliberately present on `main` and deliberately NOT applied.
  *
- * `{ tag, reason }` rather than a bare string set, following
- * `UNAUTHENTICATED_BY_DESIGN` in verify-internal-cron-auth.ts: an exception that
+ * `{ tag, reason }` rather than a bare string set, following the per-root
+ * `exemptions` lists in verify-internal-cron-auth.ts: an exception that
  * cannot say why it exists is indistinguishable from one nobody has revisited.
  * An entry naming a tag with no migration file is itself a violation, so the
  * list cannot rot into a set of names that mean nothing.

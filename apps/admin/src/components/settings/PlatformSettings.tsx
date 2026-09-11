@@ -13,6 +13,7 @@ import { Badge, Button, Input, PageBody } from '@propertypro/ui';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { AlertPrefsSection } from '@/components/settings/AlertPrefsSection';
 import { InstallAppSection } from '@/components/settings/InstallAppSection';
+import { PushToggle } from '@/components/settings/PushToggle';
 import type { AlertPrefs } from '@/lib/preferences/alert-prefs';
 
 interface PlatformAdmin {
@@ -245,6 +246,11 @@ export function PlatformSettings({
       </section>
 
       <AlertPrefsSection initial={alertPrefs} />
+
+      {/* Directly under the alert opt-ins it delivers: those five choose WHAT
+          is worth telling this operator, this one chooses whether THIS browser
+          is one of the places they are told. */}
+      <PushToggle />
 
       <InstallAppSection />
 

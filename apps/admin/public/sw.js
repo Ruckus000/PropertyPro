@@ -172,6 +172,113 @@ async function handleNavigation(request) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Web push
+//
+// The payload is written by `src/lib/server/push.ts` (`PushPayload`): a JSON
+// object of `{ title, body, url }`. Keep the two in step.
+// ---------------------------------------------------------------------------
+
+const PUSH_FALLBACK = {
+  title: 'PropertyPro console',
+  body: 'Something needs your attention.',
+  url: '/',
+};
+
+/**
+ * Read the payload defensively.
+ *
+ * `event.data` can be absent entirely — a push service may wake a worker with
+ * no body at all, and some browsers do so to test the subscription. `.json()`
+ * also throws on anything that is not JSON. Either way a notification MUST
+ * still be shown: the subscription declared `userVisibleOnly`, and a push that
+ * shows nothing counts against that promise and can cost the subscription.
+ */
+function readPushPayload(event) {
+  try {
+    const data = event.data ? event.data.json() : null;
+    if (!data || typeof data !== 'object') return PUSH_FALLBACK;
+    return {
+      title: typeof data.title === 'string' && data.title ? data.title : PUSH_FALLBACK.title,
+      body: typeof data.body === 'string' && data.body ? data.body : PUSH_FALLBACK.body,
+      // Same-origin paths only. The click handler navigates to this, and an
+      // absolute URL from a payload would make a notification a redirect to
+      // anywhere. Anything that is not a rooted path falls back to the console.
+      url:
+        typeof data.url === 'string' && data.url.startsWith('/') && !data.url.startsWith('//')
+          ? data.url
+          : PUSH_FALLBACK.url,
+    };
+  } catch {
+    return PUSH_FALLBACK;
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const payload = readPushPayload(event);
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      data: { url: payload.url },
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      // Collapse repeats of the same alert rather than stacking them: the
+      // dispatch ledger already prevents re-sending, but a re-subscribed second
+      // device can legitimately produce a duplicate.
+      tag: payload.url,
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({
+        type: 'window',
+        // Without this, a window that is open but not yet controlled by this
+        // worker is invisible here and a second one is opened on top of it.
+        includeUncontrolled: true,
+      });
+      // Resolved AND re-checked against our origin. The push handler already
+      // refuses anything that is not a rooted path, so this is the second lock
+      // on the same door — but it is the layer that runs on a notification
+      // created by an OLDER version of this worker, which is the one case the
+      // push-side guard cannot cover.
+      let target = new URL('/', self.location.origin).href;
+      try {
+        const resolved = new URL(url, self.location.origin);
+        if (resolved.origin === self.location.origin) target = resolved.href;
+      } catch {
+        // keep the root fallback
+      }
+
+      for (const client of clients) {
+        if (client.url === target && 'focus' in client) return client.focus();
+      }
+      // Otherwise reuse any open console window rather than opening a third:
+      // focus it and navigate, falling back to a new window when navigation is
+      // not permitted.
+      for (const client of clients) {
+        if ('focus' in client) {
+          await client.focus();
+          if ('navigate' in client) {
+            try {
+              return await client.navigate(target);
+            } catch {
+              break;
+            }
+          }
+          break;
+        }
+      }
+      return self.clients.openWindow(target);
+    })(),
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   const policy = classifyRequest(event.request, self.location.origin);
 

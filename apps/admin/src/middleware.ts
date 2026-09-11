@@ -5,7 +5,9 @@
  * 1. Strip spoofed tenant/user headers from incoming requests
  * 2. Refresh Supabase auth session
  * 3. Rate-limit API routes (100 req/min per IP)
- * 4. Allow /auth/login and /api/health without admin check
+ * 4. Allow /auth/login and /api/health without admin check, and
+ *    /api/admin/internal/* without a SESSION (those routes authenticate with
+ *    the cron bearer instead — see `isInternalCronPath`)
  * 5. Require valid platform_admin_users row for all other routes
  * 6. Redirect to /auth/login on 401/403
  * 7. Attach X-Request-ID for request tracing
@@ -206,6 +208,36 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
+/**
+ * The scheduled-job prefix: past the SESSION gate, never past authentication.
+ *
+ * This is the one prefix rule on this console, and the trailing slash is the
+ * whole of its tightness. `/api/admin/internal/` cannot match
+ * `/api/admin/internal-tools` or `/api/admin/internalreports` — the same
+ * argument the `/api/health` note above makes for staying an exact path, and
+ * the reason that note gives (this deployment holds the service-role key)
+ * applies here with more force, not less.
+ *
+ * What makes the rule safe is not this function. It is that EVERY route.ts
+ * under `apps/admin/src/app/api/admin/internal/` calls `requireCronSecret`,
+ * which fails closed, and that `pnpm guard:internal-cron-auth` scans this root
+ * and fails the build if one stops. The guard was extended to cover this app in
+ * the same commit that added this rule; the exemption is not defensible without
+ * it.
+ *
+ * No method filter, deliberately. Web's equivalent enumerates GET/HEAD/POST and
+ * its own comment records what enumeration cost: nine crons dead behind a
+ * POST-only entry, then HEAD 401ing for uptime monitors after the rule written
+ * to fix that. Every method reaching a route here still has to present the
+ * bearer token, so a method this list forgot fails closed rather than silently
+ * answering 307-to-login for a request that was correctly authenticated.
+ */
+const INTERNAL_CRON_PREFIX = '/api/admin/internal/';
+
+function isInternalCronPath(pathname: string): boolean {
+  return pathname.startsWith(INTERNAL_CRON_PREFIX);
+}
+
 function isApiRoute(pathname: string): boolean {
   return pathname.startsWith('/api/');
 }
@@ -302,8 +334,13 @@ async function handleRequest(request: NextRequest): Promise<Response> {
     }
   }
 
-  // 5. Allow public paths through (no admin check)
-  if (isPublicPath(pathname)) {
+  // 5. Allow public paths, and the scheduled-job prefix, through (no admin
+  //    session check). The internal routes authenticate themselves with the
+  //    cron bearer — see `isInternalCronPath`.
+  //
+  //    It sits AFTER the rate limiter on purpose: an unauthenticated,
+  //    session-less POST is exactly the surface that should stay throttled.
+  if (isPublicPath(pathname) || isInternalCronPath(pathname)) {
     return buildForwardedResponse(response, cleanHeaders, requestId);
   }
 
