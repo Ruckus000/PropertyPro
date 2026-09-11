@@ -45,7 +45,7 @@
  */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PLAN_IDS } from '@propertypro/shared';
+import { PLAN_IDS, planLabel } from '@propertypro/shared';
 import {
   AlertBanner,
   AlertDialog,
@@ -70,12 +70,6 @@ export type BillingAction =
 /** The closed set the `extend-trial` route accepts. Mirrors its schema. */
 const TRIAL_DAY_OPTIONS = [7, 14, 30] as const;
 type TrialDays = (typeof TRIAL_DAY_OPTIONS)[number];
-
-const PLAN_LABELS: Record<string, string> = {
-  essentials: 'Essentials',
-  professional: 'Professional',
-  operations_plus: 'Operations Plus',
-};
 
 const ACTION_TITLES: Record<BillingAction, string> = {
   'change-plan': 'Change plan',
@@ -203,7 +197,7 @@ export function BillingActionDialog({
   function consequence(): string {
     switch (action) {
       case 'change-plan':
-        return `Moves this subscription onto ${PLAN_LABELS[planId] ?? planId} at its current billing cadence. The price difference is invoiced immediately.`;
+        return `Moves this subscription onto ${planLabel(planId)} at its current billing cadence. The price difference is invoiced immediately.`;
       case 'extend-trial':
         return `Moves the trial end out by ${days} days from the later of now and the current end. Nobody is invoiced.`;
       case 'apply-coupon':
@@ -283,13 +277,13 @@ export function BillingActionDialog({
               >
                 {PLAN_IDS.map((id) => (
                   <option key={id} value={id}>
-                    {PLAN_LABELS[id] ?? id}
+                    {planLabel(id)}
                   </option>
                 ))}
               </select>
               <p className="text-xs text-content-tertiary">
-                `stripe_prices` is the authority on which plans exist for this community type and
-                cadence; a plan with no configured price is refused before anything changes.
+                If this plan has no price configured for this community&rsquo;s type and billing
+                cadence, the change is refused and nothing is charged.
               </p>
             </div>
           )}

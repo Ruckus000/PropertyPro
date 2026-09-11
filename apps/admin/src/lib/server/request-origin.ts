@@ -17,14 +17,26 @@
  * caller sees only a state, a latency and an error string — but "small" is not
  * "none", and a header is not a fact.
  *
- * So two defences:
+ * So three defences:
  *
  * 1. `ADMIN_APP_ORIGIN`, when set, wins outright and removes the request from
  *    the decision entirely. Production should set it.
- * 2. Otherwise the header is parsed as a bare `host[:port]` and rejected unless
- *    it is exactly that — no userinfo (`evil@`), no path, no scheme, no comma
- *    (a forwarded-header list), nothing that could address a different URL than
- *    `https://<host>/api/health` reads like.
+ * 2. **In production, that is the ONLY source.** If it is unset the function
+ *    returns `undefined` and the Admin row reads `unknown`, naming the variable.
+ *    The shape check below constrains the header to a bare host, so it could not
+ *    address a different PATH — but it could still address a different HOST, and
+ *    a caller making the console issue `GET http://127.0.0.1:9200/api/health`
+ *    gets back a state, a latency and (per `probeWebApp`) an error message that
+ *    names the host and port on a connection failure. That is a small internal
+ *    port-scan oracle, and an operator's own Host header is not a fact. A row
+ *    that honestly says "not configured" is strictly better than a row that
+ *    probes whatever it was told to.
+ * 3. Outside production the header is still accepted, because `localhost:3001`
+ *    and preview URLs are exactly the hosts that cannot be known in advance —
+ *    parsed as a bare `host[:port]` and rejected unless it is exactly that: no
+ *    userinfo (`evil@`), no path, no scheme, no comma (a forwarded-header list),
+ *    nothing that could address a different URL than `https://<host>/api/health`
+ *    reads like.
  *
  * Returns `undefined` when nothing usable is available, which the probe reports
  * as `unknown` — "we did not ask" — rather than inventing a host.
@@ -42,10 +54,19 @@
  */
 const HOST_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::\d{1,5})?$/i;
 
-/** Hosts that are legitimately served over plain http. */
+/**
+ * Hosts that are legitimately served over plain http.
+ *
+ * `[::1]` is deliberately NOT listed. It could never match: this runs on
+ * `host.split(':')[0]`, which for `[::1]` yields `'['` — and it is moot anyway,
+ * because `HOST_PATTERN` has no `[` or `]` in its character class, so an IPv6
+ * literal is rejected before it reaches here. A comment listing a case the code
+ * cannot handle is worse than no comment. Adding IPv6 support means widening the
+ * pattern and splitting on the last colon, which nothing has asked for.
+ */
 function isLoopback(host: string): boolean {
   const name = host.split(':')[0] ?? '';
-  return name === 'localhost' || name === '127.0.0.1' || name === '[::1]';
+  return name === 'localhost' || name === '127.0.0.1';
 }
 
 export function resolveAdminOrigin(headers: Headers): string | undefined {
@@ -59,6 +80,11 @@ export function resolveAdminOrigin(headers: Headers): string | undefined {
       // the row permanently `unknown` with no explanation.
     }
   }
+
+  // Production takes the configured origin or nothing. See defence 2 above: a
+  // header must not be allowed to choose an outbound request target on the
+  // deployment where that request leaves a real network.
+  if (process.env.NODE_ENV === 'production') return undefined;
 
   const raw = (headers.get('x-forwarded-host') ?? headers.get('host') ?? '').trim();
   if (!raw || !HOST_PATTERN.test(raw)) return undefined;

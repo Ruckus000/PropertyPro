@@ -47,7 +47,7 @@ import { parseCommunityIdParam } from '@/lib/api/parse-community-id';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { logAdminAction, type AdminAuditAction } from '@/lib/audit/log-admin-action';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
-import type { ActionResult, BillingActor } from '@/lib/server/billing-actions';
+import type { ActionResult } from '@/lib/server/billing-actions';
 
 /**
  * The confirmation every money-moving action requires.
@@ -92,12 +92,17 @@ const RESOURCE_TYPE = 'subscription';
 
 export function billingActionRoute<TSchema extends z.ZodObject<z.ZodRawShape>>(config: {
   schema: TSchema;
-  auditAction: AdminAuditAction;
-  run: (
-    communityId: number,
-    input: z.infer<TSchema>,
-    actor: BillingActor,
-  ) => Promise<ActionResult>;
+  /**
+   * The audit action name — a literal, or a function of the validated input.
+   *
+   * The function form exists for `pause`, which is one route in BOTH directions
+   * because it is one Stripe field. A single `'subscription_paused'` for both
+   * meant a query filtering on `action = 'subscription_paused'` returned resumes
+   * too, and `platform_admin_audit_log` is append-only, so the mislabelling is
+   * permanent. The direction is a different ACTION, not a boolean inside one.
+   */
+  auditAction: AdminAuditAction | ((input: z.infer<TSchema>) => AdminAuditAction);
+  run: (communityId: number, input: z.infer<TSchema>) => Promise<ActionResult>;
 }): (request: NextRequest, context: BillingActionRouteContext) => Promise<Response> {
   return withAdminErrorHandler(async (request: NextRequest, context: BillingActionRouteContext) => {
     const admin = await requirePlatformAdmin();
@@ -109,14 +114,12 @@ export function billingActionRoute<TSchema extends z.ZodObject<z.ZodRawShape>>(c
     const parsed = await parseAdminBody(request, config.schema);
     if (parsed instanceof NextResponse) return parsed;
 
-    const result = await config.run(communityId, parsed, {
-      id: admin.id,
-      email: admin.email,
-    });
+    const result = await config.run(communityId, parsed);
 
     await logAdminAction({
       admin,
-      action: config.auditAction,
+      action:
+        typeof config.auditAction === 'function' ? config.auditAction(parsed) : config.auditAction,
       resourceType: RESOURCE_TYPE,
       // The `sub_…` id, so the trail joins to Stripe with no second lookup.
       resourceId: result.subscriptionId,

@@ -89,6 +89,22 @@ describe('sentry client', () => {
     expect(issues[0]!.count).toBe(6);
   });
 
+  it.each([
+    ['a javascript: url', 'javascript:alert(1)'],
+    ['a data: url', 'data:text/html,<script>x</script>'],
+    ['a relative path', '/issues/42/'],
+    ['a non-string', 42],
+  ])('drops %s rather than rendering it as a link', (_label, permalink) => {
+    // `permalink` is the one coerced field that reaches an `href`. `str()` alone
+    // only proved it was a string, and `javascript:…` is a string. `''` is what
+    // `ErrorsList` already treats as "no link", so the button does not render.
+    expect(parseIssue({ ...sample, permalink }).permalink).toBe('');
+  });
+
+  it('keeps a real https permalink, so the drop above is not a blanket refusal', () => {
+    expect(parseIssue(sample).permalink).toBe('https://propertypro.sentry.io/issues/42/');
+  });
+
   it('throws on a non-2xx response so the report can fall back to null', async () => {
     process.env.SENTRY_API_TOKEN = 't';
     process.env.SENTRY_ORG = 'propertypro';

@@ -36,5 +36,5 @@ const schema = confirmedActionSchema({
 export const POST = billingActionRoute({
   schema,
   auditAction: 'subscription_plan_changed',
-  run: (communityId, input, actor) => changePlan(communityId, { planId: input.planId }, actor),
+  run: (communityId, input) => changePlan(communityId, { planId: input.planId }),
 });

@@ -33,5 +33,5 @@ const schema = confirmedActionSchema({
 export const POST = billingActionRoute({
   schema,
   auditAction: 'subscription_coupon_applied',
-  run: (communityId, input, actor) => applyCoupon(communityId, { coupon: input.coupon }, actor),
+  run: (communityId, input) => applyCoupon(communityId, { coupon: input.coupon }),
 });

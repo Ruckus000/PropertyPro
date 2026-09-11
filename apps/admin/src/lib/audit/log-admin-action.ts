@@ -126,7 +126,12 @@ export type AdminAuditAction =
   | 'subscription_plan_changed'
   | 'subscription_trial_extended'
   | 'subscription_coupon_applied'
+  // Pause and resume are ONE route and one Stripe field, but two entries. A
+  // single name for both made `where action = 'subscription_paused'` return
+  // resumes as well, and this table is append-only, so the row could never be
+  // relabelled. The direction is the action, not a boolean inside the payload.
   | 'subscription_paused'
+  | 'subscription_resumed'
   | 'subscription_canceled';
 
 export interface LogAdminActionParams {

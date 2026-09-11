@@ -51,8 +51,18 @@ export const createTicketSchema = z.object({
  *
  * Without it, a client typo (`stat: 'resolved'`) would return 200 having
  * changed nothing, and the operator would believe the ticket was closed.
+ *
+ * `.omit({ assignToMe: true })` is the other half of that promise, and it was
+ * missing. `assignToMe` is a CREATE-only affordance: `.partial()` carried it
+ * through, `.strict()` therefore ACCEPTED it, and `UpdateTicketInput` has no
+ * such field — so `PATCH` with `{"assignToMe": true}` returned 200 having
+ * changed nothing, which is verbatim the failure this docblock claims to
+ * prevent. (Excess-property checking does not catch it: `parsed` is a variable,
+ * not an object literal.) On update the equivalent is an explicit
+ * `assigneeUserId`, which is unambiguous about who the assignee becomes.
  */
 export const updateTicketSchema = createTicketSchema
+  .omit({ assignToMe: true })
   .partial()
   .extend({
     status: z.enum(SUPPORT_TICKET_STATUSES).optional(),

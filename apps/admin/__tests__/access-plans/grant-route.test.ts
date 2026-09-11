@@ -52,6 +52,7 @@ async function callGrant(body: Record<string, unknown>) {
   const mod = await import('@/app/api/admin/access-plans/route');
   const req = new Request('http://localhost/api/admin/access-plans', {
     method: 'POST',
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
   // The Next route handler accepts NextRequest — Request shape is structurally compatible for our use.
@@ -177,6 +178,9 @@ describe('POST /api/admin/access-plans — duration bounds', () => {
     const mod = await import('@/app/api/admin/access-plans/route');
     const req = new Request('http://localhost/api/admin/access-plans', {
       method: 'POST',
+      // The header matters here too: without it this would 400 on the CONTENT
+      // TYPE and stop measuring the malformed-JSON branch it is named for.
+      headers: { 'content-type': 'application/json' },
       body: '{not json',
     });
     const res = await mod.POST(req as never);

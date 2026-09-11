@@ -24,9 +24,11 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CreditCard, ExternalLink } from 'lucide-react';
-import { AlertBanner, Badge, EmptyState, QuickFilterTabs, type BadgeVariant } from '@propertypro/ui';
+import { planLabel } from '@propertypro/shared';
+import { AlertBanner, Badge, EmptyState, QuickFilterTabs } from '@propertypro/ui';
 import type { BillingRow } from '@/lib/server/billing';
 import { formatCentsAsCurrency } from '@/lib/billing/format';
+import { BILLING_STATUS_LABELS, BILLING_STATUS_VARIANTS } from '@/lib/billing/status-display';
 
 interface BillingListProps {
   rows: BillingRow[];
@@ -47,28 +49,6 @@ const FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'trialing', label: 'Trialing' },
   { value: 'canceled', label: 'Canceled' },
 ];
-
-const STATUS_LABELS: Record<BillingRow['status'], string> = {
-  active: 'Active',
-  trialing: 'Trial',
-  past_due: 'Past due',
-  canceled: 'Canceled',
-  other: 'Other',
-};
-
-const STATUS_VARIANTS: Record<BillingRow['status'], BadgeVariant> = {
-  active: 'success',
-  trialing: 'info',
-  past_due: 'warning',
-  canceled: 'neutral',
-  other: 'neutral',
-};
-
-const PLAN_LABELS: Record<string, string> = {
-  essentials: 'Essentials',
-  professional: 'Professional',
-  operations_plus: 'Operations Plus',
-};
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -170,11 +150,11 @@ export function BillingList({ rows, truncated, stripeDashboardBase }: BillingLis
                     )}
                   </td>
                   <td className="px-4 py-3 text-content-secondary">
-                    {PLAN_LABELS[row.plan] ?? row.plan}
+                    {planLabel(row.plan)}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANTS[row.status]} size="sm">
-                      {STATUS_LABELS[row.status]}
+                    <Badge variant={BILLING_STATUS_VARIANTS[row.status]} size="sm">
+                      {BILLING_STATUS_LABELS[row.status]}
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-content">{formatCentsAsCurrency(row.mrrCents)}</td>

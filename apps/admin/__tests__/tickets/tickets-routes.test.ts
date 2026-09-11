@@ -189,6 +189,40 @@ describe('tickets routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PATCH rejects assignToMe — a create-only field the service silently dropped', async () => {
+    // `createTicketSchema.partial()` carried `assignToMe` through, so `.strict()`
+    // ACCEPTED it while `UpdateTicketInput` has no such field and the assignment
+    // block never reads it: 200, nothing changed, and the operator believing the
+    // ticket was reassigned. That is the exact failure `.strict()` exists to
+    // prevent, so the field is omitted before `.partial()`.
+    const res = await PATCH(
+      json('http://a/api/admin/tickets/118', 'PATCH', { assignToMe: true }),
+      ctx('118'),
+    );
+
+    expect(updateTicket).not.toHaveBeenCalled();
+    expect(logAdminAction).not.toHaveBeenCalled();
+    expect(res.status).toBe(400);
+  });
+
+  it('PATCH still accepts an explicit assigneeUserId, which is the supported way', async () => {
+    // The control: omitting `assignToMe` must not have removed the ability to
+    // reassign, or the fix above would be a regression wearing a test.
+    const res = await PATCH(
+      json('http://a/api/admin/tickets/118', 'PATCH', {
+        assigneeUserId: '00000000-0000-4000-8000-000000000001',
+      }),
+      ctx('118'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateTicket).toHaveBeenCalledWith(
+      118,
+      expect.objectContaining({ assigneeUserId: '00000000-0000-4000-8000-000000000001' }),
+      expect.anything(),
+    );
+  });
+
   it('PATCH 400s a non-numeric id before touching the service', async () => {
     const res = await PATCH(
       json('http://a/api/admin/tickets/abc', 'PATCH', { status: 'resolved' }),

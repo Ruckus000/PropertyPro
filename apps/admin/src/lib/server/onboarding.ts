@@ -264,10 +264,34 @@ export function trialBlocker(endsAt: string | null, now: Date): string | null {
   if (!Number.isFinite(end)) return null;
   const remainingMs = end - now.getTime();
   if (remainingMs < 0) return 'Trial has ended';
+  // "Today" is a CALENDAR question, not an arithmetic one. This used to read
+  // `Math.ceil(remainingMs / MS_PER_DAY) === 0`, and `Math.ceil` of anything in
+  // (0, 86_400_000] is 1 — so the branch held only when `remainingMs` was
+  // exactly zero, and a trial ending at 14:23 this afternoon reported "Trial
+  // ends in 1 day". The string an operator can actually see is the one worth
+  // having a branch for.
+  if (isSameUtcDate(end, now.getTime())) return 'Trial ends today';
   const days = Math.ceil(remainingMs / MS_PER_DAY);
-  if (days === 0) return 'Trial ends today';
   if (days > TRIAL_ENDING_SOON_DAYS) return null;
   return `Trial ends in ${plural(days, 'day')}`;
+}
+
+/**
+ * Same UTC calendar day.
+ *
+ * UTC on both sides deliberately: every other date derivation in this file works
+ * in elapsed milliseconds or ISO strings, and a local-calendar comparison would
+ * make "today" depend on the server's timezone — the same class of bug as the
+ * `date-fns addDays` DST trap this repo already carries a rule about.
+ */
+function isSameUtcDate(a: number, b: number): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return (
+    x.getUTCFullYear() === y.getUTCFullYear() &&
+    x.getUTCMonth() === y.getUTCMonth() &&
+    x.getUTCDate() === y.getUTCDate()
+  );
 }
 
 function trialCard(row: TrialInput, now: Date): PipelineCard {

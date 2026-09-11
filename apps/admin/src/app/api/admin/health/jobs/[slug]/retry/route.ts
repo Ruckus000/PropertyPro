@@ -24,6 +24,13 @@
  *    real privileged endpoints, and neither is a cron job. An allowlist derived
  *    from observed rows cannot drift from the truth the way a hard-coded one can.
  *
+ * ## The path is a lookup, not a reconstruction
+ *
+ * `${origin}/api/v1/internal/${slug}` was right for 16 of the 17 registered jobs
+ * and wrong for the one nested route. `internalPathForCronSlug` owns the
+ * exception and `guard:cron-job-tagging` asserts it against the registry, so a
+ * future nested job fails the build rather than shipping a button that 404s.
+ *
  * And two refusals rather than a guess: an unset `WEB_APP_ORIGIN` must not
  * become a RELATIVE fetch (which would resolve against the admin app and make
  * this route call something unintended on localhost), and an unset `CRON_SECRET`
@@ -47,6 +54,7 @@ import { NotFoundError } from '@propertypro/shared/http';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
+import { internalPathForCronSlug } from '@/lib/server/cron-job-paths';
 import { listKnownJobSlugs } from '@/lib/server/health';
 
 /**
@@ -117,7 +125,12 @@ export const POST = withAdminErrorHandler(
 
     let response: Response;
     try {
-      response = await fetch(`${origin}/api/v1/internal/${slug}`, {
+      // The path is LOOKED UP, not reconstructed. `notification-digests-process`
+      // lives at `/api/v1/internal/notification-digests/process`, and the slug's
+      // `/` → `-` substitution is not reversible — so interpolating the slug
+      // POSTed to a path that does not exist and the UI reported the 404 as the
+      // job failing. See `cron-job-paths.ts`.
+      response = await fetch(`${origin}${internalPathForCronSlug(slug)}`, {
         method: 'POST',
         headers: { authorization: `Bearer ${secret}` },
         signal: AbortSignal.timeout(RETRY_TIMEOUT_MS),

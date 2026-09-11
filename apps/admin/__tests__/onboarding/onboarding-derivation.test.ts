@@ -263,6 +263,13 @@ describe('onboarding derivation', () => {
       ['2026-09-20T00:00:00Z', null],
       ['2026-09-12T00:00:00Z', 'Trial ends in 4 days'],
       ['2026-09-09T00:00:00Z', 'Trial ends in 1 day'],
+      // The case an operator actually sees. `now` is midnight UTC, so a trial
+      // ending at 14:23 TODAY has 14h23m left — which `Math.ceil` rounds to 1,
+      // so the old `days === 0` test could never reach this string and every
+      // same-day trial was announced as "in 1 day". The midnight-exact case
+      // below is the only instant the old branch could reach, and it is not an
+      // instant any real trial ends at.
+      ['2026-09-08T14:23:00Z', 'Trial ends today'],
       ['2026-09-08T00:00:00Z', 'Trial ends today'],
       ['2026-09-05T00:00:00Z', 'Trial has ended'],
     ];

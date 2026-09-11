@@ -29,7 +29,11 @@ vi.mock('@/lib/audit/log-admin-action', () => ({
   logAdminAction: (p: unknown) => logAdminAction(p),
 }));
 
-const listKnownJobSlugs = vi.fn(async () => ['expire-demos', 'revenue-snapshot']);
+const listKnownJobSlugs = vi.fn(async () => [
+  'expire-demos',
+  'revenue-snapshot',
+  'notification-digests-process',
+]);
 vi.mock('@/lib/server/health', () => ({
   listKnownJobSlugs: () => listKnownJobSlugs(),
 }));
@@ -84,6 +88,22 @@ describe('POST /api/admin/health/jobs/[slug]/retry', () => {
         resourceId: 'expire-demos',
         metadata: { status: 200 },
       }),
+    );
+  });
+
+  it('sends the NESTED job to its real path, not to the slug', async () => {
+    // `notification-digests-process` lives at
+    // `/api/v1/internal/notification-digests/process`. The slug's `/` → `-`
+    // substitution is not reversible, so interpolating the slug POSTed to a path
+    // that does not exist — and the board reported the resulting 404 as "the job
+    // ran and failed", on the one screen whose purpose is saying what is broken.
+    // It is reachable: `registerCronJobs(CRON_JOB_SLUGS)` inserts a `cron_runs`
+    // row for every registry slug, so the Retry button renders for this one.
+    const res = await post('notification-digests-process');
+
+    expect(res.status).toBe(200);
+    expect(fetchMock().mock.calls[0]![0]).toBe(
+      'https://www.getpropertypro.com/api/v1/internal/notification-digests/process',
     );
   });
 

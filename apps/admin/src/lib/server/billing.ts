@@ -37,6 +37,7 @@
  *
  * @module lib/server/billing
  */
+import * as Sentry from '@sentry/nextjs';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { stripeKeyLivemode } from '@propertypro/shared';
 import { AppError } from '@propertypro/shared/http';
@@ -99,7 +100,17 @@ export interface CommunityBillingInvoice {
 
 export interface CommunityBilling {
   row: BillingRow | null;
-  invoices: CommunityBillingInvoice[];
+  /**
+   * The invoice list, or `null` when Stripe's invoice read FAILED.
+   *
+   * Three states, not two, and the third is the reason for the type. An empty
+   * array used to mean both "this customer has no invoices" and "we asked
+   * Stripe and it broke" — so a revoked key or a Stripe outage rendered as a
+   * clean, confident empty table on a money screen. `HealthReport.errors` is
+   * `SentryIssue[] | null` for exactly this reason; the same distinction is
+   * owed here.
+   */
+  invoices: CommunityBillingInvoice[] | null;
   timeline: { text: string; when: string; tone: SignalTone }[];
   stripeDashboardUrl: string;
   /**
@@ -405,7 +416,10 @@ export function filterBillingRows(rows: BillingRow[], status: string | null): Bi
  *
  * Renders for demo and soft-deleted communities too — see the exempt at the read.
  */
-export async function getCommunityBilling(communityId: number): Promise<CommunityBilling> {
+export async function getCommunityBilling(
+  communityId: number,
+  now: Date = new Date(),
+): Promise<CommunityBilling> {
   assertStripeConfigured();
 
   const db = createAdminClient();
@@ -446,8 +460,10 @@ export async function getCommunityBilling(communityId: number): Promise<Communit
 
   // Invoices are best-effort: a customer with no invoice history, or a Stripe
   // read that fails, must not take down the rest of the tab — the row and the
-  // timeline are the part an operator acts on.
-  let invoices: CommunityBillingInvoice[] = [];
+  // timeline are the part an operator acts on. But best-effort is not the same
+  // as silent: a FAILED read returns `null` and is reported to Sentry, so it is
+  // distinguishable from a customer who genuinely has no invoices.
+  let invoices: CommunityBillingInvoice[] | null = [];
   if (row.stripeCustomerId) {
     try {
       const list = await stripe.invoices.list({
@@ -462,15 +478,21 @@ export async function getCommunityBilling(communityId: number): Promise<Communit
         status: invoice.status ?? 'unknown',
         hostedUrl: invoice.hosted_invoice_url ?? null,
       }));
-    } catch {
-      invoices = [];
+    } catch (error) {
+      // An empty catch on a money screen is how a revoked key looks like a
+      // customer who never paid for anything.
+      Sentry.captureException(error, {
+        tags: { billing_read: 'invoices' },
+        extra: { communityId },
+      });
+      invoices = null;
     }
   }
 
   return {
     row,
     invoices,
-    timeline: buildTimeline(sub, row),
+    timeline: buildTimeline(sub, row, now),
     stripeDashboardUrl: `${dashboardPrefix}subscriptions/${sub.id}`,
     livemode,
   };
@@ -481,10 +503,17 @@ export async function getCommunityBilling(communityId: number): Promise<Communit
  *
  * Derived entirely from the Stripe object — there is no stored billing event
  * log, and inventing one would duplicate a source of truth we do not own.
+ *
+ * `now` is INJECTED, and that is what makes the word "pure" above true. It used
+ * to call `Date.now()` inline to pick between "Trial ends" and "Trial ended",
+ * which every sibling derivation in this wave avoids by taking a `now` — a
+ * function documented as pure that reads a clock is untestable at the boundary
+ * and is a docblock that lies.
  */
 export function buildTimeline(
   sub: Stripe.Subscription,
   row: BillingRow,
+  now: Date,
 ): { text: string; when: string; tone: SignalTone }[] {
   const entries: { text: string; when: string; tone: SignalTone }[] = [];
 
@@ -493,7 +522,7 @@ export function buildTimeline(
 
   if (row.trialEndsAt) {
     entries.push({
-      text: Date.parse(row.trialEndsAt) > Date.now() ? 'Trial ends' : 'Trial ended',
+      text: Date.parse(row.trialEndsAt) > now.getTime() ? 'Trial ends' : 'Trial ended',
       when: row.trialEndsAt,
       tone: 'info',
     });

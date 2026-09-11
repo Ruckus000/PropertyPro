@@ -22,6 +22,5 @@ const schema = confirmedActionSchema({
 export const POST = billingActionRoute({
   schema,
   auditAction: 'subscription_canceled',
-  run: (communityId, input, actor) =>
-    cancelSubscription(communityId, { atPeriodEnd: input.atPeriodEnd }, actor),
+  run: (communityId, input) => cancelSubscription(communityId, { atPeriodEnd: input.atPeriodEnd }),
 });

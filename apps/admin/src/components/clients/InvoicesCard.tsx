@@ -9,10 +9,13 @@
  * audit trail rather than through a button this console would have to make
  * safe.
  *
- * `getCommunityBilling` treats the invoice list as best-effort and returns `[]`
- * when Stripe's invoice read fails, so an empty list here means "no invoices we
- * could read", not "no invoices exist" — which is why the empty copy points at
- * the Stripe dashboard instead of asserting there are none.
+ * Three states, not two. `getCommunityBilling` treats the invoice list as
+ * best-effort, but a FAILED Stripe read now arrives as `null` rather than as an
+ * empty array — because "this customer has no invoices" and "we asked Stripe and
+ * it broke" are different facts, and rendering the second as the first is a
+ * money screen quietly asserting that nobody was ever billed. `[]` still means a
+ * genuine empty history, and even that copy points at Stripe rather than
+ * insisting there is nothing.
  */
 import { ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@propertypro/ui';
@@ -20,7 +23,8 @@ import type { CommunityBillingInvoice } from '@/lib/server/billing';
 import { formatCentsAsCurrency } from '@/lib/billing/format';
 
 interface InvoicesCardProps {
-  invoices: CommunityBillingInvoice[];
+  /** `null` — the Stripe read FAILED. `[]` — the customer genuinely has none. */
+  invoices: CommunityBillingInvoice[] | null;
   /** Where "see them in Stripe" points when we have nothing to show. */
   stripeDashboardUrl: string;
 }
@@ -51,9 +55,27 @@ export function InvoicesCard({ invoices, stripeDashboardUrl }: InvoicesCardProps
         <CardTitle>Invoices</CardTitle>
       </CardHeader>
       <CardContent>
-        {invoices.length === 0 ? (
+        {invoices === null ? (
+          // Not an EmptyState and not a danger banner: the rest of the tab
+          // rendered fine, so this is one card reporting that one read failed.
+          // It must not look like "no invoices", which is what an empty array
+          // used to make it look like.
+          <p role="status" className="text-sm text-status-warning">
+            We could not read this customer&rsquo;s invoices from Stripe. The rest of this tab is
+            accurate; only the invoice list is missing.{' '}
+            <a
+              href={stripeDashboardUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-content-brand hover:underline"
+            >
+              Check this customer in Stripe
+            </a>
+            .
+          </p>
+        ) : invoices.length === 0 ? (
           <p className="text-sm text-content-tertiary">
-            No invoices to show.{' '}
+            No invoices to show for this customer.{' '}
             <a
               href={stripeDashboardUrl}
               target="_blank"
@@ -62,7 +84,7 @@ export function InvoicesCard({ invoices, stripeDashboardUrl }: InvoicesCardProps
             >
               Check this customer in Stripe
             </a>{' '}
-            — the list is best-effort and an unreadable invoice page also lands here.
+            if you expected some — this list covers the twelve most recent only.
           </p>
         ) : (
           <div className="overflow-x-auto">

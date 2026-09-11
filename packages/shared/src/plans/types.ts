@@ -32,6 +32,42 @@ export const PLANS_BY_COMMUNITY_TYPE: Record<CommunityType, readonly PlanId[]> =
 };
 
 /**
+ * The human name for each plan — the single source of the three strings.
+ *
+ * It lives HERE rather than being derived from `PLAN_FEATURES.displayName`
+ * because the consumers are client components: `PLAN_FEATURES` is a large object
+ * and importing a helper that closes over it would retain the whole thing in
+ * their bundles. `plan-features.ts` reads its `displayName` fields from this
+ * map, so there is exactly one place the strings exist and no way for the two to
+ * drift.
+ *
+ * Four private copies of this map had accumulated across `apps/admin`
+ * (`CommunitySettingsEditor`, `BillingActionDialog`, `BillingTab`,
+ * `BillingList`), typed inconsistently, which is how a public constant starts
+ * disagreeing with itself.
+ */
+export const PLAN_LABELS: Record<PlanId, string> = {
+  essentials: 'Essentials',
+  professional: 'Professional',
+  operations_plus: 'Operations Plus',
+};
+
+/**
+ * A plan's label, for a value that may not be a known plan id.
+ *
+ * Falls back to the raw string rather than to an empty cell or a thrown error:
+ * a column rendering a plan nobody recognises should show what the database
+ * actually holds, which is the thing an operator needs in order to fix it.
+ * Legacy aliases resolve through `resolvePlanId` first.
+ */
+export function planLabel(raw: string | null | undefined): string {
+  if (!raw) return '—';
+  if ((PLAN_IDS as readonly string[]).includes(raw)) return PLAN_LABELS[raw as PlanId];
+  const canonical = LEGACY_PLAN_ALIASES[raw];
+  return canonical ? PLAN_LABELS[canonical] : raw;
+}
+
+/**
  * Maps legacy plan IDs (stored in older signup records) to their
  * modern PlanId equivalents.
  */

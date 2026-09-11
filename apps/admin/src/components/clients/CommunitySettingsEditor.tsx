@@ -7,6 +7,7 @@ import Link from 'next/link';
 import {
   COMMUNITY_FEATURES,
   PLAN_IDS,
+  planLabel,
   type CommunityType,
   type CommunityFeatures,
 } from '@propertypro/shared';
@@ -102,12 +103,6 @@ const WRITE_LEVEL_CONFIG: WriteLevelConfig[] = [
 ];
 
 const SUBSCRIPTION_OPTIONS = ['active', 'trialing', 'past_due', 'canceled'] as const;
-
-const PLAN_LABELS: Record<(typeof PLAN_IDS)[number], string> = {
-  essentials: 'Essentials',
-  professional: 'Professional',
-  operations_plus: 'Operations Plus',
-};
 
 const US_TIMEZONES = [
   'America/New_York',
@@ -331,7 +326,7 @@ export function CommunitySettingsEditor({ community: initial, openDeletionReques
                 >
                   <option value="">Not set</option>
                   {PLAN_IDS.map((planId) => (
-                    <option key={planId} value={planId}>{PLAN_LABELS[planId]}</option>
+                    <option key={planId} value={planId}>{planLabel(planId)}</option>
                   ))}
                 </select>
               </div>

@@ -23,7 +23,11 @@ const schema = confirmedActionSchema({
 
 export const POST = billingActionRoute({
   schema,
-  auditAction: 'subscription_paused',
-  run: (communityId, input, actor) =>
-    pauseSubscription(communityId, { resume: input.resume }, actor),
+  // Two names for two directions. One name for both meant a query filtering on
+  // `action = 'subscription_paused'` returned resumes as well, in a table that
+  // is append-only — so the row could never be relabelled afterwards. The
+  // `newValues.paused` boolean did distinguish them, but a boolean inside a
+  // payload is not something an operator filters or alerts on.
+  auditAction: (input) => (input.resume ? 'subscription_resumed' : 'subscription_paused'),
+  run: (communityId, input) => pauseSubscription(communityId, { resume: input.resume }),
 });

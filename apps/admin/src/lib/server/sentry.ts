@@ -61,6 +61,30 @@ function str(value: unknown, fallback = ''): string {
 }
 
 /**
+ * A value that may be rendered as an `href`, or `''`.
+ *
+ * `permalink` is the one coerced field on `SentryIssue` that reaches an anchor's
+ * `href` (`ErrorsList.tsx`), and `str()` alone only proves it is a string —
+ * `javascript:…` is a string. The value comes from Sentry's own API over TLS, so
+ * the threat needs Sentry or the transport compromised and this is hardening
+ * rather than a live defect; it is here because `parseIssue`'s docblock
+ * carefully justifies every other coercion and was silent on the one that
+ * becomes a clickable link.
+ *
+ * Anything that is not an absolute `http(s)` URL becomes `''`, which
+ * `ErrorsList` already treats as "no link" — the button simply does not render.
+ */
+function httpUrl(value: unknown): string {
+  if (typeof value !== 'string' || value === '') return '';
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Coerce one raw issue from the API into a `SentryIssue`.
  *
  * Pure and total: every field falls back rather than throwing. A health board
@@ -93,7 +117,7 @@ export function parseIssue(raw: unknown): SentryIssue {
     culprit: str(issue.culprit),
     count: Number.isFinite(parsedCount) ? parsedCount : 0,
     lastSeen: str(issue.lastSeen),
-    permalink: str(issue.permalink),
+    permalink: httpUrl(issue.permalink),
     hourly,
   };
 }

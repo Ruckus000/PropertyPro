@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The workspace Billing tab's four data states, and the one that matters most
+ * The workspace Billing tab's five data states, and the one that matters most
  * here: a Stripe MODE REFUSAL must not take the read-only tab down with it.
  *
  * `billing.ts` is deliberately not gated on Stripe mode and `billing-actions.ts`
@@ -129,6 +129,32 @@ describe('BillingTab', () => {
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(1));
   });
 
+  it('renders NOT CONFIGURED as a configuration state, not as a failure with a retry', async () => {
+    // `assertStripeConfigured()` throws a 503 carrying STRIPE_NOT_CONFIGURED.
+    // This used to render as a red "Billing could not be loaded" with a Retry
+    // button that could never succeed — a deployment with no Stripe key is not
+    // a broken read, and an action that will fail identically every time is
+    // worse than no action. `/billing/page.tsx` already gets this right.
+    const message =
+      'Stripe is not configured for this deployment. Set STRIPE_SECRET_KEY to see billing.';
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 'STRIPE_NOT_CONFIGURED', message } }), {
+          status: 503,
+        }),
+    ) as unknown as FetchMock;
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<BillingTab communityId={42} />);
+
+    expect(await screen.findByText('Stripe is not configured')).toBeTruthy();
+    expect(screen.getByText('Nothing to show until a Stripe key is set')).toBeTruthy();
+    // No Retry, and no danger styling. `AlertBanner status="danger"` is the only
+    // thing on this tab that renders role="alert"; a warning does not.
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+    expect(screen.queryByText('Billing could not be loaded')).toBeNull();
+  });
+
   it('keeps the read-only tab intact when an action is refused for Stripe mode', async () => {
     const message =
       'Stripe key mode does not match STRIPE_EXPECTED_LIVEMODE — refusing to change a subscription. ' +
@@ -151,6 +177,31 @@ describe('BillingTab', () => {
     expect(screen.getByText('Professional')).toBeTruthy();
     expect(screen.getByText('ABC-0001')).toBeTruthy();
     expect(screen.getByText('Subscription created')).toBeTruthy();
+  });
+
+  it('says the invoice READ failed rather than rendering an empty invoice table', async () => {
+    // `invoices: null` means Stripe's invoice read threw. It used to arrive as
+    // `[]`, so a revoked key or a Stripe outage rendered "No invoices to show"
+    // on a money screen — a confident claim that a customer was never billed.
+    mockFetch({ data: { ...BILLING, invoices: null } });
+
+    render(<BillingTab communityId={42} />);
+
+    expect(await screen.findByText(/could not read this customer/i)).toBeTruthy();
+    expect(screen.queryByText(/No invoices to show/i)).toBeNull();
+    // The rest of the tab is unaffected — one card failed, not the page.
+    expect(screen.getByText('Professional')).toBeTruthy();
+  });
+
+  it('still renders a genuine empty invoice history as empty', async () => {
+    // The control for the case above: `[]` must keep meaning "none", or the
+    // three-state fix would just have collapsed the states the other way.
+    mockFetch({ data: { ...BILLING, invoices: [] } });
+
+    render(<BillingTab communityId={42} />);
+
+    expect(await screen.findByText(/No invoices to show/i)).toBeTruthy();
+    expect(screen.queryByText(/could not read this customer/i)).toBeNull();
   });
 
   it('deep-links a refund to Stripe rather than offering a refund button', async () => {

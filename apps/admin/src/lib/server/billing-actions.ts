@@ -105,12 +105,6 @@ import type Stripe from 'stripe';
 import { getStripeClient } from '@/lib/stripe';
 import { invalidateBillingCache } from './billing-cache';
 
-/** Who performed the action. Narrower than `PlatformAdminUser` on purpose. */
-export interface BillingActor {
-  id: string;
-  email: string;
-}
-
 /**
  * What the route audits and returns.
  *
@@ -129,14 +123,6 @@ export type TrialExtensionDays = 7 | 14 | 30;
 
 const MS_PER_DAY = 86_400_000;
 
-/**
- * Refusal when the key's mode is not the mode this deployment declares.
- *
- * 500 with its own code, as the plan specifies. `withAdminErrorHandler` passes an
- * `AppError` through with `code` and `message` intact, so the UI renders the
- * specific sentence rather than "An unexpected error occurred" — the whole point
- * of not letting this be a generic 500.
- */
 /**
  * How long two identical submissions are treated as the SAME request.
  *
@@ -168,6 +154,14 @@ export function idempotencyWindow(now: number = Date.now()): string {
   return String(Math.floor(now / IDEMPOTENCY_WINDOW_MS));
 }
 
+/**
+ * Refusal when the key's mode is not the mode this deployment declares.
+ *
+ * 503 with its own code. `withAdminErrorHandler` passes an `AppError` through
+ * with `code` and `message` intact, so the UI renders the specific sentence
+ * rather than "An unexpected error occurred" — the whole point of not letting
+ * this be a generic 500.
+ */
 export class StripeModeMismatchError extends AppError {
   constructor(actual: boolean, expected: boolean) {
     super(
@@ -293,6 +287,17 @@ interface SubscriptionState {
   paused: boolean;
   cancelAtPeriodEnd: boolean;
   /**
+   * The live Stripe status.
+   *
+   * Carried for one reason: `cancelSubscription` used to hard-code
+   * `canceled: false` as the audit row's `before`, so cancelling an
+   * already-canceled subscription recorded a prior state that was not the prior
+   * state. `platform_admin_audit_log` is append-only and uncorrectable, so that
+   * is a permanent false record in the one trail linking a charge to an
+   * operator. Measured, not assumed.
+   */
+  status: string;
+  /**
    * The first attached coupon's id, or `null`.
    *
    * In this API version the coupon hangs off `discount.source.coupon`, not
@@ -345,6 +350,7 @@ async function retrieveSubscriptionState(subscriptionId: string): Promise<Subscr
     trialEnd: typeof sub.trial_end === 'number' ? sub.trial_end : null,
     paused: Boolean(sub.pause_collection),
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+    status: sub.status,
     couponId: couponIdOf(firstDiscount),
   };
 }
@@ -397,7 +403,6 @@ async function resolvePriceId(
 export async function changePlan(
   communityId: number,
   input: { planId: string },
-  _actor: BillingActor,
 ): Promise<ActionResult> {
   const community = await prepareAction(communityId);
   const subscriptionId = community.stripe_subscription_id;
@@ -443,7 +448,6 @@ export async function changePlan(
 export async function extendTrial(
   communityId: number,
   input: { days: TrialExtensionDays },
-  _actor: BillingActor,
 ): Promise<ActionResult> {
   const community = await prepareAction(communityId);
   const subscriptionId = community.stripe_subscription_id;
@@ -487,7 +491,6 @@ export async function extendTrial(
 export async function applyCoupon(
   communityId: number,
   input: { coupon: string },
-  _actor: BillingActor,
 ): Promise<ActionResult> {
   const community = await prepareAction(communityId);
   const subscriptionId = community.stripe_subscription_id;
@@ -535,7 +538,6 @@ export async function applyCoupon(
 export async function pauseSubscription(
   communityId: number,
   input: { resume: boolean },
-  _actor: BillingActor,
 ): Promise<ActionResult> {
   const community = await prepareAction(communityId);
   const subscriptionId = community.stripe_subscription_id;
@@ -571,7 +573,6 @@ export async function pauseSubscription(
 export async function cancelSubscription(
   communityId: number,
   input: { atPeriodEnd: boolean },
-  _actor: BillingActor,
 ): Promise<ActionResult> {
   const community = await prepareAction(communityId);
   const subscriptionId = community.stripe_subscription_id;
@@ -594,7 +595,10 @@ export async function cancelSubscription(
 
   return {
     subscriptionId,
-    before: { cancelAtPeriodEnd: state.cancelAtPeriodEnd, canceled: false },
+    // `state.status`, never the literal `false`: cancelling a subscription that
+    // is ALREADY canceled must not record "it was not canceled" in a row that
+    // can never be corrected.
+    before: { cancelAtPeriodEnd: state.cancelAtPeriodEnd, canceled: state.status === 'canceled' },
     after: input.atPeriodEnd
       ? { cancelAtPeriodEnd: true, canceled: false }
       : { cancelAtPeriodEnd: false, canceled: true },

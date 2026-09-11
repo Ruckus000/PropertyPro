@@ -66,6 +66,15 @@ const h = vi.hoisted(() => {
    */
   interface FakeSubscription {
     id: string;
+    /**
+     * REQUIRED, not optional, and that is the point.
+     *
+     * `cancelSubscription` reads it to record the audit row's `before.canceled`.
+     * Left optional, every fixture that omitted it would silently pin the
+     * `undefined` branch — an incomplete fixture is an untested branch, and this
+     * one feeds a row that is append-only and cannot be corrected.
+     */
+    status: string;
     trial_end: number | null;
     cancel_at_period_end: boolean;
     pause_collection: { behavior: string; resumes_at?: number | null } | null;
@@ -76,6 +85,7 @@ const h = vi.hoisted(() => {
   const subscriptionsRetrieve = vi.fn(
     async (_id?: string): Promise<FakeSubscription> => ({
       id: 'sub_1',
+      status: 'active',
       trial_end: 1_760_000_000,
       cancel_at_period_end: false,
       pause_collection: null,
@@ -139,8 +149,6 @@ import {
   pauseSubscription,
   idempotencyWindow,
 } from '@/lib/server/billing-actions';
-
-const actor = { id: 'u', email: 'admin@propertypro.test' };
 
 const COMMUNITY = {
   id: 1,
@@ -236,19 +244,19 @@ describe('the Stripe mode assertion', () => {
     expect(() => assertStripeActionMode()).toThrow(/could not be determined/);
   });
 
-  it('carries a 500 and the STRIPE_MODE_MISMATCH code so the UI can name the fault', async () => {
+  it('carries a 503 and the STRIPE_MODE_MISMATCH code so the UI can name the fault', async () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_x';
     process.env.STRIPE_EXPECTED_LIVEMODE = 'false';
-    const error = await changePlan(1, { planId: 'professional' }, actor).catch((e) => e);
+    const error = await changePlan(1, { planId: 'professional' }).catch((e) => e);
     expect(error).toMatchObject({ statusCode: 503, code: 'STRIPE_MODE_MISMATCH' });
   });
 
   it.each([
-    ['changePlan', () => changePlan(1, { planId: 'professional' }, actor)],
-    ['extendTrial', () => extendTrial(1, { days: 14 }, actor)],
-    ['applyCoupon', () => applyCoupon(1, { coupon: 'SUMMER' }, actor)],
-    ['pauseSubscription', () => pauseSubscription(1, { resume: false }, actor)],
-    ['cancelSubscription', () => cancelSubscription(1, { atPeriodEnd: true }, actor)],
+    ['changePlan', () => changePlan(1, { planId: 'professional' })],
+    ['extendTrial', () => extendTrial(1, { days: 14 })],
+    ['applyCoupon', () => applyCoupon(1, { coupon: 'SUMMER' })],
+    ['pauseSubscription', () => pauseSubscription(1, { resume: false })],
+    ['cancelSubscription', () => cancelSubscription(1, { atPeriodEnd: true })],
   ])('%s refuses on a mode mismatch WITHOUT calling Stripe', async (_name, run) => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_x';
     process.env.STRIPE_EXPECTED_LIVEMODE = 'false';
@@ -265,7 +273,7 @@ describe('the Stripe mode assertion', () => {
 
 describe('changePlan', () => {
   it('updates the item price with an idempotency key and always_invoice', async () => {
-    await changePlan(1, { planId: 'professional' }, actor);
+    await changePlan(1, { planId: 'professional' });
 
     expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
       'sub_1',
@@ -281,14 +289,14 @@ describe('changePlan', () => {
   });
 
   it('keeps ONE key across a bucket boundary, because a duplicate here invoices', async () => {
-    await changePlan(1, { planId: 'professional' }, actor);
+    await changePlan(1, { planId: 'professional' });
     const first = h.subscriptionsUpdate.mock.calls.at(-1)![2];
 
     // A minute later — a different bucket for every other action, and the same
     // key for this one. That difference IS the design (see billing-actions §2),
     // so it is asserted rather than left to a docblock.
     vi.setSystemTime(new Date(FROZEN_NOW.getTime() + 90_000));
-    await changePlan(1, { planId: 'professional' }, actor);
+    await changePlan(1, { planId: 'professional' });
     const second = h.subscriptionsUpdate.mock.calls.at(-1)![2];
 
     expect(second).toEqual(first);
@@ -296,7 +304,7 @@ describe('changePlan', () => {
   });
 
   it('looks the price up by the subscription’s CURRENT interval and community type', async () => {
-    await changePlan(1, { planId: 'professional' }, actor);
+    await changePlan(1, { planId: 'professional' });
 
     const priceLookup = h.fromCalls.find((call) => call.table === 'stripe_prices');
     // The column is `billing_interval`, not `interval` — and the interval is the
@@ -312,6 +320,7 @@ describe('changePlan', () => {
   it('keeps an annual subscription annual', async () => {
     h.subscriptionsRetrieve.mockResolvedValueOnce({
       id: 'sub_1',
+      status: 'active',
       trial_end: null,
       cancel_at_period_end: false,
       pause_collection: null,
@@ -319,14 +328,14 @@ describe('changePlan', () => {
       items: { data: [{ id: 'si_1', price: { id: 'price_ess_y', recurring: { interval: 'year' } } }] },
     });
 
-    await changePlan(1, { planId: 'professional' }, actor);
+    await changePlan(1, { planId: 'professional' });
 
     const priceLookup = h.fromCalls.find((call) => call.table === 'stripe_prices');
     expect(priceLookup?.filters).toContainEqual(['billing_interval', 'year']);
   });
 
   it('reports the plan it moved from and to, and nothing else', async () => {
-    const result = await changePlan(1, { planId: 'professional' }, actor);
+    const result = await changePlan(1, { planId: 'professional' });
     expect(result).toEqual({
       subscriptionId: 'sub_1',
       before: { plan: 'essentials', priceId: 'price_ess_m' },
@@ -340,7 +349,7 @@ describe('changePlan', () => {
       error: null,
     };
 
-    await expect(changePlan(1, { planId: 'professional' }, actor)).rejects.toThrow(
+    await expect(changePlan(1, { planId: 'professional' })).rejects.toThrow(
       /no Stripe subscription/i,
     );
     expect(stripeWriteCallCount()).toBe(0);
@@ -349,7 +358,7 @@ describe('changePlan', () => {
   it('refuses, without writing, when no price row is configured', async () => {
     h.fixtures.stripe_prices = { data: null, error: { message: 'no rows' } };
 
-    await expect(changePlan(1, { planId: 'enterprise' }, actor)).rejects.toThrow(
+    await expect(changePlan(1, { planId: 'enterprise' })).rejects.toThrow(
       /No Stripe price is configured/,
     );
     expect(stripeWriteCallCount()).toBe(0);
@@ -358,7 +367,7 @@ describe('changePlan', () => {
   it('404s on an unknown community before anything else happens', async () => {
     h.fixtures.communities = { data: null, error: { message: 'no rows' } };
 
-    await expect(changePlan(999, { planId: 'professional' }, actor)).rejects.toThrow(
+    await expect(changePlan(999, { planId: 'professional' })).rejects.toThrow(
       /Community not found/,
     );
     expect(stripeWriteCallCount()).toBe(0);
@@ -369,7 +378,7 @@ describe('extendTrial', () => {
   it('adds days to NOW when the current trial end is already past', async () => {
     vi.setSystemTime(new Date('2026-09-08T00:00:00Z'));
     // The fixture's trial_end (1760000000 = 2025-10-09) is in the past.
-    await extendTrial(1, { days: 14 }, actor);
+    await extendTrial(1, { days: 14 });
 
     const params = h.subscriptionsUpdate.mock.calls.at(-1)![1] as {
       trial_end: number;
@@ -384,6 +393,7 @@ describe('extendTrial', () => {
     vi.setSystemTime(new Date('2026-09-08T00:00:00Z'));
     h.subscriptionsRetrieve.mockResolvedValueOnce({
       id: 'sub_1',
+      status: 'active',
       trial_end: Math.floor(Date.parse('2026-09-20T00:00:00Z') / 1000),
       cancel_at_period_end: false,
       pause_collection: null,
@@ -391,7 +401,7 @@ describe('extendTrial', () => {
       items: { data: [{ id: 'si_1', price: { id: 'price_ess_m', recurring: { interval: 'month' } } }] },
     });
 
-    await extendTrial(1, { days: 7 }, actor);
+    await extendTrial(1, { days: 7 });
 
     const params = h.subscriptionsUpdate.mock.calls.at(-1)![1] as { trial_end: number };
     // From 2026-09-20, not from 2026-09-08 — otherwise a 7-day extension of a
@@ -438,12 +448,13 @@ describe('extendTrial', () => {
     const t0 = Date.parse('2026-09-08T00:00:00Z');
     vi.setSystemTime(new Date(t0));
 
-    await extendTrial(1, { days: 30 }, actor);
+    await extendTrial(1, { days: 30 });
     const firstKey = h.subscriptionsUpdate.mock.calls.at(-1)![2];
 
     // The retry reads POST-write state: trial_end is now 30 days further out.
     h.subscriptionsRetrieve.mockResolvedValueOnce({
       id: 'sub_1',
+      status: 'active',
       trial_end: Math.floor(Date.parse('2026-10-08T00:00:00Z') / 1000),
       cancel_at_period_end: false,
       pause_collection: null,
@@ -452,7 +463,7 @@ describe('extendTrial', () => {
     });
     // Five seconds later: same submission, same 60-second bucket.
     vi.setSystemTime(new Date(t0 + 5_000));
-    await extendTrial(1, { days: 30 }, actor);
+    await extendTrial(1, { days: 30 });
     const retryKey = h.subscriptionsUpdate.mock.calls.at(-1)![2];
 
     expect(retryKey).toEqual(firstKey);
@@ -470,11 +481,11 @@ describe('extendTrial', () => {
   it('gives a DELIBERATE repeat a minute later a different key', async () => {
     const t0 = Date.parse('2026-09-08T00:00:00Z');
     vi.setSystemTime(new Date(t0));
-    await extendTrial(1, { days: 30 }, actor);
+    await extendTrial(1, { days: 30 });
     const first = h.subscriptionsUpdate.mock.calls.at(-1)![2];
 
     vi.setSystemTime(new Date(t0 + 90_000));
-    await extendTrial(1, { days: 30 }, actor);
+    await extendTrial(1, { days: 30 });
     const later = h.subscriptionsUpdate.mock.calls.at(-1)![2];
 
     // Same inputs, a different bucket — so the operator's SECOND decision runs
@@ -485,7 +496,7 @@ describe('extendTrial', () => {
 
 describe('applyCoupon', () => {
   it('validates the coupon before touching the subscription', async () => {
-    await expect(applyCoupon(1, { coupon: 'NOPE' }, actor)).rejects.toThrow(/coupon/i);
+    await expect(applyCoupon(1, { coupon: 'NOPE' })).rejects.toThrow(/coupon/i);
 
     // The whole point of retrieving first: a bad code changes nothing. Without
     // this ordering, `discounts` would REPLACE any existing discount.
@@ -494,7 +505,7 @@ describe('applyCoupon', () => {
   });
 
   it('applies a valid coupon through the discounts array with an idempotency key', async () => {
-    await applyCoupon(1, { coupon: 'SUMMER' }, actor);
+    await applyCoupon(1, { coupon: 'SUMMER' });
 
     expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
       'sub_1',
@@ -508,6 +519,7 @@ describe('applyCoupon', () => {
   it('records the coupon it replaced, read off discount.source.coupon', async () => {
     h.subscriptionsRetrieve.mockResolvedValueOnce({
       id: 'sub_1',
+      status: 'active',
       trial_end: null,
       cancel_at_period_end: false,
       pause_collection: null,
@@ -517,7 +529,7 @@ describe('applyCoupon', () => {
       items: { data: [{ id: 'si_1', price: { id: 'price_ess_m', recurring: { interval: 'month' } } }] },
     });
 
-    const result = await applyCoupon(1, { coupon: 'SUMMER' }, actor);
+    const result = await applyCoupon(1, { coupon: 'SUMMER' });
     expect(result.before).toEqual({ coupon: 'SPRING' });
     expect(result.after).toEqual({ coupon: 'SUMMER' });
   });
@@ -525,7 +537,7 @@ describe('applyCoupon', () => {
 
 describe('pauseSubscription', () => {
   it('pauses as mark_uncollectible with a pause-specific key', async () => {
-    await pauseSubscription(1, { resume: false }, actor);
+    await pauseSubscription(1, { resume: false });
 
     expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
       'sub_1',
@@ -535,7 +547,7 @@ describe('pauseSubscription', () => {
   });
 
   it('resumes with an empty string, and a DIFFERENT key from the pause', async () => {
-    await pauseSubscription(1, { resume: true }, actor);
+    await pauseSubscription(1, { resume: true });
 
     expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
       'sub_1',
@@ -549,6 +561,7 @@ describe('pauseSubscription', () => {
   it('reports the pause state it actually found, not the one it assumed', async () => {
     h.subscriptionsRetrieve.mockResolvedValueOnce({
       id: 'sub_1',
+      status: 'active',
       trial_end: null,
       cancel_at_period_end: false,
       pause_collection: { behavior: 'mark_uncollectible' },
@@ -556,7 +569,7 @@ describe('pauseSubscription', () => {
       items: { data: [{ id: 'si_1', price: { id: 'price_ess_m', recurring: { interval: 'month' } } }] },
     });
 
-    const result = await pauseSubscription(1, { resume: true }, actor);
+    const result = await pauseSubscription(1, { resume: true });
     expect(result.before).toEqual({ paused: true });
     expect(result.after).toEqual({ paused: false });
   });
@@ -564,7 +577,7 @@ describe('pauseSubscription', () => {
 
 describe('cancelSubscription', () => {
   it('schedules a period-end cancel through update, never through cancel', async () => {
-    await cancelSubscription(1, { atPeriodEnd: true }, actor);
+    await cancelSubscription(1, { atPeriodEnd: true });
 
     expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
       'sub_1',
@@ -577,7 +590,7 @@ describe('cancelSubscription', () => {
   });
 
   it('cancels immediately through the terminal call, with a different key', async () => {
-    await cancelSubscription(1, { atPeriodEnd: false }, actor);
+    await cancelSubscription(1, { atPeriodEnd: false });
 
     expect(h.subscriptionsCancel).toHaveBeenCalledWith('sub_1', undefined, {
       idempotencyKey: `admin:cancel:sub_1:now:${idempotencyWindow()}`,
@@ -585,12 +598,39 @@ describe('cancelSubscription', () => {
     expect(h.subscriptionsUpdate).not.toHaveBeenCalled();
   });
 
+  it('records the status it MEASURED as `before.canceled`, not an assumption', async () => {
+    // The audit row's `before` used to hard-code `canceled: false`. Cancelling a
+    // subscription that is ALREADY canceled — which is exactly the case an
+    // operator reaches for when they are unsure whether the first cancel took —
+    // therefore filed a permanent, uncorrectable claim that it was live.
+    h.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: 'sub_1',
+      status: 'canceled',
+      trial_end: null,
+      cancel_at_period_end: false,
+      pause_collection: null,
+      discounts: [],
+      items: { data: [{ id: 'si_1', price: { id: 'price_ess_m', recurring: { interval: 'month' } } }] },
+    });
+
+    const result = await cancelSubscription(1, { atPeriodEnd: false });
+    expect(result.before).toEqual({ cancelAtPeriodEnd: false, canceled: true });
+  });
+
+  it('records `canceled: false` for a subscription that really is live', async () => {
+    // The control for the case above: the measurement has to be able to say
+    // "not canceled" too, or the fix would just be a constant in the other
+    // direction.
+    const result = await cancelSubscription(1, { atPeriodEnd: false });
+    expect(result.before).toEqual({ cancelAtPeriodEnd: false, canceled: false });
+  });
+
   it('reports the two outcomes distinguishably in the audit payload', async () => {
-    expect((await cancelSubscription(1, { atPeriodEnd: true }, actor)).after).toEqual({
+    expect((await cancelSubscription(1, { atPeriodEnd: true })).after).toEqual({
       cancelAtPeriodEnd: true,
       canceled: false,
     });
-    expect((await cancelSubscription(1, { atPeriodEnd: false }, actor)).after).toEqual({
+    expect((await cancelSubscription(1, { atPeriodEnd: false })).after).toEqual({
       cancelAtPeriodEnd: false,
       canceled: true,
     });
@@ -599,7 +639,7 @@ describe('cancelSubscription', () => {
 
 describe('the community read', () => {
   it('looks the community up by primary key and does NOT filter demos or deleted rows', async () => {
-    await cancelSubscription(1, { atPeriodEnd: true }, actor);
+    await cancelSubscription(1, { atPeriodEnd: true });
 
     const read = h.fromCalls.find((call) => call.table === 'communities');
     // A soft-deleted or demo community that still carries a live subscription is

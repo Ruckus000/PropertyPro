@@ -217,10 +217,14 @@ describe('filterBillingRows', () => {
 });
 
 describe('buildTimeline', () => {
+  /** Injected, never read off the wall clock — see the function's docblock. */
+  const at = new Date('2026-09-11T00:00:00Z');
+
   it('records the cancel-at-period-end schedule and sorts newest first', () => {
     const entries = buildTimeline(
       sub({ cancel_at_period_end: true }),
       mapSubscription(sub({ cancel_at_period_end: true }), community),
+      at,
     );
     expect(entries.map((e) => e.text)).toEqual(['Cancels at period end', 'Subscription created']);
     expect(entries[0]!.tone).toBe('danger');
@@ -228,14 +232,29 @@ describe('buildTimeline', () => {
 
   it('records a payment failure for a past-due subscription', () => {
     const pastDue = sub({ status: 'past_due' });
-    const texts = buildTimeline(pastDue, mapSubscription(pastDue, community)).map((e) => e.text);
+    const texts = buildTimeline(pastDue, mapSubscription(pastDue, community), at).map((e) => e.text);
     expect(texts).toContain('Payment failed');
   });
 
   it('names the pause behaviour rather than just "paused"', () => {
     const paused = sub({ pause_collection: { behavior: 'mark_uncollectible', resumes_at: null } });
-    const texts = buildTimeline(paused, mapSubscription(paused, community)).map((e) => e.text);
+    const texts = buildTimeline(paused, mapSubscription(paused, community), at).map((e) => e.text);
     expect(texts).toContain('Collection paused (mark_uncollectible)');
+  });
+
+  it('reads the trial tense off the INJECTED now, not the wall clock', () => {
+    // The one branch that used to call `Date.now()`. Two calls differing only in
+    // `now` must produce two different strings; a wall-clock read would make
+    // both of them say the same thing forever.
+    const trialing = sub({ trial_end: Math.floor(Date.parse('2026-09-20T00:00:00Z') / 1000) });
+    const row = mapSubscription(trialing, community);
+
+    expect(buildTimeline(trialing, row, new Date('2026-09-11T00:00:00Z')).map((e) => e.text)).toContain(
+      'Trial ends',
+    );
+    expect(buildTimeline(trialing, row, new Date('2026-09-25T00:00:00Z')).map((e) => e.text)).toContain(
+      'Trial ended',
+    );
   });
 });
 

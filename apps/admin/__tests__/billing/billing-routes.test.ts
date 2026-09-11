@@ -215,11 +215,7 @@ describe('the happy path and its audit row', () => {
     const res = await cancelRoute(req({ confirm: true, atPeriodEnd: true }), params());
 
     expect(res.status).toBe(200);
-    expect(h.cancelSubscription).toHaveBeenCalledWith(
-      1,
-      { atPeriodEnd: true },
-      { id: 'u', email: 'admin@propertypro.test' },
-    );
+    expect(h.cancelSubscription).toHaveBeenCalledWith(1, { atPeriodEnd: true });
     expect(h.logAdminAction).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'subscription_canceled',
@@ -239,6 +235,11 @@ describe('the happy path and its audit row', () => {
     ['extend-trial', extendTrialRoute, { days: 14 }, 'subscription_trial_extended'],
     ['apply-coupon', applyCouponRoute, { coupon: 'SUMMER' }, 'subscription_coupon_applied'],
     ['pause', pauseRoute, { resume: false }, 'subscription_paused'],
+    // A RESUME is not a pause. One route, one Stripe field, two audit actions —
+    // `platform_admin_audit_log` is append-only, so a row filed under the wrong
+    // name is permanent, and `where action = 'subscription_paused'` returning
+    // resumes is a query nobody can fix afterwards.
+    ['pause (resume)', pauseRoute, { resume: true }, 'subscription_resumed'],
     ['cancel', cancelRoute, { atPeriodEnd: true }, 'subscription_canceled'],
   ])('%s records its own audit action', async (_n, route, body, auditAction) => {
     const res = await route(req({ ...body, confirm: true }), params('42'));

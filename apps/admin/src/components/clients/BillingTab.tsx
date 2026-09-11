@@ -8,13 +8,22 @@
  * mode, deliberately — and renders the plan, the action tiles, the invoices and
  * the lifecycle timeline.
  *
- * ## All four states, per `.claude/rules/design.md`
+ * ## All FIVE states, per `.claude/rules/design.md`
  *
  * - **loading** — skeleton blocks while the fetch is in flight.
  * - **error** — the read failed: an `AlertBanner status="danger"` carrying the
  *   server's own message, plus a Retry. Retry is safe here and only here,
  *   because this is a GET; none of the five WRITES offers one (see
  *   `BillingActionDialog`).
+ * - **not configured** — a FIFTH state, and distinct from the error above.
+ *   `getCommunityBilling` calls `assertStripeConfigured()`, which throws a 503
+ *   carrying `code: 'STRIPE_NOT_CONFIGURED'`. This component used to read only
+ *   `error.message` and discard the code, so a deployment with no Stripe key got
+ *   a red "Billing could not be loaded" and a Retry button that would fail
+ *   identically every time — a failure headline over a configuration fact, and
+ *   an action that cannot succeed. It now branches on the code to the same
+ *   warning banner plus `EmptyState` pair `/billing/page.tsx` already uses, with
+ *   NO Retry. `/billing/page.tsx` got this right; this file did not.
  * - **empty** — the community has no `stripe_subscription_id`. Not an error:
  *   plenty of communities are on a comped access plan. It still links into
  *   Stripe, because "no subscription linked here" and "no subscription exists"
@@ -54,10 +63,11 @@ import {
   CardTitle,
   EmptyState,
   Skeleton,
-  type BadgeVariant,
 } from '@propertypro/ui';
+import { planLabel } from '@propertypro/shared';
 import type { CommunityBilling } from '@/lib/server/billing';
 import { formatCentsAsCurrency } from '@/lib/billing/format';
+import { BILLING_STATUS_LABELS, BILLING_STATUS_VARIANTS } from '@/lib/billing/status-display';
 import { BillingActionDialog, type BillingAction } from './BillingActionDialog';
 import { InvoicesCard } from './InvoicesCard';
 import { SubscriptionTimeline } from './SubscriptionTimeline';
@@ -65,28 +75,6 @@ import { SubscriptionTimeline } from './SubscriptionTimeline';
 interface BillingTabProps {
   communityId: number;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  active: 'Active',
-  trialing: 'Trial',
-  past_due: 'Past due',
-  canceled: 'Canceled',
-  other: 'Other',
-};
-
-const STATUS_VARIANTS: Record<string, BadgeVariant> = {
-  active: 'success',
-  trialing: 'info',
-  past_due: 'warning',
-  canceled: 'neutral',
-  other: 'neutral',
-};
-
-const PLAN_LABELS: Record<string, string> = {
-  essentials: 'Essentials',
-  professional: 'Professional',
-  operations_plus: 'Operations Plus',
-};
 
 /** The five write tiles, in the order an operator reaches for them. */
 const ACTION_TILES: { action: BillingAction; label: string }[] = [
@@ -109,29 +97,52 @@ function formatDate(iso: string | null): string | null {
   });
 }
 
+/**
+ * The failure, with its CODE kept.
+ *
+ * Reading only `message` is what made a configuration state render as a red
+ * failure: `withAdminErrorHandler` carries an `AppError`'s `code` through, and
+ * that code is the only thing distinguishing "no Stripe key in this deployment"
+ * from "the read broke".
+ */
+interface LoadFailure {
+  code: string;
+  message: string;
+}
+
+function readFailure(payload: unknown): LoadFailure {
+  const error = (payload as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+  const message = typeof error?.message === 'string' ? error.message.trim() : '';
+  return {
+    code: typeof error?.code === 'string' ? error.code : 'UNKNOWN',
+    message: message.length > 0 ? message : 'Billing could not be loaded.',
+  };
+}
+
 export function BillingTab({ communityId }: BillingTabProps) {
   const [billing, setBilling] = useState<CommunityBilling | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<LoadFailure | null>(null);
   const [openAction, setOpenAction] = useState<BillingAction | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setFailure(null);
     try {
       const response = await fetch(`/api/admin/communities/${communityId}/billing`);
       const payload: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        const message = (payload as { error?: { message?: unknown } } | null)?.error?.message;
-        throw new Error(
-          typeof message === 'string' && message.trim().length > 0
-            ? message
-            : 'Billing could not be loaded.',
-        );
+        setFailure(readFailure(payload));
+        return;
       }
       setBilling((payload as { data: CommunityBilling }).data);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Billing could not be loaded.');
+    } catch {
+      // A transport failure has no server code to read, so it is a genuine
+      // error rather than a configuration state.
+      setFailure({
+        code: 'NETWORK',
+        message: 'We could not reach the server. Please try again.',
+      });
     } finally {
       setLoading(false);
     }
@@ -151,12 +162,36 @@ export function BillingTab({ communityId }: BillingTabProps) {
     );
   }
 
-  if (error) {
+  // Not configured is NOT an error, and must not be dressed as one. No danger
+  // styling and no Retry: retrying cannot set an environment variable, and an
+  // action that will fail identically every time is worse than no action.
+  if (failure?.code === 'STRIPE_NOT_CONFIGURED') {
+    return (
+      <div className="space-y-6">
+        <AlertBanner
+          status="warning"
+          title="Stripe is not configured"
+          description={failure.message}
+        />
+        <Card>
+          <CardContent className="p-6">
+            <EmptyState
+              icon={CreditCard}
+              title="Nothing to show until a Stripe key is set"
+              description="This is a configuration state, not a billing failure — set STRIPE_SECRET_KEY for this deployment and this tab will render."
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (failure) {
     return (
       <AlertBanner
         status="danger"
         title="Billing could not be loaded"
-        description={error}
+        description={failure.message}
         action={
           <Button size="sm" variant="outline" onClick={() => void load()}>
             Retry
@@ -205,8 +240,8 @@ export function BillingTab({ communityId }: BillingTabProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Current plan</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge variant={STATUS_VARIANTS[row.status] ?? 'neutral'} size="sm">
-                {STATUS_LABELS[row.status] ?? row.status}
+              <Badge variant={BILLING_STATUS_VARIANTS[row.status]} size="sm">
+                {BILLING_STATUS_LABELS[row.status]}
               </Badge>
               {!livemode && (
                 <Badge variant="warning" size="sm" outlined>
@@ -218,7 +253,7 @@ export function BillingTab({ communityId }: BillingTabProps) {
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-xl font-semibold text-content">
-            {PLAN_LABELS[row.plan] ?? row.plan}
+            {planLabel(row.plan)}
           </p>
           <p className="text-sm text-content-secondary">
             {formatCentsAsCurrency(row.mrrCents)} / month

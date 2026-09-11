@@ -19,10 +19,33 @@
  * retry result an operator needs to read is not something that should disappear
  * on a timer, and `aria-live` announces it without stealing focus.
  *
- * A retry is reported honestly in three ways: it succeeded, the job itself
- * refused (HTTP status carried through), or the console could not reach the web
- * app. `router.refresh()` re-reads the server report on success so the row's
- * attempt count and age stop being stale.
+ * A retry is reported honestly, and "honestly" now distinguishes FOUR outcomes
+ * rather than three. The one that was missing is the difference between *the
+ * retry was not delivered* and *the job refused it*:
+ *
+ *  - **succeeded.**
+ *  - **not delivered — 404.** The endpoint does not exist at that path. Nothing
+ *    ran, so there is nothing in Sentry, and telling an operator to look there
+ *    sends them to an empty page during an incident.
+ *  - **not delivered — 401/403.** The web app rejected the credential. That is a
+ *    `CRON_SECRET` mismatch between the two deployments, which is exactly the
+ *    failure that once had every cron 401ing silently for months behind a green
+ *    dashboard — the thing this board exists to make visible.
+ *  - **the job ran and failed.** Any other status. Sentry is the right place.
+ *
+ * The old copy called all three of those "The job ran and failed (HTTP n).
+ * Check Sentry for the cause", which was a wrong sentence for two of them.
+ *
+ * `router.refresh()` re-reads the server report on success so the row's attempt
+ * count and age stop being stale.
+ *
+ * ## Why the live region is always mounted
+ *
+ * `<p role="status">` is rendered unconditionally and its TEXT appears later. A
+ * live region inserted into the DOM at the same moment as its content is
+ * announced unreliably by NVDA and JAWS — the region has to exist before it
+ * changes for the change to be observed. An empty region renders nothing
+ * visible, so this costs no layout.
  */
 import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -35,6 +58,23 @@ interface FailedJobsListProps {
 }
 
 type RetryOutcome = { state: 'ok' | 'failed'; message: string };
+
+/**
+ * What a non-ok status from the web app actually means.
+ *
+ * A 404 or a 401 means the retry never reached the job — a different sentence
+ * from "the job refused it", and pointing at Sentry for either sends an operator
+ * to an empty page while something is on fire.
+ */
+function undeliveredOrFailed(status: number | undefined): string {
+  if (status === 404) {
+    return 'The retry was not delivered: the web app has no endpoint at that path (HTTP 404). The job did not run, so there is nothing in Sentry.';
+  }
+  if (status === 401 || status === 403) {
+    return `The web app rejected the retry (HTTP ${status}). That is a CRON_SECRET mismatch between this console and the web deployment — the job did not run.`;
+  }
+  return `The job ran and failed (HTTP ${status ?? 'unknown'}). Check Sentry for the cause.`;
+}
 
 export function FailedJobsList({ jobs }: FailedJobsListProps) {
   const router = useRouter();
@@ -73,10 +113,7 @@ export function FailedJobsList({ jobs }: FailedJobsListProps) {
         } else {
           setOutcomes((current) => ({
             ...current,
-            [slug]: {
-              state: 'failed',
-              message: `The job ran and failed (HTTP ${result?.status ?? 'unknown'}). Check Sentry for the cause.`,
-            },
+            [slug]: { state: 'failed', message: undeliveredOrFailed(result?.status) },
           }));
         }
       } catch {
@@ -154,21 +191,29 @@ export function FailedJobsList({ jobs }: FailedJobsListProps) {
                   <p className="mt-1 text-xs text-content-tertiary">
                     {job.when} · {job.attempts}
                   </p>
-                  {outcome && (
-                    <p
-                      role="status"
-                      className={`mt-2 flex items-start gap-1.5 text-xs ${
-                        outcome.state === 'ok' ? 'text-status-success' : 'text-status-danger'
-                      }`}
-                    >
-                      {outcome.state === 'ok' ? (
+                  {/*
+                    Always mounted, even with nothing to say. A live region
+                    inserted alongside its own text is announced unreliably by
+                    NVDA and JAWS; the region has to exist BEFORE it changes.
+                  */}
+                  <p
+                    role="status"
+                    className={
+                      outcome
+                        ? `mt-2 flex items-start gap-1.5 text-xs ${
+                            outcome.state === 'ok' ? 'text-status-success' : 'text-status-danger'
+                          }`
+                        : 'sr-only'
+                    }
+                  >
+                    {outcome &&
+                      (outcome.state === 'ok' ? (
                         <CheckCircle2 size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
                       ) : (
                         <AlertTriangle size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
-                      )}
-                      {outcome.message}
-                    </p>
-                  )}
+                      ))}
+                    {outcome?.message}
+                  </p>
                 </div>
 
                 {job.retryable && job.slug && (

@@ -32,5 +32,5 @@ const schema = confirmedActionSchema({
 export const POST = billingActionRoute({
   schema,
   auditAction: 'subscription_trial_extended',
-  run: (communityId, input, actor) => extendTrial(communityId, { days: input.days }, actor),
+  run: (communityId, input) => extendTrial(communityId, { days: input.days }),
 });

@@ -35,6 +35,27 @@ import type { CookieOptionsWithName } from '@supabase/ssr';
  */
 export const ADMIN_COOKIE_OPTIONS: CookieOptionsWithName = {
   name: 'sb-admin-auth-token',
+  /**
+   * Stated, not inherited.
+   *
+   * `@supabase/ssr` spreads its own `DEFAULT_COOKIE_OPTIONS` beneath whatever a
+   * caller passes, and that constant already sets `sameSite: 'lax'`. So this
+   * line changes no behaviour today — it changes what a change would cost.
+   *
+   * `SameSite=Lax` is the ONLY thing standing between a cross-site form POST and
+   * the five money-moving billing routes, and until now no file in this repo
+   * stated it and no test pinned it. A `@supabase/ssr` bump that altered the
+   * default would have been a silent CSRF regression with every check green —
+   * the same failure shape as the `NEXT_PUBLIC_COOKIE_DOMAIN` incident this
+   * file's docblock already records. Writing it here makes it ours, and
+   * `cookie-config.test.ts` asserts it. (`parseJsonBody` closes the same hazard
+   * independently by requiring `application/json`; neither control should be the
+   * only one.)
+   *
+   * Explicit also matters on its own terms: Chrome's "Lax+POST" two-minute
+   * grace applies only to cookies that OMIT the attribute.
+   */
+  sameSite: 'lax',
   // Next inlines NODE_ENV at build time, so this is correct in the client
   // bundles too. `domain` is deliberately absent — see above.
   ...(process.env.NODE_ENV === 'production' && { secure: true }),

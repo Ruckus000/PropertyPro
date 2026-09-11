@@ -13,8 +13,10 @@
  * - a non-retryable job must render NO retry button, because there is no
  *   endpoint behind one for a Stripe event.
  */
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import { ErrorsList } from '@/components/health/ErrorsList';
 import { FailedJobsList } from '@/components/health/FailedJobsList';
@@ -148,5 +150,69 @@ describe('FailedJobsList', () => {
     render(<FailedJobsList jobs={[]} />);
     expect(screen.getByText('Every scheduled job is healthy')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull();
+  });
+
+  it('mounts the live region BEFORE there is anything to announce', () => {
+    // A live region inserted into the DOM alongside its own text is announced
+    // unreliably by NVDA and JAWS. The region has to already exist for the
+    // change to be observed, so it renders empty and `sr-only`.
+    render(<FailedJobsList jobs={[cron]} />);
+    const region = screen.getByRole('status');
+    expect(region.textContent).toBe('');
+  });
+
+  describe('what a non-ok retry actually means', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /** The route answers 200 with `ok:false` and the upstream status. */
+    function mockRetry(status: number) {
+      global.fetch = vi.fn(
+        async () => new Response(JSON.stringify({ data: { status, ok: false } }), { status: 200 }),
+      ) as unknown as typeof fetch;
+    }
+
+    it('calls a 404 undelivered, and does NOT send the operator to Sentry', async () => {
+      // The nested-slug bug produced exactly this. "The job ran and failed —
+      // check Sentry" was wrong twice over: it did not run, and Sentry is empty.
+      mockRetry(404);
+      render(<FailedJobsList jobs={[cron]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry expire-demos' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('status').textContent).toContain('was not delivered'),
+      );
+      expect(screen.getByRole('status').textContent).not.toContain('Check Sentry');
+    });
+
+    it('names CRON_SECRET on a 401 rather than blaming the job', async () => {
+      // Every cron 401ing silently behind a green dashboard is this repo's own
+      // history. A board that reports it as "the job failed" repeats it.
+      mockRetry(401);
+      render(<FailedJobsList jobs={[cron]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry expire-demos' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('status').textContent).toContain('CRON_SECRET'),
+      );
+      expect(screen.getByRole('status').textContent).toContain('did not run');
+    });
+
+    it('still points at Sentry for a genuine job failure', async () => {
+      // The control: the original sentence has to survive for the case it was
+      // actually right about, or this is a regression wearing a test.
+      mockRetry(500);
+      render(<FailedJobsList jobs={[cron]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry expire-demos' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('status').textContent).toContain('The job ran and failed'),
+      );
+      expect(screen.getByRole('status').textContent).toContain('Check Sentry');
+    });
   });
 });
