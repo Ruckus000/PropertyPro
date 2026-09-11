@@ -31,25 +31,26 @@
  * machinery guarding a single pair of files.
  *
  * It proves the weaker, structurally checkable thing: **no POPULATION READ of
- * these two tables inside `apps/admin/src/lib/server` is silently unscoped.**
- * Both live defects would have failed it. A future read that forgets the
- * predicate cannot reach main without either carrying it or writing down, at the
- * call site, why it is correct without it.
+ * these two tables inside `apps/admin/src/lib` is silently unscoped.** Both live
+ * defects would have failed it. A future read that forgets the predicate cannot
+ * reach main without either carrying it or writing down, at the call site, why it
+ * is correct without it.
  *
  * Both qualifiers are load-bearing, and neither is an accident:
  *
- *  - **Inside the server library.** Reads elsewhere in `apps/admin/src` are
- *    unguarded. `(console)/settings/page.tsx` is one: a real-community count of
- *    exactly the kind this guard is about, correct today and not checked here.
- *    The root stays narrow deliberately — see `DEFAULT_ROOT_REL`.
- *  - **A population read.** Widening to all of `apps/admin/src` would pull in
- *    WRITES scoped by primary key, where the real-community predicate is
- *    meaningless: `api/admin/access-plans/route.ts` updates
+ *  - **Inside `lib`.** Reads in `apps/admin/src/app` are NOT guarded.
+ *    `(console)/settings/page.tsx` is one: a real-community count of exactly the
+ *    kind this guard is about, correct today and not checked here. Two reviewers
+ *    proposed widening to all of `apps/admin/src`, each asserting it would be
+ *    green because the outside reads are "correct" / "`.eq('id', …)` shaped".
+ *    Measured, it is not: being correct is not the same as carrying the marker
+ *    literals. That root is a separate decision, not an oversight.
+ *  - **A population read.** Mutations are excluded by rule, not by exemption —
+ *    see `MUTATION_METHODS`. `api/admin/access-plans/route.ts` updates
  *    `free_access_expires_at` by `.eq('id', communityId)`, and
  *    `api/admin/deletion-requests/[id]/recover/route.ts` exists precisely to set
- *    `deleted_at: null`. Requiring the predicate there would force exempts onto
- *    correct code, and telling a read from a write is machinery this guard does
- *    not have.
+ *    `deleted_at: null`. Requiring the real-community predicate of a write is a
+ *    category error, and exempting one would be paperwork on a non-instance.
  *
  * THE UNIT OF ANALYSIS IS THE FLUENT CALL CHAIN
  * ---------------------------------------------
@@ -148,7 +149,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEFAULT_ROOT_REL = 'apps/admin/src/lib/server';
+const DEFAULT_ROOT_REL = 'apps/admin/src/lib';
 
 /** The tables whose reads must be scoped, and the literals that scope them. */
 const REQUIRED_MARKERS: Record<string, readonly string[]> = {
@@ -167,6 +168,23 @@ const TABLES = Object.keys(REQUIRED_MARKERS);
  * without restricting the rows returned, which is the whole distinction this
  * set encodes. Anything not listed here contributes no markers (fail closed).
  */
+/**
+ * PostgREST methods that make a chain a MUTATION rather than a population read.
+ *
+ * This guard's whole subject is "does this read return the population the screen
+ * claims". A `.delete().eq('id', n)` or `.update({…}).eq('id', n)` returns no
+ * population at all, so requiring the real-community predicate of it is a
+ * category error — and a live one: widening the root surfaced
+ * `lib/db/demo-queries.ts`'s `deleteCommunity`, a delete by primary key, and
+ * `api/admin/deletion-requests/[id]/recover`'s update exists precisely to CLEAR
+ * `deleted_at`. Exempting those would be paperwork on non-instances; excluding
+ * them is the rule matching its own stated subject.
+ *
+ * They are counted and reported, never silently dropped — a denominator that
+ * quietly omits rows is how a scan starts examining less than it claims.
+ */
+const MUTATION_METHODS: ReadonlySet<string> = new Set(['delete', 'update', 'insert', 'upsert']);
+
 const FILTER_METHODS: ReadonlySet<string> = new Set([
   'eq',
   'neq',
@@ -307,6 +325,8 @@ export interface TableRead {
 
 export interface ScanResult {
   reads: TableRead[];
+  /** Chains skipped because they mutate — reported, never silently dropped. */
+  mutations: number;
   violations: TableRead[];
   /** `sourceFile.parseDiagnostics.length`, or -1 if the detector is unavailable. */
   syntaxErrors: number;
@@ -359,6 +379,24 @@ function chainRoot(literal: ts.Node): ts.Node {
  * projection or an `.order(...)` sort key. Both name a column; neither
  * restricts the population returned.
  */
+/** True when any method in this chain mutates, making it a write, not a read. */
+function isMutationChain(node: ts.Node): boolean {
+  let found = false;
+  const walk = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(n)) {
+      const callee = n.expression;
+      if (ts.isPropertyAccessExpression(callee) && MUTATION_METHODS.has(callee.name.text)) {
+        found = true;
+        return;
+      }
+    }
+    ts.forEachChild(n, walk);
+  };
+  walk(node);
+  return found;
+}
+
 function filterLiteralsIn(node: ts.Node): string[] {
   const out: string[] = [];
   const walk = (n: ts.Node): void => {
@@ -411,11 +449,17 @@ export function scanSource(fileName: string, source: string): ScanResult {
   const lineOf = (pos: number): number => sf.getLineAndCharacterOfPosition(pos).line + 1;
 
   const reads: TableRead[] = [];
+  let mutations = 0;
 
   const visit = (node: ts.Node): void => {
     if (ts.isStringLiteralLike(node) && TABLES.includes(node.text)) {
       const table = node.text;
       const chain = chainRoot(node);
+      if (isMutationChain(chain)) {
+        mutations += 1;
+        ts.forEachChild(node, visit);
+        return;
+      }
       const startLine = lineOf(chain.getStart(sf));
       const endLine = lineOf(chain.getEnd());
       const filterLiterals = filterLiteralsIn(chain);
@@ -436,6 +480,7 @@ export function scanSource(fileName: string, source: string): ScanResult {
   const diagnostics = (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics;
   return {
     reads,
+    mutations,
     violations: reads.filter((r) => r.missing.length > 0 && !r.exempt),
     syntaxErrors: Array.isArray(diagnostics) ? diagnostics.length : -1,
   };
@@ -599,6 +644,36 @@ function selftest(): void {
       'user_roles: fetchRowsInPages helper',
       `const r = await fetchRowsInPages<CreatedAtRow>(db, 'user_roles', 'created_at', 'community_id', ids, 1000, 50000);`,
       0,
+    ],
+    // MUTATIONS are out of scope by rule. Requiring the real-community predicate
+    // of a write is a category error: a delete by primary key returns no
+    // population, and `recover`'s update exists to CLEAR `deleted_at`. These are
+    // the real shapes that widening the root surfaced.
+    [
+      'mutation: delete by primary key is not a population read',
+      `const r = await from('communities').delete().eq('id', communityId);`,
+      0,
+    ],
+    [
+      'mutation: update clearing deleted_at is not a population read',
+      `const r = await db.from('communities').update({ deleted_at: null }).eq('id', id);`,
+      0,
+    ],
+    [
+      'mutation: insert is not a population read',
+      `const r = await db.from('user_roles').insert({ community_id: id, user_id: u });`,
+      0,
+    ],
+    // …but a READ that merely sits near a mutation is still checked.
+    [
+      'a fully-scoped read is still green with the mutation rule in place',
+      `const r = await db.from('communities').select('id').eq('is_demo', false).is('deleted_at', null);`,
+      0,
+    ],
+    [
+      'unscoped read is still caught with the mutation rule in place',
+      `const r = await db.from('communities').select('id');`,
+      1,
     ],
     [
       'user_roles: helper with no community_id argument',
@@ -911,10 +986,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const perTable: Record<string, number> = Object.fromEntries(TABLES.map((t) => [t, 0]));
   let totalReads = 0;
   let exemptCount = 0;
+  let totalMutations = 0;
 
   for (const file of sources) {
     const rel = path.relative(repoRoot, file);
-    const { reads, violations: fileViolations, syntaxErrors } = scanSource(
+    const { reads, mutations, violations: fileViolations, syntaxErrors } = scanSource(
       file,
       fs.readFileSync(file, 'utf8'),
     );
@@ -927,6 +1003,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       );
       continue;
     }
+
+    totalMutations += mutations;
 
     for (const read of reads) {
       totalReads += 1;
@@ -954,9 +1032,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     );
   }
 
-  // A scan that examined nothing must never pass. `apps/admin/src/lib/server`
-  // holds 13 of these reads today; a collapse to zero means the reader, the root,
-  // or the data-access convention moved, and every check above passed vacuously.
+  // A scan that examined nothing must never pass. `apps/admin/src/lib` holds 14 of
+  // these reads today; a collapse to zero means the reader, the root, or the
+  // data-access convention moved, and every check above passed vacuously.
   if (totalReads === 0) {
     fail(
       `scanned ${sources.length} file(s) under '${rootRel}' and found ZERO reads of ` +
@@ -967,7 +1045,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const denominator =
     `scanned ${sources.length} files; examined ${totalReads} reads ` +
-    `(${TABLES.map((t) => `${perTable[t] ?? 0} ${t}`).join(', ')}); ${exemptCount} exempt`;
+    `(${TABLES.map((t) => `${perTable[t] ?? 0} ${t}`).join(', ')}); ${exemptCount} exempt; ` +
+    `${totalMutations} mutation chain(s) skipped`;
 
   if (violations.length > 0) {
     console.error(
