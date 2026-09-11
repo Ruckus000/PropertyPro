@@ -12,7 +12,6 @@ import { checkPermissionV2 } from '@/lib/db/access-control';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
-import { loadWizardState } from '@/lib/queries/wizard-state';
 import { getAuthorizedCommunityIds } from '@/lib/queries/cross-community';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
@@ -66,14 +65,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const features = getFeaturesForCommunity(membership.communityType);
   if (features.hasLeaseTracking) {
     redirect(`/dashboard/apartment?communityId=${context.communityId}`);
-  }
-
-  // Redirect condo communities to onboarding if wizard is not completed [P2-39]
-  if (features.hasCompliance) {
-    const wizardState = await loadWizardState(context.communityId, 'condo');
-    if (!wizardState || wizardState.status === 'in_progress') {
-      redirect(`/onboarding/condo?communityId=${context.communityId}`);
-    }
   }
 
   const canWriteAnnouncements = checkPermissionV2(
