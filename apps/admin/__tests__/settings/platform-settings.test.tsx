@@ -24,7 +24,16 @@ const PROPS = {
   admins: ADMINS,
   stats: STATS,
   alertPrefs: DEFAULT_ALERT_PREFS,
-};
+  integrations: {
+    services: [
+      { name: 'Stripe webhooks', state: 'ok', short: 'Processing', meta: '81 ms' },
+      { name: 'Resend', state: 'ok', short: 'Reachable', meta: '120 ms' },
+      { name: 'Supabase', state: 'ok', short: 'Reachable', meta: '9 ms' },
+    ],
+    sentryAnswered: true,
+    stripeLivemode: false,
+  },
+} satisfies Parameters<typeof PlatformSettings>[0];
 
 describe('PlatformSettings', () => {
   it('renders exactly one h1, with the design copy, and marks the current admin with a "You" badge', () => {
@@ -41,7 +50,7 @@ describe('PlatformSettings', () => {
     expect(html).toContain('ops@propertypro.example');
   });
 
-  it('renders the alerts section and still holds the slot for tasks 30 and 32', () => {
+  it('renders the alerts and integrations sections', () => {
     const html = renderToStaticMarkup(
       createElement(PlatformSettings, PROPS),
     );
@@ -53,9 +62,29 @@ describe('PlatformSettings', () => {
     expect(html).toContain('Alerts &amp; push notifications');
     expect(html).toContain('Production error spikes');
 
-    // The other two are still unbuilt; nothing may render them early.
+    // Task 32: the integrations section mounts after `InstallAppSection`.
+    expect(html).toContain('Integrations');
+    expect(html).toContain('Stripe key mode');
+
+    // `InstallAppSection` renders NOTHING until it has mounted and read the
+    // browser — every input it has is a client fact — so its button is
+    // legitimately absent from static markup and stays asserted-absent here.
     expect(html).not.toContain('Install app');
-    expect(html).not.toContain('Integrations');
+  });
+
+  it('places the integrations section last', () => {
+    const html = renderToStaticMarkup(
+      createElement(PlatformSettings, PROPS),
+    );
+
+    // Ordering is asserted against the alerts section rather than against
+    // `InstallAppSection`, which renders NOTHING on a server pass — an
+    // `indexOf` of absent copy returns -1 and would satisfy a "comes before"
+    // assertion no matter where the section was mounted.
+    const alerts = html.indexOf('Alerts &amp; push notifications');
+    const integrations = html.indexOf('Integrations');
+    expect(alerts).toBeGreaterThan(-1);
+    expect(integrations).toBeGreaterThan(alerts);
   });
 
   it('does not offer a Remove control for the signed-in admin', () => {
