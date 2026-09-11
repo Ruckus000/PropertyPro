@@ -34,9 +34,24 @@ export type SupportConsentGrantRow = {
   deleted_at: string | null;
 };
 
+/**
+ * `platform_admin_users` has FOUR columns and `email` is not one of them.
+ *
+ * This shim declared `email: string` and omitted `role` and `invited_by`, which
+ * inverted both directions of the type's usefulness: `select('email')`
+ * type-checked and would have failed at runtime with 42703 (verified against the
+ * migrated schema — `column "email" does not exist`), while `select('role')`, a
+ * column that does exist and carries the privilege level, was a type error.
+ *
+ * Identity for a platform admin comes from `auth.users` via `buildAuthUserMap`
+ * (`apps/admin/src/lib/auth/list-all-auth-users.ts`), deliberately — this table
+ * holds the GRANT, not the person.
+ */
 export type PlatformAdminUserRow = {
   user_id: string;
-  email: string;
+  /** `platform_admin_role` pgEnum — a ONE-value enum today (`enums.ts:101`). */
+  role: 'super_admin';
+  invited_by: string | null;
   created_at: string;
 };
 
