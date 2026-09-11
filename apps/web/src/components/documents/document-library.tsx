@@ -345,7 +345,7 @@ export function DocumentLibrary({
           />
         </div>
 
-        <div className="grid min-h-[500px] lg:grid-cols-2">
+        <div className="grid min-h-[500px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div
             className={`min-w-0 border-r border-edge p-6 ${selectedDocument ? 'hidden lg:block' : ''}`}
           >
