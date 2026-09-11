@@ -20,7 +20,7 @@ Compliance and community management platform for Florida condominium association
 
 ```
 apps/web/src/           # Next.js app (routes, components, hooks, lib, middleware)
-apps/admin/src/         # Platform admin app (community management, access plans, deletion requests)
+apps/admin/src/         # Platform admin console (clients, inbox, tickets, health, billing, onboarding)
 packages/db/            # Drizzle ORM schema, migrations, scoped-client, queries
 packages/email/         # Email templates and service
 packages/shared/        # Shared types and constants (roles, RBAC, access policies)
@@ -31,6 +31,71 @@ packages/theme/         # Per-community theme resolution → CSS vars + font lin
 scripts/                # Seed, verify, and utility scripts
 docs/                   # Specs, ADRs, audits, design system
 ```
+
+> **The admin console was redesigned across four waves** (2026-09; #1109 `348bdb4e`,
+> #1119 `c77bc7c2`, #1121 `fd4876ca`, #1123 `b3b6258a`). Read this before assuming
+> anything about `apps/admin`'s shape — the old vocabulary is gone.
+>
+> **One shell, one route group.** Every operator-facing page lives under
+> `apps/admin/src/app/(console)/`, whose single `layout.tsx` renders one
+> `AdminShell` — hover rail, ⌘K command palette, notification tray,
+> server-computed signals, critical banner. **`AdminLayout.tsx` and `Sidebar.tsx`
+> are deleted**; no page imports chrome by hand any more. Route groups do not
+> appear in URLs, so no path changed. The layout is **not** a security boundary
+> (a request for a page's RSC payload need not re-run an ancestor layout), so
+> every page keeps its own `requireAdminPageSession()` call. Two routes stay
+> OUTSIDE the group deliberately: `/communities/rootless`, a redirect that would
+> otherwise pay the shell's reads before leaving, and `/offline`.
+>
+> **Twelve shadcn primitives** (Button, Card, Badge, Skeleton, Input, Textarea,
+> Label, Switch, Dialog, AlertDialog, Sheet, Command) and **five shared
+> components** (AlertBanner, EmptyState, KpiCard, PageBody, QuickFilterTabs) were
+> lifted into `packages/ui` so both apps consume one implementation. Admin paints
+> its page titles (`components/shell/AdminPageHeader.tsx` renders a visible
+> Fraunces `<h1>`) because it has no breadcrumb trail — the opposite of web's
+> `PageHeader`, whose `<h1>` is `sr-only`. Do not make the two agree.
+>
+> **Four subsystems arrived in waves 3–4**, with migrations `0072_support_tickets`
+> and `0073_platform_admin_preferences`. **Both are applied to production**
+> (verified 2026-09-11: `drizzle.__drizzle_migrations` holds 71 rows against 72
+> migration files, tip `created_at` = `0073`'s journal `when`; the one unapplied
+> file is still `0062_secret_ballot`).
+>
+> - **Tickets** (`0072`: `support_tickets` + `support_ticket_events`) — operator
+>   ticketing with a `platform_admin_audit_log` trail.
+> - **Health** — a services strip plus a failed-job list whose per-row `Retry`
+>   POSTs to `${WEB_APP_ORIGIN}/api/v1/internal/<slug>` carrying the platform-wide
+>   `CRON_SECRET`. It refuses rather than guesses when either is unset.
+> - **Billing** — Stripe actions gated on the key's mode matching
+>   `STRIPE_EXPECTED_LIVEMODE` (which **defaults to LIVE**: only the exact string
+>   `'false'` selects test mode).
+> - **Onboarding**, and per-admin **preferences + web push** (`0073`:
+>   `platform_admin_preferences` + `platform_admin_push_subscriptions`) — an
+>   installable console with **read-only** offline (the service worker never
+>   queues a write for replay and never caches `/api/`), and a 15-minute
+>   push-dispatch cron declared in **`apps/admin/vercel.json`** — that project's
+>   first cron, and the 18th in production.
+>
+> **Secrets these need:** `WEB_APP_ORIGIN`, `CRON_SECRET`,
+> `STRIPE_EXPECTED_LIVEMODE`, and the VAPID trio `NEXT_PUBLIC_VAPID_PUBLIC_KEY` /
+> `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` (the last optional — it defaults to a
+> `mailto:` contact). The public VAPID key is deliberately **one** variable shared
+> by browser and server, because two copies can disagree and a mismatch only
+> surfaces at delivery time. Add every one with **`vercel env add --no-sensitive`**:
+> `vercel env add` defaults to Sensitive, `vercel pull` then writes the literal
+> `[SENSITIVE]`, and the build **inlines that string** into the client bundle —
+> `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is where it breaks visibly.
+>
+> **Two guards came with it.** `pnpm guard:admin-community-scope` (wave 2) requires
+> every `communities` / `user_roles` read in `apps/admin/src/lib/server/` to carry
+> the real-community predicate — wave 2 shipped a dashboard whose Members KPI and
+> Members sparkline counted different populations, and four gates missed it because
+> the defect lives in the relationship between two sibling files. And
+> `verify-admin-semantic-css` was converted `.cjs` → `.ts` and registered as
+> `pnpm guard:admin-semantic-css`; it now scans `apps/admin/src` **and**
+> `packages/ui/src`. There are **30** guards in `scripts/run-lint-guards.mjs`;
+> `guard:admin-semantic-css` is deliberately not one of them, because it reads
+> `apps/admin/.next/static/css` and so needs a build first.
 
 ## Key Concepts
 
@@ -272,8 +337,10 @@ pnpm guard:class-resolution     # Every colour utility class in apps/web/src mus
 >
 > It scans **`apps/web/src` + `packages/ui/src`** — both roots the web config
 > lists in `content`, so a packages/ui class that resolves to nothing renders as
-> no style in web exactly like one written in apps/web (apps/admin's guard scans
-> only `apps/admin/src`, so nothing else covers it). Extraction uses the
+> no style in web exactly like one written in apps/web. Admin's own guard
+> (`guard:admin-semantic-css`) scans **both** roots too, since wave 1 — it used to
+> scan only `apps/admin/src`, which stopped covering most of what admin renders
+> the moment twelve primitives moved into `packages/ui`. Extraction uses the
 > **TypeScript parser**, not a regex over the raw text: a quote-delimited regex
 > cannot tell a string from a REGEX LITERAL or from JSX TEXT, so `const re =
 > /"/g` and `<p>Don't stop</p>` each swallow whatever follows on their line. It

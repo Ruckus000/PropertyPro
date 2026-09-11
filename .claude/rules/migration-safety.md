@@ -15,13 +15,18 @@
   #   select count(*), max(id) from drizzle.__drizzle_migrations;
   ```
 
-  **Measured 2026-09-09: files run `0000`–`0071` (70 of them; reserved gaps at `0050`/`0051`,
-  journal idx 49 → 52, tolerated by the ordering guard). Prod's ledger holds 69 rows — the
-  difference is `0062_secret_ballot`, merged but deliberately unapplied. No open PR and no
-  branch claims a number. So the next free number was `0072`.**
+  **Measured 2026-09-11: files run `0000`–`0073` (72 of them; reserved gaps at `0050`/`0051`,
+  journal idx 49 → 52, tolerated by the ordering guard). Prod's ledger holds 71 rows — the
+  difference is still `0062_secret_ballot`, merged but deliberately unapplied. The admin console
+  redesign's `0072_support_tickets` and `0073_platform_admin_preferences` are **both applied to
+  production**: the ledger's tip `created_at` (`1789140920767`) is `0073`'s journal `when`, and
+  all four tables (`support_tickets`, `support_ticket_events`, `platform_admin_preferences`,
+  `platform_admin_push_subscriptions`) are present in `information_schema`. No open PR and no
+  branch claims a number — `git log --all -- 'packages/db/migrations/0074*'` is empty. So the
+  next free number was `0074`.**
 
   That paragraph is a snapshot and goes stale the moment anything merges — it is stamped so you
-  can see how old it is, not so you can copy the digits. The previous version of this bullet
+  can see how old it is, not so you can copy the digits. An earlier version of this bullet
   said "Next free number: `0063`" while `0063`–`0071` were all merged; the localci gate's
   `verify-migration-ordering.ts` would have caught the collision at push time, but only after
   you had written the migration.
