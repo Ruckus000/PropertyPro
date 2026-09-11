@@ -3,9 +3,10 @@
  * counts, notification tray, and critical-alert banner.
  *
  * Every signal is DERIVED from an existing source of truth — nothing here is
- * stored. Three providers (`inbox`, `leads`, `deletion`) read live data;
- * four (`tickets`, `health`, `billing`, `onboarding`) are Wave-3 stubs — see
- * their files under `./signals/`.
+ * stored. All seven now read live data: `inbox`, `leads` and `deletion` from
+ * Wave 1, and `tickets`, `health`, `billing` and `onboarding` filled across
+ * Wave 3's four slices. There are no stubs left — see their files under
+ * `./signals/`.
  *
  * A provider that throws must never blank the rest of the shell: it is
  * caught, reported to Sentry, and named in `failed` — a Sentry-backed record
