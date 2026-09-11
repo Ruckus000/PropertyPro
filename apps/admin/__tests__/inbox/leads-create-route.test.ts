@@ -11,17 +11,24 @@
  *    `createAdminTypedClient` — `marketing_leads`'s typed Insert shape
  *    requires the full row. Both exports are mocked from the same module.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { UnauthorizedError } from '@propertypro/shared/http';
 
 const admin = { id: 'u1', email: 'ops@getpropertypro.com', role: 'super_admin' };
-vi.mock('@/lib/auth/platform-admin', () => ({ requirePlatformAdmin: async () => admin }));
+// Overridable so the gate can be made to REFUSE. A permanently-succeeding mock
+// means the route's first line is never exercised.
+let requirePlatformAdminImpl: () => Promise<typeof admin> = async () => admin;
+vi.mock('@/lib/auth/platform-admin', () => ({
+  requirePlatformAdmin: () => requirePlatformAdminImpl(),
+}));
 
 const logAdminAction = vi.fn(async (_params: unknown) => {});
 vi.mock('@/lib/audit/log-admin-action', () => ({ logAdminAction: (p: unknown) => logAdminAction(p) }));
 
 const insert = vi.fn();
-const thread = {
+// `let`, not `const`: the purpose-limitation test below needs a non-contact mailbox.
+let thread = {
   id: 12,
   mailbox: 'contact',
   status: 'open',
@@ -67,7 +74,14 @@ const req = (body: unknown) =>
     headers: { 'content-type': 'application/json' },
   });
 
+const CONTACT_THREAD = { ...thread };
+
 describe('POST /api/admin/leads', () => {
+  beforeEach(() => {
+    thread = { ...CONTACT_THREAD };
+    requirePlatformAdminImpl = async () => admin;
+  });
+
   it('creates a lead from the thread and audits it', async () => {
     insert.mockResolvedValueOnce({ data: { id: 99 }, error: null });
     const res = await POST(req({ threadId: 12 }));
@@ -96,5 +110,48 @@ describe('POST /api/admin/leads', () => {
 
   it('400s a bad body', async () => {
     expect((await POST(req({ threadId: 'x' }))).status).toBe(400);
+  });
+
+  /**
+   * The purpose-limitation control. `marketing_leads` has a different purpose and
+   * a different retention story from the support inbox, so a `privacy@`
+   * correspondent's email must never be copied into it — that person wrote in to
+   * exercise a data right, not to be marketed to.
+   *
+   * Nothing covered this before: the file had a happy path, a duplicate and a bad
+   * body, so deleting `if (thread.mailbox !== 'contact')` stayed green.
+   *
+   * The assertion that matters is the SECOND one. A 400 alone would also be
+   * produced by a route that inserted the row and then failed, so this pins that
+   * no email reached the table.
+   */
+  it.each(['privacy', 'support'])('refuses to convert a %s@ thread, and inserts nothing', async (mailbox) => {
+    thread = { ...CONTACT_THREAD, mailbox };
+
+    const res = await POST(req({ threadId: 12 }));
+
+    // The insert assertion comes FIRST so that, when the control is removed, the
+    // failure message names the actual harm — an email reaching marketing_leads —
+    // rather than a status code that merely differs.
+    expect(insert).not.toHaveBeenCalled();
+    expect(logAdminAction).not.toHaveBeenCalled();
+    expect(res.status).toBe(400);
+  });
+
+  it('refuses an unauthenticated caller before reading the thread', async () => {
+    // The gate is the route's first statement; if it is ever reordered below the
+    // thread read, this is what notices.
+    requirePlatformAdminImpl = async () => {
+      throw new UnauthorizedError('Not a platform admin');
+    };
+
+    // `withAdminErrorHandler` RETURNS an envelope for an AppError rather than
+    // rejecting, so assert the status — a `.rejects` expectation here passes only
+    // when something unplanned throws, which is how this case first went green
+    // against a ReferenceError.
+    const res = await POST(req({ threadId: 12 }));
+
+    expect(res.status).toBe(401);
+    expect(insert).not.toHaveBeenCalled();
   });
 });
