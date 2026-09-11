@@ -492,6 +492,16 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
     reason:
       'Bodies and internal notes for support_inbox_threads. Same 0068 lockdown and the same reason there is no community_id. Strictly more sensitive than the thread table: html_body holds RAW, UNSANITIZED, attacker-controlled markup, and raw_payload holds a quarantined provider payload including message bodies belonging to third parties, which is why that column is written to the database rather than to logs. Read only through apps/admin behind requirePlatformAdmin, and sanitized at render time, never at write time.',
   },
+  {
+    tableName: 'support_tickets',
+    reason:
+      'Platform operator work queue (0072) — the console\'s ticket list, distinct from the support_inbox_threads conversation it is sometimes escalated from. Unlike every other entry in this list it DOES have a community_id, and it is still not tenant-scoped: that column is CONTEXT, not scope. A ticket may be about a community, but the only people who can read any ticket are platform admins with no membership in it, and a large share of tickets (a billing webhook backlog, a stalled deploy) belong to no community at all — so scoping on community_id would hide every row from its sole audience while protecting nobody. The FK is ON DELETE SET NULL rather than cascade for the same reason: deleting a community must not erase the record of work done about it. Holds a free-text description an operator will paste customer details into. Locked down by 0072 on the 0068 posture: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated on both the table and its sequence, service_role retaining CRUD. The only reader and writer is apps/admin over service_role behind requirePlatformAdmin. The anon key ships in the browser bundle, so leaving the vestigial Supabase grants would expose the whole triage queue, notes included, to an unauthenticated reader.',
+  },
+  {
+    tableName: 'support_ticket_events',
+    reason:
+      'The timeline for support_tickets — operator notes and machine-written state transitions in one table so a ticket\'s history is one index scan on (ticket_id, id). Same 0072 lockdown as the ticket table, and no community_id at all: an event inherits whatever context its ticket has, and that context was never scope to begin with. Strictly the more sensitive of the two, because a note body is where the prose that did not fit in a description ends up. ticket_id is ON DELETE CASCADE — the one cascade in this pair — since an event has no meaning without its ticket and an orphan row would be unreachable by every query. Read only through apps/admin behind requirePlatformAdmin.',
+  },
   { tableName: 'platform_admin_users', reason: 'Platform-level admin authorization — service_role only (REVOKE ALL from anon/authenticated). No community_id column; not community-scoped.' },
   { tableName: 'access_plans', reason: 'Platform-level access management — not community-scoped. Managed by super_admin only.' },
   { tableName: 'account_deletion_requests', reason: 'Platform-level deletion workflow — not community-scoped. Cross-community visibility required for admin dashboard.' },
