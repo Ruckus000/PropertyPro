@@ -16,6 +16,7 @@ import {
   type SignupInput,
 } from './signup-schema';
 import { getBaseUrl } from '@/lib/utils/url';
+import { buildVerificationLink, buildVerificationRedirectUrl } from './verification-link';
 import { isUniqueConstraintError } from '@/lib/db/unique-constraint-error';
 import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 
@@ -483,11 +484,17 @@ async function createOrLinkAuthAccount(
     },
   });
 
-  const actionLink = signupLink.data?.properties?.action_link;
-  if (!signupLink.error && actionLink) {
+  // `hashed_token`, NOT `action_link`. The action_link's host is Supabase's
+  // project domain; we link at our own route and finish with verifyOtp there.
+  const signupToken = signupLink.data?.properties?.hashed_token;
+  if (!signupLink.error && signupToken) {
     return {
       authUserId: signupLink.data.user?.id ?? null,
-      verificationLink: actionLink,
+      verificationLink: buildVerificationLink({
+        hashedToken: signupToken,
+        signupRequestId: input.signupRequestId,
+        type: 'signup',
+      }),
     };
   }
 
@@ -504,14 +511,20 @@ async function createOrLinkAuthAccount(
     },
   });
 
-  const magicActionLink = magicLink.data?.properties?.action_link;
-  if (magicLink.error || !magicActionLink) {
+  const magicToken = magicLink.data?.properties?.hashed_token;
+  if (magicLink.error || !magicToken) {
     throw new Error(magicLink.error?.message ?? 'Failed to generate verification link');
   }
 
   return {
     authUserId: magicLink.data.user?.id ?? null,
-    verificationLink: magicActionLink,
+    verificationLink: buildVerificationLink({
+      hashedToken: magicToken,
+      signupRequestId: input.signupRequestId,
+      // The already-registered fallback generates a magiclink, so the token is
+      // bound to that type and must be verified as one.
+      type: 'magiclink',
+    }),
   };
 }
 
@@ -554,14 +567,6 @@ function buildPendingSignupPayload(input: SignupPersistenceInput): Record<string
     candidateSlug: input.candidateSlug,
     termsAccepted: true,
   };
-}
-
-function buildVerificationRedirectUrl(signupRequestId: string): string {
-  const baseUrl = getBaseUrl();
-  const url = new URL('/signup', baseUrl);
-  url.searchParams.set('signupRequestId', signupRequestId);
-  url.searchParams.set('verified', '1');
-  return url.toString();
 }
 
 function isAlreadyRegisteredAuthError(message: string | undefined): boolean {

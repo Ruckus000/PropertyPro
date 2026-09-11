@@ -11,6 +11,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
+import { buildVerificationRedirectUrl } from '@/lib/auth/verification-link';
 import { AppError, NotFoundError } from '@/lib/api/errors';
 import { sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
@@ -118,7 +119,7 @@ const runResendVerification = runRoute(
           branding: { communityName: 'PropertyPro Florida' },
           primaryContactName: signup.primaryContactName ?? 'there',
           communityName: signup.communityName ?? 'your community',
-          verificationLink: linkResult.actionLink,
+          verificationLink: linkResult.verificationLink,
         }),
       });
       messageId = result.id;
@@ -171,11 +172,4 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 });
 
-function buildVerificationRedirectUrl(signupRequestId: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-  const url = new URL('/signup', baseUrl);
-  url.searchParams.set('signupRequestId', signupRequestId);
-  url.searchParams.set('verified', '1');
-  return url.toString();
-}
+
