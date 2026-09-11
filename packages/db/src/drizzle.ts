@@ -45,12 +45,38 @@ if (!databaseUrl) {
  * finding user") partway through an e2e run — it broke later in a run because
  * that is when the slots ran out.
  *
- * `max` is stated explicitly rather than left implicit. It is postgres-js's own
- * default, so this changes no behaviour — it just makes the per-pool ceiling
- * visible next to the arithmetic above, since pools × max is what exhausts the
- * server.
+ * THE SECOND CEILING, measured in production on 2026-09-11. The block above is
+ * about Postgres's own `max_connections` on a local stack. Production does not
+ * hit that one — it hits SUPAVISOR's client limit first, and the app never sees
+ * Postgres directly at all:
+ *
+ *   (EMAXCONN) max client connections reached, limit: 200
+ *
+ * `globalThis` de-duplicates pools within a process, i.e. within one lambda
+ * INSTANCE. It does nothing across instances. So the arithmetic is
+ * instances × max, and at the previous `max: 10` the whole production budget
+ * was TWENTY concurrent instances. A signup during a post-deploy cold-start
+ * fan-out was enough to exhaust it, and `confirm-verification` answered 500.
+ *
+ * `docs/audits/2026-08-03-e2e-inventory.md:126-128` predicted the opposite —
+ * "Production sits behind Supabase's pooler, so this may never surface there".
+ * That was a prediction rather than a measurement, so this refines it rather
+ * than contradicting its findings.
+ *
+ * `max: 3`, not 10 and not 1. `DATABASE_URL` is port 6543 — Supavisor
+ * TRANSACTION mode — so the pooler is already the pool and a large client-side
+ * one is mostly redundant; but production runs on Fluid compute, where a single
+ * instance serves concurrent invocations, so `max: 1` would serialize them.
+ * Three gives roughly 66 instances against the same 200 ceiling.
+ *
+ * NOT MEASURABLE FROM SQL, which is why this comment carries the number instead
+ * of a probe. The app connects to Supavisor; `pg_stat_activity` only shows
+ * connections to POSTGRES, so it cannot see the count that breaks. (That is a
+ * live trap: reading it during the incident showed a healthy 26 and meant
+ * nothing.) The admin health probe goes over PostgREST and consumes no pooler
+ * slots at all, so it stays green through total saturation.
  */
-const POOL_MAX = 10;
+const POOL_MAX = 3;
 
 const globalForDb = globalThis as unknown as {
   __propertyproPgClient?: { url: string; client: ReturnType<typeof postgres> };
@@ -71,6 +97,21 @@ const client =
     : postgres(databaseUrl, {
         prepare: false,
         max: POOL_MAX,
+        /**
+         * Release idle connections back to Supavisor between invocations.
+         *
+         * This was UNSET, which is postgres-js for "never idle out". A warm
+         * lambda instance therefore held its connections open for as long as
+         * the instance lived, not just while it was serving a request — so the
+         * steady-state cost of an idle instance was the same as a busy one, and
+         * `max` bounded only the peak. Against a transaction pooler that is
+         * pure waste: reacquiring is cheap, holding is not.
+         *
+         * 20s is comfortably longer than a request and far shorter than an
+         * instance's idle lifetime, so a burst keeps its connections and a
+         * parked instance gives them back.
+         */
+        idle_timeout: 20,
         /**
          * MUST stay strictly below every route's `maxDuration`.
          *
