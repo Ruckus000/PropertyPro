@@ -14,7 +14,6 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { loadApartmentMetrics } from '@/lib/queries/apartment-metrics';
-import { loadWizardState } from '@/lib/queries/wizard-state';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
@@ -47,12 +46,6 @@ export default async function ApartmentDashboardPage({
   const features = getFeaturesForCommunity(membership.communityType);
   if (!features.hasLeaseTracking) {
     redirect('/dashboard');
-  }
-
-  // Redirect to onboarding if wizard is not completed [P2-38]
-  const wizardState = await loadWizardState(context.communityId);
-  if (!wizardState || wizardState.status === 'in_progress') {
-    redirect(`/onboarding/apartment?communityId=${context.communityId}`);
   }
 
   const canWriteAnnouncements = checkPermissionV2(

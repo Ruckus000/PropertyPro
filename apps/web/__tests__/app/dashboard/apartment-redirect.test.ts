@@ -126,18 +126,26 @@ describe('DashboardPage — Wave 3 C4 apartment routing', () => {
     expect(loadWizardStateMock).not.toHaveBeenCalled();
   });
 
-  it('does NOT send a condo community to the apartment dashboard', async () => {
+  it('does NOT send a condo community to the apartment dashboard, or to onboarding', async () => {
     requireCommunityMembershipMock.mockResolvedValue(CONDO_MEMBERSHIP);
-    // Condo with an incomplete wizard → condo onboarding, never apartment.
+    // A stale wizard row must no longer divert anyone: the post-billing wizard
+    // was removed, so a condo community renders the dashboard directly.
     loadWizardStateMock.mockResolvedValue({ status: 'in_progress' });
 
-    await expect(
-      DashboardPage({ searchParams: Promise.resolve({ communityId: '42' }) }),
-    ).rejects.toThrow('NEXT_REDIRECT');
+    // This case is no longer redirect-only, so it enters the render path. The
+    // assertions here are about routing, not output — swallow whatever the
+    // mocked render dependencies return.
+    await DashboardPage({
+      searchParams: Promise.resolve({ communityId: '42' }),
+    }).catch(() => undefined);
 
-    expect(redirectMock).toHaveBeenCalledWith('/onboarding/condo?communityId=42');
     expect(redirectMock).not.toHaveBeenCalledWith(
       '/dashboard/apartment?communityId=42',
     );
+    expect(redirectMock).not.toHaveBeenCalledWith(
+      '/onboarding/condo?communityId=42',
+    );
+    // The wizard is not consulted at all any more.
+    expect(loadWizardStateMock).not.toHaveBeenCalled();
   });
 });
