@@ -93,7 +93,14 @@ export function SignupForm({
   const [errorField, setErrorField] = useState<SignupField | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const confirmMutation = useConfirmEmailVerification();
+  // Destructured, NOT the whole mutation object. `useMutation` returns a fresh
+  // object every render (it carries isPending/status/data), so depending on it
+  // below made `confirmVerification` a new function each render, which re-fired
+  // the effect, which set state, which re-rendered — an unbounded loop that
+  // could never reach `confirmed` and POSTed to confirm-verification on every
+  // pass. `mutateAsync` is referentially stable; the sibling
+  // `verify-email-content.tsx` already relies on that and says so.
+  const { mutateAsync: confirmEmailVerification } = useConfirmEmailVerification();
   const signupMutation = useCreateSignup();
 
   const plans = useMemo(
@@ -126,8 +133,7 @@ export function SignupForm({
   const confirmVerification = useCallback(async (requestId: string) => {
     setVerificationState({ status: 'confirming' });
     try {
-      const { signupRequestId: confirmedId } =
-        await confirmMutation.mutateAsync(requestId);
+      const { signupRequestId: confirmedId } = await confirmEmailVerification(requestId);
       setVerificationState({
         status: 'confirmed',
         signupRequestId: confirmedId,
@@ -139,7 +145,7 @@ export function SignupForm({
           : 'Unable to confirm email verification. Please try again.';
       setVerificationState({ status: 'error', message });
     }
-  }, [confirmMutation]);
+  }, [confirmEmailVerification]);
 
   useEffect(() => {
     if (verificationReturn && initialSignupRequestId) {
