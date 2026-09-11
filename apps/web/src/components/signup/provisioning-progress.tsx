@@ -34,6 +34,19 @@ const STAGES: Stage[] = [
 
 const MAX_POLLS = 180; // 6 minutes before showing delayed/retry messaging
 const POLL_INTERVAL_MS = 2000;
+/*
+ * Consecutive non-OK responses tolerated before surfacing the delayed state.
+ *
+ * `if (!res.ok) return;` treated a 429 and a 500 exactly like "still
+ * provisioning", so a persistent fault span looked identical to slow work and
+ * the user watched a progress bar that could never advance. The sibling signup
+ * poll had the same line and its own version of this incident on 2026-09-11.
+ *
+ * Provisioning is genuinely async and a single blip should not derail it, so
+ * this tolerates two and surfaces on the third — about 6 seconds. `handleDelayed`
+ * already renders "Check again", which resets `pollCount` and restarts.
+ */
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 function mapProvisioningStep(step: string): number {
   if (['community_created', 'user_linked'].includes(step)) return 0;
@@ -53,6 +66,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
   const [failed, setFailed] = useState(false);
   const [delayed, setDelayed] = useState(false);
   const pollCount = useRef(0);
+  const consecutiveFailures = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -116,9 +130,13 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         `/api/v1/auth/provisioning-status?signupRequestId=${encodeURIComponent(signupRequestId)}`,
       );
       if (!res.ok) {
-        // Network/server error — keep polling silently
+        consecutiveFailures.current += 1;
+        if (consecutiveFailures.current >= MAX_CONSECUTIVE_FAILURES) {
+          handleDelayed();
+        }
         return;
       }
+      consecutiveFailures.current = 0;
       const json = (await res.json()) as { data?: ProvisioningStatusResponse };
       const data = json.data;
       if (!data) return;
@@ -153,12 +171,18 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         handleFailure();
       }
     } catch {
-      // Network error — keep polling silently
+      // A fetch rejection is the same class of fault as a 5xx — offline, DNS,
+      // an aborted request. Counted the same way so it cannot spin silently.
+      consecutiveFailures.current += 1;
+      if (consecutiveFailures.current >= MAX_CONSECUTIVE_FAILURES) {
+        handleDelayed();
+      }
     }
   }, [signupRequestId, handleComplete, handleConsumed, handleFailure, handleDelayed]);
 
   const startPolling = useCallback(() => {
     stopPolling();
+    consecutiveFailures.current = 0;
     void poll();
     intervalRef.current = setInterval(() => void poll(), POLL_INTERVAL_MS);
   }, [poll, stopPolling]);

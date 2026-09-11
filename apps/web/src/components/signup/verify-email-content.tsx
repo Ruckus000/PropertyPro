@@ -3,16 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import {
-  useConfirmVerification,
-  useResendVerification,
-} from '@/hooks/use-email-verification';
+import { useResendVerification } from '@/hooks/use-email-verification';
 
-const POLL_INTERVAL_MS = 5000;
 const DEFAULT_COOLDOWN_SECONDS = 120;
-// B8: stop the auto-poll after ~5 minutes so it can't run unbounded; the user
-// can still resend / continue manually from the surfaced hint.
-const MAX_POLLS = 60;
 
 /**
  * Enter checkout with a FULL DOCUMENT LOAD — never `router.push` or `<Link>`.
@@ -51,59 +44,11 @@ export function VerifyEmailContent() {
   const [resendError, setResendError] = useState<string | null>(null);
   const [showResent, setShowResent] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
-  const [verified, setVerified] = useState(false);
-  const [pollingStopped, setPollingStopped] = useState(false);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollCountRef = useRef(0);
 
   // TanStack's mutateAsync is referentially stable, so depend on it directly
-  // in the effect/callback dep arrays (no render-phase ref writes).
-  const { mutateAsync: confirmVerification } = useConfirmVerification();
+  // in the callback dep array (no render-phase ref writes).
   const { mutateAsync: resendVerification } = useResendVerification();
-
-  // Poll for email verification — auto-navigate to checkout when confirmed
-  useEffect(() => {
-    if (!signupRequestId || verified) return;
-
-    async function checkVerification() {
-      try {
-        const response = await confirmVerification(signupRequestId);
-
-        if (!response.ok) return; // Not verified yet or error — keep polling
-
-        const payload = response.body;
-
-        if (payload.data?.success) {
-          setVerified(true);
-          if (pollRef.current) clearInterval(pollRef.current);
-          enterCheckout(signupRequestId);
-        }
-      } catch {
-        // Network error — keep polling silently
-      }
-    }
-
-    // Check immediately on mount (in case already verified)
-    pollCountRef.current = 0;
-    setPollingStopped(false);
-    checkVerification();
-
-    pollRef.current = setInterval(() => {
-      pollCountRef.current += 1;
-      if (pollCountRef.current >= MAX_POLLS) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
-        setPollingStopped(true);
-        return;
-      }
-      checkVerification();
-    }, POLL_INTERVAL_MS);
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [signupRequestId, verified, confirmVerification]);
 
   // Cooldown tick
   useEffect(() => {
@@ -201,22 +146,7 @@ export function VerifyEmailContent() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const isButtonDisabled = isResending || cooldownSeconds > 0 || verified;
-
-  // Verified — show brief success before redirect
-  if (verified) {
-    return (
-      <div className="rounded-md border border-status-success-border bg-status-success-bg p-8 text-center shadow-e0">
-        <div className="mb-4 flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-10 w-10 text-status-success" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-semibold text-content">Email verified</h2>
-        <p className="mt-2 text-sm text-content-secondary">Taking you to checkout...</p>
-      </div>
-    );
-  }
+  const isButtonDisabled = isResending || cooldownSeconds > 0;
 
   return (
     <>
@@ -259,16 +189,14 @@ export function VerifyEmailContent() {
           Click the link to verify your email, then you'll continue to checkout.
         </p>
 
-        {/* B8: surfaced once auto-polling stops (~5 min) so the page doesn't
-            appear to hang silently. */}
-        {pollingStopped && !verified && (
-          <p
-            role="status"
-            className="mt-4 rounded-md bg-status-warning-subtle px-4 py-2 text-center text-sm text-status-warning"
-          >
-            Still waiting? Check your spam folder, or resend the verification email below.
-          </p>
-        )}
+        {/* This page does not watch for verification happening elsewhere. It used
+            to, via a 5s poll, and that poll could not tell "not yet" from a 429 or
+            a 500 — so a transient fault read as "keep waiting" forever. The resend
+            button already covers the case: the route answers 409 `alreadyVerified`
+            and `handleResend` takes you straight to checkout. */}
+        <p className="mt-3 text-center text-sm leading-relaxed text-content-secondary">
+          Already clicked it in another tab? Use the button below to continue.
+        </p>
 
         {/* Resend button */}
         <div className="mt-6 flex flex-col items-center">

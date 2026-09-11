@@ -1,21 +1,23 @@
 /**
  * Unit tests for VerifyEmailContent (B5 batch #16 drain).
  *
- * Post-B5 split: the component delegates the two auth POSTs to
- * `useConfirmVerification` / `useResendVerification`. These tests mock those
- * hooks (controllable `mutateAsync`) plus `next/navigation`, and drive the
- * poll/cooldown timers with fake timers.
+ * The component delegates its one auth POST to `useResendVerification`. These
+ * tests mock that hook (controllable `mutateAsync`) plus `next/navigation`, and
+ * drive the cooldown timer with fake timers.
+ *
+ * The verification POLL WAS DELETED. It called confirm every 5s for 5 minutes
+ * and could not tell "not verified yet" (400) from a 429 or a 500, so any
+ * transient fault read as "keep waiting" indefinitely. Everyone who clicks the
+ * emailed link is served by `signup-form.tsx` on /signup?verified=1 instead, and
+ * the resend 409 below is the manual path for anyone who verified elsewhere.
  *
  * Behavior asserted:
- * - Poll fires confirm immediately + every POLL_INTERVAL_MS (5000ms)
- * - confirm success (data.success) → FULL PAGE navigation to /signup/checkout
  * - resend 409 alreadyVerified → FULL PAGE navigation to /signup/checkout
  * - resend 429 → cooldownSeconds set from cooldownRemainingSeconds + countdown
  * - resend success → showResent true then false after 4000ms
  * - resend other non-OK → exact error literal
- * - intervals cleared on unmount
  *
- * The two navigation cases assert `window.location.assign`, NOT `router.push`,
+ * The navigation case asserts `window.location.assign`, NOT `router.push`,
  * and that is the point of them rather than an implementation detail. Checkout
  * invokes a Server Action on mount, and Server Action ids are build-coupled, so
  * a client-side navigation would hand it the ids from whatever bundle THIS page
@@ -34,11 +36,9 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => searchParams,
 }));
 
-const confirmMutateAsync = vi.fn();
 const resendMutateAsync = vi.fn();
 
 vi.mock('@/hooks/use-email-verification', () => ({
-  useConfirmVerification: () => ({ mutateAsync: confirmMutateAsync }),
   useResendVerification: () => ({ mutateAsync: resendMutateAsync }),
 }));
 
@@ -58,9 +58,7 @@ beforeEach(() => {
   delete window.location;
   // @ts-expect-error — minimal stub
   window.location = { assign: assignMock };
-  confirmMutateAsync.mockReset();
   resendMutateAsync.mockReset();
-  confirmMutateAsync.mockResolvedValue({ ok: false, status: 400, body: {} });
   resendMutateAsync.mockResolvedValue({
     ok: true,
     status: 200,
@@ -75,55 +73,6 @@ afterEach(() => {
   vi.useRealTimers();
   window.location = originalLocation;
   cleanup();
-});
-
-describe('VerifyEmailContent — poll', () => {
-  it('calls confirm immediately on mount with the signupRequestId', async () => {
-    render(<VerifyEmailContent />);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(confirmMutateAsync).toHaveBeenCalledWith('sr-1');
-  });
-
-  it('fires confirm again after POLL_INTERVAL_MS (5000ms)', async () => {
-    render(<VerifyEmailContent />);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(confirmMutateAsync).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      vi.advanceTimersByTime(5000);
-      await Promise.resolve();
-    });
-    expect(confirmMutateAsync).toHaveBeenCalledTimes(2);
-  });
-
-  it('confirm success → full page navigation to checkout, not router.push', async () => {
-    confirmMutateAsync.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: { data: { success: true, signupRequestId: 'sr-1' } },
-    });
-    render(<VerifyEmailContent />);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(assignMock).toHaveBeenCalledWith(
-      '/signup/checkout?signupRequestId=sr-1',
-    );
-  });
-
-  it('stops polling and clears interval on unmount', async () => {
-    const clearSpy = vi.spyOn(globalThis, 'clearInterval');
-    const { unmount } = render(<VerifyEmailContent />);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    unmount();
-    expect(clearSpy).toHaveBeenCalled();
-    clearSpy.mockRestore();
-  });
 });
 
 describe('VerifyEmailContent — resend', () => {

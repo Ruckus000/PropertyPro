@@ -116,12 +116,29 @@ const AUTH_RATE_LIMIT_PATHS = [
   // actually holds across instances.
   //
   '/auth/login',
-  '/signup',
   '/auth/signup',
   '/auth/register',
   '/auth/password-reset',
   '/auth/forgot-password',
 ];
+
+/**
+ * Auth paths matched EXACTLY rather than by prefix.
+ *
+ * `/signup` was in the prefix list above, and prefix matching put
+ * `/signup/verify` and `/signup/checkout` — ordinary page navigations in the
+ * middle of a paid signup — into the 10/min-per-IP auth bucket alongside the
+ * credential surfaces. Everyone behind one NAT shares it, so an association
+ * office signing up together would rate-limit each other, and a 429 on a
+ * navigation renders `RATE_LIMITED_HTML`, whose only link is `/dashboard` — a
+ * page a signed-out visitor cannot use.
+ *
+ * `/signup` itself stays on the auth tier; its sub-paths fall through to the
+ * exempt `page` tier. `transparency` already uses an exact match for the same
+ * reason (see `classifyRoute`), and the note on `/api/v1/access-requests/verify`
+ * above records prefix breadth as the known hazard here.
+ */
+const AUTH_RATE_LIMIT_EXACT_PATHS: readonly string[] = ['/signup'];
 
 /** Webhook route path prefixes (exempt from rate limiting). */
 const WEBHOOK_PATHS = [
@@ -158,7 +175,10 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
   }
 
   // Auth routes have strict limits
-  if (AUTH_RATE_LIMIT_PATHS.some((prefix) => pathname.startsWith(prefix))) {
+  if (
+    AUTH_RATE_LIMIT_EXACT_PATHS.includes(pathname) ||
+    AUTH_RATE_LIMIT_PATHS.some((prefix) => pathname.startsWith(prefix))
+  ) {
     return 'auth';
   }
 
