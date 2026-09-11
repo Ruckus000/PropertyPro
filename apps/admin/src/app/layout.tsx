@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { NavigationProgress } from '@/components/NavigationProgress';
+import { ServiceWorkerRegistration } from '@/components/shell/ServiceWorkerRegistration';
 import '../styles/globals.css';
 
 /**
@@ -49,6 +50,14 @@ export const metadata: Metadata = {
   description: 'PropertyPro Platform Administration',
   // The operator console has no business being indexed.
   robots: { index: false, follow: false },
+  // Served by `app/manifest.ts`. Declared on the ROOT layout so the login page
+  // advertises it too — that is the page a browser most often has open when it
+  // decides whether the site is installable.
+  manifest: '/manifest.webmanifest',
+  // `capable` is what makes an iOS home-screen launch open in its own window
+  // instead of a Safari tab; `title` is the name under the icon, and is the
+  // manifest's `short_name` because iOS reads this, not the manifest.
+  appleWebApp: { capable: true, title: 'PP Ops', statusBarStyle: 'default' },
 };
 
 export default function RootLayout({
@@ -60,6 +69,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
       <body className="bg-surface-page text-content">
         <NavigationProgress />
+        <ServiceWorkerRegistration />
         {/* Mirrors apps/web/src/app/layout.tsx. The target `#main-content` is
             on the <main> AdminShell renders for the whole (console) group, and
             on the <main> that error.tsx and not-found.tsx render — those sit

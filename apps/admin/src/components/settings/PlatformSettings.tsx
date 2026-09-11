@@ -12,6 +12,7 @@ import {
 import { Badge, Button, Input, PageBody } from '@propertypro/ui';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { AlertPrefsSection } from '@/components/settings/AlertPrefsSection';
+import { InstallAppSection } from '@/components/settings/InstallAppSection';
 import type { AlertPrefs } from '@/lib/preferences/alert-prefs';
 
 interface PlatformAdmin {
@@ -245,7 +246,9 @@ export function PlatformSettings({
 
       <AlertPrefsSection initial={alertPrefs} />
 
-      {/* Wave 4: InstallAppSection (task 30), IntegrationsSection (task 32) */}
+      <InstallAppSection />
+
+      {/* Wave 4: IntegrationsSection (task 32) */}
     </PageBody>
   );
 }

@@ -1,0 +1,190 @@
+/**
+ * PropertyPro Operator Console — service worker.
+ *
+ * Scope: install + READ-ONLY offline. This worker never queues a write for
+ * later replay and never caches an authenticated API response. See
+ * `../src/lib/pwa/sw-cache-policy.ts` for the reasoning behind both.
+ *
+ * Served straight from `public/`, so it is a plain script: no TypeScript, no
+ * imports, no build step. That is why `classifyRequest` below is duplicated.
+ */
+
+/* eslint-env serviceworker */
+
+const CACHE = 'ppro-admin-v1';
+const OFFLINE_URL = '/offline';
+
+/** Header this worker stamps on every cached response, so a served-from-cache
+ *  page can tell the operator how old what they are reading is. */
+const CACHED_AT_HEADER = 'x-ppro-cached-at';
+
+// ---------------------------------------------------------------------------
+// mirror of apps/admin/src/lib/pwa/sw-cache-policy.ts — and that file is the
+// mirror of this one. A service worker cannot import TypeScript, so the policy
+// is written twice ON PURPOSE. CHANGE BOTH; `__tests__/pwa/sw-cache-policy.test.ts`
+// reads this file and asserts each decision below is still present here.
+// ---------------------------------------------------------------------------
+const STATIC_PREFIXES = ['/_next/static/', '/fonts/', '/icons/'];
+
+function classifyRequest(req, origin) {
+  if (req.method !== 'GET') return 'bypass';
+
+  let pathname;
+  try {
+    const url = new URL(req.url);
+    if (url.origin !== origin) return 'bypass';
+    pathname = url.pathname;
+  } catch {
+    return 'bypass';
+  }
+
+  if (pathname.startsWith('/api/')) return 'bypass';
+
+  if (STATIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return 'static-cache-first';
+  }
+
+  if (req.mode === 'navigate') return 'navigation-network-first';
+
+  return 'bypass';
+}
+// --------------------------- end mirrored block ----------------------------
+
+/**
+ * Store a response under `request`, stamped with the time it was stored.
+ *
+ * Three responses are refused, each for a reason that is a real bug otherwise:
+ * - not `ok` — caching a 404 or a 500 makes the offline console show the error
+ *   forever, long after the server recovered;
+ * - `redirected` — replaying a followed redirect to a navigation whose redirect
+ *   mode is not `follow` makes the browser fail the whole navigation with a
+ *   network error. The admin middleware 307s to `/auth/login`, so this is the
+ *   ordinary case for an expired session, not a corner;
+ * - not `basic` — an opaque or CORS response has nothing readable to serve.
+ */
+async function putStamped(cache, request, response) {
+  if (!response.ok || response.redirected || response.type !== 'basic') return;
+
+  const headers = new Headers(response.headers);
+  const now = new Date();
+  // `Date` is preserved when the server sent one — it is the more truthful
+  // "when was this generated" — and synthesised when it did not.
+  if (!headers.has('date')) headers.set('date', now.toUTCString());
+  headers.set(CACHED_AT_HEADER, now.toISOString());
+
+  const body = await response.clone().arrayBuffer();
+  await cache.put(
+    request,
+    new Response(body, { status: response.status, statusText: response.statusText, headers }),
+  );
+}
+
+function cachedAtOf(response) {
+  if (!response) return null;
+  const stamp = response.headers.get(CACHED_AT_HEADER);
+  if (stamp) return stamp;
+  const date = response.headers.get('date');
+  if (!date) return null;
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * Tell every open console window that what it is looking at came out of the
+ * cache, and when it was put there. `OfflineBanner` reads this.
+ *
+ * Best-effort by construction: a FULL RELOAD while offline is served before the
+ * new document exists as a client, so this message has no one to reach and is
+ * dropped. That case is covered instead by the banner's fallback — the cached
+ * HTML carries the signal payload's own `generatedAt`, which is the same fact
+ * measured a moment earlier. What this message does buy is the client-side
+ * navigation case, where the window is already open and its `generatedAt` is
+ * from the still-live session rather than from the cached page.
+ */
+async function announceServedFromCache(url, cachedAt) {
+  const clients = await self.clients.matchAll({ type: 'window' });
+  for (const client of clients) {
+    client.postMessage({ type: 'served-from-cache', url, cachedAt });
+  }
+}
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      // Only the offline fallback is precached. Precaching the console's own
+      // routes would mean fetching authenticated HTML at install time — which
+      // on the login page (where registration also runs) is a redirect, and on
+      // a console page is a snapshot nobody asked for.
+      await cache.add(new Request(OFFLINE_URL, { cache: 'reload' }));
+      // A newly installed worker should take over at the next navigation
+      // rather than waiting for every tab to close; the console is a
+      // single-origin app with no cross-version client contract.
+      await self.skipWaiting();
+    })(),
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(names.filter((name) => name !== CACHE).map((name) => caches.delete(name)));
+      await self.clients.claim();
+    })(),
+  );
+});
+
+async function handleStatic(request) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+
+  const response = await fetch(request);
+  await putStamped(cache, request, response);
+  return response;
+}
+
+async function handleNavigation(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const response = await fetch(request);
+    await putStamped(cache, request, response);
+    return response;
+  } catch {
+    const hit = await cache.match(request);
+    if (hit) {
+      const cachedAt = cachedAtOf(hit);
+      // Do not block the response on telling the window about it.
+      void announceServedFromCache(request.url, cachedAt);
+      return hit;
+    }
+    const fallback = await cache.match(OFFLINE_URL);
+    if (fallback) return fallback;
+    // Nothing cached and no network. Answering with a real response beats
+    // letting the navigation fail with the browser's own error page, which
+    // says nothing about this being an offline-capable app.
+    return new Response(
+      '<!doctype html><meta charset="utf-8"><title>Offline</title>' +
+        '<p>You are offline. Reconnect and reload to open the console.</p>',
+      { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+    );
+  }
+}
+
+self.addEventListener('fetch', (event) => {
+  const policy = classifyRequest(event.request, self.location.origin);
+
+  // `bypass` deliberately does NOT call respondWith. The browser then performs
+  // the request exactly as if no worker were installed — which keeps every
+  // mutation, every `/api/` call and every cross-origin request on the real
+  // network, with the real error when it fails.
+  if (policy === 'bypass') return;
+
+  if (policy === 'static-cache-first') {
+    event.respondWith(handleStatic(event.request));
+    return;
+  }
+
+  event.respondWith(handleNavigation(event.request));
+});

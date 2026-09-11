@@ -164,12 +164,40 @@ function maybeEvict() {
 // `/api/health` is an EXACT path, not a prefix. As a prefix it would silently
 // make any future `/api/healthz` or `/api/health-internal` route
 // unauthenticated on a console that holds the service-role key.
-const PUBLIC_PATH_PREFIXES = ['/auth/'];
+//
+// `/icons/` is the PWA icon set (`public/icons/`, committed build output). Same
+// argument as `/icon.svg` below, plus one that is specific to installing: the
+// browser fetches the manifest's icons to decide the site is installable, and a
+// 307 to an HTML login page is not a PNG, so the install offer never appears.
+const PUBLIC_PATH_PREFIXES = ['/auth/', '/icons/'];
 // `/icon.svg` is the App Router favicon. Without it here every request for
 // the tab icon 307s to the login page — so the LOGIN page, the one screen
 // guaranteed to be unauthenticated, has no favicon — and every
 // authenticated request for it costs a platform_admin_users lookup.
-const PUBLIC_EXACT_PATHS = ['/auth/login', '/dev/agent-login', '/api/health', '/icon.svg'];
+//
+// The three PWA entries are here for a sharper version of the same reason.
+// None of them carries a secret — the worker is a static script, the manifest
+// is public metadata, and `/offline` is a fixed sentence — while each of them
+// BREAKS if it is answered with a redirect:
+//
+// - `/sw.js` must be served as JavaScript. The browser re-fetches it on its own
+//   schedule to check for updates, including after the session has expired, and
+//   an HTML login page at that URL fails the update with a MIME-type error.
+// - `/manifest.webmanifest` is fetched on the login page, which is exactly
+//   where the operator is when they have no session to authenticate with.
+// - `/offline` is what the worker precaches. Registration runs on the login
+//   page too, so behind the auth gate the precache would store the login
+//   redirect under the offline URL — the fallback would then show a sign-in
+//   form that cannot reach the network.
+const PUBLIC_EXACT_PATHS = [
+  '/auth/login',
+  '/dev/agent-login',
+  '/api/health',
+  '/icon.svg',
+  '/sw.js',
+  '/manifest.webmanifest',
+  '/offline',
+];
 
 function isPublicPath(pathname: string): boolean {
   return (
