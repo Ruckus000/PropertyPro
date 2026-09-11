@@ -337,6 +337,9 @@ Consequences to hold onto:
   indefinitely and "no keys installed yet" is a deployment state retrying cannot
   fix. An unauthenticated call still gets a 401.
 - **It needs `CRON_SECRET` on the admin project**, plus
+  **`SENTRY_DSN`** — without which the warning described below is never emitted at
+  all, in a section whose whole point is that this job sits outside the other
+  three mechanisms — plus
   `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (and optionally
   `VAPID_SUBJECT`). Add them with `vercel env add --no-sensitive`: a Sensitive
   variable is written by `vercel pull` as the literal `[SENSITIVE]` and inlined

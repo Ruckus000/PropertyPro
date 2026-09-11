@@ -43,9 +43,12 @@ docs/                   # Specs, ADRs, audits, design system
 > are deleted**; no page imports chrome by hand any more. Route groups do not
 > appear in URLs, so no path changed. The layout is **not** a security boundary
 > (a request for a page's RSC payload need not re-run an ancestor layout), so
-> every page keeps its own `requireAdminPageSession()` call. Two routes stay
-> OUTSIDE the group deliberately: `/communities/rootless`, a redirect that would
-> otherwise pay the shell's reads before leaving, and `/offline`.
+> every page keeps its own `requireAdminPageSession()` call. Two console PAGES carry a
+> deliberate-exclusion rationale for sitting OUTSIDE the group:
+> `/communities/rootless`, a redirect that would otherwise pay the shell's reads
+> before leaving, and `/offline`. They are not the whole inventory — `/`
+> (a redirect to `/dashboard`), `/auth/login` and `/dev/agent-login` are outside
+> for the obvious reasons.
 >
 > **Twelve shadcn primitives** (Button, Card, Badge, Skeleton, Input, Textarea,
 > Label, Switch, Dialog, AlertDialog, Sheet, Command) and **five shared
@@ -69,7 +72,9 @@ docs/                   # Specs, ADRs, audits, design system
 > - **Billing** — Stripe actions gated on the key's mode matching
 >   `STRIPE_EXPECTED_LIVEMODE` (which **defaults to LIVE**: only the exact string
 >   `'false'` selects test mode).
-> - **Onboarding**, and per-admin **preferences + web push** (`0073`:
+> - **Onboarding** — a four-stage pipeline derived from leads, demos, trials and
+>   their checklists. Wave 3, with the three above.
+> - Per-admin **preferences + web push** (wave 4, `0073`:
 >   `platform_admin_preferences` + `platform_admin_push_subscriptions`) — an
 >   installable console with **read-only** offline (the service worker never
 >   queues a write for replay and never caches `/api/`), and a 15-minute
@@ -338,7 +343,7 @@ pnpm guard:class-resolution     # Every colour utility class in apps/web/src mus
 > It scans **`apps/web/src` + `packages/ui/src`** — both roots the web config
 > lists in `content`, so a packages/ui class that resolves to nothing renders as
 > no style in web exactly like one written in apps/web. Admin's own guard
-> (`guard:admin-semantic-css`) scans **both** roots too, since wave 1 — it used to
+> (`guard:admin-semantic-css`) scans **both** roots too, since wave 1 (then as `verify-admin-semantic-css.cjs`; registered under this script name in wave 2) — it used to
 > scan only `apps/admin/src`, which stopped covering most of what admin renders
 > the moment twelve primitives moved into `packages/ui`. Extraction uses the
 > **TypeScript parser**, not a regex over the raw text: a quote-delimited regex
