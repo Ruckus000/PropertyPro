@@ -27,12 +27,21 @@ describe('searchAdmin', () => {
     expect(captureException).toHaveBeenCalledTimes(1);
     expect(captureException).toHaveBeenCalledWith(expect.any(Error), { tags: { search_searcher: 'threads' } });
   });
-  it('SEARCHERS covers exactly the three DB-backed groups — no server-side "pages" duplicate', () => {
+  it('SEARCHERS covers exactly the four DB-backed groups — no server-side "pages" duplicate', () => {
     // Pages are static and client-only (AdminCommandPalette renders NAV_PAGES
     // directly). A page searcher here would produce a second "Pages" heading
     // alongside the palette's own client-side one for any query matching a
     // nav label — see search.ts's docblock.
-    expect(SEARCHERS.map((s) => s.key).sort()).toEqual(['clients', 'people', 'threads']);
+    //
+    // `tickets` joined in wave 3. The list is exhaustive on purpose rather than
+    // a `toContain`: the failure this pins is an EXTRA group appearing, which
+    // only an exact match can see.
+    expect(SEARCHERS.map((s) => s.key).sort()).toEqual([
+      'clients',
+      'people',
+      'threads',
+      'tickets',
+    ]);
   });
   it('a term that sanitizes to nothing (all punctuation) returns no results and never reaches a searcher', async () => {
     let called = false;

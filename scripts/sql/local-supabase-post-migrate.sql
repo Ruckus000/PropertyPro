@@ -67,7 +67,23 @@ BEGIN
     -- Revoked by migration 0069. 0067 created the table and reasoned only about
     -- RLS, leaving the open grant baseline in place; 0069 closed it. Text
     -- primary key, so there is no sequence to chase.
-    'cron_runs'
+    'cron_runs',
+    -- Revoked by migration 0072, which creates them. Both have bigserial
+    -- sequences, so the dedicated block below is required as well — the loop
+    -- handles tables only. Added here the moment the first test asserted this
+    -- posture: without it, `local-test-db.sh setup` on a persistent database
+    -- re-applies the stub's blanket grant over tables the migrations do not
+    -- re-create, and both tickets tables come back fully readable by anon while
+    -- production has them revoked. That gap is not hypothetical — it is what
+    -- this pair's own RLS suite failed on first run.
+    'support_tickets', 'support_ticket_events',
+    -- Revoked by migration 0068 the same way, and missing from this list until
+    -- 0072 made the gap visible: on a PERSISTENT local database the stub's
+    -- blanket grant is re-applied over them by `local-test-db.sh setup`, so the
+    -- inbox — every message a correspondent has ever sent support@, privacy@ or
+    -- contact@ — comes back readable by anon while production has it revoked.
+    -- Same class as the tickets gap above; found by fixing that one.
+    'support_inbox_threads', 'support_inbox_messages'
   ]
   LOOP
     IF EXISTS (
@@ -99,6 +115,38 @@ BEGIN
     REVOKE ALL ON SEQUENCE public.marketing_leads_id_seq FROM anon, authenticated;
     GRANT USAGE, SELECT ON SEQUENCE public.marketing_leads_id_seq TO service_role;
   END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- support_tickets_id_seq / support_ticket_events_id_seq (migration 0072) — the
+-- loop above handles TABLES only, exactly as it does for marketing_leads.
+--
+-- Same consequence as there, and worth restating because it is the failure mode
+-- that reads as success: re-narrowing the tables alone would leave anon and
+-- authenticated holding the backing sequences, so both tables would look locked
+-- down to a privilege check on the TABLE while an INSERT path stayed reachable.
+-- 0072 revokes both; so must this.
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE
+  s text;
+BEGIN
+  FOREACH s IN ARRAY ARRAY[
+    'support_tickets_id_seq', 'support_ticket_events_id_seq',
+    -- 0068 revokes these two sequences alongside its tables; they were missing
+    -- here for the same reason the tables were, and a readable sequence lets a
+    -- caller enumerate how much correspondence exists even when the table is shut.
+    'support_inbox_threads_id_seq', 'support_inbox_messages_id_seq'
+  ]
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.sequences
+       WHERE sequence_schema = 'public' AND sequence_name = s
+    ) THEN
+      EXECUTE format('REVOKE ALL ON SEQUENCE public.%I FROM anon, authenticated', s);
+      EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO service_role', s);
+    END IF;
+  END LOOP;
 END $$;
 
 -- ---------------------------------------------------------------------------

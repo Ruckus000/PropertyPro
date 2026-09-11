@@ -37,6 +37,34 @@ function validationError(message: string, details?: Record<string, unknown>): Ne
  * clients legitimately send none. Schemas whose fields are all optional accept
  * `{}`; schemas with required fields still reject it, which is the correct
  * outcome either way.
+ *
+ * ## Why a non-empty body must declare `application/json`
+ *
+ * This used to parse any body at all, which made the five money-moving routes
+ * (`/api/admin/communities/[id]/billing/*`) reachable by a cross-site
+ * `<form enctype="text/plain">` — no preflight, cookies attached, `{"confirm":
+ * true, …}` smuggled into the field name.
+ *
+ * There is no exploit today, and the reason is worth stating because it is the
+ * reason this check exists anyway: `@supabase/ssr`'s `DEFAULT_COOKIE_OPTIONS`
+ * sets `sameSite: 'lax'`, which blocks the session cookie on any cross-site
+ * POST. That is the correct control — and it is INHERITED, not asserted. Nothing
+ * in this repo chose it; a dependency bump that changed the default, or a
+ * `cookieOptions` edit setting `sameSite: 'none'` for some legitimate reason,
+ * would silently turn five money endpoints into CSRF targets with nothing
+ * failing. (`cookie-config.ts` now states `sameSite` explicitly and a test pins
+ * it, which closes the same gap from the other end.)
+ *
+ * Requiring `application/json` makes the vector structurally impossible
+ * regardless of the cookie attribute — two independent controls for one hazard,
+ * which is what "defence in depth" means when neither is individually load-
+ * bearing enough to bet five money routes on.
+ *
+ * An ALLOWLIST, not a denylist of the three CORS-safelisted form types, and the
+ * difference is not pedantry: a `fetch` with a typeless `Blob` body sends NO
+ * `Content-Type` header at all and would walk straight through a denylist.
+ * `application/json` cannot be set cross-site without a preflight, and this app
+ * answers no `Access-Control-Allow-*`, so requiring it closes the whole shape.
  */
 export async function parseJsonBody(request: Request): Promise<unknown | NextResponse> {
   let raw: string;
@@ -46,7 +74,23 @@ export async function parseJsonBody(request: Request): Promise<unknown | NextRes
     return validationError('Could not read the request body.');
   }
 
+  // Checked AFTER the empty-body short-circuit below would apply, but stated
+  // here so the empty case is genuinely exempt: a bodyless DELETE sends no
+  // content type, and refusing it would break every one of them.
   if (raw.trim() === '') return {};
+
+  // `application/json`, optionally with parameters (`; charset=utf-8`), and
+  // nothing else. Suffixed types (`application/merge-patch+json`) are not used
+  // by anything here and are not admitted on a guess.
+  const mediaType = (request.headers.get('content-type') ?? '')
+    .toLowerCase()
+    .split(';')[0]!
+    .trim();
+  if (mediaType !== 'application/json') {
+    return validationError('Request body must be sent as application/json.', {
+      contentType: mediaType || '(none)',
+    });
+  }
 
   try {
     return JSON.parse(raw);

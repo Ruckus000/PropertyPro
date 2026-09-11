@@ -90,7 +90,49 @@ export type AdminAuditAction =
   | 'support_thread_deleted'
   // A contact@ thread converted into a marketing_leads row. Community-less —
   // a lead has no community yet, which is the entire point of the table.
-  | 'lead_created_from_thread';
+  | 'lead_created_from_thread'
+  // Platform support tickets (0072). `communityId` is the ticket's own
+  // `community_id` when it has one and null otherwise — a ticket about a
+  // broken deploy or a billing backlog belongs to no community, which is why
+  // that column is nullable on both the ticket and this log.
+  //
+  // Ticket NOTES are deliberately absent, for the same reason inbox notes are:
+  // the `support_ticket_events` row already carries `actor_user_id` and
+  // `created_at`, so it is self-auditing, and a second write would duplicate
+  // the record for no recall benefit.
+  | 'ticket_created'
+  | 'ticket_updated'
+  // A scheduled job fired by hand from the Health board. `communityId: null` —
+  // a cron job belongs to no community.
+  //
+  // This one is audited for a different reason than the rest: every other entry
+  // records a change to OUR data, while this records the console causing a
+  // privileged endpoint on the WEB app to run. `/api/v1/internal/*` routes
+  // authenticate with the platform-wide `CRON_SECRET` and their own work is
+  // audited per-community at best, so without this entry there is no record
+  // anywhere of who made `expire-demos` or `late-fee-processor` run off-schedule.
+  | 'cron_job_retried'
+  // The five Stripe subscription actions (wave 3 slice 3c). These are the only
+  // entries in this union that MOVE MONEY — a plan change invoices the proration
+  // immediately, a cancel stops collection — so the trail is the only record
+  // linking a charge on a customer's card to the operator who caused it. Stripe's
+  // own dashboard shows the change; it does not show who in this console made it.
+  //
+  // `communityId` is always the affected community, never null: unlike a support
+  // ticket or a cron job, a subscription belongs to exactly one. `resourceId` is
+  // the `sub_…` id, so the row joins to Stripe without a second lookup, and
+  // `oldValues`/`newValues` carry only the fields that changed — never a
+  // subscription dump, because this table is append-only and manager-readable.
+  | 'subscription_plan_changed'
+  | 'subscription_trial_extended'
+  | 'subscription_coupon_applied'
+  // Pause and resume are ONE route and one Stripe field, but two entries. A
+  // single name for both made `where action = 'subscription_paused'` return
+  // resumes as well, and this table is append-only, so the row could never be
+  // relabelled. The direction is the action, not a boolean inside the payload.
+  | 'subscription_paused'
+  | 'subscription_resumed'
+  | 'subscription_canceled';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */

@@ -50,6 +50,10 @@ async function callPatch(body: unknown) {
   const mod = await import('@/app/api/admin/communities/[id]/branding/route');
   const req = new Request('http://localhost/api/admin/communities/7/branding', {
     method: 'PATCH',
+    // Required since `parseJsonBody` started refusing anything that is not
+    // application/json — the cross-site-form CSRF vector. Omitting it here made
+    // undici default to text/plain, which is precisely the shape being refused.
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
   return mod.PATCH(req as never, { params: Promise.resolve({ id: '7' }) } as never);

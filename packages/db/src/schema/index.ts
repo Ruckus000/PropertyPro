@@ -544,3 +544,17 @@ export {
   type SupportInboxMessage,
   type NewSupportInboxMessage,
 } from './support-inbox-messages';
+
+// Platform support tickets — spec D13. The operator work queue and its
+// timeline. Platform-scoped (community_id is nullable CONTEXT, not scope); the
+// priority/category/status/event-kind vocabularies live in @propertypro/shared.
+export {
+  supportTickets,
+  type SupportTicket,
+  type NewSupportTicket,
+} from './support-tickets';
+export {
+  supportTicketEvents,
+  type SupportTicketEvent,
+  type NewSupportTicketEvent,
+} from './support-ticket-events';

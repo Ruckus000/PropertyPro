@@ -10,7 +10,14 @@
  * @module supabase/admin-types
  */
 
-import type { SupportMailbox, SupportThreadStatus } from '@propertypro/shared';
+import type {
+  SupportMailbox,
+  SupportThreadStatus,
+  SupportTicketCategory,
+  SupportTicketEventKind,
+  SupportTicketPriority,
+  SupportTicketStatus,
+} from '@propertypro/shared';
 
 // ─── Support ───
 
@@ -27,9 +34,24 @@ export type SupportConsentGrantRow = {
   deleted_at: string | null;
 };
 
+/**
+ * `platform_admin_users` has FOUR columns and `email` is not one of them.
+ *
+ * This shim declared `email: string` and omitted `role` and `invited_by`, which
+ * inverted both directions of the type's usefulness: `select('email')`
+ * type-checked and would have failed at runtime with 42703 (verified against the
+ * migrated schema — `column "email" does not exist`), while `select('role')`, a
+ * column that does exist and carries the privilege level, was a type error.
+ *
+ * Identity for a platform admin comes from `auth.users` via `buildAuthUserMap`
+ * (`apps/admin/src/lib/auth/list-all-auth-users.ts`), deliberately — this table
+ * holds the GRANT, not the person.
+ */
 export type PlatformAdminUserRow = {
   user_id: string;
-  email: string;
+  /** `platform_admin_role` pgEnum — a ONE-value enum today (`enums.ts:101`). */
+  role: 'super_admin';
+  invited_by: string | null;
   created_at: string;
 };
 
@@ -426,6 +448,88 @@ export type SupportInboxMessageInsert = Omit<
   created_at?: string;
 };
 
+// ─── Support tickets ───
+//
+// The operator work queue (0072), read and written exclusively from here over
+// service_role. A ticket is not a thread: `thread_id` links the two when one
+// was escalated out of mail, and is null for the many tickets nobody wrote in
+// about. `community_id` is likewise nullable CONTEXT, not scope — see
+// rls-config.ts. `priority`/`category`/`status`/`kind` are typed from
+// @propertypro/shared rather than re-declared, so adding a category is one
+// edit here and one in the migration's CHECK.
+
+export type SupportTicketRow = {
+  id: number;
+  title: string;
+  description: string | null;
+  priority: SupportTicketPriority;
+  category: SupportTicketCategory;
+  status: SupportTicketStatus;
+  community_id: number | null;
+  thread_id: number | null;
+  external_ref: string | null;
+  assignee_user_id: string | null;
+  created_by: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * The database fills `id`, both timestamps and every default
+ * (`priority`/`category`/`status`), so a caller creating a ticket should not
+ * have to restate them. `title` and `created_by` stay required: the first is
+ * bounded by `support_tickets_title_check` and the second is what makes a
+ * ticket attributable.
+ */
+export type SupportTicketInsert = Omit<
+  SupportTicketRow,
+  'id' | 'priority' | 'category' | 'status' | 'created_at' | 'updated_at'
+> & {
+  id?: number;
+  priority?: SupportTicketPriority;
+  category?: SupportTicketCategory;
+  status?: SupportTicketStatus;
+  created_at?: string;
+  updated_at?: string;
+};
+
+/**
+ * Triage only. `created_by` and `created_at` are deliberately absent: a ticket's
+ * author and birth are facts, and the timeline in `support_ticket_events` is
+ * where the story of everything after that belongs.
+ */
+export type SupportTicketUpdate = Partial<
+  Pick<
+    SupportTicketRow,
+    | 'title'
+    | 'description'
+    | 'priority'
+    | 'category'
+    | 'status'
+    | 'community_id'
+    | 'thread_id'
+    | 'external_ref'
+    | 'assignee_user_id'
+    | 'resolved_at'
+    | 'updated_at'
+  >
+>;
+
+export type SupportTicketEventRow = {
+  id: number;
+  ticket_id: number;
+  kind: SupportTicketEventKind;
+  body: string | null;
+  actor_user_id: string;
+  created_at: string;
+};
+
+export type SupportTicketEventInsert = Omit<SupportTicketEventRow, 'id' | 'created_at'> & {
+  id?: number;
+  created_at?: string;
+};
+
 export type AdminDatabase = {
   public: {
     Tables: {
@@ -492,6 +596,12 @@ export type AdminDatabase = {
         SupportInboxMessageRow,
         SupportInboxMessageInsert,
         Partial<SupportInboxMessageRow>
+      >;
+      support_tickets: AdminTable<SupportTicketRow, SupportTicketInsert, SupportTicketUpdate>;
+      support_ticket_events: AdminTable<
+        SupportTicketEventRow,
+        SupportTicketEventInsert,
+        Partial<SupportTicketEventRow>
       >;
     };
     Views: Record<string, never>;

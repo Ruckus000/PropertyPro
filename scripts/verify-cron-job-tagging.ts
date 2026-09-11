@@ -48,6 +48,7 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const VERCEL_JSON = 'apps/web/vercel.json';
 const INTERNAL_ROOT = 'apps/web/src/app/api/v1/internal';
 const REGISTRY = 'apps/web/src/lib/cron/registry.ts';
+const ADMIN_PATH_MAP = 'apps/admin/src/lib/server/cron-job-paths.ts';
 
 /**
  * The loose end of the window bound.
@@ -314,6 +315,34 @@ async function loadRegistryJobs(): Promise<Record<string, CronJobDefinition>> {
   }
 }
 
+/**
+ * The admin console's slug → internal-path translation, loaded for comparison.
+ *
+ * `apps/admin` cannot import `apps/web`, so the Health board's retry button
+ * reconstructs the path from the slug and keeps a table of the exceptions. That
+ * table can drift from the registry, and drifted means a retry POSTs to a path
+ * that does not exist — which the UI used to report as the JOB failing, on the
+ * one board whose purpose is telling an operator what is actually broken. This
+ * guard already imports the registry, so it is the place to reconcile them.
+ *
+ * Safe to import for the same reason the registry is: the module is pure data
+ * plus one string function, with no imports of its own.
+ */
+async function loadAdminCronPaths(): Promise<{
+  internalPathForCronSlug: (slug: string) => string;
+  NESTED_CRON_JOB_PATHS: Record<string, string>;
+}> {
+  try {
+    const mod = await import('../apps/admin/src/lib/server/cron-job-paths.ts');
+    return {
+      internalPathForCronSlug: mod.internalPathForCronSlug,
+      NESTED_CRON_JOB_PATHS: mod.NESTED_CRON_JOB_PATHS,
+    };
+  } catch (err) {
+    couldNotCheck(`Could not import the admin cron path map from ${ADMIN_PATH_MAP}: ${String(err)}`);
+  }
+}
+
 function couldNotCheck(msg: string): never {
   console.error(`✖ guard:cron-job-tagging — COULD NOT CHECK\n  ${msg}`);
   process.exit(2);
@@ -419,6 +448,38 @@ async function main(): Promise<never> {
 
   if (routesChecked === 0) couldNotCheck('Checked zero route files.');
 
+  // --- admin's retry path map -> registry ----------------------------------
+  //
+  // The Health board's retry button builds its target from the slug. For the one
+  // NESTED job that reconstruction is wrong, so admin keeps an exception table —
+  // and a table that drifts means a retry POSTs to a path that does not exist,
+  // which the UI reported as the job failing. Reconciled here because this is the
+  // only place that can see both sides.
+  const adminPaths = await loadAdminCronPaths();
+  let pathsCompared = 0;
+  for (const [slug, definition] of Object.entries(registryJobs)) {
+    pathsCompared += 1;
+    const resolved = adminPaths.internalPathForCronSlug(slug);
+    if (resolved !== definition.path) {
+      violations.push(
+        `'${slug}': ${ADMIN_PATH_MAP} resolves ${resolved} but ${REGISTRY} says ${definition.path} — ` +
+          `the Health board's Retry would POST to a path that does not exist`,
+      );
+    }
+  }
+  // The converse: an entry naming a slug the registry no longer has is dead
+  // weight that reads as coverage.
+  for (const slug of Object.keys(adminPaths.NESTED_CRON_JOB_PATHS)) {
+    if (!(slug in registryJobs)) {
+      violations.push(
+        `'${slug}' is in ${ADMIN_PATH_MAP} but not in ${REGISTRY} — a stale exception`,
+      );
+    }
+  }
+  if (pathsCompared === 0) {
+    couldNotCheck(`Compared zero cron paths against ${ADMIN_PATH_MAP}.`);
+  }
+
   /*
    * Vacuity checks come after the violation list is built but must not pre-empt
    * REPORTING it. A window that breaches either bound is a violation rather
@@ -444,7 +505,8 @@ async function main(): Promise<never> {
 
   const denominator =
     `crons in vercel.json: ${crons.length} · registry entries: ${registrySlugs.length} · ` +
-    `routes checked: ${routesChecked} · windows compared: ${margins.length}\n` +
+    `routes checked: ${routesChecked} · windows compared: ${margins.length} · ` +
+    `admin retry paths compared: ${pathsCompared}\n` +
     `   tightest window: '${tightest.slug}' allows ${tightest.window} min against a ` +
     `${tightest.gap} min longest gap — ${ratio}x, ${tightest.margin} min of slack\n` +
     `   loosest window:  '${loosest.slug}' allows ${loosest.window} min against a ` +

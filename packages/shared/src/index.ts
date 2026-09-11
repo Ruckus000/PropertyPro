@@ -155,6 +155,12 @@ export * from './site/portfolio-template-branding';
 // need the same closed sets — see packages/shared/src/support-inbox.ts.
 export * from './support-inbox';
 
+// Platform support TICKET vocabulary (priority, category, status, event kinds).
+// A distinct set from the inbox above and deliberately so: a thread is a
+// conversation, a ticket is a unit of work, and either can exist without the
+// other — see packages/shared/src/support-tickets.ts.
+export * from './support-tickets';
+
 // The site change model (website editor v3, Phase 4). Shared rather than
 // editor-local because publish-time validation has to run server-side too —
 // a gate that exists only in the client is a suggestion.

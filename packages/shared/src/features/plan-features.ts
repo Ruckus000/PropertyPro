@@ -11,7 +11,7 @@
 import type { CommunityType } from '../index';
 import type { CommunityFeatures } from './types';
 import type { PlanId } from '../plans/types';
-import { PLAN_IDS, LEGACY_PLAN_ALIASES, PLANS_BY_COMMUNITY_TYPE } from '../plans/types';
+import { PLAN_IDS, PLAN_LABELS, LEGACY_PLAN_ALIASES, PLANS_BY_COMMUNITY_TYPE } from '../plans/types';
 
 /** Configuration for a single subscription plan. */
 export interface PlanFeatureConfig {
@@ -60,7 +60,7 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasStormTools: true,
     },
     maxAdmins: 3,
-    displayName: 'Essentials',
+    displayName: PLAN_LABELS.essentials,
     monthlyPriceUsd: 199,
     siteAssetsQuotaBytes: 100 * 1024 * 1024, // 100 MB
   },
@@ -105,7 +105,7 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasStormTools: true,
     },
     maxAdmins: Infinity,
-    displayName: 'Professional',
+    displayName: PLAN_LABELS.professional,
     monthlyPriceUsd: 349,
     siteAssetsQuotaBytes: 500 * 1024 * 1024, // 500 MB
   },
@@ -141,7 +141,7 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasStormTools: true,
     },
     maxAdmins: Infinity,
-    displayName: 'Operations Plus',
+    displayName: PLAN_LABELS.operations_plus,
     monthlyPriceUsd: 499,
     siteAssetsQuotaBytes: 2 * 1024 * 1024 * 1024, // 2 GB
   },

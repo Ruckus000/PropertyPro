@@ -69,6 +69,7 @@ async function callPatch(body: unknown) {
   const mod = await import('@/app/api/admin/communities/[id]/members/[userId]/route');
   const req = new Request('http://localhost/api/admin/communities/1/members/u1', {
     method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
   return mod.PATCH(req as never, {

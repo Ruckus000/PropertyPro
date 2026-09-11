@@ -64,6 +64,16 @@ describe('ADMIN_COOKIE_OPTIONS', () => {
     expect(options.secure).toBeUndefined();
   });
 
+  it('states sameSite=lax rather than inheriting it from @supabase/ssr', async () => {
+    // This is the whole CSRF control on the five money-moving billing routes:
+    // SameSite=Lax blocks the session cookie on any cross-site POST. It used to
+    // come from `@supabase/ssr`'s DEFAULT_COOKIE_OPTIONS, which nothing here
+    // stated and nothing pinned — so a dependency bump that changed the default
+    // would have been a silent CSRF regression with every check still green.
+    const options = await loadOptions();
+    expect(options.sameSite).toBe('lax');
+  });
+
   it('never sets a cookie domain — admin sessions stay host-scoped', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('NEXT_PUBLIC_COOKIE_DOMAIN', '.getpropertypro.com');
