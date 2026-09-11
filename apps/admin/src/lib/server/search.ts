@@ -23,6 +23,7 @@ import * as Sentry from '@sentry/nextjs';
 import type { SignalIcon } from './signals/types';
 import { communitySearcher } from './search/communities';
 import { threadSearcher } from './search/threads';
+import { ticketSearcher } from './search/tickets';
 import { userSearcher } from './search/users';
 import { sanitizeSearchTerm, type SanitizedTerm } from './search/sanitize';
 
@@ -59,8 +60,12 @@ export interface Searcher {
   search(q: SanitizedTerm, limit: number): Promise<SearchHit[]>;
 }
 
-/** Wave 3 (tickets) appends `ticketSearcher` here — one import + one array entry. */
-export const SEARCHERS: Searcher[] = [communitySearcher, threadSearcher, userSearcher];
+export const SEARCHERS: Searcher[] = [
+  communitySearcher,
+  threadSearcher,
+  ticketSearcher,
+  userSearcher,
+];
 
 const PER_GROUP = 5;
 export const MAX_QUERY_LENGTH = 80;

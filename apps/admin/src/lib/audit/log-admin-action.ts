@@ -90,7 +90,18 @@ export type AdminAuditAction =
   | 'support_thread_deleted'
   // A contact@ thread converted into a marketing_leads row. Community-less —
   // a lead has no community yet, which is the entire point of the table.
-  | 'lead_created_from_thread';
+  | 'lead_created_from_thread'
+  // Platform support tickets (0072). `communityId` is the ticket's own
+  // `community_id` when it has one and null otherwise — a ticket about a
+  // broken deploy or a billing backlog belongs to no community, which is why
+  // that column is nullable on both the ticket and this log.
+  //
+  // Ticket NOTES are deliberately absent, for the same reason inbox notes are:
+  // the `support_ticket_events` row already carries `actor_user_id` and
+  // `created_at`, so it is self-auditing, and a second write would duplicate
+  // the record for no recall benefit.
+  | 'ticket_created'
+  | 'ticket_updated';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */
