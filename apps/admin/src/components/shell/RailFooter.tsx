@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { LogOut } from 'lucide-react';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import { clearOfflineCache } from '@/lib/pwa/clear-offline-cache';
 import { cn } from '@/lib/utils';
 
 interface RailFooterProps {
@@ -76,6 +77,14 @@ export function RailFooter({ user, expanded }: RailFooterProps) {
       setSignOutFailed(true);
       return;
     }
+
+    // Only once the session is actually gone: the service worker's navigation
+    // cache holds authenticated console DOCUMENTS, and clearing the cookie does
+    // not touch them. Awaited rather than fired-and-forgotten — a hard
+    // navigation can tear down the page before a pending delete settles — but
+    // it can never throw, and never blocks the navigation. See
+    // `lib/pwa/clear-offline-cache.ts`.
+    await clearOfflineCache();
 
     // Hard navigation so middleware re-runs and the server sees the cleared cookie.
     window.location.href = '/auth/login';

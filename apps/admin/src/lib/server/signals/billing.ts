@@ -8,7 +8,7 @@
  * provider sits first in `DEFAULT_PROVIDERS` and owns the one banner the console
  * can be interrupted by, and a billing problem does not outrank an outage.
  *
- * ## Why this one refuses to throw, unlike `healthSignals`
+ * ## Why this one refuses to throw, unlike the health provider
  *
  * An unset `STRIPE_SECRET_KEY` is the normal state of a fresh checkout. Letting
  * the read throw would put a Sentry event on every shell render of every

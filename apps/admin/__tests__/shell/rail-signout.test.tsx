@@ -38,8 +38,19 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
 let assignedHref: string | null;
+/** Cache names deleted during the click, in order. */
+let deletedCaches: string[];
 
 beforeEach(() => {
+  deletedCaches = [];
+  vi.stubGlobal('caches', {
+    keys: async () => ['ppro-admin-v1', 'ppro-admin-v0'],
+    delete: async (name: string) => {
+      deletedCaches.push(name);
+      return true;
+    },
+  });
+
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost:54321');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
   signOutMock.mockReset();
@@ -67,6 +78,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 async function renderAndClickSignOut() {
@@ -158,5 +170,51 @@ describe('RailFooter sign-out', () => {
     const alert = container.querySelector('[role="alert"]');
     expect(alert, 'the alert must still be present, not unmounted, when collapsed').toBeTruthy();
     expect(alert!.textContent).toContain('Sign out failed — you are still signed in. Try again.');
+  });
+});
+
+/**
+ * Security review HIGH-1. The service worker caches authenticated console
+ * DOCUMENTS — a thread's tray, a client's billing — and CacheStorage survives a
+ * cleared cookie. Without this, going offline after sign-out re-reads them with
+ * no session, no middleware check and no `platform_admin_users` lookup.
+ */
+describe('RailFooter sign-out clears the offline document cache', () => {
+  it('deletes every cache before navigating away', async () => {
+    signOutMock.mockResolvedValue({ error: null });
+
+    await renderAndClickSignOut();
+
+    expect(deletedCaches).toEqual(['ppro-admin-v1', 'ppro-admin-v0']);
+    expect(assignedHref).toBe('/auth/login');
+  });
+
+  // The session is still LIVE on a failed sign-out and the operator stays on the
+  // page, so wiping what they are looking at would be wrong — and would imply a
+  // sign-out that did not happen.
+  it('leaves the cache alone when sign-out fails', async () => {
+    signOutMock.mockResolvedValue({
+      error: { name: 'AuthApiError', status: 429, message: 'Too many requests' },
+    });
+
+    await renderAndClickSignOut();
+
+    expect(deletedCaches).toEqual([]);
+    expect(assignedHref).toBeNull();
+  });
+
+  it('still signs the operator out when CacheStorage throws', async () => {
+    signOutMock.mockResolvedValue({ error: null });
+    vi.stubGlobal('caches', {
+      keys: async () => {
+        throw new Error('storage disabled by policy');
+      },
+      delete: vi.fn(),
+    });
+
+    await renderAndClickSignOut();
+
+    expect(assignedHref).toBe('/auth/login');
+    expect(container.textContent).not.toContain('Sign out failed');
   });
 });

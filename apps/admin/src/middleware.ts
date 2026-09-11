@@ -5,7 +5,9 @@
  * 1. Strip spoofed tenant/user headers from incoming requests
  * 2. Refresh Supabase auth session
  * 3. Rate-limit API routes (100 req/min per IP)
- * 4. Allow /auth/login and /api/health without admin check
+ * 4. Allow /auth/login and /api/health without admin check, and
+ *    /api/admin/internal/* without a SESSION (those routes authenticate with
+ *    the cron bearer instead — see `isInternalCronPath`)
  * 5. Require valid platform_admin_users row for all other routes
  * 6. Redirect to /auth/login on 401/403
  * 7. Attach X-Request-ID for request tracing
@@ -164,18 +166,76 @@ function maybeEvict() {
 // `/api/health` is an EXACT path, not a prefix. As a prefix it would silently
 // make any future `/api/healthz` or `/api/health-internal` route
 // unauthenticated on a console that holds the service-role key.
-const PUBLIC_PATH_PREFIXES = ['/auth/'];
+//
+// `/icons/` is the PWA icon set (`public/icons/`, committed build output). Same
+// argument as `/icon.svg` below, plus one that is specific to installing: the
+// browser fetches the manifest's icons to decide the site is installable, and a
+// 307 to an HTML login page is not a PNG, so the install offer never appears.
+const PUBLIC_PATH_PREFIXES = ['/auth/', '/icons/'];
 // `/icon.svg` is the App Router favicon. Without it here every request for
 // the tab icon 307s to the login page — so the LOGIN page, the one screen
 // guaranteed to be unauthenticated, has no favicon — and every
 // authenticated request for it costs a platform_admin_users lookup.
-const PUBLIC_EXACT_PATHS = ['/auth/login', '/dev/agent-login', '/api/health', '/icon.svg'];
+//
+// The three PWA entries are here for a sharper version of the same reason.
+// None of them carries a secret — the worker is a static script, the manifest
+// is public metadata, and `/offline` is a fixed sentence — while each of them
+// BREAKS if it is answered with a redirect:
+//
+// - `/sw.js` must be served as JavaScript. The browser re-fetches it on its own
+//   schedule to check for updates, including after the session has expired, and
+//   an HTML login page at that URL fails the update with a MIME-type error.
+// - `/manifest.webmanifest` is fetched on the login page, which is exactly
+//   where the operator is when they have no session to authenticate with.
+// - `/offline` is what the worker precaches. Registration runs on the login
+//   page too, so behind the auth gate the precache would store the login
+//   redirect under the offline URL — the fallback would then show a sign-in
+//   form that cannot reach the network.
+const PUBLIC_EXACT_PATHS = [
+  '/auth/login',
+  '/dev/agent-login',
+  '/api/health',
+  '/icon.svg',
+  '/sw.js',
+  '/manifest.webmanifest',
+  '/offline',
+];
 
 function isPublicPath(pathname: string): boolean {
   return (
     PUBLIC_EXACT_PATHS.includes(pathname) ||
     PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p))
   );
+}
+
+/**
+ * The scheduled-job prefix: past the SESSION gate, never past authentication.
+ *
+ * This is the one prefix rule on this console, and the trailing slash is the
+ * whole of its tightness. `/api/admin/internal/` cannot match
+ * `/api/admin/internal-tools` or `/api/admin/internalreports` — the same
+ * argument the `/api/health` note above makes for staying an exact path, and
+ * the reason that note gives (this deployment holds the service-role key)
+ * applies here with more force, not less.
+ *
+ * What makes the rule safe is not this function. It is that EVERY route.ts
+ * under `apps/admin/src/app/api/admin/internal/` calls `requireCronSecret`,
+ * which fails closed, and that `pnpm guard:internal-cron-auth` scans this root
+ * and fails the build if one stops. The guard was extended to cover this app in
+ * the same commit that added this rule; the exemption is not defensible without
+ * it.
+ *
+ * No method filter, deliberately. Web's equivalent enumerates GET/HEAD/POST and
+ * its own comment records what enumeration cost: nine crons dead behind a
+ * POST-only entry, then HEAD 401ing for uptime monitors after the rule written
+ * to fix that. Every method reaching a route here still has to present the
+ * bearer token, so a method this list forgot fails closed rather than silently
+ * answering 307-to-login for a request that was correctly authenticated.
+ */
+const INTERNAL_CRON_PREFIX = '/api/admin/internal/';
+
+function isInternalCronPath(pathname: string): boolean {
+  return pathname.startsWith(INTERNAL_CRON_PREFIX);
 }
 
 function isApiRoute(pathname: string): boolean {
@@ -274,8 +334,13 @@ async function handleRequest(request: NextRequest): Promise<Response> {
     }
   }
 
-  // 5. Allow public paths through (no admin check)
-  if (isPublicPath(pathname)) {
+  // 5. Allow public paths, and the scheduled-job prefix, through (no admin
+  //    session check). The internal routes authenticate themselves with the
+  //    cron bearer — see `isInternalCronPath`.
+  //
+  //    It sits AFTER the rate limiter on purpose: an unauthenticated,
+  //    session-less POST is exactly the surface that should stay throttled.
+  if (isPublicPath(pathname) || isInternalCronPath(pathname)) {
     return buildForwardedResponse(response, cleanHeaders, requestId);
   }
 

@@ -15,7 +15,7 @@ const ok = (key: SignalProvider['key'], count: number, critical?: { fingerprint:
 
 describe('getShellSignals', () => {
   it('composes counts and newest-first items from every provider', async () => {
-    const s = await getShellSignals([ok('inbox', 7), ok('leads', 6)]);
+    const s = await getShellSignals(undefined, [ok('inbox', 7), ok('leads', 6)]);
     expect(s.counts.inbox).toBe(7);
     expect(s.counts.leads).toBe(6);
     expect(s.counts.tickets).toBe(0);
@@ -24,14 +24,14 @@ describe('getShellSignals', () => {
   });
   it('a throwing provider yields 0, is reported to Sentry and named in `failed`, and never blanks the rest', async () => {
     const boom: SignalProvider = { key: 'health', load: async () => { throw new Error('sentry down'); } };
-    const s = await getShellSignals([ok('inbox', 2), boom]);
+    const s = await getShellSignals(undefined, [ok('inbox', 2), boom]);
     expect(s.counts.inbox).toBe(2);
     expect(s.counts.health).toBe(0);
     expect(s.failed).toEqual(['health']);
     expect(captureException).toHaveBeenCalledTimes(1);
   });
   it('picks the first critical alert in provider order', async () => {
-    const s = await getShellSignals([ok('billing', 1, { fingerprint: 'b' }), ok('health', 1, { fingerprint: 'h' })]);
+    const s = await getShellSignals(undefined, [ok('billing', 1, { fingerprint: 'b' }), ok('health', 1, { fingerprint: 'h' })]);
     expect(s.critical?.fingerprint).toBe('b');
   });
 });

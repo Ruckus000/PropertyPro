@@ -214,6 +214,16 @@ export function buildCspHeader(options?: CspOptions): string {
     join(`frame-src 'self' ${supabaseOrigin}`, options?.frameSrc?.join(' ')),
     "font-src 'self' data:",
     "worker-src 'self'",
+    // Pinned explicitly rather than left to the `default-src 'self'` fallback.
+    // It IS only a fallback today — a same-origin `/manifest.webmanifest`
+    // already loads without this directive, so adding it fixes no breakage —
+    // but `manifest-src` is the one directive whose absence is invisible until
+    // `default-src` is later widened for an unrelated reason (a CDN, an
+    // analytics host), at which point the installable-app manifest silently
+    // becomes loadable from that host too. Stated once here, next to
+    // `worker-src 'self'`, which the service worker registration needs and
+    // which is pinned for the same reason.
+    "manifest-src 'self'",
     `frame-ancestors ${options?.frameAncestors ?? "'none'"}`,
     "base-uri 'self'",
     "form-action 'self'",

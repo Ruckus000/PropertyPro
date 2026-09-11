@@ -10,12 +10,17 @@
 import { NextResponse } from 'next/server';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
+import { getPreferences } from '@/lib/server/preferences';
 import { getShellSignals } from '@/lib/server/shell-signals';
 
 export const dynamic = 'force-dynamic';
 
 export const GET = withAdminErrorHandler(async () => {
-  await requirePlatformAdmin();
-  const data = await getShellSignals();
+  const admin = await requirePlatformAdmin();
+  // The critical banner this poll refreshes is derived against the polling
+  // operator's own error-spike threshold, so the 60-second poll agrees with
+  // what the layout server-rendered.
+  const preferences = await getPreferences(admin.id);
+  const data = await getShellSignals(preferences.alertPrefs.errorSpikeThreshold);
   return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, no-store' } });
 });

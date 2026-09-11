@@ -11,6 +11,14 @@ import {
 } from 'lucide-react';
 import { Badge, Button, Input, PageBody } from '@propertypro/ui';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
+import { AlertPrefsSection } from '@/components/settings/AlertPrefsSection';
+import { InstallAppSection } from '@/components/settings/InstallAppSection';
+import {
+  IntegrationsSection,
+  type IntegrationsSectionProps,
+} from '@/components/settings/IntegrationsSection';
+import { PushToggle } from '@/components/settings/PushToggle';
+import type { AlertPrefs } from '@/lib/preferences/alert-prefs';
 
 interface PlatformAdmin {
   userId: string;
@@ -29,9 +37,22 @@ interface PlatformSettingsProps {
   currentAdmin: { id: string; email: string; role: string };
   admins: PlatformAdmin[];
   stats: PlatformStats;
+  /** This operator's own alert opt-ins — see `AlertPrefsSection`. */
+  alertPrefs: AlertPrefs;
+  /**
+   * Third-party reachability and the Stripe key's mode, computed on the server
+   * from the CACHED health report — see `IntegrationsSection`.
+   */
+  integrations: IntegrationsSectionProps;
 }
 
-export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }: PlatformSettingsProps) {
+export function PlatformSettings({
+  currentAdmin,
+  admins: initialAdmins,
+  stats,
+  alertPrefs,
+  integrations,
+}: PlatformSettingsProps) {
   const [admins, setAdmins] = useState(initialAdmins);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addEmail, setAddEmail] = useState('');
@@ -234,7 +255,16 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
         </div>
       </section>
 
-      {/* Wave 4: AlertPrefsSection, InstallAppSection, IntegrationsSection */}
+      <AlertPrefsSection initial={alertPrefs} />
+
+      {/* Directly under the alert opt-ins it delivers: those five choose WHAT
+          is worth telling this operator, this one chooses whether THIS browser
+          is one of the places they are told. */}
+      <PushToggle />
+
+      <InstallAppSection />
+
+      <IntegrationsSection {...integrations} />
     </PageBody>
   );
 }

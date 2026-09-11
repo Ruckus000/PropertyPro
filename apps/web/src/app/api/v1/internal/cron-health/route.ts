@@ -35,8 +35,9 @@
  * ## No auth, deliberately
  *
  * Health probes must be reachable by a monitor, which is the same justification
- * `revenue-snapshot/health` carries; both are listed in
- * `UNAUTHENTICATED_BY_DESIGN` in `scripts/verify-internal-cron-auth.ts`.
+ * `revenue-snapshot/health` carries; both are listed in this root's
+ * `exemptions` in `scripts/verify-internal-cron-auth.ts` (per-root since the
+ * guard also scans apps/admin's internal prefix).
  *
  * The body is therefore restricted to job slugs and timestamps. It deliberately
  * does NOT return `last_error`, which can carry query text or table internals —

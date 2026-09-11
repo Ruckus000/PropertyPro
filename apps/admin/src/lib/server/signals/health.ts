@@ -8,7 +8,7 @@
  * badge with work nobody can do. Degraded and down services still appear in the
  * tray, where a row is information rather than a task.
  *
- * `healthSignals` sits FIRST in `DEFAULT_PROVIDERS`, which makes it the
+ * The health provider sits FIRST in `buildDefaultProviders`, which makes it the
  * highest-priority source of `critical` — `getShellSignals` keeps the first
  * non-null one. That ordering is deliberate: a platform-wide error spike
  * outranks a billing problem, which outranks an unanswered email.
@@ -36,56 +36,70 @@
  */
 import { deriveCritical, getHealthReport } from '../health';
 import { withHealthCache } from '../health-cache';
+import { DEFAULT_ERROR_SPIKE_THRESHOLD } from '@/lib/preferences/alert-prefs';
 import type { SignalProvider } from './types';
-
-/**
- * Errors per hour that earn a console-wide banner.
- *
- * Wave 4 replaces this constant with the admin's own stored preference; until
- * then it is one number in one place rather than a literal inside
- * `deriveCritical`, which has to stay pure to be testable.
- */
-const ERRORS_PER_HOUR_THRESHOLD = 10;
 
 /** How many Sentry issues reach the tray before it stops being a tray. */
 const TRAY_ISSUE_LIMIT = 3;
 
-export const healthSignals: SignalProvider = {
-  key: 'health',
-  async load() {
-    const report = await withHealthCache(() => getHealthReport());
+/**
+ * Build the health provider for one operator's error-spike threshold.
+ *
+ * A FACTORY rather than a constant provider because the threshold is now
+ * per-admin (wave 4), while everything else this provider reads is global. The
+ * default is `DEFAULT_ERROR_SPIKE_THRESHOLD`, imported rather than re-typed so
+ * the "no preferences row" path cannot drift from the preference vocabulary's
+ * own default — and that default is load-bearing: this runs on every console
+ * render, long before anyone has opened Settings, and must behave exactly as
+ * the hardcoded `ERRORS_PER_HOUR_THRESHOLD = 10` it replaces.
+ *
+ * Note what is and is not per-admin. The REPORT is global — six outbound probes
+ * and three privileged reads about the platform, identical for every operator —
+ * so it stays behind the shared `withHealthCache` and is read here, not
+ * rebuilt. Only the DERIVATION is personal: `deriveCritical` is pure and runs on
+ * the cached report after it comes back. Caching the derived banner instead
+ * would hand one operator's threshold to the next one through the cache.
+ */
+export function createHealthSignals(
+  errorsPerHour: number = DEFAULT_ERROR_SPIKE_THRESHOLD,
+): SignalProvider {
+  return {
+    key: 'health',
+    async load() {
+      const report = await withHealthCache(() => getHealthReport());
 
-    const serviceItems = report.services
-      .filter((service) => service.state === 'degraded' || service.state === 'down')
-      .map((service) => ({
-        id: `service-${service.name}`,
-        tone: (service.state === 'down' ? 'danger' : 'warning') as 'danger' | 'warning',
-        icon: 'activity' as const,
-        title: `${service.name} is ${service.state}`,
-        meta: service.short,
+      const serviceItems = report.services
+        .filter((service) => service.state === 'degraded' || service.state === 'down')
+        .map((service) => ({
+          id: `service-${service.name}`,
+          tone: (service.state === 'down' ? 'danger' : 'warning') as 'danger' | 'warning',
+          icon: 'activity' as const,
+          title: `${service.name} is ${service.state}`,
+          meta: service.short,
+          href: '/health',
+          // The probe has no event time of its own — it is a reading, not an
+          // occurrence — so the reading's own timestamp is the honest value.
+          occurredAt: report.checkedAt,
+        }));
+
+      // `errors === null` means Sentry was never asked (or refused), which is not
+      // a finding and must not become a tray row. `?? []` keeps that case empty
+      // rather than inventing "Sentry is quiet".
+      const errorItems = (report.errors ?? []).slice(0, TRAY_ISSUE_LIMIT).map((issue) => ({
+        id: `sentry-${issue.id}`,
+        tone: 'danger' as const,
+        icon: 'bug' as const,
+        title: issue.title,
+        meta: `${issue.count} events · ${issue.culprit || 'unknown location'}`,
         href: '/health',
-        // The probe has no event time of its own — it is a reading, not an
-        // occurrence — so the reading's own timestamp is the honest value.
-        occurredAt: report.checkedAt,
+        occurredAt: issue.lastSeen || report.checkedAt,
       }));
 
-    // `errors === null` means Sentry was never asked (or refused), which is not
-    // a finding and must not become a tray row. `?? []` keeps that case empty
-    // rather than inventing "Sentry is quiet".
-    const errorItems = (report.errors ?? []).slice(0, TRAY_ISSUE_LIMIT).map((issue) => ({
-      id: `sentry-${issue.id}`,
-      tone: 'danger' as const,
-      icon: 'bug' as const,
-      title: issue.title,
-      meta: `${issue.count} events · ${issue.culprit || 'unknown location'}`,
-      href: '/health',
-      occurredAt: issue.lastSeen || report.checkedAt,
-    }));
-
-    return {
-      count: report.jobs.length,
-      items: [...serviceItems, ...errorItems],
-      critical: deriveCritical(report, { errorsPerHour: ERRORS_PER_HOUR_THRESHOLD }),
-    };
-  },
-};
+      return {
+        count: report.jobs.length,
+        items: [...serviceItems, ...errorItems],
+        critical: deriveCritical(report, { errorsPerHour }),
+      };
+    },
+  };
+}

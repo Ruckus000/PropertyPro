@@ -25,7 +25,8 @@ import type { NavSignalKey } from '@/components/shell/nav-config';
 import type { ShellCritical, ShellSignalItem, SignalProvider } from './signals/types';
 import { inboxSignals } from './signals/inbox';
 import { ticketsSignals } from './signals/tickets';
-import { healthSignals } from './signals/health';
+import { createHealthSignals } from './signals/health';
+import { DEFAULT_ERROR_SPIKE_THRESHOLD } from '@/lib/preferences/alert-prefs';
 import { billingSignals } from './signals/billing';
 import { onboardingSignals } from './signals/onboarding';
 import { leadsSignals } from './signals/leads';
@@ -45,21 +46,39 @@ export interface ShellSignals {
   failed: NavSignalKey[];
 }
 
-/** Provider order is the critical-alert priority (spec D20): health, billing, then the rest. */
-export const DEFAULT_PROVIDERS: SignalProvider[] = [
-  healthSignals, billingSignals, inboxSignals, ticketsSignals, onboardingSignals, leadsSignals, deletionSignals,
-];
+/**
+ * The seven providers, in critical-alert priority order (spec D20): health,
+ * billing, then the rest.
+ *
+ * A function rather than a constant array because ONE provider is now
+ * per-operator: the health provider's error-spike threshold comes from the
+ * admin's saved preference (wave 4). Everything it reads is still global and
+ * still shared through `withHealthCache`; only the pure derivation of the
+ * banner is personal. See `signals/health.ts`.
+ */
+export function buildDefaultProviders(
+  errorsPerHour: number = DEFAULT_ERROR_SPIKE_THRESHOLD,
+): SignalProvider[] {
+  return [
+    createHealthSignals(errorsPerHour),
+    billingSignals, inboxSignals, ticketsSignals, onboardingSignals, leadsSignals, deletionSignals,
+  ];
+}
 
 const ZERO: Record<NavSignalKey, number> = { inbox: 0, tickets: 0, health: 0, onboarding: 0, billing: 0, leads: 0, deletion: 0 };
 
-async function loadShellSignals(providers: SignalProvider[] = DEFAULT_PROVIDERS): Promise<ShellSignals> {
-  const settled = await Promise.allSettled(providers.map((p) => p.load()));
+async function loadShellSignals(
+  errorsPerHour: number = DEFAULT_ERROR_SPIKE_THRESHOLD,
+  providers?: SignalProvider[],
+): Promise<ShellSignals> {
+  const resolved = providers ?? buildDefaultProviders(errorsPerHour);
+  const settled = await Promise.allSettled(resolved.map((p) => p.load()));
   const counts = { ...ZERO };
   const items: ShellSignalItem[] = [];
   const failed: NavSignalKey[] = [];
   let critical: ShellCritical | null = null;
   settled.forEach((result, i) => {
-    const key = providers[i]!.key;
+    const key = resolved[i]!.key;
     if (result.status === 'rejected') {
       failed.push(key);
       Sentry.captureException(result.reason, { tags: { shell_signal: key } });
@@ -82,9 +101,21 @@ async function loadShellSignals(providers: SignalProvider[] = DEFAULT_PROVIDERS)
 /**
  * Wrapped in React's `cache()` so the console layout (shell chrome) and any
  * page that also needs signals (the dashboard) share one load per request
- * instead of running all seven providers twice. Both call sites invoke this
- * with no arguments, so they share the same cache key regardless of the
- * `providers` default applied inside `loadShellSignals`.
+ * instead of running all seven providers twice.
+ *
+ * ## The first argument is a NUMBER, and every real call site must pass the same one
+ *
+ * `cache()` keys on the arguments, and for objects it keys on IDENTITY — so a
+ * `{ errorsPerHour }` options bag would produce a fresh key on every call and
+ * silently run all seven providers twice per dashboard render, which is the
+ * exact cost this wrapper exists to remove. Hence a bare number.
+ *
+ * It follows that the layout, the dashboard page and the signals route must all
+ * pass the SAME value, which they do by all reading it from
+ * `getPreferences(session.id)` — itself `cache()`d, so that is one query per
+ * request. `shell-signals-cache-key.test.ts` pins that they agree; drifting one
+ * of them to a literal, or to `getShellSignals()` with no argument, would halve
+ * the cache's effect with nothing failing.
  *
  * Outside an active Server Component render — this file's own tests, or any
  * plain call from Node — React's client build makes `cache()` a no-op

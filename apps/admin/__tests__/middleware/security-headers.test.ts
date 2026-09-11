@@ -158,6 +158,42 @@ describe('admin security headers', () => {
     expect(csp).toContain('https://*.getpropertypro.com');
   });
 
+  // --- PWA (task 30) -------------------------------------------------------
+  //
+  // Four static, secret-free URLs that the browser fetches WITHOUT a usable
+  // session: the worker's own script (re-fetched on the browser's update
+  // schedule, including after the session expires), the manifest and its icons
+  // (fetched on the login page, which is where installability is decided), and
+  // the offline fallback (precached by a registration that also runs on the
+  // login page). Each of them is BROKEN by a 307 to an HTML login page rather
+  // than merely delayed by it.
+  it.each(['/sw.js', '/manifest.webmanifest', '/offline', '/icons/icon-192.png'])(
+    'serves %s without an admin session',
+    async (path) => {
+      middlewareUser = null;
+      const res = await runMiddleware(`http://admin.getpropertypro.com${path}`);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('location')).toBeNull();
+      // The public branch returns before the service-role lookup, so an
+      // anonymous icon request cannot cost a platform_admin_users query.
+      expect(mockSingle).not.toHaveBeenCalled();
+      expectBaselineHeaders(res);
+    },
+  );
+
+  it('registers a service worker and loads a manifest under the CSP it serves', async () => {
+    asAdmin();
+    const res = await runMiddleware('http://admin.getpropertypro.com/clients');
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+
+    // Registering /sw.js needs worker-src; the manifest link needs manifest-src.
+    // manifest-src would fall back to default-src today, and is pinned anyway
+    // so that widening default-src later cannot silently widen it too.
+    expect(csp).toContain("worker-src 'self'");
+    expect(csp).toContain("manifest-src 'self'");
+  });
+
   it('does not permit unsafe-eval outside development', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     asAdmin();
