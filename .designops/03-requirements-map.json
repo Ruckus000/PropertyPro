@@ -5,7 +5,7 @@
     {"id":"nav-config","title":"Website navigation entries","type":"repository","locator":"apps/web/src/components/layout/nav-config.ts","status":"verified","confidence":"high","criticality":"high"},
     {"id":"website-editor-route","title":"Website editor page","type":"repository","locator":"apps/web/src/app/(authenticated)/pm/settings/website/page.tsx","status":"verified","confidence":"high","criticality":"critical"},
     {"id":"editor-components","title":"Website editor component behavior","type":"repository","locator":"apps/web/src/components/pm/site-editor/{HeroBlockForm,ContentSectionsList,CustomStylingForm,CustomDomainCard,PublishBar}.tsx","status":"verified","confidence":"high","criticality":"high"},
-    {"id":"site-preview","title":"Authenticated public-site preview","type":"repository","locator":"apps/web/src/app/(authenticated)/pm/site-preview/page.tsx and apps/web/src/components/public-site/","status":"verified","confidence":"high","criticality":"high"},
+    {"id":"site-preview","title":"Authenticated public-site preview","type":"repository","locator":"apps/web/src/app/(site-preview)/pm/site-preview/page.tsx and apps/web/src/components/public-site/","status":"verified","confidence":"high","criticality":"high"},
     {"id":"design-system","title":"PropertyPro design system rules","type":"document","locator":"DESIGN.md and .claude/rules/design.md","status":"verified","confidence":"high","criticality":"high"}
   ],
   "users": [

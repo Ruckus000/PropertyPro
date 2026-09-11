@@ -126,3 +126,39 @@ test.describe('responsive overflow', () => {
     });
   }
 });
+
+/**
+ * The wizard's live-preview iframe must contain the community's site and nothing else.
+ *
+ * `/pm/site-preview` used to live under `app/(authenticated)/`, whose layout renders
+ * `AppShell` unconditionally — so a ~490px iframe contained the entire app (rail, search,
+ * breadcrumb trail, billing banners) in mobile-drawer mode. The route now sits in the
+ * shell-less `(site-preview)` group. Route groups do not change URLs, so no existing test
+ * could have caught either the regression or the fix: `wizard-live-preview.test.tsx`
+ * asserts the iframe `src` string, which was correct throughout.
+ */
+test.describe('site preview chrome', () => {
+  test.setTimeout(120_000);
+
+  test('/pm/site-preview renders the community site with no app shell', async ({ page }) => {
+    const { communityId } = await loginAs(page, 'cam', {
+      communitySlug: 'sunset-condos',
+      skipPortalNav: true,
+    });
+
+    await page.goto(`/pm/site-preview?communityId=${communityId}&preview=true`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.locator('[data-testid="site-preview-root"]').waitFor({ state: 'visible' });
+
+    // The three shell landmarks, by the attributes their components actually set:
+    // NavRail.tsx, app-top-bar.tsx and shell-breadcrumbs.tsx respectively.
+    await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCount(0);
+    await expect(page.locator('[role="search"]')).toHaveCount(0);
+    await expect(page.locator('nav[aria-label="Breadcrumb"]')).toHaveCount(0);
+
+    // AppShell's `<main id="main-content">` and the public-site layout's own one used to
+    // NEST, duplicating the id the root layout's skip link targets. Exactly one now.
+    await expect(page.locator('#main-content')).toHaveCount(1);
+  });
+});

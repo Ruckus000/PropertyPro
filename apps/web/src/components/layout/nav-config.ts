@@ -423,9 +423,13 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
  * PROTECTED_PATH_PREFIXES, defined in lib/middleware/public-host-routes.ts, so
  * the query param is forwarded as x-community-id).
  * Those pages — /pm/website-editor, /pm/settings/website (now a redirect into
- * it), /pm/settings/branding, /pm/site-preview, /pm/onboarding/website,
+ * it), /pm/settings/branding, /pm/onboarding/website,
  * /pm/dashboard/[community_id] — must keep the normal community nav. Testing the bare '/pm/' prefix instead
  * conflated the two and made the "Website" tab replace the whole sidebar.
+ *
+ * /pm/site-preview is community-scoped too but is NOT in that list: it renders
+ * no sidebar at all. It lives in the shell-less `(site-preview)` route group so
+ * the wizard can frame it, so neither nav applies.
  *
  * The deeper fix is moving the community-scoped editor out from under the
  * portfolio prefix entirely (e.g. /communities/[id]/website); this allowlist

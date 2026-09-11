@@ -1,4 +1,3 @@
-// breadcrumbs:exempt — embedded preview surface (no chrome), framed by the wizard
 /**
  * Authenticated, framable live-preview of a community's public site, rendered
  * with the wizard's CURRENT layout/preset SELECTION (passed as query overrides)
@@ -17,6 +16,21 @@
  * plan without it can render the preview but cannot save from the editor.
  * Renders the SAME layout component the public site uses — server-side, so the
  * server-only block renderers (SoR blocks) work with the community's real data.
+ *
+ * Deliberately OUTSIDE `(authenticated)`, in its own route group, because that
+ * layout renders `AppShell` unconditionally — so the wizard's 490px-wide iframe
+ * used to contain the whole app: top bar, search, breadcrumb trail and the
+ * billing banners, in mobile-drawer mode. Route groups do not appear in URLs, so
+ * `/pm/site-preview` is unchanged and middleware still protects it (`/pm` is in
+ * `PROTECTED_PATH_PREFIXES`). The group has no `layout.tsx` and inherits the root
+ * one, like `(public)/`: the four group layouts that do exist all exist to mount
+ * `AppQueryProvider`, and nothing here calls a React Query hook — `public-site`
+ * renders these same `<Layout>` components with no provider either.
+ *
+ * This page owes the shell nothing: it runs its own auth below, and resolves its
+ * own theme, cssVars and font links further down. `(authenticated)`'s cssVars
+ * were the DEFAULT theme anyway (the PM portal sends no tenant header) and this
+ * page's own nested div overrode them.
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
@@ -35,6 +49,14 @@ import {
   resolvePreviewLayoutId,
   applyPresetTokensToBranding,
 } from '@/lib/public-site/preview-overrides';
+
+/**
+ * Inherited from `(authenticated)/layout.tsx` until this route moved out of that
+ * group; re-declared here rather than in a group layout, matching the sibling
+ * `app/dev/site-preview/page.tsx`. Without it the route becomes a static-export
+ * candidate and a redirect can be baked into `.next` — see that file's header.
+ */
+export const dynamic = 'force-dynamic';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
