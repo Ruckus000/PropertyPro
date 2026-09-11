@@ -298,18 +298,36 @@ would be the stronger control, but `cron_runs` is registry-driven and
 in both directions, so adding an admin slug means teaching that guard a second
 root first. That work was deliberately deferred, not forgotten.
 
-**What you do get:** the route's `reportRejection` fires a throttled
-`Sentry.captureMessage('push-dispatch cron rejected an unauthenticated call')` at
-`warning` level, tagged **`cron: push-dispatch`** and `outcome: unauthorized`,
-with `cronSecretConfigured` and `hasAuthorizationHeader` as extras (never the
-secret). One event per hour per process at most — the route is session-less by
-design, so an uncapped capture would let a stranger burn the Sentry quota.
+**What you do get: THREE event shapes, under two different tag keys.** This is the
+part to get right, because a rule written against only the first one looks like
+coverage and is not.
+
+| what happened | where | tag |
+|---|---|---|
+| an unauthenticated call was rejected | the route's `reportRejection` | `cron: push-dispatch`, `outcome: unauthorized` |
+| a push to one subscription failed | `dispatchPush`, `push.ts:492` | `push_dispatch: send` |
+| one admin's whole dispatch threw | `dispatchPush`, `push.ts:526` | `push_dispatch: admin` |
+
+Only the first carries a `cron` tag. The other two — the ones that mean
+notifications are **not being delivered** — carry `push_dispatch` and no `cron`
+or `job` tag at all.
+
+The rejection capture is throttled to one event per hour per process, with
+`cronSecretConfigured` and `hasAuthorizationHeader` as extras (never the secret):
+the route is session-less by design, so an uncapped capture would let a stranger
+burn the Sentry quota. The two delivery captures are not throttled, because they
+are only reachable by an authenticated tick.
 
 Consequences to hold onto:
 
-- **Sentry Rule 1 does not match it.** That rule keys on `job` being set; this
-  event carries `cron`. If you want to be paged for it, add a rule on
-  `cron is set`, or search `tags[cron]:push-dispatch` by hand.
+- **Sentry Rule 1 does not match any of them.** That rule keys on `job` being
+  set; none of these carry it. A rule on `cron is set` catches **only the
+  unauthenticated probe** — it is blind to every actual delivery failure. To be
+  paged for delivery, the rule needs `push_dispatch is set` as well, or search
+  `tags[push_dispatch]:send` by hand.
+- **The probe event is the least important of the three** and the easiest to
+  alert on, which is exactly the trap: a stranger hitting the endpoint pages you,
+  while a push service returning 500s to every subscription does not.
 - **A stopped scheduler is invisible.** A cron that never fires is never rejected
   either, so silence here means nothing. Confirm registration with
   `vercel crons ls` against the **admin** project — and remember registration is

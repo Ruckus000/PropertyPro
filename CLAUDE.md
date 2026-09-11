@@ -87,7 +87,7 @@ docs/                   # Specs, ADRs, audits, design system
 > `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is where it breaks visibly.
 >
 > **Two guards came with it.** `pnpm guard:admin-community-scope` (wave 2) requires
-> every `communities` / `user_roles` read in `apps/admin/src/lib/server/` to carry
+> every `communities` / `user_roles` read in `apps/admin/src/lib/` to carry
 > the real-community predicate — wave 2 shipped a dashboard whose Members KPI and
 > Members sparkline counted different populations, and four gates missed it because
 > the defect lives in the relationship between two sibling files. And
