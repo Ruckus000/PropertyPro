@@ -558,3 +558,17 @@ export {
   type SupportTicketEvent,
   type NewSupportTicketEvent,
 } from './support-ticket-events';
+
+// Platform admin console preferences and Web Push subscriptions — wave 4 of the
+// admin console redesign (0073). Both are platform-scoped: a platform admin has
+// no community membership, so there is no community_id to scope by.
+export {
+  platformAdminPreferences,
+  type PlatformAdminPreference,
+  type NewPlatformAdminPreference,
+} from './platform-admin-preferences';
+export {
+  platformAdminPushSubscriptions,
+  type PlatformAdminPushSubscription,
+  type NewPlatformAdminPushSubscription,
+} from './platform-admin-push-subscriptions';

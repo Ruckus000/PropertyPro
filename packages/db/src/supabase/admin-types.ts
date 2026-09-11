@@ -530,6 +530,94 @@ export type SupportTicketEventInsert = Omit<SupportTicketEventRow, 'id' | 'creat
   created_at?: string;
 };
 
+// ─── Platform admin console preferences and Web Push (0073) ───
+//
+// Per-OPERATOR state for the console's notification tray, alert opt-ins and
+// PWA push. Platform-scoped: a platform admin holds no community membership,
+// so neither table has a community_id. Read and written exclusively from
+// apps/admin over service_role, behind requirePlatformAdmin.
+
+export type PlatformAdminPreferencesRow = {
+  /** PRIMARY KEY — one row per operator, so the write is an upsert on this. */
+  user_id: string;
+  /**
+   * Tray read WATERMARK, not a per-item flag: "unread" means "surfaced after
+   * this instant". Null means nothing has ever been marked read, which is not
+   * the same as having marked everything read at the epoch.
+   */
+  notifications_read_at: string | null;
+  /**
+   * Per-category opt-ins plus `errorSpikeThreshold`. Typed loosely here and
+   * narrowed by `AlertPrefs` in apps/admin: the database's own guarantee is the
+   * `jsonb_typeof(...) = 'object'` CHECK, and claiming more in this type than
+   * the CHECK enforces would be a lie a migration could not keep.
+   */
+  alert_prefs: Record<string, unknown>;
+  /** Content hashes of alerts already delivered, so the cron does not re-notify. */
+  push_sent_fingerprints: string[];
+  updated_at: string;
+};
+
+/**
+ * Only `user_id` is required. Both jsonb columns and `updated_at` carry
+ * database defaults, and `notifications_read_at` is nullable — a first-touch
+ * upsert that sets one field should not have to restate the rest.
+ */
+export type PlatformAdminPreferencesInsert = Omit<
+  PlatformAdminPreferencesRow,
+  'notifications_read_at' | 'alert_prefs' | 'push_sent_fingerprints' | 'updated_at'
+> & {
+  notifications_read_at?: string | null;
+  alert_prefs?: Record<string, unknown>;
+  push_sent_fingerprints?: string[];
+  updated_at?: string;
+};
+
+/**
+ * `user_id` is deliberately absent: it is the identity of the row, so changing
+ * it would not be an update but a move to a different operator's preferences.
+ */
+export type PlatformAdminPreferencesUpdate = Partial<
+  Omit<PlatformAdminPreferencesRow, 'user_id'>
+>;
+
+export type PlatformAdminPushSubscriptionRow = {
+  id: number;
+  user_id: string;
+  /** UNIQUE — the natural key. One row per browser, so a re-subscribe upserts on this. */
+  endpoint: string;
+  /** The browser's public key (base64url). Not our secret, but see the Update type. */
+  p256dh: string;
+  /** The subscription's auth secret (base64url), for payload encryption. */
+  auth: string;
+  user_agent: string | null;
+  created_at: string;
+  last_success_at: string | null;
+  failure_count: number;
+};
+
+export type PlatformAdminPushSubscriptionInsert = Omit<
+  PlatformAdminPushSubscriptionRow,
+  'id' | 'user_agent' | 'created_at' | 'last_success_at' | 'failure_count'
+> & {
+  id?: number;
+  user_agent?: string | null;
+  created_at?: string;
+  last_success_at?: string | null;
+  failure_count?: number;
+};
+
+/**
+ * Delivery bookkeeping only. `user_id`, `endpoint`, `p256dh` and `auth` are
+ * absent on purpose: those four ARE the subscription, and a row whose keys were
+ * edited in place would silently start encrypting for a different browser than
+ * the one the endpoint points at. Re-subscribing writes a new row (or upserts
+ * on `endpoint`); it does not mutate the keys of an existing one.
+ */
+export type PlatformAdminPushSubscriptionUpdate = Partial<
+  Pick<PlatformAdminPushSubscriptionRow, 'user_agent' | 'last_success_at' | 'failure_count'>
+>;
+
 export type AdminDatabase = {
   public: {
     Tables: {
@@ -602,6 +690,16 @@ export type AdminDatabase = {
         SupportTicketEventRow,
         SupportTicketEventInsert,
         Partial<SupportTicketEventRow>
+      >;
+      platform_admin_preferences: AdminTable<
+        PlatformAdminPreferencesRow,
+        PlatformAdminPreferencesInsert,
+        PlatformAdminPreferencesUpdate
+      >;
+      platform_admin_push_subscriptions: AdminTable<
+        PlatformAdminPushSubscriptionRow,
+        PlatformAdminPushSubscriptionInsert,
+        PlatformAdminPushSubscriptionUpdate
       >;
     };
     Views: Record<string, never>;

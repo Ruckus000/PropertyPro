@@ -83,7 +83,17 @@ BEGIN
     -- inbox — every message a correspondent has ever sent support@, privacy@ or
     -- contact@ — comes back readable by anon while production has it revoked.
     -- Same class as the tickets gap above; found by fixing that one.
-    'support_inbox_threads', 'support_inbox_messages'
+    'support_inbox_threads', 'support_inbox_messages',
+    -- Revoked by migration 0073, which creates them. Only the push table has a
+    -- bigserial sequence — platform_admin_preferences is keyed on user_id, so
+    -- there is nothing to chase for it in the sequence block below. Added here
+    -- in the same change that created them, because the 0072/0068 pair proved
+    -- what happens otherwise: on a PERSISTENT local database the stub's blanket
+    -- grant is re-applied by `local-test-db.sh setup` over tables the migrations
+    -- do not re-create, and these come back readable by anon while production
+    -- has them revoked. Here that would expose which operator watches what and
+    -- the endpoint+keys needed to push to their device.
+    'platform_admin_preferences', 'platform_admin_push_subscriptions'
   ]
   LOOP
     IF EXISTS (
@@ -136,7 +146,11 @@ BEGIN
     -- 0068 revokes these two sequences alongside its tables; they were missing
     -- here for the same reason the tables were, and a readable sequence lets a
     -- caller enumerate how much correspondence exists even when the table is shut.
-    'support_inbox_threads_id_seq', 'support_inbox_messages_id_seq'
+    'support_inbox_threads_id_seq', 'support_inbox_messages_id_seq',
+    -- 0073's push table. Its sibling, platform_admin_preferences, is keyed on
+    -- user_id and has NO sequence — the asymmetry is the schema's, not an
+    -- omission here.
+    'platform_admin_push_subscriptions_id_seq'
   ]
   LOOP
     IF EXISTS (
