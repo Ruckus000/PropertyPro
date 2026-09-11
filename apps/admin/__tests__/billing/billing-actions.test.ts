@@ -137,6 +137,7 @@ import {
   extendTrial,
   getExpectedStripeLivemode,
   pauseSubscription,
+  idempotencyWindow,
 } from '@/lib/server/billing-actions';
 
 const actor = { id: 'u', email: 'admin@propertypro.test' };
@@ -222,7 +223,7 @@ describe('the Stripe mode assertion', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_x';
     process.env.STRIPE_EXPECTED_LIVEMODE = 'false';
     const error = await changePlan(1, { planId: 'professional' }, actor).catch((e) => e);
-    expect(error).toMatchObject({ statusCode: 500, code: 'STRIPE_MODE_MISMATCH' });
+    expect(error).toMatchObject({ statusCode: 503, code: 'STRIPE_MODE_MISMATCH' });
   });
 
   it.each([
@@ -255,7 +256,7 @@ describe('changePlan', () => {
         items: [{ id: 'si_1', price: 'price_pro_m' }],
         proration_behavior: 'always_invoice',
       }),
-      { idempotencyKey: 'admin:change-plan:sub_1:price_pro_m' },
+      { idempotencyKey: `admin:change-plan:sub_1:price_pro_m:${idempotencyWindow()}` },
     );
   });
 
@@ -367,6 +368,25 @@ describe('extendTrial', () => {
     expect(params.trial_end).toBe(Math.floor(Date.parse('2026-09-27T00:00:00Z') / 1000));
   });
 
+  /**
+   * The defect this closes: Stripe replays the original response for 24 hours
+   * when an idempotency key repeats. With keys built only from
+   * (subscription, action, input), pausing a subscription, resuming it, and
+   * pausing it again the same afternoon made the SECOND pause a silent no-op —
+   * it returned the first pause's response having changed nothing. A money
+   * action reporting success while doing nothing is the worst failure shape
+   * there is.
+   */
+  it('gives a deliberate repeat a different key, while a same-moment retry keeps one', () => {
+    const t0 = Date.parse('2026-09-08T12:00:00Z');
+
+    // Same submission retried immediately — one key, so Stripe replays.
+    expect(idempotencyWindow(t0)).toBe(idempotencyWindow(t0 + 5_000));
+
+    // A deliberate repeat a minute later — a different key, so it actually runs.
+    expect(idempotencyWindow(t0)).not.toBe(idempotencyWindow(t0 + 60_000));
+  });
+
   it('keys on the computed trial end, so a retry cannot extend twice', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-08T00:00:00Z'));
@@ -374,8 +394,15 @@ describe('extendTrial', () => {
     vi.useRealTimers();
 
     const expected = Math.floor(Date.parse('2026-10-08T00:00:00Z') / 1000);
+    // The window is derived from the clock the ACTION saw, not the clock this
+    // assertion runs under — `vi.useRealTimers()` above already restored it, so
+    // a bare `idempotencyWindow()` here would read wall-clock and never match.
+    // Pinning it to the faked instant is also what proves the bucket is
+    // genuinely time-derived rather than a constant.
     expect(h.subscriptionsUpdate.mock.calls.at(-1)![2]).toEqual({
-      idempotencyKey: `admin:extend-trial:sub_1:${expected}`,
+      idempotencyKey:
+        `admin:extend-trial:sub_1:${expected}:` +
+        idempotencyWindow(Date.parse('2026-09-08T00:00:00Z')),
     });
   });
 });
@@ -398,7 +425,7 @@ describe('applyCoupon', () => {
       // `discounts: [{ coupon }]`, not the legacy top-level `coupon:` parameter,
       // which apiVersion 2026-01-28.clover no longer accepts.
       { discounts: [{ coupon: 'SUMMER' }] },
-      { idempotencyKey: 'admin:apply-coupon:sub_1:SUMMER' },
+      { idempotencyKey: `admin:apply-coupon:sub_1:SUMMER:${idempotencyWindow()}` },
     );
   });
 
@@ -427,7 +454,7 @@ describe('pauseSubscription', () => {
     expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
       'sub_1',
       { pause_collection: { behavior: 'mark_uncollectible' } },
-      { idempotencyKey: 'admin:pause:sub_1:pause' },
+      { idempotencyKey: `admin:pause:sub_1:pause:${idempotencyWindow()}` },
     );
   });
 
@@ -439,7 +466,7 @@ describe('pauseSubscription', () => {
       // `''` is Stripe's Emptyable convention for clearing the field. `undefined`
       // would mean "leave it alone" — a resume button that does nothing.
       { pause_collection: '' },
-      { idempotencyKey: 'admin:pause:sub_1:resume' },
+      { idempotencyKey: `admin:pause:sub_1:resume:${idempotencyWindow()}` },
     );
   });
 
@@ -466,7 +493,7 @@ describe('cancelSubscription', () => {
     expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
       'sub_1',
       { cancel_at_period_end: true },
-      { idempotencyKey: 'admin:cancel:sub_1:period-end' },
+      { idempotencyKey: `admin:cancel:sub_1:period-end:${idempotencyWindow()}` },
     );
     // The terminal call must not have happened: these two are materially
     // different and only one of them can be undone.
@@ -477,7 +504,7 @@ describe('cancelSubscription', () => {
     await cancelSubscription(1, { atPeriodEnd: false }, actor);
 
     expect(h.subscriptionsCancel).toHaveBeenCalledWith('sub_1', undefined, {
-      idempotencyKey: 'admin:cancel:sub_1:now',
+      idempotencyKey: `admin:cancel:sub_1:now:${idempotencyWindow()}`,
     });
     expect(h.subscriptionsUpdate).not.toHaveBeenCalled();
   });

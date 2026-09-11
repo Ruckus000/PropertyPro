@@ -116,6 +116,32 @@ const MS_PER_DAY = 86_400_000;
  * specific sentence rather than "An unexpected error occurred" — the whole point
  * of not letting this be a generic 500.
  */
+/**
+ * How long two identical submissions are treated as the SAME request.
+ *
+ * Stripe replays the original response for 24 hours when an idempotency key
+ * repeats. Keys built only from (subscription, action, input) therefore make a
+ * DELIBERATE repeat of the same action a silent no-op: pause a subscription,
+ * resume it, pause it again the same afternoon, and the second pause returns the
+ * first pause's response having changed nothing. A money action that reports
+ * success while doing nothing is the worst failure shape available, so the key
+ * carries a coarse time bucket as well.
+ *
+ * The trade-off, stated rather than hidden: a network retry of one submission
+ * replays (which is the protection we want) unless it straddles a bucket
+ * boundary, and two genuinely distinct intents inside the same minute collide.
+ * Sixty seconds is well inside the double-click and client-retry window and well
+ * under any plausible "change my mind" interval. Every action already requires
+ * an explicit confirm dialog, so an accidental double submission is a retry of
+ * one click rather than two decisions.
+ */
+const IDEMPOTENCY_WINDOW_MS = 60_000;
+
+/** The current replay bucket. Exported for the tests that pin key shape. */
+export function idempotencyWindow(now: number = Date.now()): string {
+  return String(Math.floor(now / IDEMPOTENCY_WINDOW_MS));
+}
+
 export class StripeModeMismatchError extends AppError {
   constructor(actual: boolean, expected: boolean) {
     super(
@@ -123,7 +149,7 @@ export class StripeModeMismatchError extends AppError {
         `STRIPE_SECRET_KEY is a ${actual ? 'live' : 'test'}-mode key and this console expects ` +
         `${expected ? 'live' : 'test'} mode. Set STRIPE_EXPECTED_LIVEMODE=${expected ? 'false' : 'true'} ` +
         `if that is intended, or point STRIPE_SECRET_KEY at the ${expected ? 'live' : 'test'} key.`,
-      500,
+      503,
       'STRIPE_MODE_MISMATCH',
     );
     this.name = 'StripeModeMismatchError';
@@ -136,7 +162,7 @@ export class StripeModeUnknownError extends AppError {
     super(
       `STRIPE_SECRET_KEY is unset or its mode could not be determined, and this console expects ` +
         `${expected ? 'live' : 'test'} mode — refusing to change a subscription.`,
-      500,
+      503,
       'STRIPE_MODE_UNKNOWN',
     );
     this.name = 'StripeModeUnknownError';
@@ -360,7 +386,7 @@ export async function changePlan(
       items: [{ id: item.itemId, price: priceId }],
       proration_behavior: 'always_invoice',
     },
-    { idempotencyKey: `admin:change-plan:${subscriptionId}:${priceId}` },
+    { idempotencyKey: `admin:change-plan:${subscriptionId}:${priceId}:${idempotencyWindow()}` },
   );
 
   invalidateBillingCache();
@@ -403,7 +429,7 @@ export async function extendTrial(
   await stripe.subscriptions.update(
     subscriptionId,
     { trial_end: trialEnd, proration_behavior: 'none' },
-    { idempotencyKey: `admin:extend-trial:${subscriptionId}:${trialEnd}` },
+    { idempotencyKey: `admin:extend-trial:${subscriptionId}:${trialEnd}:${idempotencyWindow()}` },
   );
 
   invalidateBillingCache();
@@ -450,7 +476,7 @@ export async function applyCoupon(
   await stripe.subscriptions.update(
     subscriptionId,
     { discounts: [{ coupon: input.coupon }] },
-    { idempotencyKey: `admin:apply-coupon:${subscriptionId}:${input.coupon}` },
+    { idempotencyKey: `admin:apply-coupon:${subscriptionId}:${input.coupon}:${idempotencyWindow()}` },
   );
 
   invalidateBillingCache();
@@ -489,7 +515,7 @@ export async function pauseSubscription(
     subscriptionId,
     { pause_collection: input.resume ? '' : { behavior: 'mark_uncollectible' } },
     {
-      idempotencyKey: `admin:pause:${subscriptionId}:${input.resume ? 'resume' : 'pause'}`,
+      idempotencyKey: `admin:pause:${subscriptionId}:${input.resume ? 'resume' : 'pause'}:${idempotencyWindow()}`,
     },
   );
 
@@ -521,7 +547,7 @@ export async function cancelSubscription(
 
   const state = await retrieveSubscriptionState(subscriptionId);
   const stripe = getStripeClient();
-  const idempotencyKey = `admin:cancel:${subscriptionId}:${input.atPeriodEnd ? 'period-end' : 'now'}`;
+  const idempotencyKey = `admin:cancel:${subscriptionId}:${input.atPeriodEnd ? 'period-end' : 'now'}:${idempotencyWindow()}`;
 
   if (input.atPeriodEnd) {
     await stripe.subscriptions.update(
