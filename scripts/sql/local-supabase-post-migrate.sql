@@ -76,7 +76,14 @@ BEGIN
     -- re-create, and both tickets tables come back fully readable by anon while
     -- production has them revoked. That gap is not hypothetical — it is what
     -- this pair's own RLS suite failed on first run.
-    'support_tickets', 'support_ticket_events'
+    'support_tickets', 'support_ticket_events',
+    -- Revoked by migration 0068 the same way, and missing from this list until
+    -- 0072 made the gap visible: on a PERSISTENT local database the stub's
+    -- blanket grant is re-applied over them by `local-test-db.sh setup`, so the
+    -- inbox — every message a correspondent has ever sent support@, privacy@ or
+    -- contact@ — comes back readable by anon while production has it revoked.
+    -- Same class as the tickets gap above; found by fixing that one.
+    'support_inbox_threads', 'support_inbox_messages'
   ]
   LOOP
     IF EXISTS (
@@ -124,7 +131,13 @@ DO $$
 DECLARE
   s text;
 BEGIN
-  FOREACH s IN ARRAY ARRAY['support_tickets_id_seq', 'support_ticket_events_id_seq']
+  FOREACH s IN ARRAY ARRAY[
+    'support_tickets_id_seq', 'support_ticket_events_id_seq',
+    -- 0068 revokes these two sequences alongside its tables; they were missing
+    -- here for the same reason the tables were, and a readable sequence lets a
+    -- caller enumerate how much correspondence exists even when the table is shut.
+    'support_inbox_threads_id_seq', 'support_inbox_messages_id_seq'
+  ]
   LOOP
     IF EXISTS (
       SELECT 1 FROM information_schema.sequences
