@@ -61,8 +61,9 @@ test.describe('Signup → Stripe Checkout → trialing (GA gate)', () => {
     //    confirm-verification gates on the auth user's email_confirmed_at.
     await confirmSupabaseEmail(inputs.email);
 
-    // 3. Advance the pending signup to email_verified (what the /signup/verify
-    //    poll does once Supabase reports the email confirmed).
+    // 3. Advance the pending signup to email_verified. In the product this is
+    //    what /signup?verified=1 does on arrival from the emailed link — the
+    //    /signup/verify screen used to poll for it and no longer does.
     const confirm = await request.post('/api/v1/auth/confirm-verification', {
       data: { signupRequestId },
     });
