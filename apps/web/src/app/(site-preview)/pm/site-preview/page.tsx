@@ -34,7 +34,12 @@
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import {
+  resolveTheme,
+  toCssVars,
+  toFontLinks,
+  customCssOverridesToCssVars,
+} from '@propertypro/theme';
 import type { CommunityType } from '@propertypro/shared';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -44,6 +49,7 @@ import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/brand
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { visibleBlocks } from '@/lib/site/visible-blocks';
+import { resolveFooterSettings } from '@/lib/site-editor/site-settings';
 import { getLayout } from '@/components/public-site/layouts/registry';
 import {
   resolvePreviewLayoutId,
@@ -110,12 +116,33 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
       // Non-fatal.
     }
   }
+  // The HEADER logo is the wordmark when the PM has uploaded one; `resolveTheme`
+  // only ever reads the square avatar. Without this the preview shows the avatar
+  // while the live site shows the wordmark — in the header, which is most of what
+  // the PM is judging when they pick a layout. Same non-fatal shape as above.
+  let siteLogoUrl: string | null = null;
+  if (rawBranding?.siteLogoPath) {
+    try {
+      siteLogoUrl = await createPresignedDownloadUrl('documents', rawBranding.siteLogoPath);
+    } catch {
+      // Non-fatal — fall back to the square logo / text.
+    }
+  }
+
   const theme = resolveTheme(
     previewBranding ? { ...previewBranding, logoUrl } : { logoUrl },
     community!.name,
     communityType,
   );
-  const cssVars = toCssVars(theme);
+  const headerLogoUrl = siteLogoUrl ?? theme.logoUrl;
+  // Pro+ custom CSS overrides win over the resolved theme, exactly as they do on
+  // the live site. Consequence worth knowing rather than "fixing": for a community
+  // that has overrides, switching preset in the wizard will NOT move the
+  // overridden tokens here — because it will not move them in production either.
+  const cssVars = {
+    ...toCssVars(theme),
+    ...customCssOverridesToCssVars(rawBranding?.customCssOverrides),
+  };
   const fontLinks = toFontLinks(theme);
 
   const layoutId = resolvePreviewLayoutId(rawBranding, asString(params['layout']), communityType);
@@ -129,6 +156,10 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   // preview has to show what the public site will show, and an unfiltered read
   // would interleave a second page's sections into it.
   const homePageId = await reader.getHomePageId();
+  // Published-only, with no `includeDrafts` option to pass — the same view the
+  // real route gets (it does not thread its preview flag here either), so a draft
+  // page stays out of the preview nav just as it stays out of the live one.
+  const navPages = await reader.listNavPages();
   const blocks = visibleBlocks(
     await reader.listSiteBlocks({
       includeDrafts: true,
@@ -148,7 +179,7 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
             id: community!.id,
             slug: community!.slug,
             name: community!.name,
-            logoUrl: theme.logoUrl,
+            logoUrl: headerLogoUrl,
             communityType,
             city: null,
             state: null,
@@ -167,6 +198,19 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
             blockOrder: b.blockOrder,
             content: b.content,
           }))}
+          // Total resolver over the RAW branding, matching the real route: the
+          // preset overlay only touches theme tokens, never the footer fields.
+          // This is what carries the PM's opt-in statutory line into the preview.
+          footer={resolveFooterSettings(rawBranding)}
+          // `''` is the home slug, so it compares directly against a nav item's
+          // slug. `PageNav` renders nothing below two items, so this is invisible
+          // until a community has a second published in-nav page.
+          nav={{ items: navPages, currentSlug: '' }}
+          // `page` is deliberately absent: it is "only supplied for a NON-home
+          // page" (layouts/types.ts), the preview is home-scoped, and the layouts
+          // use it solely for `page && !page.isHome ? page.name : community.name`
+          // — a no-op here. Building one would cost a getPageBySlug read for no
+          // rendered difference. Do not add it.
         />
       </div>
     </>
