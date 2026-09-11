@@ -224,6 +224,23 @@ operation that has already half-completed.
    - `property-pro-web`: `STRIPE_SECRET_KEY`,
      `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
    - `property-pro-admin`: `STRIPE_SECRET_KEY`
+
+   > **Update all three web vars together, and redeploy once.** Do not deploy
+   > between them. One partial state loses live events *permanently and
+   > silently*: `STRIPE_WEBHOOK_SECRET` live while `STRIPE_SECRET_KEY` is still
+   > test. A live event then passes signature verification, reaches the mode
+   > guard at `webhooks/stripe/route.ts:688` — `getExpectedLivemode()` reads
+   > `STRIPE_SECRET_KEY` (`stripe-service.ts:318`), so it expects test — and is
+   > dropped with a **200** before the idempotency fence. 200 means handled, so
+   > Stripe never retries and the event leaves no row in
+   > `stripe_webhook_events`. A real `checkout.session.completed` in that window
+   > is simply gone.
+   >
+   > The reverse partial state is safe and self-heals: secret key live with the
+   > webhook secret still test fails *signature* verification (400), and Stripe
+   > retries until the redeploy lands. That asymmetry is the whole reason to do
+   > the three as one edit — the mode guard is correct, and correct behaviour
+   > for a foreign event is exactly what makes it lossy for a real one.
 3. **Redeploy both.** Env changes never reach a running deployment.
 
    ```bash
@@ -314,6 +331,29 @@ webhook signature verifies, the community is provisioned and the plan is stamped
 To prove an actual **charge** without waiting 30 days, end the trial on that one
 subscription from the Stripe dashboard (Subscriptions → the subscription →
 *End trial*). That bills immediately; refund the resulting invoice and cancel.
+
+**A 200 in the dashboard is not proof the webhook worked.** The route returns
+200 and stamps `processed_at` only after the handler completes; when the handler
+throws it logs, captures to Sentry, and returns 500 with `processed_at` left
+null so Stripe retries. If every retry also fails, the row stays null forever
+and nothing surfaces it. So after the signup, check the fence directly:
+
+```bash
+psql "$DATABASE_URL" -c "select event_id, received_at from stripe_webhook_events where processed_at is null order by received_at desc limit 10"
+```
+
+Any row from your signup means that event was received, signature-verified, and
+never processed — Stripe gave up. Expect **zero**.
+
+> This is not hypothetical. Measured 2026-09-10: 6 of the 278 rows in that table
+> are permanently unprocessed, all from 2026-08-10, in six bursts with exactly
+> one failure per burst. All six predate the merge of #941
+> (*stop an unknown signupRequestId retrying forever*) and #942 (*drop
+> cross-mode webhook events instead of retrying them forever*) at 14:48 and
+> 14:55 ET that day, and nothing has failed since — so they read as residue from
+> the failure modes those two closed. The event types are not recorded (the
+> table stores only `event_id`), so that is an inference from the timing, not a
+> proven cause; Sentry holds the exceptions if it ever needs settling.
 
 ---
 
