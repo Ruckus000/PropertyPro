@@ -37,6 +37,7 @@ import type { PlatformAdminPushSubscriptionRow } from '@propertypro/db/supabase/
 import type { AdminPreferences, AlertPrefKey, AlertPrefs } from '@/lib/preferences/alert-prefs';
 import { getPreferences } from '@/lib/server/preferences';
 import { getShellSignals, type ShellSignals } from '@/lib/server/shell-signals';
+import type { ShellSignalItem } from '@/lib/server/signals/types';
 
 /** One notification we would send, before the already-sent ledger is consulted. */
 export interface PushCandidate {
@@ -69,23 +70,61 @@ export const PUSH_FINGERPRINT_LIMIT = 200;
 /** The hour, in the deployment's local time (UTC on Vercel), the leads digest fires. */
 export const LEADS_DIGEST_HOUR = 8;
 
+function bodyFor(title: string, meta: string): string {
+  return meta ? `${title} — ${meta}` : title;
+}
+
+/** A tray row's own words, for signals whose text is entirely platform-derived. */
+function trayText(item: ShellSignalItem): string {
+  return bodyFor(item.title, item.meta);
+}
+
 /**
- * Which nav signal maps to which opt-in, and what its notification is called.
+ * Which nav signal maps to which opt-in, what its notification is called, and
+ * how its BODY is built.
  *
  * `tickets`, `onboarding` and `health` items are deliberately absent: the five
  * opt-ins on the settings screen are the whole vocabulary, and a signal with no
  * opt-in must not push — there would be no way for an operator to turn it off.
  * Health is covered by `critical` below rather than per item.
+ *
+ * ## The body is decided HERE, per signal, and is never inherited
+ *
+ * A tray row is read inside an authenticated console by the operator who opened
+ * it. A push body is rendered by the OS on a lock screen, in front of whoever is
+ * near the device, and kept in a notification history we do not control. The two
+ * are not interchangeable, so `body` is an explicit field per signal rather than
+ * an automatic pass-through of the tray's `title`/`meta`.
+ *
+ * A signal may use `trayText` ONLY if every part of that text is
+ * platform-derived. `inbox` cannot, on both counts (review H2 / security
+ * MEDIUM-1):
+ *
+ * - its `title` falls back to the correspondent's EMAIL ADDRESS whenever we have
+ *   no name for them — the ordinary case for a first contact, and the one field
+ *   that identifies a person outside our system;
+ * - its `meta` is the email's SUBJECT, free text chosen by whoever wrote to
+ *   `support@`. That is anyone on the internet picking a string to render under
+ *   our icon, on the lock screen of the most privileged humans in the system.
+ *
+ * So it carries a constant. The wave's own rule is "no email body and no PII
+ * beyond a name", and the console is one tap away.
  */
-const ITEM_SIGNALS: Partial<Record<string, { prefKey: AlertPrefKey; title: string }>> = {
-  inbox: { prefKey: 'newSupportThreads', title: 'New support thread' },
-  billing: { prefKey: 'paymentFailures', title: 'Payment problem' },
-  deletion: { prefKey: 'deletionReminders', title: 'Deletion scheduled' },
+const ITEM_SIGNALS: Partial<
+  Record<string, { prefKey: AlertPrefKey; title: string; body: (item: ShellSignalItem) => string }>
+> = {
+  inbox: {
+    prefKey: 'newSupportThreads',
+    title: 'New support thread',
+    // No correspondent, no address, no subject — see the docblock above.
+    body: () => 'Someone has written to a support mailbox. Open the console to read it.',
+  },
+  // Community name, days past due and MRR: all ours, none of it authored by
+  // anyone outside the platform, and the alert is useless without the client.
+  billing: { prefKey: 'paymentFailures', title: 'Payment problem', body: trayText },
+  // A request type and two dates, both computed here.
+  deletion: { prefKey: 'deletionReminders', title: 'Deletion scheduled', body: trayText },
 };
-
-function bodyFor(title: string, meta: string): string {
-  return meta ? `${title} — ${meta}` : title;
-}
 
 /** `YYYY-MM-DD` in the deployment's local time, for the digest fingerprint. */
 function localDayStamp(now: Date): string {
@@ -120,7 +159,14 @@ export function candidatesFromSignals(
     candidates.push({
       fingerprint: signals.critical.fingerprint,
       title: 'Production error spike',
-      body: signals.critical.text,
+      // `shortText`, NOT `text`. The banner's long form embeds
+      // `cron_runs.last_error` and the top Sentry issue's title — the first is
+      // withheld even from web's unauthenticated cron-health probe because it
+      // "can carry query text or table internals", and the second routinely
+      // carries user identifiers lifted out of an error message. `shortText` is
+      // a count or a job name: enough to know what broke, and nothing lifted
+      // out of a failure.
+      body: signals.critical.shortText,
       url: signals.critical.href,
       prefKey: 'errorSpikes',
     });
@@ -133,7 +179,7 @@ export function candidatesFromSignals(
     candidates.push({
       fingerprint: item.id,
       title: mapping.title,
-      body: bodyFor(item.title, item.meta),
+      body: mapping.body(item),
       url: item.href,
       prefKey: mapping.prefKey,
     });
@@ -352,12 +398,19 @@ function defaultDeps(): PushDeps {
  * every candidate against a known-gone endpoint; that only buys a higher
  * `failed` count and N pointless outbound requests per tick.)
  *
- * ## The ledger is written once, from the operator's whole batch
+ * ## The ledger is written once, from the operator's whole batch — and only if
+ * something arrived
  *
  * Not per successful send. A fingerprint records "this operator has been told
  * about this thing", and an operator with two devices where one is offline has
  * still been told. Persisting per-send would re-notify their working device on
  * the next tick every time the broken one failed.
+ *
+ * But a batch where NOTHING was delivered is not a batch that was told. The
+ * ledger is permanent for those fingerprints (nothing removes an entry but the
+ * 200-item trim), so recording an undelivered batch suppresses that alert
+ * forever — the failure mode alerting exists to prevent, written by the
+ * alerting path itself. `deliveredHere === 0` is the whole condition.
  */
 export async function dispatchPush(deps?: Partial<PushDeps>): Promise<PushDispatchResult> {
   const injectedSender = deps?.sendNotification !== undefined;
@@ -429,11 +482,23 @@ export async function dispatchPush(deps?: Partial<PushDeps>): Promise<PushDispat
         pruned += 1;
       }
 
-      // Every device was gone and nothing reached anyone: do NOT record these
-      // as sent. The operator has no subscriptions left, and marking the batch
-      // delivered would make all of it un-notifiable on the device they
-      // subscribe from next.
-      if (deliveredHere === 0 && gone.size === subscriptions.length) continue;
+      // NOTHING REACHED ANYONE: do not record these as sent.
+      //
+      // This used to also require `gone.size === subscriptions.length`, which
+      // made it the narrower "every device was gone" — so a tick where every
+      // send failed for a NON-gone reason (the push service 500s, a network
+      // blip, a bad VAPID signature) still wrote the whole batch's fingerprints
+      // to the ledger. `selectUnsent` skips anything in the ledger and
+      // fingerprints are stable by design, so a five-minute push-service outage
+      // suppressed that incident's alert FOREVER. An alert that reached nobody
+      // must not be recorded as delivered.
+      //
+      // `deliveredHere === 0` subsumes the all-gone case — pruning has already
+      // happened above — and is exactly the condition this comment describes.
+      // The converse stays deliberate: ONE device out of two succeeding IS
+      // delivery, and is why the ledger is written per batch rather than per
+      // send.
+      if (deliveredHere === 0) continue;
 
       await resolved.persistSent(admin.userId, nextSent);
     } catch (error) {

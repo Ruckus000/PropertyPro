@@ -73,6 +73,69 @@ describe('candidatesFromSignals', () => {
     expect(c.map((x) => x.fingerprint)).toEqual(['thread-1', 'billing-1']);
   });
 
+  /**
+   * Review H2 / security MEDIUM-1. A push body is rendered by the OS on a lock
+   * screen and kept in a notification history we do not control, so it must
+   * carry nothing a correspondent authored and no address.
+   */
+  describe('what a push body is allowed to carry', () => {
+    const withUnknownSender: ShellSignals = {
+      ...signals,
+      items: [
+        {
+          ...signals.items[0]!,
+          // The `participant_name ?? participant_email` fallback, and a subject
+          // line chosen by whoever wrote to support@.
+          title: 'New reply from denise.okafor@example.com',
+          meta: 'Re: my unit is flooding · Support',
+        },
+      ],
+    };
+
+    it('carries neither the correspondent nor the subject for an inbox thread', () => {
+      const [thread] = candidatesFromSignals(withUnknownSender, {
+        ...DEFAULT_ALERT_PREFS,
+        errorSpikes: false,
+      });
+
+      expect(thread?.body).not.toContain('@example.com');
+      expect(thread?.body).not.toContain('my unit is flooding');
+      expect(thread?.body).toBe(
+        'Someone has written to a support mailbox. Open the console to read it.',
+      );
+      // The pointer still has to point somewhere.
+      expect(thread?.url).toBe('/inbox/1');
+    });
+
+    // `critical.text` embeds `cron_runs.last_error` (withheld even from web's
+    // unauthenticated cron-health probe) and the top Sentry issue's title.
+    it('uses the critical banner’s shortText, never its long form', () => {
+      const withCronFailure: ShellSignals = {
+        ...signals,
+        critical: {
+          fingerprint: 'cron:expire-demos',
+          text: 'expire-demos has failed 4 in a row — duplicate key value violates unique constraint "users_email_key" (user=ops@acme.test)',
+          shortText: 'expire-demos failing',
+          href: '/health',
+        },
+      };
+
+      const [critical] = candidatesFromSignals(withCronFailure, DEFAULT_ALERT_PREFS);
+      expect(critical?.body).toBe('expire-demos failing');
+      expect(critical?.body).not.toContain('users_email_key');
+      expect(critical?.body).not.toContain('@acme.test');
+    });
+
+    // The other two signals ARE allowed their tray text: a community name, a day
+    // count and an MRR figure are all computed here, by us.
+    it('still names the client on a payment problem', () => {
+      const billing = candidatesFromSignals(signals, DEFAULT_ALERT_PREFS).find(
+        (c) => c.fingerprint === 'billing-1',
+      );
+      expect(billing?.body).toBe('Bayview is 19 days past due — $240');
+    });
+  });
+
   it('carries the item href so the notification click lands on the thing', () => {
     const c = candidatesFromSignals(signals, DEFAULT_ALERT_PREFS);
     expect(c.find((x) => x.fingerprint === 'billing-1')?.url).toBe('/clients/1?tab=billing');
@@ -265,9 +328,20 @@ describe('dispatchPush', () => {
     expect(persistSent).not.toHaveBeenCalled();
   });
 
+  /**
+   * Review M4. This case used to give `u2` a ledger holding EVERY candidate, so
+   * `selectUnsent` returned nothing, `dispatchPush` hit the `send.length === 0`
+   * short-circuit and `sendNotification` was never called — the test measured
+   * the already-sent path while claiming the failure path, leaving
+   * `recordFailure` and the Sentry capture at zero coverage. `u2`'s ledger now
+   * leaves `billing-1` unsent, so the send really happens and really fails.
+   */
   it('counts a non-gone failure and keeps going for the next operator', async () => {
-    const recordFailure = vi.fn(async () => {});
+    const recordFailure = vi.fn(async (_id: number) => {});
     const seen: string[] = [];
+    const sendNotification = vi.fn(async () => {
+      throw Object.assign(new Error('boom'), { statusCode: 500 });
+    });
     const result = await dispatchPush({
       listAdmins: async () => [{ userId: 'u1' }, { userId: 'u2' }],
       getPreferences: async (userId) => {
@@ -276,23 +350,89 @@ describe('dispatchPush', () => {
         return {
           notificationsReadAt: null,
           alertPrefs: DEFAULT_ALERT_PREFS,
-          pushSentFingerprints: ['errors:PP-1', 'thread-1', 'billing-1'],
+          // Two of three already told — `billing-1` is left to be sent.
+          pushSentFingerprints: ['errors:PP-1', 'thread-1'],
         };
       },
       getSignals: async () => signals,
       listSubscriptions: async () => [subscriptions[0]!],
-      sendNotification: async () => {
-        throw Object.assign(new Error('boom'), { statusCode: 500 });
-      },
+      sendNotification,
       recordFailure,
       persistSent: async () => {},
       now: () => new Date('2026-09-08T09:30:00Z'),
     });
 
-    // u1 threw and was swallowed; u2 still ran (and had nothing new to send).
+    // u1 threw and was swallowed; u2 still ran, and actually attempted a send.
     expect(seen).toEqual(['u1', 'u2']);
-    expect(result).toEqual({ configured: true, admins: 2, sent: 0, failed: 0, pruned: 0 });
-    expect(recordFailure).not.toHaveBeenCalled();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ configured: true, admins: 2, sent: 0, failed: 1, pruned: 0 });
+    // A non-gone failure is COUNTED against the subscription, not pruned.
+    expect(recordFailure).toHaveBeenCalledWith(1);
+  });
+
+  /**
+   * Review H1. The guard here used to be `deliveredHere === 0 && gone.size ===
+   * subscriptions.length` — all-GONE rather than all-FAILED — so a push service
+   * returning 500s left `gone` empty, the batch was written to the ledger, and
+   * `selectUnsent` suppressed those alerts forever. An alert that reached nobody
+   * must not be recorded as delivered.
+   */
+  it('does not mark anything sent when every send failed for a NON-gone reason', async () => {
+    const persistSent = vi.fn(async () => {});
+    const result = await dispatchPush({
+      listAdmins: async () => [{ userId: 'u1' }],
+      getPreferences: async () => ({
+        notificationsReadAt: null,
+        alertPrefs: DEFAULT_ALERT_PREFS,
+        pushSentFingerprints: [],
+      }),
+      getSignals: async () => signals,
+      listSubscriptions: async () => [subscriptions[0]!],
+      // A push service having a bad five minutes: 500, not 410.
+      sendNotification: async () => {
+        throw Object.assign(new Error('service unavailable'), { statusCode: 500 });
+      },
+      recordFailure: async () => {},
+      persistSent,
+      now: () => new Date('2026-09-08T09:30:00Z'),
+    });
+
+    // All three candidates attempted against the one device, all three failed,
+    // and NOTHING was pruned — which is exactly why the old all-gone condition
+    // did not fire.
+    expect(result).toEqual({ configured: true, admins: 1, sent: 0, failed: 3, pruned: 0 });
+    expect(persistSent).not.toHaveBeenCalled();
+  });
+
+  // The converse, so the fix cannot be "never write the ledger": one device out
+  // of two succeeding IS delivery, and is the reason the ledger is written per
+  // batch rather than per send.
+  it('DOES mark the batch sent when a single device took it', async () => {
+    const persisted: string[][] = [];
+    const result = await dispatchPush({
+      listAdmins: async () => [{ userId: 'u1' }],
+      getPreferences: async () => ({
+        notificationsReadAt: null,
+        alertPrefs: DEFAULT_ALERT_PREFS,
+        pushSentFingerprints: [],
+      }),
+      getSignals: async () => signals,
+      listSubscriptions: async () => subscriptions,
+      sendNotification: async (sub) => {
+        if (sub.endpoint.includes('gone')) {
+          throw Object.assign(new Error('boom'), { statusCode: 500 });
+        }
+      },
+      deleteSubscription: async () => {},
+      recordFailure: async () => {},
+      persistSent: async (_u, fps) => {
+        persisted.push(fps);
+      },
+      now: () => new Date('2026-09-08T09:30:00Z'),
+    });
+
+    expect(result).toEqual({ configured: true, admins: 1, sent: 3, failed: 3, pruned: 0 });
+    expect(persisted[0]).toEqual(['errors:PP-1', 'thread-1', 'billing-1']);
   });
 
   it('reports NOT CONFIGURED and touches nothing when VAPID keys are unset', async () => {
