@@ -21,7 +21,8 @@ vi.mock('@/lib/server/health', async (importOriginal) => {
 
 import { invalidateBillingCache } from '@/lib/server/billing-cache';
 import { HEALTH_CACHE_TTL_MS, invalidateHealthCache } from '@/lib/server/health-cache';
-import { healthSignals } from '@/lib/server/signals/health';
+import { createHealthSignals, healthSignals } from '@/lib/server/signals/health';
+import { DEFAULT_ALERT_PREFS } from '@/lib/preferences/alert-prefs';
 
 const report = (over: Partial<HealthReport> = {}): HealthReport => ({
   services: [],
@@ -121,6 +122,55 @@ describe('healthSignals', () => {
       fingerprint: 'errors:PP-1',
       href: '/health',
     });
+  });
+
+  /**
+   * Wave 4 made the error-spike threshold per-operator. Three things have to
+   * hold, and each is asserted on its own:
+   *
+   *  1. The default is still exactly 10, because the console layout resolves it
+   *     on every render and an operator with no preferences row must behave as
+   *     the hardcoded constant did.
+   *  2. A supplied threshold is actually used — not accepted and ignored.
+   *  3. The threshold reaches the derivation and nothing else: the tray rows
+   *     and the badge count are global and must not move with it.
+   */
+  it('defaults to the preference layer\'s own default threshold, not a second copy of 10', () => {
+    expect(DEFAULT_ALERT_PREFS.errorSpikeThreshold).toBe(10);
+  });
+
+  it('raises the banner at a LOWER operator threshold that the default would not', async () => {
+    getHealthReport.mockResolvedValue(report({ errorsLastHour: 4, errors: [issue()] }));
+
+    // Same report, same cache entry, two thresholds — which is the point: the
+    // probes are global, only the derivation is personal.
+    expect((await createHealthSignals(10).load()).critical).toBeNull();
+    expect((await createHealthSignals(4).load()).critical).toMatchObject({
+      fingerprint: 'errors:PP-1',
+      shortText: '4 errors/hr',
+    });
+  });
+
+  it('withholds the banner at a HIGHER operator threshold the default would have fired', async () => {
+    getHealthReport.mockResolvedValue(report({ errorsLastHour: 12, errors: [issue()] }));
+
+    expect((await healthSignals.load()).critical).toMatchObject({ fingerprint: 'errors:PP-1' });
+    expect((await createHealthSignals(50).load()).critical).toBeNull();
+  });
+
+  it('leaves the badge count and tray rows untouched by the threshold', async () => {
+    getHealthReport.mockResolvedValue(
+      report({ errorsLastHour: 12, errors: [issue()], jobs: [{ source: 'Cron', name: 'j', error: 'e', when: 'now', attempts: '1', retryable: true }] }),
+    );
+
+    const strict = await createHealthSignals(1).load();
+    const lax = await createHealthSignals(1000).load();
+
+    expect(strict.count).toBe(lax.count);
+    expect(strict.items).toEqual(lax.items);
+    // Only the banner differs.
+    expect(strict.critical).not.toBeNull();
+    expect(lax.critical).toBeNull();
   });
 
   it('lets a read failure reject so getShellSignals can report it', async () => {

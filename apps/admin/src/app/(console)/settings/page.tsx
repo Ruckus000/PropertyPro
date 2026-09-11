@@ -3,6 +3,7 @@ import { PlatformSettings } from '@/components/settings/PlatformSettings';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { buildAuthUserMap } from '@/lib/auth/list-all-auth-users';
 import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
+import { getPreferences } from '@/lib/server/preferences';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ interface PlatformAdminRow {
 
 export default async function SettingsPage() {
   const currentAdmin = await requireAdminPageSession();
+  // Already resolved by the console layout this page renders inside, and
+  // `getPreferences` is `cache()`d, so this is the same read, not a second one.
+  const preferences = await getPreferences(currentAdmin.id);
   const db = createAdminClient();
 
   // Fetch platform admins with emails
@@ -82,6 +86,7 @@ export default async function SettingsPage() {
         communityCount: communityResult.count ?? 0,
         demoCount: demoResult.count ?? 0,
       }}
+      alertPrefs={preferences.alertPrefs}
     />
   );
 }

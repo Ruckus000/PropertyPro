@@ -34,6 +34,13 @@ vi.mock('@/lib/server/dashboard', () => ({
 vi.mock('@/lib/server/dashboard-series', () => ({
   getDashboardSeries: vi.fn(async () => ({})),
 }));
+vi.mock('@/lib/server/preferences', () => ({
+  getPreferences: vi.fn(async () => ({
+    notificationsReadAt: null,
+    alertPrefs: { errorSpikes: true, paymentFailures: true, newSupportThreads: true, deletionReminders: true, newLeadsDigest: false, errorSpikeThreshold: 10 },
+    pushSentFingerprints: [],
+  })),
+}));
 vi.mock('@/lib/server/shell-signals', () => ({
   getShellSignals: vi.fn(async () => ({ items: [], generatedAt: '2026-09-10T00:00:00.000Z' })),
 }));

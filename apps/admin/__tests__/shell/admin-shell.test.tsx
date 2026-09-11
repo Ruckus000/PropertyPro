@@ -80,7 +80,7 @@ afterEach(() => {
 describe('AdminShell', () => {
   it('renders the rail, the single main landmark, and opens the palette on ⌘K', () => {
     render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -99,7 +99,7 @@ describe('AdminShell', () => {
     for (const route of ['/demo/new', '/demo/42/preview', '/demo/42/mobile']) {
       pathname.current = route;
       const { container, unmount } = render(
-        <AdminShell user={user} initialSignals={signals}>
+        <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
           <p>content</p>
         </AdminShell>,
       );
@@ -115,7 +115,7 @@ describe('AdminShell', () => {
   it('keeps the centred padded wrapper on an ordinary route', () => {
     pathname.current = '/dashboard';
     const { container } = render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -127,7 +127,7 @@ describe('AdminShell', () => {
   it('keeps exactly one main landmark once the drawer and the palette are both open', () => {
     installMatchMedia(TOUCH_PHONE);
     render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -144,7 +144,7 @@ describe('AdminShell', () => {
   it('swaps the rail for the drawer at narrow widths, and Escape closes it', async () => {
     installMatchMedia(TOUCH_PHONE);
     render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -167,7 +167,7 @@ describe('AdminShell', () => {
     pathname.current = '/clients/42';
     installMatchMedia(TOUCH_PHONE);
     const { unmount } = render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -177,7 +177,7 @@ describe('AdminShell', () => {
 
     pathname.current = '/clients';
     render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -187,7 +187,7 @@ describe('AdminShell', () => {
   it('restores the pinned rail preference after mount and persists a toggle', () => {
     localStorage.setItem('ppro-admin-nav-pinned', 'true');
     const { container } = render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -212,6 +212,7 @@ describe('AdminShell', () => {
             href: '/health',
           },
         }}
+        initialReadAt={null}
       >
         <p>content</p>
       </AdminShell>,
@@ -236,7 +237,7 @@ describe('AdminShell', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -267,7 +268,7 @@ describe('AdminShell', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -303,7 +304,7 @@ describe('AdminShell', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     render(
-      <AdminShell user={user} initialSignals={signals}>
+      <AdminShell user={user} initialSignals={signals} initialReadAt={null}>
         <p>content</p>
       </AdminShell>,
     );
@@ -345,6 +346,7 @@ describe('AdminShell', () => {
       <AdminShell
         user={user}
         initialSignals={{ ...signals, counts: { ...signals.counts, inbox: 9 } }}
+        initialReadAt={null}
       >
         <p>content</p>
       </AdminShell>,
@@ -375,6 +377,7 @@ describe('AdminShell', () => {
             },
           ],
         }}
+        initialReadAt={null}
       >
         <p>content</p>
       </AdminShell>,
@@ -419,6 +422,7 @@ describe('AdminShell', () => {
             },
           ],
         }}
+        initialReadAt={null}
       >
         <p>content</p>
       </AdminShell>,
@@ -428,5 +432,154 @@ describe('AdminShell', () => {
     fireEvent.click(screen.getByRole('button', { name: /notifications, 1 unread/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
     expect(screen.getByRole('button', { name: /notifications, 0 unread/i })).toBeTruthy();
+  });
+});
+
+/**
+ * Wave 4: the tray's read watermark is persisted per operator, and the click
+ * that moves it is OPTIMISTIC.
+ *
+ * The property that matters is the pair: the badge must drop the instant the
+ * button is pressed (a tray that waits on a round trip reads as broken), and it
+ * must come BACK if the write did not land (a `Mark all read` that silently
+ * failed is worse than one that visibly did nothing — nothing later
+ * contradicts it).
+ */
+describe('AdminShell — persisted tray watermark', () => {
+  /** One item, five minutes older than the signal payload that carries it. */
+  const withItem: ShellSignals = {
+    ...signals,
+    generatedAt: '2026-09-09T10:00:00.000Z',
+    items: [
+      {
+        key: 'inbox' as const,
+        id: 'a',
+        tone: 'info' as const,
+        icon: 'inbox' as const,
+        title: 'New reply from Denise',
+        meta: 'support@',
+        href: '/inbox/1',
+        occurredAt: '2026-09-09T09:55:00.000Z',
+      },
+    ],
+  };
+
+  function readAllResponse(notificationsReadAt: string | null) {
+    return new Response(JSON.stringify({ data: { notificationsReadAt } }), { status: 200 });
+  }
+
+  it('honours a watermark stored by a previous session, with no click at all', () => {
+    render(
+      <AdminShell user={user} initialSignals={withItem} initialReadAt="2026-09-09T09:56:00.000Z">
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    // Before wave 4 this seeded to `null` and every item read as unread on
+    // every page load, forever.
+    expect(screen.getByRole('button', { name: /notifications, 0 unread/i })).toBeTruthy();
+  });
+
+  it('drops the badge before the POST settles, then persists it', async () => {
+    let release: (r: Response) => void = () => {};
+    const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+      String(url).includes('/preferences/read-all')
+        ? new Promise<Response>((resolve) => {
+            release = resolve;
+          })
+        : Promise.resolve(new Response(JSON.stringify({ data: withItem }))),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <AdminShell user={user} initialSignals={withItem} initialReadAt={null}>
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /notifications, 1 unread/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+
+    // The request has NOT resolved. The badge is already clear.
+    expect(screen.getByRole('button', { name: /notifications, 0 unread/i })).toBeTruthy();
+
+    const call = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes('/preferences/read-all'),
+    )!;
+    expect(call[0]).toBe('/api/admin/preferences/read-all');
+    expect(call[1]?.method).toBe('POST');
+
+    await act(async () => {
+      release(readAllResponse('2026-09-09T10:00:05.000Z'));
+    });
+    expect(screen.getByRole('button', { name: /notifications, 0 unread/i })).toBeTruthy();
+  });
+
+  it('adopts the SERVER\'s stamp rather than keeping its own optimistic guess', async () => {
+    // A deliberately implausible response — a watermark OLDER than the item —
+    // because it is the only value that tells the two apart. Keeping the
+    // optimistic `generatedAt` leaves the badge at 0; adopting what was
+    // actually stored puts it back to 1, which is what a reload would show.
+    global.fetch = vi.fn((url: string) =>
+      String(url).includes('/preferences/read-all')
+        ? Promise.resolve(readAllResponse('2026-09-09T09:00:00.000Z'))
+        : Promise.resolve(new Response(JSON.stringify({ data: withItem }))),
+    ) as unknown as typeof fetch;
+
+    render(
+      <AdminShell user={user} initialSignals={withItem} initialReadAt={null}>
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /notifications, 1 unread/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /notifications, 1 unread/i })).toBeTruthy(),
+    );
+  });
+
+  it('restores the previous watermark when the write fails', async () => {
+    global.fetch = vi.fn((url: string) =>
+      String(url).includes('/preferences/read-all')
+        ? Promise.resolve(new Response('{}', { status: 500 }))
+        : Promise.resolve(new Response(JSON.stringify({ data: withItem }))),
+    ) as unknown as typeof fetch;
+
+    render(
+      <AdminShell user={user} initialSignals={withItem} initialReadAt={null}>
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /notifications, 1 unread/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /notifications, 1 unread/i })).toBeTruthy(),
+    );
+  });
+
+  it('restores it when the request is dropped entirely', async () => {
+    global.fetch = vi.fn((url: string) => {
+      if (String(url).includes('/preferences/read-all')) {
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: withItem })));
+    }) as unknown as typeof fetch;
+
+    render(
+      <AdminShell user={user} initialSignals={withItem} initialReadAt={null}>
+        <p>content</p>
+      </AdminShell>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /notifications, 1 unread/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /notifications, 1 unread/i })).toBeTruthy(),
+    );
   });
 });

@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PlatformSettings } from '@/components/settings/PlatformSettings';
+import { DEFAULT_ALERT_PREFS } from '@/lib/preferences/alert-prefs';
 
 const CURRENT_ADMIN = { id: 'admin-1', email: 'root@propertypro.example', role: 'super_admin' };
 
@@ -13,10 +14,22 @@ const ADMINS = [
 
 const STATS = { communityCount: 3, demoCount: 5 };
 
+/**
+ * Every required prop, every time. An omitted one does not fail — it pins the
+ * component to whatever the falsy path renders, and the assertions below go on
+ * passing while measuring a shape no operator ever sees.
+ */
+const PROPS = {
+  currentAdmin: CURRENT_ADMIN,
+  admins: ADMINS,
+  stats: STATS,
+  alertPrefs: DEFAULT_ALERT_PREFS,
+};
+
 describe('PlatformSettings', () => {
   it('renders exactly one h1, with the design copy, and marks the current admin with a "You" badge', () => {
     const html = renderToStaticMarkup(
-      createElement(PlatformSettings, { currentAdmin: CURRENT_ADMIN, admins: ADMINS, stats: STATS }),
+      createElement(PlatformSettings, PROPS),
     );
 
     const h1Matches = html.match(/<h1[ >]/g) ?? [];
@@ -28,22 +41,26 @@ describe('PlatformSettings', () => {
     expect(html).toContain('ops@propertypro.example');
   });
 
-  it('marks the insertion point for the Wave 4 sections without rendering them yet', () => {
+  it('renders the alerts section and still holds the slot for tasks 30 and 32', () => {
     const html = renderToStaticMarkup(
-      createElement(PlatformSettings, { currentAdmin: CURRENT_ADMIN, admins: ADMINS, stats: STATS }),
+      createElement(PlatformSettings, PROPS),
     );
 
-    // Comments don't survive renderToStaticMarkup, so this only proves the
-    // three Wave 4 sections aren't rendered prematurely; the marker comment
-    // itself is verified by reading the source in review.
-    expect(html).not.toContain('AlertPrefsSection');
-    expect(html).not.toContain('InstallAppSection');
-    expect(html).not.toContain('IntegrationsSection');
+    // Task 29 landed the first of the three Wave 4 sections. Its presence is
+    // asserted through what an operator can see — a component NAME never
+    // appears in rendered markup, so `toContain('AlertPrefsSection')` would
+    // have been vacuously false either way.
+    expect(html).toContain('Alerts &amp; push notifications');
+    expect(html).toContain('Production error spikes');
+
+    // The other two are still unbuilt; nothing may render them early.
+    expect(html).not.toContain('Install app');
+    expect(html).not.toContain('Integrations');
   });
 
   it('does not offer a Remove control for the signed-in admin', () => {
     const html = renderToStaticMarkup(
-      createElement(PlatformSettings, { currentAdmin: CURRENT_ADMIN, admins: ADMINS, stats: STATS }),
+      createElement(PlatformSettings, PROPS),
     );
 
     // Two admins: only the non-self one gets a Remove button.

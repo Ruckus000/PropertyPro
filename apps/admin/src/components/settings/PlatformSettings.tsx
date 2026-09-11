@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { Badge, Button, Input, PageBody } from '@propertypro/ui';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
+import { AlertPrefsSection } from '@/components/settings/AlertPrefsSection';
+import type { AlertPrefs } from '@/lib/preferences/alert-prefs';
 
 interface PlatformAdmin {
   userId: string;
@@ -29,9 +31,16 @@ interface PlatformSettingsProps {
   currentAdmin: { id: string; email: string; role: string };
   admins: PlatformAdmin[];
   stats: PlatformStats;
+  /** This operator's own alert opt-ins — see `AlertPrefsSection`. */
+  alertPrefs: AlertPrefs;
 }
 
-export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }: PlatformSettingsProps) {
+export function PlatformSettings({
+  currentAdmin,
+  admins: initialAdmins,
+  stats,
+  alertPrefs,
+}: PlatformSettingsProps) {
   const [admins, setAdmins] = useState(initialAdmins);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addEmail, setAddEmail] = useState('');
@@ -234,7 +243,9 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
         </div>
       </section>
 
-      {/* Wave 4: AlertPrefsSection, InstallAppSection, IntegrationsSection */}
+      <AlertPrefsSection initial={alertPrefs} />
+
+      {/* Wave 4: InstallAppSection (task 30), IntegrationsSection (task 32) */}
     </PageBody>
   );
 }

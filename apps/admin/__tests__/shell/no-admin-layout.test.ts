@@ -125,8 +125,14 @@ describe('old shell is gone', () => {
     // instead — this only matches the two statements back-to-back in that
     // order, so reordering the awaits (or moving either one away from the
     // other) breaks the match.
+    //
+    // Wave 4 inserted `getPreferences(session.id)` between the two — also a
+    // service-role read, and also required to be behind the gate — so the
+    // adjacency assertion names all three statements in order rather than being
+    // relaxed into an `indexOf`. Only these three, back-to-back, in this order,
+    // match; reordering any of them or moving one away breaks it.
     expect(layout).toMatch(
-      /const session = await requireAdminPageSession\(\);\s*\n\s*const initialSignals = await getShellSignals\(\);/,
+      /const session = await requireAdminPageSession\(\);\s*\n(?:\s*\/\/[^\n]*\n)*\s*const preferences = await getPreferences\(session\.id\);\s*\n\s*const initialSignals = await getShellSignals\(/,
     );
   });
 });

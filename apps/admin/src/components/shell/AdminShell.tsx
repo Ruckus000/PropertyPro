@@ -65,10 +65,17 @@ const FULL_BLEED = /^\/demo\/(?:new|\d+\/(?:preview|mobile))$/;
 export interface AdminShellProps {
   user: { email: string; initial: string };
   initialSignals: ShellSignals;
+  /**
+   * The operator's persisted tray read watermark, from
+   * `platform_admin_preferences`. `null` means they have never marked anything
+   * read — which is NOT the same as having marked everything read at the epoch,
+   * and is why this is nullable rather than defaulted to a timestamp.
+   */
+  initialReadAt: string | null;
   children: ReactNode;
 }
 
-export function AdminShell({ user, initialSignals, children }: AdminShellProps) {
+export function AdminShell({ user, initialSignals, initialReadAt, children }: AdminShellProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -77,10 +84,10 @@ export function AdminShell({ user, initialSignals, children }: AdminShellProps) 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [signals, setSignals] = useState(initialSignals);
-  // Tray read marker. Local to the session for now; Wave 4 replaces this with
-  // the persisted preferences API so it survives a reload and follows the
-  // operator across devices.
-  const [readAt, setReadAt] = useState<string | null>(null);
+  // Tray read watermark, seeded from the server (wave 4) so it survives a
+  // reload and follows the operator across devices. Still held in local state
+  // because the click must be OPTIMISTIC — see `handleMarkAllRead`.
+  const [readAt, setReadAt] = useState<string | null>(initialReadAt);
 
   useEffect(() => {
     setPinned(readPinned());
@@ -169,15 +176,57 @@ export function AdminShell({ user, initialSignals, children }: AdminShellProps) 
     writePinned(next);
   }, []);
 
-  // Stamped from `signals.generatedAt` (the server's clock), not
-  // `new Date()` (the operator's browser clock). `NotificationTray`'s
-  // `countUnread` compares this against `item.occurredAt`, which is a
-  // PostgREST-serialized `timestamptz` straight from Postgres — a browser
-  // clock a few minutes slow would leave the newest items unread after this
-  // click, and a few minutes fast would mark future arrivals pre-read.
+  /**
+   * Mark the tray read — optimistically, then persist.
+   *
+   * The local update happens FIRST and unconditionally. A tray that waits on a
+   * round trip to look read is a tray that looks broken on a slow connection,
+   * and this is a preference, not a transaction.
+   *
+   * The optimistic value is `signals.generatedAt` (the SERVER's clock), never
+   * `new Date()` (the operator's browser clock). `NotificationTray`'s
+   * `countUnread` compares this against `item.occurredAt`, a PostgREST-
+   * serialized `timestamptz` straight from Postgres — a browser clock a few
+   * minutes slow would leave the newest items unread after this click, and a
+   * few minutes fast would mark future arrivals pre-read.
+   *
+   * On success the server's own stamp is adopted, because that is what a reload
+   * will show; keeping the optimistic value would make the screen disagree with
+   * what is stored until the next navigation. The server stamp is strictly
+   * later than `generatedAt`, so an item that arrived in between is marked read
+   * without having been displayed — a window of one request, accepted
+   * deliberately: the alternative is letting the client name the watermark,
+   * which hands a stale tab the power to silence future alerts.
+   *
+   * On failure the previous watermark is restored, so the badge tells the truth
+   * about what is actually stored. A `Mark all read` that failed silently is
+   * worse than one that visibly did nothing.
+   */
   const handleMarkAllRead = useCallback(() => {
+    const previous = readAt;
     setReadAt(signals.generatedAt);
-  }, [signals.generatedAt]);
+
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/preferences/read-all', {
+          method: 'POST',
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          setReadAt(previous);
+          return;
+        }
+        const body = (await res.json()) as { data?: { notificationsReadAt?: string | null } };
+        if (typeof body.data?.notificationsReadAt === 'string') {
+          setReadAt(body.data.notificationsReadAt);
+        }
+      } catch {
+        // Offline, or the request was dropped. Nothing was persisted, so the
+        // badge must go back to reflecting what is.
+        setReadAt(previous);
+      }
+    })();
+  }, [readAt, signals.generatedAt]);
 
   const activeId = getActiveNavId(pathname);
 

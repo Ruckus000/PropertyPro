@@ -3,6 +3,16 @@ import { NextRequest } from 'next/server';
 import { UnauthorizedError } from '@propertypro/shared/http';
 const requirePlatformAdmin = vi.fn();
 vi.mock('@/lib/auth/platform-admin', () => ({ requirePlatformAdmin: () => requirePlatformAdmin() }));
+// The route now resolves the polling operator's own error-spike threshold
+// before composing the signals, so this read has to be stubbed too — it would
+// otherwise reach the real service-role client.
+vi.mock('@/lib/server/preferences', () => ({
+  getPreferences: async () => ({
+    notificationsReadAt: null,
+    alertPrefs: { errorSpikes: true, paymentFailures: true, newSupportThreads: true, deletionReminders: true, newLeadsDigest: false, errorSpikeThreshold: 10 },
+    pushSentFingerprints: [],
+  }),
+}));
 vi.mock('@/lib/server/shell-signals', () => ({
   getShellSignals: async () => ({ counts: { inbox: 1, tickets: 0, health: 0, onboarding: 0, billing: 0, leads: 0, deletion: 0 }, items: [], critical: null, generatedAt: 'x', failed: [] }),
 }));
