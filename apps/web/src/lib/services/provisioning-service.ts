@@ -36,6 +36,7 @@ import {
 // AUTHZ: P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { buildVerificationLink } from '@/lib/auth/verification-link';
 import {
   linkCommunityToBillingGroup,
   recalculateVolumeTier,
@@ -1496,13 +1497,16 @@ export async function getPendingSignupForResend(
 }
 
 export type SupabaseVerificationLinkResult =
-  | { ok: true; actionLink: string }
+  | { ok: true; verificationLink: string }
   | { ok: false; error: string };
 
 /**
- * Generate a Supabase magic-link "action_link" suitable for embedding into a
- * verification email body. Returns the URL string on success or an error
- * message on failure (caller should respond with 500 + log).
+ * Generate the verification link to embed in a resent verification email.
+ *
+ * Returns a link on OUR domain, built from `hashed_token` — not Supabase's
+ * `action_link`, whose host is the project's `*.supabase.co` domain. See
+ * `app/auth/verify-signup/route.ts`. The token is always a `magiclink` here,
+ * which is the `type` that route must verify it as.
  *
  * Wraps the auth-admin client so the route doesn't need to import
  * `@propertypro/db/supabase/admin` directly.
@@ -1521,14 +1525,21 @@ export async function generateVerificationActionLink(params: {
       data: { signup_request_id: params.signupRequestId },
     },
   });
-  const actionLink = linkResult.data?.properties?.action_link;
-  if (linkResult.error || !actionLink) {
+  const hashedToken = linkResult.data?.properties?.hashed_token;
+  if (linkResult.error || !hashedToken) {
     return {
       ok: false,
-      error: linkResult.error?.message ?? 'No action link returned',
+      error: linkResult.error?.message ?? 'No verification token returned',
     };
   }
-  return { ok: true, actionLink };
+  return {
+    ok: true,
+    verificationLink: buildVerificationLink({
+      hashedToken,
+      signupRequestId: params.signupRequestId,
+      type: 'magiclink',
+    }),
+  };
 }
 
 /**

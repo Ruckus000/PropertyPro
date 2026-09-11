@@ -70,6 +70,7 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 import {
+  _testInternals,
   checkSignupSubdomainAvailability,
   submitSignup,
 } from '../../src/lib/auth/signup';
@@ -416,7 +417,14 @@ describe('signup service', () => {
     generateLinkMock = vi.fn().mockResolvedValue({
       data: {
         user: { id: 'auth-user-1' },
-        properties: { action_link: 'https://verify.example.com/link' },
+        // `hashed_token`, not `action_link`: the emailed link is built on OUR
+        // domain and finished by /auth/verify-signup. action_link is still
+        // returned by Supabase and still ignored.
+        properties: {
+          hashed_token: 'hashed-token-signup',
+          action_link:
+            'https://vbqobyagjzvlfpfozvmx.supabase.co/auth/v1/verify?token=tok&type=signup',
+        },
       },
       error: null,
     });
@@ -541,7 +549,11 @@ describe('signup service', () => {
       .mockResolvedValueOnce({
         data: {
           user: { id: 'auth-user-1' },
-          properties: { action_link: 'https://verify.example.com/magic' },
+          properties: {
+            hashed_token: 'hashed-token-magic',
+            action_link:
+              'https://vbqobyagjzvlfpfozvmx.supabase.co/auth/v1/verify?token=tok&type=magiclink',
+          },
         },
         error: null,
       });
@@ -550,6 +562,35 @@ describe('signup service', () => {
     expect(result.message).toContain('Check your email');
     expect(result.verificationRequired).toBe(true);
     expect(generateLinkMock).toHaveBeenCalledTimes(2);
+
+    // The fallback arm generates a MAGICLINK, so its token must be verified as
+    // one. Getting this wrong fails only for already-registered emails, which
+    // is the rarer path and the one least likely to be noticed.
+    const fallbackLink = new URL(
+      (sendEmailMock.mock.calls.at(-1)?.[0] as { react: { props: { verificationLink: string } } })
+        .react.props.verificationLink,
+    );
+    expect(fallbackLink.searchParams.get('type')).toBe('magiclink');
+    expect(fallbackLink.searchParams.get('token_hash')).toBe('hashed-token-magic');
+  });
+
+  it('emails a link on OUR domain, not Supabase\'s action_link', async () => {
+    await submitSignup(validSignupPayload);
+
+    const sent = sendEmailMock.mock.calls.at(-1)?.[0] as {
+      react: { props: { verificationLink: string } };
+    };
+    const link = new URL(sent.react.props.verificationLink);
+
+    // The defect this guards: a mail from getpropertypro.com whose only button
+    // points at <project-ref>.supabase.co. Measured into Gmail spam on two
+    // independent accounts — docs/audits/2026-09-11-signup-verification-deliverability.md
+    expect(link.host).not.toContain('supabase.co');
+    expect(link.origin).toBe(new URL(_testInternals.getBaseUrl()).origin);
+    expect(link.pathname).toBe('/auth/verify-signup');
+    expect(link.searchParams.get('token_hash')).toBe('hashed-token-signup');
+    expect(link.searchParams.get('type')).toBe('signup');
+    expect(link.searchParams.get('signupRequestId')).toBeTruthy();
   });
 
   // A6 — clear, status-aware errors on signupRequestId reuse (hijack guard kept)

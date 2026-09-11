@@ -62,7 +62,7 @@ describe('POST /api/v1/auth/resend-verification', () => {
     getPendingSignupForResendMock.mockResolvedValue(pendingSignup);
     generateVerificationActionLinkMock.mockResolvedValue({
       ok: true,
-      actionLink: 'https://auth.example/verify',
+      verificationLink: 'https://auth.example/auth/verify-signup?token_hash=t&type=magiclink',
     });
     sendEmailMock.mockResolvedValue({ id: 'msg-1' });
     markVerificationEmailSentMock.mockResolvedValue(undefined);
