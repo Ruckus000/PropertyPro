@@ -45,6 +45,19 @@
  *    green because the outside reads are "correct" / "`.eq('id', …)` shaped".
  *    Measured, it is not: being correct is not the same as carrying the marker
  *    literals. That root is a separate decision, not an oversight.
+ *  - **A DIRECT read.** A PostgREST EMBED is invisible to this guard and always
+ *    will be: `.select('id, communities(is_demo)')` hides the table name inside a
+ *    longer string, so the exact-literal match never fires. Measured on
+ *    `lib/server/onboarding.ts` and `lib/db/demo-queries.ts`, which both join
+ *    `communities` that way.
+ *
+ *    That is a limit, not a hole, and the distinction is worth stating: an
+ *    embed's population is its PARENT query's. `demo_instances` embedding
+ *    `communities(is_demo)` returns one community per demo row, scoped by the
+ *    foreign key — so if the population is wrong, the parent read is what is
+ *    wrong, and the parent IS checked. Teaching the guard to parse select
+ *    strings would add machinery to police rows it cannot mis-scope.
+ *
  *  - **A population read.** Mutations are excluded by rule, not by exemption —
  *    see `MUTATION_METHODS`. `api/admin/access-plans/route.ts` updates
  *    `free_access_expires_at` by `.eq('id', communityId)`, and
