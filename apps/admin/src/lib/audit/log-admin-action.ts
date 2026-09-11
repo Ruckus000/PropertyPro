@@ -111,7 +111,23 @@ export type AdminAuditAction =
   // authenticate with the platform-wide `CRON_SECRET` and their own work is
   // audited per-community at best, so without this entry there is no record
   // anywhere of who made `expire-demos` or `late-fee-processor` run off-schedule.
-  | 'cron_job_retried';
+  | 'cron_job_retried'
+  // The five Stripe subscription actions (wave 3 slice 3c). These are the only
+  // entries in this union that MOVE MONEY — a plan change invoices the proration
+  // immediately, a cancel stops collection — so the trail is the only record
+  // linking a charge on a customer's card to the operator who caused it. Stripe's
+  // own dashboard shows the change; it does not show who in this console made it.
+  //
+  // `communityId` is always the affected community, never null: unlike a support
+  // ticket or a cron job, a subscription belongs to exactly one. `resourceId` is
+  // the `sub_…` id, so the row joins to Stripe without a second lookup, and
+  // `oldValues`/`newValues` carry only the fields that changed — never a
+  // subscription dump, because this table is append-only and manager-readable.
+  | 'subscription_plan_changed'
+  | 'subscription_trial_extended'
+  | 'subscription_coupon_applied'
+  | 'subscription_paused'
+  | 'subscription_canceled';
 
 export interface LogAdminActionParams {
   /** The `requirePlatformAdmin()` return value — carries id AND email. */
