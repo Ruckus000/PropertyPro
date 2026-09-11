@@ -57,8 +57,8 @@ const TIERS: LayoutRow['tier'][] = ['essentials', 'professional', 'pm'];
  * a hand-rolled `TierBadge` for the table and this map for the cards — which
  * meant two answers to "what colour is professional" in one file. The map wins
  * because it goes through the shared `Badge`, so a tier chip here matches every
- * other chip in the console (and it retires a `design-tokens:exempt` for
- * `bg-purple-100`).
+ * other chip in the console (and it retires a `design-tokens:exempt` for the
+ * raw purple palette pair the hand-rolled badge used for `professional`).
  */
 const TIER_VARIANT: Record<LayoutRow['tier'], BadgeVariant> = {
   essentials: 'info',
