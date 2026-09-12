@@ -26,6 +26,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { FilePlus2, PenTool } from 'lucide-react';
 import { type CommunityRole, type CommunityType } from '@propertypro/shared';
@@ -63,11 +64,53 @@ import {
 import { DocumentCategoryFilter } from './document-category-filter';
 import { DocumentInspector } from './document-inspector';
 import { DocumentSearch } from './document-search';
-import { DocumentUploadArea } from './document-upload-area';
-import { DocumentsBoard } from './documents-board';
 import { DocumentsTable } from './documents-table';
-import { DocumentsTimeline } from './documents-timeline';
 import { PublishDocumentDialog } from './publish-document-dialog';
+
+/**
+ * ## What is code-split here, and what deliberately is not
+ *
+ * This route measured 757.6 KiB against a 700 KiB hard budget — the largest in
+ * the app. The two views below are rendered behind a condition, so a PM who
+ * opens the screen and reads the list pays for neither.
+ *
+ * Three things that LOOK like candidates are not, and each is worth stating so
+ * nobody re-tries them: `DocumentInspector`, `PublishDocumentDialog` and
+ * `DocumentViewerModal` are all mounted UNCONDITIONALLY and told what to do
+ * through a prop (`document={selectedDocument}`, `open={…}`). `dynamic()` fetches
+ * when a component renders, so wrapping any of them loads the chunk on mount and
+ * buys nothing. The inspector's real weight is deferred one level down instead —
+ * see `PdfViewer` in `./document-viewer` and `DocumentVersionHistory` in
+ * `./document-inspector`, both of which ARE behind conditions.
+ *
+ * `DocumentsTable` stays static for the opposite reason: it is the default view
+ * (`coerceDocumentsView` returns `'list'` for anything it does not recognise), so
+ * deferring it would blank the primary content on every load. That is the trade
+ * `public-site/blocks/view-registry.ts` rejects in its header for the editor
+ * canvas, and it applies here for the same reason.
+ */
+
+// Pulls the Radix select stack via `@/components/ui/select`. Shown only after
+// the PM presses Upload, which is already a deliberate act with a wait.
+const DocumentUploadArea = dynamic(
+  () => import('./document-upload-area').then((m) => m.DocumentUploadArea),
+  {
+    loading: () => <div className="min-h-40 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+  },
+);
+
+// The two non-default readings. Switching views already implies a beat, and the
+// placeholder reserves height so the switch does not jump the page.
+const DocumentsBoard = dynamic(() => import('./documents-board').then((m) => m.DocumentsBoard), {
+  loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+});
+
+const DocumentsTimeline = dynamic(
+  () => import('./documents-timeline').then((m) => m.DocumentsTimeline),
+  {
+    loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+  },
+);
 
 interface DocumentLibraryProps {
   communityId: number;

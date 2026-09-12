@@ -16,8 +16,22 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useDeleteDocument } from '@/hooks/use-documents';
 import type { ChecklistRow, DocumentRow, DocumentState } from '@/lib/documents/document-state';
-import { DocumentVersionHistory } from './document-version-history';
+import dynamic from 'next/dynamic';
 import { DocumentViewer } from './document-viewer';
+
+/**
+ * Code-split: the version chain renders only in `mode === 'versions'`, which
+ * needs a document selected AND the PM to press "View versions". `DocumentViewer`
+ * above stays static because it is also this panel's empty state — when
+ * `document` is null this component returns a `<DocumentViewer document={null}>`,
+ * so deferring it would put a skeleton in the resting panel.
+ */
+const DocumentVersionHistory = dynamic(
+  () => import('./document-version-history').then((m) => m.DocumentVersionHistory),
+  {
+    loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+  },
+);
 
 type InspectorMode = 'viewer' | 'versions';
 

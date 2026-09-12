@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Maximize2, Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { PdfViewer } from '@/components/pdf/pdf-viewer';
+import dynamic from 'next/dynamic';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,24 @@ import {
 import type { DocumentRow } from '@/lib/documents/document-state';
 import { DocumentViewerModal } from './DocumentViewerModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+
+/**
+ * Code-split: this is the only route into `lib/pdfjs/browser.ts`, which imports
+ * the Sentry SDK at module scope, and it renders only for a PDF whose preview
+ * has already resolved (`isPdf && preview.state === 'ready'`). The documents
+ * route sits over its hard perf budget and this component is invisible until a
+ * PM selects a PDF, so it should not be in the initial payload.
+ *
+ * pdfjs-dist itself is NOT what is being deferred here — `loadPdfJs()` already
+ * fetches `/pdfjs/pdf.mjs` at runtime behind `webpackIgnore`, so the library was
+ * never bundled. What moves is the viewer UI and the Sentry-importing config.
+ *
+ * `loading` reserves the pane's height: the preview area is already sized by the
+ * time this resolves, and a zero-height placeholder would collapse it.
+ */
+const PdfViewer = dynamic(() => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer), {
+  loading: () => <div className="h-full min-h-96 animate-pulse bg-surface-muted" aria-hidden="true" />,
+});
 
 interface DocumentViewerProps {
   communityId: number;
