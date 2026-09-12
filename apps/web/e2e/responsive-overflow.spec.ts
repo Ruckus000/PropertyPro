@@ -53,17 +53,29 @@ async function findOverflows(page: Page): Promise<Overflow[]> {
       return false;
     };
 
+    // Visually-hidden text is not a bleed. Tailwind's `sr-only` is
+    // `width:1px; overflow:hidden; clip:rect(0,0,0,0)`, so clientWidth is 1 and
+    // scrollWidth is the full string — which looks exactly like clipped-without-
+    // ellipsis to the rule below. `PageHeader` renders an `h1.sr-only` on every
+    // authenticated page, so without this the probe reports every page in the app.
+    // Caught by CI on the run that first registered this spec: 3 failures, all
+    // sr-only h1s and legends.
+    const visuallyHidden = (cs: CSSStyleDeclaration): boolean =>
+      cs.clip === 'rect(0px, 0px, 0px, 0px)' || cs.clipPath === 'inset(50%)';
+
     const found: Overflow[] = [];
     const root = document.querySelector('main') ?? document.body;
     for (const el of root.querySelectorAll('*')) {
-      if (el.clientWidth <= 0) continue;
+      if (el.clientWidth <= 1) continue;
       if (el.scrollWidth <= el.clientWidth + 1) continue;
-      const ox = getComputedStyle(el).overflowX;
+      const cs = getComputedStyle(el);
+      if (visuallyHidden(cs)) continue;
+      const ox = cs.overflowX;
       // The element scrolls its own content — that is a designed affordance, not a bleed.
       if (ox === 'auto' || ox === 'scroll') continue;
       // `truncate` (overflow:hidden + ellipsis) legitimately reports scrollWidth >
       // clientWidth. It is the intended behaviour, and it is visibly ellipsised.
-      if (ox === 'hidden' && getComputedStyle(el).textOverflow === 'ellipsis') continue;
+      if (ox === 'hidden' && cs.textOverflow === 'ellipsis') continue;
       if (ownedByScroller(el)) continue;
       found.push({
         selector: describe(el),

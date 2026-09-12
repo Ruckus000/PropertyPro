@@ -272,13 +272,22 @@ export function DocumentLibrary({
           </>
         }
       >
-        <Tabs value={view} onValueChange={setView}>
-          <TabsList aria-label="View">
-            <TabsTrigger value="list">List</TabsTrigger>
-            <TabsTrigger value="board">Board</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/*
+          The view switcher is a single unbreakable flex row (~214px). PageHeader's
+          left slot carries `min-w-0`, so at 768px it shrinks to ~188px and the tabs
+          spilled 26px over the actions beside them — `overflow: visible`, so they
+          painted on top rather than being clipped. Same scrollable-row idiom as the
+          quick-filter chips further down this file.
+        */}
+        <div className="-mx-1 w-full overflow-x-auto px-1 sm:w-auto">
+          <Tabs value={view} onValueChange={setView}>
+            <TabsList aria-label="View">
+              <TabsTrigger value="list">List</TabsTrigger>
+              <TabsTrigger value="board">Board</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </PageHeader>
 
       {showUpload && canUpload && (
