@@ -300,6 +300,22 @@ export function SignupForm({
             Retry Verification
           </button>
         ) : null}
+        {/*
+          A plain anchor, deliberately — NOT `<Link>`. This card replaces the
+          whole form, and some answers are terminal ("This signup request has
+          expired. Please start a new signup."), so Retry cannot help. A
+          client-side navigation to the same route keeps this component
+          instance and its `verificationState: 'error'`, so the card would
+          never go away. A document load is what gives back a blank form.
+          Resubmitting with the same email is safe: the email-keyed upsert in
+          lib/auth/signup.ts resets the row and keeps its signupRequestId.
+        */}
+        <a
+          href="/signup"
+          className="block text-center text-sm text-content-link hover:text-interactive"
+        >
+          Start a new signup
+        </a>
       </div>
     );
   }

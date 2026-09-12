@@ -98,6 +98,27 @@ describe('POST /api/v1/auth/confirm-verification', () => {
     expect(json).toEqual({ data: { success: true, signupRequestId: 'req-abc' } });
   });
 
+  // `expired` became reachable when provisioning-watchdog started sweeping
+  // abandoned email_verified / checkout_started rows (#1111). Someone who
+  // verified, left checkout and re-clicks the email a day later lands here. The
+  // generic non-pending branch would show them the raw status string, with a
+  // Retry that can never succeed.
+  it('tells an expired signup to start over, not the raw status', async () => {
+    getPendingSignupForVerificationMock.mockResolvedValue({
+      ...pendingSignup,
+      status: 'expired',
+      // The sweep only expires rows whose expires_at has passed.
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+
+    const res = await POST(buildRequest({ signupRequestId: 'req-abc' }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error.message).toBe('This signup request has expired. Please start a new signup.');
+    expect(getSupabaseEmailVerificationStatusMock).not.toHaveBeenCalled();
+    expect(markPendingSignupEmailVerifiedIfPendingMock).not.toHaveBeenCalled();
+  });
+
   it('returns 400 when signup is not found', async () => {
     getPendingSignupForVerificationMock.mockResolvedValue(null);
     const res = await POST(buildRequest({ signupRequestId: 'missing' }));
