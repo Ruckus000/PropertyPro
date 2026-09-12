@@ -347,7 +347,7 @@ export function DocumentLibrary({
 
         <div className="grid min-h-[500px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div
-            className={`min-w-0 border-r border-edge p-6 ${selectedDocument ? 'hidden lg:block' : ''}`}
+            className={`min-w-0 p-6 xl:border-r xl:border-edge ${selectedDocument ? 'hidden xl:block' : ''}`}
           >
             {view === 'list' && (
               <DocumentsTable
@@ -405,12 +405,12 @@ export function DocumentLibrary({
             )}
           </div>
 
-          <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden lg:block'}`}>
+          <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden xl:block'}`}>
             {selectedDocument && (
               <button
                 type="button"
                 onClick={() => setSelectedDocument(null)}
-                className="mb-3 inline-flex items-center gap-1 text-sm text-content-secondary hover:text-content lg:hidden"
+                className="mb-3 inline-flex items-center gap-1 text-sm text-content-secondary hover:text-content xl:hidden"
               >
                 Back to list
               </button>

@@ -173,7 +173,17 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
         // eslint-disable-next-line @next/next/no-page-custom-font
         <link key={href} rel="stylesheet" href={href} />
       ))}
-      <div style={cssVars} data-testid="site-preview-root">
+      {/*
+        `inert`, because this is a picture of the site, not the site. Every link
+        in here is root-relative (`PageNav`'s `/about`, the header's Resident
+        Login), so inside the wizard's iframe on the PM host they resolve to app
+        routes, 404, and replace the preview with no way back. `inert` also keeps
+        the frame out of the tab order, so a keyboard user traversing the wizard
+        does not walk into a preview they cannot act on. Scrolling still works.
+        Same attribute the shell uses on its main column behind the mobile
+        drawer (`components/layout/app-shell.tsx`).
+      */}
+      <div inert style={cssVars} data-testid="site-preview-root">
         <Layout
           community={{
             id: community!.id,

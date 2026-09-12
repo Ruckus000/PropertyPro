@@ -205,7 +205,7 @@ export function ComplianceCommandCenter({
               <Skeleton key={i} className="h-[104px] rounded-[var(--radius-md)]" />
             ))}
           </div>
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
             <Skeleton className="h-96 rounded-[var(--radius-md)]" />
             <Skeleton className="h-96 rounded-[var(--radius-md)]" />
           </div>
@@ -235,7 +235,7 @@ export function ComplianceCommandCenter({
 
           <ComplianceOnboarding items={items as ChecklistItemData[]} onUpload={(item) => setUploadItem(item as ChecklistItemData)} />
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
             <ComplianceQueue
               items={items as ChecklistItemData[]}
               canWrite={canWrite}

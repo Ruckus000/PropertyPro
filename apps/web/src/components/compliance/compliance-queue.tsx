@@ -35,7 +35,7 @@ function deadlineCell(item: ChecklistItemData): string {
 }
 
 function SortableHeader({
-  label, columnKey, sortKey, sortDir, onClick, align = 'left', className = '',
+  label, columnKey, sortKey, sortDir, onClick, align = 'left',
 }: {
   label: string;
   columnKey: SortKey;
@@ -43,14 +43,12 @@ function SortableHeader({
   sortDir: SortDir;
   onClick: () => void;
   align?: 'left' | 'right';
-  /** Drop-out class for columns the responsive ladder hides. */
-  className?: string;
 }) {
   const active = sortKey === columnKey;
   const ariaSort: 'ascending' | 'descending' | 'none' =
     active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
   return (
-    <th scope="col" aria-sort={ariaSort} className={`px-3 py-3 ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}>
+    <th scope="col" aria-sort={ariaSort} className={`px-3 py-3 ${align === 'right' ? 'text-right' : 'text-left'}`}>
       <button
         type="button"
         onClick={onClick}
@@ -203,12 +201,25 @@ export function ComplianceQueue({
           div with no `tabIndex`, a scrollable region a keyboard-only user cannot
           reach (WCAG 2.1.1). Same wrapper as `esign/requests-view.tsx`.
 
-          Six columns cannot fit beside the detail rail on a laptop. Measured: the
-          table's min-content width is ~780px while the queue track is 536px at
-          1280 and 696px at 1440. The ladder below sheds the two columns the rail
-          already shows, `max-w-0` lets Record truncate instead of setting the
-          table's width (the technique `shared/data-table.tsx` documents), and this
-          wrapper catches whatever is still too wide.
+          Six columns cannot fit beside the detail rail on a laptop — measured,
+          the queue track is 576px at 1280 against a ~600px min-content table. The
+          first fix here shed Visibility and Statute below 2xl, which was wrong:
+          `display:none` on the Statute header also removes its sort button, so
+          sorting by statute became unreachable at exactly the widths most people
+          use. A drop-out ladder must never hide a column that owns the only
+          control for a feature.
+
+          So the RAIL moves instead (`2xl` in compliance-command-center.tsx): below
+          1536px it stacks under the table and the columns get the full content
+          width. `max-w-0` still lets Record truncate rather than set the table's
+          width (the technique `shared/data-table.tsx` documents), and this wrapper
+          catches anything still too wide.
+
+          ONE column still drops out below `xl`, and deliberately it is Visibility:
+          it is a plain `<th>` owning no control, so hiding it costs nothing but the
+          badge, which the detail rail shows for the selected record anyway.
+          Measured: it buys Record 88px -> 187px at 1024 and 108px -> 207px at 768.
+          Statute keeps its header at every width, which is the whole point.
         */
         <div
           role="region"
@@ -221,9 +232,9 @@ export function ComplianceQueue({
               <tr className="border-y border-edge-subtle bg-surface-muted text-left text-xs font-semibold uppercase tracking-wider text-content-tertiary">
                 <th scope="col" className="w-1/2 px-3 py-3">Record</th>
                 <SortableHeader label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('status')} />
-                <th scope="col" className="hidden px-3 py-3 2xl:table-cell">Visibility</th>
+                <th scope="col" className="hidden px-3 py-3 xl:table-cell">Visibility</th>
                 <SortableHeader label="Deadline" columnKey="deadline" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('deadline')} align="right" />
-                <SortableHeader label="Statute" columnKey="statute" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('statute')} className="hidden 2xl:table-cell" />
+                <SortableHeader label="Statute" columnKey="statute" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('statute')} />
                 <th scope="col" className="px-3 py-3 text-right"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -248,11 +259,11 @@ export function ComplianceQueue({
                     <td className="px-3 py-4">
                       <Badge variant={statusVariant(item.status)}>{statusLabel(item)}</Badge>
                     </td>
-                    <td className="hidden px-3 py-4 2xl:table-cell">
+                    <td className="hidden px-3 py-4 xl:table-cell">
                       <Badge variant={VISIBILITY_VARIANT[vis]}>{VISIBILITY_LABEL[vis]}</Badge>
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-right text-sm">{deadlineCell(item)}</td>
-                    <td className="hidden whitespace-nowrap px-3 py-4 text-sm text-content-secondary 2xl:table-cell">
+                    <td className="whitespace-nowrap px-3 py-4 text-sm text-content-secondary">
                       {item.statuteReference ?? ''}
                     </td>
                     <td className="px-3 py-4 text-right">
