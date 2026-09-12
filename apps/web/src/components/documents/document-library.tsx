@@ -277,9 +277,11 @@ export function DocumentLibrary({
           left slot carries `min-w-0`, so at 768px it shrinks to ~188px and the tabs
           spilled 26px over the actions beside them — `overflow: visible`, so they
           painted on top rather than being clipped. Same scrollable-row idiom as the
-          quick-filter chips further down this file.
+          quick-filter chips further down this file — but WITHOUT that row's `-mx-1
+          px-1` bleed, which is itself 4px of overflow when the parent is already at
+          its minimum (measured: the first attempt at this fix left +4px behind).
         */}
-        <div className="-mx-1 w-full overflow-x-auto px-1 sm:w-auto">
+        <div className="max-w-full overflow-x-auto">
           <Tabs value={view} onValueChange={setView}>
             <TabsList aria-label="View">
               <TabsTrigger value="list">List</TabsTrigger>
