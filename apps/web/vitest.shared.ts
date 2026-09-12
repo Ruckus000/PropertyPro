@@ -109,5 +109,28 @@ export const jsdomProject: UserWorkspaceConfig = {
     root: __dirname,
     include: JSDOM_FILES,
     exclude: SHARED_EXCLUDE,
+    /**
+     * CLOCK BUDGETS, not performance assertions. This one and RTL's
+     * `asyncUtilTimeout` in setup.jsdom.ts are a pair; change them together.
+     *
+     * The gate runs on a developer laptop, not a dedicated runner. On 2026-09-11
+     * a post-reboot Spotlight/apfsd storm slowed the whole suite 4-4.6x (single
+     * tests up to 6.4x: 781ms idle -> past 5000ms), and the defaults turned an
+     * unchanged, passing commit red three runs in a row. Every failure was one
+     * of the two clocks: vitest's 5000ms `testTimeout`, or RTL's 1000ms budget
+     * for a `find*` / `waitFor` (one waiting on a code-split `import()`, one on
+     * a React Query fetch) — plus the axe cascade below. The heaviest
+     * jsdom test measured idle is ~800ms, so 15s is ~19x headroom.
+     *
+     * Keep this well ABOVE asyncUtilTimeout, so a `find*` that genuinely fails
+     * reports its own "Unable to find ..." message instead of an opaque
+     * "Test timed out".
+     *
+     * `Axe is already running` is DOWNSTREAM of a timeout, not a separate bug:
+     * vitest-axe wraps axe-core's `run`, whose running flag is module-global, so
+     * a test that times out mid-audit orphans that run and every later audit in
+     * the same file rejects. Look for the first timeout in that file.
+     */
+    testTimeout: 15_000,
   },
 };
