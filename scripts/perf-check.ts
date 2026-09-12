@@ -19,8 +19,15 @@ type AppBuildManifest = {
  */
 const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
 // Ratcheted from 900 KiB after the framer-motion removal + mobile mockup
-// code-split (nav-perf PR 4): worst measured route is the mobile home;
-// this ceiling is measured + ~10% headroom.
+// code-split (nav-perf PR 4), when the worst measured route was the mobile home.
+//
+// That is no longer true and the ceiling is no longer "measured + ~10%".
+// Re-measured 2026-09-12 on a clean production build: mobile home is 411.0 KiB,
+// the worst BUDGETED route is site-editor at 663.0 KiB, and the worst route in
+// the app is `/(authenticated)/communities/[id]/documents` at 757.6 KiB — which
+// is already over this ceiling and does not fail, because it is in no group.
+// `reportUnbudgetedRoutes` below now surfaces those; enforcing them is a
+// separate decision. Do not ratchet this down until they are dealt with.
 const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 700 * 1024);
 const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1300 * 1024);
 
@@ -143,6 +150,63 @@ function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalByte
   return { totalBytes, files };
 }
 
+/**
+ * Report-only sweep over every page route, not just the budgeted groups.
+ *
+ * `groups` is six hand-picked web routes and three admin ones, so a route
+ * outside them can sit over the hard budget indefinitely without failing
+ * anything. Measured 2026-09-12: seven unbudgeted web pages already did, the
+ * largest `/(authenticated)/communities/[id]/documents` at 757.5 KiB. This pass
+ * exists so they stop being invisible.
+ *
+ * It appends to `warnings` and NEVER to `failures`. Turning pre-existing
+ * breaches red is a separate decision from being able to see them, and making
+ * it here would fail every push until seven unrelated routes were fixed.
+ *
+ * Only `/page` keys are counted. A `/layout` entry in the manifest is the
+ * layout's own RSC entrypoint, not additional first-load payload — its chunks
+ * are already accounted for in the pages beneath it. Summing it looks alarming
+ * and means nothing: `/(authenticated)/layout` reads as 924.8 KiB while Next's
+ * own First Load JS for the dashboard under it is 196 kB.
+ */
+function reportUnbudgetedRoutes(
+  spec: AppSpec,
+  pages: Record<string, string[]>,
+  selected: Map<string, string>,
+  warnings: string[],
+  failures: string[],
+): void {
+  const budgeted = new Set(selected.values());
+  const candidates = Object.keys(pages).filter(
+    (key) => key.endsWith('/page') && !budgeted.has(key),
+  );
+
+  if (candidates.length === 0) {
+    // A manifest with budgeted routes but no other pages means the filter above
+    // stopped matching the manifest's key shape — a broken scan, not a clean app.
+    failures.push(
+      `${spec.app}: unbudgeted sweep matched no '/page' keys out of ${Object.keys(pages).length} manifest entries.`,
+    );
+    return;
+  }
+
+  const over = candidates
+    .map((key) => ({ key, totalBytes: bytesForRoute(spec.nextRoot, pages[key] ?? []).totalBytes }))
+    .filter((route) => route.totalBytes > HARD_ROUTE_BUDGET_BYTES)
+    .sort((a, b) => b.totalBytes - a.totalBytes);
+
+  console.log(
+    `[${spec.app}] unbudgeted page routes scanned: ${candidates.length}; over hard budget: ${over.length}`,
+  );
+
+  for (const route of over) {
+    warnings.push(
+      `${spec.app} UNBUDGETED route ${route.key} exceeds the hard budget ` +
+        `(${formatKiB(route.totalBytes)} > ${formatKiB(HARD_ROUTE_BUDGET_BYTES)}) — reported, not enforced`,
+    );
+  }
+}
+
 function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolean {
   if (!existsSync(join(spec.nextRoot, 'app-build-manifest.json'))) {
     // Local partial builds (e.g. web-only) should stay usable; CI's
@@ -186,6 +250,8 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
       );
     }
   }
+
+  reportUnbudgetedRoutes(spec, pages, selected, warnings, failures);
 
   if (spec.aggregateBudgetBytes !== null) {
     const totalUniqueBytes = [...uniqueFiles].reduce(
