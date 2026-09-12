@@ -59,6 +59,19 @@ declare module '@tanstack/react-table' {
      * 401px table before the ladder, 619px after it, 274px with this.
      */
     absorbSlack?: boolean;
+    /**
+     * Give this column a `max-width: 0` floor WITHOUT `absorbSlack`'s `w-1/2`.
+     *
+     * The other half of the note above: a column whose cell renders `truncate`
+     * but never receives a floor has nothing to truncate against, so it sizes to
+     * its content and sets the table's width — starving the `absorbSlack` column
+     * it was supposed to leave room for. Measured on Documents: the
+     * `Statutory record` column held 277px and squeezed `Record` to 27px.
+     *
+     * Only one column per table can `absorbSlack` (two `w-1/2` headers leave the
+     * rest nothing), so a second truncating column needs this instead.
+     */
+    clamp?: boolean;
   }
 }
 
@@ -71,7 +84,9 @@ const HIDE_BELOW_CLASS: Record<'sm' | 'md', string> = {
   md: 'hidden md:table-cell',
 };
 
-type ResponsiveMeta = { hideBelow?: 'sm' | 'md'; absorbSlack?: boolean } | undefined;
+type ResponsiveMeta =
+  | { hideBelow?: 'sm' | 'md'; absorbSlack?: boolean; clamp?: boolean }
+  | undefined;
 
 function headerClass(meta: ResponsiveMeta): string | undefined {
   return cn(
@@ -83,7 +98,7 @@ function headerClass(meta: ResponsiveMeta): string | undefined {
 function cellClass(meta: ResponsiveMeta): string | undefined {
   return cn(
     meta?.hideBelow ? HIDE_BELOW_CLASS[meta.hideBelow] : undefined,
-    meta?.absorbSlack ? 'max-w-0' : undefined,
+    meta?.absorbSlack || meta?.clamp ? 'max-w-0' : undefined,
   ) || undefined;
 }
 

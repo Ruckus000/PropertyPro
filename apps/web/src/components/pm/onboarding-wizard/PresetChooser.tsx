@@ -125,7 +125,13 @@ export function PresetChooser({
         </p>
       </div>
 
-      <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/*
+        No `sm:`/`lg:` columns, for the same reason `LayoutChooser` has none: those
+        test the VIEWPORT while this fieldset lives in the wizard's half-width pane,
+        which is ~280px at 1024px. Three columns there gave 83px cards. Caught by
+        e2e/responsive-overflow.spec.ts after the LayoutChooser fix missed this twin.
+      */}
+      <fieldset className="grid grid-cols-1 gap-3">
         <legend className="sr-only">Theme preset</legend>
         {presets.map((preset) => {
           const isSelected = preset.slug === selected;

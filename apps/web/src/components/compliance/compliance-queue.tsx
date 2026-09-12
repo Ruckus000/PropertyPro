@@ -48,7 +48,7 @@ function SortableHeader({
   const ariaSort: 'ascending' | 'descending' | 'none' =
     active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
   return (
-    <th scope="col" aria-sort={ariaSort} className={`px-6 py-3 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+    <th scope="col" aria-sort={ariaSort} className={`px-3 py-3 ${align === 'right' ? 'text-right' : 'text-left'}`}>
       <button
         type="button"
         onClick={onClick}
@@ -139,7 +139,7 @@ export function ComplianceQueue({
   }
 
   return (
-    <section aria-labelledby="queue-heading" className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card">
+    <section aria-labelledby="queue-heading" className="min-w-0 rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card">
       <header className="flex items-start justify-between gap-4 px-6 py-4">
         <div>
           <h2 id="queue-heading" className="text-lg font-semibold">Required records queue</h2>
@@ -196,61 +196,93 @@ export function ComplianceQueue({
           </button>
         </div>
       ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="border-y border-edge-subtle bg-surface-muted text-left text-xs font-semibold uppercase tracking-wider text-content-tertiary">
-              <th scope="col" className="px-6 py-3">Record</th>
-              <SortableHeader label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('status')} />
-              <th scope="col" className="px-6 py-3">Visibility</th>
-              <SortableHeader label="Deadline" columnKey="deadline" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('deadline')} align="right" />
-              <SortableHeader label="Statute" columnKey="statute" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('statute')} />
-              <th scope="col" className="px-6 py-3 text-right"><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((item) => {
-              const cta = resolveComplianceCta(item, canWrite, designation);
-              const vis = getTemplateDefaultVisibility(item.templateKey);
-              return (
-                <tr
-                  key={item.id}
-                  data-row-id={item.id}
-                  aria-current={selectedId === item.id ? 'true' : undefined}
-                  className={
-                    selectedId === item.id
-                      ? 'bg-[var(--interactive-subtle)]'
-                      : 'hover:bg-surface-muted'
-                  }
-                >
-                  <td className="px-6 py-4">
-                    <div className="font-medium">{item.title}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <Badge variant={statusVariant(item.status)}>{statusLabel(item)}</Badge>
-                  </td>
-                  <td className="px-6 py-4">
-                    <Badge variant={VISIBILITY_VARIANT[vis]}>{VISIBILITY_LABEL[vis]}</Badge>
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm">{deadlineCell(item)}</td>
-                  <td className="px-6 py-4 text-sm text-content-secondary">
-                    {item.statuteReference ?? ''}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    {cta ? (
-                      <button
-                        type="button"
-                        onClick={() => dispatch(cta, item)}
-                        className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm hover:bg-surface-muted"
-                      >
-                        {cta.label}
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        /*
+          Owned scroller, not the shadcn `Table`'s: that one nests an `overflow-auto`
+          div with no `tabIndex`, a scrollable region a keyboard-only user cannot
+          reach (WCAG 2.1.1). Same wrapper as `esign/requests-view.tsx`.
+
+          Six columns cannot fit beside the detail rail on a laptop — measured,
+          the queue track is 576px at 1280 against a ~600px min-content table. The
+          first fix here shed Visibility and Statute below 2xl, which was wrong:
+          `display:none` on the Statute header also removes its sort button, so
+          sorting by statute became unreachable at exactly the widths most people
+          use. A drop-out ladder must never hide a column that owns the only
+          control for a feature.
+
+          So the RAIL moves instead (`2xl` in compliance-command-center.tsx): below
+          1536px it stacks under the table and the columns get the full content
+          width. `max-w-0` still lets Record truncate rather than set the table's
+          width (the technique `shared/data-table.tsx` documents), and this wrapper
+          catches anything still too wide.
+
+          ONE column still drops out below `xl`, and deliberately it is Visibility:
+          it is a plain `<th>` owning no control, so hiding it costs nothing but the
+          badge, which the detail rail shows for the selected record anyway.
+          Measured: it buys Record 88px -> 187px at 1024 and 108px -> 207px at 768.
+          Statute keeps its header at every width, which is the whole point.
+        */
+        <div
+          role="region"
+          aria-label="Required records"
+          tabIndex={0}
+          className="w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
+        >
+          <table className="w-full">
+            <thead>
+              <tr className="border-y border-edge-subtle bg-surface-muted text-left text-xs font-semibold uppercase tracking-wider text-content-tertiary">
+                <th scope="col" className="w-1/2 px-3 py-3">Record</th>
+                <SortableHeader label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('status')} />
+                <th scope="col" className="hidden px-3 py-3 xl:table-cell">Visibility</th>
+                <SortableHeader label="Deadline" columnKey="deadline" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('deadline')} align="right" />
+                <SortableHeader label="Statute" columnKey="statute" sortKey={sortKey} sortDir={sortDir} onClick={() => toggleSort('statute')} />
+                <th scope="col" className="px-3 py-3 text-right"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item) => {
+                const cta = resolveComplianceCta(item, canWrite, designation);
+                const vis = getTemplateDefaultVisibility(item.templateKey);
+                return (
+                  <tr
+                    key={item.id}
+                    data-row-id={item.id}
+                    aria-current={selectedId === item.id ? 'true' : undefined}
+                    className={
+                      selectedId === item.id
+                        ? 'bg-[var(--interactive-subtle)]'
+                        : 'hover:bg-surface-muted'
+                    }
+                  >
+                    <td className="max-w-0 px-3 py-4">
+                      <div className="truncate font-medium">{item.title}</div>
+                    </td>
+                    <td className="px-3 py-4">
+                      <Badge variant={statusVariant(item.status)}>{statusLabel(item)}</Badge>
+                    </td>
+                    <td className="hidden px-3 py-4 xl:table-cell">
+                      <Badge variant={VISIBILITY_VARIANT[vis]}>{VISIBILITY_LABEL[vis]}</Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-4 text-right text-sm">{deadlineCell(item)}</td>
+                    <td className="whitespace-nowrap px-3 py-4 text-sm text-content-secondary">
+                      {item.statuteReference ?? ''}
+                    </td>
+                    <td className="px-3 py-4 text-right">
+                      {cta ? (
+                        <button
+                          type="button"
+                          onClick={() => dispatch(cta, item)}
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-1.5 text-sm hover:bg-surface-muted"
+                        >
+                          {cta.label}
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

@@ -32,6 +32,17 @@
     "measurement is this job's own run on the PR that adds it — a failure there",
     "is the gate doing its job, not a broken addition to this list.",
     "",
+    "`responsive-overflow` is UNMEASURED against this stack, on the same terms as",
+    "`admin-shell` above: the container that authored it had no Docker, no Supabase CLI",
+    "and no local Postgres, so running it there was impossible. It is registered anyway",
+    "because an unregistered spec gates nothing, and the regression class it exists to",
+    "catch (a viewport-keyed breakpoint firing inside a container ~340px narrower than",
+    "the viewport) had already shipped three broken screens past every other gate — one",
+    "of which a human reviewer then found still live in document-library.tsx after the",
+    "first fix. Its 4 blocks are 3 route x 4 viewport overflow checks plus one asserting",
+    "the app shell is absent from /pm/site-preview. The real measurement is this job's",
+    "own run on the PR that adds it; a failure there is the gate doing its job.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -52,7 +63,8 @@
     "marketing-smoke.spec.ts",
     "meeting-create-spacebar.spec.ts",
     "phase1-roadmap-smoke.spec.ts",
+    "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 32
+  "expectedTestCount": 36
 }

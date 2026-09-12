@@ -102,7 +102,7 @@ export function DocumentsTable({
                   aria-hidden="true"
                 />
                 <div className="min-w-0">
-                  <p className="font-medium text-content">No file on record</p>
+                  <p className="truncate font-medium text-content">No file on record</p>
                   <p className="truncate text-xs text-content-secondary">
                     {item.requirement.title}
                   </p>
@@ -165,7 +165,9 @@ export function DocumentsTable({
         header: 'Statutory record',
         // Survives one step longer than Category: it is the link that makes a
         // document evidence rather than a file.
-        meta: { hideBelow: 'sm' },
+        // `truncate` below needs a width floor or it sets the table's width
+        // instead of yielding to it — see `clamp` in shared/data-table.tsx.
+        meta: { hideBelow: 'sm', clamp: true },
         cell: ({ row }) => {
           // Both row kinds carry `requirement`; only a document's can be null.
           const { requirement } = row.original;

@@ -94,7 +94,7 @@ export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip
         </p>
       </div>
 
-      <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <fieldset className="grid grid-cols-1 gap-4">
         <legend className="sr-only">Layout</legend>
         {LAYOUTS.map((layout) => {
           const isSelected = layout.slug === selected;

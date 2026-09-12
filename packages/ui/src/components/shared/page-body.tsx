@@ -27,18 +27,27 @@ const SPACING = {
   none: '',
 } as const;
 
+/**
+ * Effective widths, NOT Tailwind's nominal ones. Both consuming apps set a
+ * `:root { font-size: 18px }` (`apps/web/src/app/globals.css`,
+ * `apps/admin/src/styles/globals.css`), so every `max-w-*` here — which is
+ * declared in rem — renders 12.5% wider than the default-16px figures these
+ * comments used to quote. The authenticated content box is only
+ * `viewport − 260px sidebar − 80px gutter`, so `content` and `reading` do not
+ * bind at all below ~1350px/~1490px and silently behave as `full` there.
+ */
 const WIDTHS = {
   /** Full app width (inherits the container cap). */
   full: '',
-  /** ~512px — status/confirmation pages. */
+  /** 32rem = 576px — status/confirmation pages. */
   narrow: 'mx-auto w-full max-w-lg',
-  /** ~672px — notifications and other single-column feeds. */
+  /** 42rem = 756px — notifications and other single-column feeds. */
   prose: 'mx-auto w-full max-w-2xl',
-  /** ~768px — forms and detail pages. */
+  /** 48rem = 864px — forms and detail pages. */
   form: 'mx-auto w-full max-w-3xl',
-  /** ~896px — focused hubs. */
+  /** 56rem = 1008px — focused hubs. */
   content: 'mx-auto w-full max-w-4xl',
-  /** ~1024px — long documents / transparency reports. */
+  /** 64rem = 1152px — long documents / transparency reports. */
   reading: 'mx-auto w-full max-w-5xl',
 } as const;
 

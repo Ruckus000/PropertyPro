@@ -272,13 +272,24 @@ export function DocumentLibrary({
           </>
         }
       >
-        <Tabs value={view} onValueChange={setView}>
-          <TabsList aria-label="View">
-            <TabsTrigger value="list">List</TabsTrigger>
-            <TabsTrigger value="board">Board</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/*
+          The view switcher is a single unbreakable flex row (~214px). PageHeader's
+          left slot carries `min-w-0`, so at 768px it shrinks to ~188px and the tabs
+          spilled 26px over the actions beside them — `overflow: visible`, so they
+          painted on top rather than being clipped. Same scrollable-row idiom as the
+          quick-filter chips further down this file — but WITHOUT that row's `-mx-1
+          px-1` bleed, which is itself 4px of overflow when the parent is already at
+          its minimum (measured: the first attempt at this fix left +4px behind).
+        */}
+        <div className="max-w-full overflow-x-auto">
+          <Tabs value={view} onValueChange={setView}>
+            <TabsList aria-label="View">
+              <TabsTrigger value="list">List</TabsTrigger>
+              <TabsTrigger value="board">Board</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </PageHeader>
 
       {showUpload && canUpload && (
@@ -345,9 +356,9 @@ export function DocumentLibrary({
           />
         </div>
 
-        <div className="grid min-h-[500px] lg:grid-cols-2">
+        <div className="grid min-h-[500px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div
-            className={`min-w-0 border-r border-edge p-6 ${selectedDocument ? 'hidden lg:block' : ''}`}
+            className={`min-w-0 p-6 xl:border-r xl:border-edge ${selectedDocument ? 'hidden xl:block' : ''}`}
           >
             {view === 'list' && (
               <DocumentsTable
@@ -405,12 +416,12 @@ export function DocumentLibrary({
             )}
           </div>
 
-          <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden lg:block'}`}>
+          <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden xl:block'}`}>
             {selectedDocument && (
               <button
                 type="button"
                 onClick={() => setSelectedDocument(null)}
-                className="mb-3 inline-flex items-center gap-1 text-sm text-content-secondary hover:text-content lg:hidden"
+                className="mb-3 inline-flex items-center gap-1 text-sm text-content-secondary hover:text-content xl:hidden"
               >
                 Back to list
               </button>

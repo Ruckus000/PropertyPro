@@ -21,7 +21,7 @@ The target is the authenticated Website tab at `/pm/settings/website?communityId
 2. `apps/web/src/components/layout/nav-config.ts` exposes a community Website item that routes to `/pm/settings/website?communityId=X`, while the PM nav also has a Website item under a different ID (`branding`). The route therefore changes both URL family and sidebar data source when the Website item is activated.
 3. `apps/web/src/app/(authenticated)/pm/settings/website/page.tsx` renders a long single-column editor: onboarding banner, title/status/actions, Welcome card, Content Sections list, Custom Styling card, Custom Domain card, and a sticky PublishBar.
 4. `HeroBlockForm.tsx`, `ContentSectionsList.tsx`, `CustomStylingForm.tsx`, `CustomDomainCard.tsx`, and `PublishBar.tsx` show the current controls, states, save/publish actions, plan gates, and draft/published terminology.
-5. `apps/web/src/app/(authenticated)/pm/site-preview/page.tsx` renders the same public-site layouts inside an authenticated preview route. `PublicSiteHeader.tsx` and the Tidewater/Sable/Boulevard layouts provide the preview surface and branding signals.
+5. `apps/web/src/app/(site-preview)/pm/site-preview/page.tsx` renders the same public-site layouts inside an authenticated preview route. `PublicSiteHeader.tsx` and the Tidewater/Sable/Boulevard layouts provide the preview surface and branding signals.
 6. `DESIGN.md`, `.claude/rules/design.md`, and `packages/tokens` document the shared visual system: semantic colors, 4px spacing, 44px mobile touch targets, 2px focus rings, reduced motion, and one filled primary CTA per region.
 
 ## Current-state inventory
