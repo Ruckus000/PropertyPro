@@ -20,6 +20,8 @@ import {
 } from '@/lib/services/provisioning-service';
 import { confirmVerificationPostContract } from './contract';
 
+const EXPIRED_MESSAGE = 'This signup request has expired. Please start a new signup.';
+
 export const POST = withErrorHandler(
   runRoute(confirmVerificationPostContract, async ({ body }) => {
     const signup = await getPendingSignupForVerification(body.signupRequestId);
@@ -32,6 +34,16 @@ export const POST = withErrorHandler(
       return { success: true as const, signupRequestId: signup.signupRequestId };
     }
 
+    // `expired` is written by provisioning-watchdog's sweep of abandoned
+    // email_verified / checkout_started rows (#1111) — a real person who
+    // verified, left checkout, and re-clicked the email later. Without this they
+    // got the raw status string below. It is checked on STATUS, not by moving the
+    // `expiresAt` check up: a `completed` row also has a past expires_at, and a
+    // paying customer must not be told to start a new signup.
+    if (signup.status === 'expired') {
+      throw new ValidationError(EXPIRED_MESSAGE);
+    }
+
     if (signup.status !== 'pending_verification') {
       throw new ValidationError(
         `Cannot confirm verification from status "${signup.status}"`,
@@ -39,7 +51,7 @@ export const POST = withErrorHandler(
     }
 
     if (signup.expiresAt && new Date(signup.expiresAt) < new Date()) {
-      throw new ValidationError('This signup request has expired. Please start a new signup.');
+      throw new ValidationError(EXPIRED_MESSAGE);
     }
 
     if (!signup.authUserId) {

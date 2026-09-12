@@ -101,4 +101,25 @@ describe('SignupForm — return from the verification link', () => {
     // The failure path must not retry itself into the same loop.
     expect(confirmCalls()).toBe(1);
   });
+
+  // The error card replaces the whole form, and `page.tsx` renders only "Sign
+  // in" beneath it. For a terminal answer ("This signup request has expired.
+  // Please start a new signup.") Retry can never succeed, so without a link the
+  // only way forward was hand-editing the URL.
+  it('offers a way back to a blank form from the error card', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: { message: 'This signup request has expired. Please start a new signup.' },
+      }),
+    });
+
+    render(<SignupForm verificationReturn initialSignupRequestId="req-1" />);
+
+    const link = await screen.findByRole('link', { name: /start a new signup/i });
+    // `/signup` with NO query string: dropping `verified=1` and the stale
+    // signupRequestId is what lets the page render the form again.
+    expect(link).toHaveAttribute('href', '/signup');
+  });
 });
