@@ -180,16 +180,20 @@ function renderLibrary(props: Partial<React.ComponentProps<typeof DocumentLibrar
 }
 
 describe('DocumentLibrary', () => {
-  it('updates mimeType when selecting a document version', () => {
+  it('updates mimeType when selecting a document version', async () => {
     renderLibrary();
 
+    // `DocumentViewer` is still statically imported — it doubles as the
+    // inspector's empty state — so these two are synchronous. Only the version
+    // chain below is code-split.
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('none');
 
     fireEvent.click(screen.getByRole('button', { name: 'Select Document' }));
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('application/pdf');
 
     fireEvent.click(screen.getByRole('button', { name: 'View Versions' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Select PNG Version' }));
+    // `DocumentVersionHistory` is `next/dynamic`, so it resolves a tick later.
+    fireEvent.click(await screen.findByRole('button', { name: 'Select PNG Version' }));
 
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('image/png');
   });
@@ -246,16 +250,20 @@ describe('the view switcher', () => {
     expect(screen.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('mounts only the view the URL names', () => {
+  // Board and timeline are `next/dynamic`, so each resolves a tick after mount.
+  // The negative assertion still means what it did: it runs only once the OTHER
+  // view has actually rendered, so "not present" is a real absence rather than a
+  // chunk that simply had not resolved yet.
+  it('mounts only the view the URL names', async () => {
     searchParams = new URLSearchParams('view=board');
     const { unmount } = renderLibrary();
-    expect(screen.getByText('board view')).toBeDefined();
+    expect(await screen.findByText('board view')).toBeDefined();
     expect(screen.queryByText('timeline view')).toBeNull();
     unmount();
 
     searchParams = new URLSearchParams('view=timeline');
     renderLibrary();
-    expect(screen.getByText('timeline view')).toBeDefined();
+    expect(await screen.findByText('timeline view')).toBeDefined();
     expect(screen.queryByText('board view')).toBeNull();
   });
 

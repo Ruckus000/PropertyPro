@@ -19,8 +19,18 @@ type AppBuildManifest = {
  */
 const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
 // Ratcheted from 900 KiB after the framer-motion removal + mobile mockup
-// code-split (nav-perf PR 4): worst measured route is the mobile home;
-// this ceiling is measured + ~10% headroom.
+// code-split (nav-perf PR 4), when the worst measured route was the mobile home.
+//
+// That is no longer true and the ceiling is no longer "measured + ~10%".
+// Re-measured 2026-09-13 on a clean production build: mobile home is 411.1 KiB
+// and the worst BUDGETED route is site-editor at 663.1 KiB, with the PM
+// portfolio next at 679.1 KiB — only ~21 KiB of headroom, and the one route
+// still carrying `@tanstack/react-table`.
+//
+// Two routes remain OVER this ceiling without failing, because they are in no
+// group: `/auth/accept-invite` (720.2) and `/auth/reset-password` (701.4).
+// `reportUnbudgetedRoutes` below surfaces them; enforcing them is a separate
+// decision. Do not ratchet this down until they are dealt with.
 const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 700 * 1024);
 const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1300 * 1024);
 
@@ -37,10 +47,17 @@ const APPS: readonly AppSpec[] = [
     app: 'web',
     nextRoot: join(process.cwd(), 'apps', 'web', '.next'),
     groups: {
+      // The PM portfolio. Measured 2026-09-13: neither of the two forms this
+      // group used to list exists in the manifest — the route lives under
+      // `(authenticated)`, so `resolveRoute` fell through to the THIRD entry,
+      // `/(authenticated)/dashboard/page`, and this group silently reported the
+      // resident dashboard while the PM route was enforced by nothing. That
+      // unrelated fallback is deleted rather than kept: a fallback to a
+      // different screen is worse than no measurement, because it looks like one.
       pm: [
+        '/(authenticated)/pm/dashboard/communities/page',
         '/(pm)/dashboard/communities/page',
         '/pm/dashboard/communities/page',
-        '/(authenticated)/dashboard/page',
       ],
       maintenance: [
         '/(authenticated)/maintenance/inbox/page',
@@ -143,6 +160,64 @@ function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalByte
   return { totalBytes, files };
 }
 
+/**
+ * Report-only sweep over every page route, not just the budgeted groups.
+ *
+ * `groups` is six hand-picked web routes and three admin ones, so a route
+ * outside them can sit over the hard budget indefinitely without failing
+ * anything. When this pass was added, seven unbudgeted web pages already did —
+ * the largest `/(authenticated)/communities/[id]/documents` at 757.5 KiB. Two
+ * remain as of 2026-09-13 (`/auth/accept-invite`, `/auth/reset-password`);
+ * documents is now 634.8 KiB. This pass exists so they stop being invisible.
+ *
+ * This appends to `warnings` and never to `failures`, without exception. Turning
+ * pre-existing breaches red is a separate decision from being able to see them,
+ * and making it here would fail every push until seven unrelated routes were
+ * fixed.
+ *
+ * It deliberately carries no "examined nothing, so refuse to pass" branch of its
+ * own. `checkApp` already returns before calling this when no group resolved,
+ * and every resolved key ends in `/page` — so a sweep that reaches this function
+ * always has at least one page to look at. An earlier version failed on an empty
+ * candidate list; that could only mean "every page is budgeted", which is benign,
+ * and the branch meant to catch a broken scan was unreachable. A guard that
+ * cannot fire is worse than none: it reads as coverage that is not there.
+ *
+ * Only `/page` keys are counted. A `/layout` entry in the manifest is the
+ * layout's own RSC entrypoint, not additional first-load payload — its chunks
+ * are already accounted for in the pages beneath it. Summing it looks alarming
+ * and means nothing: `/(authenticated)/layout` reads as 924.8 KiB while Next's
+ * own First Load JS for the dashboard under it is 196 kB.
+ */
+function reportUnbudgetedRoutes(
+  spec: AppSpec,
+  pages: Record<string, string[]>,
+  warnings: string[],
+): void {
+  // Every DECLARED candidate, not just the resolved one. A group lists fallbacks
+  // (see `groups` above), and a fallback that did not win is still a route the
+  // spec knows about — reporting it as "unbudgeted" would be a false positive.
+  const budgeted = new Set(Object.values(spec.groups).flat());
+  const pageKeys = Object.keys(pages).filter((key) => key.endsWith('/page'));
+  const candidates = pageKeys.filter((key) => !budgeted.has(key));
+
+  const over = candidates
+    .map((key) => ({ key, totalBytes: bytesForRoute(spec.nextRoot, pages[key] ?? []).totalBytes }))
+    .filter((route) => route.totalBytes > HARD_ROUTE_BUDGET_BYTES)
+    .sort((a, b) => b.totalBytes - a.totalBytes);
+
+  console.log(
+    `[${spec.app}] unbudgeted page routes scanned: ${candidates.length}; over hard budget: ${over.length}`,
+  );
+
+  for (const route of over) {
+    warnings.push(
+      `${spec.app} UNBUDGETED route ${route.key} exceeds the hard budget ` +
+        `(${formatKiB(route.totalBytes)} > ${formatKiB(HARD_ROUTE_BUDGET_BYTES)}) — reported, not enforced`,
+    );
+  }
+}
+
 function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolean {
   if (!existsSync(join(spec.nextRoot, 'app-build-manifest.json'))) {
     // Local partial builds (e.g. web-only) should stay usable; CI's
@@ -157,6 +232,17 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
     const resolved = resolveRoute(pages, candidates);
     if (resolved) {
       selected.set(group, resolved);
+      // Falling through to a fallback is not an error — the lists exist so a page
+      // moving in or out of a route group degrades instead of hard-failing — but
+      // it must not be SILENT. The `pm` group fell through to an unrelated screen
+      // and reported its size as the PM portfolio's for as long as anyone can
+      // tell; nothing in the output said so.
+      if (resolved !== candidates[0]) {
+        warnings.push(
+          `${spec.app}: group "${group}" fell back to ${resolved} — its first candidate ` +
+            `${candidates[0]} is not in the manifest. Confirm this is still the right route.`,
+        );
+      }
     } else {
       warnings.push(`${spec.app}: no manifest route matched group "${group}" (${candidates.join(', ')})`);
     }
@@ -186,6 +272,8 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
       );
     }
   }
+
+  reportUnbudgetedRoutes(spec, pages, warnings);
 
   if (spec.aggregateBudgetBytes !== null) {
     const totalUniqueBytes = [...uniqueFiles].reduce(

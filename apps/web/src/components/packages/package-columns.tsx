@@ -1,6 +1,6 @@
 'use client';
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '@/components/shared/data-table-types';
 import { format, parseISO } from 'date-fns';
 import type { PackageListItem } from '@/hooks/use-packages';
 import { Badge } from '@/components/ui/badge';

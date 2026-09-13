@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '@/components/shared/data-table-types';
 import { format, parseISO } from 'date-fns';
 import {
   useDeleteDeniedVisitor,

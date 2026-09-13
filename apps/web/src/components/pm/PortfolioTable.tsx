@@ -1,7 +1,7 @@
 'use client';
 
 import type { OnChangeFn, PaginationState, RowSelectionState, SortingState } from '@tanstack/react-table';
-import { DataTable } from '@/components/shared/data-table';
+import { PortfolioDataTable } from './portfolio-data-table';
 import { portfolioColumns } from './portfolio-columns';
 import type { PortfolioCommunity } from '@/hooks/use-portfolio-dashboard';
 
@@ -31,7 +31,7 @@ export function PortfolioTable({
   const pageCount = Math.ceil(totalCount / pagination.pageSize);
 
   return (
-    <DataTable
+    <PortfolioDataTable
       columns={portfolioColumns}
       data={data}
       pageCount={pageCount}

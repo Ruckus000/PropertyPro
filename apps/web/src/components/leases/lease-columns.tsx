@@ -1,6 +1,6 @@
 'use client';
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '@/components/shared/data-table-types';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import type { EnrichedLeaseListItem, LeaseTableRow } from '@/hooks/use-leases';
 import {
