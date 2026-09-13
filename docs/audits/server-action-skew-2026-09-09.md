@@ -185,10 +185,13 @@ Issue 7679494141 (`PROPERTY-PRO-1J`) holds **8** events, measured through the Se
 | 2026-08-18 22:23:37 | `99de40cf` | `mail.getpropertypro.com/signup` (the event above) |
 | 2026-09-09 08:55:29–34 | `c3b5c7c9` | `www.getpropertypro.com/index` ×6, `/index.php` ×1 |
 
-The seven new events are **one burst in five seconds** from a single Windows client, sent to paths
-that serve the marketing page, which has no Server Action at all, plus a PHP filename the app has
-never had. Every title has **no quoted action id**, so each one is the non-fetch multipart branch
-described above: outside traffic, not skew.
+The seven new events are **one burst in five seconds**, all tagged `os.name=Linux` and
+`browser=Electron 31.7.7`, which looks like a headless scanner. (The latest event's `client_os`
+context says Windows, but that field is parsed from a user agent that can be spoofed.) Six went to
+`/index`, handled by `/(marketing)/page`. One went to `/index.php`, a PHP filename the app has never
+had, handled by `/(public)/[subdomain]/page`. Which page answered does not matter here: every title
+has **no quoted action id**, so each one is the non-fetch multipart branch described above, which
+throws whatever the page. Outside traffic, not skew.
 
 The argument that still stands is the other one. An `ignoreErrors` entry matches the message text,
 so it would also hide *genuine* skew if a `<form action={serverAction}>` is ever added. The issue is

@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * revenue-snapshot's UNCAUGHT failures, tested against the REAL Sentry SDK.
@@ -141,6 +141,13 @@ describe('revenue-snapshot — a healthy run is not a Sentry issue', () => {
     captured.length = 0;
     loadInputsMock.mockResolvedValue(emptyInputs);
     getStripeClientMock.mockReturnValue(noSubscriptions);
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+  });
+
+  // In afterEach, not after the assertions: a failing expect would skip it and
+  // leave console.info swallowed for the rest of the file.
+  afterEach(() => {
+    vi.mocked(console.info).mockRestore();
   });
 
   it('sends NOTHING to Sentry when the snapshot succeeds', async () => {
@@ -149,7 +156,6 @@ describe('revenue-snapshot — a healthy run is not a Sentry issue', () => {
     // unresolved issues with no level filter — so a healthy cron rendered as a
     // "production error" in Health, the tray and the error-spike count.
     priorMrrMock.mockResolvedValue(null);
-    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const res = await GET(req());
     await settle();
@@ -157,21 +163,20 @@ describe('revenue-snapshot — a healthy run is not a Sentry issue', () => {
     expect(res.status).toBe(200);
     expect(captured).toEqual([]);
     // The figures still reach the runtime log.
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('"event":"revenue_snapshot"'));
-    info.mockRestore();
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('"event":"revenue_snapshot"'),
+    );
   });
 
   it('still reports a real anomaly — the delta warning is untouched', async () => {
     // Control: proves the test above is not green merely because nothing can
     // reach `captured`. 0 MRR against a prior of 1000 is a -100% delta.
     priorMrrMock.mockResolvedValue(1000);
-    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const res = await GET(req());
     await settle();
 
     expect(res.status).toBe(200);
     expect(captured.map((e) => e.message)).toEqual(['revenue_snapshot_delta_high']);
-    info.mockRestore();
   });
 });
