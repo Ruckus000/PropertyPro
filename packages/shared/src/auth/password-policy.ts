@@ -9,9 +9,17 @@
  *
  * Rule order here must match the order of surfaced messages so the first
  * failing rule is a deterministic user-facing error.
+ *
+ * ## This file must stay zod-free
+ *
+ * It is exported as `@propertypro/shared/password-policy` so client components
+ * can reach the policy WITHOUT dragging zod in. The package ships as a single
+ * bundled `dist/index.js`, so a client importing `PASSWORD_POLICY` from the
+ * barrel pulls the whole library — 96.7 KiB, which is what put
+ * `/auth/accept-invite` and `/auth/reset-password` over their route budget.
+ * The zod face lives in `./password-policy-zod.ts`; add nothing here that
+ * imports it.
  */
-import { z } from 'zod';
-
 export type PasswordRuleId = 'length' | 'lowercase' | 'uppercase' | 'number' | 'special';
 
 export interface PasswordRule {
@@ -115,27 +123,4 @@ export function scorePassword(pw: string): PasswordScore {
   else level = 'strong';
 
   return { score, level, failedRules };
-}
-
-/**
- * Build a Zod string schema from `PASSWORD_POLICY.rules`.
- * Each rule contributes one issue with `rule.message`.
- * Callers compose this into higher-level objects (signup, reset, etc.).
- */
-export function buildPasswordZodSchema(): z.ZodString {
-  let schema = z
-    .string()
-    .min(PASSWORD_POLICY.minLength, {
-      message: `Password must be at least ${PASSWORD_POLICY.minLength} characters`,
-    })
-    .max(PASSWORD_POLICY.maxLength, {
-      message: `Password must be at most ${PASSWORD_POLICY.maxLength} characters`,
-    });
-
-  for (const rule of PASSWORD_POLICY.rules) {
-    if (rule.id === 'length') continue;
-    schema = schema.refine(rule.test, { message: rule.message });
-  }
-
-  return schema as z.ZodString;
 }

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
-import { PASSWORD_POLICY } from '@propertypro/shared';
+import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 import { useAcceptInvitation } from '@/hooks/use-invitations';
 

@@ -5,7 +5,7 @@ import {
   getPasswordChecks,
   scorePassword,
   type PasswordStrengthLevel,
-} from '@propertypro/shared';
+} from '@propertypro/shared/password-policy';
 import { cn } from '@/lib/utils';
 
 interface PasswordStrengthIndicatorProps {

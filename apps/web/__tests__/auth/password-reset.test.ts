@@ -128,11 +128,17 @@ describe('p1-21 password reset flow', () => {
     expect(result.message).toContain('Too many reset requests');
   });
 
+  // Meets PASSWORD_POLICY. The previous fixture here was 'new-password-123',
+  // which has no uppercase and no special character — it does NOT meet the
+  // policy the reset form shows the user, and it passed, because nothing on
+  // this path checked. That fixture was the gap in miniature.
+  const VALID_PASSWORD = 'New-Password-123!';
+
   it('updates password successfully with valid session', async () => {
-    const result = await updatePassword('new-password-123');
+    const result = await updatePassword(VALID_PASSWORD);
 
     expect(result.success).toBe(true);
-    expect(updateUserMock).toHaveBeenCalledWith({ password: 'new-password-123' });
+    expect(updateUserMock).toHaveBeenCalledWith({ password: VALID_PASSWORD });
   });
 
   it('returns clear message for expired or invalid reset tokens', async () => {
@@ -142,9 +148,31 @@ describe('p1-21 password reset flow', () => {
       },
     });
 
-    const result = await updatePassword('new-password-123');
+    const result = await updatePassword(VALID_PASSWORD);
 
     expect(result.success).toBe(false);
     expect(result.message).toContain('expired');
+  });
+
+  /**
+   * The form is not the enforcement point. `updatePasswordAction` is exported
+   * from a `'use server'` module, so anyone holding a valid recovery session
+   * can call it directly and never run the client's checks.
+   */
+  it('rejects a password that fails the policy, without calling Supabase', async () => {
+    const result = await updatePassword('new-password-123');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('uppercase');
+    // The decisive assertion: the weak password never reaches the auth provider.
+    expect(updateUserMock).not.toHaveBeenCalled();
+  });
+
+  it('states the first unmet rule rather than a generic failure', async () => {
+    const result = await updatePassword('short');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/at least 8 characters/i);
+    expect(updateUserMock).not.toHaveBeenCalled();
   });
 });
