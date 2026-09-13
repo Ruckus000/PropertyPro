@@ -167,7 +167,7 @@ describe('DataTable — loading, empty and keying', () => {
     expect(screen.getByRole('button', { name: 'Upload Document' })).toBeDefined();
   });
 
-  it('prefers the caller’s emptyMessage over the default', () => {
+  it('falls back to a default empty message when the caller supplies none', () => {
     renderTable({ data: [] });
     expect(screen.getByText('No results found.')).toBeDefined();
   });

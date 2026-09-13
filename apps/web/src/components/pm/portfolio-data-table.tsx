@@ -7,9 +7,17 @@
  * This is the implementation the shared `DataTable` used to be, kept intact on
  * `@tanstack/react-table` rather than reimplemented. The other eight tables
  * moved to a plain renderer because the library was costing 57.9 KiB to do work
- * they never asked for; here the features are genuinely used, and this route is
- * under its perf budget, so hand-rolling a selection state machine would have
- * been risk for no gain.
+ * they never asked for; here the features are genuinely used, so hand-rolling a
+ * selection state machine would have been risk for little gain.
+ *
+ * **This route has ~21 KiB of headroom.** It measures 679.1 KiB against the
+ * 700 KiB hard budget (2026-09-13), and the library is most of the difference
+ * between it and its neighbours. An earlier version of this note claimed the
+ * route was comfortably under budget; that was wrong, because `perf-check`'s
+ * `pm` group was silently measuring the resident dashboard instead. It measures
+ * this route now, so the next feature added to the portfolio table is the one
+ * that fails the build — at which point the answer is to defer something here,
+ * not to raise the ceiling.
  *
  * It carries no responsive-meta ladder: `portfolio-columns.tsx` declares no
  * `meta`, and the `hideBelow`/`absorbSlack`/`clamp` vocabulary now lives with
@@ -25,9 +33,7 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
-  type RowData,
 } from '@tanstack/react-table';
-import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
