@@ -20,7 +20,7 @@
  * ceiling is `walkPaginated`'s 2000-row cap in `useDocuments`.
  */
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '@/components/shared/data-table-types';
 import { AlertTriangle, FileText } from 'lucide-react';
 import { useMemo } from 'react';
 import { DataTable } from '@/components/shared/data-table';

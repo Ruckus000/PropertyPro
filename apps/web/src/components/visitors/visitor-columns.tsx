@@ -1,6 +1,6 @@
 'use client';
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '@/components/shared/data-table-types';
 import { format, parseISO } from 'date-fns';
 import { AlertTriangle, Ban } from 'lucide-react';
 import type { VisitorListItem } from '@/hooks/use-visitors';
