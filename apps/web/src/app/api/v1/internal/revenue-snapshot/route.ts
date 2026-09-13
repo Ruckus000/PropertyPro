@@ -119,10 +119,15 @@ async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
     deltaPct,
   });
 
-  // Structured log for observability
-  captureMessage('revenue_snapshot', {
-    level: 'info',
-    extra: {
+  // A LOG, not a Sentry event. This used to be `captureMessage(..., 'info')`,
+  // which opened a Sentry issue for every healthy run — and the admin console
+  // reads unresolved issues with no level filter (ErrorsList.tsx), so a
+  // successful snapshot surfaced as a "production error" in the Health list, the
+  // tray, and the error-spike count behind the critical banner and push. The
+  // figures are already durable in `revenue_snapshots`, and success is in
+  // `cron_runs`; only the anomalies below belong in Sentry.
+  console.info(
+    JSON.stringify({
       event: 'revenue_snapshot',
       mrr_cents: computation.mrrCents,
       potential_mrr_cents: computation.potentialMrrCents,
@@ -133,8 +138,8 @@ async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
       delta_pct: deltaPct,
       communities_skipped: computation.communitiesSkipped,
       prices_version: computation.pricesVersion,
-    },
-  });
+    }),
+  );
 
   // Drift warnings
   if (reconciliationDriftPct !== null && reconciliationDriftPct > 5) {

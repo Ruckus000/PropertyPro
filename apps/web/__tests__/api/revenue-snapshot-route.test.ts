@@ -29,18 +29,26 @@ Sentry.init({
   },
 });
 
-const { loadInputsMock, recordCronRunMock, registerCronJobsMock } = vi.hoisted(() => ({
+const {
+  loadInputsMock,
+  priorMrrMock,
+  getStripeClientMock,
+  recordCronRunMock,
+  registerCronJobsMock,
+} = vi.hoisted(() => ({
   loadInputsMock: vi.fn(),
+  priorMrrMock: vi.fn(),
+  getStripeClientMock: vi.fn(),
   recordCronRunMock: vi.fn(),
   registerCronJobsMock: vi.fn(),
 }));
 
 vi.mock('@/lib/services/revenue-snapshot-data-service', () => ({
   loadRevenueSnapshotInputs: loadInputsMock,
-  getPriorSnapshotMrr: vi.fn(),
+  getPriorSnapshotMrr: priorMrrMock,
   insertRevenueSnapshot: vi.fn(),
 }));
-vi.mock('@/lib/services/stripe-service', () => ({ getStripeClient: vi.fn() }));
+vi.mock('@/lib/services/stripe-service', () => ({ getStripeClient: getStripeClientMock }));
 vi.mock('@/lib/services/cron-run-service', () => ({
   recordCronRun: recordCronRunMock,
   registerCronJobs: registerCronJobsMock,
@@ -57,6 +65,8 @@ const settle = () => Sentry.flush(2000);
 beforeEach(() => {
   captured.length = 0;
   loadInputsMock.mockReset();
+  priorMrrMock.mockReset();
+  getStripeClientMock.mockReset();
   recordCronRunMock.mockReset().mockResolvedValue(undefined);
   registerCronJobsMock.mockReset().mockResolvedValue(undefined);
 });
@@ -115,5 +125,53 @@ describe('revenue-snapshot — an uncaught failure keeps its identity', () => {
       error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
     });
     expect(JSON.stringify(body)).not.toContain('select * from communities');
+  });
+});
+
+describe('revenue-snapshot — a healthy run is not a Sentry issue', () => {
+  const emptyInputs = { communities: [], prices: [], billingGroups: [], accessPlans: [] };
+  const noSubscriptions = {
+    subscriptions: { list: () => (async function* () {})() },
+  };
+
+  beforeEach(async () => {
+    // Earlier tests above do not all flush, so their events can land during
+    // THIS test's flush. Drain them first, or `captured` carries a stranger's.
+    await settle();
+    captured.length = 0;
+    loadInputsMock.mockResolvedValue(emptyInputs);
+    getStripeClientMock.mockReturnValue(noSubscriptions);
+  });
+
+  it('sends NOTHING to Sentry when the snapshot succeeds', async () => {
+    // PROPERTY-PRO-1H / 1M: an info-level `captureMessage('revenue_snapshot')`
+    // on every run opened a Sentry issue daily, and the admin console reads
+    // unresolved issues with no level filter — so a healthy cron rendered as a
+    // "production error" in Health, the tray and the error-spike count.
+    priorMrrMock.mockResolvedValue(null);
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const res = await GET(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(captured).toEqual([]);
+    // The figures still reach the runtime log.
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('"event":"revenue_snapshot"'));
+    info.mockRestore();
+  });
+
+  it('still reports a real anomaly — the delta warning is untouched', async () => {
+    // Control: proves the test above is not green merely because nothing can
+    // reach `captured`. 0 MRR against a prior of 1000 is a -100% delta.
+    priorMrrMock.mockResolvedValue(1000);
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const res = await GET(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(captured.map((e) => e.message)).toEqual(['revenue_snapshot_delta_high']);
+    info.mockRestore();
   });
 });
