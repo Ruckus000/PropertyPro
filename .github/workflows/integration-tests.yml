@@ -155,7 +155,12 @@ jobs:
         # Enabling all of it here would land CI red on day one and get this step
         # reverted, taking the RLS coverage with it. Widening the glob is its own
         # task, tracked separately.
+        #
+        # pipeline-and-transactions rides along: it needs only a bare Postgres
+        # and pins the patched postgres.js (patches/postgres@3.4.8.patch), whose
+        # loss would make every db.transaction throw UNSAFE_TRANSACTION.
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
           __tests__/rls-policies.integration.test.ts
+          __tests__/pipeline-and-transactions.integration.test.ts

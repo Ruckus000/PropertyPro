@@ -1,0 +1,75 @@
+diff --git a/cf/src/connection.js b/cf/src/connection.js
+index 8e79170aeb13efe8c3c77ccede0cd3a115b5e1b5..e25ddbcc04eeae01923b4ee91278c4c294bbd1c5 100644
+--- a/cf/src/connection.js
++++ b/cf/src/connection.js
+@@ -172,11 +172,18 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+         : (query = q, query.active = true)
+ 
+       build(q)
+-      return write(toBuffer(q))
++      const canPipeline = write(toBuffer(q))
+         && !q.describeFirst
+         && !q.cursorFn
+         && sent.length < max_pipeline
+-        && (!q.options.onexecute || q.options.onexecute(connection))
++      // propertypro patch: always run onexecute. sql.begin reserves its
++      // connection there, and it was the last operand of the && chain above, so
++      // any failed check skipped it. With max_pipeline: 0 the pipeline check
++      // always fails, and every transaction threw UNSAFE_TRANSACTION. onexecute
++      // returns undefined, so the result stays false whenever it is present.
++      return q.options.onexecute
++        ? (q.options.onexecute(connection), false)
++        : canPipeline
+     } catch (error) {
+       sent.length === 0 && write(Sync)
+       errored(error)
+diff --git a/cjs/src/connection.js b/cjs/src/connection.js
+index 07f6716702ac888215c86ad6e0071aaf55ae519c..bae562e3be56dda0f6cdf73ed9c8b92fde3edd91 100644
+--- a/cjs/src/connection.js
++++ b/cjs/src/connection.js
+@@ -170,11 +170,18 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+         : (query = q, query.active = true)
+ 
+       build(q)
+-      return write(toBuffer(q))
++      const canPipeline = write(toBuffer(q))
+         && !q.describeFirst
+         && !q.cursorFn
+         && sent.length < max_pipeline
+-        && (!q.options.onexecute || q.options.onexecute(connection))
++      // propertypro patch: always run onexecute. sql.begin reserves its
++      // connection there, and it was the last operand of the && chain above, so
++      // any failed check skipped it. With max_pipeline: 0 the pipeline check
++      // always fails, and every transaction threw UNSAFE_TRANSACTION. onexecute
++      // returns undefined, so the result stays false whenever it is present.
++      return q.options.onexecute
++        ? (q.options.onexecute(connection), false)
++        : canPipeline
+     } catch (error) {
+       sent.length === 0 && write(Sync)
+       errored(error)
+diff --git a/src/connection.js b/src/connection.js
+index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..a25e68cb0f07ed5ee1fc0b89893b8b880cd44833 100644
+--- a/src/connection.js
++++ b/src/connection.js
+@@ -170,11 +170,18 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+         : (query = q, query.active = true)
+ 
+       build(q)
+-      return write(toBuffer(q))
++      const canPipeline = write(toBuffer(q))
+         && !q.describeFirst
+         && !q.cursorFn
+         && sent.length < max_pipeline
+-        && (!q.options.onexecute || q.options.onexecute(connection))
++      // propertypro patch: always run onexecute. sql.begin reserves its
++      // connection there, and it was the last operand of the && chain above, so
++      // any failed check skipped it. With max_pipeline: 0 the pipeline check
++      // always fails, and every transaction threw UNSAFE_TRANSACTION. onexecute
++      // returns undefined, so the result stays false whenever it is present.
++      return q.options.onexecute
++        ? (q.options.onexecute(connection), false)
++        : canPipeline
+     } catch (error) {
+       sent.length === 0 && write(Sync)
+       errored(error)

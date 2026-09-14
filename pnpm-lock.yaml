@@ -8,6 +8,11 @@ overrides:
   isomorphic-dompurify>jsdom: 25.0.1
   isomorphic-dompurify>dompurify: ^3.4.15
 
+patchedDependencies:
+  postgres@3.4.8:
+    hash: 24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1
+    path: patches/postgres@3.4.8.patch
+
 importers:
 
   .:
@@ -29,7 +34,7 @@ importers:
         version: 3.2.4(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.10)(jiti@1.21.7)(jsdom@28.1.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.3))
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8)
+        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1))
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
@@ -44,7 +49,7 @@ importers:
         version: 8.5.6
       postgres:
         specifier: ^3.4.8
-        version: 3.4.8
+        version: 3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1)
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -180,7 +185,7 @@ importers:
         version: 10.4.24(postcss@8.5.6)
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8)
+        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1))
       eslint:
         specifier: ^9.39.0
         version: 9.39.5(jiti@1.21.7)
@@ -421,7 +426,7 @@ importers:
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8)
+        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1))
       eslint:
         specifier: ^9.39.0
         version: 9.39.5(jiti@1.21.7)
@@ -485,10 +490,10 @@ importers:
         version: 2.95.3
       drizzle-orm:
         specifier: ^0.45.1
-        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8)
+        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1))
       postgres:
         specifier: ^3.4.8
-        version: 3.4.8
+        version: 3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1)
     devDependencies:
       '@propertypro/eslint-config':
         specifier: workspace:*
@@ -10873,12 +10878,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8):
+  drizzle-orm@0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(@upstash/redis@1.38.2)(postgres@3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1)):
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       '@types/pg': 8.15.6
       '@upstash/redis': 1.38.2
-      postgres: 3.4.8
+      postgres: 3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1)
 
   dunder-proto@1.0.1:
     dependencies:
@@ -12938,7 +12943,7 @@ snapshots:
     dependencies:
       xtend: 4.0.2
 
-  postgres@3.4.8: {}
+  postgres@3.4.8(patch_hash=24bd477611a2254e7cf24e37a2314e21ae4e37457946cb114fd01d97e29fdff1): {}
 
   prelude-ls@1.2.1: {}
 
