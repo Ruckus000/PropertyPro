@@ -150,7 +150,7 @@ export function BroadcastComposer({ communityId, communityName, smsEnabled }: Pr
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       {/* Step indicator */}
-      <div className="flex items-center gap-2 text-sm text-content-tertiary">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-content-tertiary">
         {['Template', 'Compose', 'Recipients', 'Confirm'].map((label, i) => {
           const stepIndex = ['template', 'compose', 'recipients', 'confirm'].indexOf(step);
           const isActive = i <= stepIndex;
