@@ -18,7 +18,22 @@
  *   export const maxDuration = 60;
  *
  * Memory is NOT a Next.js route segment config — there is no
- * `export const memory`. Configure it per-function in apps/web/vercel.json.
+ * `export const memory`. apps/web/vercel.json has no `functions` block today,
+ * so this route runs at Vercel's default; that block is the lever if Chromium
+ * ever OOMs.
+ *
+ * SIZE: the full package puts ~63 MB of Brotli binaries in the function.
+ * Measured 2026-09-14, the publish route traces to 82.9 MB against Vercel's
+ * 250 MB uncompressed limit. Upstream only suggests reaching for -min "if your
+ * vendor does not allow large deployments" and names no Vercel figure, so the
+ * "50MB compressed" number this file used to carry was never authoritative.
+ *
+ * Do NOT add the package to `outputFileTracingIncludes` to "make sure" the
+ * binaries ship. nft already traces them through the serverExternalPackage
+ * (verified by measuring the route's .nft.json), and adding it lists the SAME
+ * file twice — once at the pnpm store path, once through the
+ * apps/web/node_modules symlink — taking the traced total from 82.9 MB to
+ * 146.0 MB. Measure the trace instead of pinning it.
  *
  * Cold-start can run 10–18 seconds on Vercel; subsequent calls within the
  * function's warm window are fast. Callers must surface a clear loading
@@ -66,25 +81,37 @@ type PuppeteerApi = {
 };
 
 /**
- * Chromium flags that @sparticuz/chromium ships by default but this renderer
- * must not inherit.
+ * The subset of @sparticuz/chromium's own `insecureFlags` group that this
+ * renderer does not need. Upstream groups six together (build/index.js):
  *
- * The package targets general-purpose serverless scraping, so its 49 default
- * args include `--disable-web-security` (same-origin policy OFF) and
- * `--allow-running-insecure-content`. Neither is needed to turn HTML into a
- * PDF, and this browser renders AUTHOR-SUPPLIED HTML in a process whose
- * environment holds SUPABASE_SERVICE_ROLE_KEY — the key that bypasses RLS for
- * every tenant.
+ *   --allow-running-insecure-content   removed here
+ *   --disable-site-isolation-trials    removed here
+ *   --disable-web-security             removed here
+ *   --disable-setuid-sandbox           KEPT — required
+ *   --no-sandbox                       KEPT — required
+ *   --no-zygote                        KEPT — pairs with --single-process
  *
- * `--no-sandbox` / `--disable-setuid-sandbox` are deliberately NOT in this
- * list: Lambda has no user namespaces and Chromium will not launch without
- * them. That is exactly why the sanitizer in
- * `lib/utils/sanitize-authored-html.ts` is load-bearing rather than
- * defence-in-depth, and why these two come off.
+ * The package targets general-purpose serverless scraping; turning HTML into a
+ * PDF needs none of the first three, and this browser renders AUTHOR-SUPPLIED
+ * HTML, so they come off.
+ *
+ * BE PRECISE ABOUT WHAT THIS BUYS, because it is less than it looks. Lambda has
+ * no user namespaces, so the sandbox flags cannot be removed — and site
+ * isolation stays off regardless via `--single-process` and
+ * `--disable-features=…IsolateOrigins,site-per-process`, which are load-bearing
+ * in serverless Chromium. `launch()` also passes no `env`, so the browser
+ * inherits this process's environment, SUPABASE_SERVICE_ROLE_KEY included.
+ *
+ * So this is not containment. The renderer is not sandboxed and cannot be, which
+ * is precisely why `lib/utils/sanitize-authored-html.ts` is load-bearing rather
+ * than defence-in-depth: it is the control, not a second layer. Removing these
+ * three narrows the attack surface reachable from author HTML; it does not
+ * contain a compromised renderer.
  */
 const EXCLUDED_CHROMIUM_ARGS = new Set([
-  '--disable-web-security',
   '--allow-running-insecure-content',
+  '--disable-site-isolation-trials',
+  '--disable-web-security',
 ]);
 
 export function hardenChromiumArgs(args: readonly string[]): string[] {
@@ -93,7 +120,10 @@ export function hardenChromiumArgs(args: readonly string[]): string[] {
 
 interface RenderHtmlToPdfOptions {
   html: string;
-  /** Hard ceiling on the entire operation; default 45s (Vercel cap is 60). */
+  /**
+   * Ceiling on the WHOLE operation — binary inflation, launch and render —
+   * not just the render. Default 45s, under the route's 60s maxDuration.
+   */
   timeoutMs?: number;
   format?: 'A4' | 'Letter';
 }
@@ -107,6 +137,14 @@ interface RenderHtmlToPdfOptions {
  */
 export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uint8Array> {
   const timeoutMs = opts.timeoutMs ?? 45_000;
+  // Taken BEFORE the lazy imports, because a cold start inflates ~63 MB of
+  // Brotli to /tmp and launches a browser before a single byte is rendered.
+  // Passing `timeoutMs` straight to setContent/pdf let that work stack ON TOP
+  // of the budget, so a slow cold start overran the route's 60s maxDuration and
+  // Vercel killed it with a 504 that carried no error. Spending the same budget
+  // from one deadline turns that into a real, reported timeout.
+  const deadline = Date.now() + timeoutMs;
+  const remainingMs = (): number => Math.max(1_000, deadline - Date.now());
 
   // Lazy-import to keep these out of bundles that don't render PDFs. The
   // packages export their public API as the module's default; treat both
@@ -123,9 +161,15 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
   // Detect the executable. @sparticuz/chromium expands its bundled binary to
   // /tmp and returns that path; in local dev a developer may set
   // PUPPETEER_EXECUTABLE_PATH to use system Chrome instead.
+  //
+  // `|| undefined`, NOT `??`. An env var that is present but EMPTY is how this
+  // breaks: dotenv assigns '' for a bare `KEY=` line, `'' ?? x` short-circuits
+  // to '', and puppeteer then launches with executablePath: '' and fails —
+  // the same shape as the outage this module was fixed for. .env.example keeps
+  // the key commented out for the same reason.
+  const explicitExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
   const executablePath: string =
-    (process.env.PUPPETEER_EXECUTABLE_PATH as string | undefined) ??
-    (await chromium.executablePath());
+    explicitExecutablePath ?? (await chromium.executablePath());
 
   const browser = (await puppeteer.launch({
     args: hardenChromiumArgs(chromium.args),
@@ -140,14 +184,14 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
     await page.emulateMediaType('print');
     await page.setContent(opts.html, {
       waitUntil: 'networkidle0',
-      timeout: timeoutMs,
+      timeout: remainingMs(),
     });
 
     const pdfData = (await page.pdf({
       format: opts.format ?? 'A4',
       printBackground: true,
       preferCSSPageSize: true,
-      timeout: timeoutMs,
+      timeout: remainingMs(),
       margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
     })) as unknown as Uint8Array | { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
 

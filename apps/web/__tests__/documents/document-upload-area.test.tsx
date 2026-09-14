@@ -190,4 +190,71 @@ describe('DocumentUploadArea', () => {
       redactionAttested: false,
     });
   });
+
+  it('revokes the attestation when the file is replaced', async () => {
+    // An attestation is about a SPECIFIC document. Ticking the box for one file
+    // and then swapping the file must not carry the tick across — that would
+    // send redactionAttested:true for a document the uploader never saw, and
+    // the server writes that into an append-only §718.111(12)(c) audit row.
+    useDocumentCategoriesMock.mockReturnValue({
+      categories: [
+        { id: 4, name: 'Lease Agreements', slug: 'lease-agreements', description: null },
+      ],
+      isLoading: false,
+      error: null,
+    });
+
+    const { container } = render(
+      <DocumentUploadArea communityId={133} initialCategoryId={4} />,
+    );
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['a'], 'lease-a.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+
+    // Swap in a different file. It has to be a DROP, not the file input: once a
+    // file is chosen the component renders the selected-file panel instead of
+    // the <input type="file">, so the input is unmounted and replacing through
+    // it is unreachable. The drop zone stays mounted, so drag-and-drop is the
+    // real replace path.
+    const dropZone = container.querySelector('[class*="border-dashed"]') as HTMLElement;
+    fireEvent.drop(dropZone, {
+      dataTransfer: {
+        files: [new File(['b'], 'lease-b.pdf', { type: 'application/pdf' })],
+      },
+    });
+
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByRole('button', { name: 'Upload Document' })).toBeDisabled();
+  });
+
+  it('revokes the attestation when the file is removed', async () => {
+    useDocumentCategoriesMock.mockReturnValue({
+      categories: [
+        { id: 4, name: 'Lease Agreements', slug: 'lease-agreements', description: null },
+      ],
+      isLoading: false,
+      error: null,
+    });
+
+    const { container } = render(
+      <DocumentUploadArea communityId={133} initialCategoryId={4} />,
+    );
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['a'], 'lease-a.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['b'], 'lease-b.pdf', { type: 'application/pdf' })] },
+    });
+
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+  });
 });

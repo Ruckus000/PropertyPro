@@ -70,6 +70,22 @@ export function DocumentUploadArea({
     setIsDragging(false);
   }, []);
 
+  // Both entry points (drop and browse) go through here so the attestation
+  // revoke cannot be added to one and forgotten on the other. An attestation is
+  // made about a SPECIFIC document, exactly as it is about a specific category:
+  // swapping the file revokes it, or the uploader ends up attesting to a
+  // document they never looked at.
+  const selectFile = useCallback(
+    (file: File) => {
+      setSelectedFile(file);
+      setRedactionAttested(false);
+      if (!title) {
+        setTitle(file.name.replace(/\.[^/.]+$/, ''));
+      }
+    },
+    [title],
+  );
+
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -77,24 +93,18 @@ export function DocumentUploadArea({
 
     const file = event.dataTransfer.files[0];
     if (file) {
-      setSelectedFile(file);
-      if (!title) {
-        setTitle(file.name.replace(/\.[^/.]+$/, ''));
-      }
+      selectFile(file);
     }
-  }, [title]);
+  }, [selectFile]);
 
   const handleFileSelect = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
-        setSelectedFile(file);
-        if (!title) {
-          setTitle(file.name.replace(/\.[^/.]+$/, ''));
-        }
+        selectFile(file);
       }
     },
-    [title],
+    [selectFile],
   );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -219,7 +229,10 @@ export function DocumentUploadArea({
             </p>
             <button
               type="button"
-              onClick={() => setSelectedFile(null)}
+              onClick={() => {
+                setSelectedFile(null);
+                setRedactionAttested(false);
+              }}
               className="mt-2 text-sm text-status-danger hover:text-status-danger"
             >
               Remove

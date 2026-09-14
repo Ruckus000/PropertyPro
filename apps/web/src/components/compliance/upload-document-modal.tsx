@@ -83,6 +83,13 @@ export function UploadDocumentModal({
         redactionAttested,
       });
       setWarnings(result.warnings);
+      // Clear the file AND the attestation before the early-return below. On a
+      // warning this modal stays mounted (it only closes when warnings is
+      // empty), so without this the next file inherits a tick the uploader
+      // never gave it — and the server writes a document_redaction_attestation
+      // row, in an APPEND-ONLY §718.111(12)(c) log, that is simply false.
+      setFile(null);
+      setRedactionAttested(false);
       // The result should include the document id
       const docId = (result.document as Record<string, unknown>).id as number;
       if (docId) {

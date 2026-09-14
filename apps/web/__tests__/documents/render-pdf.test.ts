@@ -39,6 +39,25 @@ import { hardenChromiumArgs, renderHtmlToPdf } from '@/lib/documents/render-pdf'
 // Cold start decompresses ~60MB of Brotli to /tmp before Chromium launches.
 const CHROMIUM_TIMEOUT_MS = 120_000;
 
+/**
+ * @sparticuz/chromium ships a Linux-x64 binary and nothing else, so the render
+ * case cannot run on a macOS/arm64 dev machine. This file runs in the `node`
+ * unit project (vitest.shared.ts), which localci executes as suite step 5 — so
+ * leaving it ungated reds `localci/suite` after every push from such a machine.
+ *
+ * Follows the house pattern for a capability-gated test — a ternary-selected
+ * runner, as in __tests__/finance/stripe-contract.test.ts — rather than
+ * `it.skipIf`, which this repo uses only twice and never on platform.
+ *
+ * The two cheap assertions below stay UNCONDITIONAL: they are
+ * platform-independent and they are what actually catches the regression class.
+ * The render is confirmation, not the guard.
+ */
+const canRunBundledChromium =
+  (process.platform === 'linux' && process.arch === 'x64')
+  || Boolean(process.env.PUPPETEER_EXECUTABLE_PATH?.trim());
+const itRenders = canRunBundledChromium ? it : it.skip;
+
 describe('renderHtmlToPdf', () => {
   it('is backed by a chromium package that ships its own binary', () => {
     const require_ = createRequire(import.meta.url);
@@ -59,7 +78,7 @@ describe('renderHtmlToPdf', () => {
     expect(statSync(brotli).size).toBeGreaterThan(1_000_000);
   });
 
-  it('renders HTML to a real PDF byte stream', async () => {
+  itRenders('renders HTML to a real PDF byte stream', async () => {
     const pdf = await renderHtmlToPdf({
       html: '<!doctype html><html><body><h1>Minutes</h1><p>Quorum met.</p></body></html>',
     });
@@ -88,18 +107,53 @@ describe('renderHtmlToPdf', () => {
     };
     const stockArgs = (mod.default ?? mod).args;
 
-    // Guard the guard: if upstream ever stops shipping these, this test would
-    // pass for the wrong reason and the filter could be deleted unnoticed.
-    expect(stockArgs).toContain('--disable-web-security');
-    expect(stockArgs).toContain('--allow-running-insecure-content');
+    // The three members of upstream's `insecureFlags` group this renderer does
+    // not need. Guard the guard: if upstream ever stops shipping one, this test
+    // would pass for the wrong reason and the filter could be deleted unnoticed.
+    const removed = [
+      '--allow-running-insecure-content',
+      '--disable-site-isolation-trials',
+      '--disable-web-security',
+    ];
+    for (const flag of removed) {
+      expect(stockArgs, `upstream no longer ships ${flag}`).toContain(flag);
+    }
 
     const hardened = hardenChromiumArgs(stockArgs);
-    expect(hardened).not.toContain('--disable-web-security');
-    expect(hardened).not.toContain('--allow-running-insecure-content');
+    for (const flag of removed) {
+      expect(hardened).not.toContain(flag);
+    }
 
-    // Everything else survives — this is a filter, not a rewrite. `--no-sandbox`
-    // in particular MUST remain or Chromium cannot start on Lambda.
-    expect(hardened).toContain('--no-sandbox');
-    expect(hardened).toHaveLength(stockArgs.length - 2);
+    // Everything else survives — this is a filter, not a rewrite. The other
+    // three members of the same upstream group MUST remain: Lambda has no user
+    // namespaces, and --no-zygote pairs with the retained --single-process.
+    for (const kept of ['--no-sandbox', '--disable-setuid-sandbox', '--no-zygote']) {
+      expect(hardened).toContain(kept);
+    }
+    expect(hardened).toHaveLength(stockArgs.length - removed.length);
   }, CHROMIUM_TIMEOUT_MS);
+
+  itRenders.each([
+    ['empty', ''],
+    ['whitespace', '   '],
+  ])(
+    'treats a %s PUPPETEER_EXECUTABLE_PATH as unset rather than launching with it',
+    async (_label, value) => {
+      // `.env.example` is copied to `.env.local` (scripts/setup.sh says to), and
+      // a bare `KEY=` line assigns the EMPTY STRING, not undefined. Read with
+      // `??` that short-circuits, and puppeteer launches with executablePath: ''
+      // — the same failure shape as the outage this module was fixed for. Hence
+      // `?.trim() || undefined`.
+      const previous = process.env.PUPPETEER_EXECUTABLE_PATH;
+      process.env.PUPPETEER_EXECUTABLE_PATH = value;
+      try {
+        const pdf = await renderHtmlToPdf({ html: '<p>Budget</p>' });
+        expect(Buffer.from(pdf.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
+      } finally {
+        if (previous === undefined) delete process.env.PUPPETEER_EXECUTABLE_PATH;
+        else process.env.PUPPETEER_EXECUTABLE_PATH = previous;
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
 });
