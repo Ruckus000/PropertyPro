@@ -120,7 +120,23 @@ export function useDocumentUpload() {
       });
 
       if (!createRes.ok) {
-        throw new Error('Upload completed, but saving document metadata failed');
+        // Surface what the server actually said. The previous fixed string
+        // ("Upload completed, but saving document metadata failed") was both
+        // uninformative and wrong — nothing was saved — and it discarded the
+        // one message the user could act on, e.g. the redaction attestation
+        // prompt that `POST /api/v1/documents` returns as a 400.
+        let message = 'We could not save this document. Please try again.';
+        try {
+          const body = (await createRes.json()) as {
+            error?: { message?: string };
+          };
+          if (typeof body?.error?.message === 'string' && body.error.message.trim() !== '') {
+            message = body.error.message;
+          }
+        } catch {
+          // Non-JSON error body — keep the generic message.
+        }
+        throw new Error(message);
       }
 
       const createBody = (await createRes.json()) as DocumentCreateResponse;

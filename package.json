@@ -78,7 +78,8 @@
       "sharp"
     ],
     "overrides": {
-      "isomorphic-dompurify>jsdom": "25.0.1"
+      "isomorphic-dompurify>jsdom": "25.0.1",
+      "isomorphic-dompurify>dompurify": "^3.4.15"
     }
   },
   "devDependencies": {
