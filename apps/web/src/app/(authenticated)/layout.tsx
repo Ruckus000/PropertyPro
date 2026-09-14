@@ -6,6 +6,7 @@ import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { IdleSessionManager } from '@/components/auth/idle-session-manager';
 import { AppShell } from '@/components/layout/app-shell';
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
+import { createApartmentDashboardTrace } from '@/lib/queries/apartment-metrics';
 import { AppQueryProvider } from '@/components/providers/query-provider';
 import { SupportBanner } from '@/components/support/SupportBanner';
 import { getPageShellBranding, getPageShellContext } from '@/lib/request/page-shell-context';
@@ -40,12 +41,27 @@ export default async function AuthenticatedLayout({
   }
 
   const features = shellContext.features;
+  // TEMPORARY DIAGNOSTIC — see createApartmentDashboardTrace. Apartment
+  // communities only, so no other tenant's navigations add log lines.
+  const trace =
+    community?.type === 'apartment'
+      ? createApartmentDashboardTrace('layout', community.id)
+      : null;
+  trace?.log('layout:shell-context-done');
+  const time = trace?.time ?? (<T,>(_step: string, promise: Promise<T>) => promise);
   // Independent lookups — run them concurrently; this layout re-renders on
   // every authenticated navigation, so serial awaits here tax every click.
   const [demoInfo, branding] = await Promise.all([
-    detectDemoInfo(shellContext.isDemo, user?.id ?? '', community?.id ?? 0),
-    community ? getPageShellBranding(community.id) : Promise.resolve(null),
+    time(
+      'layout:demo-info',
+      detectDemoInfo(shellContext.isDemo, user?.id ?? '', community?.id ?? 0),
+    ),
+    time(
+      'layout:branding',
+      community ? getPageShellBranding(community.id) : Promise.resolve(null),
+    ),
   ]);
+  trace?.log('layout:rendering');
   const theme = community
     ? resolveTheme(branding, community.name, community.type)
     : resolveTheme(null, '', 'condo_718');
