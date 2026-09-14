@@ -46,6 +46,11 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: vi.fn(),
 }));
 
+// esign-service imports createUnscopedClient at module scope, which loads
+// drizzle.ts and throws without DATABASE_URL. Nothing here calls it, so the
+// factory is empty: a future call fails naming the export instead of querying.
+vi.mock('@propertypro/db/unsafe', () => ({}));
+
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   createPresignedDownloadUrl: vi.fn(),

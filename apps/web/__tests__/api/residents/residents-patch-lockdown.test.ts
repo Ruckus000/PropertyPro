@@ -79,6 +79,12 @@ vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
 }));
 
+// The route reaches @propertypro/db/unsafe through user-linking, which loads
+// drizzle.ts and throws without DATABASE_URL. No test here takes the
+// existing-user branch that calls it, so the factory is empty: a future call
+// fails naming the export instead of querying.
+vi.mock('@propertypro/db/unsafe', () => ({}));
+
 vi.mock('@/lib/services/resident-service', () => ({
   getResidentRoleByUserId: getResidentRoleByUserIdMock,
   getResidentUserByEmail: getResidentUserByEmailMock,
