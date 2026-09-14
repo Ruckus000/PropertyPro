@@ -121,8 +121,13 @@ export function hardenChromiumArgs(args: readonly string[]): string[] {
 interface RenderHtmlToPdfOptions {
   html: string;
   /**
-   * Ceiling on the WHOLE operation — binary inflation, launch and render —
-   * not just the render. Default 45s, under the route's 60s maxDuration.
+   * Budget for the whole call, default 45s, under the route's 60s maxDuration.
+   *
+   * Precisely: binary inflation and launch SPEND this budget — whatever is left
+   * when they finish is what the render gets — but neither is individually
+   * interrupted. A hard hang inside `puppeteer.launch()` never reaches the
+   * render and still ends at Vercel's maxDuration. Bounding launch itself would
+   * mean racing it, which leaks a spawned browser nothing holds a handle to.
    */
   timeoutMs?: number;
   format?: 'A4' | 'Letter';
