@@ -34,7 +34,7 @@ import { createRequire } from 'node:module';
 import { existsSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { renderHtmlToPdf } from '@/lib/documents/render-pdf';
+import { hardenChromiumArgs, renderHtmlToPdf } from '@/lib/documents/render-pdf';
 
 // Cold start decompresses ~60MB of Brotli to /tmp before Chromium launches.
 const CHROMIUM_TIMEOUT_MS = 120_000;
@@ -70,5 +70,36 @@ describe('renderHtmlToPdf', () => {
     // `%PDF-` magic bytes: proves Chromium actually produced a document rather
     // than the helper returning an empty or placeholder buffer.
     expect(Buffer.from(pdf.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
+  }, CHROMIUM_TIMEOUT_MS);
+
+  // ---------------------------------------------------------------------------
+  // Launch hardening.
+  //
+  // This browser renders author-supplied HTML in a process holding
+  // SUPABASE_SERVICE_ROLE_KEY, and it cannot be sandboxed on Lambda. Two of
+  // @sparticuz/chromium's stock args are unnecessary for PDF rendering and
+  // must not be inherited.
+  // ---------------------------------------------------------------------------
+
+  it('does not launch Chromium with web security disabled', async () => {
+    const mod = (await import('@sparticuz/chromium')) as unknown as {
+      default?: { args: string[] };
+      args: string[];
+    };
+    const stockArgs = (mod.default ?? mod).args;
+
+    // Guard the guard: if upstream ever stops shipping these, this test would
+    // pass for the wrong reason and the filter could be deleted unnoticed.
+    expect(stockArgs).toContain('--disable-web-security');
+    expect(stockArgs).toContain('--allow-running-insecure-content');
+
+    const hardened = hardenChromiumArgs(stockArgs);
+    expect(hardened).not.toContain('--disable-web-security');
+    expect(hardened).not.toContain('--allow-running-insecure-content');
+
+    // Everything else survives — this is a filter, not a rewrite. `--no-sandbox`
+    // in particular MUST remain or Chromium cannot start on Lambda.
+    expect(hardened).toContain('--no-sandbox');
+    expect(hardened).toHaveLength(stockArgs.length - 2);
   }, CHROMIUM_TIMEOUT_MS);
 });

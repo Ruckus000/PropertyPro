@@ -65,6 +65,32 @@ type PuppeteerApi = {
   launch: (opts: PuppeteerLaunchOptions) => Promise<PuppeteerBrowser>;
 };
 
+/**
+ * Chromium flags that @sparticuz/chromium ships by default but this renderer
+ * must not inherit.
+ *
+ * The package targets general-purpose serverless scraping, so its 49 default
+ * args include `--disable-web-security` (same-origin policy OFF) and
+ * `--allow-running-insecure-content`. Neither is needed to turn HTML into a
+ * PDF, and this browser renders AUTHOR-SUPPLIED HTML in a process whose
+ * environment holds SUPABASE_SERVICE_ROLE_KEY — the key that bypasses RLS for
+ * every tenant.
+ *
+ * `--no-sandbox` / `--disable-setuid-sandbox` are deliberately NOT in this
+ * list: Lambda has no user namespaces and Chromium will not launch without
+ * them. That is exactly why the sanitizer in
+ * `lib/utils/sanitize-authored-html.ts` is load-bearing rather than
+ * defence-in-depth, and why these two come off.
+ */
+const EXCLUDED_CHROMIUM_ARGS = new Set([
+  '--disable-web-security',
+  '--allow-running-insecure-content',
+]);
+
+export function hardenChromiumArgs(args: readonly string[]): string[] {
+  return args.filter((arg) => !EXCLUDED_CHROMIUM_ARGS.has(arg));
+}
+
 interface RenderHtmlToPdfOptions {
   html: string;
   /** Hard ceiling on the entire operation; default 45s (Vercel cap is 60). */
@@ -102,7 +128,7 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
     (await chromium.executablePath());
 
   const browser = (await puppeteer.launch({
-    args: chromium.args,
+    args: hardenChromiumArgs(chromium.args),
     defaultViewport: { width: 1240, height: 1754 },
     executablePath,
     headless: true,
