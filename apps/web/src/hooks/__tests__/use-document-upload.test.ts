@@ -230,12 +230,96 @@ describe('useDocumentUpload', () => {
 
     await uploadPromise;
 
+    // This mock's body is `{ error: 'DB write failed' }` — a bare string, not
+    // the `{ error: { code, message } }` envelope withErrorHandler actually
+    // emits — so there is no server message to surface and the generic
+    // fallback is correct. The previous expectation here was
+    // 'Upload completed, but saving document metadata failed', which claimed
+    // the upload had completed when no document row was written at all.
+    expect(error?.message).toBe('We could not save this document. Please try again.');
+    expect(result.current.error).toBe('We could not save this document. Please try again.');
+  });
+
+  it("surfaces the server's own message when the metadata save is refused", async () => {
+    // The real shape from `withErrorHandler`. The redaction attestation is the
+    // case that matters: `POST /api/v1/documents` refuses a sensitive-category
+    // upload with a 400 explaining exactly what the uploader must do, and that
+    // sentence used to be thrown away and replaced with a fixed string.
+    mockPresignSuccess();
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: () =>
+        Promise.resolve({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message:
+              'This document category commonly contains protected personal information. Confirm you have redacted it before uploading.',
+            details: { fields: [{ field: 'redactionAttested' }] },
+          },
+        }),
+    });
+
+    const { result } = renderHook(() => useDocumentUpload());
+    let error: Error | undefined;
+
+    const uploadPromise = act(async () => {
+      try {
+        await result.current.uploadDocument(makeUploadRequest());
+      } catch (e) {
+        error = e as Error;
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(mockXHRInstance.send).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      mockXHRInstance.status = 200;
+      mockXHRInstance.onload?.();
+    });
+
+    await uploadPromise;
+
     expect(error?.message).toBe(
-      'Upload completed, but saving document metadata failed',
+      'This document category commonly contains protected personal information. Confirm you have redacted it before uploading.',
     );
     expect(result.current.error).toBe(
-      'Upload completed, but saving document metadata failed',
+      'This document category commonly contains protected personal information. Confirm you have redacted it before uploading.',
     );
+  });
+
+  it('forwards redactionAttested to POST /api/v1/documents', async () => {
+    // The field the two live upload UIs never sent. The hook must pass it
+    // through rather than drop it.
+    mockPresignSuccess();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { id: 7 } }),
+    });
+
+    const { result } = renderHook(() => useDocumentUpload());
+    const uploadPromise = act(async () => {
+      await result.current.uploadDocument(makeUploadRequest({ redactionAttested: true }));
+    });
+
+    await vi.waitFor(() => {
+      expect(mockXHRInstance.send).toHaveBeenCalled();
+    });
+    await act(async () => {
+      mockXHRInstance.status = 200;
+      mockXHRInstance.onload?.();
+    });
+    await uploadPromise;
+
+    const createCall = mockFetch.mock.calls.find(
+      (call) => call[0] === '/api/v1/documents',
+    );
+    expect(createCall).toBeDefined();
+    expect(JSON.parse(createCall![1].body as string)).toMatchObject({
+      redactionAttested: true,
+    });
   });
 
   it('handles expired presigned URL (slow connection, large file)', async () => {

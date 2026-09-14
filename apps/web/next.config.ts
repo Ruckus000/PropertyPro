@@ -19,10 +19,11 @@ const nextConfig: NextConfig = {
     "http://*.localtest.me:3002",
   ],
   // Server-only packages that must not be bundled by webpack:
-  //   - puppeteer-core / @sparticuz/chromium-min: Chromium binary is
-  //     fetched from a CDN at runtime, so the package must remain a Node
-  //     external (Chromium also cannot run on edge; the publish route
-  //     exports runtime='nodejs').
+  //   - puppeteer-core / @sparticuz/chromium: the package resolves its
+  //     Brotli binaries by path RELATIVE TO ITS OWN INSTALL DIR, so webpack
+  //     must not bundle it — a bundled copy relativizes that path into
+  //     `.next/...` where bin/chromium.br does not exist. (Chromium also
+  //     cannot run on edge; the publish route exports runtime='nodejs'.)
   //   - isomorphic-dompurify / jsdom: jsdom creates its window AT MODULE
   //     LOAD and reads `default-stylesheet.css` from the installed
   //     package dir. When webpack bundles jsdom, that CSS asset gets
@@ -32,7 +33,7 @@ const nextConfig: NextConfig = {
   //     node_modules at runtime.
   serverExternalPackages: [
     "puppeteer-core",
-    "@sparticuz/chromium-min",
+    "@sparticuz/chromium",
     "isomorphic-dompurify",
     "jsdom",
   ],

@@ -1,16 +1,24 @@
 /**
  * Server-side HTML→PDF rendering via headless Chromium.
  *
- * Stack: puppeteer-core (no Chrome bundled) + @sparticuz/chromium-min
- * (binary fetched at runtime from external CDN). Matches Vercel's 50MB
- * compressed function-size limit.
+ * Stack: puppeteer-core (no Chrome bundled) + @sparticuz/chromium, which
+ * SHIPS the Brotli-compressed browser binary inside the package and expands
+ * it to /tmp on first use.
+ *
+ * Do NOT swap this for @sparticuz/chromium-min without also passing a pack
+ * location to `executablePath()`. The -min variant ships no binary at all, so
+ * the no-argument call below resolves to a `bin/` directory that does not
+ * exist and throws. That is exactly what shipped, and it meant no authored
+ * document or set of meeting minutes could ever be published in production.
  *
  * NEVER import this module client-side and NEVER call it from edge runtime
  * — Chromium cannot run on edge. Routes that import this MUST set:
  *
  *   export const runtime = 'nodejs';
  *   export const maxDuration = 60;
- *   export const memory = 1024;
+ *
+ * Memory is NOT a Next.js route segment config — there is no
+ * `export const memory`. Configure it per-function in apps/web/vercel.json.
  *
  * Cold-start can run 10–18 seconds on Vercel; subsequent calls within the
  * function's warm window are fast. Callers must surface a clear loading
@@ -40,7 +48,10 @@ type PdfOptions = {
 
 type ChromiumApi = {
   args: string[];
-  executablePath: () => Promise<string>;
+  // The parameter is NOT optional-by-convenience: @sparticuz/chromium resolves
+  // its bundled binary when omitted, while -min REQUIRES a path or pack URL.
+  // Typing this as zero-argument is what let the broken call compile.
+  executablePath: (input?: string) => Promise<string>;
 };
 
 type PuppeteerLaunchOptions = {
@@ -74,7 +85,7 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
   // Lazy-import to keep these out of bundles that don't render PDFs. The
   // packages export their public API as the module's default; treat both
   // shapes (default-export and namespace-with-.default) safely.
-  const chromiumMod = (await import('@sparticuz/chromium-min')) as unknown as {
+  const chromiumMod = (await import('@sparticuz/chromium')) as unknown as {
     default?: ChromiumApi;
   } & ChromiumApi;
   const puppeteerMod = (await import('puppeteer-core')) as unknown as {
@@ -83,9 +94,9 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
   const chromium: ChromiumApi = chromiumMod.default ?? chromiumMod;
   const puppeteer: PuppeteerApi = puppeteerMod.default ?? puppeteerMod;
 
-  // Detect the executable. In production on Vercel, chromium-min provides
-  // the path via its CDN-fetched binary; in local dev a developer must set
-  // PUPPETEER_EXECUTABLE_PATH explicitly (system Chrome works).
+  // Detect the executable. @sparticuz/chromium expands its bundled binary to
+  // /tmp and returns that path; in local dev a developer may set
+  // PUPPETEER_EXECUTABLE_PATH to use system Chrome instead.
   const executablePath: string =
     (process.env.PUPPETEER_EXECUTABLE_PATH as string | undefined) ??
     (await chromium.executablePath());
