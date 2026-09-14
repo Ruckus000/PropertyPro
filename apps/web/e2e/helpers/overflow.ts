@@ -104,7 +104,25 @@ export async function findOverflows(page: Page): Promise<Overflow[]> {
       if (cs.position === 'fixed') continue;
       if (ownedByScroller(el)) continue;
       const limit = contentRight(parent);
-      const right = el.getBoundingClientRect().right;
+      // Compare the MARGIN box, not the border box — but only where the margin
+      // is negative. A negative margin is the author saying "paint me wider
+      // than my parent": `-mx-1 w-full overflow-x-auto` is the standard way to
+      // stop a horizontal scroller clipping the focus ring on its first and
+      // last child, and the 4px it gains on each side lands in the page gutter
+      // (`PageContainer` is `px-6 sm:px-8 lg:px-10`), clipping nothing.
+      // Measured on `/esign` at 768px: `parentPaddingRight` is 0 there, so a
+      // padding-box comparison would report the same +4 — the element's own
+      // `margin-right: -4px` is the whole story.
+      //
+      // Clamped to negative because the two directions are not symmetric. A
+      // POSITIVE right margin that does not fit overflows only transparent
+      // space; nothing is painted there and nothing is clipped, so counting it
+      // would invent findings. And this cancels the bleed only up to the
+      // margin: an element pushed 50px past its parent still reports +50,
+      // which is what the anti-vacuity probe checks.
+      const right =
+        el.getBoundingClientRect().right +
+        Math.min(parseFloat(cs.marginRight || '0') || 0, 0);
       const over = Math.round(right - limit);
       if (over <= 1) continue;
       found.push({ selector: describe(el), box: Math.round(limit), right: Math.round(right), over });
