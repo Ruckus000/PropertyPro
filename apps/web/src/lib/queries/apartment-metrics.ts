@@ -53,6 +53,46 @@ export interface ApartmentMetrics {
   announcements: DashboardAnnouncement[];
 }
 
+/**
+ * TEMPORARY DIAGNOSTIC — remove once the apartment-dashboard hang is found.
+ *
+ * `/dashboard/apartment` for Breakaway Apartments (community 133) runs to
+ * Vercel's 300s timeout on every load (2026-09-14, five 504s), while every
+ * other page of that community loads. Nothing in Sentry or the database
+ * explains it, so this logs one line before and after each awaited step. The
+ * last line that prints for a trace id is the step that never finishes.
+ * Logs carry the community id and step names only — no user data.
+ */
+export function createApartmentDashboardTrace(scope: string, communityId: number | null) {
+  const trace = crypto.randomUUID().slice(0, 8);
+  const startedAt = Date.now();
+  const log = (step: string) =>
+    console.info(
+      JSON.stringify({
+        event: 'apartment-dashboard.trace',
+        scope,
+        trace,
+        communityId,
+        step,
+        ms: Date.now() - startedAt,
+      }),
+    );
+  const time = async <T>(step: string, promise: Promise<T>): Promise<T> => {
+    log(`${step}:start`);
+    try {
+      const value = await promise;
+      log(`${step}:done`);
+      return value;
+    } catch (error) {
+      log(`${step}:threw`);
+      throw error;
+    }
+  };
+  return { log, time };
+}
+
+export type ApartmentDashboardTrace = ReturnType<typeof createApartmentDashboardTrace>;
+
 /** Parse YYYY-MM-DD as UTC midnight. Same approach as lease-expiration-service.ts. */
 function parseUtcDate(dateStr: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
@@ -70,18 +110,20 @@ export async function loadApartmentMetrics(
   communityId: number,
   userId: string,
   membership: CommunityMembership,
+  trace?: ApartmentDashboardTrace,
 ): Promise<ApartmentMetrics> {
   const scoped = createScopedClient(communityId);
+  const time = trace?.time ?? (<T>(_step: string, promise: Promise<T>) => promise);
 
   const [unitRows, leaseRows, maintenanceRows, announcementRows, communityRows, userRows] =
-    await Promise.all([
-      scoped.query(units),
-      scoped.query(leases),
-      scoped.query(maintenanceRequests),
-      scoped.query(announcements),
-      scoped.query(communities),
-      scoped.query(users),
-    ]);
+    await time('metrics:all-queries', Promise.all([
+      time('metrics:units', scoped.query(units)),
+      time('metrics:leases', scoped.query(leases)),
+      time('metrics:maintenance', scoped.query(maintenanceRequests)),
+      time('metrics:announcements', scoped.query(announcements)),
+      time('metrics:communities', scoped.query(communities)),
+      time('metrics:users', scoped.query(users)),
+    ]));
 
   // Community metadata
   const community = communityRows.find((r) => r['id'] === communityId);
@@ -140,12 +182,16 @@ export async function loadApartmentMetrics(
   ).filter((r) => r.status === 'open' && r.deletedAt == null).length;
 
   // Recent announcements
-  const { rows: visibleAnnouncements } = await filterVisibleAnnouncements(
-    getAnnouncementCommunityContext(membership),
-    membership,
-    announcementRows as Announcement[],
+  const { rows: visibleAnnouncements } = await time(
+    'metrics:filter-announcements',
+    filterVisibleAnnouncements(
+      getAnnouncementCommunityContext(membership),
+      membership,
+      announcementRows as Announcement[],
+    ),
   );
   const recentAnnouncements = selectRecentAnnouncements(visibleAnnouncements);
+  trace?.log('metrics:returning');
 
   return {
     firstName: toFirstName(fullName),
