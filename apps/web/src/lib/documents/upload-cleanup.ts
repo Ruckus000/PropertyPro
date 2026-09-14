@@ -77,40 +77,36 @@ export async function deleteUnreferencedUpload(
   communityId: number,
   filePath: string,
 ): Promise<UploadCleanupOutcome> {
-  if (!isUploadFilePathScoped(filePath, communityId)) {
-    // eslint-disable-next-line no-console
-    console.error('[documents] refused to clean up an out-of-scope upload path', {
-      communityId,
-      filePath,
-    });
-    return { reason: 'refused' };
-  }
-
+  // The WHOLE body is guarded, not just the two awaits. "Never throws" has to
+  // hold for every line, including the scope check and anything a future edit
+  // adds above it — otherwise `withUploadCleanup` propagates the cleanup's error
+  // in place of the caller's, and a redaction-attestation 400 surfaces as a 500
+  // with an unrelated message. That is not hypothetical: it is what a test
+  // caught when a mock factory was missing `isUploadFilePathScoped`.
   try {
+    if (!isUploadFilePathScoped(filePath, communityId)) {
+      // eslint-disable-next-line no-console
+      console.error('[documents] refused to clean up an out-of-scope upload path', {
+        communityId,
+        filePath,
+      });
+      return { reason: 'refused' };
+    }
+
+    // Fail CLOSED: if the reference check cannot run we do not know whether the
+    // object is a record, and "delete when unsure" is the wrong default for a
+    // destructive, irreversible operation on an association's files. The throw
+    // lands in the outer catch, which returns 'failed' WITHOUT deleting.
     if (await isFilePathReferenced(communityId, filePath)) {
       return { reason: 'referenced' };
     }
-  } catch (error) {
-    // Fail CLOSED. If the reference check cannot run we do not know whether the
-    // object is a record, and "delete when unsure" is the wrong default for a
-    // destructive, irreversible operation on an association's files.
-    const message = stringifyUnknownError(error);
-    // eslint-disable-next-line no-console
-    console.error('[documents] could not check whether an upload is referenced; left it alone', {
-      communityId,
-      filePath,
-      error: message,
-    });
-    return { reason: 'failed', error: message };
-  }
 
-  try {
     await deleteStorageObject(DOCUMENTS_BUCKET_NAME, filePath);
     return { reason: 'deleted' };
   } catch (error) {
     const message = stringifyUnknownError(error);
     // eslint-disable-next-line no-console
-    console.error('[documents] failed to clean up an unreferenced upload', {
+    console.error('[documents] could not clean up an upload; left it alone', {
       communityId,
       filePath,
       error: message,

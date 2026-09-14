@@ -78,6 +78,11 @@ vi.mock('@/lib/api/tenant-context', () => ({
 
 vi.mock('@/lib/api/upload-path', () => ({
   validateUploadFilePath: validateUploadFilePathMock,
+  // deleteUnreferencedUpload re-checks the path scope itself rather than
+  // trusting the route validated it. Omitting this export here does not fail
+  // loudly at import — it throws inside cleanup on the first POST that errors,
+  // turning a 400 into a 500.
+  isUploadFilePathScoped: () => true,
 }));
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({

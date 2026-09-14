@@ -26,6 +26,7 @@ import { runRoute } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import type { DocumentMutationWarning } from '@/lib/documents/types';
 import { withErrorHandler } from '@/lib/api/error-handler';
+import { withUploadCleanup } from '@/lib/documents/upload-cleanup';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -123,37 +124,52 @@ const runCreateDocument = runRoute(documentsCreateContract, async ({ body, req }
   await assertNotDemoGrace(effectiveCommunityId);
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
   requirePermission(membership, 'documents', 'write');
-  await requireActiveSubscriptionForMutation(effectiveCommunityId);
 
-  // Before the row exists, not after: an unredacted record that reaches the
-  // portal and is then deleted was still published (F-02).
-  await enforceRedactionAttestation({
-    communityId: effectiveCommunityId,
-    categoryId: body.categoryId,
-    userId,
-    title: body.title,
-    attested: body.redactionAttested,
+  // Everything from here on is wrapped so a failure cannot strand the bytes the
+  // browser already PUT. The boundary is a security constraint, not a style
+  // choice: `validateUploadFilePath` above proves only the path PREFIX, and it
+  // runs BEFORE `requireCommunityMembership`. Opening the wrapper any earlier
+  // would hand an unauthenticated or non-member caller a delete primitive —
+  // POST a crafted filePath, fail a gate on purpose, and the object is gone.
+  // Membership + permission are the gate; they stay outside.
+  //
+  // `createUploadedDocument` is INSIDE deliberately. Once its insert lands, a
+  // row references the path, so `deleteUnreferencedUpload` declines — a
+  // post-insert failure (an audit-log throw) cannot destroy a document that was
+  // just created. That is the reference guard doing the work, not the boundary.
+  return withUploadCleanup(effectiveCommunityId, body.filePath, async () => {
+    await requireActiveSubscriptionForMutation(effectiveCommunityId);
+
+    // Before the row exists, not after: an unredacted record that reaches the
+    // portal and is then deleted was still published (F-02).
+    await enforceRedactionAttestation({
+      communityId: effectiveCommunityId,
+      categoryId: body.categoryId,
+      userId,
+      title: body.title,
+      attested: body.redactionAttested,
+    });
+
+    const result = await createUploadedDocument({
+      userId,
+      communityId: effectiveCommunityId,
+      title: body.title,
+      description: body.description ?? null,
+      categoryId: body.categoryId,
+      filePath: body.filePath,
+      fileName: body.fileName,
+      fileSize: body.fileSize,
+      sourceType: 'library',
+    });
+
+    void tryAutoComplete(effectiveCommunityId, userId, 'upload_first_document');
+    void tryAutoComplete(effectiveCommunityId, userId, 'upload_community_rules');
+
+    if (result.warnings.length > 0) {
+      warningsByRequest.set(req, result.warnings);
+    }
+    return result.document;
   });
-
-  const result = await createUploadedDocument({
-    userId,
-    communityId: effectiveCommunityId,
-    title: body.title,
-    description: body.description ?? null,
-    categoryId: body.categoryId,
-    filePath: body.filePath,
-    fileName: body.fileName,
-    fileSize: body.fileSize,
-    sourceType: 'library',
-  });
-
-  void tryAutoComplete(effectiveCommunityId, userId, 'upload_first_document');
-  void tryAutoComplete(effectiveCommunityId, userId, 'upload_community_rules');
-
-  if (result.warnings.length > 0) {
-    warningsByRequest.set(req, result.warnings);
-  }
-  return result.document;
 });
 
 export const POST = withErrorHandler(async (req, ctx) => {

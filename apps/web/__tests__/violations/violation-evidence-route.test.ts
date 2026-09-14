@@ -7,12 +7,14 @@ const {
   requireViolationsEnabledMock,
   requirePermissionMock,
   createUploadedDocumentMock,
+  deleteUnreferencedUploadMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requireViolationsEnabledMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   createUploadedDocumentMock: vi.fn(),
+  deleteUnreferencedUploadMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -35,6 +37,28 @@ vi.mock('@/lib/db/access-control', () => ({
 
 vi.mock('@/lib/documents/create-uploaded-document', () => ({
   createUploadedDocument: createUploadedDocumentMock,
+}));
+
+// A faithful pass-through rather than a stub: the wrapper's own behaviour (the
+// reference guard, the scope check, failing closed) is covered in
+// __tests__/documents/upload-cleanup.test.ts. What this file must prove is the
+// ROUTE's part — that the wrapper is opened at all, with the right path, and
+// only after the authz gates. Mocking it also keeps @propertypro/db out of this
+// file, which has no DATABASE_URL.
+vi.mock('@/lib/documents/upload-cleanup', () => ({
+  deleteUnreferencedUpload: deleteUnreferencedUploadMock,
+  withUploadCleanup: async (
+    communityId: number,
+    filePath: string,
+    fn: () => Promise<unknown>,
+  ) => {
+    try {
+      return await fn();
+    } catch (error) {
+      await deleteUnreferencedUploadMock(communityId, filePath);
+      throw error;
+    }
+  },
 }));
 
 
@@ -143,5 +167,58 @@ describe('violation evidence route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(400);
+    // Cross-tenant paths are refused BEFORE any cleanup could run, so nothing
+    // here can be used to reach another community's object.
+    expect(deleteUnreferencedUploadMock).not.toHaveBeenCalled();
+  });
+
+  it('reclaims the uploaded object when document creation fails', async () => {
+    // Same two-phase upload as /api/v1/documents: the browser has already PUT
+    // the bytes and nothing records them until the insert lands.
+    createUploadedDocumentMock.mockRejectedValueOnce(new Error('insert failed'));
+
+    const req = new NextRequest('http://localhost:3000/api/v1/violations/evidence', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 8,
+        title: 'Evidence',
+        filePath: 'communities/8/documents/abc/evidence.png',
+        fileName: 'evidence.png',
+        fileSize: 512,
+        mimeType: 'image/png',
+      }),
+    });
+
+    await POST(req);
+
+    expect(deleteUnreferencedUploadMock).toHaveBeenCalledWith(
+      8,
+      'communities/8/documents/abc/evidence.png',
+    );
+  });
+
+  it('does not reclaim anything when the membership gate refuses', async () => {
+    // The boundary control: withUploadCleanup opens only after the authz gates,
+    // so a non-member cannot use a deliberately-failed POST as a delete
+    // primitive.
+    requireCommunityMembershipMock.mockRejectedValueOnce(new Error('not a member'));
+
+    const req = new NextRequest('http://localhost:3000/api/v1/violations/evidence', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 8,
+        title: 'Evidence',
+        filePath: 'communities/8/documents/abc/evidence.png',
+        fileName: 'evidence.png',
+        fileSize: 512,
+        mimeType: 'image/png',
+      }),
+    });
+
+    await POST(req).catch(() => undefined);
+
+    expect(deleteUnreferencedUploadMock).not.toHaveBeenCalled();
   });
 });

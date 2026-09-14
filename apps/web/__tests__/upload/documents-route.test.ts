@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
+import { ValidationError } from '../../src/lib/api/errors/ValidationError';
 import { AppError } from '../../src/lib/api/errors/AppError';
 
 const {
@@ -12,6 +13,7 @@ const {
   scopedInsertMock,
   scopedQueryMock,
   scopedQueryWhereMock,
+  enforceRedactionAttestationMock,
   scopedSoftDeleteMock,
   scopedUpdateMock,
   documentsTable,
@@ -33,6 +35,7 @@ const {
   scopedInsertMock: vi.fn(),
   scopedQueryMock: vi.fn(),
   scopedQueryWhereMock: vi.fn(),
+  enforceRedactionAttestationMock: vi.fn(),
   scopedSoftDeleteMock: vi.fn(),
   scopedUpdateMock: vi.fn(),
   documentsTable: Symbol('documents'),
@@ -107,7 +110,7 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn(
 // `__tests__/documents/redaction-attestation.test.ts`, and the POST contract is
 // covered in `__tests__/documents/documents-route.test.ts`.
 vi.mock('@/lib/documents/redaction-attestation', () => ({
-  enforceRedactionAttestation: vi.fn().mockResolvedValue(undefined),
+  enforceRedactionAttestation: enforceRedactionAttestationMock,
 }));
 import { GET, POST, DELETE } from '../../src/app/api/v1/documents/route';
 
@@ -156,6 +159,7 @@ function resetRouteMocks() {
   // "referenced" for every one of them, cleanup would decline every delete, and
   // every cleanup assertion in this file would pass while testing nothing.
   scopedQueryWhereMock.mockResolvedValue([]);
+  enforceRedactionAttestationMock.mockResolvedValue(undefined);
   createScopedClientMock.mockReturnValue({
     insert: scopedInsertMock,
     query: scopedQueryMock,
@@ -344,6 +348,103 @@ describe('p1-11 documents route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(403);
+    // The control for the cleanup boundary. withUploadCleanup opens AFTER the
+    // membership and permission gates precisely so a non-member cannot use a
+    // deliberately-failed POST as a delete primitive: validateUploadFilePath
+    // proves only the path prefix, and it runs before this gate.
+    expect(deleteStorageObjectMock).not.toHaveBeenCalled();
+  });
+
+  it('POST reclaims the uploaded object when the redaction attestation is refused', async () => {
+    // The most common real failure, and the one #1140 made visible and
+    // actionable — so the rate of stranded objects was about to rise. The 400
+    // fires before createUploadedDocument, so nothing inside it could ever have
+    // cleaned up.
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+    enforceRedactionAttestationMock.mockRejectedValueOnce(
+      new ValidationError('Confirm you have redacted it before uploading.'),
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        title: 'Board Minutes',
+        categoryId: 7,
+        filePath: 'communities/42/documents/abc/minutes.pdf',
+        fileName: 'minutes.pdf',
+        fileSize: 1024,
+      }),
+    });
+
+    const res = await POST(req);
+
+    // The message the uploader can act on survives — cleanup must not turn this
+    // into a 500.
+    expect(res.status).toBe(400);
+    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
+      'documents',
+      'communities/42/documents/abc/minutes.pdf',
+    );
+  });
+
+  it('POST reclaims the uploaded object when the subscription gate refuses', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+    requireActiveSubscriptionForMutationMock.mockRejectedValueOnce(
+      new ForbiddenError('Subscription is not active'),
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        title: 'Board Minutes',
+        categoryId: 7,
+        filePath: 'communities/42/documents/abc/minutes.pdf',
+        fileName: 'minutes.pdf',
+        fileSize: 1024,
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
+      'documents',
+      'communities/42/documents/abc/minutes.pdf',
+    );
+  });
+
+  it('POST does NOT reclaim the object when a documents row already references the path', async () => {
+    // Rule 2. Without it, a member with documents:write could pass a victim
+    // document's file_path with a wrong fileSize and destroy its bytes.
+    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
+    enforceRedactionAttestationMock.mockRejectedValueOnce(
+      new ValidationError('Confirm you have redacted it before uploading.'),
+    );
+    scopedQueryWhereMock.mockResolvedValueOnce([
+      { id: 99, filePath: 'communities/42/documents/abc/minutes.pdf' },
+    ]);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        title: 'Board Minutes',
+        categoryId: 7,
+        filePath: 'communities/42/documents/abc/minutes.pdf',
+        fileName: 'minutes.pdf',
+        fileSize: 1024,
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    expect(deleteStorageObjectMock).not.toHaveBeenCalled();
   });
 
   it('POST returns 422, deletes object, and audits when file size does not match', async () => {
@@ -369,6 +470,15 @@ describe('p1-11 documents route', () => {
       'documents',
       'communities/42/documents/abc/minutes.pdf',
     );
+    // TWICE, and deliberately so: rejectInvalidUpload reclaims the object, then
+    // the UnprocessableEntityError propagates through withUploadCleanup, which
+    // reclaims it again. Supabase `.remove([missingKey])` returns
+    // `{ data: [], error: null }` — a genuine no-op — so the second call costs
+    // one query and one storage call on a failure path only. The alternative
+    // (marking the error so the wrapper skips it) is more code and more
+    // coupling for no correctness gain. Pinned so it reads as intended rather
+    // than accidental.
+    expect(deleteStorageObjectMock).toHaveBeenCalledTimes(2);
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'validation_failed',
@@ -803,7 +913,14 @@ describe('p1-11 documents route — additional coverage', () => {
     it('POST returns 400 when storage fetch returns non-ok (magic bytes validation path)', async () => {
       requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
       // downloadStorageBytes throws ValidationError (400) when fetch returns !ok.
-      // deleteStorageObject is NOT called in this code path (throws before rejectInvalidUpload).
+      // This used to be one of the ~17 paths that stranded the uploaded bytes:
+      // it throws BEFORE rejectInvalidUpload, which was the only cleanup there
+      // was. withUploadCleanup now reclaims it.
+      //
+      // Deleting is right even though the fetch failed and we cannot know
+      // whether the object is readable: the caller gets a 400 and re-uploads
+      // from scratch, so the object is unreferenced either way, and
+      // deleteUnreferencedUpload declines if any documents row points at it.
       vi.stubGlobal(
         'fetch',
         vi.fn(async () => ({
@@ -829,7 +946,10 @@ describe('p1-11 documents route — additional coverage', () => {
 
       const res = await POST(req);
       expect(res.status).toBe(400);
-      expect(deleteStorageObjectMock).not.toHaveBeenCalled();
+      expect(deleteStorageObjectMock).toHaveBeenCalledWith(
+        'documents',
+        'communities/42/documents/abc/minutes.pdf',
+      );
     });
 
     it('POST handles deleteStorageObject throwing during cleanup and still returns 422', async () => {
