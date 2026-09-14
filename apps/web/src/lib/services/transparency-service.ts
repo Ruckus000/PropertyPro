@@ -3,7 +3,6 @@ import {
   communities,
   complianceChecklistItems,
   createScopedClient,
-  documents,
   meetings,
 } from '@propertypro/db';
 import {
@@ -256,10 +255,31 @@ function toMeetingNotice(
   };
 }
 
+/**
+ * Which of the last 12 months have minutes on the record.
+ *
+ * Keyed on the MEETING, not on a document: a month has minutes when a meeting
+ * that month carries `minutes_approved_at`, the stamp `markMeetingMinutesPosted`
+ * writes at the publish event — the same fact the meetings page, the owed count
+ * and the snowbird digest already read.
+ *
+ * This previously substring-matched "minutes" in a document's title/description/
+ * fileName and bucketed by the DOCUMENT's createdAt, which was wrong in the
+ * ordinary case: §718.111(12)(g) allows 30 days, so on-time minutes for a
+ * September meeting are published in October — and the page then credited
+ * October and marked September missing. It also lost the month whenever an
+ * author renamed the draft away from the seeded "Minutes — …" title, and
+ * counted anything else containing the word ("Draft minutes not yet approved",
+ * a violation PDF mentioning "waited 20 minutes").
+ *
+ * Reading both facts off the same meeting row also makes the three states below
+ * coherent: `minutes_posted` now implies a meeting that month by construction.
+ * Sourced separately, this function could emit `minutes_posted` for a month in
+ * which no meeting took place.
+ */
 function buildMinutesMonths(
   now: Date,
   meetingRows: ReadonlyArray<Record<string, unknown>>,
-  documentRows: ReadonlyArray<Record<string, unknown>>,
 ): TransparencyMinutesMonth[] {
   const months: Array<{ key: string; date: Date }> = [];
   for (let offset = 11; offset >= 0; offset -= 1) {
@@ -270,32 +290,15 @@ function buildMinutesMonths(
   const monthSet = new Set(months.map((entry) => entry.key));
 
   const monthsWithMeetings = new Set<string>();
+  const monthsWithMinutes = new Set<string>();
   for (const row of meetingRows) {
     const startsAt = asDate(row['startsAt']);
     if (!startsAt) continue;
     const key = monthKey(startsAt);
-    if (monthSet.has(key)) {
-      monthsWithMeetings.add(key);
-    }
-  }
+    if (!monthSet.has(key)) continue;
 
-  const monthsWithMinutes = new Set<string>();
-  for (const row of documentRows) {
-    const createdAt = asDate(row['createdAt']) ?? asDate(row['updatedAt']);
-    if (!createdAt) continue;
-
-    const haystack = [
-      asString(row['title']) ?? '',
-      asString(row['description']) ?? '',
-      asString(row['fileName']) ?? '',
-    ].join(' ').toLowerCase();
-
-    if (!haystack.includes('minutes')) {
-      continue;
-    }
-
-    const key = monthKey(createdAt);
-    if (monthSet.has(key)) {
+    monthsWithMeetings.add(key);
+    if (asDate(row['minutesApprovedAt'])) {
       monthsWithMinutes.add(key);
     }
   }
@@ -414,11 +417,10 @@ export async function getTransparencyPageData(
   community: ResolvedCommunityRecord,
 ): Promise<TransparencyPageData> {
   const scoped = createScopedClient(community.id);
-  const [communityRows, checklistRows, meetingRows, documentRows] = await Promise.all([
+  const [communityRows, checklistRows, meetingRows] = await Promise.all([
     scoped.query(communities),
     ensureTransparencyChecklistInitialized(community.id, community.communityType),
     scoped.query(meetings),
-    scoped.query(documents),
   ]);
 
   const communityRow = communityRows.find((row) => row['id'] === community.id) ?? null;
@@ -436,7 +438,7 @@ export async function getTransparencyPageData(
     .filter((value): value is TransparencyMeetingNotice => value != null)
     .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
 
-  const minuteMonths = buildMinutesMonths(new Date(), filteredMeetingRows, documentRows);
+  const minuteMonths = buildMinutesMonths(now, filteredMeetingRows);
   const documentsByCategory = buildDocumentGroups(checklistRows);
   const features = getFeaturesForCommunity(community.communityType);
 

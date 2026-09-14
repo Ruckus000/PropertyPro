@@ -38,6 +38,7 @@ import {
   softDeleteDocumentDraft,
 } from '@/lib/services/document-draft-service';
 import { markMeetingMinutesPosted } from '@/lib/services/meeting-service';
+import { linkMinutesDocumentToChecklist } from '@/lib/services/compliance-service';
 
 // Chromium needs a real Node runtime, more memory, and a longer timeout.
 export const runtime = 'nodejs';
@@ -199,6 +200,30 @@ export const POST = withErrorHandler(
               },
             });
           }
+
+          // Satisfy the rolling-12-month minutes item with the minutes just
+          // published. Without this a board can publish every meeting's minutes
+          // and the checklist still reads "needs board action" forever, because
+          // `document_id` is the only thing that satisfies an item and nothing
+          // but the manual Link action ever wrote it. Returns null for a
+          // community with no such item (every apartment) — not an error.
+          const linkedItemId = await linkMinutesDocumentToChecklist(
+            communityId,
+            documentId,
+            userId,
+            new Date(),
+          );
+          if (linkedItemId != null) {
+            await logAuditEvent({
+              userId,
+              action: 'link_document',
+              resourceType: 'compliance_checklist_item',
+              resourceId: String(linkedItemId),
+              communityId,
+              newValues: { documentId },
+              metadata: { linkedBy: 'minutes_publish', meetingId: targetMeetingId },
+            });
+          }
         } catch (err) {
           // Non-fatal: the document is rendered, stored and inserted, and the
           // author is done. Bookkeeping can be repaired; a thrown error here
@@ -213,8 +238,11 @@ export const POST = withErrorHandler(
       }
     }
 
-    // 8. Audit (compliance is automatic via documents-row insert; the
-    //    rolling-window calculator picks it up by category).
+    // 8. Audit. NOTE: a documents-row insert satisfies no compliance item on its
+    //    own — the calculator reads `compliance_checklist_items.document_id` and
+    //    never a category. This comment used to claim the opposite, which is why
+    //    published minutes went uncounted; the rolling-12-month minutes item is
+    //    linked explicitly in step 7 above.
     await logAuditEvent({
       userId,
       action: 'create',

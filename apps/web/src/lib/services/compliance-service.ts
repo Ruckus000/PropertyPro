@@ -43,6 +43,78 @@ export async function insertComplianceChecklistItems(
 }
 
 /**
+ * The template keys for the rolling 12-month minutes item, one per statute.
+ * A community has at most one (condo or HOA); apartments have neither, since
+ * the compliance checklist is condo/HOA-only.
+ */
+const MINUTES_ROLLING_TEMPLATE_KEYS = new Set([
+  '718_minutes_rolling_12m',
+  '720_minutes_rolling_12m',
+]);
+
+/**
+ * Point the rolling-12-month minutes item at the minutes that were just
+ * published, so publishing satisfies the item the way a manual link does.
+ *
+ * WHY THIS EXISTS. Satisfaction is `document_id IS NOT NULL` — derived at read
+ * time, never stored — and until now the only runtime writer was the
+ * `link_document` PATCH. So a board could publish every meeting's minutes
+ * through the authoring flow and the checklist would still read "needs board
+ * action" forever, because `BOARD_ACTION_TEMPLATE_KEYS` includes both minutes
+ * keys. The publish route already stamps `meetings.minutes_approved_at` and
+ * calls that "the posting event §718.111(12)(g)'s 30-day window measures"; this
+ * writes the one FK every other consumer reads (the calculator, the alert cron,
+ * the PM portfolio's raw-SQL counters, the admin console) so they all agree
+ * without each needing to learn about the stamp.
+ *
+ * This is the mirror of `unlinkChecklistItemsForDocument` below: deleting a
+ * document already un-satisfies the item automatically, and only the linking
+ * half was missing.
+ *
+ * LATEST-WINS IS DELIBERATE. One FK cannot represent twelve months of minutes
+ * as a set, but it does not need to: `calculateComplianceStatus` uses the
+ * rolling window only to DEMOTE a linked item to `overdue` once its document
+ * falls outside the window, so pointing at the most recent minutes is exactly
+ * "a rolling 12-month window is being maintained".
+ *
+ * Returns the id of the item it linked, or `null` when the community has no
+ * such item (every apartment) or it is marked not-applicable — both ordinary,
+ * neither an error.
+ *
+ * Lives here rather than in the route so the route does not import the
+ * `complianceChecklistItems` table directly (ADR-003 / guard:route-table-imports).
+ */
+export async function linkMinutesDocumentToChecklist(
+  communityId: number,
+  documentId: number,
+  actorUserId: string,
+  postedAt: Date,
+): Promise<number | null> {
+  const items = await listComplianceChecklistItems(communityId);
+  const item = items.find(
+    (row) =>
+      MINUTES_ROLLING_TEMPLATE_KEYS.has(String(row['templateKey'] ?? '')) &&
+      row['isApplicable'] !== false,
+  );
+  if (!item) {
+    return null;
+  }
+
+  const itemId = Number(item['id']);
+  const scoped = createScopedClient(communityId);
+  await scoped.update(
+    complianceChecklistItems,
+    {
+      documentId,
+      documentPostedAt: postedAt,
+      lastModifiedBy: actorUserId,
+    },
+    eq(complianceChecklistItems.id, itemId),
+  );
+  return itemId;
+}
+
+/**
  * Clear the `documentId` link on every checklist item that points at a
  * document being soft-deleted, so a deleted document can no longer keep an
  * item "satisfied".
