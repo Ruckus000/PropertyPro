@@ -76,6 +76,27 @@ test.describe('responsive overflow', () => {
     // scrollbar. Sunset Condos is `professional`, and `condo_718 + professional`
     // resolves `hasFinance: true`, so this surface is not plan-gated for `cam`.
     ['payments', (id: number) => `/communities/${id}/payments`],
+    // Added 2026-09-14, second round. Each of the three below was measured
+    // bleeding and then fixed in this branch, and each has a distinct cause, so
+    // one of them regressing tells you something the others would not.
+    //
+    // `meetings` is the page this audit found broken at ALL SIX widths, and it
+    // needed two fixes: the event pill's `inline-flex` (every width) and the
+    // month grid's phone geometry, where seven columns with `gap-2`/`p-2` left
+    // each day cell a 15px CONTENT box. `announcements/new` is an implicit grid
+    // track sized to a `datetime-local`'s UA intrinsic width — invisible to any
+    // text-based guard, because the base grid declares no `grid-cols-*` at all.
+    // `settings` is the only one whose bleed lives in a LOADING state
+    // (`SupportAccessSettings`'s skeleton), so it is the only block here that
+    // can pass vacuously when the fetch resolves before the measurement; that
+    // is still worth having, because it cannot pass while the bleed is back.
+    //
+    // All three avoid record ids on purpose. `/esign/submissions/[id]` bled too
+    // and is deliberately NOT here: it needs a seeded submission, and a block
+    // that 404s when the seed shifts is worse than no block.
+    ['meetings', (id: number) => `/communities/${id}/meetings`],
+    ['announcements composer', (id: number) => `/announcements/new?communityId=${id}`],
+    ['settings', (id: number) => `/settings?communityId=${id}`],
   ] as const) {
     test(`${label} does not bleed from 375px to 1440px`, async ({ page }) => {
       // Pinned: an unpinned demo user lands in Palm Shores (Essentials), where several

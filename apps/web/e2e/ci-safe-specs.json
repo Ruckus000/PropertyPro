@@ -50,6 +50,19 @@
     "Chromium -- rather than added on the hope that they pass. The `payments`",
     "block is still UNMEASURED against this stack on the terms above.",
     "",
+    "2026-09-14, second round: `responsive-overflow` grew from 5 blocks to 8, so",
+    "expectedTestCount went 37 -> 40. The three added (`meetings`, `announcements",
+    "composer`, `settings`) each measured bleeding earlier in the same branch and",
+    "each has a different cause -- an inline-flex pill plus a 15px day-cell content",
+    "box, an implicit grid track sized to a datetime-local's intrinsic width, and a",
+    "loading skeleton with a hard w-64 -- so one regressing says something the",
+    "others would not. All three were measured at all six widths against a",
+    "production build before being added, and all three avoid record ids on",
+    "purpose: `/esign/submissions/[id]` bled too and is deliberately excluded,",
+    "because a block that 404s when the seed shifts is worse than no block. Like",
+    "`payments`, they are UNMEASURED against THIS stack (dev server + CI seed) --",
+    "this job's own run on the PR that adds them is the real measurement.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -73,5 +86,5 @@
     "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 37
+  "expectedTestCount": 40
 }
