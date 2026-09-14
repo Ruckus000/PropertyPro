@@ -207,7 +207,7 @@ export function SmsConsentForm({
               checked={smsEnabled}
               onChange={(e) => handleConsentToggle(e.target.checked)}
               disabled={loading}
-              className="mt-1"
+              className="h-4 w-4 shrink-0 mt-1"
             />
             <span className="text-sm text-content-secondary">
               By enabling SMS notifications, I consent to receive emergency and community
