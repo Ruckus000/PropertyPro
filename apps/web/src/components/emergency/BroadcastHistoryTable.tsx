@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link';
+import { Table } from '@/components/ui/table';
 
 interface Broadcast {
   id: number;
@@ -42,7 +43,7 @@ export function BroadcastHistoryTable({ broadcasts, communityId }: Props) {
 
   return (
     <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
-      <table className="min-w-full divide-y divide-edge">
+      <Table className="min-w-full divide-y divide-edge">
         <thead className="bg-surface-page">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Title</th>
@@ -85,7 +86,7 @@ export function BroadcastHistoryTable({ broadcasts, communityId }: Props) {
             );
           })}
         </tbody>
-      </table>
+      </Table>
     </div>
   );
 }

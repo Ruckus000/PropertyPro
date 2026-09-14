@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { useAddContractBid } from '@/hooks/use-contracts';
 import type { ContractRecord } from './types';
+import { Table } from '@/components/ui/table';
 
 interface BidTrackerProps {
   communityId: number;
@@ -76,7 +77,7 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
           {bidSummary.bids.length === 0 ? (
             <p className="text-sm text-content-tertiary">No bids submitted yet.</p>
           ) : (
-            <table className="min-w-full divide-y divide-edge">
+            <Table className="min-w-full divide-y divide-edge">
               <thead className="bg-surface-page">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase text-content-tertiary">
@@ -113,7 +114,7 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           )}
         </div>
       )}

@@ -23,7 +23,11 @@ export function QuickFilterTabs({
   className,
 }: QuickFilterTabsProps) {
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    // `flex-wrap`, not `overflow-x-auto`: a scroller would need a tab stop to
+    // satisfy WCAG 2.1.1, and wrapping needs nothing. Measured at 375px in the
+    // authenticated shell — five tabs are 529px in a 327px column, so 202px of
+    // filters sat off-screen with no scrollbar and no way to reach them.
+    <div className={cn('flex flex-wrap items-center gap-1', className)}>
       {tabs.map((tab) => {
         const isActive = tab.value === active;
         return (

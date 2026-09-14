@@ -1,6 +1,7 @@
 'use client';
 
 import { useRecentPayments } from '@/hooks/use-finance';
+import { Table } from '@/components/ui/table';
 
 /* ─────── Helpers ─────── */
 
@@ -46,7 +47,7 @@ export function RecentPayments({ communityId }: { communityId: number }) {
 
   return (
     <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
-      <table className="min-w-full divide-y divide-edge">
+      <Table className="min-w-full divide-y divide-edge">
         <thead className="bg-surface-page">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Unit</th>
@@ -71,7 +72,7 @@ export function RecentPayments({ communityId }: { communityId: number }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </Table>
     </div>
   );
 }

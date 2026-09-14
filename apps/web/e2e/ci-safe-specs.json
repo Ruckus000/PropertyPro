@@ -43,6 +43,13 @@
     "the app shell is absent from /pm/site-preview. The real measurement is this job's",
     "own run on the PR that adds it; a failure there is the gate doing its job.",
     "",
+    "2026-09-14: `responsive-overflow` grew from 4 blocks to 5 (the `payments`",
+    "route) and its viewport list from 4 widths to 6 (375 and 414 added below the",
+    "old 768 floor), so expectedTestCount went 36 -> 37. The two new widths were",
+    "measured offline first -- real compiled CSS, real shell geometry, headless",
+    "Chromium -- rather than added on the hope that they pass. The `payments`",
+    "block is still UNMEASURED against this stack on the terms above.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -66,5 +73,5 @@
     "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 36
+  "expectedTestCount": 37
 }

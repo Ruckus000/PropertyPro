@@ -46,6 +46,7 @@ const GUARDS = [
   'guard:design-tokens',
   'guard:class-resolution',
   'guard:page-padding',
+  'guard:responsive-geometry',
   'guard:page-state-copy',
   'guard:audit-log-trigger-overrides',
   'guard:sanitizer-deps',

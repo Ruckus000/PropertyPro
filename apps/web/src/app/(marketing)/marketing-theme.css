@@ -246,6 +246,11 @@
 .marketing-theme .mk-srow:last-child{border-bottom:0}
 .marketing-theme .mk-srow.mk-at{background:var(--mk-coral-wash);box-shadow:inset 3px 0 0 var(--mk-coral)}
 .marketing-theme .mk-srow b{display:block;font-weight:500;font-size:13.5px}
+/* `mk-srow` is a `minmax(0,1fr) auto` grid, so column one can shrink to 73px at
+   375px — but a monospace statute citation has no space to wrap at and spilled
+   out of it (measured: 7 overflowing boxes on the home page at 375px, 0 with
+   this). `anywhere`, not `break-word`, because there is no word boundary. */
+.marketing-theme .mk-srow small,.marketing-theme .mk-srow b{overflow-wrap:anywhere}
 .marketing-theme .mk-srow small{display:block;font-family:var(--mk-mono);font-size:12px;color:var(--mk-g500);margin-top:3px}
 .marketing-theme .mk-srow .mk-ord{color:var(--mk-g500);font-weight:500}
 .marketing-theme .mk-srow .mk-act{display:flex;align-items:center;gap:8px}
