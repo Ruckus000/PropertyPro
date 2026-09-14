@@ -33,10 +33,12 @@
  * descending is both a total order and — because the table is append-only and
  * never renumbered — the same order `created_at` intends.
  *
- * `idx_platform_admin_audit_log_created_at` is the only time-ordered index, so
- * an `id desc` scan is not index-assisted. At this table's size (7 rows in
- * production on 2026-09-14) that is irrelevant, and the correct fix when it
- * stops being irrelevant is an index on `id desc`, not a wrong sort key.
+ * Nothing is given up by sorting this way. `id` is `bigserial PRIMARY KEY`
+ * (`packages/db/migrations/0052_platform_admin_audit_log.sql:73`), so the primary
+ * key's own btree already serves `order by id desc limit n` as a backward index
+ * scan — there is no index to add. An earlier version of this paragraph claimed
+ * the opposite and prescribed a redundant `(id DESC)` index, which would have
+ * misdirected the first person to profile this page.
  *
  * ## A cursor, not a cap — and why that is a deliberate departure
  *
@@ -47,7 +49,7 @@
  * admin surface that is unbounded BY CONSTRUCTION — the table only ever grows,
  * it is append-only, and nothing prunes it — so it is that case, on day one.
  *
- * ## This throws
+ * ## This throws, and reports
  *
  * Unlike `getHealthReport()`, which catches everything so the Health board can
  * render during an outage, a failed read here must NOT resolve to an empty
@@ -56,9 +58,27 @@
  * `HealthReport.errors` draws between `null` and `[]`. Callers render the
  * failure; they do not render silence.
  *
+ * It also captures to Sentry before rethrowing, and the capture lives HERE
+ * rather than at either call site because the two callers degrade differently
+ * and neither can be relied on to report: `/health/logs` paints the message,
+ * and `RecentActivityCard` swallows it outright so the board keeps rendering.
+ * With no capture, an audit read broken by a revoked grant or an unapplied
+ * migration showed one grey sentence on a board nobody was alerted about, for
+ * as long as it stayed broken.
+ *
+ * Capture-and-degrade is the ordinary admin-server convention — `billing.ts`,
+ * `preferences.ts`, `search.ts`, `shell-signals.ts` and `push.ts` all do it, and
+ * `billing.ts` puts the rule best: "An empty catch on a money screen is how a
+ * revoked key looks like a customer who never paid for anything." The health
+ * subsystem's documented silence is not a precedent for this. That carve-out
+ * covers PROBES of external services, where the failure IS the thing being
+ * reported and the page prints it; our own table failing to read is an internal
+ * defect nothing else will notice.
+ *
  * @module lib/server/admin-activity
  */
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import * as Sentry from '@sentry/nextjs';
 
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
@@ -150,30 +170,42 @@ export async function getAdminActivity(
   filters: AdminActivityFilters = {},
 ): Promise<AdminActivityPage> {
   const pageSize = filters.pageSize ?? ACTIVITY_PAGE_SIZE;
-  const db = createAdminClient();
 
-  // Filters go on BEFORE `.order()`/`.limit()`: those return PostgREST's
-  // transform builder, which has no `.eq()` on it (see `tickets.ts`).
-  let query = db.from('platform_admin_audit_log').select(COLUMNS);
-  if (filters.action) query = query.eq('action', filters.action);
-  if (filters.admin) query = query.eq('admin_email', filters.admin);
-  if (filters.communityId !== undefined) {
-    query = query.eq('community_id', filters.communityId);
+  try {
+    // `createAdminClient()` is INSIDE the try because it throws when the
+    // service-role env is unset — a failure with no PostgREST `error` object for
+    // `assertNoDbError` to see, and the one a misconfigured deployment hits first.
+    const db = createAdminClient();
+
+    // Filters go on BEFORE `.order()`/`.limit()`: those return PostgREST's
+    // transform builder, which has no `.eq()` on it (see `tickets.ts`).
+    let query = db.from('platform_admin_audit_log').select(COLUMNS);
+    if (filters.action) query = query.eq('action', filters.action);
+    if (filters.admin) query = query.eq('admin_email', filters.admin);
+    if (filters.communityId !== undefined) {
+      query = query.eq('community_id', filters.communityId);
+    }
+    if (filters.before !== undefined) query = query.lt('id', filters.before);
+
+    // One row MORE than the page, to learn whether another page exists without a
+    // second COUNT round-trip. The extra row is dropped below, never rendered.
+    const { data, error } = await query.order('id', { ascending: false }).limit(pageSize + 1);
+    assertNoDbError(error, 'Failed to load the operator activity log');
+
+    const rows = (data ?? []) as unknown as ActivityRow[];
+    const hasMore = rows.length > pageSize;
+    const page = hasMore ? rows.slice(0, pageSize) : rows;
+
+    return {
+      entries: page.map(mapRow),
+      // The LAST id on this page, so the next call asks for rows below it.
+      nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+    };
+  } catch (caught) {
+    // Capture and RETHROW. The throw is the contract — callers must never be
+    // handed an empty page for a failed read — and the capture is what stops a
+    // broken audit read from being invisible. See the docblock.
+    Sentry.captureException(caught, { tags: { admin_read: 'activity_log' } });
+    throw caught;
   }
-  if (filters.before !== undefined) query = query.lt('id', filters.before);
-
-  // One row MORE than the page, to learn whether another page exists without a
-  // second COUNT round-trip. The extra row is dropped below, never rendered.
-  const { data, error } = await query.order('id', { ascending: false }).limit(pageSize + 1);
-  assertNoDbError(error, 'Failed to load the operator activity log');
-
-  const rows = (data ?? []) as unknown as ActivityRow[];
-  const hasMore = rows.length > pageSize;
-  const page = hasMore ? rows.slice(0, pageSize) : rows;
-
-  return {
-    entries: page.map(mapRow),
-    // The LAST id on this page, so the next call asks for rows below it.
-    nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
-  };
 }

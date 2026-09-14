@@ -42,7 +42,7 @@
 import Link from 'next/link';
 import { PageBody } from '@propertypro/ui';
 
-import { ActivityLogList } from '@/components/health/ActivityLogList';
+import { ActivityLogList, buildHref } from '@/components/health/ActivityLogList';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import {
@@ -73,16 +73,30 @@ function one(value: Param): string | undefined {
 }
 
 /**
- * A positive integer, or `undefined`.
+ * A positive integer, and whether a value was PRESENT but unusable.
  *
  * `Number()` is deliberate over `parseInt`: `parseInt('12abc')` is `12`, which
  * would silently answer a different question than the URL asked.
+ *
+ * The `rejected` half exists because "absent" and "invalid" must not look the
+ * same on this page. Returning a bare `undefined` for both meant
+ * `?communityId=abc` widened an audit view from one community to the entire
+ * platform with nothing on screen saying the filter had been dropped — showing
+ * MORE than was asked for, silently, which is the dangerous direction for this
+ * surface to fail in.
+ *
+ * Zero is rejected along with the rest: `community_id` is `bigserial`, so ids
+ * start at 1 and `?communityId=0` can only be a mistake. `getAdminActivity` and
+ * `ActivityLogList` still handle a `0` defensively — they are library code with
+ * their own contract — but the route will never hand them one.
  */
-function positiveInt(value: Param): number | undefined {
+function positiveInt(value: Param): { value?: number; rejected: boolean } {
   const raw = one(value);
-  if (raw === undefined) return undefined;
+  if (raw === undefined) return { rejected: false };
   const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? { value: parsed, rejected: false }
+    : { rejected: true };
 }
 
 export default async function HealthLogsPage({
@@ -93,21 +107,44 @@ export default async function HealthLogsPage({
   await requireAdminPageSession();
 
   const params = await searchParams;
+  const communityId = positiveInt(params.communityId);
+  const before = positiveInt(params.before);
   const filters = {
     action: one(params.action),
     admin: one(params.admin),
-    communityId: positiveInt(params.communityId),
+    communityId: communityId.value,
   };
-  const before = positiveInt(params.before);
+  // Named so the banner can say WHICH param was dropped; order is the URL's.
+  const rejected = [
+    ...(communityId.rejected ? ['communityId'] : []),
+    ...(before.rejected ? ['before'] : []),
+  ];
 
   let page: AdminActivityPage = { entries: [], nextCursor: null };
   let error: string | undefined;
   try {
-    page = await getAdminActivity({ ...filters, before, pageSize: ACTIVITY_PAGE_SIZE });
+    page = await getAdminActivity({
+      ...filters,
+      before: before.value,
+      pageSize: ACTIVITY_PAGE_SIZE,
+    });
   } catch (caught) {
-    // The message is ours (`assertNoDbError` composes it) rather than a raw
-    // vendor string reaching a response body — this is a page, not an API
-    // envelope, and it is behind `super_admin`.
+    // This IS the raw upstream string, and deliberately so.
+    //
+    // `assertNoDbError` composes `${context}: ${error.message}${code}`, so the
+    // PostgREST/Postgres text is inside it; the catch is also unnarrowed, so a
+    // missing service-role env surfaces `createAdminClient`'s own message here.
+    // An earlier version of this comment claimed the opposite — that the message
+    // was "ours rather than a raw vendor string" — which was simply false, and
+    // was cited in review as though it were a guarantee.
+    //
+    // Keeping it is the decision, not an oversight. The audience is `super_admin`
+    // and "permission denied for table platform_admin_audit_log (42501)" is the
+    // sentence that tells an operator the grant or the migration is missing,
+    // which is what a health console exists to say. `lib/server/health.ts`'s
+    // probes already put unnarrowed caught messages onto the board next door.
+    // `getAdminActivity` captures to Sentry before rethrowing, so the detail is
+    // in telemetry either way.
     error = caught instanceof Error ? caught.message : 'The query failed.';
   }
 
@@ -119,12 +156,18 @@ export default async function HealthLogsPage({
         backHref="/health"
         backLabel="Health"
         actions={
-          <Link
-            href={BASE_PATH}
-            className="inline-flex h-9 items-center rounded-md border border-edge bg-surface-card px-3 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus"
-          >
-            Newest first
-          </Link>
+          // Only when a cursor is in force. With no `before`, this was a button
+          // whose sole effect was to discard every filter — a destructive action
+          // behind a label promising nothing but a change of position. It now
+          // preserves the filters and clears only the cursor.
+          before.value !== undefined ? (
+            <Link
+              href={buildHref(BASE_PATH, filters, { before: null })}
+              className="inline-flex h-9 items-center rounded-md border border-edge bg-surface-card px-3 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus"
+            >
+              Newest first
+            </Link>
+          ) : undefined
         }
       />
 
@@ -134,6 +177,8 @@ export default async function HealthLogsPage({
         filters={filters}
         basePath={BASE_PATH}
         error={error}
+        hasCursor={before.value !== undefined}
+        rejected={rejected}
       />
     </PageBody>
   );

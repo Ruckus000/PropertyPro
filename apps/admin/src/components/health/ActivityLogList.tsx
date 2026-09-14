@@ -43,7 +43,7 @@
  */
 import Link from 'next/link';
 import { ChevronRight, ScrollText } from 'lucide-react';
-import { AlertBanner, EmptyState } from '@propertypro/ui';
+import { AlertBanner, Button, EmptyState } from '@propertypro/ui';
 import type { AdminActivityEntry } from '@/lib/server/admin-activity';
 
 interface ActivityLogListProps {
@@ -56,6 +56,23 @@ interface ActivityLogListProps {
   basePath: string;
   /** Set when the read failed — renders a failure, never an empty state. */
   error?: string;
+  /**
+   * True when the URL carried a `before` cursor, i.e. this is not the first
+   * page. Passed separately from `filters` because a cursor is NOT a filter:
+   * conflating them makes an exhausted cursor say "nothing matches these
+   * filters", which is its own untrue sentence.
+   */
+  hasCursor?: boolean;
+  /**
+   * Query params that were PRESENT but unparseable, so the page is showing more
+   * than was asked for.
+   *
+   * `positiveInt` cannot distinguish "absent" from "invalid" on its own, and the
+   * two must not look the same here: silently widening an audit view from one
+   * community to the whole platform is the dangerous direction to fail in, and
+   * nothing on screen said it had happened.
+   */
+  rejected?: string[];
 }
 
 /**
@@ -130,8 +147,15 @@ export function formatLogTime(iso: string): string {
   return `${month} ${day} ${hh}:${mm}:${ss}.${ms}`;
 }
 
-/** Build a URL preserving the filters in force, overriding what is named. */
-function buildHref(
+/**
+ * Build a URL preserving the filters in force, overriding what is named.
+ *
+ * Exported because `page.tsx` builds the header's "Newest first" link with it.
+ * That link used to point at the bare base path, which silently discarded every
+ * filter in force — a destructive action behind a label that promises only a
+ * change of position.
+ */
+export function buildHref(
   basePath: string,
   filters: ActivityLogListProps['filters'],
   overrides: { action?: string | null; admin?: string | null; communityId?: number | null; before?: number | null },
@@ -181,24 +205,57 @@ export function ActivityLogList({
   filters,
   basePath,
   error,
+  hasCursor = false,
+  rejected = [],
 }: ActivityLogListProps) {
   const hasFilters = Boolean(filters.action || filters.admin || filters.communityId !== undefined);
-
-  if (error) {
-    return (
-      <AlertBanner
-        status="danger"
-        title="We couldn't load the activity log"
-        description={`${error} The trail itself is unaffected — this is a read failure, not a gap in the record. Please try again.`}
-      />
-    );
-  }
+  /** Back to the newest page, KEEPING the filters. */
+  const newestHref = buildHref(basePath, filters, { before: null });
 
   return (
     <div className="space-y-3">
-      {hasFilters && (
+      {rejected.length > 0 && (
+        <AlertBanner
+          status="warning"
+          title={
+            rejected.length === 1
+              ? `Ignored an unusable ${rejected[0]} value`
+              : `Ignored unusable values for ${rejected.join(', ')}`
+          }
+          description="The rest of the URL was applied, so this view is WIDER than the link asked for. Correct the value or clear the filter."
+        />
+      )}
+
+      {/*
+        The banner renders INSIDE the normal tree rather than as an early return.
+        An early return dropped the filter chips and "Clear all" along with the
+        list, so the only way out of a failed filtered read was to hand-edit the
+        URL — and the page docblock claimed the opposite.
+      */}
+      {error && (
+        <AlertBanner
+          status="danger"
+          title="We couldn't load the activity log"
+          // Two blocks, not one interpolated string. The upstream message is not
+          // guaranteed to end in punctuation, so concatenating ran it straight
+          // into our sentence: "…(code 42501) The trail itself is unaffected".
+          description={
+            <>
+              <span className="block font-mono">{error}</span>
+              <span className="mt-1 block">
+                The trail itself is unaffected — this is a read failure, not a gap in the
+                record. Please try again.
+              </span>
+            </>
+          }
+        />
+      )}
+
+      {(hasFilters || hasCursor) && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-content-tertiary">Filtered by</span>
+          <span className="text-xs text-content-tertiary">
+            {hasFilters ? 'Filtered by' : 'Showing'}
+          </span>
           {filters.action && (
             <FilterChip
               label={`action: ${filters.action}`}
@@ -217,6 +274,12 @@ export function ActivityLogList({
               clearHref={buildHref(basePath, filters, { communityId: null, before: null })}
             />
           )}
+          {/* A cursor is its own chip, cleared back to the newest page while the
+              filters stay put. Without it, paging deep into a filtered log left
+              no on-screen sign that this was not the top. */}
+          {hasCursor && (
+            <FilterChip label="older entries only" clearHref={newestHref} />
+          )}
           <Link
             href={basePath}
             className="rounded-md px-2 py-1 text-xs font-medium text-content-link hover:text-content-link-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus"
@@ -226,16 +289,40 @@ export function ActivityLogList({
         </div>
       )}
 
-      {entries.length === 0 ? (
-        <EmptyState
-          icon={ScrollText}
-          title={hasFilters ? 'Nothing matches these filters' : 'No operator activity recorded yet'}
-          description={
-            hasFilters
-              ? 'Clear a filter to widen the search. The trail is append-only, so nothing here has been removed.'
-              : 'Privileged actions taken in this console — admin grants, subscription changes, cron retries, deletions — are recorded here as they happen.'
-          }
-        />
+      {/*
+        No empty state at all when the read failed — the banner above has already
+        said what happened, and "no operator activity recorded yet" underneath it
+        would contradict it in the same breath.
+
+        Otherwise THREE states, not two. An exhausted cursor is neither "the log
+        is empty" nor "nothing matches these filters": `?before=<id past the end>`
+        returns zero rows on a perfectly healthy log, and it is reachable from the
+        pasteable URLs this page advertises. Reporting that as an empty log is the
+        exact lie `admin-activity.ts` throws rather than tell.
+      */}
+      {error ? null : entries.length === 0 ? (
+        hasCursor ? (
+          <EmptyState
+            icon={ScrollText}
+            title="You've reached the end of the log"
+            description="There is nothing older than this point. The entries above this page are still there."
+            action={
+              <Button asChild size="sm" variant="outline">
+                <Link href={newestHref}>Back to the newest entries</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={ScrollText}
+            title={hasFilters ? 'Nothing matches these filters' : 'No operator activity recorded yet'}
+            description={
+              hasFilters
+                ? 'Clear a filter to widen the search. The trail is append-only, so nothing here has been removed.'
+                : 'Privileged actions taken in this console — admin grants, subscription changes, cron retries, deletions — are recorded here as they happen.'
+            }
+          />
+        )
       ) : (
         <>
           {/* A real list of disclosures. The header row is presentational and is
@@ -246,7 +333,7 @@ export function ActivityLogList({
               className="hidden items-center gap-3 border-b border-edge bg-surface-subtle py-2 pl-11 pr-4 font-mono text-xs text-content-tertiary sm:flex"
             >
               <span className="w-[170px] shrink-0">TIME (UTC)</span>
-              <span className="w-[230px] shrink-0">ACTION</span>
+              <span className="w-[265px] shrink-0">ACTION</span>
               <span className="min-w-0 flex-1">RESOURCE</span>
               <span className="w-[200px] shrink-0">OPERATOR</span>
             </div>
@@ -262,6 +349,18 @@ export function ActivityLogList({
                         className="mt-1 shrink-0 text-content-tertiary transition-transform group-open:rotate-90"
                       />
                       {/*
+                        Two type sizes on one row, deliberately. The action and
+                        the resource are the row's PRIMARY content and sit at
+                        `text-sm`, matching `ErrorsList`'s issue title and
+                        `FailedJobsList`'s job name; the timestamp and the
+                        operator are metadata and stay at `text-xs`. DESIGN.md is
+                        explicit that `xs` is "metadata-only, never primary
+                        content", and the first pass had every column at `xs`.
+                        No guard checks font size, so this is review-enforced.
+
+                        It is also the hierarchy a log viewer wants — a dim, small
+                        timestamp beside a prominent message.
+
                         Stacks below `sm`, becomes the log ROW above it. The
                         column widths are `sm:`-only on purpose: as unconditional
                         `w-[…]` they could not shrink, so at phone width the row
@@ -283,11 +382,11 @@ export function ActivityLogList({
                           // column's edge. The expanded body always shows it in
                           // full as well.
                           title={entry.action}
-                          className={`w-fit max-w-full shrink-0 truncate rounded px-1.5 py-0.5 font-mono text-xs font-medium sm:w-[230px] ${TONE_CLASS[actionTone(entry.action)]}`}
+                          className={`w-fit max-w-full shrink-0 truncate rounded px-1.5 py-0.5 font-mono text-sm font-medium sm:w-[265px] ${TONE_CLASS[actionTone(entry.action)]}`}
                         >
                           {entry.action}
                         </span>
-                        <span className="min-w-0 flex-1 break-words font-mono text-xs text-content">
+                        <span className="min-w-0 flex-1 break-words font-mono text-sm text-content">
                           {entry.resourceType}
                           {entry.resourceId && (
                             <span className="text-content-tertiary"> #{entry.resourceId}</span>

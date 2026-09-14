@@ -96,6 +96,31 @@ describe('ActivityLogList', () => {
     expect(screen.queryByText(/no operator activity recorded yet/i)).toBeNull();
   });
 
+  // An early return rendered the banner ALONE, dropping the chips and "Clear
+  // all" with the list — so the only way out of a failed filtered read was to
+  // hand-edit the URL, while the page docblock claimed the filters were kept.
+  it('keeps the filter chips and Clear all when the read failed', () => {
+    render(
+      <ActivityLogList
+        {...base}
+        entries={[]}
+        filters={{ action: 'demo_deleted' }}
+        error="Failed to load: permission denied"
+      />,
+    );
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /remove filter action: demo_deleted/i })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /clear all/i })).toBeTruthy();
+  });
+
+  // The banner already says what happened; an empty state underneath would
+  // contradict it in the same breath.
+  it('renders no empty state at all alongside the failure banner', () => {
+    render(<ActivityLogList {...base} entries={[]} error="boom" />);
+    expect(screen.queryByText(/no operator activity recorded yet/i)).toBeNull();
+    expect(screen.queryByText(/nothing matches these filters/i)).toBeNull();
+  });
+
   it('renders a real empty state when the query succeeded and the log is empty', () => {
     render(<ActivityLogList {...base} entries={[]} />);
     expect(screen.getByText(/no operator activity recorded yet/i)).toBeTruthy();
@@ -107,11 +132,69 @@ describe('ActivityLogList', () => {
     expect(screen.getByText(/nothing matches these filters/i)).toBeTruthy();
   });
 
+  // `?before=<id past the end>` returns zero rows on a perfectly healthy log and
+  // is reachable from the pasteable URLs this page advertises. Reporting that as
+  // "No operator activity recorded yet" is the exact lie `admin-activity.ts`
+  // throws rather than tell. Verified against production: before=1 returns 0 rows.
+  it('says the cursor is exhausted, NOT that the log is empty', () => {
+    render(<ActivityLogList {...base} entries={[]} hasCursor />);
+    expect(screen.getByText(/you've reached the end of the log/i)).toBeTruthy();
+    expect(screen.queryByText(/no operator activity recorded yet/i)).toBeNull();
+    // And a cursor is not a filter, so it must not claim one either.
+    expect(screen.queryByText(/nothing matches these filters/i)).toBeNull();
+  });
+
+  it('offers a way back to the newest page that KEEPS the filters', () => {
+    render(
+      <ActivityLogList {...base} entries={[]} hasCursor filters={{ action: 'demo_deleted' }} />,
+    );
+    const back = screen.getByRole('link', { name: /back to the newest entries/i });
+    expect(back.getAttribute('href')).toBe('/health/logs?action=demo_deleted');
+  });
+
+  // Paging deep into a filtered log left nothing on screen saying this was not
+  // the top of the trail.
+  it('shows a removable chip while a cursor is in force', () => {
+    render(<ActivityLogList {...base} entries={[entry()]} hasCursor />);
+    const chip = screen.getByRole('link', { name: /remove filter older entries only/i });
+    expect(chip.getAttribute('href')).toBe('/health/logs');
+  });
+
+  // B3: a param that was PRESENT but unusable must not read as absent.
+  it('warns that an unusable param widened the view', () => {
+    render(<ActivityLogList {...base} entries={[entry()]} rejected={['communityId']} />);
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toMatch(/ignored an unusable communityId value/i);
+    expect(alert.textContent).toMatch(/wider than the link asked for/i);
+  });
+
+  it('names every rejected param, not just the first', () => {
+    render(
+      <ActivityLogList {...base} entries={[entry()]} rejected={['communityId', 'before']} />,
+    );
+    expect(screen.getByRole('alert').textContent).toMatch(/communityId, before/);
+  });
+
+  it('warns about nothing when every param parsed', () => {
+    render(<ActivityLogList {...base} entries={[entry()]} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('paints an unknown action rather than dropping its colour class', () => {
     render(<ActivityLogList {...base} entries={[entry({ action: 'data_repair' })]} />);
     const pill = screen.getByText('data_repair');
     // Written-out classes, not a template — a template compiles to no CSS.
     expect(pill.className).toContain('bg-status-danger-subtle');
+  });
+
+  // DESIGN.md: `xs` is "metadata-only, never primary content". The primary
+  // columns match `ErrorsList`'s issue title and `FailedJobsList`'s job name at
+  // `text-sm`; the metadata columns stay at `text-xs`. No guard checks font
+  // size, so this is the only thing holding the hierarchy.
+  it('sets the primary columns one step above the metadata columns', () => {
+    render(<ActivityLogList {...base} entries={[entry()]} />);
+    expect(screen.getByText('platform_admin_added').className).toContain('text-sm');
+    expect(screen.getByText('Sep 06 03:37:00.116').className).toContain('text-xs');
   });
 
   it('carries the machine-readable timestamp alongside the formatted one', () => {
@@ -204,7 +287,10 @@ describe('ActivityLogList', () => {
     expect(clearAction.getAttribute('href')).toBe('/health/logs?communityId=4');
   });
 
-  it('keeps communityId 0 as a filter instead of treating it as cleared', () => {
+  // A LIBRARY-contract case. The route rejects 0 (ids are bigserial, so they
+  // start at 1) and now warns instead of silently widening; this pins that a
+  // caller passing 0 still gets a chip rather than a falsy-dropped filter.
+  it('keeps a caller-supplied communityId 0 as a filter, not as cleared', () => {
     render(<ActivityLogList {...base} entries={[entry()]} filters={{ communityId: 0 }} />);
     expect(screen.getByRole('link', { name: /remove filter community: 0/i })).toBeTruthy();
   });

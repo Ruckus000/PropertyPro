@@ -62,6 +62,9 @@ function makeBuilder() {
   return builder;
 }
 
+const captureException = vi.fn();
+vi.mock('@sentry/nextjs', () => ({ captureException: (...a: unknown[]) => captureException(...a) }));
+
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: () => ({
     from(table: string) {
@@ -134,10 +137,12 @@ describe('getAdminActivity', () => {
     expect(recorded.lt).toEqual([]);
   });
 
-  it('treats communityId 0 as a filter, not as absent', async () => {
-    // `if (filters.communityId)` would drop this; the module tests for
-    // `undefined`. No community has id 0 today, but a falsy-check here is the
-    // kind of bug that only shows up once one does.
+  // A LIBRARY-contract case, not a route case. The route's `positiveInt` rejects
+  // 0 (community ids are bigserial, so they start at 1) and now says so with a
+  // banner. This pins the module's own behaviour: a caller that passes 0 gets a
+  // filter, because `if (filters.communityId)` would silently drop it and that is
+  // the kind of falsy-check bug that only surfaces once some id can be 0.
+  it('treats a caller-supplied communityId 0 as a filter, not as absent', async () => {
     await getAdminActivity({ communityId: 0 });
     expect(recorded.eq).toEqual([['community_id', 0]]);
   });
@@ -183,6 +188,25 @@ describe('getAdminActivity', () => {
   it('THROWS on a read failure rather than resolving to an empty log', async () => {
     result = { data: null, error: { message: 'permission denied', code: '42501' } };
     await expect(getAdminActivity()).rejects.toThrow(/operator activity log/);
+  });
+
+  // Without this, a broken audit read is invisible: the page paints the message
+  // and `RecentActivityCard` swallows it, so nothing reaches telemetry and the
+  // failure persists unnoticed for as long as it lasts.
+  it('captures a read failure to Sentry before rethrowing', async () => {
+    result = { data: null, error: { message: 'permission denied', code: '42501' } };
+    await expect(getAdminActivity()).rejects.toThrow();
+
+    expect(captureException).toHaveBeenCalledTimes(1);
+    const [captured, context] = captureException.mock.calls[0] as [Error, { tags: unknown }];
+    expect(captured.message).toMatch(/permission denied/);
+    expect(context.tags).toEqual({ admin_read: 'activity_log' });
+  });
+
+  it('does not report a successful read', async () => {
+    result = { data: [row()], error: null };
+    await getAdminActivity();
+    expect(captureException).not.toHaveBeenCalled();
   });
 
   it('treats a null data set with no error as genuinely empty', async () => {

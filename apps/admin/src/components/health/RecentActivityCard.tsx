@@ -26,6 +26,13 @@
  * production is down. The full-page equivalent on `/health/logs` does use a
  * banner, because there it is the whole content.
  *
+ * The `catch` is bare because `getAdminActivity` now captures to Sentry before
+ * it rethrows, so this swallow loses the error from the SCREEN and not from
+ * telemetry. Capturing here as well would double-report the same failure every
+ * time an operator opened the board. Before that capture existed this was a
+ * genuine hole: a permanently broken audit read showed one grey sentence and
+ * alerted nobody.
+ *
  * ## Cost
  *
  * One indexed read of a small append-only table, added to a page that already
