@@ -71,6 +71,13 @@ export interface HealthReport {
   services: ServiceStatus[];
   /** `null` = Sentry is not configured, or the call failed. NEVER `[]` for those. */
   errors: SentryIssue[] | null;
+  /**
+   * Why the Sentry call failed, when it was configured and failed (e.g.
+   * `Sentry issues request failed: 403`). Absent when Sentry is unconfigured or
+   * answered. Without it the two `null` cases rendered identically, so a token
+   * with the wrong scopes read as "not configured" and logged nothing.
+   */
+  sentryFailure?: string;
   jobs: FailedJob[];
   errorsLastHour: number;
   checkedAt: string;
@@ -641,6 +648,8 @@ export async function getHealthReport(deps: Partial<HealthDeps> = {}): Promise<H
     safeLoad(d.loadCronRuns),
   ]);
 
+  let sentryFailure: string | undefined;
+
   const [webAndApi, admin, supabase, stripeService, resend, errors] = await Promise.all([
     probeWebApp(d.webOrigin, d.fetchImpl),
     probeAdminApp(d.adminOrigin, d.fetchImpl),
@@ -651,7 +660,15 @@ export async function getHealthReport(deps: Partial<HealthDeps> = {}): Promise<H
     // banner either way, and an empty array here would read as "production is
     // quiet", which is a claim an unconfigured console cannot make.
     d.sentry
-      ? d.sentry.listIssues(d.sentryProject).catch(() => null)
+      ? d.sentry.listIssues(d.sentryProject).catch((error: unknown) => {
+          // The message is status-only by construction (sentry.ts never puts the
+          // response body or the token in it), so it is safe to log and render.
+          sentryFailure = error instanceof Error ? error.message : String(error);
+          console.warn(
+            JSON.stringify({ event: 'health.sentry_request_failed', message: sentryFailure }),
+          );
+          return null;
+        })
       : Promise.resolve(null),
   ]);
 
@@ -672,6 +689,7 @@ export async function getHealthReport(deps: Partial<HealthDeps> = {}): Promise<H
   return {
     services: [webAndApi.api, webAndApi.web, admin, supabase, stripeService, resend],
     errors,
+    ...(sentryFailure !== undefined ? { sentryFailure } : {}),
     jobs,
     errorsLastHour,
     checkedAt: now.toISOString(),

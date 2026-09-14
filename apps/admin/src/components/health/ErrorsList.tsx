@@ -25,6 +25,8 @@ import type { SentryIssue } from '@/lib/server/sentry';
 interface ErrorsListProps {
   /** `null` = not configured, or the request failed. */
   errors: SentryIssue[] | null;
+  /** Set when Sentry IS configured and the request failed — see `HealthReport.sentryFailure`. */
+  sentryFailure?: string;
 }
 
 /** Written out in full per band — a template class is invisible to `guard:class-resolution`. */
@@ -34,7 +36,7 @@ function countTint(count: number): string {
   return 'text-content-tertiary';
 }
 
-export function ErrorsList({ errors }: ErrorsListProps) {
+export function ErrorsList({ errors, sentryFailure }: ErrorsListProps) {
   return (
     <section aria-labelledby="health-errors" className="space-y-3">
       <h2 id="health-errors" className="text-sm font-semibold text-content-secondary">
@@ -46,7 +48,13 @@ export function ErrorsList({ errors }: ErrorsListProps) {
         )}
       </h2>
 
-      {errors === null ? (
+      {errors === null && sentryFailure !== undefined ? (
+        <AlertBanner
+          status="warning"
+          title="Sentry request failed"
+          description={`${sentryFailure}. SENTRY_API_TOKEN is set, but Sentry refused or did not answer — check that the token has project:read and event:read, and that SENTRY_ORG is right. Errors are still being captured — this panel only reads them back.`}
+        />
+      ) : errors === null ? (
         <AlertBanner
           status="info"
           title="Sentry is not configured"
