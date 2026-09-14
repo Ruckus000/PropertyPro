@@ -18,6 +18,7 @@
     "seed:verify": "tsx scripts/verify-seed-evidence.ts",
     "reap:test-communities": "tsx --tsconfig apps/web/tsconfig.json scripts/reap-test-communities.ts",
     "site-assets:reconcile": "tsx --tsconfig apps/web/tsconfig.json scripts/reconcile-site-assets-usage.ts",
+    "documents:orphan-report": "tsx scripts/report-orphaned-document-objects.ts",
     "address-index:build": "tsx scripts/address-index/build.ts",
     "perf:check": "tsx scripts/perf-check.ts",
     "test:integration:preflight": "pnpm --filter @propertypro/db db:migrate && pnpm seed:verify && pnpm --filter @propertypro/db test:integration && pnpm exec vitest run --config apps/web/vitest.integration.config.ts",
