@@ -46,7 +46,11 @@ afterEach(() => {
  * the run is about `web`; a missing admin manifest is a different branch
  * (`SKIPPED`) and would muddy these assertions.
  */
-function writeSandbox(webPages: Record<string, number>): string {
+function writeSandbox(
+  webPages: Record<string, number>,
+  /** One chunk of `kib` listed under every key in `keys` — as webpack/main-app are in a real manifest. */
+  shared?: { kib: number; keys: string[] },
+): string {
   const root = mkdtempSync(join(tmpdir(), 'perf-check-'));
   sandbox = root;
 
@@ -63,6 +67,11 @@ function writeSandbox(webPages: Record<string, number>): string {
         writeFileSync(join(next, chunk), 'x'.repeat(kib * 1024));
         pages[route] = [chunk];
       }
+      if (shared) {
+        const chunk = 'static/chunks/shared.js';
+        writeFileSync(join(next, chunk), 'x'.repeat(shared.kib * 1024));
+        for (const key of shared.keys) pages[key] = [...(pages[key] ?? []), chunk];
+      }
     }
 
     writeFileSync(join(next, 'app-build-manifest.json'), JSON.stringify({ pages }));
@@ -72,7 +81,9 @@ function writeSandbox(webPages: Record<string, number>): string {
 }
 
 function runGuard(cwd: string) {
-  const result = spawnSync(tsxBin, [guardScript], { cwd, encoding: 'utf8' });
+  // Pinned so these fixtures do not move every time the real ceilings are re-based.
+  const env = { ...process.env, PERF_BUDGET_HARD_BYTES: String(700 * 1024), PERF_BUDGET_TOTAL_HARD_BYTES: String(1300 * 1024) };
+  const result = spawnSync(tsxBin, [guardScript], { cwd, encoding: 'utf8', env });
   return {
     status: result.status ?? -1,
     output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
@@ -187,5 +198,36 @@ describe('perf-check — the unbudgeted sweep', () => {
 
     expect(output).toContain('fell back to');
     expect(output).toContain(DECLARED_FALLBACK);
+  });
+});
+
+describe('perf-check — first-load measurement', () => {
+  /**
+   * A page's manifest key lists only its own chunks; its ancestors' layout (and
+   * loading/error/not-found) chunks load with it. Summing the page key alone
+   * under-read `/(authenticated)/dashboard` by ~450 KiB.
+   */
+  it("counts ancestor segment chunks once each, and never a sibling group's", () => {
+    const settings = '/(authenticated)/settings/page';
+    const root = writeSandbox(
+      {
+        [BUDGETED_WEB_ROUTE]: 100,
+        '/(authenticated)/layout': 200,
+        [settings]: 201,
+        // A sibling group's layout, far over budget on its own: must not leak.
+        '/(onboarding)/layout': 900,
+        '/(public)/about/page': 100,
+      },
+      // In both the page and its layout: counted once, not twice.
+      { kib: 300, keys: ['/(authenticated)/layout', settings] },
+    );
+
+    const { status, output } = runGuard(root);
+
+    // 201 page + 200 layout + 300 shared. Page-only would be 501 (under budget);
+    // double-counting the shared chunk would be 1001.
+    expect(output).toContain(`UNBUDGETED route ${settings} exceeds the hard budget (701.0 KiB`);
+    expect(output).not.toContain('UNBUDGETED route /(public)/about/page');
+    expect(status).toBe(0);
   });
 });

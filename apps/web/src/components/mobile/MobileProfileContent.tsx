@@ -14,7 +14,6 @@ import {
   LogOut,
 } from "lucide-react";
 import { toInitials } from "@propertypro/shared";
-import { createBrowserClient } from "@/lib/supabase/client";
 import { MobileBackHeader } from "@/components/mobile/MobileBackHeader";
 import { PageTransition, SlideUp } from "@/components/motion";
 
@@ -77,6 +76,7 @@ export function MobileProfileContent({
   hasFinance,
 }: MobileProfileContentProps) {
   const [loggingOut, setLoggingOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const initials = toInitials(userName);
   // v3: property_manager / root_manager are uniformly management-tier (admin).
   const canAccessCompliance =
@@ -86,8 +86,16 @@ export function MobileProfileContent({
   async function handleSignOut() {
     if (loggingOut) return;
     setLoggingOut(true);
-    const supabase = createBrowserClient();
-    await supabase.auth.signOut();
+    setSignOutFailed(false);
+    try {
+      const { createBrowserClient } = await import("@/lib/supabase/client");
+      await createBrowserClient().auth.signOut();
+    } catch {
+      // Still signed in: say so rather than let a shared device look signed out.
+      setSignOutFailed(true);
+      setLoggingOut(false);
+      return;
+    }
     window.location.href = "/auth/login";
   }
 
@@ -195,7 +203,7 @@ export function MobileProfileContent({
             className="flex w-full items-center justify-center gap-2 py-3.5 text-[15px] font-medium text-red-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"
           >
             <LogOut size={18} aria-hidden="true" />
-            {loggingOut ? "Signing out..." : "Sign Out"}
+            {loggingOut ? "Signing out..." : signOutFailed ? "Couldn't sign out. Try again" : "Sign Out"}
           </button>
         </div>
       </SlideUp>

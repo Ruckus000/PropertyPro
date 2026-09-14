@@ -31,11 +31,8 @@ vi.mock('next/navigation', () => ({
   useRouter: () => routerMock,
 }));
 
-vi.mock('@/lib/supabase/client', () => ({
-  createBrowserClient: () => ({
-    auth: { verifyOtp: vi.fn().mockResolvedValue({ error: null }) },
-  }),
-}));
+const { createBrowserClientMock } = vi.hoisted(() => ({ createBrowserClientMock: vi.fn() }));
+vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: createBrowserClientMock }));
 
 import { ProvisioningProgress } from '../../src/components/signup/provisioning-progress';
 
@@ -65,6 +62,10 @@ async function tick() {
 const DELAYED_TEXT = /taking longer than usual/i;
 
 beforeEach(() => {
+  createBrowserClientMock.mockReset();
+  createBrowserClientMock.mockReturnValue({
+    auth: { verifyOtp: vi.fn().mockResolvedValue({ error: null }) },
+  });
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   vi.useFakeTimers();
@@ -125,5 +126,32 @@ describe('ProvisioningProgress — failure tolerance', () => {
     // Five polls, four of them failures — but never three in a row.
     expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(screen.queryByText(DELAYED_TEXT)).toBeNull();
+  });
+});
+
+describe('ProvisioningProgress — completion', () => {
+  /**
+   * The Supabase client is imported on completion, not at module load, so the
+   * import itself can now reject (a chunk that fails to load). Polling has
+   * already stopped by then; without a navigation the user sits on a finished
+   * progress bar with nothing to click.
+   */
+  it('falls back to manual login when the auth client cannot be loaded', async () => {
+    createBrowserClientMock.mockImplementation(() => {
+      throw new Error('ChunkLoadError');
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { status: 'completed', loginToken: 'tok', communityId: 7 } }),
+    });
+
+    await act(async () => {
+      render(<ProvisioningProgress signupRequestId="sr-1" />);
+    });
+
+    await vi.waitFor(() =>
+      expect(routerMock.push).toHaveBeenCalledWith('/auth/login?message=portal-ready'),
+    );
   });
 });

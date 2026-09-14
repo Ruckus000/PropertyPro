@@ -12,31 +12,30 @@ type AppBuildManifest = {
  * Phase 2 representative routes measured 120-180 KiB JS each.
  * TARGET is ~110% of the Phase 2 upper bound to catch regressions early.
  * HARD allows feature growth while still catching catastrophic bloat.
- * AGGREGATE HARD is ~2x the single-route hard budget (shared chunks overlap).
+ * AGGREGATE HARD sits close to the per-route ceiling, not a multiple of it: every
+ * route's first load includes the same root and shell chunks, counted once here.
  *
  * NOTE: These budgets cover JavaScript bundles only (static/chunks/*.js).
  * CSS and font payloads are not measured.
  */
 const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
-// Ratcheted from 900 KiB after the framer-motion removal + mobile mockup
-// code-split (nav-perf PR 4), when the worst measured route was the mobile home.
+// Re-based 2026-09-13 from 700 KiB, because the NUMBER changed, not the payload.
+// Until then a route was measured as its manifest `/page` key alone, which omits
+// every ancestor layout/loading/error chunk the browser loads with it (see
+// `firstLoadChunks`). The 700 ceiling was calibrated against that under-reading:
+// on the same build, the PM portfolio read 680.7 KiB and actually loads 1190.6.
 //
-// That is no longer true and the ceiling is no longer "measured + ~10%".
-// Re-measured 2026-09-13 on a clean production build: mobile home is 411.1 KiB
-// and the worst BUDGETED route is site-editor at 663.1 KiB, with the PM
-// portfolio next at 679.1 KiB — only ~21 KiB of headroom, and the one route
-// still carrying `@tanstack/react-table`.
+// Measured 2026-09-13 on a clean production build (web:build a cache miss), after
+// the root error boundary stopped statically importing the Supabase client:
+// worst BUDGETED route is the PM portfolio at 1189.1 KiB, so 1220 is ~31 KiB of
+// headroom — the ratchet margin this file already uses. Everything under the
+// `(authenticated)` shell sits at 1000-1200 KiB, because the shell itself (root
+// + `(authenticated)` layout, loading and error chunks) is 1017.2 KiB before any
+// page adds a byte; that is the lever for a future ratchet, not any one page.
 //
-// Both routes that used to sit over this ceiling in no group at all —
-// `/auth/accept-invite` (720.2) and `/auth/reset-password` (701.4) — are fixed.
-// Re-measured 2026-09-14: NOTHING in either app is over, budgeted or not.
-//
-// Do not read that as slack. The largest UNBUDGETED route is
-// `/(authenticated)/settings/account` at 693.8 KiB — 6.2 KiB of clearance — and
-// 26 web routes sit between 600 and 694. Ratcheting this down, or enforcing it
-// app-wide (see `reportUnbudgetedRoutes`), needs those routes drained first.
-const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 700 * 1024);
-const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1300 * 1024);
+// The aggregate is re-based the same way: 1453.4 KiB measured, 1490 ceiling.
+const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 1220 * 1024);
+const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1490 * 1024);
 
 interface AppSpec {
   app: string;
@@ -158,6 +157,37 @@ function fileSizeOrZero(path: string): number {
   return statSync(path).size;
 }
 
+/**
+ * The route-segment files whose client chunks the browser loads alongside a page.
+ *
+ * A manifest `/page` entry lists only the page's OWN chunks. Every ancestor
+ * segment's layout, loading, error and not-found boundary ships in the same
+ * initial payload (Next's `create-component-tree` puts each into the seed data),
+ * and each has its own manifest key with chunks the page entry does not repeat —
+ * `/(authenticated)/dashboard/page` listed 12 of its layout's 24. Summing the page
+ * key alone under-read that route by ~450 KiB.
+ *
+ * Probed 2026-09-13 against `next start`, comparing `performance` resource entries
+ * with this union: `/auth/login` and `/` each differed by one sub-1.4 KiB file
+ * (a root `not-found` stub one loads and the other does not; a font-only
+ * `(marketing)/layout` stub). `loading` is from Next's source, not a probe —
+ * every route under one needs authentication.
+ */
+const SEGMENT_FILES = ['layout', 'loading', 'error', 'not-found', 'global-error'] as const;
+
+/** A page's own chunks plus every ancestor segment file's, each file once. */
+function firstLoadChunks(pages: Record<string, string[]>, pageKey: string): string[] {
+  const segments = pageKey.slice(0, -'/page'.length).split('/');
+  const chunks = new Set(pages[pageKey] ?? []);
+  for (let depth = 1; depth <= segments.length; depth++) {
+    const prefix = segments.slice(0, depth).join('/');
+    for (const file of SEGMENT_FILES) {
+      for (const chunk of pages[`${prefix}/${file}`] ?? []) chunks.add(chunk);
+    }
+  }
+  return [...chunks];
+}
+
 function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalBytes: number; files: string[] } {
   const files = routeJsFiles(chunks);
   const totalBytes = files.reduce((sum, file) => sum + fileSizeOrZero(join(nextRoot, file)), 0);
@@ -169,38 +199,27 @@ function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalByte
  *
  * `groups` is six hand-picked web routes and three admin ones, so a route
  * outside them can sit over the hard budget indefinitely without failing
- * anything. When this pass was added, seven unbudgeted web pages already did —
- * the largest `/(authenticated)/communities/[id]/documents` at 757.5 KiB. Two
- * remain as of 2026-09-13 (`/auth/accept-invite`, `/auth/reset-password`);
- * documents is now 634.8 KiB. This pass exists so they stop being invisible.
+ * anything. This pass exists so they stop being invisible.
  *
- * This appends to `warnings` and never to `failures`, without exception. Turning
- * pre-existing breaches red is a separate decision from being able to see them,
- * and making it here would fail every push until seven unrelated routes were
- * fixed.
+ * This appends to `warnings` and never to `failures`. Enforcement is a ratchet
+ * you install after making room, not to force the room to be made: flipping it
+ * with no margin fails first on work unrelated to performance, and the
+ * predictable response — raising the ceiling — leaves the guard weaker than
+ * report-only.
  *
- * **That decision was taken on 2026-09-14: still report-only, and here is why,**
- * so it is not re-litigated from the fact that the breach count is now zero.
- * Zero over budget makes enforcement look free. It is not. The largest
- * unbudgeted route is `/(authenticated)/settings/account` at 693.8 KiB — 6.2 KiB
- * of clearance, under 1% — and its bulk is one 176.4 KiB chunk that is the
- * `@supabase/supabase-js` browser client (auth-js, storage-js, and realtime's
- * phoenix transport), which the page needs to change an email or a password.
- * That size is structural, not an accident like the zod-through-the-barrel
- * problem the auth routes had. Twenty-six web routes sit in the 600-694 band
- * over a universal 366 KiB floor, so one import added to a shared component
- * moves all of them at once.
+ * Promote it when the largest unbudgeted route clears the ceiling by ~30 KiB,
+ * the ratchet margin used above. Measured 2026-09-13 on the first-load measure
+ * it does not: `/(authenticated)/settings/page` is 1201.1 KiB against 1220, an
+ * 18.9 KiB margin, with `pm/onboarding/website` (1175.3) next. Every one of them
+ * carries the 1017.2 KiB `(authenticated)` shell, so the room comes from the
+ * shell, not from any one page.
  *
- * Enforcing at 700 today would therefore fail first on work unrelated to
- * performance, on a route nobody chose to curate. The predictable response to
- * that is raising the ceiling, which teaches exactly the wrong reflex and leaves
- * the guard weaker than report-only. Enforcement is a ratchet you install after
- * making room, not to force the room to be made.
- *
- * Promote it when the largest unbudgeted route clears the ceiling by ~30 KiB
- * (the margin this repo already uses for a ratchet) — today that means draining
- * `settings/account` and `dashboard/visitors` (682.2). Then this function moves
- * its findings to `failures` and the two-ceiling question disappears.
+ * (An earlier version of this docblock, dated 2026-09-14, named
+ * `settings/account` at 693.8 KiB and its 176.4 KiB Supabase chunk as the thing
+ * to drain. Both came from the page-only measure: that chunk is also loaded by
+ * the `(authenticated)` layout for every signed-in route, so removing it from the
+ * page would have moved the number and saved no bytes. Where it WAS avoidable —
+ * the root error boundary, loaded on every route — it is gone.)
  *
  * It deliberately carries no "examined nothing, so refuse to pass" branch of its
  * own. `checkApp` already returns before calling this when no group resolved,
@@ -210,11 +229,10 @@ function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalByte
  * and the branch meant to catch a broken scan was unreachable. A guard that
  * cannot fire is worse than none: it reads as coverage that is not there.
  *
- * Only `/page` keys are counted. A `/layout` entry in the manifest is the
- * layout's own RSC entrypoint, not additional first-load payload — its chunks
- * are already accounted for in the pages beneath it. Summing it looks alarming
- * and means nothing: `/(authenticated)/layout` reads as 924.8 KiB while Next's
- * own First Load JS for the dashboard under it is 196 kB.
+ * Only `/page` keys are candidates: a layout is not a route. Its chunks are NOT
+ * already in the pages beneath it, though — an earlier version of this docblock
+ * said so, checked against Next's First Load JS column, which omits layouts too.
+ * `firstLoadChunks` adds them to each page instead.
  */
 function reportUnbudgetedRoutes(
   spec: AppSpec,
@@ -229,7 +247,7 @@ function reportUnbudgetedRoutes(
   const candidates = pageKeys.filter((key) => !budgeted.has(key));
 
   const measured = candidates
-    .map((key) => ({ key, totalBytes: bytesForRoute(spec.nextRoot, pages[key] ?? []).totalBytes }))
+    .map((key) => ({ key, totalBytes: bytesForRoute(spec.nextRoot, firstLoadChunks(pages, key)).totalBytes }))
     .sort((a, b) => b.totalBytes - a.totalBytes);
   const over = measured.filter((route) => route.totalBytes > HARD_ROUTE_BUDGET_BYTES);
 
@@ -295,8 +313,7 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
   const uniqueFiles = new Set<string>();
 
   for (const [group, routeKey] of selected) {
-    const chunks = pages[routeKey] ?? [];
-    const { totalBytes, files } = bytesForRoute(spec.nextRoot, chunks);
+    const { totalBytes, files } = bytesForRoute(spec.nextRoot, firstLoadChunks(pages, routeKey));
     files.forEach((file) => uniqueFiles.add(file));
 
     console.log(`[${spec.app}:${group}] ${routeKey} -> ${formatKiB(totalBytes)}`);

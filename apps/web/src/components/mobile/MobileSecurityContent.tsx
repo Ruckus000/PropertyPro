@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Lock, AlertCircle, Check, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createBrowserClient } from '@/lib/supabase/client';
 import { MobileBackHeader } from '@/components/mobile/MobileBackHeader';
 import { PageTransition, SlideUp } from '@/components/motion';
 
@@ -31,6 +30,7 @@ export function MobileSecurityContent({
   // Forgot password state
   const [resetSent, setResetSent] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetFailed, setResetFailed] = useState(false);
 
   async function handleChangePassword() {
     if (newPassword !== confirmPassword) {
@@ -46,7 +46,13 @@ export function MobileSecurityContent({
     setError(null);
     setSuccess(false);
 
-    const supabase = createBrowserClient();
+    const clientModule = await import('@/lib/supabase/client').catch(() => null);
+    if (!clientModule) {
+      setError('Failed to update password. Please try again.');
+      setLoading(false);
+      return;
+    }
+    const supabase = clientModule.createBrowserClient();
 
     // Verify current password
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -83,9 +89,16 @@ export function MobileSecurityContent({
   async function handleForgotPassword() {
     setResetLoading(true);
     setResetSent(false);
+    setResetFailed(false);
 
-    const supabase = createBrowserClient();
-    await supabase.auth.resetPasswordForEmail(email);
+    try {
+      const { createBrowserClient } = await import('@/lib/supabase/client');
+      await createBrowserClient().auth.resetPasswordForEmail(email);
+    } catch {
+      setResetFailed(true);
+      setResetLoading(false);
+      return;
+    }
 
     setResetSent(true);
     setResetLoading(false);
@@ -229,7 +242,11 @@ export function MobileSecurityContent({
                 className="inline-flex items-center gap-1.5 text-[14px] font-medium text-stone-500 underline underline-offset-2 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <KeyRound size={14} aria-hidden="true" />
-                {resetLoading ? 'Sending...' : 'Forgot your password?'}
+                {resetLoading
+                  ? 'Sending...'
+                  : resetFailed
+                    ? "Couldn't send the reset link. Try again"
+                    : 'Forgot your password?'}
               </button>
             )}
           </div>
