@@ -25,6 +25,7 @@ const {
   linkPublishedDocumentToMeetingMock,
   softDeleteDocumentDraftMock,
   createAuthoredDocumentMock,
+  linkMinutesDocumentToChecklistMock,
   meetingsTableMock,
   filtersMock,
 } = vi.hoisted(() => ({
@@ -37,6 +38,7 @@ const {
   linkPublishedDocumentToMeetingMock: vi.fn().mockResolvedValue(undefined),
   softDeleteDocumentDraftMock: vi.fn().mockResolvedValue(undefined),
   createAuthoredDocumentMock: vi.fn(),
+  linkMinutesDocumentToChecklistMock: vi.fn().mockResolvedValue(null),
   meetingsTableMock: {
     id: Symbol('meetings.id'),
     minutesApprovedAt: Symbol('meetings.minutesApprovedAt'),
@@ -102,6 +104,10 @@ vi.mock('@/lib/documents/render-pdf', () => ({
 
 vi.mock('@/lib/documents/create-authored-document', () => ({
   createAuthoredDocument: createAuthoredDocumentMock,
+}));
+
+vi.mock('@/lib/services/compliance-service', () => ({
+  linkMinutesDocumentToChecklist: linkMinutesDocumentToChecklistMock,
 }));
 
 vi.mock('@/lib/services/document-draft-service', () => ({
@@ -252,5 +258,60 @@ describe('publishing a draft authored from a meeting', () => {
 
     expect(response.status).toBe(200);
     expect(softDeleteDocumentDraftMock).toHaveBeenCalledWith(42, 5);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Compliance. A documents-row insert satisfies nothing on its own: the
+  // calculator reads `compliance_checklist_items.document_id` and never a
+  // category, and until now only the manual Link action ever wrote it — so a
+  // board could publish every meeting's minutes and the checklist still read
+  // "needs board action" forever (both minutes keys are in
+  // BOARD_ACTION_TEMPLATE_KEYS).
+  // ---------------------------------------------------------------------------
+
+  it('points the rolling-12-month minutes item at the minutes just published', async () => {
+    mockMeetingRow({ id: 13, minutesApprovedAt: null });
+    linkMinutesDocumentToChecklistMock.mockResolvedValueOnce(77);
+
+    const response = await publish();
+
+    expect(response.status).toBe(200);
+    expect(linkMinutesDocumentToChecklistMock).toHaveBeenCalledWith(42, 900, 'author-1', NOW);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'link_document',
+        resourceType: 'compliance_checklist_item',
+        resourceId: '77',
+        communityId: 42,
+        newValues: { documentId: 900 },
+      }),
+    );
+  });
+
+  it('publishes cleanly for a community that has no minutes item', async () => {
+    // Every apartment: the compliance checklist is condo/HOA-only, so there is
+    // no item to link and that is ordinary, not an error.
+    mockMeetingRow({ id: 13, minutesApprovedAt: null });
+    linkMinutesDocumentToChecklistMock.mockResolvedValueOnce(null);
+
+    const response = await publish();
+
+    expect(response.status).toBe(200);
+    expect(logAuditEventMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ resourceType: 'compliance_checklist_item' }),
+    );
+  });
+
+  it('still publishes when the checklist link fails', async () => {
+    // Bookkeeping must never discard finished work: the PDF is rendered, stored
+    // and inserted by this point.
+    mockMeetingRow({ id: 13, minutesApprovedAt: null });
+    linkMinutesDocumentToChecklistMock.mockRejectedValueOnce(new Error('checklist unavailable'));
+
+    const response = await publish();
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { documentId: number } };
+    expect(body.data.documentId).toBe(900);
   });
 });

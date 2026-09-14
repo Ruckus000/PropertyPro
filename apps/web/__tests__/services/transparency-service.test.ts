@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createScopedClientMock,
@@ -286,5 +286,174 @@ describe('transparency service', () => {
     expect(result.meetingNotices.meetings).toEqual([]);
     expect(result.minutesAvailability.totalMonths).toBe(12);
     expect(result.minutesAvailability.monthsWithMinutes).toBe(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Minutes availability.
+  //
+  // This grid used to decide a month had minutes by substring-matching the word
+  // "minutes" in a document's title/description/fileName and bucketing by the
+  // DOCUMENT's createdAt. That was wrong in the ordinary case — §718.111(12)(g)
+  // allows 30 days, so on-time minutes for a February meeting are published in
+  // March, and the page credited March while marking February missing — and it
+  // broke whenever an author renamed the draft.
+  //
+  // It now reads `meetings.minutes_approved_at`, the stamp the publish route
+  // writes and calls "the posting event §718.111(12)(g)'s 30-day window
+  // measures". The document's title is no longer consulted at all, which is what
+  // the last two cases here prove, in both directions.
+  // ---------------------------------------------------------------------------
+  describe('minutes availability', () => {
+    const COMMUNITY = {
+      id: 1,
+      slug: 'sunset-condos',
+      name: 'Sunset Condos',
+      communityType: 'condo_718' as const,
+      timezone: 'America/New_York',
+      addressLine1: null,
+      addressLine2: null,
+      city: 'Miami',
+      state: 'FL',
+      zipCode: null,
+    };
+
+    /** Pinned so the rolling 12-month window is deterministic: 2025-04 … 2026-03. */
+    const NOW = new Date('2026-03-15T12:00:00.000Z');
+
+    function withRows(
+      meetingRows: Array<Record<string, unknown>>,
+      documentRows: Array<Record<string, unknown>> = [],
+    ) {
+      queryMock.mockImplementation(async (table: unknown) => {
+        if (table === checklistTable) return checklistRows;
+        if (table === meetingsTable) return meetingRows;
+        if (table === documentsTable) return documentRows;
+        return [];
+      });
+    }
+
+    function monthOf(result: { minutesAvailability: { months: Array<{ month: string; status: string }> } }, key: string) {
+      return result.minutesAvailability.months.find((m) => m.month === key);
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('credits the month of the MEETING when its minutes are stamped', async () => {
+      withRows([
+        {
+          id: 44,
+          title: 'Board Meeting',
+          meetingType: 'board',
+          startsAt: new Date('2026-02-20T18:00:00.000Z'),
+          noticePostedAt: new Date('2026-02-18T14:00:00.000Z'),
+          // Published in March, within the statute's 30 days — February is the
+          // month that must be credited, not March.
+          minutesApprovedAt: new Date('2026-03-05T10:00:00.000Z'),
+        },
+      ]);
+
+      const result = await getTransparencyPageData(COMMUNITY);
+
+      expect(monthOf(result, '2026-02')?.status).toBe('minutes_posted');
+      expect(monthOf(result, '2026-03')?.status).toBe('not_expected');
+      expect(result.minutesAvailability.monthsWithMinutes).toBe(1);
+    });
+
+    it('reports a meeting whose minutes are not stamped as missing', async () => {
+      withRows([
+        {
+          id: 44,
+          title: 'Board Meeting',
+          meetingType: 'board',
+          startsAt: new Date('2026-02-20T18:00:00.000Z'),
+          noticePostedAt: new Date('2026-02-18T14:00:00.000Z'),
+          minutesApprovedAt: null,
+        },
+      ]);
+
+      const result = await getTransparencyPageData(COMMUNITY);
+
+      expect(monthOf(result, '2026-02')?.status).toBe('minutes_missing');
+      expect(result.minutesAvailability.monthsWithMinutes).toBe(0);
+    });
+
+    it('does not credit a month for a document merely titled "minutes"', async () => {
+      // The old substring branch would have credited 2026-01 off this document
+      // alone. There is no stamped meeting, so nothing is posted.
+      withRows(
+        [
+          {
+            id: 44,
+            title: 'Board Meeting',
+            meetingType: 'board',
+            startsAt: new Date('2026-01-20T18:00:00.000Z'),
+            noticePostedAt: new Date('2026-01-18T14:00:00.000Z'),
+            minutesApprovedAt: null,
+          },
+        ],
+        [
+          {
+            id: 100,
+            title: 'Draft minutes not yet approved',
+            description: 'Approved minutes',
+            fileName: 'minutes-2026-01.pdf',
+            createdAt: new Date('2026-01-21T10:00:00.000Z'),
+            updatedAt: new Date('2026-01-21T10:00:00.000Z'),
+          },
+        ],
+      );
+
+      const result = await getTransparencyPageData(COMMUNITY);
+
+      expect(monthOf(result, '2026-01')?.status).toBe('minutes_missing');
+      expect(result.minutesAvailability.monthsWithMinutes).toBe(0);
+    });
+
+    it('still credits the month when the minutes were renamed away from "Minutes"', async () => {
+      withRows(
+        [
+          {
+            id: 44,
+            title: 'Board Meeting',
+            meetingType: 'board',
+            startsAt: new Date('2026-02-20T18:00:00.000Z'),
+            noticePostedAt: new Date('2026-02-18T14:00:00.000Z'),
+            minutesApprovedAt: new Date('2026-03-05T10:00:00.000Z'),
+          },
+        ],
+        [
+          {
+            id: 100,
+            title: 'February Board Record',
+            description: 'Adopted record of the meeting',
+            fileName: 'feb-board-record.pdf',
+            createdAt: new Date('2026-03-05T10:00:00.000Z'),
+            updatedAt: new Date('2026-03-05T10:00:00.000Z'),
+          },
+        ],
+      );
+
+      const result = await getTransparencyPageData(COMMUNITY);
+
+      expect(monthOf(result, '2026-02')?.status).toBe('minutes_posted');
+    });
+
+    it('expects nothing of a month with no meeting', async () => {
+      withRows([]);
+
+      const result = await getTransparencyPageData(COMMUNITY);
+
+      expect(result.minutesAvailability.months).toHaveLength(12);
+      expect(
+        result.minutesAvailability.months.every((m) => m.status === 'not_expected'),
+      ).toBe(true);
+    });
   });
 });
