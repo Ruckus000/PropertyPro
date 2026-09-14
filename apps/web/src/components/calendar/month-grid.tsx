@@ -70,7 +70,7 @@ export function MonthGrid({
     <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
       <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
         <div className="flex w-full flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -171,12 +171,12 @@ export function MonthGrid({
                       className="rounded-[var(--radius-sm)] bg-[var(--surface-subtle)] px-2 py-1 text-xs text-[var(--text-secondary)]"
                     >
                       {event.type === 'meeting' ? (
-                        <span className="inline-flex items-center gap-1.5">
+                        <span className="flex items-center gap-1.5">
                           <span className={`inline-flex h-2 w-2 rounded-full ${meetingTypeDotClass(event.meetingType)}`} />
                           <span className="truncate">{event.title}</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5">
+                        <span className="flex items-center gap-1.5">
                           <span className="inline-flex h-2 w-2 rounded-full bg-[var(--status-warning)]" />
                           <span className="truncate">{event.assessmentTitle}</span>
                         </span>

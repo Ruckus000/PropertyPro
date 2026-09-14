@@ -132,10 +132,10 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
               onChange={(event) => setEnabled(event.target.checked)}
               type="checkbox"
             />
-            <span>
+            <span className="min-w-0">
               <span className="block text-sm font-medium text-content">Enable public transparency page</span>
               <span className="block text-sm text-content-secondary">
-                When enabled, your public URL is available at <code>{transparencyUrl}</code>.
+                When enabled, your public URL is available at <code className="break-all">{transparencyUrl}</code>.
               </span>
             </span>
           </label>
