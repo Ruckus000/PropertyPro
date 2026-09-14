@@ -27,10 +27,14 @@ const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
 // portfolio next at 679.1 KiB — only ~21 KiB of headroom, and the one route
 // still carrying `@tanstack/react-table`.
 //
-// Two routes remain OVER this ceiling without failing, because they are in no
-// group: `/auth/accept-invite` (720.2) and `/auth/reset-password` (701.4).
-// `reportUnbudgetedRoutes` below surfaces them; enforcing them is a separate
-// decision. Do not ratchet this down until they are dealt with.
+// Both routes that used to sit over this ceiling in no group at all —
+// `/auth/accept-invite` (720.2) and `/auth/reset-password` (701.4) — are fixed.
+// Re-measured 2026-09-14: NOTHING in either app is over, budgeted or not.
+//
+// Do not read that as slack. The largest UNBUDGETED route is
+// `/(authenticated)/settings/account` at 693.8 KiB — 6.2 KiB of clearance — and
+// 26 web routes sit between 600 and 694. Ratcheting this down, or enforcing it
+// app-wide (see `reportUnbudgetedRoutes`), needs those routes drained first.
 const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 700 * 1024);
 const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1300 * 1024);
 
@@ -175,6 +179,29 @@ function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalByte
  * and making it here would fail every push until seven unrelated routes were
  * fixed.
  *
+ * **That decision was taken on 2026-09-14: still report-only, and here is why,**
+ * so it is not re-litigated from the fact that the breach count is now zero.
+ * Zero over budget makes enforcement look free. It is not. The largest
+ * unbudgeted route is `/(authenticated)/settings/account` at 693.8 KiB — 6.2 KiB
+ * of clearance, under 1% — and its bulk is one 176.4 KiB chunk that is the
+ * `@supabase/supabase-js` browser client (auth-js, storage-js, and realtime's
+ * phoenix transport), which the page needs to change an email or a password.
+ * That size is structural, not an accident like the zod-through-the-barrel
+ * problem the auth routes had. Twenty-six web routes sit in the 600-694 band
+ * over a universal 366 KiB floor, so one import added to a shared component
+ * moves all of them at once.
+ *
+ * Enforcing at 700 today would therefore fail first on work unrelated to
+ * performance, on a route nobody chose to curate. The predictable response to
+ * that is raising the ceiling, which teaches exactly the wrong reflex and leaves
+ * the guard weaker than report-only. Enforcement is a ratchet you install after
+ * making room, not to force the room to be made.
+ *
+ * Promote it when the largest unbudgeted route clears the ceiling by ~30 KiB
+ * (the margin this repo already uses for a ratchet) — today that means draining
+ * `settings/account` and `dashboard/visitors` (682.2). Then this function moves
+ * its findings to `failures` and the two-ceiling question disappears.
+ *
  * It deliberately carries no "examined nothing, so refuse to pass" branch of its
  * own. `checkApp` already returns before calling this when no group resolved,
  * and every resolved key ends in `/page` — so a sweep that reaches this function
@@ -201,14 +228,26 @@ function reportUnbudgetedRoutes(
   const pageKeys = Object.keys(pages).filter((key) => key.endsWith('/page'));
   const candidates = pageKeys.filter((key) => !budgeted.has(key));
 
-  const over = candidates
+  const measured = candidates
     .map((key) => ({ key, totalBytes: bytesForRoute(spec.nextRoot, pages[key] ?? []).totalBytes }))
-    .filter((route) => route.totalBytes > HARD_ROUTE_BUDGET_BYTES)
     .sort((a, b) => b.totalBytes - a.totalBytes);
+  const over = measured.filter((route) => route.totalBytes > HARD_ROUTE_BUDGET_BYTES);
 
   console.log(
     `[${spec.app}] unbudgeted page routes scanned: ${candidates.length}; over hard budget: ${over.length}`,
   );
+
+  // `over: 0` on its own reads as "all clear", and on 2026-09-14 it meant a
+  // route with 6.2 KiB of headroom. Naming the largest one costs a line and is
+  // the difference between a clean scan and a scan that found nothing to say.
+  const largest = measured[0];
+  if (largest) {
+    const headroom = HARD_ROUTE_BUDGET_BYTES - largest.totalBytes;
+    console.log(
+      `[${spec.app}] largest unbudgeted route: ${largest.key} at ${formatKiB(largest.totalBytes)} ` +
+        `(${headroom >= 0 ? `${formatKiB(headroom)} below` : `${formatKiB(-headroom)} OVER`} the hard budget)`,
+    );
+  }
 
   for (const route of over) {
     warnings.push(
