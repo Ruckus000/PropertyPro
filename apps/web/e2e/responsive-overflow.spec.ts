@@ -18,6 +18,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { loginAs } from './helpers/dev-login';
+import { findOverflows } from './helpers/overflow';
 
 /**
  * 375 and 414 are the two common phone widths; 768 is tablet portrait; 1024 and
@@ -39,72 +40,6 @@ import { loginAs } from './helpers/dev-login';
  */
 const VIEWPORTS = [375, 414, 768, 1024, 1280, 1440] as const;
 
-type Overflow = { selector: string; client: number; scroll: number; over: number };
-
-/**
- * Elements are allowed to overflow *if a real scroller owns them*. `<main>` does not
- * count: it carries `overflow-y-auto`, and per CSS spec a single `auto` axis makes the
- * computed `overflow-x` `auto` as well — so treating it as a scroller marks every
- * page-level violation acceptable. The first draft of this probe did exactly that and
- * reported "no violations" against three screens that were provably broken. A page that
- * scrolls sideways is the defect, not the remedy.
- */
-async function findOverflows(page: Page): Promise<Overflow[]> {
-  return page.evaluate(() => {
-    const describe = (el: Element): string => {
-      const parts: string[] = [];
-      for (let n: Element | null = el; n && parts.length < 4; n = n.parentElement) {
-        const cls = (n.getAttribute('class') ?? '').trim().split(/\s+/).slice(0, 3).join('.');
-        parts.unshift(n.tagName.toLowerCase() + (cls ? `.${cls}` : ''));
-        if (n.tagName === 'MAIN') break;
-      }
-      return parts.join(' > ');
-    };
-
-    const ownedByScroller = (el: Element): boolean => {
-      for (let n = el.parentElement; n; n = n.parentElement) {
-        if (n.tagName === 'MAIN') return false;
-        const ox = getComputedStyle(n).overflowX;
-        if (ox === 'auto' || ox === 'scroll') return true;
-      }
-      return false;
-    };
-
-    // Visually-hidden text is not a bleed. Tailwind's `sr-only` is
-    // `width:1px; overflow:hidden; clip:rect(0,0,0,0)`, so clientWidth is 1 and
-    // scrollWidth is the full string — which looks exactly like clipped-without-
-    // ellipsis to the rule below. `PageHeader` renders an `h1.sr-only` on every
-    // authenticated page, so without this the probe reports every page in the app.
-    // Caught by CI on the run that first registered this spec: 3 failures, all
-    // sr-only h1s and legends.
-    const visuallyHidden = (cs: CSSStyleDeclaration): boolean =>
-      cs.clip === 'rect(0px, 0px, 0px, 0px)' || cs.clipPath === 'inset(50%)';
-
-    const found: Overflow[] = [];
-    const root = document.querySelector('main') ?? document.body;
-    for (const el of root.querySelectorAll('*')) {
-      if (el.clientWidth <= 1) continue;
-      if (el.scrollWidth <= el.clientWidth + 1) continue;
-      const cs = getComputedStyle(el);
-      if (visuallyHidden(cs)) continue;
-      const ox = cs.overflowX;
-      // The element scrolls its own content — that is a designed affordance, not a bleed.
-      if (ox === 'auto' || ox === 'scroll') continue;
-      // `truncate` (overflow:hidden + ellipsis) legitimately reports scrollWidth >
-      // clientWidth. It is the intended behaviour, and it is visibly ellipsised.
-      if (ox === 'hidden' && cs.textOverflow === 'ellipsis') continue;
-      if (ownedByScroller(el)) continue;
-      found.push({
-        selector: describe(el),
-        client: el.clientWidth,
-        scroll: el.scrollWidth,
-        over: el.scrollWidth - el.clientWidth,
-      });
-    }
-    return found.slice(0, 10);
-  });
-}
-
 async function expectNoBleed(page: Page, where: string) {
   const pageScroll = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
@@ -120,7 +55,7 @@ async function expectNoBleed(page: Page, where: string) {
     overflows,
     `${where}: content overflows its box with no scroller to reveal it —\n` +
       overflows
-        .map((o) => `  ${o.selector}  client=${o.client} scroll=${o.scroll} (+${o.over}px)`)
+        .map((o) => `  ${o.selector}  parent box ends at ${o.box}, element ends at ${o.right} (+${o.over}px)`)
         .join('\n'),
   ).toEqual([]);
 }
