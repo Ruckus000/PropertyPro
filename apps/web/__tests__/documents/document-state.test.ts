@@ -273,9 +273,29 @@ describe('timelineRows', () => {
       NOW,
     );
     expect(rows[0]?.bar).toEqual({ from: 2, to: 7 });
-    // A gap past its deadline is the only thing that reads as already missed.
+    // A gap past its deadline reads as already missed. So does a LINKED record
+    // that went overdue — see the case below; this is not the only one.
     expect(rows[0]?.tone).toBe('bad');
     expect(rows[0]?.label).toBe('no file');
+  });
+
+  it('scores a linked but overdue record as missed, not as on file', () => {
+    // The contradiction this closes: `open` is `isGap || isOverdue`, so this row
+    // has always drawn an exposure bar — while `tone` only consulted `isOverdue`
+    // inside the gap branch, so it scored `ok` and read 'on file'. A green row
+    // with an open exposure span.
+    //
+    // Reachable because calculateComplianceStatus demotes a LINKED item to
+    // 'overdue' once its document falls outside the rolling window, and minutes
+    // now auto-link and write documentPostedAt.
+    const rows = timelineRows(
+      [doc({ id: 5, publicAccess: true })],
+      [item({ documentId: 5, deadline: '2026-03-10T00:00:00.000Z', status: 'overdue' })],
+      NOW,
+    );
+    expect(rows[0]?.tone).toBe('bad');
+    expect(rows[0]?.label).toBe('overdue');
+    expect(rows[0]?.bar).toEqual({ from: 2, to: 7 });
   });
 
   it('separates a gap that is merely open from one already missed', () => {
