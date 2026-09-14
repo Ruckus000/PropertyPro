@@ -11,6 +11,7 @@ const {
   logAuditEventMock,
   scopedInsertMock,
   scopedQueryMock,
+  scopedQueryWhereMock,
   scopedSoftDeleteMock,
   scopedUpdateMock,
   documentsTable,
@@ -31,6 +32,7 @@ const {
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   scopedInsertMock: vi.fn(),
   scopedQueryMock: vi.fn(),
+  scopedQueryWhereMock: vi.fn(),
   scopedSoftDeleteMock: vi.fn(),
   scopedUpdateMock: vi.fn(),
   documentsTable: Symbol('documents'),
@@ -146,6 +148,14 @@ function resetRouteMocks() {
   });
   createNotificationsForEventMock.mockResolvedValue({ created: 0, skipped: 0 });
   scopedUpdateMock.mockResolvedValue([]);
+  // Default: nothing references the uploaded path, so cleanup is free to delete.
+  //
+  // Deliberately its OWN mock and NOT aliased to scopedQueryMock the way
+  // selectFrom is below. scopedQueryMock is set to a non-empty document array in
+  // several cases here; aliasing would make isFilePathReferenced answer
+  // "referenced" for every one of them, cleanup would decline every delete, and
+  // every cleanup assertion in this file would pass while testing nothing.
+  scopedQueryWhereMock.mockResolvedValue([]);
   createScopedClientMock.mockReturnValue({
     insert: scopedInsertMock,
     query: scopedQueryMock,
@@ -153,6 +163,8 @@ function resetRouteMocks() {
     // instead of scoped.query + JS .find(). Alias selectFrom to the same
     // queryMock so existing test rows feed through unchanged.
     selectFrom: scopedQueryMock,
+    // The reference guard in deleteUnreferencedUpload — see resetRouteMocks.
+    queryWhere: scopedQueryWhereMock,
     softDelete: scopedSoftDeleteMock,
     // DELETE now unlinks compliance checklist items that reference the doc
     // before soft-deleting it.

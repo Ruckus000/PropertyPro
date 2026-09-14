@@ -1,7 +1,6 @@
 import {
   createPresignedDownloadUrl,
   createScopedClient,
-  deleteStorageObject,
   documents,
   logAuditEvent,
 } from '@propertypro/db';
@@ -9,6 +8,7 @@ import { AppError, UnprocessableEntityError, ValidationError } from '@/lib/api/e
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
 import { createNotificationsForEvent, queueNotificationDetailed } from '@/lib/services/notification-service';
+import { deleteUnreferencedUpload } from './upload-cleanup';
 import type { DocumentMutationResult, DocumentMutationWarning } from './types';
 
 type DocumentSourceType = 'library' | 'violation_evidence';
@@ -42,10 +42,6 @@ const DOCUMENT_NOTIFICATION_WARNING: DocumentMutationWarning = {
   message: 'The document was uploaded, but community notifications could not be sent.',
 };
 
-function stringifyUnknownError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 async function downloadStorageBytes(path: string): Promise<Uint8Array> {
   const signedUrl = await createPresignedDownloadUrl('documents', path, 300);
   const res = await fetch(signedUrl);
@@ -57,22 +53,23 @@ async function downloadStorageBytes(path: string): Promise<Uint8Array> {
   return new Uint8Array(buffer);
 }
 
+/**
+ * Reject an upload that failed validation, reclaiming its bytes.
+ *
+ * Goes through `deleteUnreferencedUpload` rather than calling
+ * `deleteStorageObject` directly, and that is a SECURITY fix, not a
+ * refactor. The direct call had no reference check, so a member of this
+ * community holding `documents:write` could pass an EXISTING document's
+ * `file_path` with a deliberately wrong `fileSize`, trip the size-mismatch
+ * branch below, and destroy that document's bytes — leaving the row behind
+ * pointing at nothing and every download 404ing. `validateUploadFilePath` does
+ * not stop it: the victim's path is in the same community and matches the
+ * prefix. See `upload-cleanup.ts` for the two rules.
+ */
 async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never> {
-  let cleanupSucceeded = true;
-  let cleanupError: string | undefined;
-
-  try {
-    await deleteStorageObject('documents', context.filePath);
-  } catch (error) {
-    cleanupSucceeded = false;
-    cleanupError = stringifyUnknownError(error);
-    // eslint-disable-next-line no-console
-    console.error('[documents] failed to clean up invalid upload', {
-      communityId: context.communityId,
-      filePath: context.filePath,
-      error: cleanupError,
-    });
-  }
+  const cleanup = await deleteUnreferencedUpload(context.communityId, context.filePath);
+  const cleanupSucceeded = cleanup.reason === 'deleted';
+  const cleanupError = cleanup.error;
 
   await logAuditEvent({
     userId: context.userId,
@@ -87,6 +84,10 @@ async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never
       fileSize: context.fileSize,
       cleanupAttempted: true,
       cleanupSucceeded,
+      // Not just "it didn't delete" but why. 'referenced' in particular is a
+      // deliberate refusal, not a failure, and the two must not read alike in
+      // an append-only log.
+      ...(cleanupSucceeded ? {} : { cleanupSkippedReason: cleanup.reason }),
       ...(cleanupError ? { cleanupError } : {}),
       ...(context.details ?? {}),
     },
