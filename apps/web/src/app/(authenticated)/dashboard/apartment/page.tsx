@@ -13,11 +13,7 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
-import {
-  createApartmentDashboardTrace,
-  loadApartmentMetrics,
-  type ApartmentDashboardTrace,
-} from '@/lib/queries/apartment-metrics';
+import { loadApartmentMetrics } from '@/lib/queries/apartment-metrics';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
@@ -32,12 +28,7 @@ interface ApartmentDashboardPageProps {
 export default async function ApartmentDashboardPage({
   searchParams,
 }: ApartmentDashboardPageProps) {
-  // TEMPORARY DIAGNOSTIC — see createApartmentDashboardTrace.
-  const pageTrace = createApartmentDashboardTrace('page', null);
-  const [resolvedSearchParams, requestHeaders] = await pageTrace.time(
-    'page:params-headers',
-    Promise.all([searchParams, headers()]),
-  );
+  const [resolvedSearchParams, requestHeaders] = await Promise.all([searchParams, headers()]);
 
   const context = resolveCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
@@ -48,12 +39,8 @@ export default async function ApartmentDashboardPage({
     redirect('/dashboard');
   }
 
-  const trace = createApartmentDashboardTrace('page', context.communityId);
-  const userId = await trace.time('page:auth', requireAuthenticatedUserId());
-  const membership = await trace.time(
-    'page:membership',
-    requireCommunityMembership(context.communityId, userId),
-  );
+  const userId = await requireAuthenticatedUserId();
+  const membership = await requireCommunityMembership(context.communityId, userId);
 
   // Feature gate: redirect non-apartment communities [AGENTS #34]
   const features = getFeaturesForCommunity(membership.communityType);
@@ -73,8 +60,7 @@ export default async function ApartmentDashboardPage({
 
   // Started (not awaited) so the metrics resolve inside the Suspense
   // boundary — the route shell flushes immediately and panels stream in.
-  const metricsPromise = loadApartmentMetrics(context.communityId, userId, membership, trace);
-  trace.log('page:returning-shell');
+  const metricsPromise = loadApartmentMetrics(context.communityId, userId, membership);
 
   return (
     <Suspense fallback={<ApartmentDashboardSkeleton />}>
@@ -82,7 +68,6 @@ export default async function ApartmentDashboardPage({
         metricsPromise={metricsPromise}
         communityId={context.communityId}
         canWriteAnnouncements={canWriteAnnouncements}
-        trace={trace}
       />
     </Suspense>
   );
@@ -105,17 +90,14 @@ interface ApartmentDashboardPanelsProps {
   metricsPromise: ReturnType<typeof loadApartmentMetrics>;
   communityId: number;
   canWriteAnnouncements: boolean;
-  trace: ApartmentDashboardTrace;
 }
 
 async function ApartmentDashboardPanels({
   metricsPromise,
   communityId,
   canWriteAnnouncements,
-  trace,
 }: ApartmentDashboardPanelsProps) {
-  const metrics = await trace.time('panels:await-metrics', metricsPromise);
-  trace.log('panels:rendering');
+  const metrics = await metricsPromise;
 
   return (
     <div className="space-y-6">
