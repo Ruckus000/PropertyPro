@@ -76,7 +76,24 @@ if (!databaseUrl) {
  * nothing.) The admin health probe goes over PostgREST and consumes no pooler
  * slots at all, so it stays green through total saturation.
  */
-const POOL_MAX = 3;
+/*
+ * TEMPORARY DIAGNOSTIC (2026-09-14) — revert to 3 after one test load.
+ *
+ * `/dashboard/apartment` for one community hangs to Vercel's 300s timeout.
+ * Timing logs (#1139) show the page's six queries finishing, while the
+ * layout's `detectDemoInfo` query, sent a moment later, never resolves.
+ * Postgres shows that query `active` / `ClientRead`. The theory is that
+ * postgres.js pipelines queries onto busy connections once all `max` are in use,
+ * and that a pipelined query can stall behind Supavisor's transaction mode.
+ *
+ * At 10, the page's eight concurrent queries each get their own connection, so
+ * nothing pipelines. If the dashboard loads, pipelining is the cause. The cost is
+ * the EMAXCONN exposure described above, accepted for a short, low-traffic
+ * window. `max_pipeline: 0` would have been the targeted test, but it skips
+ * `sql.begin`'s connection reservation (connection.js:173-177) and throws
+ * UNSAFE_TRANSACTION, measured locally.
+ */
+const POOL_MAX = 10;
 
 const globalForDb = globalThis as unknown as {
   __propertyproPgClient?: { url: string; client: ReturnType<typeof postgres> };
