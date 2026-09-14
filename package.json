@@ -56,6 +56,7 @@
     "guard:admin-semantic-css": "tsx scripts/verify-admin-semantic-css.ts",
     "guard:class-resolution": "tsx scripts/verify-web-class-resolution.ts",
     "guard:page-padding": "tsx scripts/verify-page-padding.ts",
+    "guard:responsive-geometry": "tsx scripts/verify-responsive-geometry.ts",
     "guard:page-state-copy": "tsx scripts/verify-page-state-copy.ts",
     "guard:audit-log-trigger-overrides": "tsx scripts/verify-audit-log-trigger-overrides.ts",
     "guard:sanitizer-deps": "tsx scripts/verify-sanitizer-deps.ts",

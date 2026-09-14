@@ -100,8 +100,18 @@ export function FinanceKpiRow({
   const delinquencyValue = delinquencyEnabled ? formatCents(overdueCents) : '--';
   const delinquentUnitsValue = delinquencyEnabled ? String(delinquentCount) : '--';
 
+  /*
+   * Four-up at `xl:`, not `lg:`. `lg:` is the one breakpoint that must never
+   * widen a grid inside the authenticated shell: it is the pixel where the
+   * 260px rail appears (`app-shell.tsx`, `hidden lg:block`), so the content
+   * column DROPS from ~959px to ~684px exactly as the fourth column arrives.
+   * Measured in Chromium with currency values: at 1024px each card is 159px
+   * while the value needs 173px (6 overflowing boxes); at 1152px, 4. `xl:`
+   * measures 0 at every width and is identical to `lg:` from 1280px up, so
+   * this costs nothing above the band it fixes.
+   */
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         title="Billed This Month"
         value={formatCents(billedCents)}
