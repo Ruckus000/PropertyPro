@@ -110,7 +110,12 @@ export function MonthGrid({
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-2">
+        {/* `gap-1` at base. Seven columns is not negotiable for a month grid, so
+            the gutters and the cell padding are the only slack there is: at 375px
+            the 277px grid with `gap-2` and `p-2` left each cell a 15px CONTENT box,
+            which crushed the 28px day-number badge to 10px and pushed the mobile
+            event-count label out. `gap-1`/`p-1` below `sm` recovers ~17px per cell. */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {days.map((day) => {
             const dateKey = format(day, 'yyyy-MM-dd');
             const dayEvents = eventsByDateKey.get(dateKey) || [];
@@ -143,14 +148,14 @@ export function MonthGrid({
                   }
                 }}
                 className={[
-                  'min-h-[4.75rem] rounded-[var(--radius-md)] border p-2 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-page)] sm:min-h-[7rem]',
+                  'min-h-[4.75rem] rounded-[var(--radius-md)] border p-1 sm:p-2 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-page)] sm:min-h-[7rem]',
                   isCurrentMonth
                     ? 'border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                     : 'border-[var(--border-subtle)] bg-[var(--surface-subtle)] text-[var(--text-disabled)] hover:bg-[var(--surface-hover)]',
                   isSelected ? 'border-[var(--interactive-primary)] bg-[var(--surface-hover)]' : '',
                 ].join(' ')}
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
                   <span
                     className={[
                       'inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold',

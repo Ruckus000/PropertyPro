@@ -76,9 +76,16 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
         className="flex items-start justify-between gap-4 rounded-lg border border-edge bg-surface-card p-5"
         data-testid="support-access-settings-loading"
       >
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-64" />
+        {/* `min-w-0` + a fluid second bar, because the LOADED state below is
+            fluid and this must match it. `w-64` is 256px fixed; at 375px the
+            card's content box is 287px, so with `gap-4` and the 44px switch
+            placeholder there are 227px to work with and the row pushed the
+            (correctly) `shrink-0` switch 63px out of the card. Only visible
+            while `loading`, which is why a sweep catches it or misses it
+            depending on how fast the fetch resolves. */}
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-32 max-w-full" />
+          <Skeleton className="h-3 w-64 max-w-full" />
         </div>
         <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
       </div>
