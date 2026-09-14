@@ -59,7 +59,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {CATEGORIES.map((c) => (
             <button
               key={c.value}
