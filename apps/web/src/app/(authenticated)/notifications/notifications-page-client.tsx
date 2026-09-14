@@ -81,7 +81,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
             type="checkbox"
             checked={unreadOnly}
             onChange={(e) => { setUnreadOnly(e.target.checked); resetPagination(); }}
-            className="rounded"
+            className="h-4 w-4 shrink-0 rounded"
           />
           Unread only
         </label>

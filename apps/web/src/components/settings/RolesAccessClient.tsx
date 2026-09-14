@@ -671,7 +671,7 @@ function BoardSection({
                         type="checkbox"
                         checked={ackChecked}
                         onChange={(e) => setAckChecked(e.target.checked)}
-                        className="mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                        className="h-4 w-4 shrink-0 mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                         data-testid={`board-ack-${member.userId}`}
                       />
                       <span>

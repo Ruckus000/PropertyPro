@@ -179,10 +179,17 @@ export function SubmissionDetail({
         title={submission.messageSubject ?? `Submission #${submission.id}`}
       />
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* Two-column layout — split at `xl`, not `lg`.
+          At exactly 1024 the authenticated content column is 684px (viewport less
+          the 260px pushing sidebar and the page gutter), so a 5-track grid with
+          `gap-6` gives this `col-span-2` rail 259px. Card padding, the `gap-3`
+          row and the leading icon take 68 of that, leaving a 157px button row
+          against a 175px "Open signing page" button — `flex-wrap` cannot help
+          when one item alone exceeds the line. At `xl` the rail is 362px and
+          everything fits; below it the page is a single 684px column. */}
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         {/* Left: PDF preview */}
-        <div className="lg:col-span-3">
+        <div className="xl:col-span-3">
           <Card className="overflow-hidden">
             {data.previewPdfUrl ? (
               <div className="p-4">
@@ -210,7 +217,7 @@ export function SubmissionDetail({
         </div>
 
         {/* Right: Status + signers + timeline */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="xl:col-span-2 space-y-4">
           {/* Status header */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
