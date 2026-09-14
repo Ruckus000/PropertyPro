@@ -17,9 +17,15 @@
  * it. That is deliberately the cautious direction: it over-reports the duty
  * rather than telling a board it has posted something it has not.
  *
- * Note that `documents.public_access` currently has no writer anywhere in the
- * product, so `publicCount` reads 0 for every community and every linked
- * document reads `owed`. That is the true posture, not a bug in this module.
+ * Note that `documents.public_access` reads false for every row in production
+ * today — no community has ever flipped it — so `publicCount` is 0 and every
+ * linked document reads `owed`. That is a fact about the DATA, not about the
+ * code. The flag has a writer: `setDocumentPublicAccess` (documents-service),
+ * reached from `PATCH /api/v1/documents` via `useSetDocumentPublicAccess` and
+ * the inspector's "Put on public site" button, available to condo and HOA
+ * communities on any paid plan. So `public` is a live state one click away,
+ * not an unreachable one — this module must keep handling it, and the zero is
+ * not something to design around.
  */
 
 export type DocumentExtractionStatus =

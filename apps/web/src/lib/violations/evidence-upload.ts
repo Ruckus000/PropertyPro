@@ -10,9 +10,16 @@ interface DocumentCreateResponse {
  * evidence infrastructure and returns the created document id.
  *
  * Flow:
- *  1. POST /api/v1/upload           → presigned URL + temp document record
+ *  1. POST /api/v1/upload           → presigned URL + storage path. NO record is
+ *                                     created; the response's `documentId` is a
+ *                                     UUID used only to namespace the path. The
+ *                                     row is written in step 3.
  *  2. PUT  <presigned url>          → direct-to-storage upload (bypasses Vercel 4.5MB limit)
  *  3. POST /api/v1/violations/evidence → finalizes hidden evidence metadata
+ *
+ * Because step 1 records nothing, a failure in step 3 leaves the bytes in the
+ * bucket with no row pointing at them. `withUploadCleanup` on that route
+ * reclaims them; `pnpm documents:orphan-report` measures whatever it missed.
  */
 export async function uploadEvidencePhoto(
   communityId: number,
