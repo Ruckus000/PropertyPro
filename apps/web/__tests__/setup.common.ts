@@ -42,3 +42,37 @@ vi.mock('@/components/pdf/pdf-viewer', () => ({
 vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
   requireEntitledForAdminRead: vi.fn(),
 }));
+
+// `withCronJob` — the identity wrapper on EVERY cron route — calls
+// `recordCronRun` and `registerCronJobs`, and both reach the database through
+// `createUnscopedClient()`. Importing them pulls `@propertypro/db/unsafe` →
+// `drizzle.ts`, which throws "Missing DATABASE_URL" at module scope. Four route
+// test files (account-lifecycle ×2, coupon-sync-retry, provisioning-watchdog)
+// never mocked it, so they failed at COLLECTION here and, with any DATABASE_URL
+// set, spent 5s per test on a connection that could not be made — reported as a
+// vitest timeout, which is what the timeout is for.
+//
+// The 5s failure was the benign outcome. `recordCronRun` is an UPSERT on
+// `cron_runs` keyed by `jobSlug`, and `recordHeartbeat` swallows every error, so
+// on a machine whose DATABASE_URL resolves — which for this repo's `.env.local`
+// is PRODUCTION — those tests silently overwrite the live heartbeat row for
+// three real jobs, `lastError` and `consecutiveFailures` included. That is the
+// admin console's /health screen, rewritten by a unit test, with nothing said.
+//
+// No coverage is lost. The heartbeat contract is asserted against these two
+// functions in `__tests__/cron/with-cron-job.test.ts` (which mocks them itself,
+// with assertions) and against a real database in
+// `__tests__/integration/cron-run-heartbeat.integration.test.ts`, which the unit
+// projects exclude. Per-file `vi.mock` still takes precedence, which is how
+// cron-health-route and revenue-snapshot-route keep their own stubs.
+//
+// All THREE runtime exports are stubbed, not just the two that reach
+// `withCronJob`. A factory replaces the whole module, so omitting `listCronRuns`
+// would leave `/internal/cron-health` calling `undefined` the moment its test
+// stopped mocking the module itself — the trap documented in
+// provisioning-watchdog-route.test.ts, installed globally.
+vi.mock('@/lib/services/cron-run-service', () => ({
+  recordCronRun: vi.fn().mockResolvedValue(undefined),
+  registerCronJobs: vi.fn().mockResolvedValue(undefined),
+  listCronRuns: vi.fn().mockResolvedValue([]),
+}));

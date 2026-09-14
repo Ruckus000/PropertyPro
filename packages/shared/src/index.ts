@@ -141,6 +141,7 @@ export * from './constants/subscription-statuses';
 export * from './constants/legal';
 export * from './constants/cancellation-reasons';
 export * from './auth/password-policy';
+export * from './auth/password-policy-zod';
 export * from './billing/permissions';
 export * from './billing/stripe-mode';
 export * from './billing/signup-trial';

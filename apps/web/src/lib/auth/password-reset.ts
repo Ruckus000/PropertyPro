@@ -8,6 +8,7 @@
  * regardless of rate-limit branch or Supabase response time.
  */
 
+import { buildPasswordZodSchema } from '@propertypro/shared';
 import { createServerClient } from '@propertypro/db/supabase/server';
 import {
   checkPasswordResetRateLimit,
@@ -89,10 +90,33 @@ export async function requestPasswordReset(
  * The reset link redirects to /auth/reset-password with a Supabase auth code
  * in the URL fragment. The client exchanges this code for a session, then
  * calls this function to set the new password.
+ *
+ * ## This is where the password policy is enforced
+ *
+ * It did not used to be enforced anywhere on this path. The form ran the policy
+ * client-side and this function handed whatever it received straight to
+ * `supabase.auth.updateUser`, so anyone holding a valid recovery session could
+ * call the server action directly — it is exported from a `'use server'`
+ * module — and set a password the policy forbids. Supabase's own minimum (6
+ * characters by default) was the only floor. The invitation path never had this
+ * gap: `api/v1/invitations` validates length in its contract.
+ *
+ * The client still checks first, for instant feedback. This check is the one
+ * that decides.
  */
+const passwordSchema = buildPasswordZodSchema();
+
 export async function updatePassword(
   newPassword: string,
 ): Promise<ResetPasswordResult> {
+  const policy = passwordSchema.safeParse(newPassword);
+  if (!policy.success) {
+    return {
+      success: false,
+      message: policy.error.issues[0]?.message ?? 'Password does not meet the requirements.',
+    };
+  }
+
   try {
     const supabase = await createServerClient();
 

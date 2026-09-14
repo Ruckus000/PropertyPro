@@ -29,6 +29,17 @@ const resolveConfig = {
     '@': path.resolve(__dirname, 'src'),
     '@propertypro/db': path.resolve(__dirname, '../../packages/db/src'),
     '@propertypro/email': path.resolve(__dirname, '../../packages/email/src'),
+    // MORE SPECIFIC FIRST. Vite aliases are prefix replacements tried in order,
+    // so the bare '@propertypro/shared' entry below would rewrite this subpath
+    // to `packages/shared/src/password-policy`, which does not exist — the file
+    // lives under `src/auth/`. The subpath exists so client components can reach
+    // the password policy without pulling zod through the bundled barrel; the
+    // package's own `exports` map handles it in a real build, but vitest
+    // resolves through these aliases instead and never sees that map.
+    '@propertypro/shared/password-policy': path.resolve(
+      __dirname,
+      '../../packages/shared/src/auth/password-policy.ts',
+    ),
     '@propertypro/shared': path.resolve(__dirname, '../../packages/shared/src'),
     '@propertypro/theme': path.resolve(__dirname, '../../packages/theme/src'),
     '@propertypro/tokens': path.resolve(__dirname, '../../packages/tokens/src'),

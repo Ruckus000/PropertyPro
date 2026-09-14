@@ -3,11 +3,30 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { resetPasswordSchema } from '@/lib/auth/schemas';
+import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
 import { updatePasswordAction } from '@/lib/auth/actions';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 import { Skeleton } from '@/components/ui/skeleton';
+
+/**
+ * Same policy, same messages, same shape as `set-password-form.tsx` — which has
+ * always validated this way. This used to run `resetPasswordSchema`, and that
+ * one import pulled zod (96.7 KiB) into the route, putting it over its bundle
+ * budget. `PASSWORD_POLICY.rules` are plain predicates, so the check is
+ * identical without the library.
+ *
+ * This is FEEDBACK, not enforcement: `updatePassword` in
+ * `lib/auth/password-reset.ts` is the authority and validates independently.
+ */
+function validatePassword(pw: string): string | null {
+  for (const rule of PASSWORD_POLICY.rules) {
+    if (!rule.test(pw)) {
+      return rule.message;
+    }
+  }
+  return null;
+}
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -82,16 +101,20 @@ export function ResetPasswordForm() {
     e.preventDefault();
     setError('');
 
-    const parsed = resetPasswordSchema.safeParse({ password, confirmPassword });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Invalid input');
+    const invalid = validatePassword(password);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setLoading(true);
 
     try {
-      const result = await updatePasswordAction(parsed.data.password);
+      const result = await updatePasswordAction(password);
 
       if (!result.success) {
         setError(result.message);

@@ -24,6 +24,11 @@
       "types": "./dist/observability/index.d.ts",
       "import": "./dist/observability/index.js",
       "default": "./dist/observability/index.js"
+    },
+    "./password-policy": {
+      "types": "./dist/auth/password-policy.d.ts",
+      "import": "./dist/auth/password-policy.js",
+      "default": "./dist/auth/password-policy.js"
     }
   },
   "main": "./dist/index.js",

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   PASSWORD_POLICY,
-  buildPasswordZodSchema,
   getPasswordChecks,
   scorePassword,
 } from '../../src/auth/password-policy';
+// Imported from its own module, not the barrel: `password-policy.ts` is
+// deliberately zod-free so client components can reach it as
+// `@propertypro/shared/password-policy` without pulling the library.
+import { buildPasswordZodSchema } from '../../src/auth/password-policy-zod';
 
 describe('password policy', () => {
   describe('getPasswordChecks', () => {

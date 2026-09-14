@@ -141,6 +141,43 @@ describe('perf-check — the unbudgeted sweep', () => {
     expect(status).toBe(1);
   });
 
+  /**
+   * `over hard budget: 0` is what a clean run prints — and on 2026-09-14 it
+   * printed exactly that with a route 6.2 KiB from the ceiling. These two cases
+   * cover the line that stops a clean COUNT reading as a clean RESULT, and they
+   * are two rather than one because the branch has a sign: reporting "below" for
+   * a route that is over would be the same class of lie the line exists to
+   * prevent.
+   */
+  it('names the largest unbudgeted route and its headroom when none are over', () => {
+    const root = writeSandbox({
+      [BUDGETED_WEB_ROUTE]: 100,
+      '/(authenticated)/settings/page': 699,
+      '/(authenticated)/quiet/page': 100,
+    });
+
+    const { status, output } = runGuard(root);
+
+    expect(output).toContain('over hard budget: 0');
+    expect(output).toContain('largest unbudgeted route: /(authenticated)/settings/page');
+    expect(output).toContain('699.0 KiB');
+    expect(output).toContain('1.0 KiB below');
+    expect(output).not.toContain('OVER');
+    expect(status).toBe(0);
+  });
+
+  it('says OVER, with the overshoot, when the largest unbudgeted route breaches', () => {
+    const root = writeSandbox({ [BUDGETED_WEB_ROUTE]: 100, '/(authenticated)/settings/page': 750 });
+
+    const { status, output } = runGuard(root);
+
+    expect(output).toContain('largest unbudgeted route: /(authenticated)/settings/page');
+    expect(output).toContain('50.0 KiB OVER');
+    expect(output).not.toContain('below the hard budget');
+    // Still reported, still not enforced.
+    expect(status).toBe(0);
+  });
+
   it('warns when a group falls back past its first candidate', () => {
     // `maintenance` lists the inbox first; supply only its second candidate, so
     // the group resolves but to something other than what it names first.
