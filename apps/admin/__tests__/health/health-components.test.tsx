@@ -77,6 +77,15 @@ describe('ErrorsList', () => {
     expect(screen.queryByText('No unresolved errors')).toBeNull();
   });
 
+  it('distinguishes a FAILED Sentry request from an unconfigured one', () => {
+    render(<ErrorsList errors={null} sentryFailure="Sentry issues request failed: 403" />);
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('Sentry request failed');
+    expect(alert.textContent).toContain('403');
+    expect(alert.textContent).not.toContain('Sentry is not configured');
+    expect(screen.queryByText('No unresolved errors')).toBeNull();
+  });
+
   it('shows a real empty state when Sentry was asked and production is quiet', () => {
     render(<ErrorsList errors={[]} />);
     expect(screen.getByText('No unresolved errors')).toBeTruthy();
