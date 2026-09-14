@@ -2,7 +2,6 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { useEffect, useState } from 'react';
-import { createBrowserClient } from '@/lib/supabase/client';
 import { resolveHomeDestination } from '@/lib/utils/home-destination';
 
 interface RootErrorProps {
@@ -27,6 +26,10 @@ export default function RootError({ error, reset }: RootErrorProps) {
     // its fallback. On any failure we keep the safe `/` default.
     void (async () => {
       try {
+        // Imported here, not at the top: Next loads this boundary's chunk on
+        // EVERY route at hydration, so a static import put the whole Supabase
+        // client (~180 KiB) on the marketing page and every signed-out screen.
+        const { createBrowserClient } = await import('@/lib/supabase/client');
         const { data } = await createBrowserClient().auth.getSession();
         if (active) {
           setHomeHref(

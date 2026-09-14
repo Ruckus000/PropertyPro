@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { createBrowserClient } from '@propertypro/db/supabase/client';
 import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 import { useAcceptInvitation } from '@/hooks/use-invitations';
@@ -95,6 +94,7 @@ export function SetPasswordForm({ token, communityId }: Props) {
 
     try {
       // Sign in the user with the new credentials
+      const { createBrowserClient } = await import('@propertypro/db/supabase/client');
       const supabase = createBrowserClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,

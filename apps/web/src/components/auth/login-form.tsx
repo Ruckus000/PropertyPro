@@ -1,8 +1,7 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@/lib/supabase/client';
 
 interface LoginFormProps {
   returnTo: string;
@@ -10,7 +9,6 @@ interface LoginFormProps {
 
 export function LoginForm({ returnTo }: LoginFormProps) {
   const router = useRouter();
-  const supabase = useMemo(() => createBrowserClient(), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +33,18 @@ export function LoginForm({ returnTo }: LoginFormProps) {
     setLoading(true);
     setError(null);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    let signInError: { message: string } | null;
+    try {
+      // Loaded on submit, not at module scope: the Supabase client is ~180 KiB
+      // and nothing on this page needs it before the user signs in.
+      const { createBrowserClient } = await import('@/lib/supabase/client');
+      ({ error: signInError } = await createBrowserClient().auth.signInWithPassword({
+        email,
+        password,
+      }));
+    } catch {
+      signInError = { message: "We couldn't reach the sign-in service. Please try again." };
+    }
 
     setLoading(false);
     if (signInError) {

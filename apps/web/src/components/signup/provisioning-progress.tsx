@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@/lib/supabase/client';
 import {
   CheckCircle2,
   CircleDashed,
@@ -79,9 +78,13 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
   const handleComplete = useCallback(
     async (loginToken: string, communityId?: number) => {
       stopPolling();
-      const supabase = createBrowserClient();
-      const { error } = await supabase.auth.verifyOtp({ token_hash: loginToken, type: 'magiclink' });
-      if (error) {
+      try {
+        const { createBrowserClient } = await import('@/lib/supabase/client');
+        const { error } = await createBrowserClient().auth.verifyOtp({ token_hash: loginToken, type: 'magiclink' });
+        if (error) throw error;
+      } catch {
+        // Includes the client chunk failing to load: polling has stopped, so
+        // anything but a navigation leaves the user on a finished spinner.
         router.push('/auth/login?message=portal-ready');
         return;
       }
@@ -96,9 +99,11 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
       // was refreshed (or a second tab polled first) after auto-login. If a
       // session exists, go straight in; otherwise fall back to manual login.
       stopPolling();
-      const supabase = createBrowserClient();
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
+      const session = await import('@/lib/supabase/client')
+        .then(({ createBrowserClient }) => createBrowserClient().auth.getSession())
+        .then(({ data }) => data.session)
+        .catch(() => null);
+      if (session) {
         router.push(communityId ? `/dashboard?communityId=${communityId}` : '/select-community');
         return;
       }
