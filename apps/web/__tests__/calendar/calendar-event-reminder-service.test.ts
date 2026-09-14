@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/pg-proxy';
+
+// The projections below are built from REAL drizzle tables, so @propertypro/db
+// is replaced by its schema barrel alone, without the scoped-client import that
+// loads drizzle.ts and throws without DATABASE_URL. The service also imports
+// @propertypro/db/unsafe; nothing here calls it, so that factory is empty and a
+// future call fails naming the export instead of querying.
+vi.mock('@propertypro/db', () => import('../../../../packages/db/src/schema'));
+vi.mock('@propertypro/db/unsafe', () => ({}));
 import {
   notificationPreferences,
   userRoles,

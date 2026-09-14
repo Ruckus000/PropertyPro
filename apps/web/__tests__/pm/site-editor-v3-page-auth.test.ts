@@ -76,6 +76,19 @@ vi.mock('@/lib/site-assets/quota', async (importOriginal) => ({
   getSiteAssetsQuotaBytes: quotaLookupMock,
 }));
 vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock }));
+// The page calls listSitePages on every render and turns a failure into a
+// Sentry warning. Unmocked, it attempted a real unscoped read (against whatever
+// DATABASE_URL resolved to) and the page's catch hid it. `[]` is what that
+// catch produced, so every assertion's input is unchanged.
+vi.mock('@/lib/services/site-pages-service', () => ({
+  listSitePages: vi.fn().mockResolvedValue([]),
+}));
+// site-settings-service and the real quota module import @propertypro/db and
+// @propertypro/db/unsafe, both of which load drizzle.ts and throw without
+// DATABASE_URL. The quota lookup is mocked above and nothing else reads the DB,
+// so both factories are empty and any call fails naming the export.
+vi.mock('@propertypro/db', () => ({}));
+vi.mock('@propertypro/db/unsafe', () => ({}));
 
 import WebsiteEditorV3Page from '@/app/(site-editor)/pm/website-editor/page';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';

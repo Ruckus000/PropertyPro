@@ -7,8 +7,13 @@
  * announcement, since SQL three-valued logic makes `NULL > now()` evaluate to
  * NULL rather than TRUE — and today every row has a NULL expiry.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
+
+// The SQL is rendered from the REAL drizzle table, so @propertypro/db is
+// replaced by its schema barrel alone: same table objects, without the
+// scoped-client import that loads drizzle.ts and throws without DATABASE_URL.
+vi.mock('@propertypro/db', () => import('../../../../packages/db/src/schema'));
 import {
   announcementNotExpiredWhere,
   isAnnouncementExpired,

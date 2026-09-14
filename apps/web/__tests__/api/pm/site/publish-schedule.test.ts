@@ -41,6 +41,15 @@ vi.mock('@/lib/db/access-control', () => ({
   requirePermission: requirePermissionMock,
   checkPermissionV2: vi.fn(() => true),
 }));
+// The importActual below loads the REAL service, which imports @propertypro/db
+// and @propertypro/db/unsafe (both load drizzle.ts, which throws without
+// DATABASE_URL). The pure bounds under test touch neither, so both factories
+// are empty and any call fails naming the export. site-blocks-service is cut
+// too, because its graph reaches site-pages-service, which reads `sitePages.*`
+// at module load and would fail against an empty db factory.
+vi.mock('@propertypro/db', () => ({}));
+vi.mock('@propertypro/db/unsafe', () => ({}));
+vi.mock('@/lib/services/site-blocks-service', () => ({}));
 vi.mock('@/lib/services/site-publish-schedule-service', async () => {
   // Only the data functions are stubbed. MAX_SCHEDULE_DAYS_AHEAD and
   // maxScheduleDate are pure and are the thing under test, so they stay real —

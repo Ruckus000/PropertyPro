@@ -54,6 +54,13 @@ vi.mock('@/lib/api/branding', () => ({
   getBrandingForCommunity: getBrandingForCommunityMock,
 }));
 
+// The page imports createPresignedDownloadUrl from the @propertypro/db barrel,
+// which loads drizzle.ts and throws without DATABASE_URL. No fixture sets a
+// logo path, so it is never called. The page wraps that call in a try/catch
+// that SWALLOWS the "No export" error and renders without a logo, so a test
+// that sets `logoPath` must supply its own `createPresignedDownloadUrl` mock.
+vi.mock('@propertypro/db', () => ({}));
+
 // Mock the public reader so we don't touch a real DB
 vi.mock('@/lib/db/public-community-reader', () => ({
   getPublicCommunityScopedReader: () => ({
