@@ -31,8 +31,10 @@ const CACHED_AT_HEADER = 'x-ppro-cached-at';
 const STATIC_PREFIXES = ['/_next/static/', '/fonts/', '/icons/'];
 
 // Documents that must never be written to disk. `/inbox/<threadId>` renders the
-// full body of somebody's correspondence with us — see the policy module.
-const NEVER_STORE_PATTERNS = [/^\/inbox\/[^/]+/];
+// full body of somebody's correspondence with us; `/health/logs` renders the
+// audit table's old/new/metadata JSONB, which in production carries the
+// recipient and subject of that same correspondence — see the policy module.
+const NEVER_STORE_PATTERNS = [/^\/inbox\/[^/]+/, /^\/health\/logs/];
 
 // How long a stored console document may still be served offline: one hour,
 // matching the Supabase access-token lifetime. Checked on READ, so an entry that
