@@ -3,6 +3,7 @@ import { communities, onboardingWizardState } from '@propertypro/db';
 import { eq, and } from '@propertypro/db/filters';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
 
 export type ScopedClient = ReturnType<typeof createScopedClient>;
 
@@ -76,6 +77,21 @@ export async function updateCommunityProfile(
     communityId: number,
     profile: ProfileStepData,
 ): Promise<void> {
+    // `logoPath` arrives as a bare string from the wizard body and is written
+    // straight onto the community, where `resolveAuthPageBranding` mints a
+    // presigned download URL for it against the private `documents` bucket — on
+    // /auth/login, /auth/forgot-password and /auth/reset-password, which are
+    // UNAUTHENTICATED. Unvalidated, an onboarding admin for community A could
+    // point it at `communities/B/documents/<uuid>/confidential.pdf` and have A's
+    // public login page serve a working signed URL for B's private document.
+    //
+    // Validated here rather than in each route: this is the single write point
+    // for both the condo and apartment wizards, so a third wizard cannot
+    // reintroduce the hole by forgetting a call-site check.
+    if (profile.logoPath) {
+        assertCommunityOwnedStoragePath(profile.logoPath, communityId, 'documents', 'logoPath');
+    }
+
     const updatePayload = {
         name: profile.name,
         addressLine1: profile.addressLine1,

@@ -3,7 +3,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { validateUploadFilePath } from '@/lib/api/upload-path';
+import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireViolationsEnabled } from '@/lib/violations/common';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
@@ -19,7 +19,9 @@ export const POST = withErrorHandler(
   runRoute(violationsEvidenceCreateContract, async ({ body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromBody(req, body.communityId);
-    validateUploadFilePath(body.filePath, communityId);
+    // Pins the `documents/` subdirectory — same reason as the documents route:
+    // the looser check accepted any sibling namespace in the same bucket.
+    assertCommunityOwnedStoragePath(body.filePath, communityId, 'documents', 'filePath');
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 

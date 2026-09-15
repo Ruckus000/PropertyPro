@@ -391,13 +391,17 @@ minutes ran out (last ci.yml run: 2026-08-24). Two phases, wired as a pre-push h
   only check that can see a cross-branch collision needs to run BEFORE the push,
   and the env var makes an unreadable `origin/main` an error rather than a silent
   no-op.
-- **`suite`** — detached after the push, 8 steps: no-mock guard →
-  migration-ordering → `reset:demo` + `seed:demo` (resolve-only, against a stub
-  `DATABASE_URL`) → `apps/web` vitest with coverage → the package suites + admin
-  tests → then **`pnpm build` + `test:e2e:prod` + `pnpm perf:check`**. That last
-  step owns **the only production build**, and with it the bundle-size budget and
-  the PDF.js smoke test, which read build output from disk. It reports back to
-  GitHub as the `localci/suite` check.
+- **`suite`** — detached after the push, 7 steps: the no-mock-in-integration
+  guard → `reset:demo` → `seed:demo` (both resolve-only, against a stub
+  `DATABASE_URL`) → a `build` of the six shared packages (`shared`, `db`,
+  `email`, `ui`, `theme`, `api-contract`) → `apps/web` vitest with coverage →
+  the package suites + `@propertypro/admin` + the `scripts` vitest project
+  (`scripts/` is not a workspace package, so `--filter` cannot reach it) → then
+  **`pnpm build` + `test:e2e:prod` + `pnpm perf:check`**. That last step owns
+  **the only production build**, and with it the bundle-size budget and the
+  PDF.js smoke test, which read build output from disk. It reports back to
+  GitHub as the `localci/suite` check. Note `migration-ordering` runs in
+  `gate`, not here — see the preceding bullet; it is not a `suite` step.
 
 Run history is in `~/.localci/runs/<project>/<run>/`, and `status.json` lists every
 step's exact command and exit code. **Read it before claiming what did or did not

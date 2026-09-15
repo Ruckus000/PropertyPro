@@ -17,6 +17,10 @@ export default defineConfig({
     alias: {
       '@propertypro/shared': `${repoRoot}packages/shared/src`,
       '@propertypro/db/filters': `${repoRoot}packages/db/src/filters`,
+      // Must precede the bare '@propertypro/db' entry: Vite matches aliases in
+      // order, so the shorter key would swallow this subpath and pull in the
+      // root barrel -> drizzle.ts -> "Missing DATABASE_URL" at import time.
+      '@propertypro/db/constants': `${repoRoot}packages/db/src/constants`,
       '@propertypro/db/unsafe': `${repoRoot}packages/db/src/unsafe`,
       '@propertypro/db': `${repoRoot}packages/db/src`,
     },

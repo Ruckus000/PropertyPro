@@ -20,14 +20,31 @@ import { downloadStorageObject, deleteStorageObject } from '@propertypro/db';
 import { ValidationError } from '@/lib/api/errors';
 
 /**
- * Verifies a caller-supplied storage path lives under the active
- * community's prefix in the documents bucket.
+ * Verifies a caller-supplied storage path lives under the active community's
+ * prefix in the documents bucket.
+ *
+ * The SUBDIRECTORY is the point, not decoration. Every writer into this bucket
+ * owns its own second segment — `documents/`, `esign-templates/`,
+ * `esign-signed/`, `branding/` — so pinning it is what stops one subsystem's
+ * route from naming another subsystem's object. A check that stopped at
+ * `communities/{id}/` would let an e-sign path through the documents upload and
+ * a document path through the e-sign builder.
+ *
+ * `POST /api/v1/esign/documents/from-library` exists because of this: it COPIES
+ * a library file into the e-sign prefix rather than binding the library path,
+ * specifically so this check never has to be relaxed.
  */
 export function assertCommunityOwnedStoragePath(
   path: string,
   communityId: number,
   /** Subdirectory under `communities/{id}/` (e.g. `esign-templates`). */
   subdirectory: string,
+  /**
+   * Which request field the error names. Defaults to the e-sign field this was
+   * written for; the documents and onboarding callers pass their own so a 400
+   * points at the field the caller actually sent.
+   */
+  fieldName = 'sourceDocumentPath',
 ): void {
   // Reject traversal/separator tricks BEFORE the prefix check. A bare
   // startsWith() is satisfied by
@@ -43,7 +60,7 @@ export function assertCommunityOwnedStoragePath(
   if (path.includes('\\') || segments.some((s) => s === '..' || s === '.')) {
     throw new ValidationError('Storage path is not a valid object key.', {
       fields: {
-        sourceDocumentPath: 'Path must not contain "..", "." or "\\" segments',
+        [fieldName]: 'Path must not contain "..", "." or "\\" segments',
       },
     });
   }
@@ -54,7 +71,7 @@ export function assertCommunityOwnedStoragePath(
       'Storage path does not belong to this community.',
       {
         fields: {
-          sourceDocumentPath: `Path must start with ${expectedPrefix}`,
+          [fieldName]: `Path must start with ${expectedPrefix}`,
         },
       },
     );

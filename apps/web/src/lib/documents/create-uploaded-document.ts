@@ -1,7 +1,6 @@
 import {
   createPresignedDownloadUrl,
   createScopedClient,
-  deleteStorageObject,
   documents,
   logAuditEvent,
 } from '@propertypro/db';
@@ -42,10 +41,6 @@ const DOCUMENT_NOTIFICATION_WARNING: DocumentMutationWarning = {
   message: 'The document was uploaded, but community notifications could not be sent.',
 };
 
-function stringifyUnknownError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 async function downloadStorageBytes(path: string): Promise<Uint8Array> {
   const signedUrl = await createPresignedDownloadUrl('documents', path, 300);
   const res = await fetch(signedUrl);
@@ -57,23 +52,35 @@ async function downloadStorageBytes(path: string): Promise<Uint8Array> {
   return new Uint8Array(buffer);
 }
 
+/**
+ * Reject an upload that failed validation: record it, then 422.
+ *
+ * DELIBERATELY DOES NOT DELETE THE OBJECT, and that is the fix for a real
+ * vulnerability rather than an omission.
+ *
+ * This used to call `deleteStorageObject(context.filePath)` — a client-supplied
+ * path — with no check that anything referenced it. The `documents` bucket also
+ * holds e-sign templates, signed PDFs, audit certificates and processed logos
+ * under sibling prefixes that `validateUploadFilePath` accepted, so a member
+ * holding `documents:write` could name an executed contract, send a wrong
+ * `fileSize`, and have the service-role client destroy it while the
+ * `esign_submissions` row survived pointing at nothing.
+ *
+ * Making that delete safe needs a reference model covering every writer into
+ * the bucket, kept complete forever, with no test able to prove completeness —
+ * see `scripts/lib/document-object-orphans.ts`, which enumerates six of them.
+ * This repo already declined that trade for the sibling bucket
+ * (`scripts/reconcile-site-assets-usage.ts`: orphan deletion is "destructive and
+ * irreversible, the orphan set depends on this script's reference model being
+ * complete, and it needs a human looking at real numbers first").
+ *
+ * So the rejected bytes stay. They sit in a PRIVATE bucket with no row, which
+ * makes them unreachable through every product surface — downloads are signed
+ * URLs minted only for `documents` rows — and `pnpm documents:orphan-report`
+ * lists them for an operator who can see real numbers before deciding. The
+ * audit entry below is what records that a rejection happened at all.
+ */
 async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never> {
-  let cleanupSucceeded = true;
-  let cleanupError: string | undefined;
-
-  try {
-    await deleteStorageObject('documents', context.filePath);
-  } catch (error) {
-    cleanupSucceeded = false;
-    cleanupError = stringifyUnknownError(error);
-    // eslint-disable-next-line no-console
-    console.error('[documents] failed to clean up invalid upload', {
-      communityId: context.communityId,
-      filePath: context.filePath,
-      error: cleanupError,
-    });
-  }
-
   await logAuditEvent({
     userId: context.userId,
     action: 'validation_failed',
@@ -85,9 +92,9 @@ async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never
       filePath: context.filePath,
       fileName: context.fileName,
       fileSize: context.fileSize,
-      cleanupAttempted: true,
-      cleanupSucceeded,
-      ...(cleanupError ? { cleanupError } : {}),
+      // The object is intentionally left in place; `filePath` above is what an
+      // operator needs to find it in the orphan report.
+      objectRetained: true,
       ...(context.details ?? {}),
     },
   });

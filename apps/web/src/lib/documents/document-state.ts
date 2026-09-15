@@ -17,9 +17,15 @@
  * it. That is deliberately the cautious direction: it over-reports the duty
  * rather than telling a board it has posted something it has not.
  *
- * Note that `documents.public_access` currently has no writer anywhere in the
- * product, so `publicCount` reads 0 for every community and every linked
- * document reads `owed`. That is the true posture, not a bug in this module.
+ * Note that `documents.public_access` reads false for every row in production
+ * today — no community has ever flipped it — so `publicCount` is 0 and every
+ * linked document reads `owed`. That is a fact about the DATA, not about the
+ * code. The flag has a writer: `setDocumentPublicAccess` (documents-service),
+ * reached from `PATCH /api/v1/documents` via `useSetDocumentPublicAccess` and
+ * the inspector's "Put on public site" button, available to condo and HOA
+ * communities on any paid plan. So `public` is a live state one click away,
+ * not an unreachable one — this module must keep handling it, and the zero is
+ * not something to design around.
  */
 
 export type DocumentExtractionStatus =
@@ -356,19 +362,31 @@ export function timelineRows(
       const isOverdue = requirement.status === 'overdue';
       const isOwed = document ? documentState(document, requirement) === 'owed' : false;
 
-      // `bad` is reserved for an obligation already MISSED, which in this data
-      // only ever means a gap past its deadline — a requirement holding a
-      // document is not reported overdue. Scoring a non-gap `bad` would be a
-      // branch that can never run.
-      const tone: TimelineTone = isGap
-        ? isOverdue
-          ? 'bad'
-          : 'none'
-        : isOwed
-          ? 'warn'
-          : 'ok';
+      // `bad` is "this obligation is already MISSED", and a requirement holding
+      // a document CAN be missed. `calculateComplianceStatus` returns 'overdue'
+      // for a LINKED item on two branches (compliance-calculator.ts): a document
+      // older than the rolling window, and a document posted after its deadline.
+      // Both became reachable once minutes started auto-linking and writing
+      // `documentPostedAt`.
+      //
+      // So `isOverdue` is tested FIRST, ahead of the gap/owed split. It used to
+      // be tested only INSIDE the gap branch, under a comment claiming a linked
+      // item is never overdue — which let a linked + overdue + public row score
+      // `ok` and read 'on file' while `open` below was true. That is a green row
+      // drawing an open exposure bar. Testing it first makes `tone` agree with
+      // `open` by construction rather than by coincidence.
+      const tone: TimelineTone = isOverdue ? 'bad' : isGap ? 'none' : isOwed ? 'warn' : 'ok';
 
-      const label = isGap ? 'no file' : isOwed ? 'not public' : 'on file';
+      // `isOverdue` outranks `isOwed` because it is the more urgent of the two
+      // claims, and both outrank 'on file' — labelling an overdue record
+      // 'on file' in red is the same defect in smaller form.
+      const label = isGap
+        ? 'no file'
+        : isOverdue
+          ? 'overdue'
+          : isOwed
+            ? 'not public'
+            : 'on file';
 
       // An exposure is open while the record is unsatisfied. It reads from the
       // month it was owed through to today.

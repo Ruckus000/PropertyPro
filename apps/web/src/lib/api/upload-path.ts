@@ -19,20 +19,43 @@ import { ValidationError } from '@/lib/api/errors';
  * other buckets pass their own (e.g. `maintenance`) so every upload path gets
  * the same traversal + cross-tenant checks instead of a divergent inline one.
  */
+/**
+ * The single decision both exports below are made of.
+ *
+ * One function rather than two copies of the same two conditions: the thrower
+ * and the predicate must agree exactly, because one of them gates a 400 and the
+ * other gates a DELETE. Two copies is the shape that let
+ * `purgeCommunitySiteAssets` fall a kind behind its writer — the fix there was
+ * to make the two the same list, not to lengthen one of them.
+ */
+function uploadPathScopeFailure(
+  filePath: string,
+  effectiveCommunityId: number,
+  bucketPrefix: string,
+): { reason: 'traversal' } | { reason: 'prefix'; expectedPrefix: string } | null {
+  if (filePath.includes('..')) return { reason: 'traversal' };
+  const expectedPrefix = `${bucketPrefix}/${effectiveCommunityId}/`;
+  if (!filePath.startsWith(expectedPrefix)) return { reason: 'prefix', expectedPrefix };
+  return null;
+}
+
 export function validateUploadFilePath(
   filePath: string,
   effectiveCommunityId: number,
   bucketPrefix = 'communities',
 ): void {
-  if (filePath.includes('..')) {
-    throw new ValidationError('Invalid file path', {
-      fields: [{ field: 'filePath', message: 'Path traversal is not allowed' }],
-    });
-  }
-  const expectedPrefix = `${bucketPrefix}/${effectiveCommunityId}/`;
-  if (!filePath.startsWith(expectedPrefix)) {
-    throw new ValidationError('Invalid file path', {
-      fields: [{ field: 'filePath', message: `filePath must start with ${expectedPrefix}` }],
-    });
-  }
+  const failure = uploadPathScopeFailure(filePath, effectiveCommunityId, bucketPrefix);
+  if (!failure) return;
+
+  throw new ValidationError('Invalid file path', {
+    fields: [
+      {
+        field: 'filePath',
+        message:
+          failure.reason === 'traversal'
+            ? 'Path traversal is not allowed'
+            : `filePath must start with ${failure.expectedPrefix}`,
+      },
+    ],
+  });
 }
