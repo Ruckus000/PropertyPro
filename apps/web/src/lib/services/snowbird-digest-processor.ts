@@ -22,7 +22,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { and, eq, isNull } from '@propertypro/db/filters';
+import { and, eq, inArray, isNull } from '@propertypro/db/filters';
 // AUTHZ: cron job, no session — scans digest-enabled communities cross-tenant, then reads each with a scoped client.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { SnowbirdDigestEmail, sendEmail } from '@propertypro/email';
@@ -90,37 +90,31 @@ interface OwnerRecipient {
  * Resolve owner recipients for a community: role 'resident' with isUnitOwner,
  * plus the legacy 'owner' role, that have an email and aren't deleted.
  */
-async function resolveOwnerRecipients(communityId: number): Promise<OwnerRecipient[]> {
+export async function resolveOwnerRecipients(communityId: number): Promise<OwnerRecipient[]> {
   const scoped = createScopedClient(communityId);
-  const [roleRows, userRows] = await Promise.all([
-    scoped.query(userRoles) as Promise<Row[]>,
-    scoped.query(users) as Promise<Row[]>,
-  ]);
+  const roleRows = (await scoped.query(userRoles)) as Row[];
 
-  const usersById = new Map<string, Row>();
-  for (const u of userRows) {
-    if (typeof u.id === 'string') usersById.set(u.id, u);
-  }
-
-  const recipients: OwnerRecipient[] = [];
-  const seen = new Set<string>();
+  const ownerIds = new Set<string>();
   for (const r of roleRows) {
     const userId = r.userId;
     const role = r.role;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    const isOwner = (role === 'resident' && r.isUnitOwner === true) || role === 'owner';
-    if (!isOwner || seen.has(userId)) continue;
+    if ((role === 'resident' && r.isUnitOwner === true) || role === 'owner') ownerIds.add(userId);
+  }
 
+  // Only the owners — `users` is platform-global, so it is never read wholesale.
+  const userRows = await scoped.selectFrom<{ id: string; email: string; fullName: string }>(
+    users,
+    { id: users.id, email: users.email, fullName: users.fullName },
+    inArray(users.id, [...ownerIds]),
+  );
+  const usersById = new Map(userRows.map((u) => [u.id, u]));
+
+  const recipients: OwnerRecipient[] = [];
+  for (const userId of ownerIds) {
     const u = usersById.get(userId);
-    const email = u?.email;
-    if (!u || typeof email !== 'string' || email.length === 0) continue;
-
-    seen.add(userId);
-    recipients.push({
-      userId,
-      email,
-      fullName: typeof u.fullName === 'string' && u.fullName.length > 0 ? u.fullName : 'Neighbor',
-    });
+    if (!u || u.email.length === 0) continue;
+    recipients.push({ userId, email: u.email, fullName: u.fullName.length > 0 ? u.fullName : 'Neighbor' });
   }
   return recipients;
 }

@@ -2,10 +2,10 @@
  * Import Residents Service
  *
  * Tenant-scoped helpers for the bulk-import route at
- * /api/v1/import-residents. Bulk imports are intentionally full-table
- * fetches (the route loads all units / all users / all user_roles
- * up-front to avoid per-row N+1 lookups during the import loop), so the
- * helpers here mirror that intent rather than narrowing to single rows.
+ * /api/v1/import-residents. The route loads its lookup maps up-front to avoid
+ * per-row N+1 lookups during the import loop. Units and user_roles are
+ * community-scoped, so those are full reads of this community's rows. `users`
+ * is platform-global, so that map is built from the CSV's own emails instead.
  *
  * Companion to:
  *   - apps/web/src/app/api/v1/import-residents/route.ts
@@ -17,6 +17,15 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
+import { inArray, sql } from '@propertypro/db/filters';
+import { chunk } from '@/lib/utils/chunk';
+
+/**
+ * Emails per `IN (...)` lookup. Each email is one bind parameter and Postgres
+ * caps a statement at 65,535, while the import body has no row limit. Chunks
+ * run sequentially, never in parallel (the pool is 3).
+ */
+const EMAIL_LOOKUP_CHUNK = 1000;
 
 /**
  * Build a `lower(unit_number) → unit_id` map for the import loop. Lower-case
@@ -39,19 +48,25 @@ export async function loadUnitNumberMapForImport(
 }
 
 /**
- * Build a `lower(email) → user_id` map for the import loop.
+ * Build a `lower(email) → user_id` map covering the given (lower-cased) emails.
+ *
+ * `users` has no `community_id`, so a match may belong to ANY community — the
+ * route must still run the cross-tenant attach guard on every hit.
  */
 export async function loadUserEmailMapForImport(
   communityId: number,
+  emails: string[],
 ): Promise<Map<string, string>> {
   const scoped = createScopedClient(communityId);
-  const rows = (await scoped.query(users)) as Array<Record<string, unknown>>;
   const map = new Map<string, string>();
-  for (const row of rows) {
-    const email = (row['email'] as string | undefined)?.toLowerCase();
-    const id = row['id'];
-    if (email && typeof id === 'string') {
-      map.set(email, id);
+  for (const batch of chunk(emails, EMAIL_LOOKUP_CHUNK)) {
+    const rows = await scoped.selectFrom<{ id: string; email: string }>(
+      users,
+      { id: users.id, email: users.email },
+      inArray(sql`lower(${users.email})`, batch),
+    );
+    for (const row of rows) {
+      map.set(row.email.toLowerCase(), row.id);
     }
   }
   return map;

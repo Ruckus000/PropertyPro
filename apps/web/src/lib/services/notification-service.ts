@@ -17,7 +17,7 @@ import {
   type InsertNotificationRow,
   type NotificationCategory,
 } from '@propertypro/db';
-import { and, desc, eq, isNull, lt, sql } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNull, lt, sql } from '@propertypro/db/filters';
 import {
   ComplianceAlertEmail,
   DocumentPostedEmail,
@@ -317,20 +317,10 @@ async function resolveRecipientDeliveries(
 ): Promise<RecipientDelivery[]> {
   const scoped = createScopedClient(communityId);
 
-  const [roleRows, userRows, preferenceRows] = await Promise.all([
+  const [roleRows, preferenceRows] = await Promise.all([
     scoped.query(userRoles),
-    scoped.query(users),
     scoped.query(notificationPreferences),
   ]);
-
-  const usersById = new Map<string, Record<string, unknown>>();
-  for (const row of userRows) {
-    const userId = row['id'];
-    if (typeof userId === 'string') {
-      if (row['deletedAt'] != null) continue;
-      usersById.set(userId, row);
-    }
-  }
 
   const preferencesByUserId = new Map<string, UserNotificationPreferences>();
   for (const row of preferenceRows) {
@@ -380,23 +370,25 @@ async function resolveRecipientDeliveries(
   }
 
   // Short-circuit: specific_user filter bypasses the role-based loop.
-  // usersById is community-scoped so the submitter is always present.
   // The role loop is skipped entirely — submitter may have no userRoles row in edge cases.
   if (typeof filter === 'object' && filter.type === 'specific_user') {
-    const user = usersById.get(filter.userId);
-    if (!user) return [];
-    const email = user['email'];
-    const fullName = user['fullName'];
-    if (typeof email !== 'string' || typeof fullName !== 'string') return [];
     const prefs = preferencesByUserId.get(filter.userId) ?? getDefaultPreferences();
     if (!isNotificationTypeEnabled(notificationKind, prefs) || prefs.emailFrequency === 'never') {
       return [];
     }
+    const [user] = await scoped.selectFrom<{ email: string; fullName: string }>(
+      users,
+      { email: users.email, fullName: users.fullName },
+      eq(users.id, filter.userId),
+    );
+    if (!user) return [];
     const mode = supportsDigest && isDigestFrequency(prefs.emailFrequency) ? 'digest' : 'immediate';
-    return [{ userId: filter.userId, email, fullName, preferences: prefs, mode }];
+    return [{ userId: filter.userId, email: user.email, fullName: user.fullName, preferences: prefs, mode }];
   }
 
-  const recipients: RecipientDelivery[] = [];
+  // Decide who qualifies from roles + preferences first, then load only those
+  // users: `users` is platform-global, so it is never read wholesale.
+  const candidates: Array<Omit<RecipientDelivery, 'email' | 'fullName'>> = [];
   for (const row of roleRows) {
     const userId = row['userId'];
     const role = row['role'];
@@ -419,14 +411,21 @@ async function resolveRecipientDeliveries(
     }
     if (mode === 'skip') continue;
 
-    const user = usersById.get(userId);
+    candidates.push({ userId, preferences: prefs, mode });
+  }
+
+  const userRows = await scoped.selectFrom<{ id: string; email: string; fullName: string }>(
+    users,
+    { id: users.id, email: users.email, fullName: users.fullName },
+    inArray(users.id, candidates.map((c) => c.userId)),
+  );
+  const usersById = new Map(userRows.map((user) => [user.id, user]));
+
+  const recipients: RecipientDelivery[] = [];
+  for (const candidate of candidates) {
+    const user = usersById.get(candidate.userId);
     if (!user) continue;
-
-    const email = user['email'];
-    const fullName = user['fullName'];
-    if (typeof email !== 'string' || typeof fullName !== 'string') continue;
-
-    recipients.push({ userId, email, fullName, preferences: prefs, mode });
+    recipients.push({ ...candidate, email: user.email, fullName: user.fullName });
   }
 
   return recipients;
@@ -736,20 +735,10 @@ async function resolveInAppRecipients(
 ): Promise<InAppRecipient[]> {
   const scoped = createScopedClient(communityId);
 
-  const [roleRows, userRows, preferenceRows] = await Promise.all([
+  const [roleRows, preferenceRows] = await Promise.all([
     scoped.query(userRoles),
-    scoped.query(users),
     scoped.query(notificationPreferences),
   ]);
-
-  const usersById = new Map<string, Record<string, unknown>>();
-  for (const row of userRows) {
-    const userId = row['id'];
-    if (typeof userId === 'string') {
-      if (row['deletedAt'] != null) continue;
-      usersById.set(userId, row);
-    }
-  }
 
   const preferencesByUserId = new Map<string, UserNotificationPreferences>();
   for (const row of preferenceRows) {
@@ -798,29 +787,36 @@ async function resolveInAppRecipients(
     }
   }
 
-  // Short-circuit for specific_user filter
+  // specific_user bypasses the role match — the target may hold no role row.
+  const matchedUserIds: string[] = [];
   if (typeof filter === 'object' && filter.type === 'specific_user') {
-    const user = usersById.get(filter.userId);
-    if (!user) return [];
-    const prefs = preferencesByUserId.get(filter.userId) ?? getDefaultPreferences();
-    return [{ userId: filter.userId, preferences: prefs }];
+    matchedUserIds.push(filter.userId);
+  } else {
+    for (const row of roleRows) {
+      const userId = row['userId'];
+      const role = row['role'];
+      const isUnitOwner = row['isUnitOwner'] === true;
+      const designation = row['designation'] as string | null | undefined;
+      if (typeof userId !== 'string' || typeof role !== 'string') continue;
+      if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation })) continue;
+      matchedUserIds.push(userId);
+    }
   }
 
-  const recipients: InAppRecipient[] = [];
-  for (const row of roleRows) {
-    const userId = row['userId'];
-    const role = row['role'];
-    const isUnitOwner = row['isUnitOwner'] === true;
-    const designation = row['designation'] as string | null | undefined;
-    if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation })) continue;
-    if (!usersById.has(userId)) continue;
+  // Only a live `users` row is needed, so read just the matched ids.
+  const liveUsers = await scoped.selectFrom<{ id: string }>(
+    users,
+    { id: users.id },
+    inArray(users.id, matchedUserIds),
+  );
+  const liveUserIds = new Set(liveUsers.map((user) => user.id));
 
-    const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
-    recipients.push({ userId, preferences: prefs });
-  }
-
-  return recipients;
+  return matchedUserIds
+    .filter((userId) => liveUserIds.has(userId))
+    .map((userId) => ({
+      userId,
+      preferences: preferencesByUserId.get(userId) ?? getDefaultPreferences(),
+    }));
 }
 
 /**

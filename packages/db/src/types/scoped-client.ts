@@ -31,7 +31,11 @@ export interface ScopedClient {
   /** The community ID this client instance is scoped to. */
   readonly communityId: number;
 
-  /** SELECT with tenant + soft-delete scoping applied. */
+  /**
+   * SELECT with tenant + soft-delete scoping applied. Throws for a table with no
+   * `communityId` (e.g. `users`): unfiltered, that reads the whole platform. Use
+   * `selectFrom` / `queryWhere` with a WHERE clause instead.
+   */
   query: (table: ScopedTable) => Promise<ScopedRow[]>;
 
   /**

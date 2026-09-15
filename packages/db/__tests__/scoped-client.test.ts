@@ -372,6 +372,45 @@ describe('unscoped mutation guard', () => {
   });
 });
 
+describe('unscoped read guard', () => {
+  // Same rule as the mutation guard, for reads: `users` has no communityId, so
+  // an unfiltered read returns every user on the platform — phone and OTP
+  // columns included. Every such call site was a find-one-row in disguise.
+
+  it('refuses query() on a table without tenant isolation', async () => {
+    const client = createScopedClient(42);
+    await expect(client.query(users)).rejects.toThrow('Unscoped query on table "users"');
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it('refuses queryIncludingDeleted() on a table without tenant isolation', async () => {
+    const client = createScopedClient(42);
+    await expect(client.queryIncludingDeleted(users)).rejects.toThrow(
+      'Unscoped queryIncludingDeleted on table "users"',
+    );
+  });
+
+  it('refuses queryWhere() and selectFrom() without a WHERE clause', async () => {
+    const client = createScopedClient(42);
+    await expect(client.queryWhere(users, undefined)).rejects.toThrow('Unscoped queryWhere on table "users"');
+    expect(() => client.selectFrom(users, { id: users.id })).toThrow('Unscoped selectFrom on table "users"');
+  });
+
+  it('allows a read of a global table that carries a WHERE clause', async () => {
+    const { eq } = await import('drizzle-orm');
+    const client = createScopedClient(42);
+    expect(() => client.selectFrom(users, { id: users.id }, eq(users.id, 'u-1'))).not.toThrow();
+    await expect(client.queryWhere(users, eq(users.id, 'u-1'))).resolves.not.toThrow();
+  });
+
+  it('still allows unfiltered reads of tenant tables and the communities root', async () => {
+    const client = createScopedClient(42);
+    await expect(client.query(units)).resolves.not.toThrow();
+    await expect(client.query(communities)).resolves.not.toThrow();
+    expect(() => client.selectFrom(userRoles, {})).not.toThrow();
+  });
+});
+
 describe('isSoftDeleteExempt', () => {
   it('returns true for compliance_audit_log', () => {
     expect(isSoftDeleteExempt('compliance_audit_log')).toBe(true);

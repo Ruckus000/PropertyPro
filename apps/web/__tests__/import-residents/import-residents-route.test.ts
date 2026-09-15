@@ -335,7 +335,7 @@ describe('POST /api/v1/import-residents', () => {
   });
 
   it('skips a row whose email belongs to a user the actor cannot already see', async () => {
-    // Issue #940. `loadUserEmailMapForImport` scans the platform-wide `users`
+    // Issue #940. `loadUserEmailMapForImport` searches the platform-wide `users`
     // table (no `community_id`, so the scoped client does not filter it), so a
     // CSV row can name a resident of ANOTHER association. Importing them would
     // publish their real name, email and phone through this community's
@@ -369,6 +369,21 @@ describe('POST /api/v1/import-residents', () => {
     expect(json.data.skippedCount).toBe(1);
     expect(json.data.errors[0]?.message).toContain('cannot already see');
     expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+  });
+
+  it("looks up only the CSV's own emails, not every user on the platform", async () => {
+    validateResidentCsvMock.mockReturnValueOnce({
+      header: ['name', 'email', 'role', 'unit_number'],
+      rows: [
+        { rowNumber: 2, data: { name: 'Ada', email: 'ada@x.com', role: 'owner', unit_number: '' } },
+        { rowNumber: 3, data: { name: 'Bo', email: 'bo@x.com', role: 'tenant', unit_number: '' } },
+      ],
+      errors: [{ rowNumber: 4, column: 'email', message: 'Invalid email address' }],
+    });
+
+    await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+
+    expect(loadUserEmailMapForImportMock).toHaveBeenCalledWith(42, ['ada@x.com', 'bo@x.com']);
   });
 
   it('does not consult the cross-tenant guard for brand-new emails', async () => {

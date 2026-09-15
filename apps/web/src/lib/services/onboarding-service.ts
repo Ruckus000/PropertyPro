@@ -14,7 +14,7 @@ import {
   logAuditEvent,
   notificationPreferences,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { eq, sql } from '@propertypro/db/filters';
 import { createElement } from 'react';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import type { CommunityType, CommunityRole } from '@propertypro/shared';
@@ -23,6 +23,7 @@ import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireCommunityType } from '@/lib/utils/community-validators';
 import { assertActorMayAttachExistingUser } from '@/lib/services/user-linking';
+import { getUserForInvitation } from '@/lib/services/invitations-service';
 
 /**
  * Look up a community's `communityType` by id (single-row projection).
@@ -80,17 +81,17 @@ export async function createOnboardingResident(params: {
   }
 
   // Check if user exists
-  const existingUsers = await scoped.query(users);
   const normalizedEmail = email.toLowerCase();
-
-  let userRow = existingUsers.find(
-    (row) => (row['email'] as string).toLowerCase() === normalizedEmail,
+  const [existingUser] = await scoped.selectFrom<{ id: string }>(
+    users,
+    { id: users.id },
+    sql`lower(${users.email}) = lower(${normalizedEmail})`,
   );
 
-  const isNewUser = !userRow;
-  const userId = isNewUser ? crypto.randomUUID() : (userRow?.['id'] as string);
+  const isNewUser = !existingUser;
+  const userId = existingUser?.id ?? crypto.randomUUID();
 
-  // `scoped.query(users)` above is NOT tenant-filtered — `users` has no
+  // The email lookup above is NOT tenant-filtered — `users` has no
   // `community_id`, so the match ran against every user on the platform. Before
   // reusing a stranger's row, require that the actor already shares a community
   // with them; otherwise this is a way to harvest another association's
@@ -100,14 +101,12 @@ export async function createOnboardingResident(params: {
   }
 
   if (isNewUser) {
-    const insertedUsers = await scoped.insert(users, {
+    await scoped.insert(users, {
       id: userId,
       email: normalizedEmail,
       fullName,
       phone: phone ?? null,
     });
-
-    userRow = insertedUsers[0] as Record<string, unknown>;
   }
 
   // Check for existing role
@@ -179,8 +178,7 @@ export async function createOnboardingInvitation(params: {
   }
 
   // Load user and role
-  const userRows = await scoped.query(users);
-  const user = userRows.find((row) => row['id'] === userId);
+  const user = await getUserForInvitation(communityId, userId);
   if (!user) {
     throw new NotFoundError(`User ${userId} not found`);
   }
@@ -206,12 +204,12 @@ export async function createOnboardingInvitation(params: {
   const inviteUrl = `${getBaseUrl()}/auth/accept-invite?token=${encodeURIComponent(token)}&communityId=${communityId}`;
 
   await sendEmail({
-    to: user['email'] as string,
+    to: user.email,
     subject: `You're invited to ${community['name'] as string} on PropertyPro`,
     category: 'transactional',
     react: createElement(InvitationEmail, {
       branding: { communityName: community['name'] as string },
-      inviteeName: (user['fullName'] as string) ?? 'there',
+      inviteeName: user.fullName ?? 'there',
       inviterName: params.inviterName,
       role,
       inviteUrl,

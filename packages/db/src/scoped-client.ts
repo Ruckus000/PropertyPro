@@ -246,6 +246,28 @@ function hasTenantIsolation(
   return tableName === COMMUNITIES_TABLE_NAME || hasCommunityIdColumn(columns);
 }
 
+/**
+ * Refuse a read of a global table that carries no WHERE clause — the read-side
+ * twin of the UnscopedMutationError checks below. With no community_id to
+ * inject, the only filter left is `deleted_at IS NULL`, so `query(users)`
+ * returned every user on the platform (phone and OTP columns included). Every
+ * caller that did it wanted a handful of known rows; name them in a WHERE.
+ * A deliberate platform-wide read belongs in @propertypro/db/unsafe.
+ */
+function assertScopedRead(
+  operation: string,
+  table: PgTable<TableConfig>,
+  additionalWhere?: SQL,
+): void {
+  if (hasTenantIsolation(table) || additionalWhere) return;
+  const tableName = getTableName(table as unknown as Table);
+  throw new Error(
+    `Unscoped ${operation} on table "${tableName}": it has no communityId column, ` +
+      `so this would read every row on the platform. Pass a WHERE clause ` +
+      `(selectFrom / queryWhere) or use @propertypro/db/unsafe for a deliberate global read.`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -286,11 +308,13 @@ export function createScopedClient(
     },
 
     async query(table) {
+      assertScopedRead('query', table);
       const filters = buildScopeFilters(table, ctx.communityId);
       return execSelect(database, table, combineFilters(filters));
     },
 
     async queryIncludingDeleted(table) {
+      assertScopedRead('queryIncludingDeleted', table);
       const filters = buildScopeFilters(table, ctx.communityId, {
         includeSoftDeleted: true,
       });
@@ -312,6 +336,7 @@ export function createScopedClient(
     },
 
     async queryWhere(table, additionalWhere, options = {}) {
+      assertScopedRead('queryWhere', table, additionalWhere);
       const filters = buildScopeFilters(table, ctx.communityId, options);
       if (additionalWhere) filters.push(additionalWhere);
       return execSelect(database, table, combineFilters(filters));
@@ -322,6 +347,7 @@ export function createScopedClient(
       columns: Record<string, unknown>,
       additionalWhere?: SQL,
     ): ScopedDynamicBuilder<T> {
+      assertScopedRead('selectFrom', table, additionalWhere);
       const filters = buildScopeFilters(table, ctx.communityId);
       if (additionalWhere) {
         filters.push(additionalWhere);

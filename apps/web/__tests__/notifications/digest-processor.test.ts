@@ -23,7 +23,7 @@ const {
     maintenanceRequests: Symbol('maintenance_requests'),
     documents: Symbol('documents'),
     communities: Symbol('communities'),
-    users: Symbol('users'),
+    users: { __table: 'users', id: Symbol('users.id') },
     notificationPreferences: Symbol('notification_preferences'),
     notificationDigestQueue: { id: Symbol('notification_digest_queue.id') },
   },
@@ -47,6 +47,11 @@ vi.mock('@propertypro/db', () => ({
   notificationDigestQueue: tables.notificationDigestQueue,
 }));
 
+vi.mock('@propertypro/db/filters', () => ({
+  eq: (col: unknown, val: unknown) => ({ _type: 'eq', col, val }),
+  inArray: (col: unknown, vals: unknown[]) => ({ _type: 'inArray', col, vals }),
+}));
+
 vi.mock('@propertypro/db/unsafe', () => ({
   findCandidateDigestCommunityIds: findCandidateDigestCommunityIdsMock,
   claimDigestQueueRows: claimDigestQueueRowsMock,
@@ -63,6 +68,18 @@ vi.mock('@/lib/services/announcement-delivery', () => ({
 }));
 
 import { processNotificationDigests } from '../../src/lib/services/notification-digest-processor';
+
+/**
+ * Users the scoped client would return for a WHERE on users.id: soft-deleted
+ * rows are dropped, as the real client's scope filter does.
+ */
+function selectUsersFor(communityId: number) {
+  return vi.fn(async (table: unknown, _columns: unknown, where?: { col: unknown; vals: unknown[] }) => {
+    const state = queryState.get(communityId);
+    if (!state || table !== tables.users || where?.col !== tables.users.id) return [];
+    return state.users.filter((u) => u['deletedAt'] == null && where.vals.includes(u['id']));
+  });
+}
 
 function seedCommunityState(params: {
   communityId: number;
@@ -96,11 +113,13 @@ describe('notification digest processor', () => {
         const state = queryState.get(communityId);
         if (!state) return [];
         if (table === tables.communities) return state.communities;
-        if (table === tables.users) return state.users;
+        // Mirrors the scoped client's read guard: `users` is platform-global.
+        if (table === tables.users) throw new Error('Unscoped query on table "users"');
         if (table === tables.notificationPreferences) return state.preferences;
         return [];
       }),
       queryIncludingDeleted: vi.fn(async () => []),
+      selectFrom: selectUsersFor(communityId),
       update: updateMock,
     }));
   });
@@ -157,6 +176,58 @@ describe('notification digest processor', () => {
       expect.objectContaining({
         communityId: 202,
       }),
+    );
+  });
+
+  it("loads only the tick's recipients from users, never the whole table", async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    const claimed = (id: number, userId: string, sourceId: string) => ({
+      id,
+      communityId: 101,
+      userId,
+      frequency: 'daily_digest',
+      sourceType: 'document',
+      sourceId,
+      eventType: 'document_posted',
+      eventTitle: `Doc ${sourceId}`,
+      eventSummary: 'Uploaded by board',
+      actionUrl: `https://app.local/documents/${sourceId}`,
+      attemptCount: 0,
+    });
+    claimDigestQueueRowsMock.mockResolvedValue([
+      claimed(1, 'u-1', 'doc-1'),
+      claimed(2, 'u-1', 'doc-2'),
+      claimed(3, 'u-deleted', 'doc-1'),
+    ]);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [
+        { id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null },
+        { id: 'u-stranger', email: 'stranger@example.com', fullName: 'Stranger', deletedAt: null },
+        { id: 'u-deleted', email: 'gone@example.com', fullName: 'Gone', deletedAt: new Date('2026-01-01') },
+      ],
+      preferences: [
+        { userId: 'u-1', emailFrequency: 'daily_digest' },
+        { userId: 'u-deleted', emailFrequency: 'daily_digest' },
+      ],
+    });
+
+    const summary = await processNotificationDigests({ now: new Date('2026-02-18T13:15:00.000Z') });
+
+    const scoped = createScopedClientMock.mock.results[0]?.value as { selectFrom: ReturnType<typeof vi.fn> };
+    expect(scoped.selectFrom.mock.calls.map(([, , where]) => where)).toEqual([
+      { _type: 'inArray', col: tables.users.id, vals: ['u-1', 'u-deleted'] },
+    ]);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ to: 'owner@example.com' }));
+    // A soft-deleted recipient is dropped by the scoped read, so it is discarded
+    // as not found rather than mailed.
+    expect(summary.rowsDiscarded).toBe(1);
+    expect(updateMock).toHaveBeenCalledWith(
+      tables.notificationDigestQueue,
+      expect.objectContaining({ status: 'discarded', errorMessage: 'Recipient not found' }),
+      expect.anything(),
     );
   });
 
@@ -240,11 +311,13 @@ describe('notification digest processor', () => {
         const state = queryState.get(communityId);
         if (!state) return [];
         if (table === tables.communities) return state.communities;
-        if (table === tables.users) return state.users;
+        // Mirrors the scoped client's read guard: `users` is platform-global.
+        if (table === tables.users) throw new Error('Unscoped query on table "users"');
         if (table === tables.notificationPreferences) return state.preferences;
         return [];
       }),
       queryIncludingDeleted: vi.fn(async () => []),
+      selectFrom: selectUsersFor(communityId),
       update: updateMock,
     }));
 
@@ -315,10 +388,12 @@ describe('notification digest processor', () => {
         const state = queryState.get(communityId);
         if (!state) return [];
         if (table === tables.communities) return state.communities;
-        if (table === tables.users) return state.users;
+        // Mirrors the scoped client's read guard: `users` is platform-global.
+        if (table === tables.users) throw new Error('Unscoped query on table "users"');
         if (table === tables.notificationPreferences) return state.preferences;
         return [];
       }),
+      selectFrom: selectUsersFor(communityId),
       queryIncludingDeleted: vi.fn(async (table: unknown) => {
         if (table !== tables.announcements) return [];
         return [
@@ -432,10 +507,12 @@ describe('notification digest processor', () => {
         const state = queryState.get(communityId);
         if (!state) return [];
         if (table === tables.communities) return state.communities;
-        if (table === tables.users) return state.users;
+        // Mirrors the scoped client's read guard: `users` is platform-global.
+        if (table === tables.users) throw new Error('Unscoped query on table "users"');
         if (table === tables.notificationPreferences) return state.preferences;
         return [];
       }),
+      selectFrom: selectUsersFor(communityId),
       queryIncludingDeleted: vi.fn(async (table: unknown) => {
         if (table === tables.meetings) {
           return [

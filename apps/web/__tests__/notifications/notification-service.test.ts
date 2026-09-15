@@ -16,15 +16,18 @@ const {
   sendEmailMock,
   logAuditEventMock,
   enqueueDigestItemsMock,
+  insertNotificationsMock,
   tables,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   sendEmailMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   enqueueDigestItemsMock: vi.fn().mockResolvedValue({ enqueued: 0, duplicates: 0 }),
+  insertNotificationsMock: vi.fn(),
   tables: {
     userRoles: Symbol('user_roles'),
-    users: Symbol('users'),
+    // A real column identity, so a lookup's predicate can be asserted.
+    users: { __table: 'users', id: Symbol('users.id'), email: Symbol('users.email'), fullName: Symbol('users.fullName') },
     notificationPreferences: Symbol('notification_preferences'),
     communities: Symbol('communities'),
   },
@@ -33,10 +36,21 @@ const {
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
+  insertNotifications: insertNotificationsMock,
   userRoles: tables.userRoles,
   users: tables.users,
   notificationPreferences: tables.notificationPreferences,
   communities: tables.communities,
+}));
+
+vi.mock('@propertypro/db/filters', () => ({
+  and: (...args: unknown[]) => ({ _type: 'and', args }),
+  desc: (col: unknown) => ({ _type: 'desc', col }),
+  eq: (col: unknown, val: unknown) => ({ _type: 'eq', col, val }),
+  inArray: (col: unknown, vals: unknown[]) => ({ _type: 'inArray', col, vals }),
+  isNull: (col: unknown) => ({ _type: 'isNull', col }),
+  lt: (col: unknown, val: unknown) => ({ _type: 'lt', col, val }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ _type: 'sql', strings, values }),
 }));
 
 vi.mock('@propertypro/email', () => ({
@@ -52,6 +66,7 @@ vi.mock('@/lib/services/notification-digest-queue', () => ({
 }));
 
 import {
+  createNotificationsForEvent,
   sendNotification,
   resolveRecipients,
 } from '../../src/lib/services/notification-service';
@@ -97,13 +112,29 @@ function setupMock(
 ) {
   const query = vi.fn(async (table: unknown) => {
     if (table === tables.userRoles) return roleRows;
-    if (table === tables.users) return userRows;
+    // Mirrors the scoped client's read guard: `users` is platform-global.
+    if (table === tables.users) throw new Error('Unscoped query on table "users"');
     if (table === tables.notificationPreferences) return preferenceRows;
     if (table === tables.communities) return communityRows;
     return [];
   });
 
-  createScopedClientMock.mockReturnValue({ query });
+  // selectFrom(users, …, eq|inArray on users.id). Like the real scoped client it
+  // also drops soft-deleted rows, which is how deleted users are excluded.
+  const selectFrom = vi.fn(
+    async (table: unknown, _columns: unknown, where?: { _type: string; col: unknown; val?: unknown; vals?: unknown[] }) => {
+      if (table !== tables.users || where?.col !== tables.users.id) return [];
+      const ids = where._type === 'eq' ? [where.val] : (where.vals ?? []);
+      return userRows.filter((row) => row['deletedAt'] == null && ids.includes(row['id']));
+    },
+  );
+
+  createScopedClientMock.mockReturnValue({ query, selectFrom });
+  return { query, selectFrom };
+}
+
+function userLookups(selectFrom: ReturnType<typeof vi.fn>) {
+  return selectFrom.mock.calls.filter(([table]) => table === tables.users).map(([, , where]) => where);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +220,39 @@ describe('notification-service', () => {
       );
       const recipients = await resolveRecipients(COMMUNITY_ID, 'board_only', 'meeting');
       expect(recipients).toHaveLength(0);
+    });
+
+    it('loads only the users who qualify, never the whole users table', async () => {
+      const { selectFrom } = setupMock(baseRoleRows, baseUserRows, [
+        { userId: 'u-tenant', emailFrequency: 'never' },
+      ]);
+
+      const recipients = await resolveRecipients(COMMUNITY_ID, 'owners_only', 'meeting');
+
+      expect(recipients.map((r) => r.userId)).toEqual(['u-owner']);
+      expect(userLookups(selectFrom)).toEqual([
+        { _type: 'inArray', col: tables.users.id, vals: ['u-owner'] },
+      ]);
+    });
+
+    it('resolves a specific_user who holds no role row, by id alone', async () => {
+      const { selectFrom } = setupMock(
+        baseRoleRows,
+        [...baseUserRows, { id: 'u-former', email: 'former@example.com', fullName: 'Former Resident', deletedAt: null }],
+      );
+
+      const recipients = await resolveRecipients(
+        COMMUNITY_ID,
+        { type: 'specific_user', userId: 'u-former' },
+        'maintenance',
+      );
+
+      expect(recipients).toEqual([
+        { userId: 'u-former', email: 'former@example.com', fullName: 'Former Resident' },
+      ]);
+      expect(userLookups(selectFrom)).toEqual([
+        { _type: 'eq', col: tables.users.id, val: 'u-former' },
+      ]);
     });
 
     it('returns admin roles for filter "community_admins"', async () => {
@@ -631,6 +695,68 @@ describe('notification-service', () => {
       // One succeeded, one failed
       expect(count).toBe(1);
       expect(sendEmailMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // createNotificationsForEvent — in-app channel
+  // -------------------------------------------------------------------------
+
+  describe('createNotificationsForEvent', () => {
+    const inAppEvent = {
+      category: 'announcement' as const,
+      title: 'Pool closed',
+      sourceType: 'announcement',
+      sourceId: '1',
+    };
+
+    beforeEach(() => {
+      insertNotificationsMock.mockImplementation(async (rows: unknown[]) => ({ created: rows.length }));
+    });
+
+    // This path swallows recipient-resolution errors (logs, returns created: 0),
+    // so a read the scoped client refuses would silently stop in-app delivery.
+    it('notifies live matched users, reading only their ids from users', async () => {
+      const { selectFrom } = setupMock(
+        [
+          { userId: 'u-owner', role: 'resident', isUnitOwner: true },
+          { userId: 'u-tenant', role: 'resident', isUnitOwner: false },
+          { userId: 'u-gone', role: 'resident', isUnitOwner: true },
+        ],
+        [
+          { id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null },
+          { id: 'u-tenant', email: 'tenant@example.com', fullName: 'Tenant', deletedAt: null },
+          { id: 'u-gone', email: 'gone@example.com', fullName: 'Gone', deletedAt: new Date() },
+        ],
+      );
+
+      const result = await createNotificationsForEvent(COMMUNITY_ID, inAppEvent, 'owners_only');
+
+      expect(result).toEqual({ created: 1, skipped: 0 });
+      expect(insertNotificationsMock).toHaveBeenCalledWith([
+        expect.objectContaining({ userId: 'u-owner', title: 'Pool closed' }),
+      ]);
+      expect(userLookups(selectFrom)).toEqual([
+        { _type: 'inArray', col: tables.users.id, vals: ['u-owner', 'u-gone'] },
+      ]);
+    });
+
+    it('notifies a specific_user who holds no role row', async () => {
+      const { selectFrom } = setupMock(
+        [],
+        [{ id: 'u-submitter', email: 's@example.com', fullName: 'Submitter', deletedAt: null }],
+      );
+
+      const result = await createNotificationsForEvent(
+        COMMUNITY_ID,
+        inAppEvent,
+        { type: 'specific_user', userId: 'u-submitter' },
+      );
+
+      expect(result).toEqual({ created: 1, skipped: 0 });
+      expect(userLookups(selectFrom)).toEqual([
+        { _type: 'inArray', col: tables.users.id, vals: ['u-submitter'] },
+      ]);
     });
   });
 });

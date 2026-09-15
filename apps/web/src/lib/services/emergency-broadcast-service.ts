@@ -690,17 +690,34 @@ export async function resolveEmergencyRecipients(
   const scoped = createScopedClient(communityId);
 
   // Batch queries — no N+1
-  const [roleRows, userRows, preferenceRows] = await Promise.all([
+  const [roleRows, preferenceRows] = await Promise.all([
     scoped.selectFrom<UserRoleRecord>(userRoles, {}),
-    scoped.selectFrom<User>(users, {}),
     scoped.selectFrom<NotificationPreference>(notificationPreferences, {}),
   ]);
 
-  // Index users by ID
-  const usersById = new Map<string, User>();
-  for (const u of userRows) {
-    usersById.set(u.id, u);
+  // Audience members, deduped, in role order. `users` is platform-global, so
+  // only these ids are read from it — and only the columns delivery needs.
+  const audienceUserIds = new Set<string>();
+  for (const role of roleRows) {
+    if (!role.userId || !role.role) continue;
+    if (!isAudienceMatch(role.role, audience, { isUnitOwner: role.isUnitOwner === true })) continue;
+    audienceUserIds.add(role.userId);
   }
+
+  const userRows = await scoped.selectFrom<
+    Pick<User, 'id' | 'email' | 'fullName' | 'phone' | 'phoneVerifiedAt'>
+  >(
+    users,
+    {
+      id: users.id,
+      email: users.email,
+      fullName: users.fullName,
+      phone: users.phone,
+      phoneVerifiedAt: users.phoneVerifiedAt,
+    },
+    inArray(users.id, [...audienceUserIds]),
+  );
+  const usersById = new Map(userRows.map((u) => [u.id, u]));
 
   // Index preferences by userId
   const prefsByUserId = new Map<string, NotificationPreference>();
@@ -708,20 +725,9 @@ export async function resolveEmergencyRecipients(
     prefsByUserId.set(p.userId, p);
   }
 
-  // Resolve recipients from roles
-  const seen = new Set<string>();
   const recipients: ResolvedRecipient[] = [];
 
-  for (const role of roleRows) {
-    const userId = role.userId;
-    const roleName = role.role;
-    const isUnitOwner = role.isUnitOwner === true;
-
-    if (!userId || !roleName) continue;
-    if (!isAudienceMatch(roleName, audience, { isUnitOwner })) continue;
-    if (seen.has(userId)) continue;
-    seen.add(userId);
-
+  for (const userId of audienceUserIds) {
     const user = usersById.get(userId);
     if (!user) continue;
 
