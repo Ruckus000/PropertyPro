@@ -17,7 +17,7 @@ const {
     emergencyBroadcasts: Symbol('emergency_broadcasts'),
     notificationPreferences: Symbol('notification_preferences'),
     userRoles: Symbol('user_roles'),
-    users: Symbol('users'),
+    users: { __table: 'users', id: Symbol('users.id') },
   },
 }));
 
@@ -41,6 +41,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: vi.fn(),
   and: vi.fn(),
   desc: vi.fn(),
+  inArray: (col: unknown, vals: unknown[]) => ({ _type: 'inArray', col, vals }),
 }));
 
 vi.mock('@/lib/services/sms/sms-service', () => ({
@@ -108,22 +109,36 @@ describe('emergency-broadcast-service', () => {
   describe('smsAllowed gate', () => {
     function mockCommunityWithRecipients() {
       const inserted: Array<Record<string, unknown>[]> = [];
-      const selectFrom = vi.fn((table: symbol) => {
+      const selectFrom = vi.fn((table: unknown, _columns?: unknown, where?: { col: unknown; vals: unknown[] }) => {
         if (table === tables.userRoles) {
           return Promise.resolve([
             { userId: 'u1', role: 'resident', isUnitOwner: true },
           ]);
         }
         if (table === tables.users) {
-          return Promise.resolve([
-            {
-              id: 'u1',
-              email: 'owner@example.com',
-              fullName: 'Owner One',
-              phone: '+13055551234',
-              phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
-            },
-          ]);
+          // Mirrors the scoped client's read guard: `users` is platform-global,
+          // so it is only served for a WHERE on users.id.
+          if (where?.col !== tables.users.id) {
+            return Promise.reject(new Error('Unscoped selectFrom on table "users"'));
+          }
+          return Promise.resolve(
+            [
+              {
+                id: 'u1',
+                email: 'owner@example.com',
+                fullName: 'Owner One',
+                phone: '+13055551234',
+                phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+              },
+              {
+                id: 'u-elsewhere',
+                email: 'elsewhere@example.com',
+                fullName: 'Other Community',
+                phone: '+13055559999',
+                phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+              },
+            ].filter((u) => where.vals.includes(u.id)),
+          );
         }
         if (table === tables.notificationPreferences) {
           return Promise.resolve([
@@ -192,6 +207,17 @@ describe('emergency-broadcast-service', () => {
       const recipients = inserted.flat();
       expect(recipients[0]?.smsStatus).toBe('pending');
       expect(recipients[0]?.phone).toBe('+13055551234');
+    });
+
+    it('reads only the audience members from users', async () => {
+      mockCommunityWithRecipients();
+
+      await createBroadcast({ ...baseParams, smsAllowed: true });
+
+      const scoped = createScopedClientMock.mock.results[0]?.value as { selectFrom: ReturnType<typeof vi.fn> };
+      const userLookups = scoped.selectFrom.mock.calls.filter(([table]) => table === tables.users);
+      expect(userLookups).toHaveLength(1);
+      expect(userLookups[0]?.[2]).toEqual({ _type: 'inArray', col: tables.users.id, vals: ['u1'] });
     });
 
     it('does not throw when SMS is gated off', async () => {

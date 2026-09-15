@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { eq } from '@propertypro/db/filters';
+import { eq, inArray } from '@propertypro/db/filters';
 import {
   announcements,
   communities,
@@ -427,13 +427,15 @@ export async function processNotificationDigests(
 
     if (activeRows.length === 0) continue;
 
-    const userRows = await scoped.query(users);
+    // Only this tick's recipients — `users` is platform-global, and a per-tick,
+    // per-community read of all of it scaled with every signup on the platform.
+    const userRows = await scoped.selectFrom<{ id: string; email: string; fullName: string }>(
+      users,
+      { id: users.id, email: users.email, fullName: users.fullName },
+      inArray(users.id, [...new Set(activeRows.map((row) => row.userId))]),
+    );
     const preferenceRows = await scoped.query(notificationPreferences);
-    const usersById = new Map<string, Record<string, unknown>>();
-    for (const row of userRows) {
-      const userId = row['id'];
-      if (typeof userId === 'string') usersById.set(userId, row);
-    }
+    const usersById = new Map(userRows.map((user) => [user.id, user]));
     const prefsByUserId = new Map<string, Record<string, unknown>>();
     for (const row of preferenceRows) {
       const userId = row['userId'];
@@ -455,26 +457,15 @@ export async function processNotificationDigests(
       const first = groupRows[0];
       if (!first) return;
 
+      // The scoped read drops soft-deleted users, so a deleted recipient lands
+      // here too. email and full_name are NOT NULL, so a found row has both.
       const user = usersById.get(first.userId);
       if (!user) {
         await Promise.all(groupRows.map((row) => markRowDiscarded(row, 'Recipient not found', now)));
         summary.rowsDiscarded += groupRows.length;
         return;
       }
-
-      if (user['deletedAt'] != null) {
-        await Promise.all(groupRows.map((row) => markRowDiscarded(row, 'Recipient inactive', now)));
-        summary.rowsDiscarded += groupRows.length;
-        return;
-      }
-
-      const email = user['email'];
-      const fullName = user['fullName'];
-      if (typeof email !== 'string' || typeof fullName !== 'string') {
-        await Promise.all(groupRows.map((row) => markRowDiscarded(row, 'Recipient missing email', now)));
-        summary.rowsDiscarded += groupRows.length;
-        return;
-      }
+      const { email, fullName } = user;
 
       const prefs = coercePreferences(prefsByUserId.get(first.userId));
       if (prefs.emailFrequency !== first.frequency) {

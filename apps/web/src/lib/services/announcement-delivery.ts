@@ -7,7 +7,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { and, eq } from '@propertypro/db/filters';
+import { and, eq, inArray } from '@propertypro/db/filters';
 import { AnnouncementEmail, sendEmail } from '@propertypro/email';
 import { hasBoardDesignation } from '@propertypro/shared';
 import {
@@ -67,19 +67,10 @@ async function resolveRecipients(
   audience: AnnouncementAudience,
 ): Promise<Recipient[]> {
   const scoped = createScopedClient(communityId);
-  const [roleRows, userRows, preferenceRows] = await Promise.all([
+  const [roleRows, preferenceRows] = await Promise.all([
     scoped.query(userRoles),
-    scoped.query(users),
     scoped.query(notificationPreferences),
   ]);
-
-  const usersById = new Map<string, Record<string, unknown>>();
-  for (const row of userRows) {
-    const userId = row['id'];
-    if (typeof userId === 'string') {
-      usersById.set(userId, row);
-    }
-  }
 
   const preferencesByUserId = new Map<
     string,
@@ -104,7 +95,9 @@ async function resolveRecipients(
     }
   }
 
-  const recipients: Recipient[] = [];
+  // Decide who qualifies from roles + preferences first, then load only those
+  // users: `users` is platform-global, so it is never read wholesale.
+  const candidates: Array<{ userId: string; emailFrequency: EmailFrequency }> = [];
   for (const row of roleRows) {
     const userId = row['userId'];
     const role = row['role'];
@@ -120,21 +113,29 @@ async function resolveRecipients(
 
     if (!prefs.emailAnnouncements) continue;
     if (isNeverFrequency(prefs.emailFrequency)) continue;
+    candidates.push({ userId, emailFrequency: prefs.emailFrequency });
+  }
 
+  const userRows = await scoped.selectFrom<{ id: string; email: string; fullName: string }>(
+    users,
+    { id: users.id, email: users.email, fullName: users.fullName },
+    inArray(users.id, candidates.map((c) => c.userId)),
+  );
+  const usersById = new Map(userRows.map((user) => [user.id, user]));
+
+  const recipients: Recipient[] = [];
+  for (const { userId, emailFrequency } of candidates) {
     const user = usersById.get(userId);
     if (!user) continue;
+    const { email, fullName } = user;
 
-    const email = user['email'];
-    const fullName = user['fullName'];
-    if (typeof email !== 'string' || typeof fullName !== 'string') continue;
-
-    if (isDigestFrequency(prefs.emailFrequency)) {
+    if (isDigestFrequency(emailFrequency)) {
       recipients.push({
         userId,
         email,
         fullName,
         mode: 'digest',
-        frequency: prefs.emailFrequency,
+        frequency: emailFrequency,
       });
       continue;
     }

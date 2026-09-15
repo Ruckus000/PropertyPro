@@ -18,7 +18,7 @@ import {
   notificationPreferences,
   logAuditEvent,
 } from '@propertypro/db';
-import { eq, and, isNull } from '@propertypro/db/filters';
+import { eq, and, inArray, isNull, sql } from '@propertypro/db/filters';
 import {
   OtpVerificationEmail,
   AccessRequestPendingEmail,
@@ -135,10 +135,12 @@ export async function submitAccessRequest(params: {
     return { requestId: pendingVerification['id'] as number, resent: true };
   }
 
-  // Check if email already belongs to a community member
-  const existingUsers = await scoped.query(users);
-  const existingUser = existingUsers.find(
-    (u) => (u['email'] as string).toLowerCase() === normalizedEmail,
+  // Check if email already belongs to a community member. `users` is
+  // platform-global, so look up this one address rather than reading the table.
+  const [existingUser] = await scoped.selectFrom<{ id: string }>(
+    users,
+    { id: users.id },
+    sql`lower(${users.email}) = lower(${normalizedEmail})`,
   );
 
   if (existingUser) {
@@ -274,20 +276,24 @@ export async function verifyOtp(params: {
     );
   });
 
-  const userRows = await scoped.query(users);
+  const userRows = await scoped.selectFrom<{ id: string; email: string; fullName: string }>(
+    users,
+    { id: users.id, email: users.email, fullName: users.fullName },
+    inArray(users.id, adminRoles.map((r) => r['userId'] as string)),
+  );
   const dashboardUrl = `${getBaseUrl()}/dashboard/residents`;
 
   for (const adminRole of adminRoles) {
-    const adminUser = userRows.find((u) => u['id'] === adminRole['userId']);
+    const adminUser = userRows.find((u) => u.id === adminRole['userId']);
     if (!adminUser) continue;
 
     sendEmail({
-      to: adminUser['email'] as string,
+      to: adminUser.email,
       subject: `New resident access request for ${communityName}`,
       category: 'transactional',
       react: createElement(AccessRequestPendingEmail, {
         branding: { communityName },
-        adminName: (adminUser['fullName'] as string) ?? 'Admin',
+        adminName: adminUser.fullName ?? 'Admin',
         requesterName: request['fullName'] as string,
         requesterEmail: request['email'] as string,
         claimedUnit: (request['claimedUnitNumber'] as string) ?? undefined,

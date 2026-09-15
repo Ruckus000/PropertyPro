@@ -7,11 +7,12 @@
  * communities (so that per-community Promise.allSettled error capture stays
  * at the route).
  */
-import { announcements, createScopedClient, users } from '@propertypro/db';
+import { announcements, createScopedClient } from '@propertypro/db';
 import {
   queueAnnouncementDelivery,
   type AnnouncementAudience,
 } from '@/lib/services/announcement-delivery';
+import { getAnnouncementAuthorName } from '@/lib/services/announcement-service';
 
 /**
  * Insert an announcement into one community and queue its email delivery.
@@ -51,15 +52,9 @@ export async function broadcastBulkAnnouncementToCommunity(params: {
   });
   const created = rows[0] as Record<string, unknown>;
 
-  // Resolve author display name (preserves prior route-side behavior; a
-  // tighter `selectFrom(users, ..., eq(users.id, userId))` lookup would be
-  // a worthwhile perf follow-up but is out of scope for this drain).
-  const authorRows = await scoped.query(users);
-  const author = authorRows.find((row) => row['id'] === userId);
-  const authorName =
-    typeof author?.['fullName'] === 'string'
-      ? (author['fullName'] as string)
-      : 'Community Team';
+  // Same one-row author lookup (and 'Community Team' fallback) as a
+  // single-community announcement.
+  const authorName = await getAnnouncementAuthorName(communityId, userId);
 
   // Queue email delivery (non-blocking for partial failures)
   await queueAnnouncementDelivery({

@@ -61,7 +61,12 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: vi.fn((col: unknown, val: unknown) => ({ _type: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ _type: 'and', args })),
   isNull: vi.fn((_col: unknown) => ({ _type: 'isNull' })),
-  inArray: vi.fn((_col: unknown, _vals: unknown) => ({ _type: 'inArray' })),
+  inArray: vi.fn((col: unknown, vals: unknown) => ({ _type: 'inArray', col, vals })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    _type: 'sql',
+    text: strings.join('?'),
+    values,
+  })),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
@@ -117,7 +122,9 @@ function setupScopedMock(overrides: {
 } = {}) {
   const queryMock = vi.fn(async (table: unknown) => {
     if (table === tables.accessRequests) return overrides.accessRequestRows ?? [];
-    if (table === tables.users) return overrides.userRows ?? [];
+    // Mirrors the scoped client's read guard: `users` is platform-global, so an
+    // unfiltered read of it is refused rather than served.
+    if (table === tables.users) throw new Error('Unscoped query on table "users"');
     if (table === tables.userRoles) return overrides.roleRows ?? [];
     if (table === tables.communities) return overrides.communityRows ?? communityRows;
     if (table === tables.notificationPreferences) return [];
@@ -138,16 +145,35 @@ function setupScopedMock(overrides: {
   // exercise the rejection path.
   const queryByIdMock = vi.fn(async (_table: unknown, id: number) => ({ id }));
 
-  // Approval looks up an existing `users` row by email before creating the auth
-  // account, so it can adopt that row's id (issue #944). Default to "no existing
+  // `users` reads go through selectFrom with a WHERE. The two predicates the
+  // service builds are applied to `userRows`, so a lookup only sees the rows it
+  // actually asked for:
+  // - inArray(users.id, ids)           — admin notification recipients
+  // - sql`lower(users.email) = lower(x)` — the submit-time member check
+  // Anything else (approval's `eq(users.email, ...)`) defaults to "no existing
   // row" — the ordinary new-resident case; tests override it to model someone
-  // pre-provisioned by another community.
+  // pre-provisioned by another community (issue #944).
   const selectFromMock = vi.fn(
     async (
-      _table: unknown,
+      table: unknown,
       _columns: unknown,
-      _additionalWhere?: unknown,
-    ): Promise<Record<string, unknown>[]> => [],
+      additionalWhere?: unknown,
+    ): Promise<Record<string, unknown>[]> => {
+      if (table !== tables.users) return [];
+      const rows = overrides.userRows ?? [];
+      const where = additionalWhere as
+        | { _type: 'inArray'; col: unknown; vals: unknown[] }
+        | { _type: 'sql'; values: unknown[] }
+        | undefined;
+      if (where?._type === 'inArray' && where.col === tables.users.id) {
+        return rows.filter((row) => where.vals.includes(row['id']));
+      }
+      if (where?._type === 'sql' && where.values[0] === tables.users.email) {
+        const wanted = String(where.values[1]).toLowerCase();
+        return rows.filter((row) => String(row['email']).toLowerCase() === wanted);
+      }
+      return [];
+    },
   );
 
   const scoped = {
@@ -302,6 +328,36 @@ describe('access-request-service', () => {
         }),
       ).rejects.toThrow('already associated with a member');
     });
+
+    it('looks the submitted email up case-insensitively, never by reading the users table', async () => {
+      const scoped = setupScopedMock({
+        userRows: [
+          { id: 'someone-else', email: 'other@example.com', fullName: 'Other' },
+          { id: 'user-1', email: 'Member@Example.com', fullName: 'Member' },
+        ],
+        roleRows: [{ userId: 'user-1', role: 'resident', isUnitOwner: true }],
+      });
+
+      await expect(
+        submitAccessRequest({
+          communityId: COMMUNITY_ID,
+          communitySlug: COMMUNITY_SLUG,
+          email: 'MEMBER@example.com',
+          fullName: 'Member',
+          isUnitOwner: false,
+        }),
+      ).rejects.toThrow('already associated with a member');
+
+      expect(scoped.selectFrom).toHaveBeenCalledWith(
+        tables.users,
+        { id: tables.users.id },
+        {
+          _type: 'sql',
+          text: 'lower(?) = lower(?)',
+          values: [tables.users.email, 'member@example.com'],
+        },
+      );
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -425,6 +481,33 @@ describe('access-request-service', () => {
         );
 
         expect(emails).toEqual([]);
+      });
+
+      it('loads only the notified admins, never the whole users table', async () => {
+        const scoped = setupScopedMock({
+          accessRequestRows: [pendingRequestRow],
+          roleRows: [
+            { userId: 'admin-1', role: 'property_manager', designation: null },
+            { userId: 'resident-1', role: 'resident', designation: null },
+            { userId: 'admin-2', role: 'root_manager', designation: null },
+          ],
+          userRows: [
+            { id: 'admin-1', email: 'pm@example.com', fullName: 'PM' },
+            { id: 'resident-1', email: 'resident@example.com', fullName: 'Resident' },
+            { id: 'admin-2', email: 'root@example.com', fullName: 'Root' },
+          ],
+        });
+
+        await verifyOtp({ requestId: 10, otp: TEST_OTP, communityId: COMMUNITY_ID });
+
+        const userLookups = scoped.selectFrom.mock.calls.filter(([table]) => table === tables.users);
+        expect(userLookups).toEqual([
+          [
+            tables.users,
+            expect.any(Object),
+            { _type: 'inArray', col: tables.users.id, vals: ['admin-1', 'admin-2'] },
+          ],
+        ]);
       });
     });
 

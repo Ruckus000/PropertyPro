@@ -7,13 +7,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockScopedQuery,
   mockScopedInsert,
+  mockScopedSelectFrom,
   mockLogAuditEvent,
   mockFindUserCommunitiesUnscoped,
+  usersTable,
 } = vi.hoisted(() => ({
   mockScopedQuery: vi.fn(),
   mockScopedInsert: vi.fn(),
+  mockScopedSelectFrom: vi.fn(),
   mockLogAuditEvent: vi.fn(),
   mockFindUserCommunitiesUnscoped: vi.fn(),
+  // Per-column identities, so a predicate assertion can tell users.id from
+  // users.email (on a bare Symbol both are `undefined`).
+  usersTable: { __table: 'users', id: Symbol('users.id'), email: Symbol('users.email') },
 }));
 
 // The cross-tenant guard (user-linking.ts) reads BOTH users' memberships when an
@@ -26,15 +32,32 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(() => ({
-    query: mockScopedQuery,
+    // Mirrors the scoped client's read guard: `users` is platform-global, so an
+    // unfiltered read of it is refused. Every other table falls through to the
+    // call-order mock below.
+    query: (table: unknown) =>
+      table === usersTable
+        ? Promise.reject(new Error('Unscoped query on table "users"'))
+        : mockScopedQuery(table),
     insert: mockScopedInsert,
+    selectFrom: mockScopedSelectFrom,
   })),
-  users: Symbol('users'),
+  users: usersTable,
   userRoles: Symbol('userRoles'),
   invitations: Symbol('invitations'),
   communities: Symbol('communities'),
   notificationPreferences: Symbol('notificationPreferences'),
   logAuditEvent: mockLogAuditEvent,
+}));
+
+// Preserve column + value so the users lookups' predicates can be asserted.
+vi.mock('@propertypro/db/filters', () => ({
+  eq: (col: unknown, val: unknown) => ({ _type: 'eq', col, val }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    _type: 'sql',
+    text: strings.join('?'),
+    values,
+  }),
 }));
 
 vi.mock('@propertypro/email', () => ({
@@ -124,6 +147,7 @@ const USER_ID = 'user-uuid-123';
 function resetMocks() {
   mockScopedQuery.mockReset();
   mockScopedInsert.mockReset();
+  mockScopedSelectFrom.mockReset();
   mockLogAuditEvent.mockReset().mockResolvedValue(undefined);
   (sendEmail as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(undefined);
   (validateRoleAssignment as ReturnType<typeof vi.fn>).mockReset().mockReturnValue({ valid: true });
@@ -135,15 +159,23 @@ function resetMocks() {
 
 /**
  * Set up query mocks for createOnboardingResident.
- * Call order: query(users) -> query(userRoles)
+ * users: selectFrom(users, …, lower(email) = lower(x)), applied to existingUsers.
+ * Then: query(userRoles).
  */
 function setupResidentQueryMocks(opts: {
   existingUsers?: Record<string, unknown>[];
   existingRoles?: Record<string, unknown>[];
 }) {
-  mockScopedQuery
-    .mockResolvedValueOnce(opts.existingUsers ?? []) // query(users)
-    .mockResolvedValueOnce(opts.existingRoles ?? []); // query(userRoles)
+  mockScopedSelectFrom.mockImplementation(
+    async (_table: unknown, _columns: unknown, where?: { _type: string; values?: unknown[] }) => {
+      if (where?._type !== 'sql' || where.values?.[0] !== usersTable.email) return [];
+      const wanted = String(where.values[1]).toLowerCase();
+      return (opts.existingUsers ?? []).filter(
+        (row) => String(row['email']).toLowerCase() === wanted,
+      );
+    },
+  );
+  mockScopedQuery.mockResolvedValueOnce(opts.existingRoles ?? []); // query(userRoles)
   mockScopedInsert.mockResolvedValue([{ id: USER_ID, email: 'test@example.com', fullName: 'Test User' }]);
 }
 
@@ -435,6 +467,36 @@ describe('createOnboardingResident', () => {
 
     expect(mockFindUserCommunitiesUnscoped).not.toHaveBeenCalled();
   });
+
+  it('looks up the one submitted email case-insensitively, never by reading the users table', async () => {
+    setupResidentQueryMocks({
+      existingUsers: [
+        { id: 'someone-else', email: 'other@example.com', fullName: 'Other' },
+        { id: USER_ID, email: 'Existing@Example.com', fullName: 'Existing' },
+      ],
+      existingRoles: [],
+    });
+
+    const result = await createOnboardingResident({
+      communityId: COMMUNITY_ID,
+      email: 'EXISTING@example.com',
+      fullName: 'Existing',
+      phone: null,
+      role: 'resident',
+      unitId: 3,
+      actorUserId: ACTOR_USER_ID,
+      communityType: 'condo_718',
+      isUnitOwner: true,
+    });
+
+    expect(result).toEqual({ userId: USER_ID, isNewUser: false });
+    expect(mockScopedSelectFrom).toHaveBeenCalledTimes(1);
+    expect(mockScopedSelectFrom).toHaveBeenCalledWith(
+      usersTable,
+      { id: usersTable.id },
+      { _type: 'sql', text: 'lower(?) = lower(?)', values: [usersTable.email, 'existing@example.com'] },
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -454,8 +516,8 @@ describe('createOnboardingInvitation', () => {
 
     mockScopedQuery
       .mockResolvedValueOnce([communityRow]) // query(communities)
-      .mockResolvedValueOnce([userRow])      // query(users)
       .mockResolvedValueOnce([roleRow]);     // query(userRoles)
+    mockScopedSelectFrom.mockResolvedValueOnce([userRow]); // selectFrom(users, eq(id))
     mockScopedInsert.mockResolvedValue([{}]);
 
     const result = await createOnboardingInvitation({
@@ -532,9 +594,8 @@ describe('createOnboardingInvitation', () => {
 
   it('throws NotFoundError when user does not exist', async () => {
     const communityRow = { id: COMMUNITY_ID, name: 'Test Community' };
-    mockScopedQuery
-      .mockResolvedValueOnce([communityRow]) // communities found
-      .mockResolvedValueOnce([]);            // no users
+    mockScopedQuery.mockResolvedValueOnce([communityRow]); // communities found
+    mockScopedSelectFrom.mockResolvedValueOnce([]);        // no users
 
     await expect(
       createOnboardingInvitation({
@@ -554,8 +615,8 @@ describe('createOnboardingInvitation', () => {
 
     mockScopedQuery
       .mockResolvedValueOnce([communityRow])
-      .mockResolvedValueOnce([userRow])
       .mockResolvedValueOnce([]); // no role rows
+    mockScopedSelectFrom.mockResolvedValueOnce([userRow]);
     mockScopedInsert.mockResolvedValue([{}]);
 
     await createOnboardingInvitation({
@@ -581,8 +642,8 @@ describe('createOnboardingInvitation', () => {
 
     mockScopedQuery
       .mockResolvedValueOnce([communityRow])
-      .mockResolvedValueOnce([userRow])
       .mockResolvedValueOnce([roleRow]);
+    mockScopedSelectFrom.mockResolvedValueOnce([userRow]);
     mockScopedInsert.mockResolvedValue([{}]);
 
     const result = await createOnboardingInvitation({
@@ -596,5 +657,30 @@ describe('createOnboardingInvitation', () => {
     const diffDays = (result.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     expect(diffDays).toBeGreaterThan(13.9);
     expect(diffDays).toBeLessThan(14.1);
+  });
+
+  it('loads only the invited user by id, never the whole users table', async () => {
+    mockScopedQuery
+      .mockResolvedValueOnce([{ id: COMMUNITY_ID, name: 'Test' }])
+      .mockResolvedValueOnce([]);
+    mockScopedSelectFrom.mockResolvedValueOnce([
+      { email: 'invited@example.com', fullName: 'Invited User' },
+    ]);
+    mockScopedInsert.mockResolvedValue([{}]);
+
+    await createOnboardingInvitation({
+      communityId: COMMUNITY_ID,
+      userId: USER_ID,
+      actorUserId: ACTOR_USER_ID,
+      inviterName: INVITER_NAME,
+    });
+
+    expect(mockScopedSelectFrom).toHaveBeenCalledTimes(1);
+    expect(mockScopedSelectFrom).toHaveBeenCalledWith(
+      usersTable,
+      expect.any(Object),
+      { _type: 'eq', col: usersTable.id, val: USER_ID },
+    );
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'invited@example.com' }));
   });
 });

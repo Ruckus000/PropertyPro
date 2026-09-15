@@ -109,14 +109,10 @@ function nonEmpty(value: unknown): string | null {
 
 /** Board/admin members with a deliverable email who have NOT opted out. */
 async function resolveAdminRecipients(scoped: ScopedClient): Promise<AdminRecipient[]> {
-  const [roleRows, userRows, prefRows] = await Promise.all([
+  const [roleRows, prefRows] = await Promise.all([
     scoped.query(userRoles) as Promise<Row[]>,
-    scoped.query(users) as Promise<Row[]>,
     scoped.query(notificationPreferences) as Promise<Row[]>,
   ]);
-
-  const usersById = new Map<string, Row>();
-  for (const u of userRows) if (typeof u.id === 'string') usersById.set(u.id, u);
 
   // Opted out only when a prefs row explicitly sets the flag false; missing = default on.
   const optedOut = new Set<string>();
@@ -124,26 +120,29 @@ async function resolveAdminRecipients(scoped: ScopedClient): Promise<AdminRecipi
     if (typeof p.userId === 'string' && p.emailInsuranceAlerts === false) optedOut.add(p.userId);
   }
 
-  const recipients: AdminRecipient[] = [];
-  const seen = new Set<string>();
+  const candidateIds = new Set<string>();
   for (const r of roleRows) {
     const userId = r.userId;
     const role = r.role;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (seen.has(userId) || optedOut.has(userId)) continue;
+    if (optedOut.has(userId)) continue;
     const designation = typeof r.designation === 'string' ? r.designation : null;
-    if (!isBoardOrAdminRecipient(role, designation)) continue;
+    if (isBoardOrAdminRecipient(role, designation)) candidateIds.add(userId);
+  }
 
+  // Only the board/admin candidates — `users` is platform-global, never read wholesale.
+  const userRows = await scoped.selectFrom<{ id: string; email: string; fullName: string }>(
+    users,
+    { id: users.id, email: users.email, fullName: users.fullName },
+    inArray(users.id, [...candidateIds]),
+  );
+  const usersById = new Map(userRows.map((u) => [u.id, u]));
+
+  const recipients: AdminRecipient[] = [];
+  for (const userId of candidateIds) {
     const u = usersById.get(userId);
-    const email = u?.email;
-    if (!u || typeof email !== 'string' || email.length === 0) continue;
-
-    seen.add(userId);
-    recipients.push({
-      userId,
-      email,
-      fullName: typeof u.fullName === 'string' && u.fullName.length > 0 ? u.fullName : 'there',
-    });
+    if (!u || u.email.length === 0) continue;
+    recipients.push({ userId, email: u.email, fullName: u.fullName.length > 0 ? u.fullName : 'there' });
   }
   return recipients;
 }

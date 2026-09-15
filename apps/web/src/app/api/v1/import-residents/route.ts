@@ -98,7 +98,10 @@ export const POST = withErrorHandler(
     // Proceed with import
     const communityType = await getCommunityTypeForOnboarding(communityId);
     const unitByNumber = await loadUnitNumberMapForImport(communityId);
-    const userByEmail = await loadUserEmailMapForImport(communityId);
+    const userByEmail = await loadUserEmailMapForImport(
+      communityId,
+      parsedCsv.rows.map((row) => row.data.email),
+    );
     // Hoisted out of the row loop: the cross-tenant guard needs the actor's own
     // memberships for every pre-existing match, and they do not change mid-import.
     const actorCommunities = await loadActorCommunitiesForLinking(actorUserId);
@@ -165,7 +168,7 @@ export const POST = withErrorHandler(
 
       // Find or create user
       let userId = userByEmail.get(email);
-      // `userByEmail` comes from a platform-wide scan (`users` has no
+      // `userByEmail` comes from a platform-wide lookup (`users` has no
       // `community_id`, so the scoped client does not filter it). A hit here
       // may therefore be a resident of a DIFFERENT association, and binding
       // them in would publish their real name, email and phone through this
