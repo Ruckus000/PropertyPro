@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   analyzeOrphans,
   classifyObjectPath,
+  parseReportArgs,
   referencePathsQuery,
   type AnalyzeOrphansInput,
 } from '../lib/document-object-orphans';
@@ -167,5 +168,49 @@ describe('analyzeOrphans', () => {
         communities: [],
       }),
     ).toThrow(/zero communities/);
+  });
+});
+
+describe('parseReportArgs', () => {
+  it('parses the equals form', () => {
+    expect(parseReportArgs(['--max-age-hours=48'])).toEqual({ asJson: false, maxAgeHours: 48 });
+  });
+
+  it('parses the SPACE form, which used to be silently ignored', () => {
+    // `--max-age-hours 720` previously matched nothing, fell back to the 24h
+    // default, and over-reported recent uploads as orphans.
+    expect(parseReportArgs(['--max-age-hours', '720'])).toEqual({
+      asJson: false,
+      maxAgeHours: 720,
+    });
+  });
+
+  it('parses --json, alone and alongside a value flag', () => {
+    expect(parseReportArgs(['--json'])).toEqual({ asJson: true });
+    expect(parseReportArgs(['--json', '--max-age-hours=1'])).toEqual({
+      asJson: true,
+      maxAgeHours: 1,
+    });
+  });
+
+  it('THROWS on a mistyped flag instead of silently using the default', () => {
+    // The whole point: a safety setting you can turn off with a typo is not a
+    // safety setting, and this report is what a destructive decision is based on.
+    expect(() => parseReportArgs(['--max-age-hourz=720'])).toThrow(/unrecognised argument/);
+  });
+
+  it('throws on a stray positional argument', () => {
+    expect(() => parseReportArgs(['--delete'])).toThrow(/unrecognised argument/);
+    expect(() => parseReportArgs(['48'])).toThrow(/unrecognised argument/);
+  });
+
+  it('throws on a non-numeric or negative value, in either form', () => {
+    expect(() => parseReportArgs(['--max-age-hours=none'])).toThrow(/non-negative number/);
+    expect(() => parseReportArgs(['--max-age-hours', '-1'])).toThrow(/non-negative number/);
+    expect(() => parseReportArgs(['--max-age-hours'])).toThrow(/needs a value/);
+  });
+
+  it('defaults to no flags', () => {
+    expect(parseReportArgs([])).toEqual({ asJson: false });
   });
 });

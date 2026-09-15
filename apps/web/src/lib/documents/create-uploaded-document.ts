@@ -8,7 +8,6 @@ import { AppError, UnprocessableEntityError, ValidationError } from '@/lib/api/e
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { validateFile } from '@/lib/utils/file-validation';
 import { createNotificationsForEvent, queueNotificationDetailed } from '@/lib/services/notification-service';
-import { deleteUnreferencedUpload } from './upload-cleanup';
 import type { DocumentMutationResult, DocumentMutationWarning } from './types';
 
 type DocumentSourceType = 'library' | 'violation_evidence';
@@ -54,23 +53,34 @@ async function downloadStorageBytes(path: string): Promise<Uint8Array> {
 }
 
 /**
- * Reject an upload that failed validation, reclaiming its bytes.
+ * Reject an upload that failed validation: record it, then 422.
  *
- * Goes through `deleteUnreferencedUpload` rather than calling
- * `deleteStorageObject` directly, and that is a SECURITY fix, not a
- * refactor. The direct call had no reference check, so a member of this
- * community holding `documents:write` could pass an EXISTING document's
- * `file_path` with a deliberately wrong `fileSize`, trip the size-mismatch
- * branch below, and destroy that document's bytes — leaving the row behind
- * pointing at nothing and every download 404ing. `validateUploadFilePath` does
- * not stop it: the victim's path is in the same community and matches the
- * prefix. See `upload-cleanup.ts` for the two rules.
+ * DELIBERATELY DOES NOT DELETE THE OBJECT, and that is the fix for a real
+ * vulnerability rather than an omission.
+ *
+ * This used to call `deleteStorageObject(context.filePath)` — a client-supplied
+ * path — with no check that anything referenced it. The `documents` bucket also
+ * holds e-sign templates, signed PDFs, audit certificates and processed logos
+ * under sibling prefixes that `validateUploadFilePath` accepted, so a member
+ * holding `documents:write` could name an executed contract, send a wrong
+ * `fileSize`, and have the service-role client destroy it while the
+ * `esign_submissions` row survived pointing at nothing.
+ *
+ * Making that delete safe needs a reference model covering every writer into
+ * the bucket, kept complete forever, with no test able to prove completeness —
+ * see `scripts/lib/document-object-orphans.ts`, which enumerates six of them.
+ * This repo already declined that trade for the sibling bucket
+ * (`scripts/reconcile-site-assets-usage.ts`: orphan deletion is "destructive and
+ * irreversible, the orphan set depends on this script's reference model being
+ * complete, and it needs a human looking at real numbers first").
+ *
+ * So the rejected bytes stay. They sit in a PRIVATE bucket with no row, which
+ * makes them unreachable through every product surface — downloads are signed
+ * URLs minted only for `documents` rows — and `pnpm documents:orphan-report`
+ * lists them for an operator who can see real numbers before deciding. The
+ * audit entry below is what records that a rejection happened at all.
  */
 async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never> {
-  const cleanup = await deleteUnreferencedUpload(context.communityId, context.filePath);
-  const cleanupSucceeded = cleanup.reason === 'deleted';
-  const cleanupError = cleanup.error;
-
   await logAuditEvent({
     userId: context.userId,
     action: 'validation_failed',
@@ -82,13 +92,9 @@ async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never
       filePath: context.filePath,
       fileName: context.fileName,
       fileSize: context.fileSize,
-      cleanupAttempted: true,
-      cleanupSucceeded,
-      // Not just "it didn't delete" but why. 'referenced' in particular is a
-      // deliberate refusal, not a failure, and the two must not read alike in
-      // an append-only log.
-      ...(cleanupSucceeded ? {} : { cleanupSkippedReason: cleanup.reason }),
-      ...(cleanupError ? { cleanupError } : {}),
+      // The object is intentionally left in place; `filePath` above is what an
+      // operator needs to find it in the orphan report.
+      objectRetained: true,
       ...(context.details ?? {}),
     },
   });

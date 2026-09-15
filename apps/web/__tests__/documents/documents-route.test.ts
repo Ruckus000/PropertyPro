@@ -20,7 +20,7 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   resolveEffectiveCommunityIdMock,
-  validateUploadFilePathMock,
+  assertCommunityOwnedStoragePathMock,
   assertNotDemoGraceMock,
   requirePermissionMock,
   requireActiveSubscriptionForMutationMock,
@@ -43,7 +43,7 @@ const {
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
-  validateUploadFilePathMock: vi.fn(),
+  assertCommunityOwnedStoragePathMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn(),
@@ -76,13 +76,8 @@ vi.mock('@/lib/api/tenant-context', () => ({
   resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
 }));
 
-vi.mock('@/lib/api/upload-path', () => ({
-  validateUploadFilePath: validateUploadFilePathMock,
-  // deleteUnreferencedUpload re-checks the path scope itself rather than
-  // trusting the route validated it. Omitting this export here does not fail
-  // loudly at import — it throws inside cleanup on the first POST that errors,
-  // turning a 400 into a 500.
-  isUploadFilePathScoped: () => true,
+vi.mock('@/lib/services/storage-validators', () => ({
+  assertCommunityOwnedStoragePath: assertCommunityOwnedStoragePathMock,
 }));
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
@@ -301,7 +296,7 @@ describe('POST /api/v1/documents', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-admin');
     resolveEffectiveCommunityIdMock.mockReturnValue(42);
-    validateUploadFilePathMock.mockReturnValue(undefined);
+    assertCommunityOwnedStoragePathMock.mockReturnValue(undefined);
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
     requirePermissionMock.mockReturnValue(undefined);

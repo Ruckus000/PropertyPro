@@ -18,8 +18,12 @@ interface DocumentCreateResponse {
  *  3. POST /api/v1/violations/evidence → finalizes hidden evidence metadata
  *
  * Because step 1 records nothing, a failure in step 3 leaves the bytes in the
- * bucket with no row pointing at them. `withUploadCleanup` on that route
- * reclaims them; `pnpm documents:orphan-report` measures whatever it missed.
+ * bucket with no row pointing at them. Nothing reclaims them in the request
+ * path, deliberately: a deleter driven by a client-supplied path needs a
+ * reference model covering every writer into the bucket, and getting that wrong
+ * destroys records (see `create-uploaded-document.ts`). They are unreachable —
+ * private bucket, no row, no signed URL — and `pnpm documents:orphan-report`
+ * lists them for an operator.
  */
 export async function uploadEvidencePhoto(
   communityId: number,

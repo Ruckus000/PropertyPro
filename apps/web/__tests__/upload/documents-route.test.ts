@@ -12,7 +12,6 @@ const {
   logAuditEventMock,
   scopedInsertMock,
   scopedQueryMock,
-  scopedQueryWhereMock,
   enforceRedactionAttestationMock,
   scopedSoftDeleteMock,
   scopedUpdateMock,
@@ -34,7 +33,6 @@ const {
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   scopedInsertMock: vi.fn(),
   scopedQueryMock: vi.fn(),
-  scopedQueryWhereMock: vi.fn(),
   enforceRedactionAttestationMock: vi.fn(),
   scopedSoftDeleteMock: vi.fn(),
   scopedUpdateMock: vi.fn(),
@@ -100,7 +98,6 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
 }));
 
-
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 
 // The §718.111(12)(c) redaction gate reads the category's NAME from the DB to
@@ -151,14 +148,6 @@ function resetRouteMocks() {
   });
   createNotificationsForEventMock.mockResolvedValue({ created: 0, skipped: 0 });
   scopedUpdateMock.mockResolvedValue([]);
-  // Default: nothing references the uploaded path, so cleanup is free to delete.
-  //
-  // Deliberately its OWN mock and NOT aliased to scopedQueryMock the way
-  // selectFrom is below. scopedQueryMock is set to a non-empty document array in
-  // several cases here; aliasing would make isFilePathReferenced answer
-  // "referenced" for every one of them, cleanup would decline every delete, and
-  // every cleanup assertion in this file would pass while testing nothing.
-  scopedQueryWhereMock.mockResolvedValue([]);
   enforceRedactionAttestationMock.mockResolvedValue(undefined);
   createScopedClientMock.mockReturnValue({
     insert: scopedInsertMock,
@@ -167,8 +156,6 @@ function resetRouteMocks() {
     // instead of scoped.query + JS .find(). Alias selectFrom to the same
     // queryMock so existing test rows feed through unchanged.
     selectFrom: scopedQueryMock,
-    // The reference guard in deleteUnreferencedUpload — see resetRouteMocks.
-    queryWhere: scopedQueryWhereMock,
     softDelete: scopedSoftDeleteMock,
     // DELETE now unlinks compliance checklist items that reference the doc
     // before soft-deleting it.
@@ -355,15 +342,21 @@ describe('p1-11 documents route', () => {
     expect(deleteStorageObjectMock).not.toHaveBeenCalled();
   });
 
-  it('POST reclaims the uploaded object when the redaction attestation is refused', async () => {
-    // The most common real failure, and the one #1140 made visible and
-    // actionable — so the rate of stranded objects was about to rise. The 400
-    // fires before createUploadedDocument, so nothing inside it could ever have
-    // cleaned up.
+  
+  
+  
+  it.each([
+    ['an e-sign source template', 'communities/42/esign-templates/uuid-lease.pdf'],
+    ['an executed e-sign contract', 'communities/42/esign-signed/7/signed.pdf'],
+    ['a processed community logo', 'communities/42/branding/logo.webp'],
+  ])('POST rejects %s — same community, sibling namespace in the same bucket', async (_l, filePath) => {
+    // THE INPUT CLASS THAT WAS MISSING, and the reason a live hole survived five
+    // revert-checks: every filePath in this file used the `documents/` segment,
+    // so a check that stopped at `communities/{id}/` passed everything while
+    // admitting every other subsystem's objects in the same bucket. Accepting one
+    // here would let a manager create a documents row pointing at an executed
+    // contract and then flip publicAccess.
     requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
-    enforceRedactionAttestationMock.mockRejectedValueOnce(
-      new ValidationError('Confirm you have redacted it before uploading.'),
-    );
 
     const req = new NextRequest('http://localhost:3000/api/v1/documents', {
       method: 'POST',
@@ -372,60 +365,25 @@ describe('p1-11 documents route', () => {
         communityId: 42,
         title: 'Board Minutes',
         categoryId: 7,
-        filePath: 'communities/42/documents/abc/minutes.pdf',
+        filePath,
         fileName: 'minutes.pdf',
         fileSize: 1024,
       }),
     });
 
     const res = await POST(req);
-
-    // The message the uploader can act on survives — cleanup must not turn this
-    // into a 500.
     expect(res.status).toBe(400);
-    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
-      'documents',
-      'communities/42/documents/abc/minutes.pdf',
-    );
+    expect(scopedInsertMock).not.toHaveBeenCalled();
   });
 
-  it('POST reclaims the uploaded object when the subscription gate refuses', async () => {
+  it('POST accepts a filename containing a double dot, which the old substring check refused', async () => {
+    // `sanitizeFilename` permits `.`, so `report..final.pdf` is a filename the
+    // presign route can legitimately produce. The previous `includes('..')`
+    // check 400d it. The segment-wise check accepts it while still rejecting a
+    // real `..` segment — see the traversal case above.
     requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
-    requireActiveSubscriptionForMutationMock.mockRejectedValueOnce(
-      new ForbiddenError('Subscription is not active'),
-    );
-
-    const req = new NextRequest('http://localhost:3000/api/v1/documents', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        communityId: 42,
-        title: 'Board Minutes',
-        categoryId: 7,
-        filePath: 'communities/42/documents/abc/minutes.pdf',
-        fileName: 'minutes.pdf',
-        fileSize: 1024,
-      }),
-    });
-
-    const res = await POST(req);
-
-    expect(res.status).toBe(403);
-    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
-      'documents',
-      'communities/42/documents/abc/minutes.pdf',
-    );
-  });
-
-  it('POST does NOT reclaim the object when a documents row already references the path', async () => {
-    // Rule 2. Without it, a member with documents:write could pass a victim
-    // document's file_path with a wrong fileSize and destroy its bytes.
-    requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
-    enforceRedactionAttestationMock.mockRejectedValueOnce(
-      new ValidationError('Confirm you have redacted it before uploading.'),
-    );
-    scopedQueryWhereMock.mockResolvedValueOnce([
-      { id: 99, filePath: 'communities/42/documents/abc/minutes.pdf' },
+    scopedInsertMock.mockResolvedValue([
+      { id: 99, communityId: 42, title: 'Report' },
     ]);
 
     const req = new NextRequest('http://localhost:3000/api/v1/documents', {
@@ -433,21 +391,20 @@ describe('p1-11 documents route', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         communityId: 42,
-        title: 'Board Minutes',
+        title: 'Report',
         categoryId: 7,
-        filePath: 'communities/42/documents/abc/minutes.pdf',
-        fileName: 'minutes.pdf',
+        filePath: 'communities/42/documents/abc/report..final.pdf',
+        fileName: 'report..final.pdf',
         fileSize: 1024,
+        mimeType: 'application/pdf',
       }),
     });
 
     const res = await POST(req);
-
-    expect(res.status).toBe(400);
-    expect(deleteStorageObjectMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
   });
 
-  it('POST returns 422, deletes object, and audits when file size does not match', async () => {
+  it('POST returns 422 and audits, RETAINING the object, when file size does not match', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
     const req = new NextRequest('http://localhost:3000/api/v1/documents', {
       method: 'POST',
@@ -466,19 +423,13 @@ describe('p1-11 documents route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(422);
-    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
-      'documents',
-      'communities/42/documents/abc/minutes.pdf',
-    );
-    // TWICE, and deliberately so: rejectInvalidUpload reclaims the object, then
-    // the UnprocessableEntityError propagates through withUploadCleanup, which
-    // reclaims it again. Supabase `.remove([missingKey])` returns
-    // `{ data: [], error: null }` — a genuine no-op — so the second call costs
-    // one query and one storage call on a failure path only. The alternative
-    // (marking the error so the wrapper skips it) is more code and more
-    // coupling for no correctness gain. Pinned so it reads as intended rather
-    // than accidental.
-    expect(deleteStorageObjectMock).toHaveBeenCalledTimes(2);
+    // NOTHING is deleted, and that is the fix rather than a regression. The
+    // delete this used to assert took a client-supplied path with no check that
+    // anything referenced it, so a member could name an executed e-sign contract
+    // and have it destroyed. The rejected bytes now stay in a private bucket with
+    // no row — unreachable through every product surface — and
+    // `pnpm documents:orphan-report` lists them for an operator.
+    expect(deleteStorageObjectMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'validation_failed',
@@ -488,7 +439,7 @@ describe('p1-11 documents route', () => {
     );
   });
 
-  it('POST returns 422, deletes object, and audits when magic bytes validation fails', async () => {
+  it('POST returns 422 and audits, RETAINING the object, when magic bytes validation fails', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
     vi.stubGlobal(
       'fetch',
@@ -519,10 +470,8 @@ describe('p1-11 documents route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(422);
-    expect(deleteStorageObjectMock).toHaveBeenCalledWith(
-      'documents',
-      'communities/42/documents/abc/fake.pdf',
-    );
+    // The rejected file stays in the bucket — see the size-mismatch case above.
+    expect(deleteStorageObjectMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'validation_failed',
@@ -913,14 +862,9 @@ describe('p1-11 documents route — additional coverage', () => {
     it('POST returns 400 when storage fetch returns non-ok (magic bytes validation path)', async () => {
       requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
       // downloadStorageBytes throws ValidationError (400) when fetch returns !ok.
-      // This used to be one of the ~17 paths that stranded the uploaded bytes:
-      // it throws BEFORE rejectInvalidUpload, which was the only cleanup there
-      // was. withUploadCleanup now reclaims it.
-      //
-      // Deleting is right even though the fetch failed and we cannot know
-      // whether the object is readable: the caller gets a 400 and re-uploads
-      // from scratch, so the object is unreferenced either way, and
-      // deleteUnreferencedUpload declines if any documents row points at it.
+      // Nothing is deleted on any failure path any more: a deleter driven by a
+      // client-supplied path needs a reference model covering every writer into
+      // this bucket, and an incomplete one destroys records.
       vi.stubGlobal(
         'fetch',
         vi.fn(async () => ({
@@ -946,53 +890,8 @@ describe('p1-11 documents route — additional coverage', () => {
 
       const res = await POST(req);
       expect(res.status).toBe(400);
-      expect(deleteStorageObjectMock).toHaveBeenCalledWith(
-        'documents',
-        'communities/42/documents/abc/minutes.pdf',
-      );
+      expect(deleteStorageObjectMock).not.toHaveBeenCalled();
     });
 
-    it('POST handles deleteStorageObject throwing during cleanup and still returns 422', async () => {
-      requireCommunityMembershipMock.mockResolvedValueOnce(MANAGER_MEMBERSHIP);
-      // Stub EXE magic bytes to trigger rejectInvalidUpload
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(async () => {
-          const bytes = new Uint8Array([0x4d, 0x5a]); // EXE signature
-          return {
-            ok: true,
-            status: 200,
-            arrayBuffer: async () => bytes.buffer,
-          } as Response;
-        }),
-      );
-      deleteStorageObjectMock.mockRejectedValueOnce(new Error('Storage unavailable'));
-
-      const req = new NextRequest('http://localhost:3000/api/v1/documents', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 42,
-          title: 'Fake PDF',
-          categoryId: 7,
-          filePath: 'communities/42/documents/abc/fake.pdf',
-          fileName: 'fake.pdf',
-          fileSize: 2,
-          mimeType: 'application/pdf',
-        }),
-      });
-
-      const res = await POST(req);
-      // rejectInvalidUpload catches the deleteStorageObject error internally
-      // and still throws UnprocessableEntityError (422)
-      expect(res.status).toBe(422);
-      // Audit log still fires even when cleanup fails
-      expect(logAuditEventMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'validation_failed',
-          resourceType: 'document_upload',
-        }),
-      );
-    });
   });
 });

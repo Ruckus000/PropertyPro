@@ -323,3 +323,67 @@ export function analyzeOrphans(input: AnalyzeOrphansInput): OrphanReportResult {
     groups,
   };
 }
+
+// ---------------------------------------------------------------------------
+// CLI argument parsing
+// ---------------------------------------------------------------------------
+
+export interface ReportCliOptions {
+  asJson: boolean;
+  maxAgeHours?: number;
+}
+
+const BOOLEAN_FLAGS = new Set(['--json']);
+const VALUE_FLAGS = new Set(['--max-age-hours']);
+
+/**
+ * Parse the report's argv, rejecting anything it does not recognise.
+ *
+ * Lives here rather than in the script so it is testable: the script imports
+ * `@propertypro/db/unsafe`, which throws at module load without a DATABASE_URL.
+ *
+ * THROWS ON AN UNRECOGNISED TOKEN, deliberately. The previous version matched
+ * only `--name=value` and ignored everything else, so `--max-age-hours 720`
+ * (space form) and `--max-age-hourz=720` (typo) both silently fell back to the
+ * 24h default and over-reported recent uploads as orphans — the exact direction
+ * the module header warns about. `reconcile-site-assets-usage.ts` states the
+ * principle: a safety setting you can turn off with a typo is not a safety
+ * setting. It matters more here than there, because this report is the only
+ * instrument left for deciding what to delete.
+ */
+export function parseReportArgs(args: readonly string[]): ReportCliOptions {
+  const options: ReportCliOptions = { asJson: false };
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+
+    if (BOOLEAN_FLAGS.has(arg)) {
+      options.asJson = true;
+      continue;
+    }
+
+    const eq = arg.indexOf('=');
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+
+    if (!VALUE_FLAGS.has(name)) {
+      throw new Error(
+        `unrecognised argument "${arg}". Known flags: ${[...BOOLEAN_FLAGS, ...VALUE_FLAGS].join(', ')}`,
+      );
+    }
+
+    // Accept both `--name=value` and `--name value`; the space form silently
+    // did nothing before.
+    const raw = eq === -1 ? args[(i += 1)] : arg.slice(eq + 1);
+    if (raw === undefined) {
+      throw new Error(`${name} needs a value`);
+    }
+
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`${name} must be a non-negative number; got "${raw}"`);
+    }
+    options.maxAgeHours = value;
+  }
+
+  return options;
+}

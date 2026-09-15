@@ -59,21 +59,3 @@ export function validateUploadFilePath(
     ],
   });
 }
-
-/**
- * The same decision as a predicate, for callers that must choose rather than
- * throw.
- *
- * Exists so `deleteUnreferencedUpload` can re-establish the property itself
- * instead of trusting that its caller already validated. A deleter whose safety
- * depends on an earlier line in a different file is one refactor away from
- * deleting the wrong tenant's object, and the check costs two string
- * comparisons.
- */
-export function isUploadFilePathScoped(
-  filePath: string,
-  effectiveCommunityId: number,
-  bucketPrefix = 'communities',
-): boolean {
-  return uploadPathScopeFailure(filePath, effectiveCommunityId, bucketPrefix) === null;
-}

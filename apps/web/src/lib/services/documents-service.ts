@@ -38,37 +38,6 @@ const WALK_PAGINATED_MAX_PAGES = 20;
 const DELETED_DOCUMENTS_ROW_CAP = WALK_PAGINATED_MAX_PAGES * MAX_PAGE_SIZE;
 
 /**
- * Whether any `documents` row in this community points at `filePath`.
- *
- * The question a deleter has to answer before touching storage: is this object
- * a RECORD, or residue? `deleteUnreferencedUpload` calls it and refuses when
- * the answer is yes.
- *
- * `queryWhere(..., { includeSoftDeleted: true })`, NOT `selectFrom`, and the
- * distinction is the whole point. `selectFrom` unconditionally ANDs
- * `deleted_at IS NULL`, so a soft-deleted document would come back as
- * unreferenced and its bytes would be deleted — out from under a row sitting in
- * the board's Deleted column waiting to be restored. `queryWhere` is the only
- * read that forwards the option through to `buildScopeFilters`; the same reason
- * `getDocumentDeletedAtByIds` below uses it.
- *
- * Runs only on a failure path, so the absence of an index on `file_path` costs
- * nothing worth a migration.
- *
- * AUTHZ: tenant-scoped — caller MUST have already verified membership.
- */
-export async function isFilePathReferenced(
-  communityId: number,
-  filePath: string,
-): Promise<boolean> {
-  const scoped = createScopedClient(communityId);
-  const rows = (await scoped.queryWhere(documents, eq(documents.filePath, filePath), {
-    includeSoftDeleted: true,
-  })) as Array<Record<string, unknown>>;
-  return rows.length > 0;
-}
-
-/**
  * Resolve `deleted_at` for a specific set of document ids, INCLUDING
  * soft-deleted rows, as `documentId -> deletedAt | null`.
  *

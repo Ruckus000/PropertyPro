@@ -57,6 +57,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   analyzeOrphans,
   communitiesQuery,
+  parseReportArgs,
   referencePathsQuery,
   storageObjectsQuery,
   KIND_NOTES,
@@ -113,30 +114,7 @@ function printReport(result: OrphanReportResult): void {
 }
 
 async function run(): Promise<void> {
-  const args = process.argv.slice(2);
-  const asJson = args.includes('--json');
-
-  /**
-   * Parse a numeric flag strictly.
-   *
-   * `Number('none')` is NaN and every comparison against NaN is false, so an
-   * unvalidated `--max-age-hours=x` would silently set the cutoff to "skip
-   * nothing" and report in-flight uploads as orphans. Borrowed in spirit from
-   * `reconcile-site-assets-usage.ts`: a safety setting you can turn off with a
-   * typo is not a safety setting.
-   */
-  const numericFlag = (name: string): number | undefined => {
-    const arg = args.find((a) => a.startsWith(`${name}=`));
-    if (arg === undefined) return undefined;
-    const raw = arg.slice(name.length + 1);
-    const value = Number(raw);
-    if (!Number.isFinite(value) || value < 0) {
-      throw new Error(`${name} must be a non-negative number; got "${raw}"`);
-    }
-    return value;
-  };
-
-  const maxAgeHours = numericFlag('--max-age-hours');
+  const { asJson, maxAgeHours } = parseReportArgs(process.argv.slice(2));
   const db = createUnscopedClient();
 
   const objects = (await db.execute(storageObjectsQuery())) as unknown as StorageObjectRow[];
