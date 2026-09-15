@@ -7,7 +7,10 @@ export default defineConfig({
     include: ["__tests__/**/*.test.{ts,tsx}", "src/**/__tests__/**/*.test.{ts,tsx}"],
     server: {
       deps: {
-        inline: ["@propertypro/tokens"],
+        // jest-dom inlined so Vite, not Node, resolves its `import 'vitest'`,
+        // so it cannot extend a second chai. See jsdomProject in
+        // apps/web/vitest.shared.ts for the incident.
+        inline: ["@propertypro/tokens", "@testing-library/jest-dom"],
       },
     },
   },
