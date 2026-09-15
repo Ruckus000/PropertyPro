@@ -26,12 +26,15 @@
  * production is down. The full-page equivalent on `/health/logs` does use a
  * banner, because there it is the whole content.
  *
- * The `catch` is bare because `getAdminActivity` now captures to Sentry before
- * it rethrows, so this swallow loses the error from the SCREEN and not from
- * telemetry. Capturing here as well would double-report the same failure every
- * time an operator opened the board. Before that capture existed this was a
- * genuine hole: a permanently broken audit read showed one grey sentence and
- * alerted nobody.
+ * The `catch` is bare because `getAdminActivity` logs a structured
+ * `health.activity_read_failed` event before it rethrows, so this swallow loses
+ * the error from the SCREEN and not from the platform logs. Logging here as well
+ * would double-report the same failure every time an operator opened the board.
+ *
+ * That log is deliberately not a Sentry capture, and this component is the
+ * reason: `HealthFreshness` re-renders this page every 60 s and on focus, so a
+ * capture here would feed `errorsLastHour` — and therefore the critical banner —
+ * once a minute per open tab. See `admin-activity.ts` and #1138.
  *
  * ## Cost
  *

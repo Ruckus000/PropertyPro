@@ -62,6 +62,8 @@ function makeBuilder() {
   return builder;
 }
 
+// Mocked so a re-introduced capture is DETECTED rather than silently swallowed
+// by the test environment — see the "never captures to Sentry" case below.
 const captureException = vi.fn();
 vi.mock('@sentry/nextjs', () => ({ captureException: (...a: unknown[]) => captureException(...a) }));
 
@@ -191,22 +193,46 @@ describe('getAdminActivity', () => {
   });
 
   // Without this, a broken audit read is invisible: the page paints the message
-  // and `RecentActivityCard` swallows it, so nothing reaches telemetry and the
-  // failure persists unnoticed for as long as it lasts.
-  it('captures a read failure to Sentry before rethrowing', async () => {
+  // and `RecentActivityCard` swallows it, so nothing reaches the platform logs
+  // and the failure persists unnoticed for as long as it lasts.
+  it('logs a structured event for a read failure before rethrowing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     result = { data: null, error: { message: 'permission denied', code: '42501' } };
     await expect(getAdminActivity()).rejects.toThrow();
 
-    expect(captureException).toHaveBeenCalledTimes(1);
-    const [captured, context] = captureException.mock.calls[0] as [Error, { tags: unknown }];
-    expect(captured.message).toMatch(/permission denied/);
-    expect(context.tags).toEqual({ admin_read: 'activity_log' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(warn.mock.calls[0]![0] as string)).toEqual({
+      event: 'health.activity_read_failed',
+      message: expect.stringMatching(/permission denied/),
+    });
+    warn.mockRestore();
+  });
+
+  /**
+   * The load-bearing case. #1138 refused a Sentry capture for a Health-board read
+   * failure — "the Health board reads Sentry issues, and a warning issue per load
+   * would itself show as a production error" — and this module is worse than the
+   * one it was written about: `RecentActivityCard` sits on `/health`, which
+   * re-renders every 60 s, and `errorsLastHour` drives the critical banner.
+   *
+   * A capture re-introduced here would pass every other test in this file, so
+   * this is the only thing standing between that loop and production.
+   */
+  it('never captures to Sentry, however the read fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    result = { data: null, error: { message: 'permission denied', code: '42501' } };
+    await expect(getAdminActivity()).rejects.toThrow();
+    expect(captureException).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('does not report a successful read', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     result = { data: [row()], error: null };
     await getAdminActivity();
+    expect(warn).not.toHaveBeenCalled();
     expect(captureException).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('treats a null data set with no error as genuinely empty', async () => {

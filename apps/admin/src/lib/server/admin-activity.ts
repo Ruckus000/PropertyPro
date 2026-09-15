@@ -58,27 +58,37 @@
  * `HealthReport.errors` draws between `null` and `[]`. Callers render the
  * failure; they do not render silence.
  *
- * It also captures to Sentry before rethrowing, and the capture lives HERE
- * rather than at either call site because the two callers degrade differently
- * and neither can be relied on to report: `/health/logs` paints the message,
- * and `RecentActivityCard` swallows it outright so the board keeps rendering.
- * With no capture, an audit read broken by a revoked grant or an unapplied
- * migration showed one grey sentence on a board nobody was alerted about, for
- * as long as it stayed broken.
+ * It also logs before rethrowing, because neither caller can be relied on to
+ * report: `/health/logs` paints the message, and `RecentActivityCard` swallows
+ * it outright so the board keeps rendering.
+ *
+ * ## Why that log is NOT a Sentry capture
  *
  * Capture-and-degrade is the ordinary admin-server convention — `billing.ts`,
- * `preferences.ts`, `search.ts`, `shell-signals.ts` and `push.ts` all do it, and
- * `billing.ts` puts the rule best: "An empty catch on a money screen is how a
- * revoked key looks like a customer who never paid for anything." The health
- * subsystem's documented silence is not a precedent for this. That carve-out
- * covers PROBES of external services, where the failure IS the thing being
- * reported and the page prints it; our own table failing to read is an internal
- * defect nothing else will notice.
+ * `preferences.ts`, `search.ts`, `shell-signals.ts` and `push.ts` all do it. The
+ * Health subsystem is the exception, and #1138 wrote down why while fixing the
+ * neighbouring Sentry probe: "No Sentry capture: the Health board reads Sentry
+ * issues, and a warning issue per load would itself show as a production error."
+ *
+ * That applies here with a sharper edge. `RecentActivityCard` renders on
+ * `/health`, which `HealthFreshness` re-renders every 60 s AND on window focus —
+ * so a broken audit read would mint a Sentry event once a minute per open tab.
+ * `getHealthReport` sums the newest hourly bucket into `errorsLastHour`, and
+ * `deriveCritical` raises the console-wide critical banner (and dispatches web
+ * push) at a default threshold of 10. A single operator leaving the board open
+ * for ten minutes would therefore be paged about the console's own monitoring
+ * failing to read a table — by the monitoring.
+ *
+ * So this follows #1138: a structured `console.warn` carrying the same shape as
+ * `health.sentry_request_failed`, plus the on-screen reporting both callers
+ * already do. Weaker telemetry than a capture, deliberately, and the same
+ * trade #1138 made. `console.error`/`console.warn` is not a Sentry signal in
+ * this repo (there is no `captureConsoleIntegration`), so this reaches the
+ * platform logs and nothing else — which is the point.
  *
  * @module lib/server/admin-activity
  */
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import * as Sentry from '@sentry/nextjs';
 
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
@@ -202,10 +212,15 @@ export async function getAdminActivity(
       nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
     };
   } catch (caught) {
-    // Capture and RETHROW. The throw is the contract — callers must never be
-    // handed an empty page for a failed read — and the capture is what stops a
-    // broken audit read from being invisible. See the docblock.
-    Sentry.captureException(caught, { tags: { admin_read: 'activity_log' } });
+    // Log and RETHROW. The throw is the contract — callers must never be handed
+    // an empty page for a failed read. The log is deliberately NOT a Sentry
+    // capture; see the docblock for why, and do not "fix" it back.
+    console.warn(
+      JSON.stringify({
+        event: 'health.activity_read_failed',
+        message: caught instanceof Error ? caught.message : String(caught),
+      }),
+    );
     throw caught;
   }
 }
