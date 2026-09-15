@@ -21,6 +21,7 @@ import {
   type Lease,
   type Unit,
 } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import {
   selectRecentAnnouncements,
@@ -80,7 +81,17 @@ export async function loadApartmentMetrics(
       scoped.query(maintenanceRequests),
       scoped.query(announcements),
       scoped.query(communities),
-      scoped.query(users),
+      // Point lookup of the viewer's name only. `users` is platform-global (no
+      // community_id), so `scoped.query(users)` scanned every user on the
+      // platform — phone and OTP columns included — to read one name. Same
+      // shape as `getDashboardUserLookup` in dashboard/dashboard-queries.ts.
+      scoped
+        .selectFrom<{ fullName: string | null }>(
+          users,
+          { fullName: users.fullName },
+          eq(users.id, userId),
+        )
+        .limit(1),
     ]);
 
   // Community metadata
@@ -90,8 +101,7 @@ export async function loadApartmentMetrics(
   const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
 
   // User first name
-  const user = userRows.find((r) => r['id'] === userId);
-  const fullName = typeof user?.['fullName'] === 'string' ? (user['fullName'] as string) : null;
+  const fullName = typeof userRows[0]?.fullName === 'string' ? userRows[0].fullName : null;
 
   // Active leases (not soft-deleted)
   const activeLeases = (leaseRows as Lease[]).filter(
