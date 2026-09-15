@@ -269,10 +269,28 @@ export async function getAuthorDisplayName(
 }
 
 /**
- * Insert a `meeting_documents` link row joining a published document to
- * its source meeting. Idempotency is the caller's responsibility (or the
- * insert can be retried; pre-existing rows will throw uniqueness errors
- * which the caller should catch — see the publish flow for the pattern).
+ * Insert a `meeting_documents` link row joining a published document to its
+ * source meeting.
+ *
+ * NOT idempotent, and nothing makes it so. `meeting_documents` has no unique
+ * constraint on `(meeting_id, document_id)` — not in the Drizzle schema, not in
+ * any migration, not in the snapshot. It is the outlier among this repo's join
+ * tables, which do declare one (`poll_votes`, `election_eligibility`,
+ * `snowbird_digest_subscriptions`). A retried or re-entered publish inserts a
+ * SECOND link row and raises no error at any layer.
+ *
+ * The duplicate is visible downstream: `meeting-detail-modal.tsx` maps link
+ * rows with `key={document.id}`, so React sees duplicate keys, and
+ * `day-detail-panel.tsx` counts link rows, so the attachment count over-reports.
+ *
+ * A caller that needs at-most-one link must check for an existing row itself.
+ * The publish route's try/catch around this call is NOT that check — it only
+ * `console.error`s so a link failure cannot block publishing.
+ *
+ * Note that a unique index would not make re-publishing idempotent either:
+ * `createAuthoredDocument` mints a NEW `documents` row each time, so the second
+ * link is a different pair. Deciding what "the current minutes" means is a
+ * product question, not a constraint.
  */
 export async function linkPublishedDocumentToMeeting(
   communityId: number,

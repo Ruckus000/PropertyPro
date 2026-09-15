@@ -11,7 +11,11 @@ vi.mock('@propertypro/db', () => ({
   leases: { _tag: 'leases' },
   maintenanceRequests: { _tag: 'maintenanceRequests' },
   units: { _tag: 'units' },
-  users: { _tag: 'users' },
+  users: { _tag: 'users', id: { _col: 'users.id' }, fullName: { _col: 'users.full_name' } },
+}));
+
+vi.mock('@propertypro/db/filters', () => ({
+  eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
 }));
 
 vi.mock('@/lib/utils/timezone', () => ({
@@ -122,7 +126,9 @@ function buildScopedMock(data: MockData = {}) {
     users: userRows = [{ id: USER_ID, fullName: 'Jane Doe' }],
   } = data;
 
-  // createScopedClient(id).query(table) dispatches by the table's _tag
+  // createScopedClient(id).query(table) dispatches by the table's _tag.
+  // `users` is deliberately NOT served here: it is platform-global, so a
+  // `query(users)` is a full-table scan and must not be how the loader reads it.
   const queryFn = vi.fn((table: { _tag: string }) => {
     switch (table._tag) {
       case 'units':             return Promise.resolve(unitRows);
@@ -130,13 +136,31 @@ function buildScopedMock(data: MockData = {}) {
       case 'maintenanceRequests': return Promise.resolve(mrRows);
       case 'announcements':     return Promise.resolve(annRows);
       case 'communities':       return Promise.resolve(commRows);
-      case 'users':             return Promise.resolve(userRows);
       default:                  return Promise.resolve([]);
     }
   });
 
-  (createScopedClient as ReturnType<typeof vi.fn>).mockReturnValue({ query: queryFn });
-  return queryFn;
+  // selectFrom(users, columns, where).limit(n) — emulate the point lookup by
+  // applying the `eq(users.id, …)` filter and the limit to the fixture rows.
+  const limitFn = vi.fn();
+  const selectFromFn = vi.fn(
+    (table: { _tag: string }, columns: Record<string, unknown>, where?: { __eq?: { val: unknown } }) => {
+      const source = table._tag === 'users' ? (userRows as Array<Record<string, unknown>>) : [];
+      const matched = where?.__eq ? source.filter((r) => r['id'] === where.__eq!.val) : source;
+      const projected = matched.map((r) =>
+        Object.fromEntries(Object.keys(columns).map((key) => [key, r[key]])),
+      );
+      return {
+        limit: limitFn.mockImplementation((n: number) => Promise.resolve(projected.slice(0, n))),
+      };
+    },
+  );
+
+  (createScopedClient as ReturnType<typeof vi.fn>).mockReturnValue({
+    query: queryFn,
+    selectFrom: selectFromFn,
+  });
+  return { queryFn, selectFromFn, limitFn };
 }
 
 // ---------------------------------------------------------------------------
@@ -443,6 +467,28 @@ describe('loadApartmentMetrics — metadata', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
+    expect(metrics.firstName).toBe('Henry');
+  });
+
+  it('looks up only the viewer\'s name by id, never a full read of the global users table', async () => {
+    const { queryFn, selectFromFn, limitFn } = buildScopedMock({
+      users: [
+        { id: 'someone-else', fullName: 'Other Person', phone: '+15550000000' },
+        { id: USER_ID, fullName: 'Henry Higgins', phone: '+15551111111' },
+      ],
+    });
+
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
+
+    const userTableQueries = queryFn.mock.calls.filter(([table]) => table._tag === 'users');
+    expect(userTableQueries).toEqual([]);
+    expect(selectFromFn).toHaveBeenCalledTimes(1);
+    expect(selectFromFn).toHaveBeenCalledWith(
+      expect.objectContaining({ _tag: 'users' }),
+      { fullName: expect.objectContaining({ _col: 'users.full_name' }) },
+      { __eq: { col: expect.objectContaining({ _col: 'users.id' }), val: USER_ID } },
+    );
+    expect(limitFn).toHaveBeenCalledWith(1);
     expect(metrics.firstName).toBe('Henry');
   });
 });

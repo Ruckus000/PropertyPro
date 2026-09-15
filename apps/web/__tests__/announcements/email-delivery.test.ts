@@ -11,7 +11,7 @@ const {
   enqueueDigestItemsMock: vi.fn().mockResolvedValue({ enqueued: 0, duplicates: 0 }),
   tables: {
     userRoles: Symbol('user_roles'),
-    users: Symbol('users'),
+    users: { __table: 'users', id: Symbol('users.id') },
     notificationPreferences: Symbol('notification_preferences'),
     communities: Symbol('communities'),
     announcementDeliveryLog: { id: Symbol('announcement_delivery_log.id') },
@@ -27,6 +27,12 @@ vi.mock('@propertypro/db', () => ({
   announcementDeliveryLog: tables.announcementDeliveryLog,
 }));
 
+vi.mock('@propertypro/db/filters', () => ({
+  and: (...args: unknown[]) => ({ _type: 'and', args }),
+  eq: (col: unknown, val: unknown) => ({ _type: 'eq', col, val }),
+  inArray: (col: unknown, vals: unknown[]) => ({ _type: 'inArray', col, vals }),
+}));
+
 vi.mock('@propertypro/email', () => ({
   AnnouncementEmail: (props: unknown) => ({ type: 'AnnouncementEmail', props }),
   sendEmail: sendEmailMock,
@@ -37,6 +43,19 @@ vi.mock('@/lib/services/notification-digest-queue', () => ({
 }));
 
 import { queueAnnouncementDelivery } from '../../src/lib/services/announcement-delivery';
+
+/** selectFrom(users, …, inArray(users.id, ids)) served from `userRows`. */
+function selectUsersFrom(userRows: Array<Record<string, unknown>>) {
+  return vi.fn(async (table: unknown, _columns: unknown, where?: { col: unknown; vals: unknown[] }) => {
+    if (table !== tables.users || where?.col !== tables.users.id) return [];
+    return userRows.filter((row) => where.vals.includes(row['id']));
+  });
+}
+
+/** Mirrors the scoped client's read guard: `users` is platform-global. */
+function refuseUsersTable(table: unknown): void {
+  if (table === tables.users) throw new Error('Unscoped query on table "users"');
+}
 
 describe('announcement email delivery', () => {
   beforeEach(() => {
@@ -55,13 +74,7 @@ describe('announcement email delivery', () => {
           { userId: 'u-tenant', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant' },
         ];
       }
-      if (table === tables.users) {
-        return [
-          { id: 'u-owner', email: 'owner@example.com', fullName: 'Owner' },
-          { id: 'u-board', email: 'board@example.com', fullName: 'Board' },
-          { id: 'u-tenant', email: 'tenant@example.com', fullName: 'Tenant' },
-        ];
-      }
+      refuseUsersTable(table);
       if (table === tables.notificationPreferences) {
         return [
           { userId: 'u-owner', emailAnnouncements: true, emailFrequency: 'immediate' },
@@ -96,9 +109,16 @@ describe('announcement email delivery', () => {
       return [];
     });
 
+    const selectFrom = selectUsersFrom([
+      { id: 'u-owner', email: 'owner@example.com', fullName: 'Owner' },
+      { id: 'u-board', email: 'board@example.com', fullName: 'Board' },
+      { id: 'u-tenant', email: 'tenant@example.com', fullName: 'Tenant' },
+    ]);
+
     createScopedClientMock.mockReturnValue({
       query,
       queryWhere,
+      selectFrom,
       insert,
       update,
     });
@@ -143,6 +163,11 @@ describe('announcement email delivery', () => {
       ]),
     );
     expect(update).toHaveBeenCalled();
+    // Only the audience members who have not opted out are read from users —
+    // u-tenant is outside board_only (and opted out), so it is never loaded.
+    expect(selectFrom.mock.calls.map(([, , where]) => where)).toEqual([
+      { _type: 'inArray', col: tables.users.id, vals: ['u-owner', 'u-board'] },
+    ]);
   });
 
   it('delivers large recipient lists and returns total count', async () => {
@@ -164,7 +189,7 @@ describe('announcement email delivery', () => {
     const deliveryRows: Array<Record<string, unknown>> = [];
     const query = vi.fn(async (table: unknown) => {
       if (table === tables.userRoles) return roleRows;
-      if (table === tables.users) return userRows;
+      refuseUsersTable(table);
       if (table === tables.notificationPreferences) return preferenceRows;
       if (table === tables.communities) return [{ id: 5, name: 'Sunset Condos' }];
       if (table === tables.announcementDeliveryLog) return deliveryRows;
@@ -182,6 +207,7 @@ describe('announcement email delivery', () => {
     createScopedClientMock.mockReturnValue({
       query,
       queryWhere: vi.fn().mockResolvedValue([]),
+      selectFrom: selectUsersFrom(userRows),
       insert,
       update: vi.fn().mockResolvedValue([]),
     });
@@ -222,7 +248,7 @@ describe('announcement email delivery', () => {
     const deliveryRows: Array<Record<string, unknown>> = [];
     const query = vi.fn(async (table: unknown) => {
       if (table === tables.userRoles) return roleRows;
-      if (table === tables.users) return userRows;
+      refuseUsersTable(table);
       if (table === tables.notificationPreferences) return [];
       if (table === tables.communities) return [{ id: 5, name: 'Sunset Condos' }];
       if (table === tables.announcementDeliveryLog) return deliveryRows;
@@ -240,6 +266,7 @@ describe('announcement email delivery', () => {
     createScopedClientMock.mockReturnValue({
       query,
       queryWhere: vi.fn().mockResolvedValue([]),
+      selectFrom: selectUsersFrom(userRows),
       insert,
       update: vi.fn().mockResolvedValue([]),
     });

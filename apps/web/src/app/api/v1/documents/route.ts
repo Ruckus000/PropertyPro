@@ -30,7 +30,7 @@ import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { validateUploadFilePath } from '@/lib/api/upload-path';
+import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
@@ -119,7 +119,12 @@ const runCreateDocument = runRoute(documentsCreateContract, async ({ body, req }
   const userId = await requireAuthenticatedUserId();
 
   const effectiveCommunityId = resolveEffectiveCommunityId(req, body.communityId);
-  validateUploadFilePath(body.filePath, effectiveCommunityId);
+  // Pins the `documents/` subdirectory, not just `communities/{id}/`. The looser
+  // check this replaced accepted any sibling namespace in the same bucket, so a
+  // caller could hand in `communities/{id}/esign-signed/7/signed.pdf` and get a
+  // `documents` row pointing at an executed contract — which `publicAccess`
+  // could then put on the association's public website.
+  assertCommunityOwnedStoragePath(body.filePath, effectiveCommunityId, 'documents', 'filePath');
   await assertNotDemoGrace(effectiveCommunityId);
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
   requirePermission(membership, 'documents', 'write');

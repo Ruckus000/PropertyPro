@@ -43,7 +43,7 @@ const {
     addressLine1: 'c.a1', addressLine2: 'c.a2', city: 'c.city', state: 'c.state', zipCode: 'c.zip',
   },
   userRoles: { __t: 'userRoles' },
-  users: { __t: 'users' },
+  users: { __t: 'users', id: 'u.id' },
   notificationPreferences: { __t: 'notificationPreferences' },
   windMitigationReports: { __t: 'windMitigationReports', id: 'wm.id' },
   insurancePolicies: { __t: 'insurancePolicies', id: 'ip.id' },
@@ -122,19 +122,29 @@ function scopedFor(communityId: number) {
   return {
     query: (table: unknown) => {
       if (table === userRoles) return Promise.resolve(ROLE_ROWS[communityId] ?? []);
-      if (table === users) return Promise.resolve(USER_ROWS[communityId] ?? []);
+      // Mirrors the scoped client's read guard: `users` is platform-global.
+      if (table === users) return Promise.reject(new Error('Unscoped query on table "users"'));
       if (table === notificationPreferences) return Promise.resolve(PREF_ROWS[communityId] ?? []);
       if (table === windMitigationReports) return Promise.resolve(WIND_ROWS[communityId] ?? []);
       if (table === insurancePolicies) return Promise.resolve(POLICY_ROWS[communityId] ?? []);
       return Promise.resolve([]);
     },
+    selectFrom: (table: unknown, _columns: unknown, where?: { __inArray?: { col: unknown; vals: unknown[] } }) => {
+      userLookups.push({ communityId, where });
+      if (table !== users || where?.__inArray?.col !== users.id) return Promise.resolve([]);
+      const ids = where.__inArray.vals;
+      return Promise.resolve((USER_ROWS[communityId] ?? []).filter((u) => ids.includes(u['id'])));
+    },
     update: updateMock,
   };
 }
 
+const userLookups: Array<{ communityId: number; where: unknown }> = [];
+
 describe('processInsuranceAlerts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    userLookups.length = 0;
     sendEmailMock.mockResolvedValue({ id: 'msg-1' });
     logAuditEventMock.mockResolvedValue(undefined);
     updateMock.mockResolvedValue([{}]);
@@ -160,6 +170,14 @@ describe('processInsuranceAlerts', () => {
     expect(call.react.props.senderAddressLines).toEqual(['1 A St', 'Miami, FL 33139']);
 
     expect(result.emailsSent).toBe(2);
+  });
+
+  it('reads only the opted-in board/admin candidates from users', async () => {
+    await processInsuranceAlerts(NOW);
+
+    expect(userLookups).toEqual([
+      { communityId: 1, where: { __inArray: { col: users.id, vals: ['board1', 'pm1'] } } },
+    ]);
   });
 
   it('advances the fired row lastAlertBand exactly once (dedupe)', async () => {
