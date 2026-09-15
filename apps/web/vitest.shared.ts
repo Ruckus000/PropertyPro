@@ -121,6 +121,32 @@ export const jsdomProject: UserWorkspaceConfig = {
     include: JSDOM_FILES,
     exclude: SHARED_EXCLUDE,
     /**
+     * ONE `vitest` INSTANCE, or jest-dom's matchers vanish.
+     *
+     * `@testing-library/jest-dom/vitest` is a two-line module:
+     * `import { expect } from 'vitest'; expect.extend(matchers)`. Left external,
+     * that bare `vitest` specifier is resolved by NODE's ESM resolver, not by
+     * Vite, and Node walks up from the pnpm store looking for any
+     * `node_modules/vitest`. If it finds a different copy than the one running
+     * the tests, jest-dom extends a second `chai`, and every jest-dom
+     * assertion fails with `Invalid Chai property: toBeInTheDocument` (a
+     * `waitFor` around one hits RTL's 5s budget first). Tests that use no
+     * jest-dom matcher still pass, which makes it look like a per-file bug.
+     *
+     * The real trigger (2026-09-15): a stray `node_modules/node_modules` symlink
+     * to the MAIN checkout's `node_modules`. It first appeared in the main checkout
+     * on 2026-05-08, pointing at itself, which is harmless there. A worktree whose
+     * `node_modules` was CLONED from main inherited it pointing outward, so
+     * Node's walk found main's vitest first. 164 files went red there while a
+     * fresh-installed `.claude/worktrees` checkout of the same commit passed.
+     * The dot path was a coincidence.
+     *
+     * Inlining makes Vite transform jest-dom, so its `vitest` import is resolved
+     * by Vite from this project and always lands on the instance running the
+     * tests, whatever else sits on disk.
+     */
+    server: { deps: { inline: ['@testing-library/jest-dom'] } },
+    /**
      * CLOCK BUDGETS, not performance assertions. This one and RTL's
      * `asyncUtilTimeout` in setup.jsdom.ts are a pair; change them together.
      *
