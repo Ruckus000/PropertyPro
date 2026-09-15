@@ -78,6 +78,46 @@ if (!databaseUrl) {
  */
 const POOL_MAX = 3;
 
+/**
+ * NO PIPELINING. Read this before changing POOL_MAX or the postgres.js version.
+ *
+ * postgres.js defaults `max_pipeline` to 100: once all `max` connections are
+ * busy, it writes further queries straight onto a busy connection instead of
+ * queueing them. Behind Supavisor's transaction mode, a pipelined query can
+ * stall FOREVER. Postgres shows it `active` with wait event `ClientRead`
+ * (waiting on the client), and nothing in this stack times it out (see
+ * connect_timeout below).
+ *
+ * Measured in production, 2026-09-14:
+ * - `/dashboard/apartment` for one community hit Vercel's 300s timeout on every
+ *   load, with no error anywhere.
+ * - Per-step timing logs (#1139): the page's six queries finished in about 1s,
+ *   while the layout's `detectDemoInfo` query, sent a moment later onto the
+ *   now-busy pool of 3, never resolved.
+ * - With POOL_MAX temporarily at 10, so the same eight queries never had to
+ *   pipeline (#1141), the query finished in about 500ms and the page loaded.
+ * - The same stall showed up that day as a trivial `user_roles` read cancelled
+ *   by the 120s statement_timeout.
+ *
+ * `0`, not `1`. The check is `sent.length < max_pipeline`, and the running query
+ * is not in `sent`, so `1` still stacks one query behind it (measured: writes
+ * at +0/+0/+408ms, versus +0/+204/+408ms at 0).
+ *
+ * `0` REQUIRES patches/postgres@3.4.8.patch. Upstream, `sql.begin` reserves
+ * its connection in `onexecute`, the last operand of the same `&&` chain, so at
+ * 0 it was skipped and every transaction threw UNSAFE_TRANSACTION. Measured
+ * locally, and still present in 3.4.9. The patch always runs `onexecute`.
+ * Bumping postgres.js without carrying the patch breaks every
+ * `db.transaction`. pnpm refuses to install a patch whose target version is
+ * missing, which is the intended alarm. See
+ * packages/db/__tests__/pipeline-and-transactions.integration.test.ts.
+ *
+ * Spread in from a separate object because the type definitions omit
+ * `max_pipeline` (the runtime reads it at index.js:447-455), so an inline key
+ * fails the excess-property check.
+ */
+const UNTYPED_DRIVER_OPTIONS = { max_pipeline: 0 };
+
 const globalForDb = globalThis as unknown as {
   __propertyproPgClient?: { url: string; client: ReturnType<typeof postgres> };
 };
@@ -138,6 +178,7 @@ const client =
          * this same shared client: a cure worse than the disease at this stage.
          */
         connect_timeout: 10,
+        ...UNTYPED_DRIVER_OPTIONS,
       });
 
 // Cache in every environment. Production re-evaluates this module rarely, but

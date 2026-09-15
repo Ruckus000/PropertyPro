@@ -73,7 +73,7 @@ export default async function HealthPage() {
       <HealthFreshness checkedAt={report.checkedAt} />
 
       <ServicesStrip services={report.services} />
-      <ErrorsList errors={report.errors} />
+      <ErrorsList errors={report.errors} sentryFailure={report.sentryFailure} />
       <FailedJobsList jobs={report.jobs} />
       <RecentActivityCard />
     </PageBody>

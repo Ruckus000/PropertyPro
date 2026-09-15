@@ -78,7 +78,11 @@
       "sharp"
     ],
     "overrides": {
-      "isomorphic-dompurify>jsdom": "25.0.1"
+      "isomorphic-dompurify>jsdom": "25.0.1",
+      "isomorphic-dompurify>dompurify": "^3.4.15"
+    },
+    "patchedDependencies": {
+      "postgres@3.4.8": "patches/postgres@3.4.8.patch"
     }
   },
   "devDependencies": {

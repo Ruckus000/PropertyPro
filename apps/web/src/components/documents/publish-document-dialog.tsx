@@ -10,15 +10,15 @@
  * redaction duty actually bites: the attestation taken at upload covers the
  * owner portal, and only for categories that USUALLY carry PII.
  *
- * The attestation shown here mirrors the server's rule exactly — same helper,
- * same fail-closed treatment of an unrecognised category — so the checkbox
- * appears in precisely the cases the API will refuse without it.
+ * The attestation shown here mirrors the server's rule exactly — it calls the
+ * same `categoryRequiresRedactionAttestation` helper the two upload surfaces
+ * use, with the same fail-closed treatment of an unrecognised category — so the
+ * checkbox appears in precisely the cases the API will refuse without it.
  *
  * Removing a document takes no attestation: it reduces disclosure.
  */
 
 import { useEffect, useId, useState } from 'react';
-import { isRedactionSensitiveCategory, normalizeCategoryName } from '@propertypro/shared';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { REDACTION_ATTESTATION_TEXT } from '@/lib/documents/redaction-attestation-text';
+import { categoryRequiresRedactionAttestation } from '@/components/documents/redaction-attestation-field';
 
 interface PublishDocumentDialogProps {
   open: boolean;
@@ -63,7 +64,7 @@ export function PublishDocumentDialog({
   }, [open, documentTitle]);
 
   const requiresAttestation =
-    publishing && isRedactionSensitiveCategory(normalizeCategoryName(categoryName ?? null));
+    publishing && categoryRequiresRedactionAttestation(categoryName);
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel(); }}>

@@ -13,6 +13,10 @@ import {
 } from '@/components/ui/select';
 import { useDocumentCategories } from '@/hooks/use-document-categories';
 import {
+  RedactionAttestationField,
+  categoryRequiresRedactionAttestation,
+} from '@/components/documents/redaction-attestation-field';
+import {
   useDocumentUpload,
   type UploadDocumentResult,
 } from '@/hooks/use-document-upload';
@@ -34,10 +38,18 @@ export function DocumentUploadArea({
   const [isDragging, setIsDragging] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(initialCategoryId ?? null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [redactionAttested, setRedactionAttested] = useState(false);
   const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
 
   const { uploadDocument, isUploading, progress, error } = useDocumentUpload();
   const { categories, isLoading, error: categoriesError } = useDocumentCategories(communityId);
+
+  const selectedCategoryName =
+    categories.find((category) => category.id === selectedCategoryId)?.name ?? null;
+  // Only ask once a category is chosen — the submit button is already blocked
+  // until then, and prompting against no category would read as a bug.
+  const requiresAttestation =
+    selectedCategoryId != null && categoryRequiresRedactionAttestation(selectedCategoryName);
 
   useEffect(() => {
     if (initialCategoryId != null && categories.some((category) => category.id === initialCategoryId)) {
@@ -58,6 +70,22 @@ export function DocumentUploadArea({
     setIsDragging(false);
   }, []);
 
+  // Both entry points (drop and browse) go through here so the attestation
+  // revoke cannot be added to one and forgotten on the other. An attestation is
+  // made about a SPECIFIC document, exactly as it is about a specific category:
+  // swapping the file revokes it, or the uploader ends up attesting to a
+  // document they never looked at.
+  const selectFile = useCallback(
+    (file: File) => {
+      setSelectedFile(file);
+      setRedactionAttested(false);
+      if (!title) {
+        setTitle(file.name.replace(/\.[^/.]+$/, ''));
+      }
+    },
+    [title],
+  );
+
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -65,24 +93,18 @@ export function DocumentUploadArea({
 
     const file = event.dataTransfer.files[0];
     if (file) {
-      setSelectedFile(file);
-      if (!title) {
-        setTitle(file.name.replace(/\.[^/.]+$/, ''));
-      }
+      selectFile(file);
     }
-  }, [title]);
+  }, [selectFile]);
 
   const handleFileSelect = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
-        setSelectedFile(file);
-        if (!title) {
-          setTitle(file.name.replace(/\.[^/.]+$/, ''));
-        }
+        selectFile(file);
       }
     },
-    [title],
+    [selectFile],
   );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -103,6 +125,7 @@ export function DocumentUploadArea({
         description: description.trim() || null,
         categoryId: selectedCategoryId,
         file: selectedFile,
+        redactionAttested,
       });
 
       setWarnings(result.warnings);
@@ -111,6 +134,7 @@ export function DocumentUploadArea({
       setSelectedFile(null);
       setSelectedCategoryId(initialCategoryId ?? null);
       setCategoryError(null);
+      setRedactionAttested(false);
 
       toast.success('Document uploaded.');
       onUploaded?.(result);
@@ -163,6 +187,9 @@ export function DocumentUploadArea({
           onValueChange={(value) => {
             setSelectedCategoryId(Number(value));
             setCategoryError(null);
+            // An attestation is made about a specific category; changing the
+            // category revokes it.
+            setRedactionAttested(false);
           }}
         >
           <SelectTrigger className="w-full">
@@ -202,7 +229,10 @@ export function DocumentUploadArea({
             </p>
             <button
               type="button"
-              onClick={() => setSelectedFile(null)}
+              onClick={() => {
+                setSelectedFile(null);
+                setRedactionAttested(false);
+              }}
               className="mt-2 text-sm text-status-danger hover:text-status-danger"
             >
               Remove
@@ -290,11 +320,26 @@ export function DocumentUploadArea({
         </div>
       )}
 
+      {requiresAttestation && (
+        <RedactionAttestationField
+          id="document-upload-area-redaction-attested"
+          checked={redactionAttested}
+          onChange={setRedactionAttested}
+          disabled={isUploading}
+        />
+      )}
+
       {error && <p className="text-sm text-status-danger">{error}</p>}
 
       <button
         type="submit"
-        disabled={isUploading || !selectedFile || !title.trim() || selectedCategoryId == null}
+        disabled={
+          isUploading
+          || !selectedFile
+          || !title.trim()
+          || selectedCategoryId == null
+          || (requiresAttestation && !redactionAttested)
+        }
         className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isUploading ? 'Uploading...' : 'Upload Document'}

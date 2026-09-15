@@ -7,6 +7,10 @@ import { AlertBanner } from "@/components/shared/alert-banner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { useDocumentCategories } from "@/hooks/use-document-categories";
 import { useDocumentUpload } from "@/hooks/use-document-upload";
+import {
+  RedactionAttestationField,
+  categoryRequiresRedactionAttestation,
+} from "@/components/documents/redaction-attestation-field";
 
 interface UploadDocumentModalProps {
   communityId: number;
@@ -26,6 +30,7 @@ export function UploadDocumentModal({
   const [title, setTitle] = useState(defaultTitle);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [redactionAttested, setRedactionAttested] = useState(false);
   const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isUploading, progress, error, uploadDocument } = useDocumentUpload();
@@ -37,6 +42,11 @@ export function UploadDocumentModal({
   } = useDocumentCategories(communityId);
   const resolvedCategoryId = resolveCategoryId(categoryName);
   const resolvedCategoryName = categories.find((category) => category.id === resolvedCategoryId)?.name ?? categoryName;
+  // Compliance checklist items map onto financial_records / meeting_records /
+  // operations, all of which the server treats as redaction-sensitive, so this
+  // modal needs the attestation more often than not.
+  const requiresAttestation =
+    resolvedCategoryId != null && categoryRequiresRedactionAttestation(resolvedCategoryName);
 
   // Close on Escape
   useEffect(() => {
@@ -62,6 +72,7 @@ export function UploadDocumentModal({
 
   async function handleUpload() {
     if (!file || !title.trim() || resolvedCategoryId == null) return;
+    if (requiresAttestation && !redactionAttested) return;
 
     try {
       const result = await uploadDocument({
@@ -69,8 +80,16 @@ export function UploadDocumentModal({
         title: title.trim(),
         categoryId: resolvedCategoryId,
         file,
+        redactionAttested,
       });
       setWarnings(result.warnings);
+      // Clear the file AND the attestation before the early-return below. On a
+      // warning this modal stays mounted (it only closes when warnings is
+      // empty), so without this the next file inherits a tick the uploader
+      // never gave it — and the server writes a document_redaction_attestation
+      // row, in an APPEND-ONLY §718.111(12)(c) log, that is simply false.
+      setFile(null);
+      setRedactionAttested(false);
       // The result should include the document id
       const docId = (result.document as Record<string, unknown>).id as number;
       if (docId) {
@@ -227,6 +246,15 @@ export function UploadDocumentModal({
             />
           </div>
 
+          {requiresAttestation && (
+            <RedactionAttestationField
+              id="compliance-upload-redaction-attested"
+              checked={redactionAttested}
+              onChange={setRedactionAttested}
+              disabled={isUploading}
+            />
+          )}
+
           {/* Upload progress */}
           {isUploading && (
             <div className="flex h-1 w-full overflow-hidden rounded-full bg-surface-muted">
@@ -252,7 +280,14 @@ export function UploadDocumentModal({
             variant="default"
             size="sm"
             onClick={handleUpload}
-            disabled={!file || !title.trim() || isUploading || isLoadingCategories || resolvedCategoryId == null}
+            disabled={
+              !file
+              || !title.trim()
+              || isUploading
+              || isLoadingCategories
+              || resolvedCategoryId == null
+              || (requiresAttestation && !redactionAttested)
+            }
           >
             {isUploading ? `Uploading ${progress}%` : "Upload & Link"}
           </Button>

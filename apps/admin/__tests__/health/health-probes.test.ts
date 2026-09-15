@@ -264,6 +264,8 @@ describe('getHealthReport', () => {
     const report = await getHealthReport(deps({ sentry: null }));
     expect(report.errors).toBeNull();
     expect(report.errorsLastHour).toBe(0);
+    // Unconfigured is not a failure: nothing was asked, so nothing failed.
+    expect(report.sentryFailure).toBeUndefined();
   });
 
   it('leaves errors null when Sentry is configured but the call fails', async () => {
@@ -271,6 +273,30 @@ describe('getHealthReport', () => {
       deps({ sentry: { listIssues: async () => { throw new Error('403'); } } }),
     );
     expect(report.errors).toBeNull();
+  });
+
+  it('says WHY the Sentry call failed, so a bad token does not read as "not configured"', async () => {
+    // Observed 2026-09-14: SENTRY_API_TOKEN was set on the admin project and the
+    // board still said "Sentry is not configured", with nothing logged.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const report = await getHealthReport(
+        deps({
+          sentry: {
+            listIssues: async () => {
+              throw new Error('Sentry issues request failed: 403');
+            },
+          },
+        }),
+      );
+      expect(report.errors).toBeNull();
+      expect(report.sentryFailure).toBe('Sentry issues request failed: 403');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('"event":"health.sentry_request_failed"'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('sums the most recent hourly bucket across issues for errorsLastHour', async () => {

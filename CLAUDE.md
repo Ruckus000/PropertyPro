@@ -82,7 +82,11 @@ docs/                   # Specs, ADRs, audits, design system
 >   first cron, and the 18th in production.
 >
 > **Secrets these need:** `WEB_APP_ORIGIN`, `CRON_SECRET`,
-> `STRIPE_EXPECTED_LIVEMODE`, and the VAPID trio `NEXT_PUBLIC_VAPID_PUBLIC_KEY` /
+> `STRIPE_EXPECTED_LIVEMODE`, `SENTRY_API_TOKEN` (a read token with
+> `project:read` + `event:read` — NOT the build-time `SENTRY_AUTH_TOKEN`; without
+> it the Health board's error list, error-spike banner and push can never fire),
+> `ADMIN_APP_ORIGIN` (production refuses to probe the request's Host header, so
+> the Health board's Admin row stays "Not checked" without it), and the VAPID trio `NEXT_PUBLIC_VAPID_PUBLIC_KEY` /
 > `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` (the last optional — it defaults to a
 > `mailto:` contact). The public VAPID key is deliberately **one** variable shared
 > by browser and server, because two copies can disagree and a mismatch only
