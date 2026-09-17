@@ -58,10 +58,10 @@ export function DenyDialog({ requestId, requestName, onSuccess }: DenyDialogProp
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-edge px-3 py-2',
+          'inline-flex min-h-11 items-center gap-1.5 rounded-md border border-edge px-3 py-2',
           'text-sm font-medium text-content hover:bg-surface-muted',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-          'md:min-h-[36px]',
+          'lg:min-h-9',
         )}
       >
         <XCircle size={14} aria-hidden="true" />

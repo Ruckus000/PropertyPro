@@ -25,7 +25,7 @@
 1. Never rely on color alone. Always pair with icon + text label.
 2. Status escalation follows the 4-tier system (`calm`/`aware`/`urgent`/`critical`).
 3. Critical (overdue) items must be visible without scrolling on the dashboard.
-4. All interactive elements meet 44px touch target on mobile, 36px on desktop.
+4. All interactive elements meet a 44px touch target below `lg` (<1024px), 36px from 1024 up — implemented in the primitives, with `Checkbox`, `Switch` and `HelpTooltip` as named exceptions. The conformance floor beneath it is WCAG 2.2 SC 2.5.8 (AA): 24x24 with a spacing exception.
 5. All focus states use the focus ring system. No element may suppress `focus-visible`.
 
 ## Motion

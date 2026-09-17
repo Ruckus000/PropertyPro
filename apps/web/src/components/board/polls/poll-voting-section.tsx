@@ -82,7 +82,7 @@ export function PollVotingSection({
             <label
               key={option}
               className={cn(
-                'flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-edge p-3 md:min-h-9',
+                'flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-edge p-3 lg:min-h-9',
                 checked && 'border-interactive bg-surface-hover',
                 (hasVoted || !isActive) && 'cursor-default',
               )}
@@ -121,7 +121,6 @@ export function PollVotingSection({
       {!hasVoted && isActive ? (
         <Button
           type="button"
-          className="h-11 md:h-9"
           disabled={selectedOptions.length === 0}
           loading={castVote.isPending}
           onClick={() => void castVote.mutateAsync(selectedOptions)}

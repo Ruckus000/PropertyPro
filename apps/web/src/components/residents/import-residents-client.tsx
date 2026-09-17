@@ -283,7 +283,7 @@ function UploadStep({
               <p className="mt-1 text-sm text-content-secondary">or</p>
             </div>
             <label className="cursor-pointer">
-              <span className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]">
+              <span className="inline-flex min-h-11 items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover lg:min-h-9">
                 Browse Files
               </span>
               <input
@@ -485,14 +485,14 @@ function PreviewStep({
           type="button"
           onClick={onImport}
           disabled={validCount === 0}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[36px]"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-9"
         >
           Import {validCount} {validCount === 1 ? 'Resident' : 'Residents'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted lg:min-h-9"
         >
           Cancel
         </button>
@@ -554,14 +554,14 @@ function ResultsStep({ result, communityId, onImportMore }: ResultsStepProps) {
       <div className="flex items-center gap-3">
         <Link
           href={`/dashboard/residents?communityId=${communityId}`}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover lg:min-h-9"
         >
           View Residents
         </Link>
         <button
           type="button"
           onClick={onImportMore}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted lg:min-h-9"
         >
           Import More
         </button>

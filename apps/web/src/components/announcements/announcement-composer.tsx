@@ -179,7 +179,6 @@ export function AnnouncementComposer({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Board meeting reminder"
           maxLength={500}
-          className="h-11 md:h-9"
         />
       </div>
 
@@ -204,7 +203,7 @@ export function AnnouncementComposer({
         <div className="space-y-2">
           <Label htmlFor="announcement-audience">Audience</Label>
           <Select value={audience} onValueChange={(value) => setAudience(value as AnnouncementAudience)}>
-            <SelectTrigger id="announcement-audience" className="h-11 md:h-9">
+            <SelectTrigger id="announcement-audience">
               <SelectValue placeholder="Select audience" />
             </SelectTrigger>
             <SelectContent>
@@ -254,14 +253,13 @@ export function AnnouncementComposer({
           <Button
             type="button"
             variant="outline"
-            className="h-11 md:h-9"
             disabled={isSubmitting}
             onClick={onCancel}
           >
             Cancel
           </Button>
         ) : null}
-        <Button type="submit" className="h-11 md:h-9" loading={isSubmitting}>
+        <Button type="submit" loading={isSubmitting}>
           {submitLabel}
         </Button>
       </div>

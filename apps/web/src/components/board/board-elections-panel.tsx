@@ -68,7 +68,6 @@ function EligibilitySnapshotButton({
     <Button
       type="button"
       variant="outline"
-      className="h-11 md:h-9"
       disabled={snapshotEligibility.isPending}
       onClick={(event) => {
         event.stopPropagation();
@@ -201,7 +200,6 @@ function ElectionCard({
             <Button
               type="button"
               variant="outline"
-              className="h-11 md:h-9"
               onClick={(event) => {
                 event.stopPropagation();
                 onOpen();

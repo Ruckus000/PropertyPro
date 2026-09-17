@@ -27,7 +27,7 @@ import { findOverflows } from './helpers/overflow';
  * 1280 are the two cliff edges; 1440 is a large laptop.
  *
  * The floor moved from 768 to 375 on 2026-09-14. The old floor was never a
- * product decision — `DESIGN.md:207` has always required 44px touch targets
+ * product decision — `DESIGN.md` has always required 44px touch targets
  * *below* 768px, and `/mobile/` covers 16 routes with no equivalent for finance,
  * contracts, violations, esign, compliance or PM portfolio, so a phone user on
  * any of those gets this shell. Below 1024 the 260px rail becomes a drawer

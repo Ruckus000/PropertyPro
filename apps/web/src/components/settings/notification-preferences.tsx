@@ -145,7 +145,7 @@ export function NotificationPreferencesForm({
 
             <div className="space-y-2">
               {reminderVisibility.meetings ? (
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+                <label className="flex min-h-11 cursor-pointer items-center gap-2">
                   <input
                     className="h-4 w-4 shrink-0"
                     type="checkbox"
@@ -161,7 +161,7 @@ export function NotificationPreferencesForm({
                 </label>
               ) : null}
               {reminderVisibility.personalAssessments ? (
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+                <label className="flex min-h-11 cursor-pointer items-center gap-2">
                   <input
                     className="h-4 w-4 shrink-0"
                     type="checkbox"
@@ -177,7 +177,7 @@ export function NotificationPreferencesForm({
                 </label>
               ) : null}
               {reminderVisibility.communityAssessments ? (
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+                <label className="flex min-h-11 cursor-pointer items-center gap-2">
                   <input
                     className="h-4 w-4 shrink-0"
                     type="checkbox"
@@ -197,7 +197,7 @@ export function NotificationPreferencesForm({
         ) : null}
 
       <div className="space-y-2">
-        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2">
           <input
             className="h-4 w-4 shrink-0"
             type="checkbox"
@@ -208,7 +208,7 @@ export function NotificationPreferencesForm({
           />
           <span className="text-sm text-content">Announcements</span>
         </label>
-        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2">
           <input
             className="h-4 w-4 shrink-0"
             type="checkbox"
@@ -217,7 +217,7 @@ export function NotificationPreferencesForm({
           />
           <span className="text-sm text-content">Meeting notices</span>
         </label>
-        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2">
           <input
             className="h-4 w-4 shrink-0"
             type="checkbox"
@@ -227,7 +227,7 @@ export function NotificationPreferencesForm({
           <span className="text-sm text-content">In-app notifications</span>
         </label>
         {showInsuranceAlerts ? (
-          <label className="flex min-h-[44px] cursor-pointer items-start gap-2">
+          <label className="flex min-h-11 cursor-pointer items-start gap-2">
             <input
               type="checkbox"
               className="h-4 w-4 shrink-0 mt-1"

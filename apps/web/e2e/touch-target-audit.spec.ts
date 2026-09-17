@@ -15,11 +15,13 @@
  *
  *   1. **Does a primitive clear 24x24?** Asserted. A failure there is a defect,
  *      not a preference.
- *   2. **Does it reach the house 44px?** Reported, never asserted. Four
- *      documents assert that rule, no primitive satisfies it, and `DESIGN.md`
- *      contradicts itself about it (line 118 against 207/228). Resolving that is
- *      a product decision, and a gate must not pre-empt it by turning the whole
- *      component library red.
+ *   2. **Does it reach the house 44px below `lg`?** Also asserted, since
+ *      2026-09-17. It was reported and not asserted for as long as the rule was
+ *      stated in four documents and implemented in none — a gate is a bad place
+ *      to hold an open argument. The argument was settled by adopting the rule
+ *      in the primitives, so the gate now holds it. Three controls are named
+ *      exceptions to the house rule (never to the AA floor): `Checkbox`,
+ *      `Switch`, `HelpTooltip`.
  *
  * ## Where the markup comes from
  *
@@ -63,8 +65,18 @@ const webRoot = resolve(here, '..');
 
 /** WCAG 2.2 SC 2.5.8, Level AA. The bar that is asserted. */
 const AA_MINIMUM = 24;
-/** DESIGN.md:207 and :228. The bar that is reported. */
-const HOUSE_MOBILE = 44;
+/** DESIGN.md's house rule, now implemented rather than merely asserted. */
+const HOUSE_TOUCH = 44;
+/**
+ * The two branches of every primitive. The step is at `lg` (1024px), not the
+ * 768px the rule used to state: 768-1024 is a touch tablet, and `DESIGN.md:8`
+ * calls the board-member persona tablet-first *with larger targets*, so
+ * stepping down at 768 handed that persona the smaller control.
+ */
+const TOUCH_WIDTH = 375;
+const DESKTOP_WIDTH = 1280;
+/** Tailwind's `lg`. The width the step happens AT, not a width we measure at. */
+const STEP_BREAKPOINT = 1024;
 
 // ---------------------------------------------------------------------------
 // Fixture assembly
@@ -111,7 +123,18 @@ async function compileTailwind(markup: string): Promise<string> {
 
 type Measurement = { name: string; width: number; height: number; note?: string };
 
-async function mountAndMeasure(page: Page): Promise<Measurement[]> {
+/**
+ * `width` is not optional, and the reason is a bug this file shipped with.
+ *
+ * Until the primitives gained a responsive height there was only one branch to
+ * measure, so the fixture just used whatever viewport the project set —
+ * `devices['Desktop Chrome']`, 1280px. The moment `h-11 lg:h-9` landed, that
+ * silently kept measuring the DESKTOP branch: every number came back
+ * unchanged and the self-check below passed, which looked like the change had
+ * not landed at all. It had; the fixture could not see it.
+ */
+async function mountAndMeasure(page: Page, width: number): Promise<Measurement[]> {
+  await page.setViewportSize({ width, height: 900 });
   const primitives = renderPrimitives();
 
   // Each in its own generously padded row, so no primitive is crowded by a
@@ -155,40 +178,58 @@ async function mountAndMeasure(page: Page): Promise<Measurement[]> {
 // ---------------------------------------------------------------------------
 
 test.describe('touch targets — the primitives', () => {
-  test('the fixture reproduces the app, or nothing below is worth reading', async ({ page }) => {
-    const measured = await mountAndMeasure(page);
+  test('the fixture reproduces the app on both sides of the breakpoint', async ({ page }) => {
+    const touch = await mountAndMeasure(page, TOUCH_WIDTH);
+    const desktop = await mountAndMeasure(page, DESKTOP_WIDTH);
 
     // `.claude/rules/verification.md`: a scan that examined nothing must not
     // pass. -1 means a selector matched nothing, which would silently shrink
     // the population the assertions below run over.
     expect(
-      measured.filter((m) => m.height < 0).map((m) => m.name),
+      touch.filter((m) => m.height < 0).map((m) => m.name),
       'a probe selector matched nothing',
     ).toEqual([]);
-    expect(measured.length, 'the catalogue emptied itself').toBeGreaterThan(8);
+    expect(touch.length, 'the catalogue emptied itself').toBeGreaterThan(8);
 
-    const by = (name: string) => {
-      const found = measured.find((m) => m.name === name);
+    const at = (set: Measurement[], name: string) => {
+      const found = set.find((m) => m.name === name);
       if (!found) throw new Error(`no measurement named ${name}`);
       return found;
     };
 
-    // Pinned to the literal px of the spacing override. Under Tailwind's stock
-    // rem scale these would be 40.5 / 36 / 45 at an 18px root, so this catches
-    // a config that failed to load as readily as a size change.
-    expect(by('Button size=default').height, 'h-9').toBe(36);
-    expect(by('Button size=sm').height, 'h-8').toBe(32);
-    expect(by('Button size=lg').height, 'h-10').toBe(40);
-    expect(by('Input').height, 'h-9').toBe(36);
-    expect(by('Checkbox (bare)').height, 'h-4').toBe(16);
+    // Below `lg` every variant clamps to 44. That is what a minimum does to
+    // 32/36/40 — `sm`, `default` and `lg` are indistinguishable on a phone.
+    expect(at(touch, 'Button size=default').height, 'h-11').toBe(44);
+    expect(at(touch, 'Button size=sm').height, 'h-11').toBe(44);
+    expect(at(touch, 'Button size=lg').height, 'h-11').toBe(44);
+    expect(at(touch, 'Button size=icon').width, 'size-11').toBe(44);
+    expect(at(touch, 'Input').height, 'h-11').toBe(44);
+    expect(at(touch, 'SelectTrigger').height, 'h-11').toBe(44);
 
-    // The padding-derived one, and the only figure here that depends on the
-    // whole cascade being present: at a 16px root the same markup is ~29px.
-    expect(by('TabsTrigger').height, 'padding-derived, 18px root').toBeCloseTo(31.6, 0);
+    // At and above `lg` the variants mean what they always meant. Pinned to the
+    // literal px of the spacing override: under Tailwind's stock rem scale
+    // these would be 40.5 / 36 / 45 at an 18px root, so this catches a config
+    // that failed to load as readily as a size change.
+    expect(at(desktop, 'Button size=default').height, 'lg:h-9').toBe(36);
+    expect(at(desktop, 'Button size=sm').height, 'lg:h-8').toBe(32);
+    expect(at(desktop, 'Button size=lg').height, 'lg:h-10').toBe(40);
+    expect(at(desktop, 'Input').height, 'lg:h-9').toBe(36);
+
+    // Unchanged on both sides — the two named exceptions to the house rule.
+    expect(at(touch, 'Checkbox (bare)').height, 'h-4').toBe(16);
+    expect(at(desktop, 'Checkbox (bare)').height, 'h-4').toBe(16);
+
+    // The padding-derived one. Above `lg` it has no minimum and falls back to
+    // padding plus an 18px-root line box; at a 16px root the same markup is
+    // ~29px, so this figure is the whole cascade's receipt.
+    expect(at(desktop, 'TabsTrigger').height, 'padding-derived, 18px root').toBeCloseTo(31.6, 0);
+    expect(at(touch, 'TabsTrigger').height, 'min-h-11').toBe(44);
   });
 
   test('only the four known controls fall under 24x24, and they are named', async ({ page }) => {
-    const measured = await mountAndMeasure(page);
+    // Measured at the TOUCH width, where the house rule applies and where any
+    // control that is going to be small is smallest.
+    const measured = await mountAndMeasure(page, TOUCH_WIDTH);
     const under = measured
       .filter((m) => m.width < AA_MINIMUM || m.height < AA_MINIMUM)
       .map((m) => `${m.name} (${m.width}x${m.height})`)
@@ -220,7 +261,7 @@ test.describe('touch targets — the primitives', () => {
   });
 
   test('axe excuses exactly those four when nothing crowds them', async ({ page }) => {
-    await mountAndMeasure(page);
+    await mountAndMeasure(page, TOUCH_WIDTH);
     const { checked, findings } = await findUndersizedTargets(page);
 
     expect(checked, 'the rule examined nothing — see helpers/target-size.ts').toBeGreaterThan(8);
@@ -247,24 +288,59 @@ test.describe('touch targets — the primitives', () => {
     ).toEqual([]);
   });
 
-  test('reports conformance with the house 44px rule without asserting it', async ({ page }) => {
-    const measured = await mountAndMeasure(page);
-    const reaching = measured.filter((m) => m.height >= HOUSE_MOBILE);
+  /**
+   * This test used to PRINT the 44px result and assert nothing, because
+   * `DESIGN.md`'s rule demanded a height no primitive delivered and a gate is a
+   * bad place to hold an open argument. The argument is settled: the rule is
+   * implemented, so the gate asserts it.
+   *
+   * Two named exceptions, and they are exceptions to the HOUSE rule only —
+   * both clear WCAG 2.2 SC 2.5.8 (AA) via the spacing exception, measured
+   * across every authenticated screen:
+   *
+   *   - **Checkbox** (16x16) and **Switch** (36x20) cannot reach 44px without
+   *     a visual redesign. A 44px checkbox dominates a form row, and the
+   *     alternative — an invisible pseudo-element hit area — is a pattern that
+   *     exists nowhere in this codebase and would have shipped in the same
+   *     change that moved 344 Button call sites.
+   *   - **HelpTooltip** (20x20) is the same call: a 44px "?" beside a label
+   *     is louder than the label.
+   *
+   * The esign remove button (24x24) is NOT an exception to be tolerated — it
+   * is the one control that genuinely failed AA, and it was fixed. It sits
+   * here because 24 is still under 44.
+   */
+  test('every primitive meets the house 44px rule below the breakpoint', async ({ page }) => {
+    const measured = await mountAndMeasure(page, TOUCH_WIDTH);
 
-    // Printed, not asserted — see the header. `DESIGN.md:207` is unresolved
-    // against `DESIGN.md:118`, and a red suite is not where that gets settled.
-    console.log(
-      `\ntouch targets vs DESIGN.md:207 (${HOUSE_MOBILE}px mobile)\n` +
-        measured
-          .map(
-            (m) =>
-              `  ${m.height >= HOUSE_MOBILE ? 'ok   ' : 'under'} ${`${m.width}x${m.height}`.padEnd(12)} ${m.name}`,
-          )
-          .join('\n') +
-        `\n  ${reaching.length} of ${measured.length} reach it\n`,
+    const HOUSE_EXCEPTIONS = new Set([
+      'Checkbox (bare)',
+      'Checkbox (+ sibling label, as shipped)',
+      'Switch',
+      'HelpTooltip trigger (in situ)',
+      'esign field remove button (in situ)',
+    ]);
+
+    const short = measured
+      .filter((m) => !HOUSE_EXCEPTIONS.has(m.name) && m.height < HOUSE_TOUCH)
+      .map((m) => `${m.name} (${m.width}x${m.height})`);
+
+    expect(
+      short,
+      `DESIGN.md's ${HOUSE_TOUCH}px touch-target rule is implemented in the primitives ` +
+        `below ${STEP_BREAKPOINT}px. These are under it:\n  ${short.join('\n  ')}`,
+    ).toEqual([]);
+
+    // The exceptions are pinned by NAME, so deleting one from the set is a
+    // decision rather than a quiet drift — and so an exception that later
+    // grows past 44px stops being listed as one.
+    const stillShort = measured
+      .filter((m) => HOUSE_EXCEPTIONS.has(m.name) && m.height < HOUSE_TOUCH)
+      .map((m) => m.name)
+      .sort();
+    expect(stillShort, 'a named house-rule exception no longer needs to be one').toEqual(
+      [...HOUSE_EXCEPTIONS].sort(),
     );
-
-    expect(measured.length, 'the catalogue emptied itself').toBeGreaterThan(8);
   });
 });
 
@@ -320,7 +396,7 @@ test.describe('touch targets — the rule itself', () => {
  * 13px until `shrink-0` was added.
  *
  * Phone widths only. Above 768px the pointer is usually a mouse, and the house
- * rule itself stops applying (`DESIGN.md:207`).
+ * rule itself stops applying above `lg`.
  *
  * `isMobile` / `hasTouch` / `deviceScaleFactor: 2` are set together and
  * deliberately: appendix bug 9 of the 2026-09-14 audit is a probe that omitted

@@ -64,10 +64,10 @@ export function ApproveDialog({
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-interactive px-3 py-2',
+          'inline-flex min-h-11 items-center gap-1.5 rounded-md bg-interactive px-3 py-2',
           'text-sm font-medium text-content-inverse hover:bg-interactive-hover',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-          'md:min-h-[36px]',
+          'lg:min-h-9',
         )}
       >
         <CheckCircle2 size={14} aria-hidden="true" />

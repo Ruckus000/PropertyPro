@@ -133,7 +133,7 @@ export function ElectionVoteForm({
             <label
               key={candidate.id}
               className={cn(
-                'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-edge p-3 transition-colors md:min-h-9',
+                'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-edge p-3 transition-colors lg:min-h-9',
                 checked && 'border-interactive bg-surface-hover',
                 disabled && !checked && 'opacity-60',
               )}
@@ -156,7 +156,7 @@ export function ElectionVoteForm({
       </div>
 
       <div className="rounded-lg border border-edge bg-surface-muted p-3">
-        <div className="flex min-h-11 items-center gap-3 md:min-h-9">
+        <div className="flex min-h-11 items-center gap-3 lg:min-h-9">
           <Checkbox
             checked={isAbstaining}
             disabled={castVote.isPending}
@@ -183,7 +183,7 @@ export function ElectionVoteForm({
 
       <Button
         type="button"
-        className="h-11 w-full md:h-9"
+        className="w-full"
         disabled={!canReview}
         loading={castVote.isPending}
         onClick={() => setReviewOpen(true)}
@@ -211,7 +211,6 @@ export function ElectionVoteForm({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={castVote.isPending}>Go back</AlertDialogCancel>
             <AlertDialogAction
-              className="h-11 md:h-9"
               disabled={castVote.isPending}
               onClick={(event) => {
                 event.preventDefault();

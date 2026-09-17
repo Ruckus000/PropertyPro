@@ -108,7 +108,6 @@ export function ForumThreadDetail({
             <Button
               type="button"
               variant="outline"
-              className="h-11 md:h-9"
               loading={updateThread.isPending && updateThread.variables?.isPinned !== undefined}
               onClick={() => void updateThread.mutateAsync({ isPinned: !thread.isPinned })}
             >
@@ -117,7 +116,6 @@ export function ForumThreadDetail({
             <Button
               type="button"
               variant="outline"
-              className="h-11 md:h-9"
               loading={updateThread.isPending && updateThread.variables?.isLocked !== undefined}
               onClick={() => void updateThread.mutateAsync({ isLocked: !thread.isLocked })}
             >
@@ -165,7 +163,7 @@ export function ForumThreadDetail({
                   <Button
                     type="button"
                     variant="ghost"
-                    className="h-11 shrink-0 px-3 text-content-secondary hover:bg-status-danger-bg hover:text-status-danger md:h-9"
+                    className="shrink-0 px-3 text-content-secondary hover:bg-status-danger-bg hover:text-status-danger"
                     disabled={deleteReply.isPending}
                     loading={deleteReply.isPending && replyPendingRemoval === reply.id}
                     title="Delete reply"
@@ -225,7 +223,6 @@ export function ForumThreadDetail({
         <div className="flex justify-end">
           <Button
             type="button"
-            className="h-11 md:h-9"
             disabled={thread.isLocked || replyBody.trim().length === 0}
             loading={createReply.isPending}
             onClick={() => {

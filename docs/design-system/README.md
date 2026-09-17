@@ -131,8 +131,10 @@ do not recreate it.
 
 Density is viewport-driven, not user-toggle-driven.
 
-- mobile (`<768px`): spacious defaults, larger touch targets
-- desktop (`>=768px`): tighter component internals
+- touch (`<1024px`): spacious defaults, 44px touch targets
+- desktop (`>=1024px`): tighter component internals
+- the step is at `lg`, not `md`: 768-1024 is a touch tablet, and the board-member
+  persona is tablet-first
 - macro spacing (`section`, `page`) remains constant across breakpoints
 
 ## Accessibility
@@ -141,7 +143,8 @@ V2 accessibility baseline includes:
 
 - global `:focus-visible` ring tokens
 - skip-link pattern support
-- touch target minimums: 44px mobile, 36px desktop
+- touch target minimums: 44px below `lg`, 36px from 1024 up (house rule, implemented
+  in the primitives); WCAG 2.2 SC 2.5.8 AA's 24x24 is the conformance floor beneath it
 - color + icon + text for all status presentation
 - `prefers-reduced-motion` support across transition and animation durations
 
@@ -150,12 +153,11 @@ V2 accessibility baseline includes:
 | Component | Key V2 Values |
 |---|---|
 | `Button` | see the Component Dimensions table in `/DESIGN.md` (canonical: `packages/ui/src/components/ui/button.tsx`) |
-| `Input` (token contract) | heights: `40 desktop / 48 mobile density`; radius `sm (6px)` |
+| `Input` | height `44` below `lg`, `36` from 1024 up; radius `sm (6px)`. One size — the older `40 desktop / 48 mobile` token contract was never implemented |
 | `Card` | radius `md (10px)`; elevation `E0` rest, `E1` hover/interactive |
 | `Modal` | radius `lg (16px)`; elevation `E3` |
 | `Badge` | radius `full`; touch-aware minimum target |
 | `NavRail Item` | height `44px`; radius `md (10px)` |
-| `DataRow` | minimum target `44px` mobile, `36px` desktop |
 | `SectionHeader` | macro spacing via `section.*` tokens |
 
 ## Implementation Notes

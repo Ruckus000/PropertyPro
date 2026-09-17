@@ -93,12 +93,12 @@ export function AwaitingYouPanel({
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-0">
+                <Button asChild variant="outline" size="sm">
                   <Link href={`/esign/submissions/${request.id}?communityId=${communityId}`}>
                     Open request
                   </Link>
                 </Button>
-                <Button asChild size="sm" className="min-h-11 sm:min-h-0">
+                <Button asChild size="sm">
                   <Link href={`/sign/${request.externalId}/${signer.slug}`}>
                     <ExternalLink aria-hidden="true" className="size-3.5" />
                     Sign now

@@ -42,7 +42,7 @@ export function BoardForumPanel({ communityId }: BoardForumPanelProps) {
     <>
       <div className="space-y-4">
         <div className="flex justify-end">
-          <Button type="button" className="h-11 md:h-9" onClick={() => setCreateDialogOpen(true)}>
+          <Button type="button" onClick={() => setCreateDialogOpen(true)}>
             New Thread
           </Button>
         </div>

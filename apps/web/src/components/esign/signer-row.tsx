@@ -105,7 +105,6 @@ export function SignerRow({ communityId, request, signer }: SignerRowProps) {
             type="button"
             variant="ghost"
             size="sm"
-            className="min-h-11 sm:min-h-0"
             onClick={() =>
               void copy(
                 `${window.location.origin}/sign/${request.externalId}/${signer.slug}`,
@@ -127,7 +126,6 @@ export function SignerRow({ communityId, request, signer }: SignerRowProps) {
             type="button"
             variant="outline"
             size="sm"
-            className="min-h-11 sm:min-h-0"
             disabled={remind.isPending}
             onClick={() =>
               // `mutate`, not `mutateAsync`: the mutation invalidates the list,

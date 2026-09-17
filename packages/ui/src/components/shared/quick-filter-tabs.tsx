@@ -39,7 +39,7 @@ export function QuickFilterTabs({
             // colour alone. Five screens share this component.
             aria-pressed={isActive}
             className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-quick',
+              'inline-flex h-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-quick lg:h-8',
               isActive
                 ? 'bg-interactive text-content-inverse shadow-sm'
                 : 'text-content-tertiary hover:bg-surface-hover hover:text-content'

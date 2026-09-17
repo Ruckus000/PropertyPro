@@ -161,12 +161,22 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 ## Component Dimensions
 
-- Buttons: sm(32px) default(36px) lg(40px) icon(36px). Radius md. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `packages/ui/src/components/ui/button.tsx` (web re-exports it from `apps/web/src/components/ui/button.tsx`).
-- Inputs: sm(36px) md(40px) lg(48px). Radius sm. 1px border, 2px on focus.
+- Buttons: **44px below `lg`**; sm(32px) default(36px) lg(40px) icon(36px) from 1024 up. Radius md. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `packages/ui/src/components/ui/button.tsx` (web re-exports it from `apps/web/src/components/ui/button.tsx`).
+- Inputs: **44px below `lg`**, 36px from 1024 up. One size — the sm/md/lg ladder was never implemented. Radius sm. 1px border, 2px on focus.
 - Cards: radius md. Padding sm(16) md(20) lg(24). E0 rest, E1 hover.
 - Modals: radius lg. E3. Widths: sm(400) md(560) lg(720) xl(960).
 - Table rows: 52px body, 40px header, 12px cell padding.
-- Touch targets: 44px mobile (<768px), 36px desktop (>=768px).
+- Touch targets: 44px below `lg` (<1024px), 36px from 1024 up. The step is at 1024
+  and not 768 because 768-1024 is a touch tablet and the board-member persona is
+  tablet-first. **Implemented in the primitives** (Button/Input/SelectTrigger/
+  TabsTrigger/QuickFilterTabs) — do NOT hand-roll it at a call site; three rival
+  idioms accumulated that way and were consolidated on 2026-09-17. Named exceptions:
+  `Checkbox`, `Switch`, `HelpTooltip`.
+- Touch-target CONFORMANCE floor is WCAG 2.2 SC 2.5.8 (AA): 24x24 with a spacing
+  exception. That is the bar that binds; 44px is a house standard above it (WCAG 2.1
+  SC 2.5.5 is AAA). Asserted in a browser by
+  `apps/web/e2e/touch-target-audit.spec.ts` — never by a static lint rule, because a
+  geometry claim belongs in the browser (`scripts/verify-responsive-geometry.ts`).
 
 ## State Handling
 

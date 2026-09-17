@@ -21,11 +21,30 @@ const buttonVariants = cva(
         ghost: "hover:bg-surface-hover hover:text-content",
         link: "text-interactive underline-offset-4 hover:underline",
       },
+      // 44px below `lg`, the variant height at and above it. `DESIGN.md:207`
+      // has always asked for a 44px touch target on touch viewports; until
+      // 2026-09-17 no variant reached it and ~32 call sites hand-rolled the
+      // step themselves. The rule now lives here instead.
+      //
+      // The breakpoint is `lg` (1024px), NOT the 768px the rule used to state.
+      // At 768-1024 the device is still a tablet and still touch, and
+      // `DESIGN.md:8` calls the board-member persona tablet-first *with larger
+      // targets* — so stepping down at 768 handed exactly that persona the
+      // smaller control. It also matches `layout/app-top-bar.tsx`, which
+      // already shipped `size-11 ... lg:size-9`.
+      //
+      // Every variant clamps to the same 44px below `lg`, so `sm`/`default`/
+      // `lg` are indistinguishable on a phone. That is what a minimum does to
+      // values of 32/36/40; the variants keep their meaning above the
+      // breakpoint. This is NOT an accessibility fix — WCAG 2.2 SC 2.5.8 (AA)
+      // asks for 24x24 and the whole app already measured clean against it
+      // (2,612 targets, zero failures). It is a deliberate product decision
+      // about touch comfort.
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "h-11 px-4 py-2 lg:h-9",
+        sm: "h-11 rounded-md px-3 text-xs lg:h-8",
+        lg: "h-11 rounded-md px-8 lg:h-10",
+        icon: "size-11 lg:size-9",
       },
     },
     defaultVariants: {

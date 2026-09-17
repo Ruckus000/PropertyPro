@@ -116,8 +116,8 @@ Four layers, each with a specific role:
 
 | Component | Heights | Radius | Notes |
 |-----------|---------|--------|-------|
-| Button | sm 32 / default 36 / lg 40 / icon 36 | md (10px) | Denser scale adopted 2026-07 (Wave 2); canonical component: `packages/ui/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
-| Input | sm/md/lg 36 / 40 / 48 | sm (6px) | 1px border, 2px on focus |
+| Button | **44 below `lg`**; sm 32 / default 36 / lg 40 / icon 36 from 1024 up | md (10px) | Denser scale adopted 2026-07 (Wave 2); the touch floor was implemented in the CVA 2026-09-17, so the variants are indistinguishable on a phone by design. Canonical component: `packages/ui/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
+| Input | **44 below `lg`**, 36 from 1024 up | sm (6px) | 1px border, 2px on focus. One size — the `sm/md/lg` ladder this row used to claim was never implemented |
 | Card | — | md (10px) | Padding: 16/20/24px. E0 rest, E1 hover |
 | Modal | — | lg (16px) | E3. Widths: 400/560/720/960px |
 | Badge | 20 / 24 / 28 | full | Status indicators |
@@ -186,7 +186,6 @@ Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tok
 
 ### Data Display
 
-- DataRow pattern: 44px touch target on mobile, 36px on desktop
 - Tables: row height 52px, header 40px, 12px cell padding
 - ColumnHeader for sortable columns
 - StatusPills for aggregated status summaries
@@ -204,7 +203,20 @@ Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tok
 ## Accessibility
 
 - **Focus:** `:focus-visible` ring system — 2px solid, 2px offset. NEVER suppress on any interactive element.
-- **Touch targets:** 44px minimum on mobile (<768px), 36px on desktop (>=768px)
+- **Touch targets:** 44px minimum below `lg` (<1024px), 36px from 1024 up. The
+  breakpoint is 1024 and not 768 deliberately: 768-1024 is a touch tablet, and the
+  board-member persona above is tablet-first *with larger targets*, so stepping down
+  at 768 handed exactly that persona the smaller control. Implemented in the
+  primitives (Button / Input / SelectTrigger / TabsTrigger / QuickFilterTabs), not
+  left to call sites, and asserted by `apps/web/e2e/touch-target-audit.spec.ts`.
+  **Named exceptions**, which meet the conformance floor below but not this rule:
+  `Checkbox` (16x16), `Switch` (36x20) and `HelpTooltip` (20x20) — each would need a
+  visual redesign, and each is conformant wherever nothing crowds it.
+- **Touch-target conformance floor:** WCAG 2.2 **SC 2.5.8 (AA)** — 24x24 CSS px, with
+  spacing, inline, user-agent-control and essential exceptions. This is the bar that
+  binds; the 44px rule above is a house standard on top of it (the 44px figure is
+  WCAG 2.1 SC 2.5.5, which is AAA). Measured 2026-09-17: 2,612 targets across 68
+  authenticated pages at phone widths, zero failures.
 - **Skip link:** `.skip-link` class supported for keyboard users
 - **Motion:** All animations respect `prefers-reduced-motion`. Motion must be functional (feedback/orientation/attention), never decorative.
 - **Color:** Never rely on color alone. Always icon + text + color for status.
@@ -225,7 +237,7 @@ Every PR touching UI must pass:
 - [ ] All radii from the radius scale
 - [ ] All shadows from the elevation scale
 - [ ] Focus ring visible on every interactive element
-- [ ] Touch targets meet minimums (44px mobile, 36px desktop)
+- [ ] Touch targets meet minimums (44px below `lg`, 36px from 1024 up) — the primitives do this for you
 - [ ] Status uses icon + text + color (never color alone)
 - [ ] `prefers-reduced-motion` respected (no decorative animation)
 - [ ] Loading, empty, and error states handled for all data-dependent views

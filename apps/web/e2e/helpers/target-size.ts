@@ -36,7 +36,7 @@
  *
  * SC 2.5.8 **Target Size (Minimum)**, Level **AA**: 24x24 CSS px, with spacing,
  * inline, user-agent-control, equivalent and essential exceptions. That is the
- * conformance bar. It is NOT the repo's own 44px rule (`DESIGN.md:207`), which
+ * conformance bar. It is NOT the repo's own 44px rule, which
  * is SC 2.5.5 **Target Size (Enhanced)**, Level **AAA** — a deliberate internal
  * aspiration, and a separate question. Do not conflate them here.
  *

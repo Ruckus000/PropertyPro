@@ -71,7 +71,7 @@ function FilterChip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`rounded-full border px-3 py-1.5 text-sm min-h-[36px] ${
+      className={`rounded-full border px-3 py-1.5 text-sm min-h-11 lg:min-h-9 ${
         active
           ? 'border-[var(--interactive-primary)] bg-[var(--interactive-subtle)] text-[var(--interactive-primary)] font-semibold'
           : 'border-[var(--border-default)] text-content hover:bg-surface-muted'

@@ -82,7 +82,7 @@ export function CreatePollDialog({
 
           <div className="space-y-2">
             <Label htmlFor="poll-title">Title</Label>
-            <Input id="poll-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={240} className="h-11 md:h-9" />
+            <Input id="poll-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={240} />
           </div>
 
           <div className="space-y-2">
@@ -93,7 +93,7 @@ export function CreatePollDialog({
           <div className="space-y-2">
             <Label>Poll type</Label>
             <Select value={pollType} onValueChange={(value) => setPollType(value as 'single_choice' | 'multiple_choice')}>
-              <SelectTrigger className="h-11 md:h-9">
+              <SelectTrigger>
                 <SelectValue placeholder="Select poll type" />
               </SelectTrigger>
               <SelectContent>
@@ -109,7 +109,6 @@ export function CreatePollDialog({
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 md:h-9"
                 disabled={options.length >= 20}
                 onClick={() => setOptions((current) => [...current, ''])}
               >
@@ -128,13 +127,11 @@ export function CreatePollDialog({
                       setOptions(next);
                     }}
                     placeholder={`Option ${index + 1}`}
-                    className="h-11 md:h-9"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-11 w-11 md:h-9 md:w-9"
                     disabled={options.length <= 2}
                     onClick={() => setOptions((current) => current.filter((_, optionIndex) => optionIndex !== index))}
                   >
@@ -148,15 +145,15 @@ export function CreatePollDialog({
 
           <div className="space-y-2">
             <Label htmlFor="poll-ends-at">End date</Label>
-            <Input id="poll-ends-at" type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} className="h-11 md:h-9" />
+            <Input id="poll-ends-at" type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
           </div>
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" className="h-11 md:h-9" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" className="h-11 md:h-9" disabled={!canSubmit} loading={createPoll.isPending} onClick={() => void handleSubmit()}>
+          <Button type="button" disabled={!canSubmit} loading={createPoll.isPending} onClick={() => void handleSubmit()}>
             Create Poll
           </Button>
         </DialogFooter>

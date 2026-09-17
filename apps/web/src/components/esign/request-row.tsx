@@ -109,7 +109,7 @@ export function RequestRow({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-11 shrink-0 md:size-9"
+              className="shrink-0"
               aria-expanded={isExpanded}
               // Conditional, never constant: a `aria-controls` pointing at an
               // id that only exists while open is a dangling reference the rest

@@ -62,7 +62,7 @@ export function UrgentRequestStrip({ communityId, request, now }: UrgentRequestS
             {progress.total} · after it expires the request has to be sent again
           </p>
         </div>
-        <Button asChild variant="outline" size="sm" className="min-h-11 shrink-0 sm:min-h-0">
+        <Button asChild variant="outline" size="sm" className="shrink-0">
           <Link href={`/esign/submissions/${request.id}?communityId=${communityId}`}>Open</Link>
         </Button>
       </Card>

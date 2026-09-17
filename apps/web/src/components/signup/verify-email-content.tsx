@@ -209,7 +209,7 @@ export function VerifyEmailContent() {
                 ? `Resend email available in ${formatCooldown(cooldownSeconds)}`
                 : 'Resend verification email'
             }
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-edge-strong bg-surface-card px-5 text-sm font-medium text-content transition-colors hover:bg-surface-muted hover:border-edge-strong disabled:cursor-not-allowed disabled:text-content-tertiary max-[480px]:h-11 max-[480px]:w-full"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-edge-strong bg-surface-card px-5 text-sm font-medium text-content transition-colors hover:bg-surface-muted hover:border-edge-strong disabled:cursor-not-allowed disabled:text-content-tertiary lg:h-10 max-[480px]:w-full"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

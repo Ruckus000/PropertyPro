@@ -209,7 +209,7 @@ export function CrossCommunityNotificationDropdown() {
                             <a
                               href={buildHref(n)}
                               className={cn(
-                                'flex min-h-[44px] items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
+                                'flex min-h-11 items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
                               )}
                             >
                               <span
