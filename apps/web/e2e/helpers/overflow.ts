@@ -83,10 +83,33 @@ export async function findOverflows(page: Page): Promise<Overflow[]> {
       );
     };
 
+    /**
+     * The nearest ancestor that actually generates a box.
+     *
+     * `display: contents` generates none — the element's children are laid out
+     * as if they were children of ITS parent — but `getBoundingClientRect()`
+     * still answers, with zeros. Comparing against that gives a content edge of
+     * roughly 0, so every child "overflows" it by its whole right edge. The
+     * repo has one of these today (`site-editor-v3/canvas/FloatControls.tsx`,
+     * a `className="contents"` wrapper that exists only to stop clicks
+     * bubbling), and since layout treats its children as the grandparent's,
+     * so does this.
+     *
+     * Same shape as the `display:none` guard below, one level up: that one
+     * checks the ELEMENT generates a box, this one checks its comparison
+     * target does.
+     */
+    const boxParent = (el: Element): Element | null => {
+      for (let n = el.parentElement; n; n = n.parentElement) {
+        if (n.getClientRects().length > 0) return n;
+      }
+      return null;
+    };
+
     const found: Overflow[] = [];
     const root = document.querySelector('main') ?? document.body;
     for (const el of root.querySelectorAll('*')) {
-      const parent = el.parentElement;
+      const parent = boxParent(el);
       if (!parent) continue;
       // Generates no boxes — `display:none` on this element OR on any ancestor.
       // Checking `cs.display` alone is not enough: a child of a `display:none`
@@ -124,8 +147,47 @@ export async function findOverflows(page: Page): Promise<Overflow[]> {
         el.getBoundingClientRect().right +
         Math.min(parseFloat(cs.marginRight || '0') || 0, 0);
       const over = Math.round(right - limit);
-      if (over <= 1) continue;
-      found.push({ selector: describe(el), box: Math.round(limit), right: Math.round(right), over });
+
+      // A TEXT node overflowing its own box is invisible to the comparison
+      // above, which only ever looks at element edges. That is a real gap the
+      // `scrollWidth` rule used to cover: `.mk-srow small` on the marketing
+      // home page is a `display:block` box holding one unbreakable monospace
+      // statute citation, and it spilled out of a 73px grid column at 375px —
+      // seven boxes on that page, fixed in this branch with `overflow-wrap`.
+      // Under edge comparison alone it would have regressed silently.
+      //
+      // Restricted to elements with NO element children, which is what makes it
+      // safe to reach for `scrollWidth` again. The false positive that forced
+      // the rewrite was an ANCESTOR's `scrollWidth` counting the content of a
+      // descendant scroller; an element with no children has no descendants at
+      // all, so that case cannot arise here. It also cannot double-report a
+      // child element's bleed, for the same reason.
+      //
+      // Ellipsised text is exempt, and that exemption is the whole reason this
+      // check is not simply "scrollWidth > clientWidth". `truncate` is
+      // `overflow:hidden` + `text-overflow:ellipsis` + `white-space:nowrap`, so
+      // a truncating element ALWAYS has more content than box — that is what it
+      // is for. Measured on a plain 80px truncating span: +236, and the app is
+      // full of them, so without this the rule would report most of the app.
+      // What stays reportable is text that disappears with no signal: clipped
+      // with no ellipsis, or spilling out of a box that does not clip at all
+      // (`.mk-srow small` was the second kind).
+      //
+      // `clientWidth` is 0 on an inline non-replaced box, so inline text is
+      // outside this check rather than wrongly inside it: 0 - 0 is 0.
+      const ownText =
+        el.children.length === 0 && cs.textOverflow !== 'ellipsis'
+          ? el.scrollWidth - el.clientWidth
+          : 0;
+
+      const worst = Math.max(over, ownText);
+      if (worst <= 1) continue;
+      found.push({
+        selector: describe(el),
+        box: Math.round(limit),
+        right: Math.round(right),
+        over: worst,
+      });
     }
     return found.slice(0, 10);
   });

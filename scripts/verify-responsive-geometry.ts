@@ -122,11 +122,27 @@ function main(): void {
     for (const f of failures) {
       console.error(`  ${f.file}:${f.lines.join(',')} — ${f.count} found, baseline allows ${f.allowed}`);
     }
+    // The remedy differs by root, and saying so matters: this guard scans
+    // `packages/ui/src` too, where neither the `@/` alias nor the primitive
+    // exists, so the web advice is not merely unhelpful there — it is an
+    // instruction that cannot be followed, leaving the exemption as the only
+    // way out of a guard that never explains that.
+    const inPackagesUi = failures.some((f) => f.file.startsWith('packages/ui/'));
     console.error(
-      "\nFix: import { Table } from '@/components/ui/table' and swap <table…> for <Table…>." +
-        ' Children pass straight through, so <thead>/<tbody> are untouched, and the wrapper' +
-        ' brings the scroll box and the conditional tab stop with it.' +
-        ' If a raw table is genuinely right here, add `// responsive-geometry:exempt — <reason>`.',
+      "\nFix (apps/web): import { Table } from '@/components/ui/table' and swap <table…> for" +
+        ' <Table…>. Children pass straight through, so <thead>/<tbody> are untouched, and the' +
+        ' wrapper brings the scroll box and the conditional tab stop with it.',
+    );
+    if (inPackagesUi) {
+      console.error(
+        `\nFix (packages/ui): there is no Table primitive here — ${PRIMITIVE} lives in apps/web` +
+          " and the '@/' alias does not resolve in this package. Either move the table into a" +
+          ' component under apps/web, or lift the primitive into packages/ui the way the twelve' +
+          ' shadcn components already were, or exempt it below.',
+      );
+    }
+    console.error(
+      '\nIf a raw table is genuinely right here, add `// responsive-geometry:exempt — <reason>`.',
     );
     process.exit(1);
   }

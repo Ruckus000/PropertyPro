@@ -175,14 +175,22 @@ export function MonthGrid({
                       key={event.type === 'meeting' ? `meeting-${event.id}` : `${event.type}-${event.assessmentId}-${event.dueDate}`}
                       className="rounded-[var(--radius-sm)] bg-[var(--surface-subtle)] px-2 py-1 text-xs text-[var(--text-secondary)]"
                     >
+                      {/* `shrink-0` on both dots. These rows became `flex` (they
+                          were `inline-flex`, which shrink-to-fits its container
+                          rather than being bounded by it — the bug this file's
+                          +189 was), and a flex item defaults to `flex-shrink: 1`.
+                          An empty 8px span has a min-content width of 0, so a
+                          long title squeezed the status dot down to nothing. */}
                       {event.type === 'meeting' ? (
                         <span className="flex items-center gap-1.5">
-                          <span className={`inline-flex h-2 w-2 rounded-full ${meetingTypeDotClass(event.meetingType)}`} />
+                          <span
+                            className={`inline-flex h-2 w-2 shrink-0 rounded-full ${meetingTypeDotClass(event.meetingType)}`}
+                          />
                           <span className="truncate">{event.title}</span>
                         </span>
                       ) : (
                         <span className="flex items-center gap-1.5">
-                          <span className="inline-flex h-2 w-2 rounded-full bg-[var(--status-warning)]" />
+                          <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-[var(--status-warning)]" />
                           <span className="truncate">{event.assessmentTitle}</span>
                         </span>
                       )}

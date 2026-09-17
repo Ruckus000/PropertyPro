@@ -63,6 +63,20 @@
     "`payments`, they are UNMEASURED against THIS stack (dev server + CI seed) --",
     "this job's own run on the PR that adds them is the real measurement.",
     "",
+    "2026-09-17, review follow-up: `overflow-detector.spec.ts` joins the list (13",
+    "blocks) and expectedTestCount goes 40 -> 54. It drives `helpers/overflow.ts`",
+    "against synthetic `setContent` fixtures -- no server, no database, no seed --",
+    "so it is the one spec here that tests a GATE RULE rather than the app. That",
+    "rule had been wrong four separate times against a real app that answered",
+    "consistently every time, which is the failure a fixture test catches and a",
+    "page visit does not; writing it immediately surfaced a fifth (reaching for",
+    "scrollWidth again made every `truncate` in the app report +236).",
+    "",
+    "That 40 was also one short of reality: measured 41 before this spec, 54 after.",
+    "The slack predates this branch -- expectedTestCount is a FLOOR, so it passed",
+    "quietly. It is now the exact collected count, which is safe because the",
+    "workflow fails on ANY skip separately and counts only non-skipped tests.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -81,10 +95,11 @@
     "demo-flows.spec.ts",
     "esign-and-documents-flow.spec.ts",
     "marketing-smoke.spec.ts",
+    "overflow-detector.spec.ts",
     "meeting-create-spacebar.spec.ts",
     "phase1-roadmap-smoke.spec.ts",
     "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 40
+  "expectedTestCount": 54
 }

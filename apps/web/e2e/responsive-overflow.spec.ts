@@ -8,8 +8,10 @@
  * ~684px at the exact pixel where every `lg:` layout switches on. Three screens shipped
  * visibly broken in that band and no gate could see it: Playwright runs one project
  * (`devices['Desktop Chrome']` = 1280x720 — squarely inside the band) and asserts nothing
- * about layout, jsdom does no layout at all, and the 30 lint guards check colour and
- * structure, never geometry.
+ * about layout, jsdom does no layout at all, and the lint guards check colour and
+ * structure, never geometry — `guard:responsive-geometry` is the 31st and the only one
+ * that goes near layout, and it deliberately asks only one structural question
+ * (no raw `<table>`), because a geometry claim belongs in a browser.
  *
  * The check that matters is the second one. A page-level `scrollWidth` assertion alone
  * misses the common case, where an inner box overflows and the excess is clipped by an
