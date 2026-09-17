@@ -9,36 +9,70 @@
  *  - `ensureCommunity` matched by slug alone and stamped `is_demo=true` on a
  *    real community that held the slug.
  *
- * Runs against a real Postgres (DATABASE_URL — use `pnpm db:test-local:setup`);
- * only Supabase storage/auth are faked, since the seed's document PDFs and auth
- * lookups are not what is under test.
+ * Runs against a real Postgres (DATABASE_URL — use `pnpm db:test-local:setup`).
+ * The seed also uploads document PDFs through Supabase storage and looks up auth
+ * users; those go to a small in-process HTTP double of the Supabase API, so the
+ * real supabase-js client path runs and no module is mocked (integration tests
+ * may not mock — scripts/verify-no-mocks-in-integration.ts).
  */
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-vi.mock('../src/supabase/admin', () => {
-  const stored = new Map<string, Uint8Array>();
-  const bucket = {
-    upload: async (path: string, bytes: Uint8Array) => {
-      stored.set(path, bytes);
-      return { data: { path }, error: null };
-    },
-    list: async (_folder: string, opts: { search: string }) => ({
-      data: [...stored.keys()]
-        .map((p) => p.slice(p.lastIndexOf('/') + 1))
-        .filter((name) => name === opts.search)
-        .map((name) => ({ name })),
-      error: null,
-    }),
-    download: async (path: string) => ({ data: stored.get(path) ?? null, error: null }),
-  };
-  return {
-    createAdminClient: () => ({
-      storage: { from: () => bucket },
-      auth: { admin: { listUsers: async () => ({ data: { users: [] }, error: null }) } },
-    }),
-  };
-});
+/**
+ * Just enough of the Supabase REST surface for the seed: storage upload / list /
+ * download and auth admin listUsers. Anything else is recorded and answered 404,
+ * and the suite asserts nothing unexpected was called.
+ */
+function startSupabaseDouble(): Promise<{ server: Server; url: string; unexpected: string[] }> {
+  const objects = new Map<string, Buffer>();
+  const unexpected: string[] = [];
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      const url = new URL(req.url ?? '/', 'http://double');
+      const path = decodeURIComponent(url.pathname);
+      const body = Buffer.concat(chunks);
+      const json = (status: number, payload: unknown) => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(payload));
+      };
+
+      if (req.method === 'GET' && path === '/auth/v1/admin/users') return json(200, { users: [], aud: 'authenticated' });
+
+      const list = path.match(/^\/storage\/v1\/object\/list\/([^/]+)$/);
+      if (req.method === 'POST' && list) {
+        const { prefix = '', search = '' } = JSON.parse(body.toString() || '{}') as { prefix?: string; search?: string };
+        const names = [...objects.keys()]
+          .filter((key) => key.startsWith(`${list[1]}/${prefix}${prefix ? '/' : ''}`))
+          .map((key) => key.slice(key.lastIndexOf('/') + 1))
+          .filter((name) => name.includes(search));
+        return json(200, names.map((name) => ({ name, id: name, metadata: {} })));
+      }
+
+      const object = path.match(/^\/storage\/v1\/object\/(?:authenticated\/)?([^/]+)\/(.+)$/);
+      if (object && (req.method === 'POST' || req.method === 'PUT')) {
+        objects.set(`${object[1]}/${object[2]}`, body);
+        return json(200, { Key: `${object[1]}/${object[2]}`, Id: randomUUID() });
+      }
+      if (object && req.method === 'GET' && objects.has(`${object[1]}/${object[2]}`)) {
+        res.writeHead(200, { 'content-type': 'application/pdf' });
+        return res.end(objects.get(`${object[1]}/${object[2]}`));
+      }
+
+      unexpected.push(`${req.method ?? '?'} ${path}`);
+      return json(404, { message: 'not in the double' });
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({ server, url: `http://127.0.0.1:${String(port)}`, unexpected });
+    });
+  });
+}
 
 const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
 
@@ -56,8 +90,16 @@ describeDb('seedCommunity never rewrites a real community (integration)', () => 
   let schema: typeof import('../src/schema');
   let realCommunityId = 0;
   let realRequestsBefore: Array<{ id: number; communityId: number; title: string }> = [];
+  let double: Awaited<ReturnType<typeof startSupabaseDouble>>;
+  const savedEnv = {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  };
 
   beforeAll(async () => {
+    double = await startSupabaseDouble();
+    process.env.NEXT_PUBLIC_SUPABASE_URL = double.url;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'isolation-test-service-role';
     process.env.DEMO_DEFAULT_PASSWORD ??= 'isolation-test-password';
     ({ seedCommunity } = await import('../src/seed/seed-community'));
     schema = await import('../src/schema');
@@ -86,7 +128,13 @@ describeDb('seedCommunity never rewrites a real community (integration)', () => 
       await db.delete(schema.communities).where(inArray(schema.communities.id, ids));
     }
     await db.delete(schema.users).where(like(schema.users.email, `%.${tag}@isolation.test`));
+    await new Promise((resolve) => double.server.close(resolve));
+    for (const [name, value] of [['NEXT_PUBLIC_SUPABASE_URL', savedEnv.url], ['SUPABASE_SERVICE_ROLE_KEY', savedEnv.key]] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   }, 120_000);
+
 
   async function requestsOf(communityId: number) {
     const { eq } = await import('drizzle-orm');
@@ -132,4 +180,9 @@ describeDb('seedCommunity never rewrites a real community (integration)', () => 
       .where(eq(schema.communities.id, realCommunityId));
     expect(row).toEqual({ isDemo: false, name: 'Real Apartments' });
   }, 300_000);
+
+  // Last, so it covers every request the seeds above made.
+  it('only used the Supabase endpoints the double implements', () => {
+    expect(double.unexpected).toEqual([]);
+  });
 });
