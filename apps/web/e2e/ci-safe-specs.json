@@ -63,6 +63,20 @@
     "`payments`, they are UNMEASURED against THIS stack (dev server + CI seed) --",
     "this job's own run on the PR that adds them is the real measurement.",
     "",
+    "2026-09-17, touch-target audit: `touch-target-audit.spec.ts` joins the list",
+    "(8 blocks) and expectedTestCount goes 55 -> 63. Six of its blocks need no",
+    "server (they render the real primitives through react-dom/server in a tsx",
+    "subprocess and measure them in Chromium); two visit the six routes that",
+    "`marketing-smoke` and `activation-smoke` already prove are DB-free, so this",
+    "job's stack is more than they need. It runs axe-core's `target-size` rule --",
+    "already a dependency, already implementing SC 2.5.8's spacing, inline and",
+    "user-agent-control exceptions -- rather than a second hand-rolled geometry",
+    "rule. The predecessor harness, which did hand-roll one, had seven counting",
+    "defects and is not in this repo at all. Note what these blocks assert and",
+    "what they only print: the 24x24 AA floor is asserted; conformance with",
+    "`DESIGN.md:207`'s 44px is logged, because no primitive reaches it and that",
+    "contradiction is a product decision, not a thing to hold CI red over.",
+    "",
     "2026-09-17, review follow-up: `overflow-detector.spec.ts` joins the list (15",
     "blocks) and expectedTestCount goes 40 -> 55. It drives `helpers/overflow.ts`",
     "against synthetic `setContent` fixtures -- no server, no database, no seed --",
@@ -102,10 +116,11 @@
     "esign-and-documents-flow.spec.ts",
     "marketing-smoke.spec.ts",
     "overflow-detector.spec.ts",
+    "touch-target-audit.spec.ts",
     "meeting-create-spacebar.spec.ts",
     "phase1-roadmap-smoke.spec.ts",
     "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 55
+  "expectedTestCount": 63
 }

@@ -172,7 +172,17 @@ function DraggableField({
             e.stopPropagation();
             onRemove();
           }}
-          className="absolute -right-2 -top-2 z-20 flex size-4 items-center justify-center rounded-full bg-status-danger text-content-inverse hover:opacity-80"
+          // `size-6`, not `size-4`. WCAG 2.2 SC 2.5.8 (AA) wants a 24x24 target
+          // unless the SPACING exception applies, and it cannot here: this
+          // button is pinned to the corner of the field box, and the field box
+          // is itself a target (draggable, selectable). Two targets that close
+          // means neither one gets the exception. At 16x16 `axe-core`'s
+          // `target-size` reported it even with 24px of clear space around the
+          // whole overlay — the only control in the design system that failed
+          // on its own geometry rather than on its surroundings. The offset
+          // moves 8px -> 12px so the larger circle still centres on the corner,
+          // and the glyph stays `size-3` so the badge does not get louder.
+          className="absolute -right-3 -top-3 z-20 flex size-6 items-center justify-center rounded-full bg-status-danger text-content-inverse hover:opacity-80"
           aria-label="Remove field"
         >
           <X className="size-3" />

@@ -19,13 +19,14 @@ authenticated page: **9 of 75 bled**, overwhelmingly below 768px. **All nine are
 post-fix sweep — 558 measurements, every route at every width — finds **none**. Five personas were
 measured, not one, and the two components that had never rendered at all now render clean.
 
-The larger problem is not overflow. It is touch targets: **53 of the 65 pages measured at 375px**
-carry a control under the 44px minimum, and **29 of 65** fail even the looser 36px desktop floor.
-Fixing 17 unsized checkboxes took 375px to 47 of 66 and removed a quarter of the offending
-controls; the rest cannot be fixed without a product decision, because `DESIGN.md`'s 44px rule
-contradicts the design system's own 32/36/40px component ladder and **nothing in the repo detects
-violations of either** — the axe assertions that would run `target-size` execute under jsdom,
-which performs no layout, so they pass without measuring anything.
+The other finding in this document was **touch targets**, and it was reported against the wrong
+standard. A follow-up pass on 2026-09-17 re-measured it and the section below is rewritten: the
+44px figure this audit called a "minimum" is WCAG 2.1 **SC 2.5.5, Level AAA**, while the AA
+criterion is WCAG 2.2 **SC 2.5.8 — 24x24 with a spacing exception**. Measured against AA, in real
+Chromium, with the rule that implements the exceptions: **twelve of the thirteen shared controls
+are conformant**, and the one that was not — a 16px remove button that overlaps another target —
+is fixed here. Against the house 44px rule, **none of the thirteen reaches it**, which is a design
+decision the repo has never actually taken.
 
 ## What was measured
 
@@ -133,98 +134,156 @@ horizontal flex row whose children cannot shrink and whose container cannot wrap
 `div.flex.items-center.gap-2 > button`, `> span`, `> div.min-w-[11rem]`. `/dashboard` at 1024px is
 the `lg:` cliff in miniature: an action button that fits at every other width.
 
-## Touch targets — the larger finding
+## Touch targets — re-measured 2026-09-17 against the criterion that binds
 
-| viewport | floor (`DESIGN.md:207`) | pages affected, before | after | distinct controls, before → after |
-|---|---|---|---|---|
-| 375 | 44px | **53 of 65** | **47 of 66** | 192 → 147 |
-| 414 | 44px | **53 of 65** | **46 of 66** | 192 → 147 |
-| 768 | 36px | **29 of 65** | **26 of 65** | 97 → 90 |
-| 1024 | 36px | **29 of 65** | **23 of 65** | 97 → 84 |
-| 1280 | 36px | **30 of 65** | **26 of 65** | 99 → 88 |
-| 1440 | 36px | **30 of 65** | **26 of 65** | 97 → 88 |
+**This section replaces an earlier one that led with "53 of the 65 pages measured at 375px carry a
+control under the 44px minimum". That sentence is withdrawn.** It was not wrong about the pixels.
+It was wrong about what the pixels meant, and it was produced by a probe that is not in this
+repository.
 
-Denominators are the pages measured **at that width**, which is not the same as the 75 the sweep
-reaches across all widths — see correction 2 below. Control counts are distinct
-(tag, label, height) triples and are a **floor**: the sweep caps its per-page list at 10.
+### Which standard 44px actually is
 
-Two in three pages miss the rule at phone widths, and a third still miss it **at desktop widths
-against the looser threshold**. The whole of the "after" column is the checkbox fix below; nothing
-in categories 1 and 2 has been touched, because they need a decision rather than a patch.
+| | criterion | level | size |
+|---|---|---|---|
+| what this audit measured | WCAG 2.1 SC 2.5.5 Target Size (Enhanced) | **AAA** | 44×44 |
+| what conformance asks for | WCAG 2.2 SC 2.5.8 Target Size (Minimum) | **AA** | **24×24**, with exceptions |
+| WCAG 2.1 AA — the version most often cited | *no target-size criterion at all* | — | — |
 
-> **Two corrections to this section, both of which make the finding worse.**
->
-> 1. It said *"the 18px root makes `h-8` render 36px"*. False — and it was the sentence that made
->    the gap look smaller than it is. `apps/web/tailwind.config.ts:27-42` overrides the spacing
->    scale with literal pixels and Tailwind's height scale derives from spacing, so
->    `h-8`/`h-9`/`h-10`/`h-11` are exactly **32/36/40/44px**. The design system's numbers do not
->    quietly satisfy the rule; the gap is 4px *wider* than claimed. The 18px root
->    (`globals.css:8`) is real but reaches height only through controls with **no** height class
->    — which is why `TabsTrigger` lands on 31.6px. It does inflate every rem font token:
->    `--font-size-sm: 0.875rem` (`packages/ui/src/styles/tokens.css:168`) renders **15.75px**, not
->    the 14px its own comment claims.
-> 2. A draft of this revision "corrected" the denominator from **65** to 75 and was **wrong**:
->    75 is the pages reached at *any* width, while 65 is the pages measured *at that width*, which
->    is the only population the numerator comes from. 65 stands. Recomputing per width confirms it
->    at all six (appendix bug 10). What does need saying is that the control counts are a
->    **floor** — the sweep caps its per-page list at 10 — and that it only records controls under
->    44px, so there is no "controls measured" total in this data.
+44px is a defensible internal standard: it is the Apple HIG figure, and this product's residents
+skew older than most consumer software's. But calling a shortfall against it an accessibility
+failure inflates an aspiration into a defect, and an audit that does so invites a sprint against
+the wrong number. SC 2.5.8 also carries five exceptions — **spacing**, inline, user-agent control,
+equivalent, essential — and the spacing one does most of the work: an undersized target that no
+other target crowds is conformant.
 
-### The 192 were three different problems, not one — and one of them is now fixed
+### What the shared controls actually measure
 
-1. **Primitives below the floor — the policy question.** `packages/ui/src/components/ui/button.tsx`
-   is `sm:h-8 / default:h-9 / lg:h-10 / icon:h-9`, so **no Button variant reaches 44px**;
-   `ui/input.tsx:11` and `ui/select.tsx:22` are both `h-9`. Note the rules file's Input ladder
-   (`sm(36) md(40) lg(48)`) does not exist in code — Input has one size.
-2. **Controls with no height class at all.** `ui/tabs.tsx:44` `TabsTrigger` is only
-   `px-3 py-1 text-sm`; its height comes from `TabsList` (`h-auto min-h-9 p-1`) plus an
-   18px-root-inflated line box, landing at 31.6px. That is upstream shadcn's composition, not a
-   missing value — supplying `h-9` would grow every tab strip in the app and still only reach the
-   36px desktop floor, so it belongs with the policy decision below rather than being fixed
-   quietly.
-3. **Unsized raw checkboxes — an outright defect, and fixed in this branch.** 17 raw
-   `<input type="checkbox">` across 8 files carried no size class and rendered at Chrome's native
-   ~13.3px, against 20 siblings already written `h-4 w-4`. That is the **13px input** in the table
-   above. They now match the repo's own primitive (`ui/checkbox.tsx:16` is `h-4 w-4 shrink-0`);
-   `shrink-0` is load-bearing, since `w-4` alone still measured 13px wide where the row was tight.
-   This is the whole of the "after" column: it takes the smallest control in the app from 13px to
-   16px and removes about a quarter of the distinct sub-floor controls, without touching a single
-   design-system decision. Categories 1 and 2 are untouched and are what the decision below is
-   about.
+Thirteen controls, rendered from the real components (`react-dom/server`, so the fixture cannot
+drift from `packages/ui`) into real Chromium against Tailwind compiled from
+`apps/web/tailwind.config.ts`, with `tokens.css` and the 18px root in the cascade.
+`apps/web/e2e/touch-target-audit.spec.ts` is the measurement and it is committed.
 
-### Two caveats on the measurement
+| control | measured | clears 24×24 | reaches 44px |
+|---|---|---|---|
+| `Button` size=default (`h-9`) | 141.8×36 | yes | no |
+| `Button` size=sm (`h-8`) | 50.2×32 | yes | no |
+| `Button` size=lg (`h-10`) | 153.5×40 | yes | no |
+| `Button` size=icon (`h-9 w-9`) | 36×36 | yes | no |
+| `Input` (`h-9`) | full-width × 36 | yes | no |
+| `SelectTrigger` (`h-9`) | full-width × 36 | yes | no |
+| `TabsTrigger` (no height class) | 98.2×**31.6** | yes | no |
+| `QuickFilterTabs` pill (`h-8`) | 43.5×32 | yes | no |
+| esign field remove button (`size-4` → `size-6`) | 16×16 → **24×24** | **now** | no |
+| `HelpTooltip` trigger (`size-5`) | 20×20 | spacing-dependent | no |
+| `Checkbox` (`h-4 w-4`) | 16×16 | spacing-dependent | no |
+| `Checkbox` + sibling `<label>`, as shipped | **16×16** | spacing-dependent | no |
+| `Switch` (`h-5 w-9`) | 36×**20** | spacing-dependent | no |
 
-- **Checkboxes and switches are counted unfairly.** `getBoundingClientRect()` is the right
-  measurement for buttons, links, inputs and selects — there is **zero** hit-area expansion
-  anywhere in `apps/web/src` or `packages/ui/src` (no `after:-inset-*`, no `touch-action`), so the
-  visual box *is* the tap target for those. But a checkbox's real target is its `<label>`, and the
-  probe measured the input. `ui/checkbox.tsx` (16px) and `packages/ui`'s Switch (20px) can never
-  pass a rect measurement and should not be read as failures on that basis.
-- **The rule is unevenly implemented, not ignored.** 36 call sites across 38 files already write
-  `h-11 md:h-9` / `min-h-11 sm:min-h-0` by hand — `layout/app-top-bar.tsx:33,43,60`,
-  `notifications/notification-bell.tsx:35,49`, `layout/profile-menu.tsx:57`, and the whole
-  `board/elections/` and `board/polls/` trees. Someone has already decided what compliance looks
-  like; it just never reached the primitives.
+**One genuine AA violation existed, and it is fixed.** `esign/field-overlay.tsx:185`'s remove
+button was `size-4` — 16×16 — pinned at the corner of a field box that is itself a target
+(draggable, selectable). Two targets that close means neither gets the spacing exception, and
+`axe-core`'s `target-size` reported it **even with 24px of clear space around the entire overlay**.
+It is `size-6` now, with the offset moved 8px → 12px so the larger circle still centres on the
+corner and the glyph stays `size-3`. Reverting that one class turns exactly two blocks red, both
+naming the control and its 16×16 size, with the sibling blocks green.
 
-### The decision this needs
+**Four controls sit under 24×24 and depend on their surroundings.** Checkbox, Switch and the help
+tooltip are conformant wherever nothing else clickable is within reach, and axe excuses all four
+in the fixture. That is the criterion, not a loophole — but it does mean their conformance is a
+property of each screen rather than of the component, and nothing measures it on the authenticated
+surface today.
 
-**This is a policy contradiction before it is a bug.** `DESIGN.md:189,207,228` states the 44px rule
-three times; `.claude/rules/design.md:164` specifies buttons at 32/36/40px six lines from restating
-it. Both cannot hold, and neither cites WCAG (for reference, WCAG 2.5.8 AA is 24px with spacing
-exemptions — *looser* than either). One of the two documents has to change:
+**Correcting this audit's own caveat.** It said "a checkbox's real target is its `<label>`, and the
+probe measured the input". As a geometry claim that is false, and now measured: the shipped shape
+(`pm/BulkAnnouncementDialog.tsx:220-229`) puts the label in a **sibling** element, so the control's
+box is 16×16 with or without it. Clicking the label does activate the control — that is a genuine
+usability gain — but it does not enlarge the target, and SC 2.5.8 is about the target.
 
-- **promote `h-11 md:h-9` into the Button/Input/SelectTrigger CVAs**, matching the 36 hand-rolled
-  sites — satisfies `DESIGN.md:207` app-wide, but changes every control's height on every phone
-  screen, and taller controls can introduce new wrapping and overflow; or
-- **delete the 44px line from `DESIGN.md`** and accept the shadcn ladder as the standard.
+### On real pages
 
-That is a product decision, not an engineering one, and nothing can be enforced until it is made.
+Six routes at 375px and 414px, with `isMobile` / `hasTouch` / `deviceScaleFactor: 2`: **83 targets
+examined per width, 0 unexcused.** The routes are the ones `marketing-smoke` and `activation-smoke`
+already prove need no database — `/`, `/resources`, `/contact`, `/login`, `/signup/checkout`,
+`/signup/checkout/return`.
 
-**Nothing currently detects this, and axe will not help.** `axe-core ^4.11.1` is already a
-dependency and its default ruleset includes `target-size`, but every call site
-(`apps/web/__tests__/accessibility/`) runs under **jsdom**, which performs no layout — every
-`getBoundingClientRect()` returns zero, so the rule resolves as inapplicable and those assertions
-pass vacuously. No axe configuration fixes that; only a browser-run check would.
+That is a real result for the public surface and it should not be read as more. Those six are the
+least control-dense pages in the product. Every dense screen — finance tables, the compliance
+queue, the copy-pasted row-action kebabs — is authenticated, and **the authenticated surface is
+unmeasured against this criterion.** Running these two blocks in the CI e2e job, which has a real
+Supabase stack, is the cheapest way to close that and is recommendation 2 below.
+
+### Why the old numbers are withdrawn rather than corrected
+
+The harness behind the 53-of-65 table (`sweep.mts`) was never committed; it survived only in a
+scratch directory, so a figure in a shipped audit document was not reproducible from this
+repository. Read back, it had seven counting defects, and each one is something SC 2.5.8 has an
+explicit clause about:
+
+1. the per-page list was truncated at 10, so "192 → 147 controls" cannot measure progress — a page
+   could go 40 → 12 and still report 10 → 10;
+2. it compared **height only**, so a 40×12px chip remover scored better than a 36px full-width
+   button, when the criterion is a 24×24 box;
+3. it measured `<input type=checkbox>` rather than the label association;
+4. it matched only `[role="button"]`, missing `tab` / `menuitem` / `switch` / `option`;
+5. it counted native `<select>`, which has a user-agent-control exception;
+6. its inline-link exemption was `closest('p,li')`, so an inline link in a `<td>` or a `<div>`
+   counted;
+7. its dedupe key was `(tag, label, height)` — neither per-page distinct nor globally distinct.
+
+**And there was no spacing exception at all**, which is the one that matters most: it is why a 32px
+button with room around it was reported as an accessibility failure. That single omission is most
+of the difference between "53 of 65 pages fail" and "one control in the design system did".
+
+The replacement does not re-derive the rule. `axe-core` has been a dependency of `apps/web` the
+whole time and its `target-size` rule (`wcag22aa` / `wcag258`) already implements every clause
+above. The reason it never fired is in this audit's own text: the existing axe assertions run under
+jsdom, which performs no layout, so the rule resolves inapplicable and passes without measuring
+anything. The new spec runs it in a real engine, prints the number of targets examined so a vacuous
+run cannot look like a clean one, and carries a block that injects a deliberately 10×10px target to
+prove the rule fires.
+
+### The decision this still needs — with both options priced
+
+The contradiction is narrower and worse than this audit first described. It is not `DESIGN.md`
+against `.claude/rules/design.md`: **both** documents state the 44/36 rule *and* the 32/36/40
+ladder. `DESIGN.md` contradicts **itself**, at line 118 against lines 207 and 228. Four documents
+assert 44px (`DESIGN.md:207`, `:228`, `docs/design-system/DESIGN_LAWS.md:28`,
+`docs/design-system/README.md:144`), **zero** primitives satisfy it, and **no guard enforces it**.
+Two further signs that the rule was written rather than decided:
+
+- `DESIGN.md:189` scopes it to "the DataRow pattern". **`DataRow` does not exist** — zero hits
+  across `apps/web/src` and `packages/ui/src`.
+- `DESIGN.md:8` calls board members "tablet-first … larger touch targets", while the 768px
+  breakpoint hands tablets the **smaller** 36px target. The rule is inverted for the persona it
+  was written for.
+
+Meanwhile the rule has been half-applied by hand, in three incompatible idioms across ~27 files:
+`h-11 md:h-9` (32 sites), `min-h-11 sm:min-h-0` (which **drops the floor entirely** above 640px
+instead of stepping to 36px), and `min-h-[44px] md:min-h-[36px]` (raw px, violating the repo's own
+no-ad-hoc-spacing rule). Consolidating those is a prerequisite to either option below, because a
+CVA change would leave 32+ redundant overrides behind.
+
+**Option A — adopt 44px: promote `h-11 md:h-9` into the Button / Input / SelectTrigger CVAs.**
+Reaches `DESIGN.md:207` in one edit per primitive and retires the hand-rolled sites. The cost is
+not the edit, it is the blast radius: 344 Button call sites change height at once, and
+`size="icon"` going 36 → 44 adds **8px horizontally per control** in a 327px content column — the
+exact geometry that cost this branch eleven commits of overflow work. It also needs a decision on
+`TabsTrigger`, whose height comes from `TabsList` by upstream shadcn composition, and on Checkbox
+and Switch, which cannot reach 44px without either a hit-area expansion (a pattern that exists
+**nowhere** in this codebase today) or a visual redesign.
+
+**Option B — keep the shadcn ladder, make 24×24 the enforced floor, demote 44px to a documented
+aspiration for touch-primary surfaces.** Costs four documentation edits and nothing else; the
+committed spec already enforces the AA floor. It is honest about what ships, and it is what the
+code has effectively chosen already. The cost is giving up a target size that genuinely suits an
+older resident population, on the surfaces where that matters most.
+
+**Recommendation: Option B now, and Option A scoped to the resident-facing mobile surfaces only, if
+anyone wants it.** The app-wide version buys AAA conformance the product has never claimed, at a
+layout risk this branch has already paid for once. A 44px floor on `/mobile/**` — which is
+[already mostly `h-11` and above](../../apps/web/src/components/mobile/) — plus the resident portal
+would get the benefit where the users who need it actually are. Either way, the documents have to
+stop asserting a rule nothing implements; that is the part with no downside.
 
 ## Fixed in this branch, each measured before and after
 
@@ -285,7 +344,7 @@ community 1, and said so. Root-exclusive and resident-only surfaces were entirel
 two components — `RolesAccessClient` and `WelcomeScreen` — had never rendered once. Closing that
 required fixing the seed defect above first, since `root_sunset` could not authenticate at all.
 
-| persona | role | pages rendered | pages that bleed | sub-44px @375 | measurements lost |
+| persona | role | pages rendered | pages that bleed | under 44px @375 [^tt] | measurements lost |
 |---|---|---:|---:|---:|---:|
 | `root_sunset` | root_manager | 75 | 3 | 51 of 65 | 29/558 (5%) |
 | `cam` (pre-fix baseline) | property_manager | 75 | 9 | 53 of 65 | 16/558 (3%) |
@@ -293,6 +352,12 @@ required fixing the seed defect above first, since `root_sunset` could not authe
 | `owner` | resident (unit owner) | 53 | 1 | 33 of 53 | 47/558 (8%) |
 | `tenant` | resident (tenant) | 50 | 1 | 32 of 50 | 112/558 (20%) |
 | `pm_admin` | portfolio manager | 6 PM routes, measured directly | 0 | — | 0 |
+
+[^tt]: This column is kept for the record but is **not** an accessibility measure — see "Touch
+targets" above. It counts pages carrying a control below the house 44px aspiration (WCAG AAA), not
+pages failing the AA criterion, and it comes from the withdrawn `sweep.mts` harness, whose per-page
+list was capped at 10 and which applied no spacing exception. Read it as "how far the app sits from
+`DESIGN.md:207`", nothing more.
 
 **The rows are not one build.** The two `cam` rows bracket the work; `root_sunset`, `owner` and
 `tenant` were swept in between, after the first round of fixes and before the last three, so read
@@ -353,6 +418,22 @@ Reading it:
   width; the fix was the gutters. And it would **not** have flagged `announcement-composer`, whose
   base grid declares no `grid-cols-*` at all: the offending track is the implicit one. A text rule
   can find the right line with the wrong advice, and miss the case that has no text to match.
+- **`touch-target-audit.spec.ts`** (added 2026-09-17, 8 blocks, `expectedTestCount` 55 → 63). Runs
+  `axe-core`'s `target-size` — already a dependency — rather than a second hand-rolled geometry
+  rule, which is the whole lesson of the harness it replaces. Six blocks need no server: they
+  render the real primitives through `react-dom/server` in a `tsx` subprocess and measure them in
+  Chromium against Tailwind compiled from the app's own config. Two visit the six DB-free routes.
+
+  It asserts the **24×24 AA floor** and the *set* of controls that fall below it, and only
+  **prints** conformance with `DESIGN.md:207`'s 44px. That split is the point. Asserting 44px would
+  turn the entire component library red over a contradiction nobody has resolved, and a gate is a
+  bad place to hold an argument; leaving the 24×24 floor unasserted would let the one real
+  violation come back silently. Pinning the under-24 set by equality rather than asserting it empty
+  means a fifth control acquiring a dependency on its surroundings is a decision someone makes.
+
+  Note also what it does **not** do: there is no static lint rule for control size, and there
+  should not be. `verify-responsive-geometry.ts` already settles why — "a geometry claim belongs in
+  the browser" — and a grep for `size="sm"` is exactly the shape it rejects.
 - **`responsive-overflow.spec.ts`** floor 768 → 375, four widths → six, and **4 route blocks → 7**.
   Under the old detector three blocks would have failed on compliance — at 768 and 1024, widths
   gated since #1129, on a screen with nothing wrong with it. With the corrected detector **all 42
@@ -381,7 +462,15 @@ skipped for want of seed rows (`board/forum/[threadId]`, `maintenance/[id]`), an
 is out of scope per `.claude/rules/design.md:86-89`.
 
 Also unmeasured: **`apps/web` on a dev server**, which is what CI's e2e job actually runs. Every
-number here is from a production build.
+overflow number here is from a production build.
+
+And for touch targets specifically, the gap is larger and in a different place. The 2026-09-17
+re-measurement covers **thirteen shared controls** and **six DB-free routes** — it does not cover
+the authenticated app at all, because a container without Docker cannot start Supabase and
+`/dev/agent-login` needs a live Auth instance. That matters more than it would for overflow: four
+of the thirteen controls are conformant only by SC 2.5.8's **spacing** exception, so whether they
+are conformant *in the product* is a property of each screen, and the crowded screens — finance
+tables, the compliance queue, the copy-pasted row-action kebabs — are all behind a login.
 
 Not measured but enumerated: 59 hard `w-[Npx]`; `sheet.tsx`'s `w-3/4 sm:max-w-sm` left/right panels
 (~186px usable at 320px) containing unprefixed two-column form grids; 45 `whitespace-nowrap`, ~30 on
@@ -391,11 +480,16 @@ user strings; 9 of 10 `DataTable` consumers declaring no `meta.hideBelow`.
 
 1. **Declare a minimum supported viewport.** This audit assumed 375px. Nothing states one, which is
    how the gate sat at 768px for a year without anyone disagreeing.
-2. **Resolve 44px vs 32/36/40px** before anyone tries to enforce touch targets. The concrete
-   choice is in "The decision this needs" above: promote `h-11 md:h-9` into the Button/Input CVAs
-   (matching the 36 sites that already hand-roll it), or delete the 44px line from `DESIGN.md`.
-   Until one of those happens the rule is unenforceable, and nothing detects violations — the
-   existing axe assertions run in jsdom and pass vacuously.
+2. **Resolve 44px vs 32/36/40px, and run the target-size blocks against the authenticated app.**
+   The choice and its price are in "The decision this still needs" above; the recommendation there
+   is to make 24x24 the enforced floor, demote 44px to a documented aspiration, and scope any
+   44px push to the resident-facing mobile surfaces. Whichever is chosen, the four documents that
+   assert a rule no primitive implements have to stop. Separately and independently: the two
+   real-page blocks in `apps/web/e2e/touch-target-audit.spec.ts` reach six DB-free routes today
+   because that is all a container without Docker can serve. The CI e2e job has a real Supabase
+   stack and a seed, so pointing those blocks at authenticated routes there is the cheap way to
+   measure the dense screens — and the dense screens are where the four spacing-dependent controls
+   either are or are not crowded.
 3. **Treat `lg:` with suspicion inside the shell — but only where content cannot shrink.** The
    concern is real: `lg:` is the pixel the rail appears, so a grid that widens there gets a
    *narrower* column. It cost `FinanceKpiRow` six overflowing boxes at 1024px, fixed by moving to
@@ -421,7 +515,7 @@ user strings; 9 of 10 `DataTable` consumers declaring no `meta.hideBelow`.
    when the thing that varies is the content column. `@container` on `PageContainer` would delete
    the class rather than patch instances. Out of scope here; every future patch is interest on it.
 
-## Appendix — eleven harness bugs, because they cost more than the findings
+## Appendix — twelve harness bugs, because they cost more than the findings
 
 Each was precise, reproducible, and wrong. This is the transferable part of the exercise.
 
@@ -485,12 +579,35 @@ Each was precise, reproducible, and wrong. This is the transferable part of the 
    correction is a command rather than a number: count with
    `--list | grep -c chromium`.
 
+12. **The biggest one was not a bug in the harness. It was the standard.** Everything in bug 10 and
+   bug 11 was an argument about a *number* — 65 or 75, 40 or 41 — while the sentence those numbers
+   supported ("53 of 65 pages carry a control under the 44px **minimum**") was measuring an
+   aspiration and calling it a floor. 44px is WCAG 2.1 SC 2.5.5, Level **AAA**; the AA criterion is
+   SC 2.5.8 at 24×24 with a spacing exception, and WCAG 2.1 AA has no target-size criterion at all.
+   This document said so, once, in a parenthetical — "for reference, WCAG 2.5.8 AA is 24px with
+   spacing exemptions — *looser* than either" — and then led with the AAA number anyway for a
+   fortnight. Re-measured against AA, one control in the design system failed, not two thirds of
+   the pages.
+
+   The harness defect underneath it is the same shape: the probe implemented no spacing exception,
+   which is not a detail but most of the criterion, and `axe-core` — already installed, with the
+   rule already written and tagged `wcag258` — was never reached for because the existing axe call
+   sites appeared to cover it. They ran under jsdom, which has no layout engine, so the rule had
+   been resolving inapplicable and passing for as long as it had existed. A dependency that is
+   present, invoked, and green is not the same as a check that runs.
+
+   The correction worth keeping: **before measuring, write down which criterion, at which level.**
+   Three revisions of this section argued about denominators without anyone asking what the
+   numerator was supposed to mean.
+
 Bug 2 also recurred: the first measurement of the `/esign/submissions/[id]` fix returned the
 before-number to the pixel, because `next start` serves the build on disk and the source edit was
 never compiled. Identical output across a change is itself a signal.
 
-The pattern: a measurement that is precise and reproducible still is not valid. Nine of the eleven
+The pattern: a measurement that is precise and reproducible still is not valid. Nine of the twelve
 were caught only by deliberately breaking something, or by re-deriving a number two ways and
-finding they disagreed. The last two were both **corrections** rather than original measurements,
-which is the part worth keeping: a number I had just decided to change got less scrutiny than one
-I had measured, in both directions, twice.
+finding they disagreed. Two more were **corrections** rather than original measurements, which is
+worth keeping on its own: a number I had just decided to change got less scrutiny than one I had
+measured, in both directions, twice. And the twelfth outranks all of them, because precision and
+reproducibility were never going to catch it — the number was defensible and the question was
+wrong.
