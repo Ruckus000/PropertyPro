@@ -264,6 +264,7 @@ export function AuthorEditorClient({
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-content">
           <label className="inline-flex items-center gap-2">
             <input
+              className="h-4 w-4 shrink-0"
               type="checkbox"
               checked={coverSheet}
               onChange={(e) => setCoverSheet(e.target.checked)}
@@ -272,6 +273,7 @@ export function AuthorEditorClient({
           </label>
           <label className="inline-flex items-center gap-2">
             <input
+              className="h-4 w-4 shrink-0"
               type="checkbox"
               checked={letterheadHeader}
               onChange={(e) => setLetterheadHeader(e.target.checked)}
@@ -280,6 +282,7 @@ export function AuthorEditorClient({
           </label>
           <label className="inline-flex items-center gap-2">
             <input
+              className="h-4 w-4 shrink-0"
               type="checkbox"
               checked={letterheadFooter}
               onChange={(e) => setLetterheadFooter(e.target.checked)}

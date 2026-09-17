@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { ContractForm } from './ContractForm';
 import { BidTracker } from './BidTracker';
 import type { ContractRecord, ExpirationAlert } from './types';
+import { Table } from '@/components/ui/table';
 
 interface ContractTableProps {
   /** Pure-prop presenter input — fetched by the container. */
@@ -119,90 +120,88 @@ export function ContractTable({
       {contracts.length === 0 ? (
         <p className="text-sm text-content-tertiary">No contracts found. Create one to get started.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-edge">
-            <thead className="bg-surface-page">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Title</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Vendor</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Value</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Dates</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Bids</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-edge bg-surface-card">
-              {contracts.map((contract) => {
-                const alert = getAlertBadge(contract.id);
-                return (
-                  <tr key={contract.id} className="hover:bg-surface-hover">
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <div className="font-medium text-content">{contract.title}</div>
-                      {contract.conflictOfInterest && (
-                        <span className="mt-1 inline-block rounded bg-status-danger-bg px-2 py-0.5 text-xs text-status-danger">
-                          COI Declared
-                        </span>
-                      )}
-                      {alert && (
-                        <span className="mt-1 ml-1 inline-block rounded bg-status-warning-bg px-2 py-0.5 text-xs text-status-warning">
-                          {alert.window === 'expired'
-                            ? 'Expired'
-                            : `${alert.daysUntilExpiry}d to expiry`}
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
-                      {contract.vendorName}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
-                      {contract.contractValue ? `$${contract.contractValue}` : '-'}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
-                      {contract.startDate}
-                      {contract.endDate ? ` - ${contract.endDate}` : ' - Open'}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadgeColor(contract.status)}`}
-                      >
-                        {contract.status}
+        <Table className="min-w-full divide-y divide-edge">
+          <thead className="bg-surface-page">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Title</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Vendor</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Value</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Dates</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Bids</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-edge bg-surface-card">
+            {contracts.map((contract) => {
+              const alert = getAlertBadge(contract.id);
+              return (
+                <tr key={contract.id} className="hover:bg-surface-hover">
+                  <td className="whitespace-nowrap px-4 py-3 text-sm">
+                    <div className="font-medium text-content">{contract.title}</div>
+                    {contract.conflictOfInterest && (
+                      <span className="mt-1 inline-block rounded bg-status-danger-bg px-2 py-0.5 text-xs text-status-danger">
+                        COI Declared
                       </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
-                      {contract.bidSummary.embargoed ? (
-                        <span className="text-status-warning">
-                          {contract.bidSummary.bidCount} sealed
-                        </span>
-                      ) : (
-                        <span>{contract.bidSummary.bidCount} bid(s)</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <button
-                        onClick={() => {
-                          setSelectedContract(contract);
-                          setShowForm(true);
-                        }}
-                        className="mr-2 text-content-link hover:text-content-link"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedContract(contract);
-                        }}
-                        className="text-content-secondary hover:text-content"
-                      >
-                        Bids
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    )}
+                    {alert && (
+                      <span className="mt-1 ml-1 inline-block rounded bg-status-warning-bg px-2 py-0.5 text-xs text-status-warning">
+                        {alert.window === 'expired'
+                          ? 'Expired'
+                          : `${alert.daysUntilExpiry}d to expiry`}
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
+                    {contract.vendorName}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
+                    {contract.contractValue ? `$${contract.contractValue}` : '-'}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
+                    {contract.startDate}
+                    {contract.endDate ? ` - ${contract.endDate}` : ' - Open'}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadgeColor(contract.status)}`}
+                    >
+                      {contract.status}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
+                    {contract.bidSummary.embargoed ? (
+                      <span className="text-status-warning">
+                        {contract.bidSummary.bidCount} sealed
+                      </span>
+                    ) : (
+                      <span>{contract.bidSummary.bidCount} bid(s)</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm">
+                    <button
+                      onClick={() => {
+                        setSelectedContract(contract);
+                        setShowForm(true);
+                      }}
+                      className="mr-2 text-content-link hover:text-content-link"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedContract(contract);
+                      }}
+                      className="text-content-secondary hover:text-content"
+                    >
+                      Bids
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
       )}
     </div>
   );

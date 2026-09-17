@@ -193,7 +193,14 @@ export function AnnouncementComposer({
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+      {/* The base track needs `minmax(0,1fr)` for the same reason `md:` already
+          has it. A bare one-column grid gets an implicit `auto` track sized to the
+          widest item's min-content, and the `datetime-local` input below has a UA
+          intrinsic width no class can undercut. Measured at 375px: grid content box
+          277px, track 290px, so all three items stretched to 290 and each bled 13px.
+          `minmax(0,1fr)` pins the track to the container and the input shrinks with
+          it — it already carries `min-width: 0` from the Input primitive. */}
+      <div className="grid gap-4 grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="space-y-2">
           <Label htmlFor="announcement-audience">Audience</Label>
           <Select value={audience} onValueChange={(value) => setAudience(value as AnnouncementAudience)}>

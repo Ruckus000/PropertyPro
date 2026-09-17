@@ -70,7 +70,7 @@ export function MonthGrid({
     <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
       <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
         <div className="flex w-full flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -104,13 +104,24 @@ export function MonthGrid({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
+        {/* Same gap as the day grid below, or the columns stop lining up. When
+            that grid went to `gap-1` below `sm` and this row stayed at `gap-2`,
+            the header cells were 40px over 43px day cells at 375px — the labels
+            drifted off their own columns. It is also what CI caught: a 40px cell
+            holds "Mon" with 3px to spare only if you do not count the trailing
+            letter-space that `tracking-[0.16em]` adds after the last glyph. */}
+        <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)] sm:gap-2">
           {WEEKDAY_LABELS.map((label) => (
             <div key={label}>{label}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-2">
+        {/* `gap-1` at base. Seven columns is not negotiable for a month grid, so
+            the gutters and the cell padding are the only slack there is: at 375px
+            the 277px grid with `gap-2` and `p-2` left each cell a 15px CONTENT box,
+            which crushed the 28px day-number badge to 10px and pushed the mobile
+            event-count label out. `gap-1`/`p-1` below `sm` recovers ~17px per cell. */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {days.map((day) => {
             const dateKey = format(day, 'yyyy-MM-dd');
             const dayEvents = eventsByDateKey.get(dateKey) || [];
@@ -143,14 +154,14 @@ export function MonthGrid({
                   }
                 }}
                 className={[
-                  'min-h-[4.75rem] rounded-[var(--radius-md)] border p-2 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-page)] sm:min-h-[7rem]',
+                  'min-h-[4.75rem] rounded-[var(--radius-md)] border p-1 sm:p-2 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-page)] sm:min-h-[7rem]',
                   isCurrentMonth
                     ? 'border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                     : 'border-[var(--border-subtle)] bg-[var(--surface-subtle)] text-[var(--text-disabled)] hover:bg-[var(--surface-hover)]',
                   isSelected ? 'border-[var(--interactive-primary)] bg-[var(--surface-hover)]' : '',
                 ].join(' ')}
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
                   <span
                     className={[
                       'inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold',
@@ -170,14 +181,22 @@ export function MonthGrid({
                       key={event.type === 'meeting' ? `meeting-${event.id}` : `${event.type}-${event.assessmentId}-${event.dueDate}`}
                       className="rounded-[var(--radius-sm)] bg-[var(--surface-subtle)] px-2 py-1 text-xs text-[var(--text-secondary)]"
                     >
+                      {/* `shrink-0` on both dots. These rows became `flex` (they
+                          were `inline-flex`, which shrink-to-fits its container
+                          rather than being bounded by it — the bug this file's
+                          +189 was), and a flex item defaults to `flex-shrink: 1`.
+                          An empty 8px span has a min-content width of 0, so a
+                          long title squeezed the status dot down to nothing. */}
                       {event.type === 'meeting' ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className={`inline-flex h-2 w-2 rounded-full ${meetingTypeDotClass(event.meetingType)}`} />
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex h-2 w-2 shrink-0 rounded-full ${meetingTypeDotClass(event.meetingType)}`}
+                          />
                           <span className="truncate">{event.title}</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="inline-flex h-2 w-2 rounded-full bg-[var(--status-warning)]" />
+                        <span className="flex items-center gap-1.5">
+                          <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-[var(--status-warning)]" />
                           <span className="truncate">{event.assessmentTitle}</span>
                         </span>
                       )}

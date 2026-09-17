@@ -85,6 +85,15 @@ const PRIMARY_ASSIGNMENTS: Record<DemoCommunitySlug, CommunityRoleAssignment[]> 
     { email: 'tenant.one@sunset.local', role: 'tenant' },
     { email: 'cam.one@sunset.local', role: 'property_manager' },
     { email: 'pm.admin@sunset.local', role: 'property_manager' },
+    // Seeded here, not only in ROOT_MANAGER_BY_SLUG, because this list is the
+    // ONLY path that reaches `ensureAuthUser` (seedCommunity -> buildSeedUsers).
+    // The root loop below calls `ensureDemoUserRecord`, which writes
+    // `public.users` and nothing else — so a root declared only there gets a
+    // user row and a role row but no Supabase Auth identity, and
+    // `/dev/agent-login?as=root_sunset` 500s on `generateLink`. The role here
+    // is provisional: the loop promotes it to `root_manager`, exactly as it
+    // already does for `founding.admin@palm.local`.
+    { email: 'root.manager@sunset.local', role: 'property_manager' },
   ],
   'palm-shores-hoa': [
     { email: 'board.president@sunset.local', role: 'property_manager', designation: BOARD_DESIGNATIONS[0] },
@@ -93,6 +102,8 @@ const PRIMARY_ASSIGNMENTS: Record<DemoCommunitySlug, CommunityRoleAssignment[]> 
   'sunset-ridge-apartments': [
     { email: 'site.manager@sunsetridge.local', role: 'property_manager' },
     { email: 'pm.admin@sunset.local', role: 'property_manager' },
+    // See the note on `root.manager@sunset.local` above.
+    { email: 'root.manager@sunsetridge.local', role: 'property_manager' },
     { email: 'tenant.apt101@sunsetridge.local', role: 'tenant' },
     { email: 'tenant.apt102@sunsetridge.local', role: 'tenant' },
     { email: 'tenant.apt201@sunsetridge.local', role: 'tenant' },
@@ -2108,6 +2119,7 @@ async function main(): Promise<void> {
     await runSeedSafetyChecks({
       databaseUrl: process.env.DATABASE_URL ?? '',
       db,
+      demoEmails: DEMO_USERS.map((user) => user.email),
     });
     await runDemoSeed({ syncAuthUsers });
     // eslint-disable-next-line no-console

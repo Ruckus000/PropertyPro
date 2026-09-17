@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHeader } from '@/components/shared/page-header';
+import { Table } from '@/components/ui/table';
 
 interface UnitsPageClientProps {
   communityId: number;
@@ -139,7 +140,7 @@ export function UnitsPageClient({ communityId, communityType, canWrite }: UnitsP
       <PageHeader title="Units" actions={addUnitButton} />
 
       <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
-        <table className="w-full text-sm">
+        <Table className="w-full text-sm">
           <thead className="bg-surface-muted text-left text-xs font-semibold uppercase text-content-secondary">
             <tr>
               <th className="px-3 py-2">Unit</th>
@@ -160,7 +161,7 @@ export function UnitsPageClient({ communityId, communityType, canWrite }: UnitsP
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </div>
     </div>
   );

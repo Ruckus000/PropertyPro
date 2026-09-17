@@ -147,6 +147,7 @@ export function NotificationPreferencesForm({
               {reminderVisibility.meetings ? (
                 <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
                   <input
+                    className="h-4 w-4 shrink-0"
                     type="checkbox"
                     checked={values.calendarReminderMeetings}
                     onChange={(e) =>
@@ -162,6 +163,7 @@ export function NotificationPreferencesForm({
               {reminderVisibility.personalAssessments ? (
                 <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
                   <input
+                    className="h-4 w-4 shrink-0"
                     type="checkbox"
                     checked={values.calendarReminderPersonalAssessments}
                     onChange={(e) =>
@@ -177,6 +179,7 @@ export function NotificationPreferencesForm({
               {reminderVisibility.communityAssessments ? (
                 <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
                   <input
+                    className="h-4 w-4 shrink-0"
                     type="checkbox"
                     checked={values.calendarReminderCommunityAssessments}
                     onChange={(e) =>
@@ -196,6 +199,7 @@ export function NotificationPreferencesForm({
       <div className="space-y-2">
         <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
           <input
+            className="h-4 w-4 shrink-0"
             type="checkbox"
             checked={values.emailAnnouncements}
             onChange={(e) =>
@@ -206,6 +210,7 @@ export function NotificationPreferencesForm({
         </label>
         <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
           <input
+            className="h-4 w-4 shrink-0"
             type="checkbox"
             checked={values.emailMeetings}
             onChange={(e) => setValues((v) => ({ ...v, emailMeetings: e.target.checked }))}
@@ -214,6 +219,7 @@ export function NotificationPreferencesForm({
         </label>
         <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
           <input
+            className="h-4 w-4 shrink-0"
             type="checkbox"
             checked={values.inAppEnabled}
             onChange={(e) => setValues((v) => ({ ...v, inAppEnabled: e.target.checked }))}
@@ -224,7 +230,7 @@ export function NotificationPreferencesForm({
           <label className="flex min-h-[44px] cursor-pointer items-start gap-2">
             <input
               type="checkbox"
-              className="mt-1"
+              className="h-4 w-4 shrink-0 mt-1"
               checked={values.emailInsuranceAlerts}
               onChange={(e) =>
                 setValues((v) => ({ ...v, emailInsuranceAlerts: e.target.checked }))
