@@ -37,10 +37,22 @@ import { expect, test } from '@playwright/test';
 
 import { findOverflows } from './helpers/overflow';
 
-/** Fixtures are rooted in `<main>` because that is where the detector starts. */
+/**
+ * Fixtures are rooted in `<main>` because that is where the detector starts.
+ *
+ * The 18px root matches the app (`globals.css:8`) and is load-bearing, not
+ * decoration: any fixture using `rem` or `em` resolves against it. The
+ * letter-spacing case below is `0.75rem` text with `0.16em` tracking — 13.5px
+ * and 2.16px in the app, 12px and 1.92px at a default 16px root, and at that
+ * smaller size the label FITS and the case passes no matter what the rule does.
+ * Its revert-check caught that: the case stayed green with the fix removed.
+ */
 const page1 = (body: string) => `
   <!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>* { margin: 0; padding: 0; box-sizing: border-box; font: 14px/1.4 system-ui; }</style>
+  <style>
+    html { font-size: 18px; }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui; }
+  </style>
   <main style="width: 400px">${body}</main>
 `;
 
@@ -172,6 +184,35 @@ test.describe('findOverflows', () => {
       </div>
     `));
     expect(await findOverflows(page)).toEqual([]);
+  });
+
+  test('stays quiet for letter-spaced text that fits', async ({ page }) => {
+    // CSS adds letter-spacing after EVERY character, including the last, where
+    // nothing is painted — but `scrollWidth` counts it. The meetings weekday
+    // header (`tracking-[0.16em]` = 2.16px) reported +2 and +3 in CI on centred
+    // text that clips nothing, which is what sent this case here.
+    await page.setContent(page1(`
+      <div style="width: 326px; display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 8px;
+                  text-align: center; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+                  letter-spacing: 0.16em">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+    `));
+    expect(await findOverflows(page)).toEqual([]);
+  });
+
+  test('still catches letter-spaced text that genuinely does not fit', async ({ page }) => {
+    // The other half: subtracting ONE trailing letter-space must not excuse a
+    // real overflow. This one is tens of pixels over, not two.
+    await page.setContent(page1(`
+      <div style="width: 400px">
+        <div style="width: 60px; overflow: hidden; letter-spacing: 0.16em; white-space: nowrap">
+          WEDNESDAY AFTERNOON
+        </div>
+      </div>
+    `));
+    const found = await findOverflows(page);
+    expect(found.length, JSON.stringify(found)).toBeGreaterThan(0);
   });
 
   test('stays quiet for a deliberate negative margin', async ({ page }) => {

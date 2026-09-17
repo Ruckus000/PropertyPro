@@ -421,7 +421,7 @@ user strings; 9 of 10 `DataTable` consumers declaring no `meta.hideBelow`.
    when the thing that varies is the content column. `@container` on `PageContainer` would delete
    the class rather than patch instances. Out of scope here; every future patch is interest on it.
 
-## Appendix — ten harness bugs, because they cost more than the findings
+## Appendix — eleven harness bugs, because they cost more than the findings
 
 Each was precise, reproducible, and wrong. This is the transferable part of the exercise.
 
@@ -475,11 +475,22 @@ Each was precise, reproducible, and wrong. This is the transferable part of the 
    the correction was the error. It survived one review because the new number was *smaller* and
    therefore felt more conservative — a wrong denominator does not get safer by being bigger.
 
+11. **The same mistake again, on a different number, and CI is what caught it.** Bug 10 was
+   "corrected" a right number into a wrong one. Two reviews then disagreed about how many blocks
+   the e2e config collects — 40 or 41 — and I sided with 41, called the long-standing 40 a stale
+   floor with slack, and set the new floor from a `playwright --list` total. CI rejected it:
+   `counted=53 floor=54`. `--list` prints the warmup project's test alongside the chromium ones;
+   the workflow's assertion filters `projectName !== "warmup"` and says so in its own comment. So
+   40 was right, review 1 was right, and I had repeated bug 10 within the same branch. The
+   correction is a command rather than a number: count with
+   `--list | grep -c chromium`.
+
 Bug 2 also recurred: the first measurement of the `/esign/submissions/[id]` fix returned the
 before-number to the pixel, because `next start` serves the build on disk and the source edit was
 never compiled. Identical output across a change is itself a signal.
 
-The pattern: a measurement that is precise and reproducible still is not valid. Eight of the ten
+The pattern: a measurement that is precise and reproducible still is not valid. Nine of the eleven
 were caught only by deliberately breaking something, or by re-deriving a number two ways and
-finding they disagreed — which is how the last one was caught, and it was a correction, not an
-original.
+finding they disagreed. The last two were both **corrections** rather than original measurements,
+which is the part worth keeping: a number I had just decided to change got less scrutiny than one
+I had measured, in both directions, twice.

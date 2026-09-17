@@ -175,9 +175,19 @@ export async function findOverflows(page: Page): Promise<Overflow[]> {
       //
       // `clientWidth` is 0 on an inline non-replaced box, so inline text is
       // outside this check rather than wrongly inside it: 0 - 0 is 0.
+      //
+      // Trailing letter-spacing is subtracted because CSS adds it after EVERY
+      // character including the last, where nothing is painted. `scrollWidth`
+      // counts that empty space, so letter-spaced text reports an overflow it
+      // does not have. This is not hypothetical: the meetings weekday header
+      // (`tracking-[0.16em]`, so 2.16px) reported +2 and +3 on "Wed" and "Mon"
+      // in CI, on centred text that clips nothing. One letter-space is the
+      // exact correction — `scrollWidth` is the widest LINE, and every line has
+      // exactly one trailing space.
+      const trailing = Math.max(parseFloat(cs.letterSpacing) || 0, 0);
       const ownText =
         el.children.length === 0 && cs.textOverflow !== 'ellipsis'
-          ? el.scrollWidth - el.clientWidth
+          ? el.scrollWidth - el.clientWidth - trailing
           : 0;
 
       const worst = Math.max(over, ownText);
