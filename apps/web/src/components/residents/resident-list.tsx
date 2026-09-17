@@ -46,7 +46,14 @@ function ResidentRow({ resident, onResendInvite }: ResidentRowProps) {
     <li key={`${resident.userId}:${resident.role}`} className="flex items-center justify-between gap-3 p-3 text-sm">
       <div className="min-w-0">
         <p className="font-medium text-content">{resident.fullName ?? 'Unknown resident'}</p>
-        <p className="text-content-secondary">{resident.email ?? 'No email'}</p>
+        {/* `break-words`, because an email has no space to wrap at. The text
+            column is `min-w-0` inside a `justify-between` row, so it gets
+            ~170px at 375px while `root.manager@sunset.local` needs 204 —
+            measured overflowing by 34px, and up to 52px for longer rows.
+            `overflow-wrap: break-word` only acts when a word cannot fit, so
+            it is a no-op on every address that already fits. NOT `truncate`:
+            an ellipsised email is unreadable, and a wrapped one is not. */}
+        <p className="break-words text-content-secondary">{resident.email ?? 'No email'}</p>
         <p className="text-content-secondary">
           Role: {resident.role}
           {resident.unitId ? ` • Unit ${resident.unitId}` : ''}

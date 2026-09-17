@@ -149,10 +149,15 @@ export function AlertBanner({
       <Icon size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
 
       {/* Content */}
+      {/* `break-words` on both lines: `min-w-0` lets the column shrink, but a
+          single unbreakable token (a URL, a slug, an email) then overflows it
+          rather than wrapping. Measured on `/pm/dashboard/communities` at
+          375px: +10px on the title and +21px on the description. It only acts
+          when a word cannot fit, so it changes nothing for ordinary copy. */}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-sm font-medium">{title}</p>
+        <p className="break-words text-sm font-medium">{title}</p>
         {description && (
-          <p className="text-sm opacity-85">{description}</p>
+          <p className="break-words text-sm opacity-85">{description}</p>
         )}
       </div>
 

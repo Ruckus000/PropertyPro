@@ -27,8 +27,10 @@ Chromium, with the rule that implements the exceptions: **twelve of the thirteen
 are conformant**, and the one that was not — a 16px remove button that overlaps another target —
 is fixed here. Sweeping all 93 authenticated routes at phone widths then examined **2,612 targets
 across 68 pages and found zero failures**, so the product has no AA target-size defect anywhere it
-was measured. Against the house 44px rule, **none of the thirteen controls reaches it** — which is
-now a pure design decision, with no accessibility argument on either side of it.
+was measured. The house 44px rule was then **adopted** (2026-09-17) and is now implemented in the
+primitives at `lg`, with three named exceptions — a product decision about touch comfort, taken
+with the measurement in hand and explicitly not an accessibility fix. The overflow sweep that
+gates it found **zero** pages scrolling sideways and no bleed attributable to it.
 
 ## What was measured
 
@@ -165,21 +167,25 @@ drift from `packages/ui`) into real Chromium against Tailwind compiled from
 `apps/web/tailwind.config.ts`, with `tokens.css` and the 18px root in the cascade.
 `apps/web/e2e/touch-target-audit.spec.ts` is the measurement and it is committed.
 
-| control | measured | clears 24×24 | reaches 44px |
-|---|---|---|---|
-| `Button` size=default (`h-9`) | 141.8×36 | yes | no |
-| `Button` size=sm (`h-8`) | 50.2×32 | yes | no |
-| `Button` size=lg (`h-10`) | 153.5×40 | yes | no |
-| `Button` size=icon (`h-9 w-9`) | 36×36 | yes | no |
-| `Input` (`h-9`) | full-width × 36 | yes | no |
-| `SelectTrigger` (`h-9`) | full-width × 36 | yes | no |
-| `TabsTrigger` (no height class) | 98.2×**31.6** | yes | no |
-| `QuickFilterTabs` pill (`h-8`) | 43.5×32 | yes | no |
-| esign field remove button (`size-4` → `size-6`) | 16×16 → **24×24** | **now** | no |
-| `HelpTooltip` trigger (`size-5`) | 20×20 | spacing-dependent | no |
-| `Checkbox` (`h-4 w-4`) | 16×16 | spacing-dependent | no |
-| `Checkbox` + sibling `<label>`, as shipped | **16×16** | spacing-dependent | no |
-| `Switch` (`h-5 w-9`) | 36×**20** | spacing-dependent | no |
+The table below is **as first measured**, before the 44px rule was adopted later the same day.
+The right-hand column is what each control is now: the rule is implemented at `lg`, so every row
+that said "no" says 44 below 1024px and keeps its old height above. See "The decision, taken".
+
+| control | measured (pre-adoption) | clears 24×24 | reaches 44px | now |
+|---|---|---|---|---|
+| `Button` size=default (`h-9`) | 141.8×36 | yes | no | **44** / 36 at `lg` |
+| `Button` size=sm (`h-8`) | 50.2×32 | yes | no | **44** / 32 at `lg` |
+| `Button` size=lg (`h-10`) | 153.5×40 | yes | no | **44** / 40 at `lg` |
+| `Button` size=icon (`h-9 w-9`) | 36×36 | yes | no | **44×44** / 36×36 at `lg` |
+| `Input` (`h-9`) | full-width × 36 | yes | no | **44** / 36 at `lg` |
+| `SelectTrigger` (`h-9`) | full-width × 36 | yes | no | **44** / 36 at `lg` |
+| `TabsTrigger` (no height class) | 98.2×**31.6** | yes | no | **min 44** / 31.6 at `lg` |
+| `QuickFilterTabs` pill (`h-8`) | 43.5×32 | yes | no | **44** / 32 at `lg` |
+| esign field remove button (`size-4` → `size-6`) | 16×16 → **24×24** | **now** | no | 24×24 — the AA fix, not the house rule |
+| `HelpTooltip` trigger (`size-5`) | 20×20 | spacing-dependent | no | unchanged — **named exception** |
+| `Checkbox` (`h-4 w-4`) | 16×16 | spacing-dependent | no | unchanged — **named exception** |
+| `Checkbox` + sibling `<label>`, as shipped | **16×16** | spacing-dependent | no | unchanged — **named exception** |
+| `Switch` (`h-5 w-9`) | 36×**20** | spacing-dependent | no | unchanged — **named exception** |
 
 **One genuine AA violation existed, and it is fixed.** `esign/field-overlay.tsx:185`'s remove
 button was `size-4` — 16×16 — pinned at the corner of a field box that is itself a target
@@ -287,48 +293,95 @@ anything. The new spec runs it in a real engine, prints the number of targets ex
 run cannot look like a clean one, and carries a block that injects a deliberately 10×10px target to
 prove the rule fires.
 
-### The decision this still needs — with both options priced
+### The decision, taken 2026-09-17: the 44px rule is now implemented
 
-The contradiction is narrower and worse than this audit first described. It is not `DESIGN.md`
-against `.claude/rules/design.md`: **both** documents state the 44/36 rule *and* the 32/36/40
-ladder. `DESIGN.md` contradicts **itself**, at line 118 against lines 207 and 228. Four documents
-assert 44px (`DESIGN.md:207`, `:228`, `docs/design-system/DESIGN_LAWS.md:28`,
-`docs/design-system/README.md:144`), **zero** primitives satisfy it, and **no guard enforces it**.
-Two further signs that the rule was written rather than decided:
+The contradiction was narrower and worse than this audit first described. It was
+not `DESIGN.md` against `.claude/rules/design.md`: **both** documents stated the
+44/36 rule *and* the 32/36/40 ladder. `DESIGN.md` contradicted **itself**, at line
+118 against 207 and 228. Four documents asserted 44px
+(`DESIGN.md:207`, `:228`, `DESIGN_LAWS.md:28`, `design-system/README.md:144`),
+**zero** primitives satisfied it, and **no** guard enforced it. Two further signs
+that the rule had been written rather than decided:
 
-- `DESIGN.md:189` scopes it to "the DataRow pattern". **`DataRow` does not exist** — zero hits
-  across `apps/web/src` and `packages/ui/src`.
-- `DESIGN.md:8` calls board members "tablet-first … larger touch targets", while the 768px
-  breakpoint hands tablets the **smaller** 36px target. The rule is inverted for the persona it
-  was written for.
+- `DESIGN.md:189` scoped it to "the DataRow pattern". **`DataRow` never existed** —
+  zero hits across `apps/web/src` and `packages/ui/src`. Deleted from both files
+  that described it.
+- `DESIGN.md:8` calls board members "tablet-first … larger touch targets", while
+  the 768px breakpoint handed tablets the **smaller** target. The rule was
+  inverted for the persona it was written for.
 
-Meanwhile the rule has been half-applied by hand, in three incompatible idioms across ~27 files:
-`h-11 md:h-9` (32 sites), `min-h-11 sm:min-h-0` (which **drops the floor entirely** above 640px
-instead of stepping to 36px), and `min-h-[44px] md:min-h-[36px]` (raw px, violating the repo's own
-no-ad-hoc-spacing rule). Consolidating those is a prerequisite to either option below, because a
-CVA change would leave 32+ redundant overrides behind.
+**What was decided.** Implement the rule in the primitives, at **`lg` (1024px)**
+rather than the stated 768. Explicitly **not** an accessibility fix: the
+conformance bar is SC 2.5.8's 24×24, and the app measured clean against it before
+any of this. It is a product decision about touch comfort, taken with that
+evidence in hand.
 
-**Option A — adopt 44px: promote `h-11 md:h-9` into the Button / Input / SelectTrigger CVAs.**
-Reaches `DESIGN.md:207` in one edit per primitive and retires the hand-rolled sites. The cost is
-not the edit, it is the blast radius: 344 Button call sites change height at once, and
-`size="icon"` going 36 → 44 adds **8px horizontally per control** in a 327px content column — the
-exact geometry that cost this branch eleven commits of overflow work. It also needs a decision on
-`TabsTrigger`, whose height comes from `TabsList` by upstream shadcn composition, and on Checkbox
-and Switch, which cannot reach 44px without either a hit-area expansion (a pattern that exists
-**nowhere** in this codebase today) or a visual redesign.
+| | |
+|---|---|
+| primitives changed | Button (all four sizes), Input, SelectTrigger, TabsTrigger, QuickFilterTabs |
+| breakpoint | `lg` — 768–1024 is a touch tablet, and it matches `app-top-bar.tsx`, which already shipped `size-11 … lg:size-9` |
+| below `lg` | every Button size clamps to 44, so `sm`/`default`/`lg` are indistinguishable on a phone — what a minimum does to 32/36/40 |
+| named exceptions | `Checkbox` (16×16), `Switch` (36×20), `HelpTooltip` (20×20) — each clears the AA floor via the spacing exception; reaching 44 needs a visual redesign or an invisible hit area, a pattern that exists nowhere here |
+| idioms | **three collapsed to one.** Zero `md:`/`sm:` height steps remain |
+| the gate | the 44px test flipped from *printing* to *asserting*, exceptions pinned by name |
 
-**Option B — keep the shadcn ladder, make 24×24 the enforced floor, demote 44px to a documented
-aspiration for touch-primary surfaces.** Costs four documentation edits and nothing else; the
-committed spec already enforces the AA floor. It is honest about what ships, and it is what the
-code has effectively chosen already. The cost is giving up a target size that genuinely suits an
-older resident population, on the surfaces where that matters most.
+**The idiom consolidation was not cosmetic.** All 32 `h-11 md:h-9` sites sat on
+`Button`/`Input`/`SelectTrigger`. Left alone they would not merely have been
+redundant: `md:h-9` and `lg:h-9` are different variant groups and both survive
+`tailwind-merge`, so those 32 call sites would have kept the tablet inversion
+alive in exactly the files the breakpoint change exists to fix.
+`min-h-11 sm:min-h-0` (4 sites) never implemented the rule at all — it drops the
+floor above 640px instead of stepping down. The `min-h-[44px] md:min-h-[36px]`
+cluster (23 sites) was raw arbitrary px, against the repo's own
+no-ad-hoc-spacing rule, and is now on the scale.
 
-**Recommendation: Option B now, and Option A scoped to the resident-facing mobile surfaces only, if
-anyone wants it.** The app-wide version buys AAA conformance the product has never claimed, at a
-layout risk this branch has already paid for once. A 44px floor on `/mobile/**` — which is
-[already mostly `h-11` and above](../../apps/web/src/components/mobile/) — plus the resident portal
-would get the benefit where the users who need it actually are. Either way, the documents have to
-stop asserting a rule nothing implements; that is the part with no downside.
+### What the change cost, measured
+
+The gate for a change that makes every control taller is the **overflow** suite,
+not the touch-target suite. All 93 authenticated routes at all six widths, after:
+
+| | |
+|---|---|
+| measurements | **558**, zero lost |
+| distinct pages | 77 |
+| **pages that scroll sideways** | **0** |
+| rows with a bleed | 8, across 5 pages — **none attributable to this change** |
+
+**I predicted this wrong.** The stated risk was the 768–1024 band: `lg` keeps 44px
+controls alive there, and 1024 is where the rail appears and the content column is
+narrowest (684px, narrower than at 768). Not one bleed appeared at 768, 1024, 1280
+or 1440. Every finding was at 375 or 414.
+
+**Attribution took three attempts and the first answer was wrong.** A before/after
+on the flagged routes said `/dashboard/residents` went 0 → 6 bleeds, which read as
+a clean regression. It was not: measuring the row's geometry under both versions
+gave **identical numbers** — text column 170.4px, button column 118.6px, the email
+needing 204px either way — and re-running the control warm reproduced all six
+bleeds *with the change reverted*. That route's bleed count tracks whether the list
+has painted, not the code. The flaky signal was the count; the deterministic signal
+was the geometry.
+
+Two of the five were real, pre-existing defects and are fixed here:
+
+- **`/dashboard/residents`** — `root.manager@sunset.local` in a 170px column,
+  overflowing 8–52px at 375 and 414. `break-words` on the email line; not
+  `truncate`, because an ellipsised address is unreadable and a wrapped one is
+  not. Note the likely origin: that seed identity was added in #1151, and it is
+  longer than every other seeded email — which is why the merged sweep, run before
+  it existed, reported zero bleeds.
+- **`AlertBanner`** (`/pm/dashboard/communities`, +10 and +21) — `min-w-0` lets the
+  column shrink but an unbreakable token then overflows rather than wrapping.
+  `break-words` on both lines; a no-op for ordinary copy.
+
+Three were not defects: `/settings/payments` (+11) is an `animate-pulse`
+**skeleton** and `/communities/1/documents/author/…` (+195) an unsettled input —
+neither reproduces once the page finishes loading. `/communities/1/meetings`
+(+1.8px) is the known trailing-letter-spacing edge in the detector, unchanged
+before and after.
+
+Neither fixed route is in the committed overflow gate, deliberately: both bleeds
+are only observable after their list paints, and a block that races the data would
+be a flaky gate, which is worse than none.
 
 ## Fixed in this branch, each measured before and after
 
@@ -534,10 +587,11 @@ user strings; 9 of 10 `DataTable` consumers declaring no `meta.hideBelow`.
    The choice and its price are in "The decision this still needs" above; the recommendation there
    is to make 24x24 the enforced floor, demote 44px to a documented aspiration, and scope any
    44px push to the resident-facing mobile surfaces. Whichever is chosen, the four documents that
-   assert a rule no primitive implements have to stop. The measurement half of this
-   recommendation is **done**: the authenticated app was swept on 2026-09-17 and is clean, and
-   `apps/web/e2e/touch-target-audit.spec.ts` now carries a block over the five densest
-   authenticated screens so a future change that crowds one of the four spacing-dependent controls
+   assert a rule no primitive implements have to stop. **Done, 2026-09-17** — see "The decision,
+   taken" above. The rule is implemented at `lg`, the three rival idioms are one, the four
+   documents describe what ships, and the 44px test asserts rather than prints.
+   `apps/web/e2e/touch-target-audit.spec.ts` also carries a block over the five densest
+   authenticated screens, so a future change that crowds one of the spacing-dependent controls
    fails a gate rather than shipping.
 3. **Treat `lg:` with suspicion inside the shell — but only where content cannot shrink.** The
    concern is real: `lg:` is the pixel the rail appears, so a grid that widens there gets a
@@ -564,7 +618,7 @@ user strings; 9 of 10 `DataTable` consumers declaring no `meta.hideBelow`.
    when the thing that varies is the content column. `@container` on `PageContainer` would delete
    the class rather than patch instances. Out of scope here; every future patch is interest on it.
 
-## Appendix — twelve harness bugs, because they cost more than the findings
+## Appendix — fourteen harness bugs, because they cost more than the findings
 
 Each was precise, reproducible, and wrong. This is the transferable part of the exercise.
 
@@ -649,14 +703,40 @@ Each was precise, reproducible, and wrong. This is the transferable part of the 
    Three revisions of this section argued about denominators without anyone asking what the
    numerator was supposed to mean.
 
+13. **A fixture that could only ever see one branch.** After the 44px rule landed in the CVAs,
+   every number in the primitive layer came back identical and the self-check passed — which
+   reads exactly like a change that did not apply. It had applied; the fixture renders at the
+   project's viewport, `devices['Desktop Chrome']` = 1280px, where `lg:` is already in force, so
+   it was measuring the desktop branch and reporting it as the only one. It had been correct for
+   as long as there was one branch to measure, which is what made it invisible: the bug arrived
+   in the production code, not in the test, and the test's silence was the symptom. It now takes
+   the width as an argument and pins both sides.
+
+14. **An attribution that was confidently backwards.** The overflow sweep flagged
+   `/dashboard/residents`, and a before/after on that route said 0 bleeds without the change and
+   6 with it — a clean regression, reported as one. It was not. Measuring the ROW rather than
+   counting bleeds gave identical geometry under both versions (text column 170.4px, button
+   column 118.6px, the email needing 204px either way), and re-running the control with the route
+   warm reproduced all six bleeds *with the change reverted*. The route's bleed count tracks
+   whether its list has painted; the count was the flaky signal and the geometry was the
+   deterministic one. This is bug 10 and bug 11's family again — a number that felt like evidence
+   because it came from a comparison — with the added lesson that **a before/after is only a
+   control if both sides are in the same state**, and "I just recompiled" is not the same state.
+
 Bug 2 also recurred: the first measurement of the `/esign/submissions/[id]` fix returned the
 before-number to the pixel, because `next start` serves the build on disk and the source edit was
 never compiled. Identical output across a change is itself a signal.
 
-The pattern: a measurement that is precise and reproducible still is not valid. Nine of the twelve
-were caught only by deliberately breaking something, or by re-deriving a number two ways and
-finding they disagreed. Two more were **corrections** rather than original measurements, which is
+The pattern: a measurement that is precise and reproducible still is not valid. Nine of the
+fourteen were caught only by deliberately breaking something, or by re-deriving a number two ways
+and finding they disagreed. Two were **corrections** rather than original measurements, which is
 worth keeping on its own: a number I had just decided to change got less scrutiny than one I had
-measured, in both directions, twice. And the twelfth outranks all of them, because precision and
-reproducibility were never going to catch it — the number was defensible and the question was
-wrong.
+measured, in both directions, twice. Bug 12 outranks those, because precision and reproducibility
+were never going to catch it — the number was defensible and the question was wrong.
+
+Bugs 13 and 14 add the one that recurs most and is hardest to see: **a measurement taken in the
+wrong state**. A fixture at the wrong viewport, a route measured before its list paints, a control
+run against a just-recompiled server. In every case the harness worked perfectly and answered a
+question about a situation that was not the one being asked about. The defence is not more care in
+reading the number — it is a second, differently-shaped measurement of the same thing: the count
+of targets examined, the geometry behind the bleed, the same route warm as well as cold.
