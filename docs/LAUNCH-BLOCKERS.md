@@ -72,9 +72,11 @@ line says where.
   `property-pro-admin` too; a real charge settled (signup is a $0 trial, so only an ended
   trial produces one). The 6 unprocessed `stripe_webhook_events` from 2026-08-10 are still
   unprocessed (runbook step 6).
-  **Confirmed 2026-09-17 by the owner:** `STRIPE_EXPECTED_LIVEMODE=true` on
-  `property-pro-admin` Production (set ~2026-09-12). Were it `false`, the console's five
-  billing writes would refuse the live key with `STRIPE_MODE_MISMATCH`.
+  **`STRIPE_EXPECTED_LIVEMODE` on `property-pro-admin` Production was `false`** from its
+  creation (~2026-09-12) until the owner changed it to `true` on 2026-09-17. Through that
+  window the console's five billing writes refused the live key with
+  `STRIPE_MODE_MISMATCH`. Values are baked in at build, so the fix is live only from the
+  first admin deploy after 2026-09-17.
 
 - **2. `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` unset** — closed 2026-09-08. Established
   deductively, since nobody recorded fixing it: readiness returns `healthy`, and
