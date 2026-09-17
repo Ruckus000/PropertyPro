@@ -1,17 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   ALLOWED_SEED_ENVIRONMENTS,
-  EPHEMERAL_TEST_SLUG_PREFIXES,
   SeedSafetyError,
-  assertNoUnrecognizedProductionData,
+  assertDemoUsersNotAttachedToRealCommunities,
   assertSeedEnvironment,
-  isEphemeralTestSlug,
   logDatabaseTarget,
+  resolveDemoCommunityIds,
 } from '../../../scripts/lib/seed-safety';
 
-/** Minimal db stub matching the SqlExecutor shape: execute() returns a RowList. */
-function fakeDb(rows: Array<{ id: number; slug: string }>) {
-  return { execute: async () => rows };
+/**
+ * Minimal db stub matching the SqlExecutor shape: execute() returns a RowList
+ * (postgres-js) and records each query's bound params.
+ */
+function fakeDb(rows: Array<Record<string, unknown>>) {
+  const params: unknown[][] = [];
+  return {
+    params,
+    execute: vi.fn(async (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
+      params.push(new PgDialect().sqlToQuery(query).params);
+      return rows;
+    }),
+  };
 }
 
 describe('assertSeedEnvironment', () => {
@@ -91,71 +101,51 @@ describe('logDatabaseTarget', () => {
   });
 });
 
-describe('isEphemeralTestSlug', () => {
-  for (const prefix of EPHEMERAL_TEST_SLUG_PREFIXES) {
-    it(`recognizes the "${prefix}" fixture prefix`, () => {
-      expect(isEphemeralTestSlug(`${prefix}whatever-1234abcd`)).toBe(true);
-    });
-  }
+describe('assertDemoUsersNotAttachedToRealCommunities', () => {
+  it('passes when no real community references a demo user', async () => {
+    const db = fakeDb([]);
+    await expect(
+      assertDemoUsersNotAttachedToRealCommunities(db, ['pm.admin@sunset.local']),
+    ).resolves.toBeUndefined();
+  });
 
-  it('does not match real-looking signup slugs', () => {
-    expect(isEphemeralTestSlug('sunset-condos')).toBe(false);
-    expect(isEphemeralTestSlug('ruth-s-house')).toBe(false);
-    expect(isEphemeralTestSlug('quantum-lake-villas')).toBe(false);
+  it('asks about exactly the demo emails it was given, lower-cased', async () => {
+    const db = fakeDb([]);
+    await assertDemoUsersNotAttachedToRealCommunities(db, ['PM.Admin@Sunset.local', 'owner.one@sunset.local']);
+    expect(db.params[0]).toEqual(
+      expect.arrayContaining(['pm.admin@sunset.local', 'owner.one@sunset.local']),
+    );
+  });
+
+  it('refuses, naming each real community and the demo user attached to it', async () => {
+    const db = fakeDb([
+      { id: 2360, slug: 'quantum-lake-villas', email: 'pm.admin@sunset.local' },
+    ]);
+    await expect(
+      assertDemoUsersNotAttachedToRealCommunities(db, ['pm.admin@sunset.local']),
+    ).rejects.toThrow(SeedSafetyError);
+    await expect(
+      assertDemoUsersNotAttachedToRealCommunities(db, ['pm.admin@sunset.local']),
+    ).rejects.toThrow('quantum-lake-villas (id=2360) via pm.admin@sunset.local');
+  });
+
+  it('refuses to run with no demo emails, rather than checking nothing', async () => {
+    const db = fakeDb([]);
+    await expect(assertDemoUsersNotAttachedToRealCommunities(db, [])).rejects.toThrow(SeedSafetyError);
+    expect(db.execute).not.toHaveBeenCalled();
   });
 });
 
-describe('assertNoUnrecognizedProductionData', () => {
-  const originalAck = process.env.PROPERTYPRO_SEED_ACK_NONDEMO;
-  let logSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    delete process.env.PROPERTYPRO_SEED_ACK_NONDEMO;
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+describe('resolveDemoCommunityIds', () => {
+  it('returns the ids the query yields, as numbers', async () => {
+    const db = fakeDb([{ id: '1' }, { id: 3 }]);
+    expect(await resolveDemoCommunityIds(db, ['sunset-condos', 'sunset-ridge-apartments'])).toEqual([1, 3]);
+    expect(db.params[0]).toEqual(expect.arrayContaining(['sunset-condos', 'sunset-ridge-apartments']));
   });
 
-  afterEach(() => {
-    logSpy.mockRestore();
-    if (originalAck === undefined) {
-      delete process.env.PROPERTYPRO_SEED_ACK_NONDEMO;
-    } else {
-      process.env.PROPERTYPRO_SEED_ACK_NONDEMO = originalAck;
-    }
-  });
-
-  it('passes when there are no non-demo rows', async () => {
-    await expect(assertNoUnrecognizedProductionData(fakeDb([]))).resolves.toBeUndefined();
-  });
-
-  it('passes when every non-demo row is an ephemeral test fixture', async () => {
-    const rows = [
-      { id: 1, slug: 'p2-43-sunset-condos-26d1ca2d' },
-      { id: 2, slug: 'p4_55_rls_1777006992243_1e9db684-b' },
-      { id: 3, slug: 'advisory-taken-abc' },
-    ];
-    await expect(assertNoUnrecognizedProductionData(fakeDb(rows))).resolves.toBeUndefined();
-    expect(logSpy.mock.calls.some((c) => String(c[0]).includes('Ignoring 3'))).toBe(true);
-  });
-
-  it('throws on a genuinely unrecognized (real) community, listing only it', async () => {
-    const rows = [
-      { id: 1, slug: 'p2-43-sunset-condos-26d1ca2d' },
-      { id: 99, slug: 'quantum-lake-villas' },
-    ];
-    await expect(assertNoUnrecognizedProductionData(fakeDb(rows))).rejects.toThrow(SeedSafetyError);
-    try {
-      await assertNoUnrecognizedProductionData(fakeDb(rows));
-    } catch (err) {
-      const message = (err as Error).message;
-      expect(message).toContain('found 1 community row(s)');
-      expect(message).toContain('quantum-lake-villas');
-      expect(message).not.toContain('p2-43-sunset-condos');
-    }
-  });
-
-  it('honors PROPERTYPRO_SEED_ACK_NONDEMO=1 for unrecognized rows', async () => {
-    process.env.PROPERTYPRO_SEED_ACK_NONDEMO = '1';
-    const rows = [{ id: 99, slug: 'quantum-lake-villas' }];
-    await expect(assertNoUnrecognizedProductionData(fakeDb(rows))).resolves.toBeUndefined();
+  it('issues no query for an empty slug list', async () => {
+    const db = fakeDb([]);
+    expect(await resolveDemoCommunityIds(db, [])).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
   });
 });

@@ -332,6 +332,14 @@ To prove an actual **charge** without waiting 30 days, end the trial on that one
 subscription from the Stripe dashboard (Subscriptions → the subscription →
 *End trial*). That bills immediately; refund the resulting invoice and cancel.
 
+**Then remove the smoke community.** Cancel its subscription (admin console →
+the client → Billing → *Cancel immediately*), then soft-delete the community as
+an audited data repair (`.claude/rules/migration-safety.md`, "Prod Data
+Repairs"). Left in place it shows up as a real trialing customer in the admin
+client list and revenue snapshots — and its live trial bills the card after 30
+days. (It no longer blocks the nightly demo reset, which used to refuse to run
+while any real community existed.)
+
 **A 200 in the dashboard is not proof the webhook worked.** The route returns
 200 and stamps `processed_at` only after the handler completes; when the handler
 throws it logs, captures to Sentry, and returns 500 with `processed_at` left

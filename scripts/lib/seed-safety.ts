@@ -8,41 +8,16 @@
  * target environment. Placed at the CLI entry so library callers (integration
  * tests importing `runDemoSeed` / `runDemoReset` directly) bypass the gate.
  *
- * This module intentionally imports only from `drizzle-orm` — not from
- * `@propertypro/db` — to avoid pulling the module-level DB client. That keeps
+ * This module intentionally imports only from `drizzle-orm` (plus the
+ * dependency-free `extract-rows`) — not from `@propertypro/db` — to avoid pulling
+ * the module-level DB client. That keeps
  * the env-check surface pure and unit-testable without a live database.
  */
 import { sql } from 'drizzle-orm';
+import { extractRows } from './extract-rows';
 
 export const ALLOWED_SEED_ENVIRONMENTS = ['development', 'ci', 'demo-nightly'] as const;
 export type SeedEnvironment = (typeof ALLOWED_SEED_ENVIRONMENTS)[number];
-
-/**
- * Slug prefixes for ephemeral communities created by integration-test suites.
- * These are NOT real signups — they leak when a suite's teardown cannot delete
- * a community whose audited mutations wrote append-only `compliance_audit_log`
- * rows. The demo-reset safety backstop treats them as recognized (ignorable) so
- * a single leaked fixture cannot block the nightly reset, while still refusing
- * on genuinely unrecognized rows.
- *
- * Keep in sync with the fixtures that mint these slugs:
- *   - `apps/web/__tests__/fixtures/multi-tenant-communities.ts`  (`p2-43-*`)
- *   - `packages/db/__tests__/rls-policies.integration.test.ts`   (`p4_55_rls_*`)
- *   - `apps/web/__tests__/elections/vote-integration.test.ts`    (`vote-integ*`)
- *   - `apps/web/__tests__/integration/signup-subdomain.integration.test.ts` (`advisory-*`)
- */
-export const EPHEMERAL_TEST_SLUG_PREFIXES = [
-  'p2-43-',
-  'p4_55_rls_',
-  'vote-integ',
-  'advisory-',
-  't-bootstrap-',
-] as const;
-
-/** True when a community slug belongs to a known ephemeral test fixture. */
-export function isEphemeralTestSlug(slug: string): boolean {
-  return EPHEMERAL_TEST_SLUG_PREFIXES.some((prefix) => slug.startsWith(prefix));
-}
 
 export class SeedSafetyError extends Error {
   constructor(message: string) {
@@ -91,93 +66,98 @@ export function logDatabaseTarget(databaseUrl: string): void {
   console.log(`[seed-safety] Target database host: ${hostname}`);
 }
 
-interface CommunityBackstopRow {
-  id: number | string;
-  slug: string;
-}
-
 type SqlExecutor = {
   execute: (query: ReturnType<typeof sql>) => Promise<unknown>;
 };
 
 /**
- * Scan `communities` for rows where `is_demo = false AND deleted_at IS NULL`.
- * If any exist, the database likely contains production (or real signup-created)
- * data — refuse unless `PROPERTYPRO_SEED_ACK_NONDEMO=1` is set.
- *
- * Uses raw SQL through the caller's db.execute so this module does not import
- * the @propertypro/db schema (which would pull the module-level client and
- * break env-less unit tests).
+ * Ids of the communities the reset may wipe: those holding a demo slug AND
+ * flagged `is_demo`. The reset DELETEs 31 tables for these ids and runs against
+ * production, so a real association that somehow holds a demo slug must never
+ * be returned — the slug alone is not proof a row is a demo.
  */
-export async function assertNoUnrecognizedProductionData(
+export async function resolveDemoCommunityIds(
   db: SqlExecutor,
+  slugs: readonly string[],
+): Promise<number[]> {
+  if (slugs.length === 0) return [];
+  const rows = extractRows<{ id: number | string }>(
+    await db.execute(sql`
+      select id from communities
+      where is_demo = true
+        and slug in (${sql.join(slugs.map((slug) => sql`${slug}`), sql`, `)})
+      order by id
+    `),
+  );
+  return rows.map((row) => Number(row.id));
+}
+
+/**
+ * Refuse when a demo user is attached to a REAL (is_demo=false, live) community,
+ * by a role or as the owner of its billing group.
+ *
+ * The seed rewrites demo users wherever they are — name, phone, auth password,
+ * and a re-key of every FK to them — and recounts the pm.admin billing group. A
+ * real community is only at risk through one of those users, so that is what
+ * this checks. Real communities merely EXISTING is expected: this runs nightly
+ * against production. (The previous rule refused on any non-demo community,
+ * which blocked every run from the first real signup on.)
+ *
+ * Raw SQL through the caller's db, so this module never imports the schema.
+ */
+export async function assertDemoUsersNotAttachedToRealCommunities(
+  db: SqlExecutor,
+  demoEmails: readonly string[],
 ): Promise<void> {
-  const raw = await db.execute(
-    sql`select id, slug from communities where is_demo = false and deleted_at is null order by id`,
+  if (demoEmails.length === 0) {
+    throw new SeedSafetyError('Refusing to run: no demo user emails were supplied to check.');
+  }
+  const emails = sql.join(demoEmails.map((email) => sql`${email.toLowerCase()}`), sql`, `);
+  const rows = extractRows<{ id: number | string; slug: string; email: string }>(
+    await db.execute(sql`
+      select c.id, c.slug, u.email
+        from communities c
+        join user_roles ur on ur.community_id = c.id
+        join users u on u.id = ur.user_id
+       where c.is_demo = false and c.deleted_at is null and lower(u.email) in (${emails})
+      union
+      select c.id, c.slug, u.email
+        from communities c
+        join billing_groups bg on bg.id = c.billing_group_id
+        join users u on u.id = bg.owner_user_id
+       where c.is_demo = false and c.deleted_at is null and lower(u.email) in (${emails})
+      order by id, email
+    `),
   );
 
-  // postgres-js returns a RowList (array); node-pg shape uses { rows: [] }
-  const maybe = raw as unknown;
-  const rows: CommunityBackstopRow[] = Array.isArray(maybe)
-    ? (maybe as CommunityBackstopRow[])
-    : ((maybe as { rows?: CommunityBackstopRow[] }).rows ?? []);
+  if (rows.length === 0) return;
 
-  // Ignore leaked integration-test fixtures — they are not real signup data,
-  // and a single one must not be able to block the nightly demo reset.
-  const recognizedTestRows = rows.filter((r) => isEphemeralTestSlug(r.slug));
-  const unrecognized = rows.filter((r) => !isEphemeralTestSlug(r.slug));
-
-  if (recognizedTestRows.length > 0) {
-    console.log(
-      `[seed-safety] Ignoring ${String(
-        recognizedTestRows.length,
-      )} ephemeral integration-test community row(s).`,
-    );
-  }
-
-  if (unrecognized.length === 0) {
-    return;
-  }
-
-  const ack = process.env.PROPERTYPRO_SEED_ACK_NONDEMO;
-  if (ack === '1') {
-    const slugs = unrecognized.map((r) => r.slug).join(', ');
-    console.log(
-      `[seed-safety] PROPERTYPRO_SEED_ACK_NONDEMO=1 — proceeding despite ${String(
-        unrecognized.length,
-      )} non-demo community row(s) present: ${slugs}`,
-    );
-    return;
-  }
-
-  const slugs = unrecognized.map((r) => `  - ${r.slug} (id=${String(r.id)})`).join('\n');
+  const listed = rows.map((r) => `  - ${r.slug} (id=${String(r.id)}) via ${r.email}`).join('\n');
   throw new SeedSafetyError(
     [
-      `Refusing to run: found ${String(
-        unrecognized.length,
-      )} community row(s) with is_demo=false and deleted_at IS NULL.`,
-      'This database may contain production (or real signup-created) data.',
+      `Refusing to run: ${String(rows.length)} real (is_demo=false) community link(s) to a demo user.`,
+      'The seed rewrites demo users (name, phone, password, id) and their billing group,',
+      'so running now would change data that belongs to these communities:',
+      listed,
       '',
-      'Offending communities:',
-      slugs,
-      '',
-      '  Remediation: verify the target database is safe to mutate, then re-run with:',
-      '    export PROPERTYPRO_SEED_ACK_NONDEMO=1',
+      '  Remediation: detach the demo user from the real community (remove the role or',
+      '  billing-group link), then re-run.',
     ].join('\n'),
   );
 }
 
 /**
- * Compose all three checks. Call from `main()` of seed/reset CLI entry points
- * before any destructive operation.
+ * Compose the checks. Call from `main()` of seed/reset CLI entry points before
+ * any destructive operation.
  */
 export async function runSeedSafetyChecks(params: {
   databaseUrl: string;
   db: SqlExecutor;
+  demoEmails: readonly string[];
 }): Promise<SeedEnvironment> {
   const env = assertSeedEnvironment();
   logDatabaseTarget(params.databaseUrl);
-  await assertNoUnrecognizedProductionData(params.db);
+  await assertDemoUsersNotAttachedToRealCommunities(params.db, params.demoEmails);
   console.log(`[seed-safety] Checks passed. PROPERTYPRO_SEED_ENV=${env}`);
   return env;
 }
