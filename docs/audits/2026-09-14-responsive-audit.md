@@ -25,8 +25,10 @@ standard. A follow-up pass on 2026-09-17 re-measured it and the section below is
 criterion is WCAG 2.2 **SC 2.5.8 — 24x24 with a spacing exception**. Measured against AA, in real
 Chromium, with the rule that implements the exceptions: **twelve of the thirteen shared controls
 are conformant**, and the one that was not — a 16px remove button that overlaps another target —
-is fixed here. Against the house 44px rule, **none of the thirteen reaches it**, which is a design
-decision the repo has never actually taken.
+is fixed here. Sweeping all 93 authenticated routes at phone widths then examined **2,612 targets
+across 68 pages and found zero failures**, so the product has no AA target-size defect anywhere it
+was measured. Against the house 44px rule, **none of the thirteen controls reaches it** — which is
+now a pure design decision, with no accessibility argument on either side of it.
 
 ## What was measured
 
@@ -199,18 +201,61 @@ probe measured the input". As a geometry claim that is false, and now measured: 
 box is 16×16 with or without it. Clicking the label does activate the control — that is a genuine
 usability gain — but it does not enlarge the target, and SC 2.5.8 is about the target.
 
-### On real pages
+### On real pages — public, then the whole authenticated app
 
-Six routes at 375px and 414px, with `isMobile` / `hasTouch` / `deviceScaleFactor: 2`: **83 targets
-examined per width, 0 unexcused.** The routes are the ones `marketing-smoke` and `activation-smoke`
-already prove need no database — `/`, `/resources`, `/contact`, `/login`, `/signup/checkout`,
-`/signup/checkout/return`.
+**Public routes.** Six at 375px and 414px, with `isMobile` / `hasTouch` /
+`deviceScaleFactor: 2`: **83 targets examined per width, 0 unexcused.** They are the ones
+`marketing-smoke` and `activation-smoke` already prove need no database — `/`, `/resources`,
+`/contact`, `/login`, `/signup/checkout`, `/signup/checkout/return`.
 
-That is a real result for the public surface and it should not be read as more. Those six are the
-least control-dense pages in the product. Every dense screen — finance tables, the compliance
-queue, the copy-pasted row-action kebabs — is authenticated, and **the authenticated surface is
-unmeasured against this criterion.** Running these two blocks in the CI e2e job, which has a real
-Supabase stack, is the cheapest way to close that and is recommendation 2 below.
+**The authenticated app, measured 2026-09-17.** All 93 authenticated routes at 375 and 414 as the
+property_manager persona, driving the same committed `findUndersizedTargets`:
+
+| | |
+|---|---|
+| measurements | **186**, zero lost |
+| distinct pages landed | **68** (+3 apartment-only dashboards, measured separately) |
+| targets examined | **2,612** (+103 on the apartment dashboards) |
+| **unexcused targets (SC 2.5.8 failures)** | **0** |
+
+So the four spacing-dependent controls are, on every screen this reaches, spaced. **There is no
+WCAG 2.2 AA target-size failure anywhere in the product at phone widths**, and the 44px question is
+therefore a pure product decision with no accessibility component attached to it. That is the
+single most useful thing this section now says, and the earlier version of it said the opposite.
+
+**How the stack was rebuilt**, since `supabase start` is still impossible (image blobs are
+proxy-blocked, as recorded above): PostgreSQL 16 started natively from the existing cluster — no
+Docker — with the seeded `propertypro_dev` database intact at 72 of 72 migrations; the Auth/Storage
+stand-in described above; and a **loopback-only env symlinked into `apps/web/.env.local`**, written
+outside the repository so it cannot be committed. The production env file was neither read nor
+written. `nonLocalBackendReason` (`packages/shared/src/env/loopback.ts`) fails closed and 403s
+`/dev/agent-login` unless BOTH `DATABASE_URL` and `NEXT_PUBLIC_SUPABASE_URL` are loopback, which is
+what makes that safe rather than merely intended.
+
+**Three things this sweep got wrong first, all caught by the denominator.**
+
+1. **It measured sign-in screens and called them clean.** The first probe reported `/dashboard`
+   with zero findings — having examined **4 targets**, which is what a login page has. Supabase
+   auth cookies are host-only and Next's dev server normalises `request.url` to `localhost`, so a
+   browser on `127.0.0.1` never sends the session back. `CLAUDE.md` records this trap for the admin
+   app; it bites the web app identically. Every page was rendering `/auth/login`.
+2. **Then it measured `/select-community`.** With the host fixed, a multi-community persona with no
+   pin bounces there — a real authenticated page, so it measures plausibly while telling you
+   nothing about the page requested. Top-level routes need `?communityId=`; nested
+   `/communities/[id]/…` routes must not have one.
+3. **Then it lost a quarter of the run.** 47 of 186 measurements failed, in two contiguous blocks
+   rather than scattered: the dev server went down and came back twice, which is appendix bug 3's
+   run-length degradation again. A resume pass that **waits** for the server instead of recording
+   an error recovered all 47. Two further rows had transiently landed on `/` and were re-measured.
+
+The lesson is the same one in each case: a sweep that cannot render the page reports zero findings,
+which is indistinguishable from a pass. Only the count of targets examined separates them, which is
+why both the sweep and the committed blocks print it and assert a floor on it.
+
+**Still unmeasured.** Four of the five personas (the sweep used one, on the finding that touch
+targets barely vary by role); every width above 414; `apps/admin`; and `/mobile/**`. The sweep ran
+against a dev server and the seeded dataset, so a route whose content differs in production could
+differ here.
 
 ### Why the old numbers are withdrawn rather than corrected
 
@@ -418,7 +463,7 @@ Reading it:
   width; the fix was the gutters. And it would **not** have flagged `announcement-composer`, whose
   base grid declares no `grid-cols-*` at all: the offending track is the implicit one. A text rule
   can find the right line with the wrong advice, and miss the case that has no text to match.
-- **`touch-target-audit.spec.ts`** (added 2026-09-17, 8 blocks, `expectedTestCount` 55 → 63). Runs
+- **`touch-target-audit.spec.ts`** (added 2026-09-17, 9 blocks, `expectedTestCount` 55 → 64). Runs
   `axe-core`'s `target-size` — already a dependency — rather than a second hand-rolled geometry
   rule, which is the whole lesson of the harness it replaces. Six blocks need no server: they
   render the real primitives through `react-dom/server` in a `tsx` subprocess and measure them in
@@ -430,6 +475,14 @@ Reading it:
   bad place to hold an argument; leaving the 24×24 floor unasserted would let the one real
   violation come back silently. Pinning the under-24 set by equality rather than asserting it empty
   means a fifth control acquiring a dependency on its surroundings is a decision someone makes.
+
+  A ninth block sweeps the five densest AUTHENTICATED screens at 375px — the same five
+  `responsive-overflow.spec.ts` already proves render against the CI seed, so it adds a block
+  rather than a seed dependency. It is there for the one failure mode the other layers cannot
+  see: **crowding**. Four controls clear SC 2.5.8 only while nothing clickable sits within 24px of
+  them, so a change to one row's `gap` can end conformance without touching a component file. It
+  asserts a floor on targets examined as well as zero findings, because five dense screens that
+  examine almost nothing have rendered as login pages.
 
   Note also what it does **not** do: there is no static lint rule for control size, and there
   should not be. `verify-responsive-geometry.ts` already settles why — "a geometry claim belongs in
@@ -464,13 +517,10 @@ is out of scope per `.claude/rules/design.md:86-89`.
 Also unmeasured: **`apps/web` on a dev server**, which is what CI's e2e job actually runs. Every
 overflow number here is from a production build.
 
-And for touch targets specifically, the gap is larger and in a different place. The 2026-09-17
-re-measurement covers **thirteen shared controls** and **six DB-free routes** — it does not cover
-the authenticated app at all, because a container without Docker cannot start Supabase and
-`/dev/agent-login` needs a live Auth instance. That matters more than it would for overflow: four
-of the thirteen controls are conformant only by SC 2.5.8's **spacing** exception, so whether they
-are conformant *in the product* is a property of each screen, and the crowded screens — finance
-tables, the compliance queue, the copy-pasted row-action kebabs — are all behind a login.
+For touch targets the authenticated gap is now **closed** — all 93 routes were swept on
+2026-09-17 (see "On real pages") — but on a narrower base than the overflow numbers: one persona,
+two widths, a dev server. What remains unmeasured there is the other four personas, every width
+above 414px, and the same `apps/admin` and `/mobile/**` exclusions.
 
 Not measured but enumerated: 59 hard `w-[Npx]`; `sheet.tsx`'s `w-3/4 sm:max-w-sm` left/right panels
 (~186px usable at 320px) containing unprefixed two-column form grids; 45 `whitespace-nowrap`, ~30 on
@@ -484,12 +534,11 @@ user strings; 9 of 10 `DataTable` consumers declaring no `meta.hideBelow`.
    The choice and its price are in "The decision this still needs" above; the recommendation there
    is to make 24x24 the enforced floor, demote 44px to a documented aspiration, and scope any
    44px push to the resident-facing mobile surfaces. Whichever is chosen, the four documents that
-   assert a rule no primitive implements have to stop. Separately and independently: the two
-   real-page blocks in `apps/web/e2e/touch-target-audit.spec.ts` reach six DB-free routes today
-   because that is all a container without Docker can serve. The CI e2e job has a real Supabase
-   stack and a seed, so pointing those blocks at authenticated routes there is the cheap way to
-   measure the dense screens — and the dense screens are where the four spacing-dependent controls
-   either are or are not crowded.
+   assert a rule no primitive implements have to stop. The measurement half of this
+   recommendation is **done**: the authenticated app was swept on 2026-09-17 and is clean, and
+   `apps/web/e2e/touch-target-audit.spec.ts` now carries a block over the five densest
+   authenticated screens so a future change that crowds one of the four spacing-dependent controls
+   fails a gate rather than shipping.
 3. **Treat `lg:` with suspicion inside the shell — but only where content cannot shrink.** The
    concern is real: `lg:` is the pixel the rail appears, so a grid that widens there gets a
    *narrower* column. It cost `FinanceKpiRow` six overflowing boxes at 1024px, fixed by moving to

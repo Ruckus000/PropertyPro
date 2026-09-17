@@ -63,6 +63,20 @@
     "`payments`, they are UNMEASURED against THIS stack (dev server + CI seed) --",
     "this job's own run on the PR that adds them is the real measurement.",
     "",
+    "2026-09-17, authenticated sweep: that spec gains a ninth block and",
+    "expectedTestCount goes 63 -> 64. The new block measures the five densest",
+    "authenticated screens at 375px, which are the same five",
+    "`responsive-overflow.spec.ts` already proves render against this seed -- so it",
+    "adds a block, not a seed dependency. It exists because neither of the other",
+    "layers can see CROWDING: four controls (Checkbox 16x16, Switch 36x20, the",
+    "help tooltip 20x20, and any 16px icon button) clear SC 2.5.8 only while",
+    "nothing clickable sits within 24px, so one change to a row's gap can break",
+    "conformance without touching a component. Backing measurement, offline over",
+    "all 93 authenticated routes at 375 and 414: 2,612 targets examined across 68",
+    "pages, zero unexcused. It asserts a floor on the number of targets examined",
+    "as well: five dense screens that examine almost nothing have rendered as",
+    "login pages, which is how the offline sweep first reported /dashboard clean.",
+    "",
     "2026-09-17, touch-target audit: `touch-target-audit.spec.ts` joins the list",
     "(8 blocks) and expectedTestCount goes 55 -> 63. Six of its blocks need no",
     "server (they render the real primitives through react-dom/server in a tsx",
@@ -122,5 +136,5 @@
     "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 63
+  "expectedTestCount": 64
 }

@@ -54,6 +54,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 
 import type { RenderedPrimitive } from './fixtures/render-primitives.mjs';
+import { loginAs } from './helpers/dev-login';
 import { findUndersizedTargets } from './helpers/target-size';
 
 const require_ = createRequire(import.meta.url);
@@ -381,4 +382,90 @@ test.describe('touch targets — real pages', () => {
       ).toEqual([]);
     });
   }
+});
+
+/**
+ * Layer 3 — the densest authenticated screens.
+ *
+ * Layer 1 asserts that no PRIMITIVE is under 24x24 except four that are, and
+ * Layer 2 checks the public routes. Neither can see the failure mode that
+ * actually threatens those four: **crowding**. `Checkbox` (16x16), `Switch`
+ * (36x20) and the help tooltip (20x20) are conformant only while nothing else
+ * clickable sits within 24px of them, so their conformance is a property of the
+ * screen, not of the component — and one CSS change to a row's gap can take it
+ * away without touching a single component file.
+ *
+ * Measured 2026-09-17 over all 93 authenticated routes at 375 and 414 as the
+ * property_manager persona: **2,612 targets examined across 68 distinct pages,
+ * zero unexcused**, plus 103 more on the three apartment-only dashboards a
+ * condo-pinned persona cannot reach. This block is the part of that sweep worth
+ * paying for on every PR — the five densest screens, which are also the five
+ * `responsive-overflow.spec.ts` already proves render against the CI seed, so
+ * it adds no new seed dependency.
+ *
+ * 375px only. It is the tighter of the two widths, nothing was found at either,
+ * and a second width doubles the cost of the block for a second chance at the
+ * same answer. Device pixel ratio is deliberately NOT set: measured both ways on
+ * these routes, `target-size` returns the same counts and the same findings, and
+ * matching `responsive-overflow.spec.ts`'s context is worth more than parity
+ * with an offline sweep. What DOES move the count is page settle, which is why
+ * this waits the way that spec waits and then some.
+ */
+test.describe('touch targets — the densest authenticated screens', () => {
+  // A dev server compiles these on demand and one block visits five of them.
+  test.setTimeout(240_000);
+
+  const ROUTES = [
+    ['meetings', (id: number) => `/communities/${id}/meetings`],
+    ['documents', (id: number) => `/communities/${id}/documents`],
+    ['payments', (id: number) => `/communities/${id}/payments`],
+    ['announcements composer', (id: number) => `/announcements/new?communityId=${id}`],
+    ['settings', (id: number) => `/settings?communityId=${id}`],
+  ] as const;
+
+  test('no target-size violation at 375px', async ({ page }) => {
+    // Pinned, for the same reason `responsive-overflow.spec.ts` pins: an
+    // unpinned demo user lands in Palm Shores (Essentials), where several of
+    // these render "Upgrade now" — a different page with different controls.
+    const { communityId } = await loginAs(page, 'cam', {
+      communitySlug: 'sunset-condos',
+      skipPortalNav: true,
+    });
+    await page.setViewportSize({ width: 375, height: 900 });
+
+    const report: string[] = [];
+    let examined = 0;
+
+    for (const [label, buildPath] of ROUTES) {
+      await page.goto(buildPath(communityId), { waitUntil: 'domcontentloaded' });
+      await page.locator('main').waitFor({ state: 'visible' });
+      await page.evaluate(() => document.fonts.ready);
+      // Controls arrive with the data on these screens. Without this,
+      // `/communities/N/documents` measured 18 targets on one run and 53 on
+      // another — a skeleton scores clean because it has nothing to measure.
+      await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
+
+      const { checked, findings } = await findUndersizedTargets(page);
+      examined += checked;
+      for (const f of findings) {
+        report.push(`  ${label}  ${f.selector}  ${f.width}x${f.height}  [${f.certainty}]`);
+      }
+    }
+
+    // The denominator, asserted. Five dense screens examined 2 targets between
+    // them would mean they rendered as login pages — which is exactly what
+    // happened during the offline sweep, where a "clean" /dashboard turned out
+    // to have examined 4 targets because the session cookie was never sent.
+    expect(
+      examined,
+      `the rule examined almost nothing across ${ROUTES.length} screens (${examined}) — ` +
+        'these pages did not render',
+    ).toBeGreaterThan(40);
+
+    expect(
+      report,
+      `WCAG 2.2 SC 2.5.8 (AA) — targets under 24x24 that no spacing excuses ` +
+        `(examined ${examined}):\n${report.join('\n')}`,
+    ).toEqual([]);
+  });
 });
