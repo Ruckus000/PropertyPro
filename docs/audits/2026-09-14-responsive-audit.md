@@ -383,6 +383,24 @@ Neither fixed route is in the committed overflow gate, deliberately: both bleeds
 are only observable after their list paints, and a block that races the data would
 be a flaky gate, which is worse than none.
 
+**And the accessibility side, re-checked.** "Bigger controls cannot fail a size
+minimum" is the intuition and it is only half right: nothing shrank, but
+`Checkbox`, `Switch` and `HelpTooltip` clear SC 2.5.8 **only via the spacing
+exception**, and their neighbours just grew 36→44px. In a fixed-width row that
+closes the gap, which is the one mechanism by which making everything larger
+could produce an accessibility regression. Re-swept all 93 routes at 375 and 414
+after the change: **186 measurements, zero lost, 2,564 targets examined across 66
+pages, zero unexcused.** The three exceptions are still uncrowded everywhere they
+appear.
+
+One operational note that cost a red run and is worth writing down: the
+authenticated block failed once with `ECONNRESET` in `loginAs` after the dev
+server had been driven for several hours — the same run-length degradation as
+appendix bug 3, now visible as a connection reset rather than lost measurements.
+It passed on a freshly started server in 2.2 minutes. The block's timeout went
+240s → 360s on the strength of that number, since a cold CI runner compiles
+every route from scratch and 2.2 minutes warm is not a safe margin against four.
+
 ## Fixed in this branch, each measured before and after
 
 | | |

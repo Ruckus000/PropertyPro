@@ -488,8 +488,11 @@ test.describe('touch targets — real pages', () => {
  * this waits the way that spec waits and then some.
  */
 test.describe('touch targets — the densest authenticated screens', () => {
-  // A dev server compiles these on demand and one block visits five of them.
-  test.setTimeout(240_000);
+  // A dev server compiles these on demand and one block visits five of them,
+  // each with a `networkidle` wait that can legitimately run its full 20s. This
+  // measured 2.2m on a warm local server, so 4 minutes was uncomfortably close
+  // for a cold CI runner compiling every route from scratch.
+  test.setTimeout(360_000);
 
   const ROUTES = [
     ['meetings', (id: number) => `/communities/${id}/meetings`],
