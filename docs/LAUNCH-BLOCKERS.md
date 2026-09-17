@@ -70,10 +70,11 @@ line says where.
   **Open tail — unverified, nothing in code or the DB can show it:** the live Customer
   Portal is configured (`/billing/portal` 500s until it is); `STRIPE_SECRET_KEY` is live on
   `property-pro-admin` too; a real charge settled (signup is a $0 trial, so only an ended
-  trial produces one); `STRIPE_EXPECTED_LIVEMODE` is not left at `false` on
-  `property-pro-admin`, or the console's five billing writes refuse the live key with
-  `STRIPE_MODE_MISMATCH`. The 6 unprocessed `stripe_webhook_events` from 2026-08-10 are still
+  trial produces one). The 6 unprocessed `stripe_webhook_events` from 2026-08-10 are still
   unprocessed (runbook step 6).
+  **Confirmed 2026-09-17 by the owner:** `STRIPE_EXPECTED_LIVEMODE=true` on
+  `property-pro-admin` Production (set ~2026-09-12). Were it `false`, the console's five
+  billing writes would refuse the live key with `STRIPE_MODE_MISMATCH`.
 
 - **2. `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` unset** — closed 2026-09-08. Established
   deductively, since nobody recorded fixing it: readiness returns `healthy`, and
