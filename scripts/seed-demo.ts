@@ -2108,6 +2108,7 @@ async function main(): Promise<void> {
     await runSeedSafetyChecks({
       databaseUrl: process.env.DATABASE_URL ?? '',
       db,
+      demoEmails: DEMO_USERS.map((user) => user.email),
     });
     await runDemoSeed({ syncAuthUsers });
     // eslint-disable-next-line no-console

@@ -12,12 +12,11 @@
  *   scripts/with-env-local.sh pnpm reset:demo
  */
 import { pathToFileURL } from 'node:url';
-import { inArray, sql } from '@propertypro/db/filters';
-import { communities } from '@propertypro/db';
+import { sql } from '@propertypro/db/filters';
 // AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
-import { DEMO_COMMUNITIES } from './config/demo-data';
-import { runSeedSafetyChecks } from './lib/seed-safety';
+import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+import { resolveDemoCommunityIds, runSeedSafetyChecks } from './lib/seed-safety';
 import { extractRows } from './lib/extract-rows';
 import { runDemoSeed } from './seed-demo';
 
@@ -99,19 +98,6 @@ async function resolveExistingResetTables(): Promise<string[]> {
   }
 
   return DEMO_RESET_TABLE_DELETION_ORDER.filter((table) => existingTables.has(table));
-}
-
-async function resolveDemoCommunityIds(): Promise<number[]> {
-  const slugs = DEMO_COMMUNITIES.map((c) => c.slug);
-  if (slugs.length === 0) {
-    return [];
-  }
-  const rows = await db
-    .select({ id: communities.id })
-    .from(communities)
-    .where(inArray(communities.slug, slugs));
-
-  return rows.map((r) => r.id);
 }
 
 async function countRowsByCommunity(table: string, communityIds: number[]): Promise<number> {
@@ -237,7 +223,10 @@ export async function runDemoReset(options: DemoResetOptions = {}): Promise<void
 
   const resetTables = await resolveExistingResetTables();
 
-  const communityIds = await resolveDemoCommunityIds();
+  const communityIds = await resolveDemoCommunityIds(
+    db,
+    DEMO_COMMUNITIES.map((c) => c.slug),
+  );
   console.log(`[reset-demo] Found ${communityIds.length} demo communities (IDs: ${communityIds.join(', ') || 'none'})`);
 
   if (communityIds.length > 0) {
@@ -279,6 +268,7 @@ async function main(): Promise<void> {
     await runSeedSafetyChecks({
       databaseUrl: process.env.DATABASE_URL ?? '',
       db,
+      demoEmails: DEMO_USERS.map((user) => user.email),
     });
     await runDemoReset({ syncAuthUsers: true });
   } finally {

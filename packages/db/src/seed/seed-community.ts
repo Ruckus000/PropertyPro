@@ -436,6 +436,15 @@ async function ensureCommunity(config: SeedCommunityConfig): Promise<number> {
   const { trialEndsAt, demoExpiresAt } = resolveDemoLifecycle(config);
 
   if (existing[0]) {
+    // The nightly reset runs against production, where real associations live
+    // beside the demos. A slug match alone must never stamp is_demo=true onto
+    // one of them (and let later resets delete its data).
+    if (isDemo && !existing[0].isDemo) {
+      throw new Error(
+        `Refusing to convert non-demo community "${config.slug}" (id=${existing[0].id}) into a demo.`,
+      );
+    }
+
     const updatePayload: Partial<typeof communities.$inferInsert> = {
       name: config.name,
       communityType: config.communityType,
@@ -853,7 +862,17 @@ export async function ensureNotificationPreference(communityId: number, userId: 
   `);
 }
 
-async function lookupRegistry(entityType: string, seedKey: string): Promise<string | null> {
+/**
+ * Registry keys are unique per (entity_type, seed_key) across ALL communities,
+ * and some are not slug-prefixed (`apt-maint-*`), so the lookup must be scoped
+ * to the community being seeded — otherwise seeding one community re-homes
+ * another community's registered rows into it.
+ */
+async function lookupRegistry(
+  entityType: string,
+  seedKey: string,
+  communityId: number,
+): Promise<string | null> {
   if (!(await hasRegistryTable())) {
     return null;
   }
@@ -861,7 +880,13 @@ async function lookupRegistry(entityType: string, seedKey: string): Promise<stri
   const rows = await db
     .select()
     .from(demoSeedRegistry)
-    .where(and(eq(demoSeedRegistry.entityType, entityType), eq(demoSeedRegistry.seedKey, seedKey)))
+    .where(
+      and(
+        eq(demoSeedRegistry.entityType, entityType),
+        eq(demoSeedRegistry.seedKey, seedKey),
+        eq(demoSeedRegistry.communityId, communityId),
+      ),
+    )
     .limit(1);
   return rows[0]?.entityId ?? null;
 }
@@ -1000,7 +1025,7 @@ async function seedRegistryDocument(
   const filePath = `demo/${communityId}/${seedKey}/${fileName}`;
   const fileSize = await ensureSeededDocumentStorage(filePath, title, searchText);
 
-  const registryEntityId = await lookupRegistry('document', seedKey);
+  const registryEntityId = await lookupRegistry('document', seedKey, communityId);
   if (registryEntityId) {
     const id = Number(registryEntityId);
     const [updated] = await db
@@ -1075,7 +1100,7 @@ async function seedRegistryMeeting(
   startsAt: Date,
   location: string,
 ): Promise<number> {
-  const registryEntityId = await lookupRegistry('meeting', seedKey);
+  const registryEntityId = await lookupRegistry('meeting', seedKey, communityId);
   if (registryEntityId) {
     const id = Number(registryEntityId);
     const [updated] = await db
@@ -1142,7 +1167,7 @@ async function seedRegistryAnnouncement(
   audience: string = 'all',
   isPinned = false,
 ): Promise<number> {
-  const registryEntityId = await lookupRegistry('announcement', seedKey);
+  const registryEntityId = await lookupRegistry('announcement', seedKey, communityId);
   if (registryEntityId) {
     const id = Number(registryEntityId);
     const [updated] = await db
@@ -1516,7 +1541,7 @@ async function seedApartmentMaintenanceRequests(
   });
 
   for (const request of requestData) {
-    const registryEntityId = await lookupRegistry('maintenance_request', request.seedKey);
+    const registryEntityId = await lookupRegistry('maintenance_request', request.seedKey, communityId);
     if (registryEntityId) {
       const id = Number(registryEntityId);
       const [updated] = await db
