@@ -1,5 +1,7 @@
 "use client";
 
+import { Table } from '@/components/ui/table';
+
 interface Recipient {
   userId: string;
   email: string | null;
@@ -34,7 +36,7 @@ export function DeliveryReport({ recipients, recipientCount, deliveredCount, fai
   return (
     <div className="space-y-4">
       {/* Summary stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-md border border-edge bg-surface-card p-3 text-center">
           <div className="text-2xl font-bold text-content">{recipientCount}</div>
           <div className="text-xs text-content-tertiary">Total</div>
@@ -55,7 +57,7 @@ export function DeliveryReport({ recipients, recipientCount, deliveredCount, fai
 
       {/* Recipient table */}
       <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
-        <table className="min-w-full divide-y divide-edge">
+        <Table className="min-w-full divide-y divide-edge">
           <thead className="bg-surface-page">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Name</th>
@@ -81,7 +83,7 @@ export function DeliveryReport({ recipients, recipientCount, deliveredCount, fai
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </div>
     </div>
   );

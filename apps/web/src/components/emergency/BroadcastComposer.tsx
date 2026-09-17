@@ -150,7 +150,7 @@ export function BroadcastComposer({ communityId, communityName, smsEnabled }: Pr
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       {/* Step indicator */}
-      <div className="flex items-center gap-2 text-sm text-content-tertiary">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-content-tertiary">
         {['Template', 'Compose', 'Recipients', 'Confirm'].map((label, i) => {
           const stepIndex = ['template', 'compose', 'recipients', 'confirm'].indexOf(step);
           const isActive = i <= stepIndex;
@@ -291,6 +291,7 @@ export function BroadcastComposer({ communityId, communityName, smsEnabled }: Pr
             {smsEnabled ? (
               <label className="flex items-center gap-2">
                 <input
+                  className="h-4 w-4 shrink-0"
                   type="checkbox"
                   checked={channels.includes('sms')}
                   onChange={(e) => {
@@ -309,6 +310,7 @@ export function BroadcastComposer({ communityId, communityName, smsEnabled }: Pr
             )}
             <label className="flex items-center gap-2">
               <input
+                className="h-4 w-4 shrink-0"
                 type="checkbox"
                 checked={channels.includes('email')}
                 onChange={(e) => {
@@ -374,7 +376,7 @@ export function BroadcastComposer({ communityId, communityName, smsEnabled }: Pr
               type="checkbox"
               checked={confirmed}
               onChange={(e) => setConfirmed(e.target.checked)}
-              className="mt-1"
+              className="h-4 w-4 shrink-0 mt-1"
             />
             <span className="text-sm text-status-danger">
               I understand this will immediately alert{' '}

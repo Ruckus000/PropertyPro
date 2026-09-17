@@ -29,7 +29,7 @@ export function DashboardAnnouncements({
 
   return (
     <section className="rounded-md border border-edge bg-surface-card p-5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-content">Recent Announcements</h2>
         {createHref ? (
           <Button asChild variant="outline" size="sm">

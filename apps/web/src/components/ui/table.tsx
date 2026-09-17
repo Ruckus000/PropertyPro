@@ -18,6 +18,17 @@ import { cn } from "@/lib/utils"
  *
  * Deliberately NO `role="region"`: that would need an accessible name this
  * component cannot know, and an unnamed region is worse than none.
+ *
+ * The focus ring is `ring-inset`. A Tailwind ring is a box-shadow painted
+ * OUTSIDE the border box, and four of this component's call sites wrap it in
+ * `overflow-hidden` to clip the table's corners to a rounded border
+ * (`finance/recent-payments.tsx`, `emergency/BroadcastHistoryTable.tsx`,
+ * `emergency/DeliveryReport.tsx`, `units/units-page-client.tsx`). The wrapper
+ * fills that box exactly, so an outward ring is clipped away completely: the
+ * conditional tab stop below would be reachable with no visible focus
+ * indicator, trading a WCAG 2.1.1 failure for a 2.4.7 one. Inset draws it just
+ * inside the edge, where nothing can clip it, and is correct for the call
+ * sites that do not clip too.
  */
 const Table = React.forwardRef<
   HTMLTableElement,
@@ -44,7 +55,7 @@ const Table = React.forwardRef<
   return (
     <div
       ref={wrapperRef}
-      className="relative w-full overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+      className="relative w-full overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-interactive"
       {...(scrollable ? { tabIndex: 0 } : {})}
     >
       <table

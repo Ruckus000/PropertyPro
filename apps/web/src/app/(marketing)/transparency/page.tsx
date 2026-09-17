@@ -40,6 +40,12 @@ export default function TransparencyPage() {
                 gap: 24,
                 marginTop: 40,
                 maxWidth: '42em',
+                // A grid with no explicit track gets one implicit `auto` column,
+                // and `auto` floors at the item's min-content — so these cards
+                // sized to 434px inside a 303px column and the whole page
+                // scrolled sideways on every phone. `minmax(0, 1fr)` lets the
+                // track shrink to the column. Measured at 320/375/414px.
+                gridTemplateColumns: 'minmax(0, 1fr)',
               }}
             >
               <div className="mk-card" style={{ padding: 28 }}>
@@ -86,10 +92,16 @@ export default function TransparencyPage() {
                   The Sunset Condos demo shows what a fully populated transparency
                   page looks like:
                 </p>
+                {/*
+                  45 unbroken characters in an inline-flex box with 22px side
+                  padding and no cap: the second reason this page scrolled
+                  sideways on a phone. A hostname has no space to wrap at, so it
+                  needs `anywhere` rather than `break-word`.
+                */}
                 <a
                   href="https://sunset-condos.getpropertypro.com/transparency"
                   className="mk-pill mk-pill-ghost"
-                  style={{ marginTop: 16 }}
+                  style={{ marginTop: 16, maxWidth: '100%', overflowWrap: 'anywhere' }}
                 >
                   sunset-condos.getpropertypro.com/transparency
                   <span aria-hidden="true">→</span>

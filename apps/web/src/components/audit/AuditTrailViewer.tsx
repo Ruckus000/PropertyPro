@@ -116,7 +116,7 @@ export function AuditTrailViewer({ communityId }: AuditTrailViewerProps) {
 
   return (
     <div>
-      <div className="mb-4 flex items-start justify-between gap-4">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <AuditFilters
           communityId={communityId}
           filters={filters}

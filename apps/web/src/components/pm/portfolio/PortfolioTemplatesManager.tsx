@@ -268,6 +268,7 @@ function ManagerBody({ communities }: { communities: CommunityOption[] }) {
                         {communities.map((c) => (
                           <label key={c.communityId} className="flex items-center gap-2 text-sm text-content">
                             <input
+                              className="h-4 w-4 shrink-0"
                               type="checkbox"
                               checked={selected.has(c.communityId)}
                               onChange={() => toggleTarget(c.communityId)}

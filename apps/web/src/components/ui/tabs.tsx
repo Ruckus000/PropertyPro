@@ -14,7 +14,20 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-surface-muted p-1 text-content-secondary",
+      // `flex-wrap`, and `h-auto min-h-9` so a second row is not clipped by the
+      // fixed height. TabsTrigger is `whitespace-nowrap`, so without this the
+      // strip simply runs off the side with no scrollbar and no way to reach
+      // the tabs past the edge. Measured at 375px in a 327px content column:
+      // /pm/reports 569px, /communities/[id]/payments 423px,
+      // /communities/[id]/meetings and /esign the same shape — four of the
+      // eleven routes that bleed, all from this one component.
+      //
+      // Wrapping rather than `overflow-x-auto`: a scroller needs its own tab
+      // stop to satisfy WCAG 2.1.1, wrapping needs nothing, and at any width
+      // where the tabs already fit `flex-wrap` is a no-op — so this cannot
+      // change a desktop layout. Same call as `QuickFilterTabs`, so the
+      // codebase has one answer to this rather than two.
+      "inline-flex h-auto min-h-9 flex-wrap items-center justify-center rounded-lg bg-surface-muted p-1 text-content-secondary",
       className
     )}
     {...props}

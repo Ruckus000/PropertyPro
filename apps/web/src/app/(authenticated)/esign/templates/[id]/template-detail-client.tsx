@@ -199,7 +199,7 @@ export function TemplateDetailClient({
         title={template.name}
         description={template.description ?? undefined}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant={STATUS_VARIANT[template.status] ?? 'neutral'}
               size="sm"
