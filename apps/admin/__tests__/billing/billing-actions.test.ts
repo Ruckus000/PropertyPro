@@ -224,10 +224,9 @@ describe('the Stripe mode assertion', () => {
     expect(() => assertStripeActionMode()).toThrow(/STRIPE_EXPECTED_LIVEMODE/);
   });
 
-  it('refuses a test key in the shipped default, which is the state of this repo', () => {
-    // docs/LAUNCH-BLOCKERS.md: Stripe here is still in TEST mode, and the default
-    // expects LIVE — so with no override every action refuses. That is the path a
-    // reviewer of this branch will actually exercise.
+  it('refuses a test key in the shipped default, which is the state of local development', () => {
+    // Local development runs on test keys and the default expects LIVE — so with
+    // no override every action refuses.
     process.env.STRIPE_SECRET_KEY = 'sk_test_x';
     delete process.env.STRIPE_EXPECTED_LIVEMODE;
     expect(() => assertStripeActionMode()).toThrow(/refusing to change a subscription/);

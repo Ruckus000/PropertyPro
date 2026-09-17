@@ -20,9 +20,10 @@
  *
  * Two consequences worth stating plainly:
  *
- *  - **The default expects LIVE.** `docs/LAUNCH-BLOCKERS.md` records this repo's
- *    Stripe as still being in TEST mode, so with `STRIPE_EXPECTED_LIVEMODE`
- *    unset every one of these five actions REFUSES here. That is the correct
+ *  - **The default expects LIVE.** Any environment on test keys (local
+ *    development, and production before its 2026-09-10 live cutover) refuses
+ *    every one of these five actions unless `STRIPE_EXPECTED_LIVEMODE=false`
+ *    is set — and one left set to `false` refuses a live key. That is the correct
  *    direction to fail — an unconfigured deployment must not be able to move
  *    money — and the refusal is the path a reviewer will actually exercise. It is
  *    why the refusal has its own error code and a message that names the
@@ -363,9 +364,10 @@ async function retrieveSubscriptionState(subscriptionId: string): Promise<Subscr
  * subscription's CURRENT one: changing a plan must not silently also change a
  * customer from annual to monthly billing.
  *
- * `docs/LAUNCH-BLOCKERS.md` records production's `stripe_prices` as holding TEST
- * price ids. Nothing here tries to reconcile that — it is the cutover's problem,
- * and the mode assertion above is what keeps a mismatched pair from being used.
+ * The ids in `stripe_prices` belong to exactly one Stripe mode (production's were
+ * rewritten to live ids at the 2026-09-10 cutover). Nothing here checks which —
+ * that is the cutover's problem, and the mode assertion above is what keeps a
+ * key from being paired with the other mode's ids.
  */
 async function resolvePriceId(
   planId: string,
