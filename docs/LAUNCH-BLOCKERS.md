@@ -2,11 +2,12 @@
 
 **Opened:** 2026-09-01, from the pre-launch audit.
 **Scope:** things that must be true before real Florida associations are onboarded.
-**Last re-verified end-to-end:** 2026-09-09 — every command below was re-run, every
-issue re-checked, every count re-measured.
+**Last re-verified end-to-end:** 2026-09-09. **Launch items re-checked 2026-09-17**
+(served Stripe key, `stripe_prices`, webhook intake, DNS, production-health runs, GitHub
+issues); the engineering backlog below was not re-measured.
 
-**One blocker is open: item 1, the Stripe live cutover.** It is a dashboard and
-key-rotation task, not code. Items 2–7 are resolved and collapsed below.
+**No blocker is open on the evidence available.** Items 1–7 are resolved and collapsed
+below. Item 1 carries an open tail that only the Stripe and Vercel dashboards can confirm.
 
 The code is in good shape: the `guard:*` suite passes **29/29** (measured 2026-09-09,
 `pnpm lint`), and ~12,155 unit tests plus a clean production build of both apps were
@@ -39,90 +40,6 @@ checklist rather than a bug tracker.
 > as stale.
 
 ---
-## 1. Stripe is not cut over to live — checkout cannot take real money
-
-**Status:** verified 2026-09-08 · **Owner:** you (Stripe dashboard + live keys) · **Runbook:** [`docs/runbooks/stripe-live-cutover.md`](runbooks/stripe-live-cutover.md)
-
-**Production serves TEST-mode keys.** This is now settled from outside, which an
-earlier revision of this entry said was impossible:
-
-```bash
-chunk=$(curl -s https://www.getpropertypro.com/signup/checkout \
-  | grep -oE '/_next/static/[^"]+signup/checkout/page-[a-f0-9]+\.js' | head -1)
-curl -sg "https://www.getpropertypro.com$chunk" \
-  | grep -oE 'pk_(test|live)_[A-Za-z0-9]{6}'
-# -> pk_test_51Syt6      (re-run 2026-09-09)
-```
-
-The key is read inside a `'use client'` component (`signup/checkout/page.tsx`)
-that Stripe.js loads lazily, so it is inlined into the **route** chunk, whose hash
-changes every build. The path therefore has to be read out of the HTML first — which
-is why the 2026-09-04 check, looking at the page HTML and the shared chunks, concluded
-it was "not present in the served bundle".
-
-> A fixed URL cannot work here, and `curl -g` *disables* globbing, so the `page-*.js`
-> form an earlier revision of this block printed returns **404**. It shipped with
-> output pasted from a different invocation that had worked. Re-run a command before
-> printing it; a transcript beside it is not evidence that the line above produced it.
-
-So this is the benign case: **checkout works and takes no money.** It is
-scheduled work, not an outage. (The urgent case — live keys against the test
-price ids in the database, i.e. checkout broken for everyone — is ruled out.)
-
-### Blast radius: zero real customers
-
-Measured against production 2026-09-10 (re-measured; the 2026-09-08 reading of
-this table said the three demo communities share "one customer and one
-subscription" — the customer yes, the subscriptions no, and one subscription
-could never be shared because `communities_stripe_subscription_id_unique` is a
-unique index):
-
-| | |
-|---|---|
-| Communities holding a `cus_…`/`sub_…` | 5 — the 3 seeded demo communities (one shared customer, **three distinct subscriptions**) and 2 soft-deleted `Big Mama's House` test signups |
-| `billing_groups` | 4, all with customer ids, none tombstoned — but only one (`Pat PM Demo Portfolio`) has communities attached; the other 3 are orphans |
-| `stripe_connected_accounts` | 0 |
-| `finance_stripe_webhook_events` | 0 |
-| `access_plans` (holds `stripe_coupon_id`) | 0 |
-| `stripe_webhook_events` | 278, of which **6 are permanently unprocessed** — all 2026-08-10, predating #941/#942; see the runbook's step 6 |
-
-No real money has ever moved through this account. The cutover can be done in one
-sitting with no customer impact — but that is a **snapshot**, not a standing
-property. Re-measure before relying on it.
-
-### The tooling was fixed first
-
-An adversarial audit of the runbook against the code (2026-09-08) found two
-defects that would have broken the cutover mid-flight. Both are fixed:
-
-- `remediate-stale-stripe-ids.ts` accepted a **test** key. Combined with
-  `scripts/with-env-local.sh` clobbering an exported `STRIPE_SECRET_KEY`, step 4
-  would have reported "nothing to remediate" and done nothing — and any later
-  re-run, once real customers existed, would have nulled their billing state. It
-  now calls `assertKeyMode(secretKey, true, …)`.
-- `verify-stripe-mode.ts` counted **soft-deleted** billing groups that
-  `remediate` skips, so step 5 could never pass once step 4 had run, and
-  re-running step 4 was a no-op. The two queries now agree.
-
-### Known, unfixed, and documented in the runbook
-
-- **`verify-stripe-mode.ts` can never exit 0.** `webhookSecretCheck` returns
-  `unknown` whenever the secret is set and `isFailing` counts that as failing, so
-  the exit code carries no signal in any environment. Read the table.
-- **It reads your shell's env, not Vercel's** — `.env.local`, not what is
-  deployed.
-- **`STRIPE_SECRET_KEY` lives on two Vercel projects.** `property-pro-admin`
-  reads it for the demo→customer conversion route.
-- **The live Customer Portal is a separate dashboard object** with no API
-  equivalent here; `/billing/portal` 500s until it is configured in live mode.
-- **Step 6 cannot "purchase then refund"** — signup is a 30-day trial, so the
-  first invoice is $0. End the trial from the dashboard to force a real charge.
-
-**Verify:** re-run `verify-stripe-mode.ts` (read-only, safe against prod) and
-read the table — the exit code is always 1. Then a real card, per runbook §6.
-
----
-
 ## Resolved
 
 **Item numbers are load-bearing — nothing here is renumbered.** Four places outside this
@@ -134,6 +51,32 @@ file cite them: `.github/workflows/production-health.yml:20`,
 The problem statements these items were opened with are **deleted, not updated**. Where
 the reasoning was worth keeping it was moved somewhere that outlives this file, and the
 line says where.
+
+- **1. Stripe was not cut over to live** — closed on evidence 2026-09-17; the cutover itself
+  is dated by `stripe_prices`. What ran: the `/signup/checkout` route chunk inlines
+  `pk_live_51Syt6` (it was `pk_test_51Syt6` on 2026-09-09); all 10 `stripe_prices` rows
+  were rewritten 2026-09-10 22:58Z; webhook events arrived and were processed on 2026-09-11
+  and 2026-09-17; a non-demo `Fake` community took a Stripe customer 2026-09-11 and was
+  canceled and soft-deleted 2026-09-17, which fits the runbook's §6 real-card test. The
+  procedure and its known tooling defects live in
+  [`docs/runbooks/stripe-live-cutover.md`](runbooks/stripe-live-cutover.md).
+  The key check is the only one that reads what production serves, and the chunk path
+  changes every build:
+  ```bash
+  chunk=$(curl -s https://www.getpropertypro.com/signup/checkout \
+    | grep -oE '/_next/static/[^"]+signup/checkout/page-[a-f0-9]+\.js' | head -1)
+  curl -sg "https://www.getpropertypro.com$chunk" | grep -oE 'pk_(test|live)_[A-Za-z0-9]{6}'
+  ```
+  **Open tail — unverified, nothing in code or the DB can show it:** the live Customer
+  Portal is configured (`/billing/portal` 500s until it is); `STRIPE_SECRET_KEY` is live on
+  `property-pro-admin` too; a real charge settled (signup is a $0 trial, so only an ended
+  trial produces one). The 6 unprocessed `stripe_webhook_events` from 2026-08-10 are still
+  unprocessed (runbook step 6).
+  **`STRIPE_EXPECTED_LIVEMODE` on `property-pro-admin` Production was `false`** from its
+  creation (~2026-09-12) until the owner changed it to `true` on 2026-09-17. Through that
+  window the console's five billing writes refused the live key with
+  `STRIPE_MODE_MISMATCH`. Values are baked in at build, so the fix is live only from the
+  first admin deploy after 2026-09-17.
 
 - **2. `COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET` unset** — closed 2026-09-08. Established
   deductively, since nobody recorded fixing it: readiness returns `healthy`, and
@@ -311,9 +254,11 @@ it is not (then delete the spec and the phase-2 spec section together).
 
 ## B3. Open on GitHub
 
-**[#526](https://github.com/Ruckus000/PropertyPro/issues/526) — Site-assets quota +
-lifecycle, 3 deferred findings that need design — is the only open issue in the repo**
-(`gh issue list --state open`, 2026-09-09).
+Open issues: [`gh issue list --state open`](https://github.com/Ruckus000/PropertyPro/issues).
+On 2026-09-17 that was [#526](https://github.com/Ruckus000/PropertyPro/issues/526)
+(site-assets quota + lifecycle, needs design) and
+[#1115](https://github.com/Ruckus000/PropertyPro/issues/1115) (subdomain availability
+precheck cannot recognise the caller's own prior row).
 
 > **This section used to restate issue state, and that is what rotted.** It said "three
 > remain" and described #747 as *"open — a job known to be failing"*. #747 closed

@@ -19,10 +19,9 @@
  *
  * ## The refusal a reviewer will actually see
  *
- * `docs/LAUNCH-BLOCKERS.md` records this repo's Stripe as TEST mode while
- * `STRIPE_EXPECTED_LIVEMODE` defaults to LIVE, so in this environment all five
- * actions answer 503 `STRIPE_MODE_MISMATCH` and nothing reaches Stripe. That is
- * the normal state here, not a crash, and the server's own message names the
+ * `STRIPE_EXPECTED_LIVEMODE` defaults to LIVE, so on test keys (local
+ * development) all five actions answer 503 `STRIPE_MODE_MISMATCH` and nothing
+ * reaches Stripe. That is the normal state there, not a crash, and the server's own message names the
  * variable and both modes — so this renders `error.message` verbatim and only
  * supplies the headline. The generic "An unexpected error occurred" string
  * belongs to `withAdminErrorHandler`'s unknown-error branch alone; if it ever
