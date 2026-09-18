@@ -150,6 +150,110 @@ test.describe('Flow 1: Board admin compliance dashboard', () => {
 });
 
 // =============================================================================
+// Release regressions: legal gates, onboarding, and discoverable navigation
+// =============================================================================
+
+test.describe('Release regression coverage', () => {
+  test('a direct election link explains the attorney-review gate while its API remains forbidden', async ({
+    page,
+  }) => {
+    const { communityId } = await loginAs(page, 'board_president', {
+      communitySlug: 'sunset-condos',
+      skipPortalNav: true,
+    });
+
+    await page.goto(`/communities/${communityId}/board/elections`, {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(
+      page.getByRole('heading', { name: /attorney review required before elections/i }),
+    ).toBeVisible({ timeout: FIRST_RENDER_TIMEOUT });
+    await expect(page.getByText(/polls and forum discussions are available now/i)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Go to polls' })).toHaveAttribute(
+      'href',
+      `/communities/${communityId}/board/polls`,
+    );
+
+    const response = await page.request.get(`/api/v1/elections?communityId=${communityId}`);
+    expect(response.status()).toBe(403);
+  });
+
+  test('a non-voting apartment election link returns to Board polls', async ({ page }) => {
+    const { communityId } = await loginAs(page, 'root_sunsetridge', {
+      communitySlug: 'sunset-ridge-apartments',
+      skipPortalNav: true,
+    });
+
+    await page.goto(`/communities/${communityId}/board/elections`, {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(page).toHaveURL(`/communities/${communityId}/board/polls`);
+  });
+
+  test('an apartment root manager receives no impossible compliance checklist action', async ({
+    page,
+  }) => {
+    const { communityId } = await loginAs(page, 'root_sunsetridge', {
+      communitySlug: 'sunset-ridge-apartments',
+      skipPortalNav: true,
+    });
+
+    // Bootstrap is idempotent. Calling the real route here verifies the fresh
+    // apartment template, including a manager/root-manager path rather than a
+    // fixture assembled only for this spec.
+    const bootstrap = await page.request.post('/api/v1/onboarding/checklist', {
+      data: { communityId },
+    });
+    expect(bootstrap.ok()).toBeTruthy();
+
+    const response = await page.request.get(
+      `/api/v1/onboarding/checklist?communityId=${communityId}`,
+    );
+    expect(response.ok()).toBeTruthy();
+    const body = (await response.json()) as {
+      data: Array<{ itemKey: string; displayText: string }>;
+    };
+    expect(body.data.map((item) => item.itemKey)).toContain('upload_community_rules');
+    expect(body.data.map((item) => item.itemKey)).not.toContain('review_compliance');
+    expect(body.data.map((item) => item.displayText)).not.toContain('Review your compliance score');
+
+    await page.goto(`/dashboard/apartment?communityId=${communityId}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await expect(page.getByRole('heading', { name: /quick actions/i })).toBeVisible({
+      timeout: FIRST_RENDER_TIMEOUT,
+    });
+    await expect(page.getByText('Review your compliance score')).toHaveCount(0);
+  });
+
+  test('a long navigation rail at desktop size remains scrollable with native scrollbar behavior', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { communityId } = await loginAs(page, 'root_sunset', {
+      communitySlug: 'sunset-condos',
+      skipPortalNav: true,
+    });
+
+    await page.goto(`/dashboard?communityId=${communityId}`, { waitUntil: 'domcontentloaded' });
+    const rail = page.getByRole('navigation', { name: 'Main navigation' });
+    await expect(rail).toBeVisible({ timeout: FIRST_RENDER_TIMEOUT });
+    const scrollRail = rail.locator('[role="list"]');
+    await expect(scrollRail).toBeVisible();
+
+    const scrollbar = await scrollRail.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      scrollbarWidth: getComputedStyle(element).scrollbarWidth,
+    }));
+    expect(scrollbar.scrollHeight).toBeGreaterThan(scrollbar.clientHeight);
+    expect(scrollbar.scrollbarWidth).toBe('auto');
+  });
+});
+
+// =============================================================================
 // Flow 2: Owner Document Access
 // =============================================================================
 

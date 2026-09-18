@@ -167,6 +167,10 @@ export interface CspOptions {
   frameSrc?: string[];
   /** Extra `img-src` hosts beyond `'self' data: blob:` and the Supabase origin. */
   imgSrc?: string[];
+  /** Extra `style-src` hosts beyond `'self' 'unsafe-inline'`. */
+  styleSrc?: string[];
+  /** Extra `font-src` hosts beyond `'self' data:`. */
+  fontSrc?: string[];
   /** Add `'unsafe-eval'` to script-src. Required only by dev-mode HMR. */
   allowUnsafeEval?: boolean;
 }
@@ -205,14 +209,14 @@ export function buildCspHeader(options?: CspOptions): string {
       options?.scriptSrc?.join(' '),
       options?.allowUnsafeEval ? "'unsafe-eval'" : undefined,
     ),
-    "style-src 'self' 'unsafe-inline'",
+    join("style-src 'self' 'unsafe-inline'", options?.styleSrc?.join(' ')),
     join(`img-src 'self' data: blob: ${supabaseOrigin}`, options?.imgSrc?.join(' ')),
     join(
       `connect-src 'self' ${supabaseOrigin} ${supabaseWsScheme}://${supabaseHost}`,
       options?.connectSrc?.join(' '),
     ),
     join(`frame-src 'self' ${supabaseOrigin}`, options?.frameSrc?.join(' ')),
-    "font-src 'self' data:",
+    join("font-src 'self' data:", options?.fontSrc?.join(' ')),
     "worker-src 'self'",
     // Pinned explicitly rather than left to the `default-src 'self'` fallback.
     // It IS only a fallback today — a same-origin `/manifest.webmanifest`

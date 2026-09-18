@@ -107,5 +107,5 @@
     "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 55
+  "expectedTestCount": 59
 }

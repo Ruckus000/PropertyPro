@@ -127,10 +127,22 @@ describeDb('postgres.js pipelining and transactions (DB integration)', () => {
     expect(rollback).toBe('rollback requested');
   });
 
-  it("the app's shared client is built with max_pipeline 0 and runs transactions", async () => {
+  it("the app's shared client pins the Supavisor-safe pool settings and runs transactions", async () => {
     const { db } = await import('../src/drizzle');
     const client = (db as unknown as { $client: Client }).$client;
-    expect((client.options as unknown as { max_pipeline: number }).max_pipeline).toBe(0);
+    expect(
+      client.options as unknown as {
+        max: number;
+        max_pipeline: number;
+        idle_timeout: number;
+        connect_timeout: number;
+      },
+    ).toMatchObject({
+      max: 3,
+      max_pipeline: 0,
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
 
     const results = await Promise.all(
       [1, 2, 3, 4].map((n) =>
