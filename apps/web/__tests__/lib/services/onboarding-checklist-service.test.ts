@@ -1,15 +1,40 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const {
+  createScopedClientMock,
+  selectFromMock,
+  orderByMock,
+  onboardingChecklistItemsMock,
+  eqMock,
+  andMock,
+  isNullMock,
+} = vi.hoisted(() => ({
+  createScopedClientMock: vi.fn(),
+  selectFromMock: vi.fn(),
+  orderByMock: vi.fn(),
+  onboardingChecklistItemsMock: {
+    id: Symbol('id'),
+    itemKey: Symbol('itemKey'),
+    userId: Symbol('userId'),
+    completedAt: Symbol('completedAt'),
+    createdAt: Symbol('createdAt'),
+    deletedAt: Symbol('deletedAt'),
+  },
+  eqMock: vi.fn(),
+  andMock: vi.fn(),
+  isNullMock: vi.fn(),
+}));
+
 // Mock @propertypro/db so the module can be imported without a built package
 vi.mock('@propertypro/db', () => ({
-  createScopedClient: vi.fn(),
-  onboardingChecklistItems: Symbol('onboardingChecklistItems'),
+  createScopedClient: createScopedClientMock,
+  onboardingChecklistItems: onboardingChecklistItemsMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
-  eq: vi.fn(),
-  and: vi.fn(),
-  isNull: vi.fn(),
+  eq: eqMock,
+  and: andMock,
+  isNull: isNullMock,
 }));
 
 import {
@@ -19,6 +44,7 @@ import {
   OWNER_TENANT_ITEMS,
   ADMIN_CONDO_ITEMS,
   ADMIN_APARTMENT_ITEMS,
+  getChecklistItems,
 } from '../../../src/lib/services/onboarding-checklist-service';
 
 describe('getItemKeysForRole — v3 role + designation resolution', () => {
@@ -48,6 +74,7 @@ describe('getItemKeysForRole — v3 role + designation resolution', () => {
     const keys = getItemKeysForRole('property_manager', null, 'apartment');
     expect(keys).toEqual([...ADMIN_APARTMENT_ITEMS, ...PM_ADMIN_ITEMS]);
     expect(keys).toContain('customize_portal');
+    expect(keys).not.toContain('review_compliance');
   });
 
   it('property_manager (no designation, PM scope) → admin base + PM_ADMIN_ITEMS', () => {
@@ -64,5 +91,36 @@ describe('getItemKeysForRole — v3 role + designation resolution', () => {
   it('resident (no designation) → OWNER_TENANT_ITEMS regardless of community type', () => {
     const keys = getItemKeysForRole('resident', null, 'apartment');
     expect(keys).toEqual([...OWNER_TENANT_ITEMS]);
+  });
+});
+
+describe('getChecklistItems', () => {
+  it('never returns a soft-deleted onboarding row', async () => {
+    vi.clearAllMocks();
+    const activeUserCondition = Symbol('active-user');
+    const activeRowCondition = Symbol('active-row');
+    const combinedCondition = Symbol('combined');
+    const rows = [{ id: 1, itemKey: 'add_units', completedAt: null, createdAt: new Date() }];
+
+    eqMock.mockReturnValue(activeUserCondition);
+    isNullMock.mockReturnValue(activeRowCondition);
+    andMock.mockReturnValue(combinedCondition);
+    orderByMock.mockResolvedValue(rows);
+    selectFromMock.mockReturnValue({ orderBy: orderByMock });
+    createScopedClientMock.mockReturnValue({ selectFrom: selectFromMock });
+
+    await expect(getChecklistItems(42, 'user-1')).resolves.toEqual(rows);
+
+    expect(createScopedClientMock).toHaveBeenCalledWith(42);
+    expect(isNullMock).toHaveBeenCalledWith(onboardingChecklistItemsMock.deletedAt);
+    expect(andMock).toHaveBeenCalledWith(activeUserCondition, activeRowCondition);
+    expect(selectFromMock).toHaveBeenCalledWith(
+      onboardingChecklistItemsMock,
+      expect.objectContaining({
+        id: onboardingChecklistItemsMock.id,
+        itemKey: onboardingChecklistItemsMock.itemKey,
+      }),
+      combinedCondition,
+    );
   });
 });

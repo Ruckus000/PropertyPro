@@ -113,6 +113,11 @@ export function buildCspHeader(options?: { isPreview?: boolean }): string {
     scriptSrc: ['https://js.stripe.com'],
     connectSrc: ['https://*.ingest.sentry.io', 'https://api.stripe.com'],
     frameSrc: ['https://js.stripe.com', 'https://hooks.stripe.com'],
+    // Community themes deliberately emit Google Fonts stylesheet links for
+    // non-vendored families. Both origins are needed: CSS comes from
+    // fonts.googleapis.com and the stylesheet's WOFF files from fonts.gstatic.com.
+    styleSrc: ['https://fonts.googleapis.com'],
+    fontSrc: ['https://fonts.gstatic.com'],
     allowUnsafeEval: process.env.NODE_ENV === 'development',
   });
 }

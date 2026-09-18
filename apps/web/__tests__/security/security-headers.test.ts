@@ -183,7 +183,14 @@ describe('buildCspHeader', () => {
 
   it('includes style-src self and unsafe-inline', () => {
     const csp = buildCspHeader();
-    expect(csp).toContain("style-src 'self' 'unsafe-inline'");
+    expect(csp).toContain("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
+  });
+
+  it('permits the Google Fonts file origin without widening unrelated directives', () => {
+    const csp = buildCspHeader();
+    expect(csp).toContain("font-src 'self' data: https://fonts.gstatic.com");
+    expect(csp).not.toContain('script-src \'self\' \'unsafe-inline\' https://fonts.googleapis.com');
+    expect(csp).not.toContain('connect-src \'self\' https://fonts.googleapis.com');
   });
 
   it('includes frame-ancestors none to prevent clickjacking', () => {

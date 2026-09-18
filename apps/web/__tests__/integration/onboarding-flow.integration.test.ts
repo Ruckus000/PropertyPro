@@ -1,7 +1,8 @@
 /**
  * Onboarding flow integration test — P2-38 closeout
  */
-import { eq } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADMIN_APARTMENT_ITEMS, PM_ADMIN_ITEMS } from '../../src/lib/services/onboarding-checklist-service';
@@ -36,10 +37,20 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 
 type OnboardingRouteModule = typeof import('../../src/app/api/v1/onboarding/apartment/route');
+type OnboardingChecklistRouteModule = typeof import('../../src/app/api/v1/onboarding/checklist/route');
 
 interface RouteModules {
   onboarding: OnboardingRouteModule;
+  checklist: OnboardingChecklistRouteModule;
 }
+
+const retireApartmentComplianceChecklistStep = readFileSync(
+  new URL(
+    '../../../../packages/db/migrations/0074_retire_apartment_compliance_checklist_step.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
@@ -94,6 +105,7 @@ describeDb('onboarding flow (db-backed integration)', () => {
 
     routes = {
       onboarding: await import('../../src/app/api/v1/onboarding/apartment/route'),
+      checklist: await import('../../src/app/api/v1/onboarding/checklist/route'),
     };
   });
 
@@ -256,6 +268,82 @@ describeDb('onboarding flow (db-backed integration)', () => {
       [...ADMIN_APARTMENT_ITEMS, ...PM_ADMIN_ITEMS].sort(),
     );
     expect(actorChecklist.every((row) => row['completedAt'] == null)).toBe(true);
+  });
+
+  it('retires only existing apartment compliance rows, remains idempotent, and hides them from reads', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const communityC = requireCommunity(kit, 'communityC');
+    const actorA = kit.users.get('actorA');
+    const siteManagerC = kit.users.get('siteManagerC');
+
+    if (!actorA || !siteManagerC) throw new Error('Required checklist users not seeded');
+
+    // Simulate the exact pre-remediation rows on both sides of the tenant-type
+    // boundary. The local DB has already applied 0074 at setup, so executing
+    // its data-only statement below against these rows tests both its effect
+    // and the safe re-run behavior we need for deployment retries.
+    await kit.db
+      .delete(kit.dbModule.onboardingChecklistItems)
+      .where(
+        and(
+          inArray(kit.dbModule.onboardingChecklistItems.communityId, [communityA.id, communityC.id]),
+          inArray(kit.dbModule.onboardingChecklistItems.userId, [actorA.id, siteManagerC.id]),
+          eq(kit.dbModule.onboardingChecklistItems.itemKey, 'review_compliance'),
+        ),
+      );
+
+    const inserted = await kit.db
+      .insert(kit.dbModule.onboardingChecklistItems)
+      .values([
+        { communityId: communityA.id, userId: actorA.id, itemKey: 'review_compliance' },
+        { communityId: communityC.id, userId: siteManagerC.id, itemKey: 'review_compliance' },
+      ])
+      .returning({
+        id: kit.dbModule.onboardingChecklistItems.id,
+        communityId: kit.dbModule.onboardingChecklistItems.communityId,
+      });
+
+    await kit.db.execute(sql.raw(retireApartmentComplianceChecklistStep));
+
+    const firstPass = await kit.db
+      .select({
+        id: kit.dbModule.onboardingChecklistItems.id,
+        communityId: kit.dbModule.onboardingChecklistItems.communityId,
+        deletedAt: kit.dbModule.onboardingChecklistItems.deletedAt,
+      })
+      .from(kit.dbModule.onboardingChecklistItems)
+      .where(inArray(kit.dbModule.onboardingChecklistItems.id, inserted.map((row) => row.id)));
+
+    const apartmentRow = firstPass.find((row) => row.communityId === communityC.id);
+    const condoRow = firstPass.find((row) => row.communityId === communityA.id);
+    expect(apartmentRow?.deletedAt).toBeInstanceOf(Date);
+    expect(condoRow?.deletedAt).toBeNull();
+    const retiredAt = apartmentRow?.deletedAt?.toISOString();
+
+    await kit.db.execute(sql.raw(retireApartmentComplianceChecklistStep));
+
+    const secondPass = await kit.db
+      .select({
+        communityId: kit.dbModule.onboardingChecklistItems.communityId,
+        deletedAt: kit.dbModule.onboardingChecklistItems.deletedAt,
+      })
+      .from(kit.dbModule.onboardingChecklistItems)
+      .where(inArray(kit.dbModule.onboardingChecklistItems.id, inserted.map((row) => row.id)));
+    expect(secondPass.find((row) => row.communityId === communityC.id)?.deletedAt?.toISOString()).toBe(
+      retiredAt,
+    );
+
+    setActor(kit, 'siteManagerC');
+    const checklistResponse = await appRoutes.checklist.GET(
+      new NextRequest(apiUrl('/api/v1/onboarding/checklist'), {
+        headers: { 'x-community-id': String(communityC.id) },
+      }),
+    );
+    expect(checklistResponse.status).toBe(200);
+    const checklistJson = await parseJson<{ data: Array<{ itemKey: string }> }>(checklistResponse);
+    expect(checklistJson.data.map((item) => item.itemKey)).not.toContain('review_compliance');
   });
 
   it('feature gate: condo community returns 403 on GET', async () => {

@@ -111,6 +111,22 @@ describe("NavRail", () => {
       expect(nav).not.toContain("dark:bg-gray-900");
     });
 
+    it("keeps the overflow rail on the browser's native scrollbar", () => {
+      const { container } = renderNavRail({
+        items: Array.from({ length: 24 }, (_, index) => ({
+          id: `item-${index}`,
+          label: `Item ${index}`,
+          icon: TestIcon,
+        })),
+      });
+
+      const scrollRail = container.querySelector('.overflow-y-auto');
+      expect(scrollRail).toBeTruthy();
+      expect(scrollRail?.className).not.toContain('[scrollbar-width:none]');
+      expect(scrollRail?.className).not.toContain('[-ms-overflow-style:none]');
+      expect(scrollRail?.className).not.toContain('[&::-webkit-scrollbar]:hidden');
+    });
+
     it("uses a token-driven focus ring (not ring-white) so it shows on a light bg", () => {
       renderNavRail();
       const item = screen.getByLabelText("Documents");

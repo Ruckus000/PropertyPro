@@ -13,7 +13,9 @@ export type DevRole =
   | 'cam'
   | 'pm_admin'
   | 'founding_admin'
-  | 'site_manager';
+  | 'site_manager'
+  | 'root_sunset'
+  | 'root_sunsetridge';
 
 type AgentLoginPayload = {
   ok: boolean;

@@ -438,7 +438,7 @@ export function NavRail({
 
       <div
         role="list"
-        className="flex-1 overflow-y-auto p-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="flex-1 overflow-y-auto p-2"
       >
         <div className="flex flex-col gap-1">
           {(() => {

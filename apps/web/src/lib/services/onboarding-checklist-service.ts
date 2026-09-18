@@ -21,7 +21,6 @@ export const ADMIN_APARTMENT_ITEMS = [
   'upload_community_rules',
   'add_units',
   'invite_first_member',
-  'review_compliance',
   'post_announcement',
 ] as const;
 
@@ -160,7 +159,10 @@ export async function getChecklistItems(
       completedAt: onboardingChecklistItems.completedAt,
       createdAt: onboardingChecklistItems.createdAt,
     },
-    eq(onboardingChecklistItems.userId, userId),
+    and(
+      eq(onboardingChecklistItems.userId, userId),
+      isNull(onboardingChecklistItems.deletedAt),
+    ),
   ).orderBy(onboardingChecklistItems.createdAt);
 
   return rows;
