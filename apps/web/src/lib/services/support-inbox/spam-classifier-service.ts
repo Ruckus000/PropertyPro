@@ -30,6 +30,22 @@ import { buildText, planSpamScan } from './spam-scan-plan';
 const MAX_CORPUS_ROWS = 500;
 const MAX_SCORE_BATCH = 200;
 
+/**
+ * Ceiling on message bodies read to build the model.
+ *
+ * Separate from `MAX_CORPUS_ROWS` because that caps THREADS and messages per
+ * thread are unbounded — `findThreadId` matches on the RFC `In-Reply-To` /
+ * `References` chain without the `status <> 'spam'` exclusion its
+ * subject-fallback branch carries, so a sender whose thread has been shelved
+ * can keep appending to it indefinitely by replying in-chain. Without a cap
+ * here, one flooded thread grows this read without bound, and `MAX_TEXT_CHARS`
+ * truncates only AFTER the full body has crossed the wire.
+ *
+ * Newest-first so a flooded thread cannot starve the rest of the corpus of its
+ * share of the cap.
+ */
+const MAX_CORPUS_MESSAGES = 5_000;
+
 export interface SpamScanSummary {
   spamCount: number;
   hamCount: number;
@@ -92,7 +108,9 @@ async function collectCorpus(db: Db): Promise<Array<{ text: string; label: SpamL
         inArray(supportInboxMessages.threadId, [...labels.keys()]),
         eq(supportInboxMessages.direction, 'inbound'),
       ),
-    );
+    )
+    .orderBy(desc(supportInboxMessages.id))
+    .limit(MAX_CORPUS_MESSAGES);
 
   const corpus: Array<{ text: string; label: SpamLabel }> = [];
   for (const message of messages) {
