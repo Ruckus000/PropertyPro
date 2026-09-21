@@ -417,6 +417,14 @@ export type SupportInboxMessageRow = {
   normalization_status: 'ok' | 'failed';
   provider_message_id: string | null;
   author_user_id: string | null;
+  /** Provider authentication verdicts, verbatim and unconstrained. */
+  spf_result: string | null;
+  dkim_result: string | null;
+  dmarc_result: string | null;
+  /** Classifier output. NULL means not yet scored, or nothing to score. */
+  spam_score: number | null;
+  spam_verdict: 'spam' | 'ham' | null;
+  classified_at: string | null;
   created_at: string;
 };
 
@@ -434,6 +442,12 @@ export type SupportInboxMessageInsert = Omit<
   | 'normalization_status'
   | 'raw_payload'
   | 'created_at'
+  | 'spf_result'
+  | 'dkim_result'
+  | 'dmarc_result'
+  | 'spam_score'
+  | 'spam_verdict'
+  | 'classified_at'
 > & {
   id?: number;
   received_at?: string;
@@ -446,6 +460,18 @@ export type SupportInboxMessageInsert = Omit<
    */
   raw_payload?: Record<string, unknown> | null;
   created_at?: string;
+  /**
+   * Omitted above and optional here for the same reason as `raw_payload`: the
+   * admin console never writes any of them. The authentication verdicts come
+   * from the provider via the web ingress; the classifier columns are written
+   * only by the inbox-spam-scan cron, over Drizzle rather than this type.
+   */
+  spf_result?: string | null;
+  dkim_result?: string | null;
+  dmarc_result?: string | null;
+  spam_score?: number | null;
+  spam_verdict?: 'spam' | 'ham' | null;
+  classified_at?: string | null;
 };
 
 // ─── Support tickets ───

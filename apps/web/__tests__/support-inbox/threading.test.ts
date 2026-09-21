@@ -25,6 +25,9 @@ function email(overrides: Partial<InboundEmail> = {}): InboundEmail {
     references: [],
     sentAt: new Date('2026-09-05T10:00:00.000Z'),
     hasAttachments: false,
+    spfResult: 'pass',
+    dkimResult: 'pass',
+    dmarcResult: 'pass',
     ...overrides,
   };
 }

@@ -194,6 +194,12 @@ export async function persistInboundEmail(
           htmlBody: email.htmlBody,
           sentAt: email.sentAt,
           hasAttachments: email.hasAttachments,
+          // Recorded, not acted on. Classification happens out of band in the
+          // inbox-spam-scan cron; nothing in this transaction may depend on a
+          // verdict, because a throw here returns 429 and defers real mail.
+          spfResult: email.spfResult,
+          dkimResult: email.dkimResult,
+          dmarcResult: email.dmarcResult,
           normalizationStatus: 'ok',
         })
         .returning({ id: supportInboxMessages.id });

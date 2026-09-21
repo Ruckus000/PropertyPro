@@ -44,6 +44,9 @@ import {
 // Defensive readers
 // ---------------------------------------------------------------------------
 
+/** A verdict is a word ('pass', 'fail', 'softfail', 'none'). This is slack. */
+const MAX_VERDICT_CHARS = 64;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -66,6 +69,21 @@ function readString(value: unknown): string | null {
 }
 
 /** Tolerates a bare scalar where an array was expected — a common provider drift. */
+/**
+ * An authentication verdict from the provider, clamped.
+ *
+ * `readString` already rejects non-strings and empty strings. The clamp is the
+ * addition that matters: this is a remote party's value crossing a trust
+ * boundary into an unconstrained text column, and a verdict is a word. Anything
+ * longer is not a verdict, so keep a prefix — enough to recognise in a
+ * quarantine investigation — rather than storing an unbounded blob or dropping
+ * the evidence entirely.
+ */
+function readVerdict(value: unknown): string | null {
+  const verdict = readString(value);
+  return verdict === null ? null : verdict.slice(0, MAX_VERDICT_CHARS);
+}
+
 function readArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (value === undefined || value === null) return [];
@@ -249,5 +267,8 @@ export function normalizeForwardEmailPayload(payload: unknown): InboundEmail {
     ),
     sentAt: readDate(record.date),
     hasAttachments: detectAttachments(record),
+    spfResult: readVerdict(record.spf),
+    dkimResult: readVerdict(record.dkim),
+    dmarcResult: readVerdict(record.dmarc),
   };
 }

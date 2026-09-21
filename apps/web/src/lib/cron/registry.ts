@@ -39,6 +39,7 @@ export type CronJobSlug =
   | 'coupon-sync-retry'
   | 'expire-demos'
   | 'generate-assessments'
+  | 'inbox-spam-scan'
   | 'insurance-alerts'
   | 'late-fee-processor'
   | 'notification-digests-process'
@@ -113,6 +114,11 @@ export const CRON_JOBS: Record<CronJobSlug, CronJobDefinition> = {
     path: '/api/v1/internal/generate-assessments',
     schedule: '0 5 1 * *',
     maxAgeMinutes: MONTHLY,
+  },
+  'inbox-spam-scan': {
+    path: '/api/v1/internal/inbox-spam-scan',
+    schedule: '*/15 * * * *',
+    maxAgeMinutes: EVERY_15_MIN,
   },
   'insurance-alerts': {
     path: '/api/v1/internal/insurance-alerts',

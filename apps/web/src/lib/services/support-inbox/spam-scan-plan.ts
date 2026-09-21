@@ -1,0 +1,112 @@
+/**
+ * The spam-scan decision, with no database in it.
+ *
+ * Split from `spam-classifier-service.ts` so the rules that matter — the
+ * cold-start floor, the shelving threshold, what counts as classifiable — can
+ * be tested against real inputs. Importing the service pulls in
+ * `@propertypro/db/unsafe`, which throws at module load without a
+ * `DATABASE_URL`; these rules deserve a test that does not need one.
+ */
+import { score as scoreText, type NaiveBayesModel, type SpamLabel } from './naive-bayes';
+
+/**
+ * Below this many labelled documents on EITHER side, the job scores but does
+ * not act.
+ *
+ * This is the single most important number in the file. The inbox's entire
+ * history at the time of writing is six messages, all of them spam and none of
+ * them replied to — a model trained on that has never seen a legitimate email
+ * and classifies everything as spam. Scoring from day one is useful (the score
+ * is visible on the row); acting on it before there is a ham corpus would shelve
+ * the first real customer who ever wrote in.
+ *
+ * Deleting this check is what the revert-check in the test file targets.
+ */
+export const COLD_START_MIN_DOCUMENTS = 50;
+
+/**
+ * P(spam) at or above which a thread is shelved, once the floor above is met.
+ *
+ * Deliberately far above 0.5. A false positive here is a real person's support
+ * request silently leaving the queue, and `nextThreadStatus()` makes `spam`
+ * sticky — the thread never reopens on a reply. A false negative is one click.
+ */
+export const SPAM_SHELF_THRESHOLD = 0.95;
+
+/**
+ * How much of one message is fed to the tokenizer.
+ *
+ * Bounds both the training pass and the per-message scoring pass so a single
+ * pathological message cannot dominate the model or the job's memory. Real
+ * support mail is a few hundred to a few thousand characters; the six spam
+ * samples run 663-1,945.
+ */
+const MAX_TEXT_CHARS = 16_000;
+
+
+/** Subject and body are both optional; scoring text is whatever exists. */
+export function buildText(subject: string | null, textBody: string | null): string {
+  return `${subject ?? ''}\n${textBody ?? ''}`.trim().slice(0, MAX_TEXT_CHARS);
+}
+
+export interface ScannableMessage {
+  id: number;
+  threadId: number;
+  subject: string | null;
+  textBody: string | null;
+}
+
+export interface ScoredMessage {
+  id: number;
+  threadId: number;
+  score: number;
+  verdict: SpamLabel;
+}
+
+export interface SpamScanPlan {
+  /** True when the model exists but the cold-start floor is not yet met. */
+  advisoryOnly: boolean;
+  /** One entry per message that had something to classify. */
+  scores: ScoredMessage[];
+  /** Threads to shelve. Empty whenever `advisoryOnly` is true. */
+  shelfThreadIds: number[];
+}
+
+/**
+ * Decide what the scan should do. Pure — no database, no clock.
+ *
+ * Split out from `runInboxSpamScan` so the rules that matter can be tested
+ * against real inputs instead of a mocked query builder. Everything below this
+ * function is transport.
+ */
+export function planSpamScan(input: {
+  model: NaiveBayesModel;
+  spamCount: number;
+  hamCount: number;
+  messages: readonly ScannableMessage[];
+}): SpamScanPlan {
+  const advisoryOnly =
+    input.spamCount < COLD_START_MIN_DOCUMENTS || input.hamCount < COLD_START_MIN_DOCUMENTS;
+
+  const scores: ScoredMessage[] = [];
+  const shelfThreadIds = new Set<number>();
+
+  for (const message of input.messages) {
+    const text = buildText(message.subject, message.textBody);
+    // Nothing to classify. Emitting no score leaves spam_score NULL, which
+    // keeps "not scored" and "scored 0.5" distinguishable and lets the row be
+    // picked up again for free if a body ever arrives.
+    if (text.length === 0) continue;
+
+    const score = scoreText(input.model, text);
+    const isSpam = score >= SPAM_SHELF_THRESHOLD;
+    scores.push({ id: message.id, threadId: message.threadId, score, verdict: isSpam ? 'spam' : 'ham' });
+
+    // The cold-start floor. Removing this line is what the revert-check in
+    // spam-classifier-service.test.ts targets: without it, a model trained on
+    // an all-spam history shelves the first real customer who ever writes in.
+    if (!advisoryOnly && isSpam) shelfThreadIds.add(message.threadId);
+  }
+
+  return { advisoryOnly, scores, shelfThreadIds: [...shelfThreadIds] };
+}

@@ -55,6 +55,16 @@ export interface InboxMessage {
   occurredAt: string;
   /** True for a quarantined payload the normalizer could not read. */
   unreadable: boolean;
+  /**
+   * P(spam) from the inbox-spam-scan cron, or null when the message has not
+   * been scored — which includes a message with no subject and no text body,
+   * where abstaining is the honest answer.
+   *
+   * Advisory. Until the classifier's cold-start floor is met it is the ONLY
+   * output of the filter: the job scores but does not shelve, so this number is
+   * what an operator acts on.
+   */
+  spamScore: number | null;
 }
 
 export interface InboxStats {
@@ -114,6 +124,7 @@ function mapMessage(row: SupportInboxMessageRow): InboxMessage {
     // is ours. Prefer the trustworthy one for ordering and display.
     occurredAt: row.received_at,
     unreadable: row.normalization_status === 'failed',
+    spamScore: row.spam_score,
   };
 }
 

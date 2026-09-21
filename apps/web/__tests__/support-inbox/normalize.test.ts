@@ -200,3 +200,70 @@ describe('mailparser falsy fields', () => {
   });
 });
 
+describe('authentication verdicts', () => {
+  it('reads spf/dkim/dmarc from the reference payload', () => {
+    const email = normalizeForwardEmailPayload(forwardEmailFixture);
+
+    expect(email.spfResult).toBe('pass');
+    expect(email.dkimResult).toBe('pass');
+    expect(email.dmarcResult).toBe('pass');
+  });
+
+  it('returns null when the provider omits them', () => {
+    // `null` is not "none" — a provider that stops sending the field must stay
+    // distinguishable from one reporting an absent DMARC record, or a future
+    // reader cannot tell a downgrade from a verdict.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+    });
+
+    expect(email.spfResult).toBeNull();
+    expect(email.dkimResult).toBeNull();
+    expect(email.dmarcResult).toBeNull();
+  });
+
+  it('stores an unfamiliar verdict verbatim rather than rejecting it', () => {
+    // The column has no CHECK on purpose: rejecting a value here would fail the
+    // INSERT, and the route answers 429 on a failed write, which parks a real
+    // sender's mail for 24-72 hours. An odd verdict is not worth that.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      spf: 'temperror',
+      dkim: 'policy.syntax',
+      dmarc: 'bestguesspass',
+    });
+
+    expect(email.spfResult).toBe('temperror');
+    expect(email.dkimResult).toBe('policy.syntax');
+    expect(email.dmarcResult).toBe('bestguesspass');
+  });
+
+  it('clamps an absurdly long verdict instead of storing it whole', () => {
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      spf: 'x'.repeat(5_000),
+    });
+
+    expect(email.spfResult).toHaveLength(64);
+  });
+
+  it('does not stringify a boolean verdict', () => {
+    // Same defect class the html=false case documents above: mailparser-shaped
+    // payloads use `false` for "absent", and String(false) would write the word
+    // "false" into the column as though it were a verdict.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      spf: false,
+      dkim: false,
+      dmarc: false,
+    });
+
+    expect(email.spfResult).toBeNull();
+    expect(email.dkimResult).toBeNull();
+    expect(email.dmarcResult).toBeNull();
+  });
+});

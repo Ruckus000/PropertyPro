@@ -48,6 +48,22 @@ export interface InboundEmail {
    * a message that looks complete.
    */
   hasAttachments: boolean;
+  /**
+   * The provider's SPF / DKIM / DMARC verdicts, verbatim.
+   *
+   * Read but never interpreted here: the vocabulary comes from Forward Email's
+   * source rather than a spec, so the normalizer clamps the length and stores
+   * whatever string arrived. `null` means the payload did not carry it, which
+   * is different from a verdict of "none" and must stay distinguishable.
+   *
+   * These are weak signals for THIS inbox — every spam message it has received
+   * so far came from an authenticated Gmail account and passed all three — and
+   * are kept because they cost nothing and because they are decisive against
+   * spoofed senders, which is simply a class we have not yet seen.
+   */
+  spfResult: string | null;
+  dkimResult: string | null;
+  dmarcResult: string | null;
 }
 
 /**

@@ -26,6 +26,7 @@ import {
   bigserial,
   boolean,
   check,
+  doublePrecision,
   index,
   jsonb,
   pgTable,
@@ -136,6 +137,40 @@ export const supportInboxMessages = pgTable(
     providerMessageId: text('provider_message_id'),
     /** The platform admin who wrote a note or sent a reply. NULL on inbound. */
     authorUserId: uuid('author_user_id'),
+    /**
+     * Inbound authentication verdicts, exactly as the provider reported them.
+     *
+     * Forward Email includes `spf` / `dkim` / `dmarc` in every webhook payload
+     * and until now nothing read them. They are stored verbatim and NOT
+     * constrained: the payload shape is read from their source rather than a
+     * spec, so a CHECK here would reject an unfamiliar verdict, fail the
+     * INSERT, and — under the route's deferral invariant — send the sender's
+     * mail back into a 24-72 hour retry queue. Every other CHECK on this table
+     * constrains a value WE produce; these are values THEY produce.
+     *
+     * Note these do not discriminate the spam this inbox actually receives,
+     * which arrives from authenticated Gmail accounts and passes all three.
+     * They are kept because they are free and because they are decisive
+     * against the spoofed/botnet class, which has simply not arrived yet.
+     */
+    spfResult: text('spf_result'),
+    dkimResult: text('dkim_result'),
+    dmarcResult: text('dmarc_result'),
+    /**
+     * Spam classifier output, written out of band by the inbox-spam-scan cron.
+     *
+     * NULL means "not yet scored" — which is also the resting state for a
+     * message with no subject and no text body, because there is nothing to
+     * classify and guessing is worse than abstaining. These three columns ARE
+     * the audit record for an automated shelving: this table has no
+     * `community_id` for `compliance_audit_log`, and a cron has no
+     * `admin_user_id` for `platform_admin_audit_log`, so the row records its
+     * own decision the same way an operator note does.
+     */
+    spamScore: doublePrecision('spam_score'),
+    /** 'spam' | 'ham' — the verdict at `classified_at`, for the score shown. */
+    spamVerdict: text('spam_verdict'),
+    classifiedAt: timestamp('classified_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
