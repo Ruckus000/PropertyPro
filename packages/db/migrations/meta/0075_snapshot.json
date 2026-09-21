@@ -1,5 +1,5 @@
 {
-  "id": "5e7ac3c2-0fe2-470d-a988-4a2aa71c5bf4",
+  "id": "0e2cc7c2-80af-4800-9c2b-32f955ec88fc",
   "prevId": "0567cee2-672e-4d0a-87d1-2898b1ad12d9",
   "version": "7",
   "dialect": "postgresql",
@@ -1248,12 +1248,6 @@
         "spam_score": {
           "name": "spam_score",
           "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "spam_verdict": {
-          "name": "spam_verdict",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

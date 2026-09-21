@@ -1,9 +1,9 @@
 /**
  * POST /api/v1/internal/inbox-spam-scan
  *
- * Every 15 minutes: retrain the support-inbox spam classifier from the
- * operator's own triage labels, score unscored inbound messages, and shelve the
- * ones the model is confident about.
+ * Hourly: rebuild the support-inbox spam classifier from the operator's own
+ * triage labels, re-score the inbound messages, and shelve the ones the model
+ * is confident about.
  *
  * ## Why this is a cron and not part of ingest
  *
@@ -25,10 +25,10 @@
  * There is no audit-log write, deliberately: `support_inbox_*` has no
  * `community_id` for `compliance_audit_log`, and a cron has no human
  * `admin_user_id` for `platform_admin_audit_log`. The `spam_score` /
- * `spam_verdict` / `classified_at` columns on the message row ARE the record.
+ * `spam_score` / `classified_at` columns on the message row ARE the record.
  *
- * Schedule: every 15 minutes (vercel.json). Written out rather than as a
- * crontab expression because the slash-star form would close this comment.
+ * Schedule: hourly, on the hour (vercel.json). At one or two messages a day,
+ * a quarter-hourly job was 96 runs to score nothing.
  */
 import { runRoute } from '@propertypro/api-contract';
 

@@ -24,9 +24,9 @@
 import { defineRoute, z } from '@propertypro/api-contract';
 
 export const inboxSpamScanResponseSchema = z.object({
-  trained: z.boolean(),
   spamCount: z.number().int().nonnegative(),
   hamCount: z.number().int().nonnegative(),
+  /** Messages whose score CHANGED this run; every message is re-scored. */
   scored: z.number().int().nonnegative(),
   shelved: z.number().int().nonnegative(),
   /**

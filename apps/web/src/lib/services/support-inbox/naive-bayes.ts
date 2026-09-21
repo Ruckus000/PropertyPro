@@ -54,7 +54,7 @@ export function tokenize(text: string): string[] {
     .filter((token) => token.length >= MIN_TOKEN && token.length <= MAX_TOKEN);
 }
 
-export function emptyModel(): NaiveBayesModel {
+function emptyModel(): NaiveBayesModel {
   return { tokens: {}, totals: { spam: 0, ham: 0 }, documents: { spam: 0, ham: 0 } };
 }
 
@@ -82,7 +82,8 @@ export function train(documents: ReadonlyArray<{ text: string; label: SpamLabel 
  * Returns exactly 0.5 — "no opinion" — when either class is unseen. That is the
  * honest answer for an untrained model and it keeps the caller's threshold from
  * firing on a model that has only ever seen spam, which is this inbox's literal
- * starting condition.
+ * starting condition. Callers must not persist a 0.5 as though it were a
+ * finding; `planSpamScan` declines to score at all in that state.
  */
 export function score(model: NaiveBayesModel, text: string): number {
   const { spam: spamDocs, ham: hamDocs } = model.documents;

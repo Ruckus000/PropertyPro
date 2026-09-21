@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { emptyModel, score, tokenize, train } from '@/lib/services/support-inbox/naive-bayes';
+import { score, tokenize, train } from '@/lib/services/support-inbox/naive-bayes';
 import {
   COLD_START_MIN_DOCUMENTS,
   SPAM_SHELF_THRESHOLD,
@@ -38,9 +38,15 @@ function corpus(spam: number, ham: number) {
   return documents;
 }
 
-function message(id: number, text: string): ScannableMessage {
+function message(id: number, text: string, currentScore: number | null = null): ScannableMessage {
   const [subject, ...body] = text.split('\n');
-  return { id, threadId: id * 10, subject: subject ?? null, textBody: body.join('\n') || null };
+  return {
+    id,
+    threadId: id * 10,
+    subject: subject ?? null,
+    textBody: body.join('\n') || null,
+    currentScore,
+  };
 }
 
 describe('tokenize', () => {
@@ -64,7 +70,7 @@ describe('score', () => {
   });
 
   it('has no opinion on an untrained model or empty text', () => {
-    expect(score(emptyModel(), 'anything')).toBe(0.5);
+    expect(score(train([]), 'anything')).toBe(0.5);
     expect(score(train(corpus(4, 4)), '')).toBe(0.5);
   });
 
@@ -149,7 +155,7 @@ describe('planSpamScan — scoring rules', () => {
     const plan = planSpamScan({
       model,
       ...atFloor,
-      messages: [{ id: 1, threadId: 10, subject: null, textBody: null }],
+      messages: [{ id: 1, threadId: 10, subject: null, textBody: null, currentScore: null }],
     });
 
     expect(plan.scores).toEqual([]);
@@ -160,16 +166,23 @@ describe('planSpamScan — scoring rules', () => {
     const plan = planSpamScan({
       model,
       ...atFloor,
-      messages: [{ id: 1, threadId: 10, subject: SPAM_SAMPLES[0]!.split('\n')[0]!, textBody: null }],
+      messages: [
+        {
+          id: 1,
+          threadId: 10,
+          subject: SPAM_SAMPLES[0]!.split('\n')[0]!,
+          textBody: null,
+          currentScore: null,
+        },
+      ],
     });
 
     expect(plan.scores).toHaveLength(1);
   });
 
-  it('records a verdict alongside every score', () => {
+  it('scores ham below the shelving threshold', () => {
     const plan = planSpamScan({ model, ...atFloor, messages: [message(1, HAM_SAMPLES[1]!)] });
 
-    expect(plan.scores[0]!.verdict).toBe('ham');
     expect(plan.scores[0]!.score).toBeLessThan(SPAM_SHELF_THRESHOLD);
   });
 
@@ -178,11 +191,89 @@ describe('planSpamScan — scoring rules', () => {
       model,
       ...atFloor,
       messages: [
-        { id: 1, threadId: 99, subject: SPAM_SAMPLES[0]!, textBody: SPAM_SAMPLES[0]! },
-        { id: 2, threadId: 99, subject: SPAM_SAMPLES[1]!, textBody: SPAM_SAMPLES[1]! },
+        { id: 1, threadId: 99, subject: SPAM_SAMPLES[0]!, textBody: SPAM_SAMPLES[0]!, currentScore: null },
+        { id: 2, threadId: 99, subject: SPAM_SAMPLES[1]!, textBody: SPAM_SAMPLES[1]!, currentScore: null },
       ],
     });
 
     expect(plan.shelfThreadIds).toEqual([99]);
+  });
+});
+
+describe('planSpamScan — the one-class inbox', () => {
+  // The state production is in right now: six spam threads, zero ham.
+  const oneClass = train(corpus(6, 0));
+  const messages = [message(1, SPAM_SAMPLES[0]!), message(2, HAM_SAMPLES[0]!)];
+
+  it('writes NOTHING while the model has only ever seen one class', () => {
+    // The bug this prevents: `score()` returns 0.5 for every input in this
+    // state, and the first version of the job persisted that 0.5 and then
+    // excluded scored rows from future runs — permanently blinding the
+    // classifier to the entire corpus it was built to learn from.
+    const plan = planSpamScan({ model: oneClass, spamCount: 6, hamCount: 0, messages });
+
+    expect(plan.scores).toEqual([]);
+    expect(plan.shelfThreadIds).toEqual([]);
+    expect(plan.advisoryOnly).toBe(true);
+  });
+
+  it('starts scoring as soon as both classes exist', () => {
+    const plan = planSpamScan({
+      model: train(corpus(6, 6)),
+      spamCount: 6,
+      hamCount: 6,
+      messages,
+    });
+
+    expect(plan.scores.length).toBeGreaterThan(0);
+  });
+});
+
+describe('planSpamScan — re-scoring', () => {
+  const model = train(corpus(200, 200));
+  const atFloor = { spamCount: COLD_START_MIN_DOCUMENTS, hamCount: COLD_START_MIN_DOCUMENTS };
+
+  it('re-scores a message that already has a score', () => {
+    // There is no "already scored" state. A row scored under an older, worse
+    // model is reconsidered on the next run rather than frozen forever.
+    const plan = planSpamScan({
+      model,
+      ...atFloor,
+      messages: [message(1, SPAM_SAMPLES[0]!, 0.5)],
+    });
+
+    expect(plan.scores).toHaveLength(1);
+    expect(plan.scores[0]!.score).toBeGreaterThan(0.9);
+  });
+
+  it('writes nothing when the score is unchanged', () => {
+    // Steady state: every message is re-scored every run, and none are written.
+    const stored = planSpamScan({ model, ...atFloor, messages: [message(1, SPAM_SAMPLES[0]!)] })
+      .scores[0]!.score;
+
+    const plan = planSpamScan({
+      model,
+      ...atFloor,
+      messages: [message(1, SPAM_SAMPLES[0]!, stored)],
+    });
+
+    expect(plan.scores).toEqual([]);
+  });
+
+  it('still shelves a thread whose score did not change', () => {
+    // The shelving decision must not be coupled to the WRITE filter: a spam
+    // thread an operator un-shelved by hand would otherwise never be caught
+    // again, because its score is identical and so nothing is written.
+    const stored = planSpamScan({ model, ...atFloor, messages: [message(1, SPAM_SAMPLES[0]!)] })
+      .scores[0]!.score;
+
+    const plan = planSpamScan({
+      model,
+      ...atFloor,
+      messages: [message(1, SPAM_SAMPLES[0]!, stored)],
+    });
+
+    expect(plan.scores).toEqual([]);
+    expect(plan.shelfThreadIds).toEqual([10]);
   });
 });

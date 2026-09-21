@@ -7,7 +7,7 @@
  * `@propertypro/db/unsafe`, which throws at module load without a
  * `DATABASE_URL`; these rules deserve a test that does not need one.
  */
-import { score as scoreText, type NaiveBayesModel, type SpamLabel } from './naive-bayes';
+import { score as scoreText, type NaiveBayesModel } from './naive-bayes';
 
 /**
  * Below this many labelled documents on EITHER side, the job scores but does
@@ -43,6 +43,9 @@ export const SPAM_SHELF_THRESHOLD = 0.95;
  */
 const MAX_TEXT_CHARS = 16_000;
 
+/** Float noise floor — a re-score that differs only in the last bits is not a change. */
+const EPSILON = 1e-9;
+
 
 /** Subject and body are both optional; scoring text is whatever exists. */
 export function buildText(subject: string | null, textBody: string | null): string {
@@ -54,19 +57,20 @@ export interface ScannableMessage {
   threadId: number;
   subject: string | null;
   textBody: string | null;
+  /** The score already stored on the row, so an unchanged one is not rewritten. */
+  currentScore: number | null;
 }
 
 export interface ScoredMessage {
   id: number;
   threadId: number;
   score: number;
-  verdict: SpamLabel;
 }
 
 export interface SpamScanPlan {
   /** True when the model exists but the cold-start floor is not yet met. */
   advisoryOnly: boolean;
-  /** One entry per message that had something to classify. */
+/** One entry per message whose score CHANGED. Unchanged rows are left alone. */
   scores: ScoredMessage[];
   /** Threads to shelve. Empty whenever `advisoryOnly` is true. */
   shelfThreadIds: number[];
@@ -91,21 +95,51 @@ export function planSpamScan(input: {
   const scores: ScoredMessage[] = [];
   const shelfThreadIds = new Set<number>();
 
+  /*
+   * A model that has seen only one class has no opinion: `score()` returns
+   * exactly 0.5 for every input. Writing that 0.5 to the rows would be actively
+   * harmful, not merely useless — see the re-scoring note below for why a
+   * persisted non-finding used to be permanent.
+   *
+   * This inbox's entire history is one class (six spam, zero ham), so this is
+   * the branch that runs today and will keep running until somebody replies to
+   * a real email.
+   */
+  if (input.model.documents.spam === 0 || input.model.documents.ham === 0) {
+    return { advisoryOnly, scores, shelfThreadIds: [] };
+  }
+
   for (const message of input.messages) {
     const text = buildText(message.subject, message.textBody);
-    // Nothing to classify. Emitting no score leaves spam_score NULL, which
-    // keeps "not scored" and "scored 0.5" distinguishable and lets the row be
-    // picked up again for free if a body ever arrives.
+    // Nothing to classify. Leaving spam_score NULL keeps "no body" and "scored"
+    // distinguishable, and the row is picked up for free if a body arrives.
     if (text.length === 0) continue;
 
     const score = scoreText(input.model, text);
-    const isSpam = score >= SPAM_SHELF_THRESHOLD;
-    scores.push({ id: message.id, threadId: message.threadId, score, verdict: isSpam ? 'spam' : 'ham' });
+
+    /*
+     * EVERY message is re-scored on every run, not just the ones with no score
+     * yet, and only a CHANGED score is written back.
+     *
+     * The first version of this job scored only rows where `spam_score IS
+     * NULL`. Combined with the cold-start branch above writing 0.5 to
+     * everything, that meant the whole existing corpus got stamped with a
+     * meaningless 0.5 on the first run and was then excluded from scoring
+     * forever — the filter's opening move was to blind itself to its own
+     * history, permanently, with no way back short of a manual UPDATE.
+     *
+     * Re-scoring removes the failure mode rather than guarding it: there is no
+     * "already scored" state to get wrong, and every score always reflects the
+     * current model. The write filter keeps the steady-state cost at zero.
+     */
+    if (message.currentScore === null || Math.abs(score - message.currentScore) > EPSILON) {
+      scores.push({ id: message.id, threadId: message.threadId, score });
+    }
 
     // The cold-start floor. Removing this line is what the revert-check in
-    // spam-classifier-service.test.ts targets: without it, a model trained on
-    // an all-spam history shelves the first real customer who ever writes in.
-    if (!advisoryOnly && isSpam) shelfThreadIds.add(message.threadId);
+    // spam-classifier.test.ts targets: without it, a model trained on an
+    // all-spam history shelves the first real customer who ever writes in.
+    if (!advisoryOnly && score >= SPAM_SHELF_THRESHOLD) shelfThreadIds.add(message.threadId);
   }
 
   return { advisoryOnly, scores, shelfThreadIds: [...shelfThreadIds] };

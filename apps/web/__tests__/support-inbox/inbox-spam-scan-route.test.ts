@@ -16,7 +16,6 @@ const { GET, POST } = await import('@/app/api/v1/internal/inbox-spam-scan/route'
 const SECRET = 'cron-secret-value';
 
 const SUMMARY = {
-  trained: true,
   spamCount: 6,
   hamCount: 0,
   scored: 6,

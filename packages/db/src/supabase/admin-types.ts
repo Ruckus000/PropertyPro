@@ -423,7 +423,6 @@ export type SupportInboxMessageRow = {
   dmarc_result: string | null;
   /** Classifier output. NULL means not yet scored, or nothing to score. */
   spam_score: number | null;
-  spam_verdict: 'spam' | 'ham' | null;
   classified_at: string | null;
   created_at: string;
 };
@@ -446,7 +445,6 @@ export type SupportInboxMessageInsert = Omit<
   | 'dkim_result'
   | 'dmarc_result'
   | 'spam_score'
-  | 'spam_verdict'
   | 'classified_at'
 > & {
   id?: number;
@@ -470,7 +468,6 @@ export type SupportInboxMessageInsert = Omit<
   dkim_result?: string | null;
   dmarc_result?: string | null;
   spam_score?: number | null;
-  spam_verdict?: 'spam' | 'ham' | null;
   classified_at?: string | null;
 };
 

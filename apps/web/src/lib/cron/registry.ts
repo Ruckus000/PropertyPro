@@ -117,8 +117,8 @@ export const CRON_JOBS: Record<CronJobSlug, CronJobDefinition> = {
   },
   'inbox-spam-scan': {
     path: '/api/v1/internal/inbox-spam-scan',
-    schedule: '*/15 * * * *',
-    maxAgeMinutes: EVERY_15_MIN,
+    schedule: '0 * * * *',
+    maxAgeMinutes: HOURLY,
   },
   'insurance-alerts': {
     path: '/api/v1/internal/insurance-alerts',

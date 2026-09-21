@@ -159,6 +159,11 @@ export const supportInboxMessages = pgTable(
     /**
      * Spam classifier output, written out of band by the inbox-spam-scan cron.
      *
+     * The score alone, deliberately — there is no stored verdict. A verdict is
+     * `spam_score >= SPAM_SHELF_THRESHOLD`, so storing it beside its own input
+     * means the two can disagree the moment that constant moves, and nothing
+     * ever read it.
+     *
      * NULL means "not yet scored" — which is also the resting state for a
      * message with no subject and no text body, because there is nothing to
      * classify and guessing is worse than abstaining. These three columns ARE
@@ -168,8 +173,6 @@ export const supportInboxMessages = pgTable(
      * own decision the same way an operator note does.
      */
     spamScore: doublePrecision('spam_score'),
-    /** 'spam' | 'ham' — the verdict at `classified_at`, for the score shown. */
-    spamVerdict: text('spam_verdict'),
     classifiedAt: timestamp('classified_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

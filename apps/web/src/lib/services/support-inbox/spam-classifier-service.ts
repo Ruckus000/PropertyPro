@@ -15,7 +15,7 @@
 // AUTHZ: platform support inbox — tables have no community_id; no tenant data read.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { supportInboxMessages, supportInboxThreads } from '@propertypro/db';
-import { and, desc, eq, inArray, isNull, ne } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, ne } from '@propertypro/db/filters';
 
 import { train, type NaiveBayesModel, type SpamLabel } from './naive-bayes';
 import { buildText, planSpamScan } from './spam-scan-plan';
@@ -31,7 +31,6 @@ const MAX_CORPUS_ROWS = 500;
 const MAX_SCORE_BATCH = 200;
 
 export interface SpamScanSummary {
-  trained: boolean;
   spamCount: number;
   hamCount: number;
   scored: number;
@@ -137,31 +136,31 @@ export async function runInboxSpamScan(): Promise<SpamScanSummary> {
   const db = createUnscopedClient();
   const { model, spam, ham } = await buildModel(db);
 
-  const unscored = await db
+  const candidates = await db
     .select({
       id: supportInboxMessages.id,
       threadId: supportInboxMessages.threadId,
       subject: supportInboxMessages.subject,
       textBody: supportInboxMessages.textBody,
+      currentScore: supportInboxMessages.spamScore,
     })
     .from(supportInboxMessages)
     .where(
       and(
         eq(supportInboxMessages.kind, 'email'),
         eq(supportInboxMessages.direction, 'inbound'),
-        isNull(supportInboxMessages.spamScore),
       ),
     )
     .orderBy(desc(supportInboxMessages.id))
     .limit(MAX_SCORE_BATCH);
 
-  const plan = planSpamScan({ model, spamCount: spam, hamCount: ham, messages: unscored });
+  const plan = planSpamScan({ model, spamCount: spam, hamCount: ham, messages: candidates });
   const classifiedAt = new Date();
 
   for (const scored of plan.scores) {
     await db
       .update(supportInboxMessages)
-      .set({ spamScore: scored.score, spamVerdict: scored.verdict, classifiedAt })
+      .set({ spamScore: scored.score, classifiedAt })
       .where(eq(supportInboxMessages.id, scored.id));
   }
 
@@ -184,7 +183,6 @@ export async function runInboxSpamScan(): Promise<SpamScanSummary> {
   }
 
   return {
-    trained: true,
     spamCount: spam,
     hamCount: ham,
     scored: plan.scores.length,
