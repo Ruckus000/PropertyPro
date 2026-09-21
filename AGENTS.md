@@ -119,3 +119,25 @@ The admin app is a separate Next.js application for platform administrators (PM 
 **DB access:** The admin app uses Supabase admin client (`createAdminClient()`) for direct queries — it is NOT in the scoped client allowlist and does NOT use `createScopedClient()`.
 
 **Account lifecycle tables** (`access_plans`, `account_deletion_requests`): Platform-level, NOT tenant-scoped. Listed in `RLS_GLOBAL_TABLE_EXCLUSIONS`, not `RLS_TENANT_TABLES`. Service-role only access (REVOKE from anon/authenticated).
+
+---
+
+## 9. Agent Live-Test Sandbox
+
+For authenticated UI verification, use `pnpm agent:live:web` (or
+`pnpm agent:live:admin`) and the login URL it prints. It starts an isolated
+Supabase Auth + Storage + Postgres stack for the current worktree and never
+reads `.env.local`.
+
+- Never run bare `pnpm seed:demo`, `pnpm dev`, or `/dev/agent-login` for agent
+  live testing from an environment that may inherit `.env.local` production
+  values. Use the `agent:*` commands.
+- For UI or authenticated behavior, inspect the changed user journey in that
+  sandbox. For non-UI work, run the smallest relevant automated check.
+- Use `pnpm agent:env:reset` before a test that needs a clean baseline. It
+  resets only the current worktree's local sandbox.
+- Use `pnpm agent:fixture:user` and `pnpm agent:fixture:community` only for
+  `@agent.local` identities and `agent-` community slugs. These commands are
+  local-only; do not add a remote fixture endpoint or platform-admin fixture.
+- Do not read `.env.local`, extract credentials, or point a live-test command
+  at a shared/remote Supabase project. The loopback guard is a security boundary.

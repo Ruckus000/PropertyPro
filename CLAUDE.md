@@ -157,6 +157,12 @@ pnpm build                      # Production build
 pnpm test                       # Unit tests
 pnpm seed:demo                  # Seed demo data
 pnpm seed:verify                # Verify seed integrity
+pnpm agent:env:prepare          # Safe per-worktree Supabase/Auth/Storage sandbox
+pnpm agent:live:web             # Start web against that sandbox
+pnpm agent:live:admin           # Start admin against that sandbox
+pnpm agent:env:reset            # Reset and reseed this worktree's sandbox
+pnpm agent:fixture:user -- ...  # Create a local @agent.local membership
+pnpm agent:fixture:community -- ... # Create a local agent-* community
 pnpm perf:check                 # Performance budget check
 pnpm --filter @propertypro/db db:migrate  # Run migrations
 

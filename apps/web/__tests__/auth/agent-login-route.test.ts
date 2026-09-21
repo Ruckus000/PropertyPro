@@ -135,6 +135,48 @@ describe('dev agent-login route', () => {
     expect(body.hint).toContain('/pm/dashboard/communities');
   });
 
+  it('logs in an @agent.local fixture and uses its membership role', async () => {
+    verifyOtpMock.mockResolvedValueOnce({
+      data: { user: { id: 'fixture-user-1', email: 'resident@agent.local' } },
+      error: null,
+    });
+    findUserCommunitiesUnscopedMock.mockResolvedValueOnce([
+      {
+        communityId: 7,
+        communityName: 'Agent Review',
+        slug: 'agent-review',
+        communityType: 'hoa_720',
+        role: 'resident',
+      },
+    ]);
+
+    const response = await GET(
+      makeRequest('http://localhost:3000/dev/agent-login?email=resident@agent.local&communityId=7'),
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).portal).toBe('/mobile?communityId=7');
+  });
+
+  it.each([
+    '/dev/agent-login?email=resident@example.com',
+    '/dev/agent-login?as=owner&email=resident@agent.local',
+    '/dev/agent-login',
+  ])('rejects invalid fixture selector %s before minting a session', async (path) => {
+    const response = await GET(makeRequest(`http://localhost:3000${path}`));
+
+    expect(response.status).toBe(400);
+    expect(generateLinkMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a communityId that is not one of the fixture user memberships', async () => {
+    const response = await GET(
+      makeRequest('http://localhost:3000/dev/agent-login?email=resident@agent.local&communityId=999'),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   /**
    * The gate itself, at the route level. `packages/shared`'s `loopback.test.ts`
    * proves the PREDICATE; nothing proved this ROUTE consults it until now —

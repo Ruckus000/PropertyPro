@@ -2,6 +2,7 @@
  * Agent-friendly dev login — development only.
  *
  * Usage: GET /dev/agent-login?as=owner
+ *        GET /dev/agent-login?email=fixture@agent.local
  *
  * Authenticates via admin-generated magic link verified server-side.
  * No env vars or passwords needed by the caller — the agent only provides
@@ -59,6 +60,12 @@ const COMMUNITY_ROOT_PERSONAS = new Set([
   'root_sunsetridge',
 ]);
 
+function fixtureEmail(raw: string | null): string | null {
+  if (!raw) return null;
+  const email = raw.trim().toLowerCase();
+  return /^[^\s@]+@agent\.local$/.test(email) ? email : null;
+}
+
 export async function GET(request: Request) {
   if (process.env.NODE_ENV !== 'development') {
     return new NextResponse('Not Found', { status: 404 });
@@ -77,16 +84,30 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const role = url.searchParams.get('as');
+  const requestedEmail = url.searchParams.get('email');
   const validRoles = Object.keys(ROLE_EMAIL_MAP).join(', ');
 
-  if (!role || !(role in ROLE_EMAIL_MAP)) {
+  if ((role && requestedEmail) || (!role && !requestedEmail)) {
+    return NextResponse.json(
+      { error: `Provide exactly one of "as" (${validRoles}) or a fixture "email".` },
+      { status: 400 },
+    );
+  }
+
+  if (role && !(role in ROLE_EMAIL_MAP)) {
     return NextResponse.json(
       { error: `Missing or invalid "as" parameter. Valid roles: ${validRoles}` },
       { status: 400 },
     );
   }
 
-  const email = ROLE_EMAIL_MAP[role]!;
+  const email = role ? ROLE_EMAIL_MAP[role]! : fixtureEmail(requestedEmail);
+  if (!email) {
+    return NextResponse.json(
+      { error: 'Fixture email must use the @agent.local namespace.' },
+      { status: 400 },
+    );
+  }
 
   // Step 1: Generate a magic link via admin client (service role, server-side only)
   const admin = createAdminClient();
@@ -171,22 +192,33 @@ export async function GET(request: Request) {
 
   // Allow explicit community selection via ?communityId=X
   const rawCommunityId = url.searchParams.get('communityId');
-  const requestedCommunityId = rawCommunityId ? Number(rawCommunityId) : null;
+  const parsedCommunityId = rawCommunityId === null ? null : Number(rawCommunityId);
+  if (parsedCommunityId !== null && (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0)) {
+    return NextResponse.json(
+      { error: 'communityId must be a positive integer.' },
+      { status: 400 },
+    );
+  }
 
-  const primary = (
-    requestedCommunityId
-      ? communities.find((c) => c.communityId === requestedCommunityId)
-      : undefined
-  ) ?? communities[0] ?? null;
+  const requestedCommunity = parsedCommunityId === null
+    ? undefined
+    : communities.find((c) => c.communityId === parsedCommunityId);
+  if (parsedCommunityId !== null && !requestedCommunity) {
+    return NextResponse.json(
+      { error: 'Requested community is not a membership of this user.' },
+      { status: 400 },
+    );
+  }
+  const primary = requestedCommunity ?? communities[0] ?? null;
 
-  const isAdmin = ADMIN_ROLES.has(role);
+  const isAdmin = role ? ADMIN_ROLES.has(role) : primary?.role === 'property_manager';
   // PM-tier users (property_manager / root_manager) land on the PM portfolio
   // dashboard. The `?as=pm_admin` alias resolves to a property_manager demo row.
   // legacy-roles:exempt — dev-login alias, 404 in production.
   // The single-community root personas stay on the community dashboard — a
   // portfolio view is meaningless for them, and the root-exclusive surfaces
   // they exist to exercise (billing, deletion, role assignment) all live there.
-  const isCommunityRootPersona = COMMUNITY_ROOT_PERSONAS.has(role);
+  const isCommunityRootPersona = role ? COMMUNITY_ROOT_PERSONAS.has(role) : primary?.role === 'root_manager';
   const isPmTier =
     !isCommunityRootPersona
     && (
@@ -200,6 +232,7 @@ export async function GET(request: Request) {
   if (primary && !isPmTier) {
     portal += `?communityId=${primary.communityId}`;
   }
+  const reportedRole = role ?? primary?.role ?? 'fixture';
 
   // Step 4: Respond based on Accept header
   const accept = request.headers.get('accept') ?? '';
@@ -211,7 +244,7 @@ export async function GET(request: Request) {
       user: {
         id: authData.user.id,
         email: authData.user.email,
-        role,
+        role: reportedRole,
       },
       community: primary
         ? {
@@ -230,7 +263,7 @@ export async function GET(request: Request) {
         role: c.role,
       })),
       portal,
-      hint: `Session cookies are set. Navigate to ${portal} to use the app as ${role}.`,
+      hint: `Session cookies are set. Navigate to ${portal} to use the app as ${reportedRole}.`,
     });
 
     response.headers.set('Cache-Control', 'no-store');
