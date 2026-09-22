@@ -556,6 +556,12 @@ but now it *looks* configured, which is worse than the honest bounce.
    DNS of its own is unsupportable — but it means the next digest (~2026-09-27, the
    first window fully under reject) deserves one glance, and a new *intentional*
    subdomain sender needs its own `_dmarc` (or DKIM + alignment) before it can mail.
+   **That glance is tracked, dated, and scripted:** issue
+   [#1160](https://github.com/Ruckus000/PropertyPro/issues/1160) (due 2026-09-27),
+   `DMARC_API_TOKEN=… pnpm dmarc:check --from 2026-09-21 --to 2026-09-28` —
+   `scripts/dmarc-digest-check.ts`, tri-state exit (0 clean · 1 finding · 2 could-not-
+   check; 2 is never a pass). Its allowlist is deliberately one entry (`amazonses.com`):
+   anything else in a report is by definition the sender-nobody-knew-about event.
 
    > **`propertyprofl.com` — the other domain, and now the softer target.** Verified
    > 2026-09-10 (wildcard control empty, so these absences are real): Google Workspace MX
