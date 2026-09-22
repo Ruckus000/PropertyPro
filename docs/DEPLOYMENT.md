@@ -73,7 +73,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `STRIPE_SECRET_KEY` | Server only — **both apps** | Stripe secret key. Its `sk_live_`/`sk_test_` prefix is what the app treats as this deployment's Stripe mode. Needed on `property-pro-admin` as well as `property-pro-web`: `apps/admin/src/lib/stripe.ts` uses it for the demo→customer conversion route. A cutover that updates only web leaves that route minting test-mode subscriptions. |
 | `STRIPE_WEBHOOK_SECRET` | Server only | Stripe webhook signing secret. Endpoint-specific: a mode change means a *different* endpoint and therefore a different secret. |
 | `RESEND_API_KEY` | **Both apps, server only** | Resend email API key. The admin console needs it too, since the support-inbox reply route sends from there. **Without it on `property-pro-admin`, every reply reports "Sent" and goes nowhere** — `sendEmail` resolves with a `test_N` id in that mode. The reply route surfaces this as `delivered: false`, which is the only signal, because the readiness probe lives on the web app.
-| `RESEND_FROM` | Server only, **web** | The `From:` on every sender except the admin support-inbox reply, which passes an explicit `support@`/`privacy@`/`contact@` — `apps/admin/src/app/api/admin/inbox/[threadId]/reply/route.ts` is the only `sendEmail` call site outside `apps/web`. Set in production to `PropertyPro <noreply@getpropertypro.com>`, which merely restates the hardcoded default at `packages/email/src/send.ts:6`; not set on `property-pro-admin`, correctly. **It is listed here because it is a DMARC trap, not because it needs configuring.** DKIM is published on the APEX only (`resend._domainkey`), so pointing this at a subdomain address — `@mail.` or `@send.getpropertypro.com` — would make every one of those senders fail alignment and be quarantined by `sp=quarantine`, with nothing in CI or the repo to flag it. Keep it on the apex or unset. See `.env.example` section 3, which already carries the commented default. |
+| `RESEND_FROM` | Server only, **web** | The `From:` on every sender except the admin support-inbox reply, which passes an explicit `support@`/`privacy@`/`contact@` — `apps/admin/src/app/api/admin/inbox/[threadId]/reply/route.ts` is the only `sendEmail` call site outside `apps/web`. Set in production to `PropertyPro <noreply@getpropertypro.com>`, which merely restates the hardcoded default at `packages/email/src/send.ts:6`; not set on `property-pro-admin`, correctly. **It is listed here because it is a DMARC trap, not because it needs configuring.** DKIM is published on the APEX only (`resend._domainkey`), so pointing this at a subdomain address — `@mail.` or `@send.getpropertypro.com` — would make every one of those senders fail alignment and be **rejected outright** by `sp=reject` — hard bounce since 2026-09-22, where the same mistake was merely quarantined before that — with nothing in CI or the repo to flag it. Keep it on the apex or unset. See `.env.example` section 3, which already carries the commented default. |
 | `INBOUND_EMAIL_WEBHOOK_SECRET` | Server only, web | **Required** (min 32). HMAC for the inbound support-mail webhook. Fails **closed** — unlike §4.2's secrets, which fail silently. See `.env.example` section 14, and [the rotation runbook](runbooks/inbound-webhook-key-rotation.md). Must match Forward Email's "Webhook Signature Payload Verification Key". |
 | `NEXT_PUBLIC_SENTRY_DSN` | All | Sentry client DSN |
 | `SENTRY_DSN` | Server only | Sentry server DSN |
@@ -539,15 +539,23 @@ but now it *looks* configured, which is worse than the honest bounce.
    sender exists anywhere in `apps/web` / `apps/admin` / `packages/email`** (grep re-run
    2026-09-22), and `_dmarc.www.getpropertypro.com` measures absent — so the policy
    governs exactly the traffic the structural audit cleared.
-   **One item remains open: the digest read itself** (due ~2026-09-14, weekly, into the
-   Gmail address above) — the only detector for the failure mode the audit cannot see,
-   **a sender nobody knew about.** Be aware of the sharpened consequence now that `sp`
-   is `reject`: a subdomain sender that turns up misaligned is **bounced**, not merely
-   quarantined. That is the intended posture — a subdomain `From:` with no DNS of its
-   own is by definition unsupportable — but it converts the digest from a check-when-
-   convenient item into the thing standing between "the audit was complete" and
-   "someone's mail starts 550-ing." A new intentional subdomain sender needs its own
-   `_dmarc` (or DKIM + alignment) before it can mail.
+   **First digest READ 2026-09-22 — the tail item is closed.** Window Sep 13–20 (the
+   last pre-reject week): **8 messages, one source (`amazonses.com`, `54.240.11.x` —
+   whois-confirmed Amazon, and Postmark classifies it under "sources we know belong to
+   you"), 100% SPF-aligned AND 100% DKIM-aligned per IP, 0% unaligned, no unknown-source
+   section.** The thing the structural audit could not see — **a sender nobody knew
+   about** — is empirically absent, and the digest independently confirms the alignment
+   mechanism documented at the top of this section: the apex carries **no SPF record**
+   (verified live 2026-09-22), so SPF alignment is riding `send.getpropertypro.com`'s
+   `v=spf1 include:amazonses.com ~all` plus relaxed org-domain matching (`aspf=r`), with
+   DKIM at the apex (`resend._domainkey`, present). The digest's own
+   "policy is set to quarantine" line reflects the report window, not the live record —
+   do not read it as drift.
+   **Standing posture under full `reject`:** a sender that turns up misaligned is now
+   **bounced, not merely quarantined**. That is intended — a subdomain `From:` with no
+   DNS of its own is unsupportable — but it means the next digest (~2026-09-27, the
+   first window fully under reject) deserves one glance, and a new *intentional*
+   subdomain sender needs its own `_dmarc` (or DKIM + alignment) before it can mail.
 
    > **`propertyprofl.com` — the other domain, and now the softer target.** Verified
    > 2026-09-10 (wildcard control empty, so these absences are real): Google Workspace MX
