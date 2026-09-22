@@ -25,7 +25,7 @@ The pass changed that community: it now has a published site, extra sections, an
 | Preview, page with sections | Works | Home preview showed the welcome block and the empty states for announcements, meetings, documents, and contact. This community has no records in those features, so the populated path was not seen. |
 | Preview, empty page | Works | The new Amenities page, and Sunset Condos' home (no sections in the seed), both say there is nothing to preview yet. |
 | Publish | Works | `site_published_at` was set and the new sections went live. |
-| One text section left unpublished | Broken | After that publish, text block id 6 (the default body, "Tell residents what they need to know…") was still `is_draft = true`. The sections list shows it with no draft marker. |
+| One text section left unpublished | Not a bug | Block 6 is a soft-deleted draft. The autosave at 13:49:56 replaced it with block 14 (`isDraft: true` in the audit log). Publish then flipped block 14 to live. The deleted row still has `is_draft = true`, which a query that forgets `deleted_at IS NULL` misreads as an unpublished section. |
 | Urgent notice before the first publish | Works | The panel says to publish the website first and does not offer the form. |
 | Urgent notice in the same session as publish | Broken | After a successful publish, without reloading, Notice still says "Publish your website first". |
 | Urgent notice after reload | Works | Posting "Pool closed through Friday for storm repairs." showed it as live. Remove, through the confirm dialog, cleared it. |
@@ -54,6 +54,19 @@ Every editor control checked at 1440×900 was on screen:
 - Help: search, suggested articles, and the help-centre link.
 - Preview: a dialog titled "Preview — Home" with the same welcome and empty states as the live site.
 - Phone (390px): "Editing needs a bigger screen", Post an urgent notice, and View the public site.
+
+## Edge cases the click-through missed
+
+Two different columns mean "this site is live", and they disagree.
+
+- `applyStarterPackToCommunity` inserts the home page and its blocks as already published (`is_draft = false`, `published_at` set) and never stamps `communities.site_published_at`. On community 4 those blocks are dated 2026-09-21 22:03, and `site_published_at` stayed null until the editor publish the next day.
+- The public reader shows any `is_draft = false` block. It does not look at `site_published_at`. So a new community's starter site is already on the public host.
+- The urgent-notice service and the editor both treat `site_published_at IS NULL` as "never published" and refuse a notice. Publish itself returns `nothing-to-publish` when there is no draft, and that path does not stamp the column. A manager who has not edited anything has a live site, a disabled Publish button, and no way to post a closure notice.
+- After a real editor publish, `hasPublishedSite` is still the value from the first server render (`website-editor/page.tsx`). Publish does not refresh it. The Notice tab keeps saying "Publish your website first" until a full reload. The API would accept the write; the form is not offered.
+
+The agent sandbox cannot show that public site with its own defaults. `scripts/agent-env.sh` sets `NEXT_PUBLIC_ROOT_DOMAIN=localhost:$port` and starts Next with `--hostname 127.0.0.1`. Hosts ending in `.localhost` are ignored by the tenant router on purpose, so the editor's "View the public site" link is the marketing homepage. Binding to `127.0.0.1` also drops `x-community-id` on a `localtest.me` host (the page then says "Community not found"). Binding to `0.0.0.0` with root domain `localtest.me:31002` is what rendered the site.
+
+`upsertPublishedBlock` defaults `isDraft` to false, which writes straight to the live row. The blocks route and the hero route both pass `true`. A new caller that omits it publishes immediately. Not hit by the editor today.
 
 ## Not claimed
 
