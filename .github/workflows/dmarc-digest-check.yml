@@ -1,0 +1,85 @@
+name: DMARC Digest Check
+
+# Closes the calendar tail of launch-blockers item 4 (docs/DEPLOYMENT.md §5.5).
+# getpropertypro.com reached `p=reject; sp=reject` on 2026-09-22. Under reject a
+# misaligned sender is BOUNCED at the receiver, so "did any digest window show a
+# source we do not recognise, or an alignment failure?" stopped being a curiosity
+# question the moment the ratchet completed — it became a deliverability tripwire.
+# The first digest under the new policy covers ~Sep 21 onward; it was due ~Sep 28.
+#
+# Runs scripts/dmarc-digest-check.ts (`pnpm dmarc:check`), whose contract this
+# workflow deliberately inherits verbatim:
+#   exit 0 = clean;  exit 1 = finding;  exit 2 = COULD NOT CHECK.
+# 2 is not a pass and is not tolerated: no token, an HTTP error, an unparseable
+# payload, or ZERO reports in the window all go red, because every one of those
+# is the silent-degradation shape this checklist exists to kill. A domain that
+# sends any mail receives aggregate reports roughly daily — an empty window
+# means the rua pipeline broke, which is precisely the thing nobody would
+# otherwise notice.
+#
+# Like production-health.yml, this runs on GitHub and NOT as a Vercel cron: a
+# cron watching the mail pipeline shares nothing with it. The script is
+# dependency-free (global fetch, Node 24), so this shells `npx tsx` rather than
+# paying a workspace install for one file.
+#
+# The first run before DMARC_API_TOKEN is set goes red ON PURPOSE — same posture
+# as production-health's missing-secret guard: a watcher that no-ops while
+# unconfigured is how seventeen crons stayed dead behind a green dashboard in
+# 2026-08. Add the token under Settings > Secrets and variables > Actions
+# (it is account-level in the DMARC dashboard, and WRITE-capable — this
+# workflow only ever issues GETs).
+
+on:
+  schedule:
+    # Mondays 07:17 UTC — Postmark's digests land weekly (the Sep 13–20 report
+    # was generated Sep 21); an offset minute, not :00. No flags are passed on
+    # the scheduled path, so the script's own 14-day default applies: it always
+    # contains the just-landed digest, and a finding re-reddens each week until
+    # someone acts — which is the desired nag, not a bug. Dispatch with
+    # explicit from/to for a one-off window.
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      from_date:
+        description: 'Window start YYYY-MM-DD (default: 9 days ago)'
+        required: false
+      to_date:
+        description: 'Window end YYYY-MM-DD (default: yesterday)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  digest-check:
+    name: dmarc-digest-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Read the window's aggregate reports
+        env:
+          DMARC_API_TOKEN: ${{ secrets.DMARC_API_TOKEN }}
+          FROM_DATE: ${{ inputs.from_date }}
+          TO_DATE: ${{ inputs.to_date }}
+        run: |
+          set -uo pipefail
+          if [ -z "${DMARC_API_TOKEN:-}" ]; then
+            echo "::error::DMARC_API_TOKEN is not set as a repository secret."
+            echo "This watcher cannot read the digests until it is — red is the point;"
+            echo "an unconfigured green would be the failure mode, not the fix."
+            exit 1
+          fi
+          npx --yes tsx scripts/dmarc-digest-check.ts \
+            ${FROM_DATE:+--from "$FROM_DATE"} \
+            ${TO_DATE:+--to "$TO_DATE"}
