@@ -50,14 +50,11 @@ The compliance engine tracks Florida statutory obligations for condos (§718, 17
 
 ## 4. CI Enforcement Gates
 
-> **`.github/workflows/ci.yml` is `disabled_manually` and has been since #976**,
-> which moved CI to **localci** when GitHub Actions minutes ran out. The table
-> below is the set of checks, not a description of seven live GitHub jobs — read
-> the CI section of `CLAUDE.md` for where each one actually runs now. In short:
-> `lint` / `typecheck` / migration-ordering block the **push** (localci `gate`);
-> unit tests, `no-mock-guard`, `build` and `perf-check` run in the detached
-> localci `suite`, which reports as the `localci/suite` check and is the **only**
-> required status check on `main`.
+> **GitHub Actions is the merge authority.** `.github/workflows/ci.yml` runs on
+> pull requests to `main` and pushes to `main`; its required contexts are the
+> checks in the table below. `localci` remains useful for fast local feedback,
+> but its detached suite is not a merge gate and must never be treated as proof
+> that CI passed.
 
 | Check | What it catches | Script |
 |-----|----------------|--------|
@@ -65,7 +62,7 @@ The compliance engine tracks Florida statutory obligations for condos (§718, 17
 | **typecheck** | Type errors across all packages | `pnpm typecheck` |
 | **unit-tests** | Vitest unit test failures | `pnpm test` |
 | **no-mock-guard** | `vi.mock()` / `jest.mock()` in integration tests | `scripts/verify-no-mocks-in-integration.ts` |
-| **migration-ordering** | Timestamp ordering, duplicate indices, and an index or `when` already claimed on `origin/main` | `scripts/verify-migration-ordering.ts` — in the localci **gate**, so it blocks the push |
+| **migration-ordering** | Timestamp ordering, duplicate indices, and an index or `when` already claimed on `origin/main` | `scripts/verify-migration-ordering.ts` — GitHub's PR merge ref catches cross-branch collisions |
 | **perf-check** | Bundle size budget violations | `pnpm perf:check` |
 | **build** | Build failures (depends on all 6 above) | `pnpm build` |
 

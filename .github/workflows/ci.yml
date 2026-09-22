@@ -59,6 +59,9 @@ on:
       - '.claude/**'
       - '.vscode/**'
       - 'LICENSE'
+  # Gives an operator a GitHub-hosted way to rerun CI after restoring this
+  # workflow, rather than relying on a status posted by a developer machine.
+  workflow_dispatch:
 
 permissions:
   contents: read

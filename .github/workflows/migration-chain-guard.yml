@@ -20,9 +20,9 @@ name: Migration Chain Guard
 # A `pull_request` trigger is the fix: GitHub checks out `refs/pull/N/merge`, so
 # this runs against the MERGED tree — the only place the fork exists.
 #
-# `ci.yml` would also have caught it, but it is `disabled_manually` (#976 moved
-# CI to localci when Actions minutes ran out). This is deliberately a small,
-# fast, dedicated job rather than a reason to re-enable that one.
+# `ci.yml` also runs migration ordering now. This remains a small, dedicated
+# defense-in-depth job with a migration-only path filter, so failures are easier
+# to diagnose without waiting for the full CI suite.
 #
 # ── Two gaps the script still has (recorded here, not fixed here) ──
 #

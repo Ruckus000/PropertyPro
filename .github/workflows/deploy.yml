@@ -1,33 +1,15 @@
 name: Deploy
 
 on:
-  # Push to main, directly. This USED to be `workflow_run: [CI]` — deploy only
-  # after CI passed on main. #976 moved CI off GitHub (Actions minutes ran out)
-  # and DISABLED ci.yml, and a disabled workflow never completes, so that
-  # trigger could never fire again: every merge after #976 landed on main and
-  # silently went nowhere, the exact two-week failure mode the comment below
-  # describes. The unit/build gate `workflow_run` used to encode now runs as
-  # localci's pre-push gate + suite on the branch head; with squash merges the
-  # merged tree is identical to the branch head whenever the branch was 0
-  # behind main. Integration Tests still run on GitHub, and the `gate` job
-  # below still refuses to deploy until they pass for this exact sha — that
-  # part is unchanged.
-  #
-  # If ci.yml is ever re-enabled, restore the workflow_run trigger and drop
-  # this one, or every merge will deploy twice.
-  push:
+  # CI is the deployment authority: a main commit deploys only after its CI
+  # workflow succeeds. Do not add a parallel push trigger — that would deploy
+  # the same commit twice and would bypass a failed CI result.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    # Same inert-path list as ci.yml's push trigger, and it MUST stay in sync:
-    # under workflow_run these commits never deployed (CI itself skipped, so
-    # its completion event never came); listing them here preserves that. A
-    # docs-only commit cannot change build output, so deploying it is pure
-    # churn against the production environment.
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - '.claude/**'
-      - '.vscode/**'
-      - 'LICENSE'
+    # `workflow_run` has no path filters. That is intentional: if CI skips an
+    # inert-only change, it emits no completion event and this deploy cannot run.
   # Manual trigger. Deploys are otherwise reachable ONLY by landing a commit on
   # main, which makes two ordinary operations awkward: applying a changed Vercel
   # env var (values are baked in at `vercel pull` + `vercel build`, so an existing
@@ -51,11 +33,9 @@ jobs:
   # dependency skips its dependents, so this condition governs all of them.
   gate:
     name: Require Integration Tests
-    # Both remaining triggers proceed to the gate: a push has no upstream
-    # conclusion to check anymore (localci validated the branch pre-push), and
-    # a dispatch means the operator has decided. The Integration Tests step
-    # below is what actually stands between a push and production.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # A completed-but-failed CI run must not deploy. Manual dispatch remains the
+    # deliberate operator escape hatch for infrastructure-only re-deploys.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -79,13 +59,11 @@ jobs:
         # hatch that exists *because* this pipeline once silently blocked every
         # production deploy for two weeks; giving it a new way to refuse would
         # recreate exactly that failure mode. A human running it has decided.
-        if: github.event_name == 'push'
+        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          # On push this IS the merge commit — under workflow_run it had to be
-          # dug out of the triggering run's payload.
-          HEAD_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           echo "Resolving Integration Tests for $HEAD_SHA"
@@ -135,6 +113,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # workflow_run executes the default branch's workflow definition,
+          # which can advance before this job starts. Deploy the exact commit CI
+          # validated, not whatever main happens to contain at checkout time.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -271,6 +254,9 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Keep web and admin deployments pinned to the same CI-validated SHA.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
