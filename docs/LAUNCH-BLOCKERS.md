@@ -97,8 +97,10 @@ line says where.
   including why the "read a week of reports first" step was skipped deliberately, and the
   `aspf=r` tripwire that would drop SPF alignment for every sender at once if anyone
   "tightened" it. No test would catch either.
-  **Overdue:** read the first Postmark digest (~2026-09-14), then `p=reject` — still
-  quarantine as of 2026-09-22. Open item.
+  **Ratcheted to full `p=reject; sp=reject` on 2026-09-22** (owner, Vercel DNS — `sp` a few
+  hours after `p`, and the first `sp` edit silently did not land; §5.5 carries the
+  verify-against-authoritative-NS lesson). `aspf=r` and `rua` survived every edit. The one
+  item still open is the Postmark digest read — §5.5, not restated here.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both
