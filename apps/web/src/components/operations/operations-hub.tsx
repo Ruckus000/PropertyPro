@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -203,17 +203,6 @@ export function OperationsHub({
       limit: 20,
     },
   });
-
-  useEffect(() => {
-    if (!legacyNotice) {
-      return;
-    }
-
-    // TODO: wire to analytics service
-    console.info('[analytics] maintenance_redirect', {
-      source: 'legacy_maintenance_page',
-    });
-  }, [legacyNotice]);
 
   const activeState = useMemo(() => {
     switch (selectedTab) {
@@ -441,9 +430,6 @@ export function OperationsHub({
               onClick={() => {
                 const params = new URLSearchParams(searchParams.toString());
                 if (operationsQuery.data?.meta.cursor) params.set('cursor', operationsQuery.data.meta.cursor);
-                // TODO: wire to analytics service
-                // eslint-disable-next-line no-console
-                console.info('[analytics] operations_pagination_loaded', { tab: 'all', mechanism: 'cursor' });
                 router.replace(`${pathname}?${params.toString()}`);
               }}
             />
@@ -474,9 +460,6 @@ export function OperationsHub({
                 const nextPage = filters.page + 1;
                 const params = new URLSearchParams(searchParams.toString());
                 params.set('page', String(nextPage));
-                // TODO: wire to analytics service
-                // eslint-disable-next-line no-console
-                console.info('[analytics] operations_pagination_loaded', { tab: 'requests', mechanism: 'page' });
                 router.replace(`${pathname}?${params.toString()}`);
               }}
             />
@@ -509,8 +492,6 @@ export function OperationsHub({
                 const nextPage = filters.page + 1;
                 const params = new URLSearchParams(searchParams.toString());
                 params.set('page', String(nextPage));
-                // eslint-disable-next-line no-console
-                console.info('[analytics] operations_pagination_loaded', { tab: 'work-orders', mechanism: 'page' });
                 router.replace(`${pathname}?${params.toString()}`);
               }}
             />
@@ -545,8 +526,6 @@ export function OperationsHub({
                 const nextPage = filters.page + 1;
                 const params = new URLSearchParams(searchParams.toString());
                 params.set('page', String(nextPage));
-                // eslint-disable-next-line no-console
-                console.info('[analytics] operations_pagination_loaded', { tab: 'reservations', mechanism: 'page' });
                 router.replace(`${pathname}?${params.toString()}`);
               }}
             />

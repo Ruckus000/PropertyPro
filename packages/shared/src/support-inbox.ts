@@ -208,24 +208,19 @@ export const SUPPORT_MAILBOX_CONTEXT: Record<SupportMailbox, SupportMailboxConte
  * Whether a mailbox's context-strip action has a real destination to send the
  * operator to, RIGHT NOW.
  *
- * `support` → `/tickets/new`, created by Task 22 (Wave 3); `/tickets` is a nav
- * stub today, so this is still `false`. `privacy` → `/deletion-requests`, which
- * Task 18 (commit `16525fbf`, this branch) taught to seed its email filter from
- * the URL — so it is now `true`. The link carries `?thread=<id>` and the page
- * resolves the participant's email server-side; it deliberately does NOT carry
- * `?q=<email>`, which would put a data subject's address in Vercel access logs,
- * browser history and Sentry navigation breadcrumbs.
+ * `support` → `/tickets/new`; links into the admin ticket queue, carrying
+ * `?thread=<id>`, resolving the participant's email server-side (no `?q=<email>`).
+ * `privacy` → `/deletion-requests` filtered by sender email. `contact` →
+ * `POST /api/admin/leads` behind the strip — always ready.
  *
  * **This flag governs two of the three mailboxes.** `ThreadContextStrip` answers
  * `contact` with a button above the `ready` branch — `POST /api/admin/leads`
  * shipped with the strip itself — so `contact: true` is documentation rather
  * than a condition anything reads. For `support` and `privacy` it is the single
- * place to flip, which is the point: a console that offers an action and then
- * 404s is worse than one that offers it a wave later, and the previous wave left
- * `privacy` reading "not available yet" for a destination that already worked.
+ * place to flip.
  */
 export const SUPPORT_MAILBOX_CONTEXT_ACTION_READY: Record<SupportMailbox, boolean> = {
-  support: false,
+  support: true,
   privacy: true,
   contact: true,
 };

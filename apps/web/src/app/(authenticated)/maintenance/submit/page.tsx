@@ -24,15 +24,5 @@ export default async function MaintenanceSubmitPage({ searchParams }: PageProps)
   passthrough.set('tab', 'requests');
   passthrough.set('from', 'maintenance');
 
-  // Analytics — pairs with operations-hub's existing maintenance_redirect.
-  // TODO: wire to analytics service
-  // eslint-disable-next-line no-console
-  console.info('[analytics] operations_legacy_redirect', {
-    source: 'submit',
-    hadFilters: Array.from(passthrough.keys()).some((k) =>
-      ['status', 'priority', 'unitId', 'q'].includes(k),
-    ),
-  });
-
   redirect(`/communities/${rawId}/operations?${passthrough.toString()}`);
 }

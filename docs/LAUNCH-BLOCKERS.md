@@ -9,7 +9,7 @@ issues); the engineering backlog below was not re-measured.
 **No blocker is open on the evidence available.** Items 1–7 are resolved and collapsed
 below. Item 1 carries an open tail that only the Stripe and Vercel dashboards can confirm.
 
-The code is in good shape: the `guard:*` suite passes **29/29** (measured 2026-09-09,
+The code is in good shape: the `guard:*` suite passes **31/31** (measured 2026-09-22,
 `pnpm lint`), and ~12,155 unit tests plus a clean production build of both apps were
 green at `aabf9727`.
 
@@ -91,13 +91,14 @@ line says where.
   the whole SMTP delivery dies with it. That section carries the do-not-downgrade
   tripwire; no test would catch a regression.
 
-- **4. No DMARC record** — closed 2026-09-07; **enforcing since 2026-09-10** at
+- **4. No DMARC record** — closed 2026-09-07; enforcing since 2026-09-10 at
   `p=quarantine; sp=quarantine`. `dig _dmarc.getpropertypro.com TXT +short` reads it back.
-  **The reasoning lives in [`DEPLOYMENT.md`](DEPLOYMENT.md) §5.5 item 4, kept in full** —
+  The reasoning lives in [`DEPLOYMENT.md`](DEPLOYMENT.md) §5.5 item 4, kept in full —
   including why the "read a week of reports first" step was skipped deliberately, and the
   `aspf=r` tripwire that would drop SPF alignment for every sender at once if anyone
   "tightened" it. No test would catch either.
-  **Open tail:** read the first Postmark digest (~2026-09-14), then `p=reject`.
+  **Overdue:** read the first Postmark digest (~2026-09-14), then `p=reject` — still
+  quarantine as of 2026-09-22. Open item.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both
@@ -323,22 +324,23 @@ delete — but nothing in the repo says so, which is why it is written here.
 
 ## B4. Code that is a stub rather than a feature
 
-- **Nothing is wired to analytics.** **Seven** call sites `console.info('[analytics] …')`
-  behind **five** `// TODO: wire to analytics service` comments —
-  `components/operations/operations-hub.tsx` (×5), `(authenticated)/maintenance/submit/page.tsx`,
-  `(authenticated)/maintenance/inbox/page.tsx`. (This row said "five call sites"; five is
-  the count of TODO *comments*. Re-measured 2026-09-09; it was wrong at authorship, not
-  drifted.) There is no analytics service; those
-  events go nowhere. Decide whether the product wants them, or delete the calls — a
-  `console.info` in production reads as instrumentation to the next person and is not.
+- **Nothing is wired to analytics.** ~~**Seven** call sites `console.info('[analytics] …')`~~
+  **All removed 2026-09-22.** No analytics service exists; five TODO comments and seven
+  console calls in `operations-hub.tsx`, `maintenance/submit/page.tsx`, and
+  `maintenance/inbox/page.tsx` were deleted rather than replaced with shims. If the product
+  wants these events, a dedicated emitter belongs near `conversion-events.ts`, not as
+  scattered `console.info` behind a TODO comment.
 - ~~`packages/shared/src/http/request-context.ts:20` — `x-tenant-id` fallback marked for
   removal "after migration window" (P2-30).~~ **Removed**; `COMMUNITY_ID_HEADERS` is now
   `['x-community-id']` and `docs/platform-data-flow-audit.md` records M-03 as fixed.
-- **`docs/issues/mobile-demo-gaps.md` has never been updated.** Of its 7 issues, #1 is
+- ~~**`docs/issues/mobile-demo-gaps.md` has never been updated.**~~ Of its 7 issues, #1 is
   fixed (`app/mobile/more/page.tsx` exists) and #2 is still open (no
   `app/mobile/announcements/[id]`). The file cannot tell you which is which. Mobile is
   out of standardization scope by decision, so this is a *tracking* defect, not a
   product one — but a stale issue list is worse than none.
+- **SUPPORT_MAILBOX_CONTEXT_ACTION_READY.support was false** — the `/tickets` nav entry,
+  route group (`page.tsx`, `new/page.tsx`, `[id]/page.tsx`), API routes, and components
+  all shipped in Wave 3; only the shared boolean flag was left stale. Fixed 2026-09-22.
 
 ## B5. Documentation that states things that are no longer true
 
