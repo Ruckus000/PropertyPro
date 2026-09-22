@@ -464,16 +464,20 @@ but now it *looks* configured, which is worse than the honest bounce.
    **Live since 2026-09-10** (Vercel DNS, `ns1/ns2.vercel-dns.com`, TTL 60):
 
    ```
-   _dmarc  TXT  v=DMARC1; p=reject; sp=quarantine; pct=100; rua=mailto:<id>@dmarc.postmarkapp.com; aspf=r;
+   _dmarc  TXT  v=DMARC1; p=reject; sp=reject; pct=100; rua=mailto:<id>@dmarc.postmarkapp.com; aspf=r;
    ```
 
-   **Moved 2026-09-22: `p=quarantine → p=reject` (owner, Vercel DNS).** Read back
-   identically from `1.1.1.1` and `8.8.8.8`, with an empty-answer control query on a random
-   `_dmarc.*` host ruling out wildcard DNS; `aspf=r` survived the edit untouched. **`sp` did
-   NOT move with `p`,** which the "moves with `p=`" discipline below says it should — see the
-   still-to-do note for what that leaves enforced vs. quarantined. Ratchet history:
-   `p=none; sp=none` (live 2026-09-07) → `p=quarantine; sp=quarantine` (2026-09-10) →
-   `p=reject; sp=quarantine` (2026-09-22, `sp` pending).
+   **Ratcheted to full `reject` on 2026-09-22 (owner, Vercel DNS): `p` first, then `sp`
+   the same evening** — the move-both discipline closed within hours, not a revision cycle.
+   Ratchet history: `p=none; sp=none` (live 2026-09-07) → `p=quarantine; sp=quarantine`
+   (2026-09-10) → `p=reject; sp=quarantine` (2026-09-22 a.m.) → `p=reject; sp=reject`
+   (2026-09-22 p.m.). Every step verified the same way, and it matters: **the first
+   `sp` edit did not land** — Vercel's form accepted it and the zone kept serving
+   `sp=quarantine` from the *authoritative* `ns1/ns2.vercel-dns.com`, which only a
+   direct-NS query catches (recursors and the dashboard both looked fine). Re-verify any
+   DNS edit against the authoritative servers, with an empty-answer control query on a
+   random nonexistent `_dmarc.*` host to rule out wildcard echo. `rua` and `aspf=r`
+   survived all four edits untouched.
 
    `rua=` points at Postmark's free DMARC Digests (weekly summaries by
    email, and no mailbox of ours has to accept gzipped XML) because aggregate
@@ -526,24 +530,24 @@ but now it *looks* configured, which is worse than the honest bounce.
    drop SPF for every sender at once; DKIM would still carry them, but the
    second mechanism would be gone.
 
-   **Still to do (2026-09-22).** The apex `p=reject` landed **before** the first digest
-   was read — the same deliberate skip as the 2026-09-10 ratchet, and its justification
-   held up: `RESEND_FROM` is set on `property-pro-web` Production (listed 2026-09-22,
-   value per the table in §3 = apex `noreply@`), and every `From:` resolves through
-   `resolveFromAddress` (`packages/email/src/send.ts:6`, apex default) with **no
-   subdomain sender anywhere in `apps/web` / `apps/admin` / `packages/email`**
-   (grep re-run 2026-09-22) — so the reject policy governs exactly the traffic the
-   structural audit cleared, and a forgery of the apex `From:` is now hard-rejected
-   rather than merely downgraded. Two things remain, and they are one read apart: the
-   Postmark digest (due ~2026-09-14, weekly, into the Gmail address above) for the
-   one thing a structural audit cannot see — **a sender nobody knew about** — and then
-   the `sp` half of this ratchet, `quarantine → reject`. `sp` is the only enforcement
-   reaching any subdomain `From:` (none exist in code today; `www` would inherit
-   `sp=`, and `_dmarc.www.getpropertypro.com` measures absent, 2026-09-22), so leaving
-   it at quarantine keeps the move-both discipline half-applied in a way that matters
-   the moment a subdomain sender appears — which is exactly the event the digest
-   exists to reveal. If it shows clean www traffic, flip `sp` to `reject`; if it shows
-   none, flip anyway — the record stays honest either way.
+   **The ratchet rationale, restated 2026-09-22 with the move complete.** The reject
+   policy (both tags) went live **before the first Postmark digest was read** — the same
+   deliberate skip as the 2026-09-10 ratchet, and its justification still holds as of
+   this writing: `RESEND_FROM` is set on `property-pro-web` Production (listed 2026-09-22,
+   value per the table in §3 = apex `noreply@`), every `From:` resolves through
+   `resolveFromAddress` (`packages/email/src/send.ts:6`, apex default), **no subdomain
+   sender exists anywhere in `apps/web` / `apps/admin` / `packages/email`** (grep re-run
+   2026-09-22), and `_dmarc.www.getpropertypro.com` measures absent — so the policy
+   governs exactly the traffic the structural audit cleared.
+   **One item remains open: the digest read itself** (due ~2026-09-14, weekly, into the
+   Gmail address above) — the only detector for the failure mode the audit cannot see,
+   **a sender nobody knew about.** Be aware of the sharpened consequence now that `sp`
+   is `reject`: a subdomain sender that turns up misaligned is **bounced**, not merely
+   quarantined. That is the intended posture — a subdomain `From:` with no DNS of its
+   own is by definition unsupportable — but it converts the digest from a check-when-
+   convenient item into the thing standing between "the audit was complete" and
+   "someone's mail starts 550-ing." A new intentional subdomain sender needs its own
+   `_dmarc` (or DKIM + alignment) before it can mail.
 
    > **`propertyprofl.com` — the other domain, and now the softer target.** Verified
    > 2026-09-10 (wildcard control empty, so these absences are real): Google Workspace MX
