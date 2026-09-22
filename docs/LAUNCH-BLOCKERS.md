@@ -97,8 +97,14 @@ line says where.
   including why the "read a week of reports first" step was skipped deliberately, and the
   `aspf=r` tripwire that would drop SPF alignment for every sender at once if anyone
   "tightened" it. No test would catch either.
-  **Overdue:** read the first Postmark digest (~2026-09-14), then `p=reject` — still
-  quarantine as of 2026-09-22. Open item.
+  **Updated 2026-09-22:** the apex is now **`p=reject`** (owner changed it in Vercel; read
+  back identically from `1.1.1.1` and `8.8.8.8`, with an empty-answer control query on a
+  random `_dmarc.*` host to rule out wildcard DNS). `aspf=r` survived the edit.
+  **`sp` is still `quarantine`,** so the move-both discipline in
+  [`DEPLOYMENT.md`](DEPLOYMENT.md) §5.5 was only half applied — subdomain `From:` (none
+  exist in code today; `resolveFromAddress` defaults every sender to the apex) sits at
+  quarantine while any apex forgery is now hard-rejected. The digest read and the `sp`
+  decision remain open; the full tail is recorded in §5.5, not restated here.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both
