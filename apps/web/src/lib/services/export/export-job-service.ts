@@ -13,6 +13,7 @@
 import { communities, communityExportJobParts, communityExportJobs, logAuditEvent } from '@propertypro/db';
 import type { CommunityExportJob, ExportJobCursor, ExportJobManifest } from '@propertypro/db';
 import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
+import { redactParams } from '@propertypro/shared/observability';
 // The worker's claim scan is cross-tenant by nature: a cron with no session,
 // looking for claimable jobs in ANY community, so there is no communityId to
 // scope by until a job has been selected. Touches ONLY the two job tables; every
@@ -391,7 +392,13 @@ export async function markJobFailed(params: {
     .set({
       status: willRetry ? 'queued' : 'failed',
       errorCode: params.errorCode,
-      errorMessage: params.errorMessage.slice(0, 2000),
+      // Redact BEFORE the cap: `error_message` is a tenant column rendered
+      // verbatim to the PM, and a drizzle message embeds the bound values
+      // (#1092). Callers curate what they pass (the worker route sends a
+      // fixed sentence); this is the last door, so no future caller can
+      // persist raw params regardless. Redacting first also keeps the
+      // 2000-char budget on SQL rather than values. (#951 residual.)
+      errorMessage: redactParams(params.errorMessage).slice(0, 2000),
       leaseExpiresAt: null,
       completedAt: willRetry ? null : now,
       updatedAt: now,

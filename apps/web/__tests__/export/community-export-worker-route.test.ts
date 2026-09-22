@@ -169,6 +169,25 @@ describe('community-export-worker', () => {
     expect(body.data.errors[0]).toContain('resend is down');
   });
 
+  it('redacts the notify-failure reason that rides in summary.errors', async () => {
+    // `summary.errors` leaves in the response body and is copied wholesale into
+    // Sentry `extra` by withCronJob — every other push into it is redacted, and
+    // the notify reason (raw `error.message` from the mail send) was the one
+    // contributor that was not.
+    claimOnce();
+    runExportJobMock.mockResolvedValue(COMPLETED);
+    sendExportReadyEmailMock.mockResolvedValue({
+      sent: false,
+      reason: 'Failed query: insert into emails\nparams: ["canary@x.com"]',
+    });
+
+    const body = await (await POST(request())).json();
+
+    expect(body.data.errors[0]).toContain('params: [redacted]');
+    expect(body.data.errors[0]).not.toContain('canary@x.com');
+    expect(body.data.completed).toBe(1);
+  });
+
   it('does NOT email a job that only yielded', async () => {
     claimOnce();
     runExportJobMock.mockResolvedValue({ status: 'yielded', partsWritten: 0, bytesWritten: 0, totalParts: 0, totalBytes: 0, warnings: 0, manifest: {} });
@@ -187,6 +206,36 @@ describe('community-export-worker', () => {
     const body = await (await POST(request())).json();
 
     expect(sendExportReadyEmailMock).not.toHaveBeenCalled();
+    expect(body.data.failed).toBe(1);
+  });
+
+  it('persists a CURATED sentence for the PM, never driver text', async () => {
+    /*
+     * `community_export_jobs.error_message` is rendered VERBATIM to the PM
+     * (export-job-card.tsx). Redaction (#1092) removed the bound VALUES but
+     * still persisted the raw SQL — table names, constraint names, driver
+     * internals. The PM-facing contract follows site-publish-schedule-service:
+     * a curated, actionable sentence; the technical text stays in the engineer
+     * channels only (`summary.errors`, Sentry). #951 residual.
+     */
+    claimOnce();
+    runExportJobMock.mockRejectedValue(
+      new Error(
+        'Failed query: select * from documents where community_id = $1\nparams: ["canary@x.com","CANARY_VALUE_9F3"]',
+      ),
+    );
+    markJobFailedMock.mockResolvedValue({ willRetry: false });
+
+    const body = await (await POST(request())).json();
+
+    const persisted = markJobFailedMock.mock.calls[0]![0].errorMessage as string;
+    // Positively pinned: the column holds the curated sentence, not merely
+    // "something without SQL in it".
+    expect(persisted).toContain("We couldn't prepare this export");
+    expect(persisted).not.toMatch(/select|params:|canary|CANARY/i);
+    // Engineer channels keep the redacted technical text for triage.
+    expect(body.data.errors[0]).toContain('params: [redacted]');
+    expect(body.data.errors[0]).not.toContain('canary@x.com');
     expect(body.data.failed).toBe(1);
   });
 

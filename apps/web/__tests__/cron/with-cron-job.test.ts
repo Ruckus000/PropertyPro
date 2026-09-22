@@ -420,6 +420,28 @@ describe('withCronJob records a heartbeat', () => {
     );
   });
 
+  it('redacts drizzle bound params out of the stored failure reason', async () => {
+    /*
+     * `cron_runs.error` is rendered in the admin console's Health board. A
+     * drizzle failure embeds the bound VALUES in `error.message` after
+     * `params: ` (#1092) — Sentry scrubs its own copy via scrubServerEvent, but
+     * this persisted one had no scrubber: raw tenant values (emails, tokens,
+     * row contents) were stored and operator-visible. #951 residual.
+     */
+    const handler = withCronJob('late-fee-processor', async () => {
+      throw new Error(
+        'Failed query: update communities set plan = $1\nparams: ["canary@x.com","CANARY_VALUE_9F3"]',
+      );
+    });
+
+    await expect(handler(req())).rejects.toThrow();
+    const recorded = recordCronRunMock.mock.calls[0]?.[1] as { error: string };
+    expect(recorded.error).toContain('params: [redacted]');
+    expect(recorded.error).not.toContain('canary@x.com');
+    expect(recorded.error).not.toContain('CANARY_VALUE_9F3');
+    expect(recorded.error.length).toBeLessThanOrEqual(300);
+  });
+
   it('truncates a long failure reason rather than storing a log', async () => {
     const handler = withCronJob('expire-demos', async () => {
       throw new Error('x'.repeat(5000));

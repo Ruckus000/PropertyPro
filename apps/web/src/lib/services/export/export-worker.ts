@@ -35,6 +35,7 @@ import {
 } from '@propertypro/db';
 import type { CommunityExportJob, ExportJobCursor, ExportJobManifest } from '@propertypro/db';
 import { asc, gt } from '@propertypro/db/filters';
+import { redactParams } from '@propertypro/shared/observability';
 import { generateCSVHeaderLine, generateCSVRowLine } from '@/lib/services/csv-export';
 import { EXPORT_TABLES, type ExportTableSpec } from './table-registry';
 import { recordJobPart, saveJobProgress } from './export-job-service';
@@ -338,10 +339,16 @@ export async function runExportJob(
       } catch (error) {
         // A table that cannot be read must NOT abort the whole export — the
         // other twenty tables are still the association's records.
+        //
+        // The detail is REDACTED: warnings ride the same PM-visible surface as
+        // error_message (export-job-card renders them for any status; they are
+        // printed into the completion email and the archive README), and a
+        // drizzle failure embeds the bound values after `params: ` (#1092,
+        // #951 residual).
         pushWarning(
           manifest,
           'TABLE_READ_FAILED',
-          `${spec.tableName}: ${error instanceof Error ? error.message : String(error)}`,
+          `${spec.tableName}: ${redactParams(error instanceof Error ? error.message : String(error))}`,
         );
         manifest.tables = manifest.tables ?? [];
         manifest.tables.push({ name: spec.tableName, file: spec.file, rowCount: 0, complete: false });
@@ -433,11 +440,12 @@ export async function runExportJob(
           manifest.documents.included += 1;
         } catch (error) {
           // Per-file, deliberately. A single missing object must never fail an
-          // entire statutory export.
+          // entire statutory export. Detail redacted — same PM-visible surface
+          // as TABLE_READ_FAILED above (#951 residual).
           pushWarning(
             manifest,
             'DOCUMENT_FILE_MISSING',
-            `document ${row.id}: ${error instanceof Error ? error.message : String(error)}`,
+            `document ${row.id}: ${redactParams(error instanceof Error ? error.message : String(error))}`,
             row.id,
           );
         }
