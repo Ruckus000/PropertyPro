@@ -99,8 +99,10 @@ line says where.
   "tightened" it. No test would catch either.
   **Ratcheted to full `p=reject; sp=reject` on 2026-09-22** (owner, Vercel DNS — `sp` a few
   hours after `p`, and the first `sp` edit silently did not land; §5.5 carries the
-  verify-against-authoritative-NS lesson). `aspf=r` and `rua` survived every edit. The one
-  item still open is the Postmark digest read — §5.5, not restated here.
+  verify-against-authoritative-NS lesson). `aspf=r` and `rua` survived every edit. The
+  Postmark digest was **read 2026-09-22: one known source (Amazon SES — Resend's
+  upstream), 8/8 fully aligned, zero unknown senders** — the item's last open step, closed;
+  result and standing posture in §5.5.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both
