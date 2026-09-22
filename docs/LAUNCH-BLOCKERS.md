@@ -102,7 +102,8 @@ line says where.
   verify-against-authoritative-NS lesson). `aspf=r` and `rua` survived every edit. The
   Postmark digest was **read 2026-09-22: one known source (Amazon SES — Resend's
   upstream), 8/8 fully aligned, zero unknown senders** — the item's last open step, closed;
-  result and standing posture in §5.5.
+  result and standing posture in §5.5. The follow-through (first digest window fully under
+  reject, ~09-27) is a dated GitHub issue: #1160, checkable with `pnpm dmarc:check`.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both
