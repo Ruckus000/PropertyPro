@@ -28,13 +28,9 @@ cp .env.example .env.local
 # 3. Install dependencies
 pnpm install
 
-# 4. Create and migrate a DISPOSABLE local database
-#    Do NOT run `db:migrate` against the DATABASE_URL you just put in
-#    .env.local — that value points at PRODUCTION. See the warning below.
-pnpm db:test-local:setup
-
-# 5. Seed demo data
-pnpm seed:demo
+# 4. Start the supported local agent sandbox (Supabase Auth + Storage + DB).
+#    It never reads .env.local and refuses remote backends.
+pnpm agent:env:prepare
 ```
 
 > **Never run `pnpm --filter @propertypro/db db:migrate` from a shell carrying
@@ -57,6 +53,30 @@ pnpm dev
 # Run a single app
 pnpm --filter @propertypro/web dev      # web on :3000
 pnpm --filter @propertypro/admin dev    # admin on :3001
+```
+
+### Agent live testing
+
+Use the sandbox when testing authenticated behavior or asking an agent to
+inspect a change in a browser. It provisions an isolated local Supabase stack
+per worktree, migrates it, and seeds the demo personas without reading
+`.env.local`.
+
+```bash
+pnpm agent:live:web       # starts web and prints its unique localhost URL
+pnpm agent:live:admin     # starts admin only when needed
+pnpm agent:env:status     # show this worktree's URLs
+pnpm agent:env:reset      # clean local-only DB, then migrate and reseed
+pnpm agent:env:stop       # stop the worktree's stack while retaining data
+```
+
+After the web server starts, visit the printed `/dev/agent-login?as=owner`
+URL. For a disposable scenario, create a namespaced fixture and open the
+returned login URL:
+
+```bash
+pnpm agent:fixture:community -- --slug agent-review --name "Review HOA" --type hoa_720 --root-email root@agent.local --root-name "Root Agent"
+pnpm agent:fixture:user -- --community agent-review --email resident@agent.local --name "Resident Agent" --role resident --owner
 ```
 
 ### Admin access

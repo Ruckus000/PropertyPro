@@ -157,6 +157,12 @@ pnpm build                      # Production build
 pnpm test                       # Unit tests
 pnpm seed:demo                  # Seed demo data
 pnpm seed:verify                # Verify seed integrity
+pnpm agent:env:prepare          # Safe per-worktree Supabase/Auth/Storage sandbox
+pnpm agent:live:web             # Start web against that sandbox
+pnpm agent:live:admin           # Start admin against that sandbox
+pnpm agent:env:reset            # Reset and reseed this worktree's sandbox
+pnpm agent:fixture:user -- ...  # Create a local @agent.local membership
+pnpm agent:fixture:community -- ... # Create a local agent-* community
 pnpm perf:check                 # Performance budget check
 pnpm --filter @propertypro/db db:migrate  # Run migrations
 
@@ -378,53 +384,24 @@ pnpm guard:class-resolution     # Every colour utility class in apps/web/src mus
 > `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,
 > `plan:verify:*`, `help:*`, and E2E variants).
 
-**CI:** the lint / typecheck / unit / build / perf gate runs through **localci**
-(the `localci` CLI), NOT GitHub Actions. `.github/workflows/ci.yml` is
-`disabled_manually` and that is deliberate — #976 moved CI off GitHub when Actions
-minutes ran out (last ci.yml run: 2026-08-24). Two phases, wired as a pre-push hook:
+**CI:** GitHub Actions is the merge authority. `.github/workflows/ci.yml` runs
+lint, typecheck, unit tests, the no-mock guard, migration ordering, the production
+build, production-safe E2E smoke tests, and the performance budget on every PR to
+`main` and every non-inert push to `main`. Its job names — `Lint`, `Typecheck`,
+`Unit Tests`, `no-mock-guard`, `migration-ordering`, `perf-check`, and `Build` —
+are the required branch-protection contexts. Integration Tests, E2E, Branch
+Freshness Guard, and Scoped DB Access Guard remain separate GitHub workflows.
 
-- **`gate`** — blocking, before the push completes: `pnpm lint` (includes the DB
-  access guard and the rest of the `guard:*` set), `pnpm typecheck`,
-  `./scripts/verify-css-var-migration.sh`, and
-  `MIGRATION_BASELINE_REQUIRED=1 pnpm exec tsx scripts/verify-migration-ordering.ts`.
-  That last one moved here from `suite` after index 0069 was claimed twice: the
-  only check that can see a cross-branch collision needs to run BEFORE the push,
-  and the env var makes an unreadable `origin/main` an error rather than a silent
-  no-op.
-- **`suite`** — detached after the push, 7 steps: the no-mock-in-integration
-  guard → `reset:demo` → `seed:demo` (both resolve-only, against a stub
-  `DATABASE_URL`) → a `build` of the six shared packages (`shared`, `db`,
-  `email`, `ui`, `theme`, `api-contract`) → `apps/web` vitest with coverage →
-  the package suites + `@propertypro/admin` + the `scripts` vitest project
-  (`scripts/` is not a workspace package, so `--filter` cannot reach it) → then
-  **`pnpm build` + `test:e2e:prod` + `pnpm perf:check`**. That last step owns
-  **the only production build**, and with it the bundle-size budget and the
-  PDF.js smoke test, which read build output from disk. It reports back to
-  GitHub as the `localci/suite` check. Note `migration-ordering` runs in
-  `gate`, not here — see the preceding bullet; it is not a `suite` step.
+`localci` is optional local feedback only. It may still run a fast pre-push gate
+and detached suite, but neither result authorizes a merge and neither may be a
+required GitHub status. A developer's shell, credentials, or machine availability
+must not determine whether a PR can merge.
 
-Run history is in `~/.localci/runs/<project>/<run>/`, and `status.json` lists every
-step's exact command and exit code. **Read it before claiming what did or did not
-run** — an absent GitHub `perf-check` on a PR is not a coverage gap, and the
-production build is not missing. Do not propose re-enabling ci.yml (see below).
-
-Still on GitHub Actions, independently of localci: Integration Tests, E2E, Branch
-Freshness Guard, Scoped DB Access Guard.
-
-Two consequences worth knowing:
-
-- `deploy.yml` used to trigger on `workflow_run: [CI]`, and a disabled workflow
-  never completes — so #978 moved it to `push: [main]`. **Re-enabling ci.yml means
-  reverting that trigger, or every merge deploys twice.**
-- The gate is per-machine. A contributor without localci gets no
-  lint/typecheck/unit/build/perf gate server-side; `localci hooks` installs a
-  global dispatcher, but that too is per-machine.
-
-Two traps: the suite runs against the **working tree**, not the pushed commit, so
-editing or rebasing while it runs fails the run on your own half-written files;
-and suites serialize across every registered project, so `suite running in the
-background` on push can mean *queued* — confirm with `localci runs` and check the
-run's `status.json` `commit` matches.
+Deploys trigger from a successful CI run on `main`, not directly from the push.
+`deploy.yml` checks out the CI run's exact `head_sha`, preventing a queued
+deployment from accidentally building a later `main` commit. Its automatic path
+still waits for Integration Tests on that same SHA; `workflow_dispatch` remains
+the deliberate manual re-deploy escape hatch.
 
 Unit tests are split into two vitest projects — `node` (~505 files) and `jsdom`
 (~285) — because constructing a JSDOM per file dominated the job. See

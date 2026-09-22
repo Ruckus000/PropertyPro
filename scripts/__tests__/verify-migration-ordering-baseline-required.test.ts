@@ -67,7 +67,15 @@ describe('a readable baseline', () => {
     const result = spawnSync('pnpm', ['exec', 'tsx', SCRIPT], {
       cwd: resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'),
       encoding: 'utf-8',
-      env: { ...process.env, MIGRATION_BASELINE_REQUIRED: '1' },
+      // Unit Tests use a shallow checkout, where origin/main is intentionally
+      // absent. This case only proves that required mode succeeds with a
+      // readable baseline; the dedicated migration-ordering CI job verifies the
+      // real origin/main comparison with fetch-depth: 0.
+      env: {
+        ...process.env,
+        MIGRATION_BASELINE_REQUIRED: '1',
+        MIGRATION_BASELINE_REF: 'HEAD',
+      },
     });
 
     expect(result.status).toBe(0);

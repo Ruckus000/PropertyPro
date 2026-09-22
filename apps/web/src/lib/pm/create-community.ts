@@ -88,12 +88,15 @@ export async function createCommunityForPm(
     return { communityId: cId, slug: community.slug };
   });
 
-  // 5. Generate onboarding checklist (outside transaction — uses scoped client, is idempotent).
-  // The creator is linked as root_manager (step 2); pass that v3 role so
-  // getItemKeysForRole resolves the PM-admin checklist (the legacy 'pm_admin'
-  // string is not in PM_SCOPE_DB_ROLES and would fall through to owner/tenant).
-  // legacy-roles:exempt — warns about a value that no longer works.
-  await createChecklistItems(communityId, input.userId, 'root_manager', null, input.communityType);
+  // 5. Generate onboarding checklist outside the transaction. The community is
+  // already valid once its core transaction commits, so this must not make the
+  // caller retry a creation that already succeeded.
+  try {
+    await createChecklistItems(communityId, input.userId, 'root_manager', null, input.communityType);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('createChecklistItems failed', { communityId, err });
+  }
 
   // 5b. Apply starter pack (outside transaction — best-effort, idempotent)
   // PR #5: §4.0 "site is always live" guarantee — pre-populate published site_blocks so
@@ -120,15 +123,22 @@ export async function createCommunityForPm(
     console.error('seedDefaultSiteBranding failed', { communityId, err });
   }
 
-  // 6. Audit log (outside transaction — best-effort, should not fail community creation)
-  await logAuditEvent({
-    userId: input.userId,
-    communityId,
-    action: 'create',
-    resourceType: 'community',
-    resourceId: String(communityId),
-    newValues: { name: input.name, slug: input.subdomain, type: input.communityType },
-  });
+  // 6. Audit log (outside transaction — best-effort, should not fail a
+  // committed community creation). The append-only audit table remains intact;
+  // this only prevents a transient logging failure from stranding the creator.
+  try {
+    await logAuditEvent({
+      userId: input.userId,
+      communityId,
+      action: 'create',
+      resourceType: 'community',
+      resourceId: String(communityId),
+      newValues: { name: input.name, slug: input.subdomain, type: input.communityType },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('logAuditEvent failed during community creation', { communityId, err });
+  }
 
   return { communityId, slug };
 }

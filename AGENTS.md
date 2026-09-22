@@ -50,14 +50,11 @@ The compliance engine tracks Florida statutory obligations for condos (§718, 17
 
 ## 4. CI Enforcement Gates
 
-> **`.github/workflows/ci.yml` is `disabled_manually` and has been since #976**,
-> which moved CI to **localci** when GitHub Actions minutes ran out. The table
-> below is the set of checks, not a description of seven live GitHub jobs — read
-> the CI section of `CLAUDE.md` for where each one actually runs now. In short:
-> `lint` / `typecheck` / migration-ordering block the **push** (localci `gate`);
-> unit tests, `no-mock-guard`, `build` and `perf-check` run in the detached
-> localci `suite`, which reports as the `localci/suite` check and is the **only**
-> required status check on `main`.
+> **GitHub Actions is the merge authority.** `.github/workflows/ci.yml` runs on
+> pull requests to `main` and pushes to `main`; its required contexts are the
+> checks in the table below. `localci` remains useful for fast local feedback,
+> but its detached suite is not a merge gate and must never be treated as proof
+> that CI passed.
 
 | Check | What it catches | Script |
 |-----|----------------|--------|
@@ -65,7 +62,7 @@ The compliance engine tracks Florida statutory obligations for condos (§718, 17
 | **typecheck** | Type errors across all packages | `pnpm typecheck` |
 | **unit-tests** | Vitest unit test failures | `pnpm test` |
 | **no-mock-guard** | `vi.mock()` / `jest.mock()` in integration tests | `scripts/verify-no-mocks-in-integration.ts` |
-| **migration-ordering** | Timestamp ordering, duplicate indices, and an index or `when` already claimed on `origin/main` | `scripts/verify-migration-ordering.ts` — in the localci **gate**, so it blocks the push |
+| **migration-ordering** | Timestamp ordering, duplicate indices, and an index or `when` already claimed on `origin/main` | `scripts/verify-migration-ordering.ts` — GitHub's PR merge ref catches cross-branch collisions |
 | **perf-check** | Bundle size budget violations | `pnpm perf:check` |
 | **build** | Build failures (depends on all 6 above) | `pnpm build` |
 
@@ -119,3 +116,25 @@ The admin app is a separate Next.js application for platform administrators (PM 
 **DB access:** The admin app uses Supabase admin client (`createAdminClient()`) for direct queries — it is NOT in the scoped client allowlist and does NOT use `createScopedClient()`.
 
 **Account lifecycle tables** (`access_plans`, `account_deletion_requests`): Platform-level, NOT tenant-scoped. Listed in `RLS_GLOBAL_TABLE_EXCLUSIONS`, not `RLS_TENANT_TABLES`. Service-role only access (REVOKE from anon/authenticated).
+
+---
+
+## 9. Agent Live-Test Sandbox
+
+For authenticated UI verification, use `pnpm agent:live:web` (or
+`pnpm agent:live:admin`) and the login URL it prints. It starts an isolated
+Supabase Auth + Storage + Postgres stack for the current worktree and never
+reads `.env.local`.
+
+- Never run bare `pnpm seed:demo`, `pnpm dev`, or `/dev/agent-login` for agent
+  live testing from an environment that may inherit `.env.local` production
+  values. Use the `agent:*` commands.
+- For UI or authenticated behavior, inspect the changed user journey in that
+  sandbox. For non-UI work, run the smallest relevant automated check.
+- Use `pnpm agent:env:reset` before a test that needs a clean baseline. It
+  resets only the current worktree's local sandbox.
+- Use `pnpm agent:fixture:user` and `pnpm agent:fixture:community` only for
+  `@agent.local` identities and `agent-` community slugs. These commands are
+  local-only; do not add a remote fixture endpoint or platform-admin fixture.
+- Do not read `.env.local`, extract credentials, or point a live-test command
+  at a shared/remote Supabase project. The loopback guard is a security boundary.

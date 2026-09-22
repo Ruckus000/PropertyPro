@@ -551,16 +551,15 @@ an unavoidable outage across all six addresses, and the expected failure is sile
 
 ### 6.1 Workflow Overview
 
-> `ci.yml` is **`disabled_manually`** and is deliberately absent from this table (#976 moved
-> lint/typecheck/test/build to localci — see §7.1, and `CLAUDE.md` for the step list).
-> `performance-budget-check.yml` (#804) and `notification-digest-cron.yml` (#920) were deleted
-> and are gone from it too. A former §6.2 drew `ci.yml`'s job graph; it was removed 2026-09-09,
-> because a diagram of a workflow that does not run cannot be usefully corrected.
+> `ci.yml` is the GitHub-hosted merge gate. `performance-budget-check.yml` (#804)
+> and `notification-digest-cron.yml` (#920) remain deleted; their relevant checks
+> live in CI.
 
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| **Deploy** | `deploy.yml` | Push to `main` | Production deploy, gated on Integration Tests |
-| **Deploy (manual)** | `deploy.yml` | `workflow_dispatch` | Same deploy, **ungated** — the Integration Tests step is `if: github.event_name == 'push'` |
+| **CI** | `ci.yml` | PR + push to `main`, manual | Required lint, typecheck, test, migration, build, E2E smoke, and perf checks |
+| **Deploy** | `deploy.yml` | Successful CI run on `main` | Production deploy, gated on Integration Tests for the CI-validated SHA |
+| **Deploy (manual)** | `deploy.yml` | `workflow_dispatch` | Same deploy, deliberately bypassing the automatic Integration Tests wait |
 | **Integration Tests** | `integration-tests.yml` | PR + push to main | Database integration tests (requires Postgres service) |
 | **DB Access Guard** | `scoped-db-access-guard.yml` | PR + push (src changes) | Scoped DB access pattern verification |
 | **Branch Freshness** | `branch-freshness-guard.yml` | PR | Rebase enforcement (max 20 commits behind) |
@@ -576,24 +575,20 @@ gh api repos/Ruckus000/PropertyPro/branches/main/protection \
          reviews:.required_pull_request_reviews, admins:.enforce_admins.enabled}'
 ```
 
-Measured 2026-09-09: `contexts: ["localci/suite"]`, `strict: false`, `reviews: null`,
-`admins: false`. **One required check, and nothing else is enforced.**
+Required contexts must be GitHub-hosted CI job names: `Lint`, `Typecheck`, `Unit Tests`,
+`no-mock-guard`, `migration-ordering`, `perf-check`, and `Build`. Do not require
+`localci/suite`: it is emitted from a developer machine and can disappear when
+that machine or its credentials are unavailable.
 
 > This section previously carried four `[x]` boxes — required reviews, `strict`, and
 > no-bypass — under a note claiming it had been "verified live against the branch protection
 > API". Three of the four were not set. A checkbox is a claim about another system's state, and
 > this file cannot keep one true; the command above can.
 
-`localci/suite` is the single required check. Seven of the eight jobs `ci.yml` required until
-#976 — `Lint`, `Typecheck`, `Unit Tests`, `no-mock-guard`, `migration-ordering`, `perf-check`,
-`Build` — still run, as steps inside `localci/suite` and the blocking pre-push `gate` rather
-than as separate GitHub contexts.
-
-**`integration-tests` is the exception: it is not a localci step.** `localci.yml:3` lists
-`integration` among the workflows localci does not cover, and it still runs on GitHub as its
-own workflow. It is **not** a required check for merging — but a *pushed* deploy is gated on
-it, because `deploy.yml`'s `gate` job resolves that run for the exact SHA and every deploy job
-`needs:` it. A `workflow_dispatch` deploy is not: that step is push-only.
+`integration-tests` remains a separate workflow. It is not a required merge
+context, but an automatic deployment waits for it to pass for the exact SHA that
+CI validated. A `workflow_dispatch` deploy is intentionally an operator escape
+hatch and does not wait for it.
 
 ## 7. Deployment Procedures
 
@@ -601,17 +596,15 @@ it, because `deploy.yml`'s `gate` job resolves that run for the exact SHA and ev
 
 Production deploys happen automatically when a PR is merged to `main`:
 
-1. PR passes CI checks — these run through **localci**, not GitHub Actions: lint,
-   typecheck and migration-ordering in the blocking pre-push `gate`; unit tests,
-   no-mock-guard, Build and perf-check in the detached `suite`, which reports back
-   as `localci/suite`
+1. PR passes the required GitHub Actions CI checks: Lint, Typecheck, Unit Tests,
+   no-mock-guard, migration-ordering, perf-check, and Build.
 2. PR is reviewed — by convention, **not** by enforcement: branch protection records
    `reviews: null` (§6.2). PR previews are created by the native Vercel GitHub integration
    during the PR lifecycle
 3. PR is merged to `main`
-4. `deploy.yml` triggers on the **push to `main`** — not on a CI result; `ci.yml` has been
-   `disabled_manually` since #976. It installs deps, then builds via Vercel CLI and deploys
-   to production, gated on the Integration Tests run for that SHA (§6.2).
+4. `deploy.yml` triggers only after CI succeeds for the merged `main` SHA. It
+   installs deps, then builds via Vercel CLI and deploys to production, gated on
+   the Integration Tests run for that same SHA (§6.2).
    **It deploys CODE ONLY — it does not run migrations.**
 5. Smoke test verifies HTTP 200 at the deployment URL
 6. (Optional) Verify `/api/v1/internal/readiness` reports `schema_compatibility.status = "pass"`

@@ -171,4 +171,15 @@ describe('createCommunityForPm', () => {
       VALID_INPUT.communityType,
     );
   });
+
+  it('does not report failure after the core community transaction has committed', async () => {
+    buildDb();
+    createChecklistItemsMock.mockRejectedValueOnce(new Error('transient checklist failure'));
+    logAuditEventMock.mockRejectedValueOnce(new Error('transient audit failure'));
+
+    await expect(createCommunityForPm(VALID_INPUT)).resolves.toEqual({
+      communityId: 42,
+      slug: 'sunset-condos',
+    });
+  });
 });

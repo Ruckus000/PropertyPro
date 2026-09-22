@@ -2,7 +2,8 @@
 
 # Agent Testing
 
-**DO NOT read `.env.local` or try to extract credentials.** Use the `/dev/agent-login` endpoint instead.
+**DO NOT read `.env.local` or try to extract credentials.** Start the local
+agent sandbox and use its printed `/dev/agent-login` endpoint instead.
 
 **Integration tests: use the LOCAL DB runner, never prod.** `.env.local`'s
 `DATABASE_URL` points at **production**, so running the integration suite via
@@ -15,15 +16,35 @@ leaked). Instead run `pnpm test:integration:local` (or `pnpm db:test-local:setup
 
 The dev server exposes `/dev/agent-login?as=<role>` which authenticates the browser session as a demo user without needing any passwords or env vars.
 
-**Step 1** — Start the dev server (if not already running):
+**Step 1** — Start the safe, per-worktree dev server:
 ```
-preview_start("web")
+pnpm agent:live:web
 ```
 
 **Step 2** — Navigate to the agent-login endpoint:
 ```
 preview_eval: window.location.href = '/dev/agent-login?as=owner'
 ```
+
+The sandbox never sources `.env.local`; it starts local Supabase Auth, Storage,
+and Postgres, then migrates and seeds the demo personas. `pnpm agent:env:reset`
+returns only this worktree to a clean baseline.
+
+## Disposable Fixture Login
+
+Create a fixture when a seeded persona cannot express the scenario. The CLI
+requires `@agent.local` emails and `agent-` community slugs, then prints a
+password-free login URL:
+
+```
+pnpm agent:fixture:community -- --slug agent-review --name "Review HOA" --type hoa_720 --root-email root@agent.local --root-name "Root Agent"
+pnpm agent:fixture:user -- --community agent-review --email reviewer@agent.local --name "Reviewer Agent" --role resident --owner
+preview_eval: window.location.href = '/dev/agent-login?email=reviewer@agent.local'
+```
+
+Fixtures are local-only and immutable: use a new `@agent.local` email or reset
+the sandbox after a fixture already exists. Do not create platform-admin
+fixtures; use the existing admin dev login route when testing the admin app.
 
 **Step 3** — Verify the login worked:
 ```
