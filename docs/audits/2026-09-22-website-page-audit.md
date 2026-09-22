@@ -33,7 +33,27 @@ The pass changed that community: it now has a published site, extra sections, an
 | Address, invalid host | Works | "not a domain" is refused: "That doesn't look like a valid domain (invalid host)." `POST /api/v1/pm/site/domain` returns 400. A real registrar lookup was not run. |
 | Help | Works | Search and suggested articles render, including the transparency-page article. |
 | Phone width (390px) | Works | The editor is replaced by "Editing needs a bigger screen", with "Post an urgent notice" and "View the public site". |
-| Public site at the URL the editor gives | Broken | The phone gate links to `http://agent-reset-proof.localhost:31002/`. That URL, and `http://sunset-condos.localhost:31002/`, both return the marketing homepage ("The records your association owes owners, on the record."), not the community site. Hosts ending in `.localhost` are not treated as community subdomains. |
+| Public site at the URL the editor gives | Broken on `*.localhost` | The phone gate links to `http://agent-reset-proof.localhost:31002/`. That URL, and `http://sunset-condos.localhost:31002/`, both return the marketing homepage. Hosts ending in `.localhost` are not treated as community subdomains. The published site does render on `localtest.me` — see the follow-up below. |
+
+## Follow-up — published site opened in a browser
+
+Yes. The site had already been published (`site_published_at` set). Opening `http://agent-reset-proof.localtest.me:31002/` showed Reset Proof HOA: Home and Amenities in the nav, the welcome block, the saved paragraph ("Residents can find pool hours, meeting dates, and documents on this page."), and the empty states for announcements, meetings, documents, and contact. `/amenities` showed the community name, the same nav, and the footer.
+
+That page stays "Community not found" when `next dev` is started with `--hostname 127.0.0.1`. Middleware still resolves community 4, but the page never receives `x-community-id`. Binding the same server to `0.0.0.0`, with `NEXT_PUBLIC_ROOT_DOMAIN=localtest.me:31002`, the published site shows.
+
+Every editor control checked at 1440×900 was on screen:
+
+- Tabs: Site, Notice, Pages, Sections, Add, Colours, Address, Help. Preview and Publish in the top bar. Publish was visible and disabled, titled "Nothing to publish yet", because the draft was already live.
+- Site: page title, description, search-engine switch, site icon, photo storage, association name, footer note, records statement, Save settings.
+- Notice: the post form (text, expiry, Post notice).
+- Pages: the list, Add a page, and Home's settings (page name and Save name). The name is applied immediately, not on the next publish.
+- Sections: each row has move up, move down, hide, duplicate, and reorder.
+- Add: Text, Image, Announcements, Documents, Meetings, Contact, FAQ, Gallery, Amenities, Payments.
+- Colours: a switch and field for each brand colour, the body-font switch, Save colours.
+- Address: domain field, Connect, and Find one (which opens a domain search).
+- Help: search, suggested articles, and the help-centre link.
+- Preview: a dialog titled "Preview — Home" with the same welcome and empty states as the live site.
+- Phone (390px): "Editing needs a bigger screen", Post an urgent notice, and View the public site.
 
 ## Not claimed
 
