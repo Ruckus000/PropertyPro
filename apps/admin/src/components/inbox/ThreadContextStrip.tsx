@@ -19,15 +19,16 @@ interface ThreadContextStripProps {
 /**
  * The "what to do next" strip for a thread's mailbox (design spec D14/D15).
  *
- * `support` names a destination that does not exist yet — `/tickets/new` ships
- * in Task 22 (Wave 3) — so it renders as inert copy until
- * `SUPPORT_MAILBOX_CONTEXT_ACTION_READY.support` flips. `privacy` was in the
- * same state until Task 18 taught `/deletion-requests` to seed its filter; that
- * shipped on this branch, so the flag is now `true` and the link is live.
- * `contact` short-circuits above the flag, so only two of the three mailboxes
- * actually consult it (noted on the flag itself).
+ * All three actions are live. `support` links to `/tickets/new` and `privacy`
+ * to `/deletion-requests`, each gated on
+ * `SUPPORT_MAILBOX_CONTEXT_ACTION_READY` — both flags are `true` now that the
+ * Wave 3 ticket routes shipped and Task 18 taught `/deletion-requests` to seed
+ * its filter from the URL. The inert "not available yet" branch remains only as
+ * the degrade path if a flag is ever flipped back. `contact` short-circuits
+ * above the flag, so only two of the three mailboxes actually consult it
+ * (noted on the flag itself).
  *
- * **Both live destinations carry only the thread id.** The `privacy` link used to
+ * **Both link destinations carry only the thread id.** The `privacy` link used to
  * carry `?q=<participant email>`, which is the PII sink this branch deliberately
  * removed from the command palette (see `lib/server/search/users.ts`: Vercel
  * access logs, browser history and Sentry navigation breadcrumbs none of which

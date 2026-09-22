@@ -24,14 +24,5 @@ export default async function MaintenanceInboxPage({ searchParams }: PageProps) 
   passthrough.set('tab', 'requests');
   passthrough.set('from', 'maintenance');
 
-  // TODO: wire to analytics service
-  // eslint-disable-next-line no-console
-  console.info('[analytics] operations_legacy_redirect', {
-    source: 'inbox',
-    hadFilters: Array.from(passthrough.keys()).some((k) =>
-      ['status', 'priority', 'unitId', 'q'].includes(k),
-    ),
-  });
-
   redirect(`/communities/${rawId}/operations?${passthrough.toString()}`);
 }
