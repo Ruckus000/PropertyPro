@@ -40,6 +40,7 @@
 import type { NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
+import { redactParams } from '@propertypro/shared/observability';
 import { recordCronRun, registerCronJobs } from '@/lib/services/cron-run-service';
 
 import { CRON_JOB_SLUGS, type CronJobSlug } from './registry';
@@ -183,10 +184,16 @@ async function recordHeartbeat(
       error:
         status === 'ok'
           ? null
-          : (error instanceof Error ? error.message : String(error ?? 'unknown')).slice(
-              0,
-              MAX_ERROR_CHARS,
-            ),
+          // Redacted: `cron_runs.error` is rendered in the admin console's
+          // Health board, and a drizzle message embeds the bound VALUES after
+          // `params: ` (#1092). Sentry scrubs its own copy via
+          // scrubServerEvent; this persisted one had no scrubber. (#951
+          // residual.) Redact BEFORE the cap so the stored string always
+          // fits MAX_ERROR_CHARS and ends in the intact `params: [redacted]`
+          // suffix — capping first could re-append past the cut.
+          : redactParams(
+              error instanceof Error ? error.message : String(error ?? 'unknown'),
+            ).slice(0, MAX_ERROR_CHARS),
     });
   } catch {
     // Deliberately silent — see the docblock.

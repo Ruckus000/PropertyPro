@@ -148,6 +148,48 @@ describe('runExportJob', () => {
     expect(openStorageObjectStreamMock).not.toHaveBeenCalled();
   });
 
+  it('redacts drizzle bound params out of the TABLE_READ_FAILED detail', async () => {
+    /*
+     * `manifest.warnings[].detail` rides the SAME PM-visible surface as
+     * `error_message`: export-job-card renders it verbatim for ANY status, and
+     * it is printed into the completion email and the archive README. A
+     * drizzle failure embeds the bound values after `params: ` (#1092) — this
+     * is the same leak class as #951's residual, one column over.
+     */
+    const scoped = {
+      selectFrom: vi.fn(() => {
+        throw new Error(
+          'Failed query: select * from owners where community_id = $1\nparams: ["canary@x.com","CANARY_VALUE_9F3"]',
+        );
+      }),
+    };
+    createScopedClientMock.mockReturnValue(scoped);
+
+    const result = await runExportJob({ ...(JOB as object), includeDocumentFiles: false } as never, {
+      budgetMs: 30_000,
+    });
+
+    const detail = result.manifest.warnings?.[0]?.detail ?? '';
+    expect(result.manifest.warnings?.[0]?.code).toBe('TABLE_READ_FAILED');
+    expect(detail).toContain('params: [redacted]');
+    expect(detail).not.toContain('canary@x.com');
+    expect(detail).not.toContain('CANARY_VALUE_9F3');
+  });
+
+  it('redacts drizzle bound params out of the DOCUMENT_FILE_MISSING detail', async () => {
+    mockScoped({ unitRows: [{ id: 1 }], docRows: [{ id: 5, filePath: 'gone.pdf', fileName: 'gone.pdf' }] });
+    openStorageObjectStreamMock.mockRejectedValueOnce(
+      new Error('Failed query: select body\nparams: ["canary@x.com"]'),
+    );
+
+    const result = await runExportJob(JOB, { budgetMs: 30_000 });
+
+    const detail = result.manifest.warnings?.[0]?.detail ?? '';
+    expect(result.manifest.warnings?.[0]?.code).toBe('DOCUMENT_FILE_MISSING');
+    expect(detail).toContain('params: [redacted]');
+    expect(detail).not.toContain('canary@x.com');
+  });
+
   it('records a warning and still exports when a TABLE read fails', async () => {
     const scoped = {
       selectFrom: vi.fn(() => {

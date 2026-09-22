@@ -77,10 +77,13 @@ import { scrubBrowserEvent, type ScrubbableEvent } from './scrub-browser-event';
 const PARAMS_MARKER = 'params: ';
 
 /**
- * Exported for the two places that PERSIST an error message rather than sending
- * it to Sentry, which `beforeSend` cannot reach:
+ * Exported for the places that PERSIST an error message rather than sending it
+ * to Sentry, which `beforeSend` cannot reach:
  * `community_export_jobs.error_message` (rendered to the PM by
- * `export-job-card.tsx:161-163`) and `provisioning_jobs.error_message`.
+ * `export-job-card.tsx`; the worker route now curates what it passes and
+ * `markJobFailed` redacts as the last door), `provisioning_jobs.error_message`,
+ * and `cron_runs.last_error` (rendered in the admin console's Health board;
+ * redacted in `with-cron-job.ts recordHeartbeat`).
  */
 export function redactParams(value: string): string {
   const marker = value.indexOf(PARAMS_MARKER);

@@ -277,11 +277,20 @@ Everything the ~27-day batch (#947, #950, #951, #956) established is recorded on
 issues themselves. Two findings from it are worth keeping here because they are *not*
 recorded anywhere a reader of this file would look:
 
-- **#951 residuals, still open.** `scrubServerEvent` drops Sentry request bodies and
-  `redactQueryParams` redacts drizzle's bound parameters, both re-measured on a live
-  envelope. Three things it does **not** cover: the export-job column still shows the PM
-  raw SQL, `invitations.token` is still plaintext at rest, and ~90 other `console.error`
-  sites still reach Vercel logs.
+- **#951 residuals.** `scrubServerEvent` drops Sentry request bodies and `redactParams`
+  (the real export name — this bullet used to say `redactQueryParams`, which exists
+  nowhere in code) redacts drizzle's bound parameters, both re-measured on a live
+  envelope. Of the three gaps it left, the export-job column's **write path closed
+  2026-09-22**: the PM-visible `community_export_jobs.error_message` now receives a
+  curated sentence (`EXPORT_FAILURE_MESSAGE`), and every persisted error copy redacts
+  at the write site (`markJobFailed`, `cron_runs.last_error` via `recordHeartbeat`).
+  One ops step remains on it: pre-fix legacy rows may still render raw SQL/params to
+  PMs — count them read-only via Supabase MCP (`WHERE error_message LIKE '%params: %'
+  AND error_message NOT LIKE '%params: [redacted]'`, plus `LIKE '%Failed query:%'` for
+  SQL-only rows) and, if non-zero, repair per the migration-safety "Prod Data Repairs"
+  audit-CTE template (never copy the raw message into `old_values`). Still open:
+  `invitations.token` is plaintext at rest, and ~90 other `console.error` sites reach
+  Vercel logs.
 - **#956 is a deliberate exemption, not an oversight.** ARC withdraw skips
   `requireActiveSubscriptionForMutation` on purpose — gating it would strand the row in
   `submitted` with no way out for either side. Recorded in the route docblock and at the

@@ -78,6 +78,7 @@ const {
   failExhaustedJobs,
   findPurgeableJobArchives,
   markJobArchivePurged,
+  markJobFailed,
   queueExportJob,
 } = await import('@/lib/services/export/export-job-service');
 
@@ -383,6 +384,64 @@ describe('findPurgeableJobArchives', () => {
     const chain = (db.select as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(chain.innerJoin).toHaveBeenCalled();
     expect(JSON.stringify(chain.where.mock.calls[0]![0])).toContain('parts.deleted_at');
+  });
+});
+
+/**
+ * Defense-in-depth for the PM-visible `error_message` column (#951 residual).
+ *
+ * The worker route curates what it passes, but `markJobFailed` is the last door
+ * to a tenant column the settings card renders verbatim — a future caller
+ * passing raw driver text must not be able to persist bound values. Drizzle
+ * embeds them in `error.message` after `params: ` (#1092).
+ */
+describe('markJobFailed — error message hygiene', () => {
+  const setPayloadOf = (db: ReturnType<typeof buildDb>) =>
+    (db.update as ReturnType<typeof vi.fn>).mock.results[0]!.value.set.mock
+      .calls[0]![0] as Record<string, unknown>;
+
+  it('redacts drizzle bound params out of the persisted message', async () => {
+    const db = buildDb({
+      selectResults: [[{ id: 5, attemptCount: 3, maxAttempts: 3 }]],
+      updateReturning: [[]],
+    });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await markJobFailed({
+      jobId: 5,
+      errorCode: 'EXPORT_WORKER_ERROR',
+      errorMessage:
+        'Failed query: insert into documents\nparams: ["canary@x.com","CANARY_VALUE_9F3"]',
+    });
+
+    const payload = setPayloadOf(db);
+    // End-anchored: pins the intact-suffix property (nothing may follow the
+    // redaction marker — a partial cut of the values would).
+    expect(payload.errorMessage).toMatch(/params: \[redacted\]$/);
+    expect(payload.errorMessage).not.toContain('canary@x.com');
+    expect(payload.errorMessage).not.toContain('CANARY_VALUE_9F3');
+  });
+
+  it('truncates AFTER redacting, so the cap holds and no value survives the cut', async () => {
+    // Marker placed inside the 2000-char cap with values that a bare slice
+    // would retain: the persisted text must stay within the cap AND carry no
+    // value, whichever long-message shape arrives.
+    const sql = 'x'.repeat(1900);
+    const db = buildDb({
+      selectResults: [[{ id: 6, attemptCount: 1, maxAttempts: 3 }]],
+      updateReturning: [[]],
+    });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await markJobFailed({
+      jobId: 6,
+      errorCode: 'EXPORT_WORKER_ERROR',
+      errorMessage: `Failed query: ${sql}\nparams: ["canary@x.com"]`,
+    });
+
+    const payload = setPayloadOf(db);
+    expect((payload.errorMessage as string).length).toBeLessThanOrEqual(2000);
+    expect(payload.errorMessage).not.toContain('canary@x.com');
   });
 });
 

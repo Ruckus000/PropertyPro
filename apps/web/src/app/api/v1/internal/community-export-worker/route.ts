@@ -67,6 +67,22 @@ const BUDGET_MS = 60_000;
 /** Jobs claimed per invocation. Small: each can consume the whole budget. */
 const MAX_JOBS_PER_RUN = 2;
 
+/**
+ * What the PM is told when a job fails.
+ *
+ * `community_export_jobs.error_message` is rendered VERBATIM by
+ * export-job-card.tsx, so it follows the same contract as
+ * site-publish-schedule-service's SCHEDULE_FAILURE_MESSAGE: a curated,
+ * actionable sentence — never raw driver text (SQL, constraint names, table
+ * internals), even with the bound values already redacted (#1092). The card
+ * only renders this under `failed`, which is exactly the branch that captures
+ * to Sentry, so "the team has been notified" is true wherever it is read.
+ * Technical detail stays in the engineer channels: console, `summary.errors`,
+ * Sentry. (#951 residual.)
+ */
+const EXPORT_FAILURE_MESSAGE =
+  "We couldn't prepare this export. Our team has been notified — you can try again, and contact support if it keeps failing.";
+
 const handler = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(
     req,
@@ -135,33 +151,38 @@ const handler = withErrorHandler(async (req: NextRequest) => {
         if (notified.sent) {
           summary.notified += 1;
         } else {
-          summary.errors.push(`job ${job.id} notify: ${notified.reason ?? 'unknown'}`);
+          // Redacted like every other contributor to `summary.errors`: the
+          // reason is a raw `error.message` from the mail send, and the summary
+          // leaves in the response body and is copied into Sentry `extra`.
+          summary.errors.push(
+            `job ${job.id} notify: ${redactParams(notified.reason ?? 'unknown')}`,
+          );
         }
       } else {
         summary.yielded += 1;
       }
     } catch (error) {
-      // Redacted: this lands in `community_export_jobs.error_message`, a tenant
-      // column that `export-job-card.tsx:161-163` RENDERS TO THE PM. A drizzle
-      // failure here would otherwise show them `params: <values from the rows
-      // being exported>` (#1092) — a worse sink than Sentry, since it is
-      // persisted and user-visible.
-      //
-      // NOTE this only removes the VALUES. `site-publish-schedule-service.ts:485-493`
-      // argues a curated sentence is the right shape for this column ("raw driver
-      // text — constraint names, table internals — must not land in it"), which
-      // would also drop the SQL. That is a change to PM-visible copy and is left
-      // as a follow-up rather than made here.
+      // Redacted for the ENGINEER channels only (console line below and
+      // `summary.errors`, which leaves in the response body): a drizzle failure
+      // embeds the bound values — rows being exported — in its message (#1092).
       const message = redactParams(
         error instanceof Error ? error.message : String(error),
       );
+      console.error('[community-export-worker] job failed', {
+        jobId: job.id,
+        error: message,
+      });
+      // The PM-visible column gets the CURATED sentence — see
+      // EXPORT_FAILURE_MESSAGE. This replaced the redacted-but-still-raw SQL
+      // text, which export-job-card.tsx rendered verbatim (#951 residual).
+      //
       // Below maxAttempts the job returns to `queued` with its CURSOR INTACT, so
       // a retry resumes rather than restarting — the difference between
       // converging and never finishing on a large association.
       const { willRetry } = await markJobFailed({
         jobId: job.id,
         errorCode: 'EXPORT_WORKER_ERROR',
-        errorMessage: message,
+        errorMessage: EXPORT_FAILURE_MESSAGE,
       });
       if (!willRetry) {
         summary.failed += 1;

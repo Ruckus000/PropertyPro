@@ -84,6 +84,12 @@ export const cronRuns = pgTable('cron_runs', {
    * Deliberately NOT returned by `/api/v1/internal/cron-health`: that endpoint
    * is unauthenticated, and an error message can carry query text or table
    * internals. The probe answers "is it fresh?", which needs timestamps only.
+   *
+   * Sanitization scope, so nobody assumes more than is true: `recordHeartbeat`
+   * strips drizzle's bound `params:` VALUES (#1092) but keeps the SQL, and it
+   * cannot see sensitive text a NON-drizzle error embeds in its own message
+   * (e.g. a postgres.js server message quoting the offending input). The
+   * audience is platform admins only (Health board, critical banner).
    */
   lastError: text('last_error'),
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
