@@ -362,6 +362,17 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // tenant data. The route in front of it is HMAC-signature-authenticated and
   // fails closed. See packages/db/src/schema/rls-config.ts for the RLS posture.
   resolve(repoRoot, 'apps/web/src/lib/services/support-inbox/inbound-email-service.ts'),
+  // Platform support inbox spam classification. Same tables, same reason: they
+  // have no community_id, so createScopedClient cannot express them. Runs only
+  // from the inbox-spam-scan cron behind requireCronSecret. This allowlist is
+  // per-FILE, so the scope that matters is the file's: it reads and writes
+  // support_inbox_messages and support_inbox_threads and nothing else. Its
+  // writes are confined to the spam_score / classified_at columns on
+  // support_inbox_messages and `status` on support_inbox_threads — and that
+  // last one only for threads still 'open', so it can never overwrite an
+  // operator's own triage. The model is retrained in memory each run and is
+  // never persisted to a table.
+  resolve(repoRoot, 'apps/web/src/lib/services/support-inbox/spam-classifier-service.ts'),
   // Export-ready notification. Runs from the same cron — no session, no
   // membership — and reads exactly two rows to address one email: the job's own
   // requester, and its community's name. The community is fixed by the job row,

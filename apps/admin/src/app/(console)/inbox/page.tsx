@@ -1,5 +1,5 @@
 import { PageBody } from '@propertypro/ui';
-import { InboxDashboard } from '@/components/inbox/InboxDashboard';
+import { INBOX_DEFAULT_STATUS, InboxDashboard } from '@/components/inbox/InboxDashboard';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getInboxOverview } from '@/lib/server/inbox';
@@ -24,7 +24,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
       <InboxDashboard
         overview={overview}
         initialMailbox={mailbox ?? 'all'}
-        initialStatus={status ?? 'all'}
+        initialStatus={status ?? INBOX_DEFAULT_STATUS}
       />
     </PageBody>
   );

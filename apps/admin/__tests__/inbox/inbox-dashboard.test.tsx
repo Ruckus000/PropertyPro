@@ -55,8 +55,29 @@ describe('InboxDashboard URL filter validation', () => {
     expect(screen.getByRole('link', { name: /please delete my account/i })).toBeTruthy();
   });
 
-  it('falls back to All for a status that is not a real status', () => {
+  it('falls back to the DEFAULT status for one that is not a real status', () => {
     render(<InboxDashboard overview={OVERVIEW} initialMailbox="all" initialStatus="banana" />);
+
+    // The fallback is `INBOX_DEFAULT_STATUS` ('open'), not 'all' — the same
+    // value the server page uses when `?status=` is absent, because a garbage
+    // value and a missing one mean the same thing.
+    //
+    // The defect this whole describe block exists for was never "a thread got
+    // filtered out"; it was "no tab is highlighted, so nothing on screen says
+    // which filter is in force". That still holds: the Open tab is visibly
+    // active, and this thread is `pending`, so its absence is explained.
+    expect(
+      screen.getByRole('button', { name: /^Open/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(screen.queryByRole('link', { name: /please delete my account/i })).toBeNull();
+  });
+
+  it('honours an explicit status=all rather than forcing the default', () => {
+    // The round-trip that makes the "All" tab usable: the client writes
+    // `?status=all` explicitly precisely because omitting it would now mean
+    // 'open'. If this regresses, clicking All appears to work and then silently
+    // un-picks itself on the next load.
+    render(<InboxDashboard overview={OVERVIEW} initialMailbox="all" initialStatus="all" />);
 
     expect(screen.getByRole('link', { name: /please delete my account/i })).toBeTruthy();
   });

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { InboxDashboard } from '@/components/inbox/InboxDashboard';
+import { INBOX_DEFAULT_STATUS, InboxDashboard } from '@/components/inbox/InboxDashboard';
 import { ThreadView } from '@/components/inbox/ThreadView';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getInboxOverview, getReplyParent, getThreadDetail } from '@/lib/server/inbox';
@@ -47,7 +47,7 @@ export default async function ThreadPage({ params, searchParams }: ThreadPagePro
     <InboxDashboard
       overview={overview}
       initialMailbox={mailbox ?? 'all'}
-      initialStatus={status ?? 'all'}
+      initialStatus={status ?? INBOX_DEFAULT_STATUS}
       activeThreadId={threadId}
       detail={
         <ThreadView

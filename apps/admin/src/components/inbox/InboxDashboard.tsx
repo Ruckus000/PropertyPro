@@ -32,15 +32,30 @@ interface InboxDashboardProps {
 }
 
 /**
+ * The status the inbox opens on when the URL does not say otherwise.
+ *
+ * NOT 'all'. `StatusControl` describes `spam` as "a shelf" whose threads
+ * "leave the default list", and with an 'all' default that was simply untrue —
+ * shelving a thread changed a chip and nothing else, so an inbox whose entire
+ * history had been triaged as spam still rendered as a wall of spam. Opening on
+ * the work queue is what makes the shelf a shelf.
+ *
+ * Exported because `page.tsx` must not spell it independently: the server's
+ * fallback and the client's must be the same value or the URL round-trip below
+ * is wrong in one direction.
+ */
+export const INBOX_DEFAULT_STATUS = 'open';
+
+/**
  * `?mailbox=` / `?status=` are untrusted input — a bookmark, a shared link, a
  * hand-edited URL — so each is validated against its known list and falls back
- * to 'all', the same discipline `ClientWorkspace` applies to `?tab=`. Without
- * it, `?mailbox=foo` rendered an empty thread list with no active chip and no
- * explanation: nothing matched the filter, and no tab was highlighted to say
- * which filter was in force.
+ * to a caller-supplied default, the same discipline `ClientWorkspace` applies
+ * to `?tab=`. Without it, `?mailbox=foo` rendered an empty thread list with no
+ * active chip and no explanation: nothing matched the filter, and no tab was
+ * highlighted to say which filter was in force.
  */
-function knownOr(value: string, allowed: readonly string[]): string {
-  return allowed.includes(value) ? value : 'all';
+function knownOr(value: string, allowed: readonly string[], fallback = 'all'): string {
+  return allowed.includes(value) ? value : fallback;
 }
 
 /**
@@ -62,7 +77,9 @@ export function InboxDashboard({
   const router = useRouter();
   const pathname = usePathname();
   const [mailbox, setMailbox] = useState(() => knownOr(initialMailbox, SUPPORT_MAILBOXES));
-  const [status, setStatus] = useState(() => knownOr(initialStatus, SUPPORT_THREAD_STATUSES));
+  const [status, setStatus] = useState(() =>
+    knownOr(initialStatus, [...SUPPORT_THREAD_STATUSES, 'all'], INBOX_DEFAULT_STATUS),
+  );
 
   function updateFilters(next: { mailbox?: string; status?: string }) {
     const nextMailbox = next.mailbox ?? mailbox;
@@ -70,9 +87,13 @@ export function InboxDashboard({
     setMailbox(nextMailbox);
     setStatus(nextStatus);
 
+    // Omit a param only when it equals what the SERVER will default to on the
+    // next load. 'all' is no longer that value for status, so it must be
+    // written explicitly — otherwise clicking "All" produces a bare /inbox URL
+    // that reopens filtered to 'open', and the tab silently un-picks itself.
     const params = new URLSearchParams();
     if (nextMailbox !== 'all') params.set('mailbox', nextMailbox);
-    if (nextStatus !== 'all') params.set('status', nextStatus);
+    if (nextStatus !== INBOX_DEFAULT_STATUS) params.set('status', nextStatus);
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }

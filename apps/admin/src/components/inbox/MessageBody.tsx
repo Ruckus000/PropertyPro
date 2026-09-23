@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { AlertTriangle, Paperclip } from 'lucide-react';
+import { AlertTriangle, Paperclip, ShieldAlert } from 'lucide-react';
 
 import type { InboxMessage } from '@/lib/server/inbox';
 
@@ -15,6 +15,17 @@ interface MessageBodyProps {
 }
 
 const MUTED = 'text-content-tertiary';
+
+/**
+ * Only a confident score is worth an operator's attention.
+ *
+ * Below this the classifier is not saying "probably fine", it is saying it has
+ * no useful opinion — and a badge on every message would train the reader to
+ * ignore the badge, which is the failure mode that makes advisory signals
+ * worthless. Deliberately lower than the shelving threshold so a human sees the
+ * near-misses the job declined to act on.
+ */
+const SPAM_BADGE_THRESHOLD = 0.8;
 
 /**
  * One message in the thread timeline.
@@ -71,6 +82,21 @@ export function MessageBody({ message, sanitizedHtml }: MessageBodyProps) {
           <span>
             This delivery could not be read. The original payload was kept for
             diagnosis — see <code>raw_payload</code> on this message.
+          </span>
+        </p>
+      ) : null}
+
+      {message.spamScore !== null && message.spamScore >= SPAM_BADGE_THRESHOLD ? (
+        <p className="mb-2 flex items-start gap-2 text-sm text-content-secondary">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            Scored{' '}
+            <span className="font-medium text-content">
+              {Math.round(message.spamScore * 100)}%
+            </span>{' '}
+            likely spam, by a classifier trained on your own triage. The
+            thread&rsquo;s status above is the authority on what was actually
+            done about it.
           </span>
         </p>
       ) : null}
