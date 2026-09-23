@@ -17,15 +17,17 @@
  * ## Authorization contract
  *
  * `requireCronSecret` only. The cross-table writes are wrapped by
- * `runInboxSpamScan`, whose write scope is limited to the classifier columns on
- * `support_inbox_messages`, the single `support_inbox_spam_model` row, and
+ * `runInboxSpamScan`, whose write scope is limited to two things: the
+ * `spam_score` / `classified_at` columns on `support_inbox_messages`, and
  * `status` on `support_inbox_threads` — and that last one only for threads
- * still `open`, so the job can never overwrite an operator's own triage.
+ * still `open`, so the job can never overwrite an operator's own triage. The
+ * model itself is retrained in memory every run and never persisted, so there
+ * is no third table here.
  *
  * There is no audit-log write, deliberately: `support_inbox_*` has no
  * `community_id` for `compliance_audit_log`, and a cron has no human
- * `admin_user_id` for `platform_admin_audit_log`. The `spam_score` /
- * `spam_score` / `classified_at` columns on the message row ARE the record.
+ * `admin_user_id` for `platform_admin_audit_log`. The `spam_score` and
+ * `classified_at` columns on the message row ARE the record.
  *
  * Schedule: hourly, on the hour (vercel.json). At one or two messages a day,
  * a quarter-hourly job was 96 runs to score nothing.

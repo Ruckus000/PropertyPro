@@ -28,6 +28,20 @@ import { buildText, planSpamScan } from './spam-scan-plan';
  * cost is knowable rather than discovered.
  */
 const MAX_CORPUS_ROWS = 500;
+
+/**
+ * How many messages one run re-scores, newest first.
+ *
+ * Every one of them is re-scored on every run — there is deliberately no
+ * "already scored" filter, because that is the self-blinding bug this job was
+ * rewritten to remove (see the note in `planSpamScan`). The bound here is
+ * recency instead, which has its own horizon: once the inbox holds more than
+ * this many inbound emails, the older ones stop being re-scored and keep
+ * whatever score they last received. At one or two messages a day that is
+ * months away, and the feature is advisory, so a single unpaginated read is
+ * the honest trade for now. Paginating this is tracked separately; if you do
+ * it, page the read — do not reintroduce a `spam_score IS NULL` filter.
+ */
 const MAX_SCORE_BATCH = 200;
 
 /**
@@ -143,8 +157,11 @@ async function buildModel(db: Db): Promise<{ model: NaiveBayesModel; spam: numbe
 }
 
 /**
- * One pass: build the model, score everything unscored, shelve what the floor
- * allows.
+ * One pass: build the model, re-score the newest `MAX_SCORE_BATCH` inbound
+ * messages, and shelve what the cold-start floor allows.
+ *
+ * "Re-score", not "score the unscored": every candidate is scored every run and
+ * only a changed score is written back.
  *
  * Returns a summary rather than logging one. Nothing here may log message text
  * or the model — the first is third-party correspondence and the second is

@@ -100,8 +100,12 @@ export function score(model: NaiveBayesModel, text: string): number {
 
   for (const token of tokens) {
     const counts = model.tokens[token];
-    // An unseen token contributes the same Laplace-smoothed mass to both sides,
-    // so it cannot move the verdict. Skipping it is the same answer, cheaper.
+    // Skip tokens the model has never seen. NOT because they cancel out — they
+    // do not: including one would add log(1/(totals.spam + V)) to one side and
+    // log(1/(totals.ham + V)) to the other, which differ whenever the two class
+    // token totals differ, tilting every novel word toward whichever class has
+    // seen fewer tokens overall. That is noise, not evidence. Scoring on
+    // observed evidence only is both the correct answer and the cheaper one.
     if (!counts) continue;
     // Laplace (add-one) smoothing: a token seen only in spam must not drive
     // P(ham) to zero, which in log space is -Infinity and unrecoverable.
