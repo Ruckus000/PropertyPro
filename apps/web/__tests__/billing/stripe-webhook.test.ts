@@ -2092,6 +2092,34 @@ describe('POST /api/v1/webhooks/stripe', () => {
       });
     });
 
+    it('passes a null amount (not a placeholder) when the invoice carries no amount_due', async () => {
+      constructEventMock.mockReturnValue(
+        makeEvent(
+          'invoice.payment_action_required',
+          {
+            id: 'inv_sca_zero',
+            customer: 'cus_sca',
+            parent: {
+              subscription_details: { subscription: 'sub_sca' },
+              type: 'subscription_details',
+            },
+            amount_due: 0,
+            hosted_invoice_url: 'https://invoice.stripe.com/i/acct_1/live_zero',
+          },
+          'evt_sca_zero',
+        ),
+      );
+      setupCommunity();
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(sendPaymentActionRequiredEmailMock).toHaveBeenCalledWith(
+        55,
+        expect.objectContaining({ amountDue: null }),
+      );
+    });
+
     it('passes null when Stripe supplied no hosted invoice URL', async () => {
       constructEventMock.mockReturnValue(
         makeEvent(

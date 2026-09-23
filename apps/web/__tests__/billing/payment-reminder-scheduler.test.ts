@@ -792,6 +792,21 @@ describe('sendPaymentActionRequiredEmail', () => {
     expect(sendEmail).toHaveBeenCalledTimes(2);
   });
 
+  it('states no amount in the subject when Stripe gave none', async () => {
+    const db = mockDbReturning([{ communityType: 'condo_718' }], [{ email: 'a@example.com', fullName: 'Alice' }]);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: null,
+      communityName: 'Sunset Ridge',
+      authenticateUrl: AUTHENTICATE_URL,
+    });
+
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: 'Confirm your payment for Sunset Ridge' }),
+    );
+  });
+
   it('sends nothing when the community has no admin recipients', async () => {
     const db = mockDbReturning([{ communityType: 'condo_718' }], []);
     (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
@@ -957,6 +972,20 @@ describe('billing email detail props', () => {
 
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ category: 'transactional' }));
     expect(propsFor(SubscriptionExpiryWarningEmail)?.['atLockout']).toEqual([...LOCKOUT_EFFECTS]);
+  });
+
+  it('lock warning: an apartment is not told it loses ARC requests or violation reports it never had', async () => {
+    const db = buildMockDb(
+      [{ id: 4, name: 'Sunset Ridge Apartments', communityType: 'apartment', subscriptionPlan: null, paymentFailedAt: daysAgo(30), subscriptionCanceledAt: daysAgo(5) }],
+      [{ email: 'site@example.com', fullName: 'Sam Site' }],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await processPaymentReminders(new Date());
+
+    const rows = propsFor(SubscriptionExpiryWarningEmail)?.['atLockout'] as Array<{ label: string }>;
+    expect(rows.map((row) => row.label)).not.toContain('New resident ARC requests & violation reports');
+    expect(rows).toHaveLength(LOCKOUT_EFFECTS.length - 1);
   });
 
   it('lock warning: tells the board that residents lose ARC requests and violation reports, because those routes are guarded', () => {

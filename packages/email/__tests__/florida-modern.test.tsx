@@ -24,6 +24,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render } from '@react-email/components';
 import {
   AnnouncementEmail,
+  AuthenticateCardEmail,
   CertificateRequestEmail,
   EmergencyAlertEmail,
   InvitationEmail,
@@ -313,6 +314,23 @@ describe('payment failed without a known amount', () => {
     expect(html).not.toMatch(/null|undefined|overdue amount|unknown amount/);
     expect(html).toContain('your latest payment');
     expect(html).toContain('Action required: A payment failed');
+  });
+});
+
+describe('card authentication without a known amount', () => {
+  it('omits the renewal figure and never prints a placeholder as money', async () => {
+    const html = await render(
+      <AuthenticateCardEmail
+        branding={{ communityName: 'Sunset Palms HOA' }}
+        recipientName="Dana"
+        amountDue={null}
+        authenticateUrl="https://invoice.stripe.com/i/x"
+        billingPortalUrl="https://example.com/billing"
+      />,
+    );
+    expect(html).not.toContain('Renewal awaiting confirmation');
+    expect(html).not.toMatch(/null|undefined|subscription payment/);
+    expect(html).toContain('to complete your renewal');
   });
 });
 

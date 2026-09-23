@@ -36,7 +36,9 @@ import {
   PAID_GRACE_DAYS,
   paidGraceEndsAt,
   planLabel,
+  RBAC_MATRIX,
   type CommunityRole,
+  type CommunityType,
 } from '@propertypro/shared';
 import { getBaseUrl } from '@/lib/utils/url';
 
@@ -77,8 +79,11 @@ function emailPlanLabel(raw: string | null | undefined): string | undefined {
 }
 
 /**
- * What changes when a lapsed community's admin access locks — exactly what the
- * code enforces, and nothing more:
+ * What changes when a lapsed community's admin access locks. The resident rows
+ * are exact; the board & manager rows are deliberately stated as "most", because
+ * the mutation guard covers only the statutory/financial write routes (work
+ * orders, vendors, amenities, … are not mutation-guarded — though the read
+ * guard hides most of those admin pages):
  * - admin mutations: `requireActiveSubscriptionForMutation`
  *   (middleware/subscription-guard.ts) → 403 SUBSCRIPTION_REQUIRED
  * - admin reads: `requireEntitledForAdminRead` (middleware/read-entitlement-guard.ts)
@@ -91,12 +96,28 @@ function emailPlanLabel(raw: string | null | undefined): string | undefined {
  * If either guard's scope changes, this list must change with it.
  */
 export const LOCKOUT_EFFECTS = [
-  { label: 'Board & manager admin changes', status: 'Suspended', tone: 'red' },
-  { label: 'Board & manager access to admin pages', status: 'Suspended', tone: 'red' },
+  { label: 'Most board & manager admin changes', status: 'Suspended', tone: 'red' },
+  { label: 'Most board & manager admin pages', status: 'Suspended', tone: 'red' },
   { label: 'New resident ARC requests & violation reports', status: 'Suspended', tone: 'red' },
   { label: 'Resident access to the portal', status: 'Stays on', tone: 'green' },
   { label: 'Resident dues & rent payments', status: 'Stays on', tone: 'green' },
 ] as const satisfies ReadonlyArray<{ label: string; status: string; tone: 'red' | 'green' }>;
+
+const RESIDENT_REQUESTS_ROW = LOCKOUT_EFFECTS[2];
+
+/**
+ * The lockout list for one community type. The ARC/violation row is dropped
+ * where residents cannot file either in the first place (apartments, per the
+ * RBAC matrix's community-type exclusions) — telling them it is suspended would
+ * describe a feature they never had.
+ */
+export function lockoutEffectsFor(communityType: CommunityType) {
+  const residents = [RBAC_MATRIX[communityType].owner, RBAC_MATRIX[communityType].tenant];
+  const residentsCanFile = residents.some(
+    (cell) => cell.arc_submissions.write || cell.violations.write,
+  );
+  return LOCKOUT_EFFECTS.filter((row) => row !== RESIDENT_REQUESTS_ROW || residentsCanFile);
+}
 
 // ---------------------------------------------------------------------------
 // Admin recipient lookup
@@ -240,7 +261,8 @@ export async function sendPaymentFailedEmail(
 // ---------------------------------------------------------------------------
 
 export interface SendPaymentActionRequiredEmailOpts {
-  amountDue: string;
+  /** Formatted invoice amount; null when Stripe gave none (the email omits the figure). */
+  amountDue: string | null;
   communityName: string;
   /**
    * Stripe's `invoice.hosted_invoice_url`, or `null` when Stripe did not
@@ -301,7 +323,9 @@ export async function sendPaymentActionRequiredEmail(
     // Deliberately not the word "failed". Stripe fires this BEFORE the payment
     // gives up, and a subject claiming failure would make a recipient replace a
     // perfectly good card instead of completing the bank's check.
-    `Confirm your payment of ${opts.amountDue} for ${opts.communityName}`,
+    opts.amountDue
+      ? `Confirm your payment of ${opts.amountDue} for ${opts.communityName}`
+      : `Confirm your payment for ${opts.communityName}`,
     (r) =>
       createElement(AuthenticateCardEmail, {
         branding: { communityName: opts.communityName },
@@ -486,7 +510,7 @@ async function processCommunityReminder(
           recipientName: r.fullName,
           expiryDate: formatDate(expiryDate),
           billingPortalUrl,
-          atLockout: [...LOCKOUT_EFFECTS],
+          atLockout: lockoutEffectsFor(community.communityType),
         }),
     );
 

@@ -25,7 +25,8 @@ import type { BaseEmailProps } from '../types';
  */
 export interface AuthenticateCardEmailProps extends BaseEmailProps {
   recipientName: string;
-  amountDue: string;
+  /** Formatted renewal amount, or null when Stripe gave none — null omits the figure. */
+  amountDue: string | null;
   /**
    * Stripe's `invoice.hosted_invoice_url` — the page that runs the 3-D Secure
    * challenge.
@@ -54,7 +55,7 @@ export function AuthenticateCardEmail({
       branding={branding}
       sender="platform"
       tone="amber"
-      previewText={previewText ?? `Confirm your bank's security check to complete ${amountDue}`}
+      previewText={previewText ?? `Confirm your bank's security check to complete ${amountDue ?? 'your renewal'}`}
       mastheadContext={branding.communityName}
       mastheadChip={{ label: 'Confirmation needed', tone: 'amber' }}
     >
@@ -62,14 +63,20 @@ export function AuthenticateCardEmail({
       <Headline
         lede={
           <>
-            Hi {recipientName} — your renewal of <Strong>{amountDue}</Strong> for <Strong>{branding.communityName}</Strong>{' '}
+            Hi {recipientName} — your renewal{' '}
+            {amountDue && (
+              <>
+                of <Strong>{amountDue}</Strong>{' '}
+              </>
+            )}
+            for <Strong>{branding.communityName}</Strong>{' '}
             is ready to go through, but your bank has asked for an extra security check before it will approve the charge.
           </>
         }
       >
         Your bank needs you to confirm this payment
       </Headline>
-      <Figure label="Renewal awaiting confirmation" icon="money-slate" amount={amountDue} tone="amber" />
+      {amountDue && <Figure label="Renewal awaiting confirmation" icon="money-slate" amount={amountDue} tone="amber" />}
       <EmailAlert variant="warning" title="Nothing has gone wrong with your card">
         There is no need to replace it. The payment simply cannot complete until someone confirms it with the bank. If it
         is not confirmed, the renewal will fail on its own and the subscription will fall into arrears.

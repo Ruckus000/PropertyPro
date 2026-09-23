@@ -541,7 +541,7 @@ async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice): Prom
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
         invoice.amount_due / 100,
       )
-    : 'your subscription payment';
+    : null;
 
   await sendPaymentActionRequiredEmail(community.id, {
     amountDue,
