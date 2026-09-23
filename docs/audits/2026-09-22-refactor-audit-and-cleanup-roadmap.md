@@ -24,8 +24,13 @@ adversarially verified; counts re-run at HEAD.
 > `1566d03e3` there are 8 definition files**, one (digest-queue) semantically
 > divergent. The consolidation is **by semantics** to **≤3 definition files** —
 > 2 shared predicates plus 1 documented-in-file digest-queue fork — held as a
-> shrink-only ratchet. Original measurements are left in place below; this note
-> is the normative statement for Phase 1.
+> shrink-only ratchet. **(3) Item 1.3 includes the ledger-D9 self-test**: a
+> `calendar/google/callback` case in `scripts/__tests__/verify-tenant-scope.test.ts`
+> pinning the prose-vs-declaration trap — a contract whose only `tenantScope`
+> occurrence is prose (its docblock literally writes `` `tenantScope`: ``) must
+> NOT count as declaring; the route stays inside the ceiling population as a
+> permanent non-candidate for the Phase 3.6 sweep. Original measurements are
+> left in place below; this note is the normative statement for Phase 1.
 
 ## 1. Headline numbers
 
@@ -231,7 +236,7 @@ Sequenced by **dependency**, not impact. The two load-bearing gates: (a) TST-01/
 |---|---|---|---|---|---|
 | 1.1 | **AZ-01** — gate `POST/PATCH/DELETE /leases` with `requirePermission(membership,'units','write')`; declare GET intent (self-scoped rows for non-managers); 403-for-tenant test | S | low | — | `root-exclusive-routes.test.ts` pattern; invitations AZ-01 fix as precedent |
 | 1.2 | **PAG-01** — one expand migration adding the B3 doc's two named partial indexes + 5 analogous (vendors/assessments/visitors/forum_threads/amenities) = 7 CREATE INDEX statements (amended 2026-09-23 per the header note); apply before traffic per expand/contract discipline | S | low | — | doc DDLs verbatim at `b3-…-design.md:193,213`; the five analogous index names are listed in the header amendment |
-| 1.3 | **CON-01 + CON-02** (one PR) — idiom-agnostic 157-route census (union of resolver + finance-parser); port `checkCeiling` into `verify-tenant-scope.ts`, freeze at 157, print the denominator | S | low | — | `scripts/lib/ceiling.ts`, `verify-contracts.ts` shape |
+| 1.3 | **CON-01 + CON-02** (one PR) — idiom-agnostic 157-route census (union of resolver + finance-parser); port `checkCeiling` into `verify-tenant-scope.ts`, freeze at 157, print the denominator; plus the ledger-D9 self-test in `scripts/__tests__/verify-tenant-scope.test.ts` including a `calendar/google/callback` case — a prose-only `tenantScope` mention must NOT count as declaring (amended 2026-09-23 per the header note) | S | low | — | `scripts/lib/ceiling.ts`, `verify-contracts.ts` shape |
 | 1.4 | **CON-07 + CON-03** — allowlist entries carry classification as data (`Map<path, reason>`); state the A1 floor (~42 permanent) explicitly and close the lane; regenerate drain-loop PERMANENT_SKIPS from the map, drop 3 stale entries | S | low | — | workflow's existing RUNNER_BLOCKED taxonomy; `drain-one-batch.workflow.js:222` one-line change |
 | 1.5 | **TST-06** — integration collected-count floor (port `expectedTestCount` shape) | S | low | — | `e2e.yml:378` |
 | 1.6 | **R3-05 + R3-06 + DBB-06** — doc corrections in one PR: ADR-006 addendum (designation grants read/egress breadth, never write; strike shipped-deferred bullets), guard-header truth | S | low | — | ADR addendum convention |
