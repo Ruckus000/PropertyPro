@@ -65,6 +65,20 @@ export interface InboxMessage {
    * what an operator acts on.
    */
   spamScore: number | null;
+  /**
+   * SPF / DKIM / DMARC verdicts as the receiving MTA reported them, or null
+   * when it reported none.
+   *
+   * These are the classifier's blind spot, not a duplicate of it. The filter
+   * scores token frequency, so it cannot see spoofing at all — every spam this
+   * inbox has actually received PASSED all three, and the converse is the case
+   * that matters: a message claiming to be from a board member while failing
+   * DMARC is the one an operator must not answer. Nothing else in the console
+   * surfaces that.
+   */
+  spfResult: string | null;
+  dkimResult: string | null;
+  dmarcResult: string | null;
 }
 
 export interface InboxStats {
@@ -125,6 +139,9 @@ function mapMessage(row: SupportInboxMessageRow): InboxMessage {
     occurredAt: row.received_at,
     unreadable: row.normalization_status === 'failed',
     spamScore: row.spam_score,
+    spfResult: row.spf_result,
+    dkimResult: row.dkim_result,
+    dmarcResult: row.dmarc_result,
   };
 }
 

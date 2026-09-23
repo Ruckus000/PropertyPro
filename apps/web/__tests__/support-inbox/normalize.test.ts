@@ -266,4 +266,97 @@ describe('authentication verdicts', () => {
     expect(email.dkimResult).toBeNull();
     expect(email.dmarcResult).toBeNull();
   });
+
+  it('digs a verdict out of the object shape production actually sends', () => {
+    // The defect this block exists for. A string-only reader stored three
+    // nulls for the first real message after the feature shipped: Forward
+    // Email's MX is built on mailauth, which reports a verdict as an object.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      spf: { result: 'pass' },
+      dkim: { result: 'fail' },
+      dmarc: { result: 'softfail' },
+    });
+
+    expect(email.spfResult).toBe('pass');
+    expect(email.dkimResult).toBe('fail');
+    expect(email.dmarcResult).toBe('softfail');
+  });
+
+  it("digs through mailauth's `status` wrapper as well as a bare `result`", () => {
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      spf: { status: { result: 'pass' }, domain: 'example.com' },
+      dmarc: { status: 'fail', policy: 'reject' },
+    });
+
+    expect(email.spfResult).toBe('pass');
+    expect(email.dmarcResult).toBe('fail');
+  });
+
+  it('falls back to the RFC 8601 Authentication-Results header', () => {
+    // The point of the fallback: this reads a standard every receiving MTA
+    // writes, so it survives the provider changing its JSON or being replaced.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      headerLines: [
+        {
+          key: 'authentication-results',
+          line:
+            'Authentication-Results: mx1.forwardemail.net; dkim=pass header.d=gmail.com; ' +
+            'spf=pass smtp.mailfrom=jane@example.com; dmarc=fail header.from=gmail.com',
+        },
+      ],
+    });
+
+    expect(email.spfResult).toBe('pass');
+    expect(email.dkimResult).toBe('pass');
+    expect(email.dmarcResult).toBe('fail');
+  });
+
+  it("prefers the provider's own field over the header", () => {
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      spf: { result: 'fail' },
+      headerLines: [{ line: 'Authentication-Results: mx1.example.net; spf=pass' }],
+    });
+
+    expect(email.spfResult).toBe('fail');
+  });
+
+  it('trusts the FIRST Authentication-Results header, not a later relay', () => {
+    // Each hop prepends its own header, so the first is the most recent hop —
+    // the one that actually authenticated this delivery. A forged 'pass' from
+    // further down the chain must not overwrite it.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      headerLines: [
+        { line: 'Authentication-Results: mx1.forwardemail.net; dmarc=fail' },
+        { line: 'Authentication-Results: relay.attacker.example; dmarc=pass' },
+      ],
+    });
+
+    expect(email.dmarcResult).toBe('fail');
+  });
+
+  it('does not read a verdict out of a lookalike token', () => {
+    // The regex boundary earns its place here: without it `dkim=` matches
+    // inside `x-dkim=` and `spf=` inside `receivedspf=`, which would write a
+    // verdict this MTA never asserted.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      headerLines: [
+        { line: 'Authentication-Results: mx1.example.net; x-dkim=pass; receivedspf=pass' },
+      ],
+    });
+
+    expect(email.dkimResult).toBeNull();
+    expect(email.spfResult).toBeNull();
+  });
 });
