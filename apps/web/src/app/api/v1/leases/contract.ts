@@ -41,14 +41,25 @@
  *   a synthesized ack with no Date fields (corpus rule 5). Wire shape stays
  *   byte-identical at `{ data: { deleted: true, id } }`.
  *
- * --- permission metadata ---
+ * --- permission metadata (AZ-01) ---
  * `leases` is intentionally NOT a member of `RBAC_RESOURCES`
  * (`packages/shared/src/rbac-matrix.ts:13` — "leases: NOT in this matrix
- * (separate apartment feature gate)"). The route enforces access via
- * `requireApartmentCommunity(membership.communityType)`, not
- * `requirePermission`. The `permission.resource: 'leases'` entries below are
- * therefore DOCUMENTED PLACEHOLDERS — metadata only, not enforced by the
- * runner — kept for codegen/doc completeness.
+ * (separate apartment feature gate)"), so there is no `leases` matrix row to
+ * name. The entries below therefore key on the REAL resource the route
+ * enforces: `units`. Mutations require `units:write`, which is true on the
+ * `manager` row only — that is the new gate in `./route.ts`.
+ *
+ * GET declares `units:read` and documents an asymmetry on purpose: `units:read`
+ * is true for every row of the matrix, so that entry is descriptive metadata,
+ * not a gate the route needs — what bounds a non-manager's read is the
+ * party-scoped ROW FILTER (`residentId === actorUserId`) in the handler, not a
+ * matrix query. A future guard that cross-checks `contract.permission` against
+ * call sites (AZ-05) must not read GET as a missing `requirePermission` call.
+ *
+ * Interim vocabulary: `units` is the closest existing resource, not a claim
+ * that leases ARE units. Phase 2.1 adds a real `leases` entry to
+ * `RBAC_RESOURCES` and re-keys these four plus the three call sites. Still
+ * metadata only — the runner does not enforce it.
  *
  * --- behavior changes vs. pre-migration ---
  *   - GET: the bespoke 400 messages (`communityId query parameter is
@@ -119,7 +130,7 @@ export const leasesGetContract = defineRoute({
   path: '/api/v1/leases',
   request: { query: getQuerySchema },
   response: z.unknown(),
-  permission: { resource: 'leases', action: 'read' },
+  permission: { resource: 'units', action: 'read' },
   tenantScope: { in: 'query' },
 });
 
@@ -128,7 +139,7 @@ export const leasesPostContract = defineRoute({
   path: '/api/v1/leases',
   request: { body: createLeaseSchema },
   response: z.unknown(),
-  permission: { resource: 'leases', action: 'write' },
+  permission: { resource: 'units', action: 'write' },
   tenantScope: { in: 'body' },
 });
 
@@ -137,7 +148,7 @@ export const leasesPatchContract = defineRoute({
   path: '/api/v1/leases',
   request: { body: updateLeaseSchema },
   response: z.unknown(),
-  permission: { resource: 'leases', action: 'write' },
+  permission: { resource: 'units', action: 'write' },
   tenantScope: { in: 'body' },
 });
 
@@ -146,6 +157,6 @@ export const leasesDeleteContract = defineRoute({
   path: '/api/v1/leases',
   request: { query: deleteQuerySchema },
   response: z.object({ deleted: z.literal(true), id: z.number() }),
-  permission: { resource: 'leases', action: 'write' },
+  permission: { resource: 'units', action: 'write' },
   tenantScope: { in: 'query' },
 });
