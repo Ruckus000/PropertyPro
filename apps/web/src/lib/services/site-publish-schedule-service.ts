@@ -20,6 +20,7 @@
  * terminal status and, on failure, the reason, so the editor can show it.
  */
 import { sitePublishSchedules, logAuditEvent } from '@propertypro/db';
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
 /*
  * The cron's claim scan is deliberately CROSS-TENANT — it looks for due
  * schedules in every community — so it cannot go through a community-scoped
@@ -106,24 +107,6 @@ const LEASE_MS = 10 * 60 * 1000;
 
 /** Exported for tests, which assert the exact expiry the claim writes. */
 export const SITE_PUBLISH_SCHEDULE_LEASE_MS = LEASE_MS;
-
-/**
- * Walks `cause` because the driver wraps the original error — a top-level
- * `code` check alone misses it. Local rather than shared: the repo already has
- * several copies of this and consolidating them is worth doing, but not inside
- * a defect fix that would then touch three unrelated services.
- */
-function hasPostgresErrorCode(error: unknown, expectedCode: string): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  if ('code' in error && (error as { code: unknown }).code === expectedCode) return true;
-  if ('cause' in error) return hasPostgresErrorCode((error as { cause: unknown }).cause, expectedCode);
-  return false;
-}
-
-/** 23505 — here, always the one-active-schedule-per-community index. */
-function isUniqueViolation(error: unknown): boolean {
-  return hasPostgresErrorCode(error, '23505');
-}
 
 /**
  * How many times a schedule is attempted before it is given up on.
@@ -285,7 +268,7 @@ export async function scheduleSitePublish({
       return rows[0]!;
     })
     .catch((error: unknown) => {
-      if (isUniqueViolation(error)) {
+      if (isUniqueConstraintError(error)) {
         throw new ConflictError(
           'A scheduled publish for this community is running right now. Wait a minute and try again.',
         );

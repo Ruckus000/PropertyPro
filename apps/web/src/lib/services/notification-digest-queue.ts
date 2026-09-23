@@ -24,6 +24,11 @@ export interface EnqueueDigestResult {
   enqueued: boolean;
 }
 
+// DELIBERATELY DIVERGENT from `@/lib/db/postgres-error` (SVC-06): the
+// `instanceof Error` gate plus the `/unique/i` message regex mean a message-only
+// failure counts as a duplicate here, so collapsing this onto the shared
+// predicate would turn `enqueueDigestItem`'s throw into a silent
+// `{ enqueued: false }` — a dropped digest nobody sees. Pending a policy decision.
 function isUniqueConstraintError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const asRecord = error as Error & { code?: string };

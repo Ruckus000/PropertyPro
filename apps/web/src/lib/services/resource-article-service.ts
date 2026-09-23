@@ -143,11 +143,6 @@ function getSources(): ResourceSource[] {
   return cachedSources;
 }
 
-/** Test seam — the module-level cache would otherwise outlive a fixture swap. */
-export function clearResourceCache(): void {
-  cachedSources = null;
-}
-
 function isVisible(metadata: ResourceMetadata): boolean {
   // Drafts stay readable by direct URL in development so authors can preview.
   return !metadata.draft || process.env.NODE_ENV === 'development';

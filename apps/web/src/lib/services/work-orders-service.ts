@@ -18,6 +18,10 @@ import {
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from '@propertypro/db/filters';
 // AUTHZ: Operations reservation cancel transition — atomic transaction uses the unsafe escape hatch after the caller has already verified tenant membership and reservation ownership scope.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import {
+  hasPostgresErrorCode,
+  isUniqueConstraintError,
+} from '@/lib/db/postgres-error';
 import { AppError } from '@/lib/api/errors/AppError';
 import {
   BadRequestError,
@@ -184,26 +188,7 @@ const VALID_WORK_ORDER_PRIORITIES: readonly WorkOrderPriority[] = ['low', 'mediu
 const VALID_WORK_ORDER_STATUSES: readonly WorkOrderStatus[] = ['created', 'assigned', 'in_progress', 'completed', 'closed'];
 const VALID_RESERVATION_STATUSES: readonly AmenityReservationStatus[] = ['confirmed', 'cancelled'];
 
-function hasPostgresErrorCode(error: unknown, expectedCode: string): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  if ('code' in error && (error as { code: unknown }).code === expectedCode) {
-    return true;
-  }
-
-  if ('cause' in error) {
-    return hasPostgresErrorCode((error as { cause: unknown }).cause, expectedCode);
-  }
-
-  return false;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return hasPostgresErrorCode(error, '23505');
-}
-
+/** 23P01 — an exclusion constraint, i.e. two overlapping reservation ranges. */
 function isExclusionConstraintError(error: unknown): boolean {
   return hasPostgresErrorCode(error, '23P01');
 }
@@ -420,17 +405,6 @@ async function ensureVendorActive(
   if (!vendor.isActive) {
     throw new UnprocessableEntityError('Cannot assign inactive vendor');
   }
-}
-
-export async function listVendorsForCommunity(
-  communityId: number,
-): Promise<VendorRecord[]> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped
-    .selectFrom<VendorRecord>(vendors, {})
-    .orderBy(desc(vendors.isActive), asc(vendors.name), asc(vendors.id));
-
-  return rows.map(mapVendorRow);
 }
 
 /**
@@ -716,17 +690,6 @@ export async function completeWorkOrderForCommunity(
     { status: 'completed' },
     requestId,
   );
-}
-
-export async function listAmenitiesForCommunity(
-  communityId: number,
-): Promise<AmenityRecord[]> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped
-    .selectFrom<AmenityRecord>(amenities, {})
-    .orderBy(asc(amenities.name));
-
-  return rows.map(mapAmenityRow);
 }
 
 /**
