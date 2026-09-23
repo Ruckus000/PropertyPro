@@ -4,9 +4,10 @@
  * Plan A1 drain. Migrated from `withErrorHandler(async ...)` to
  * `withErrorHandler(runRoute(contract, ...))`. See `./contract.ts` for the
  * input schemas, the GET-filter manual-parse rationale, the loose-vs-tight
- * response modeling, and the `leases` permission-placeholder note.
+ * response modeling, and why the contract's `permission` entries key on
+ * `units` rather than a `leases` resource (AZ-01, interim until Phase 2.1).
  *
- * Authorization invariants (preserved verbatim):
+ * Authorization invariants (AZ-01 — this route is the ONLY enforcement point):
  *   `communityId` is resolved + injected by the runner from the contract's
  *   `tenantScope` (Plan B2): GET/DELETE → query, POST/PATCH → body. The
  *   reconciliation against the `x-community-id` header is unchanged — it now
@@ -15,18 +16,39 @@
  *   GET    — requireAuthenticatedUserId
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
+ *          → requireEntitledForAdminRead (admin-tier only; lapsed-subscription
+ *            gate — it short-circuits for non-admins, so it is NOT a role gate)
+ *          → party-scoped row filter: `isAdminRole(membership.role)` sees every
+ *            lease in the community, anyone else only rows whose `residentId`
+ *            is their own user id. The same visible set backs the
+ *            `renewal_chain_for` traversal, so a chain rooted at someone
+ *            else's lease resolves to nothing.
  *   POST   — requireAuthenticatedUserId
  *          → assertNotDemoGrace (BEFORE membership — corpus rule 2)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
+ *          → requirePermission(membership, 'units', 'write')
  *   PATCH  — requireAuthenticatedUserId
  *          → assertNotDemoGrace (BEFORE membership)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
+ *          → requirePermission(membership, 'units', 'write')
  *   DELETE — requireAuthenticatedUserId
  *          → assertNotDemoGrace (BEFORE membership)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
+ *          → requirePermission(membership, 'units', 'write')
+ *
+ *   AZ-01 rationale. Before this gate the chain stopped at
+ *   `requireCommunityMembership`, and `leases` is not an `RBAC_RESOURCES`
+ *   member, so no matrix query was even possible: ANY member of an apartment
+ *   community — including a tenant — could read and mutate EVERY lease in that
+ *   community, rent amounts included. Neither the scoped client nor RLS closes
+ *   it, because both connections run as `service_role`. `units:write` is true
+ *   on the `manager` row only (`rbac-matrix.ts`, inherited by `apartment` via
+ *   `withPhase5Defaults` with no `excludedCommunityTypes`), which is exactly
+ *   what the only UI entry point (`LeaseListPage`) already enforces
+ *   server-side, so the gate costs no reachable workflow.
  *
  * Patterns preserved:
  * - lease-service helpers for tenant-scoped DB access (AGENTS #13)
@@ -35,11 +57,12 @@
  */
 import { runRoute } from '@/lib/api/run-route';
 import { logAuditEvent } from '@propertypro/db';
-import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import { getFeaturesForCommunity, isAdminRole, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePermission } from '@/lib/db/access-control';
 import {
   getExpiringLeases,
   getRenewalChain,
@@ -201,8 +224,30 @@ export const GET = withErrorHandler(
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 
+    // AZ-01 read scoping — DELIBERATELY PARTY-SCOPED (roadmap ledger D1/D29).
+    //
+    // A permission gate would tighten nothing on this method: `units:read` is
+    // true on every row of the matrix, so every member already holds it. What
+    // the audit found is an unscoped ROW SET, so the boundary is enforced on
+    // the rows instead.
+    //
+    // Management-tier callers keep the whole community's leases — that is the
+    // live property-manager workflow. Everyone else sees ONLY the leases they
+    // are a party to (`residentId === actorUserId`). A unit owner who is not
+    // the named party on a lease therefore sees nothing: that is the ledger's
+    // decision, not an oversight. Broadening read to owner-by-unit needs a
+    // My-Lease product decision and a units join, and this phase deliberately
+    // adds neither.
+    //
+    // Fail-closed by construction — `isAdminRole` resolves only the v3
+    // management roles onto the admin row, so any other value gets the filter
+    // rather than the full list.
+    const seesAllLeases = isAdminRole(membership.role);
+    const visibleToActor = (records: LeaseRecord[]): LeaseRecord[] =>
+      seesAllLeases ? records : records.filter((l) => l.residentId === actorUserId);
+
     const rows = await listLeasesForCommunity(communityId);
-    let leaseRecords = rows.map(coerceLeaseRecord);
+    let leaseRecords = visibleToActor(rows.map(coerceLeaseRecord));
 
     // Optional filters — parsed manually from the URL to preserve the
     // pre-migration lenient semantics (malformed values are silently ignored,
@@ -236,9 +281,12 @@ export const GET = withErrorHandler(
     if (chainFor) {
       const leaseId = Number(chainFor);
       if (Number.isInteger(leaseId) && leaseId > 0) {
-        // Need all leases (not just active) for chain traversal
+        // Need all leases (not just active) for chain traversal — but all
+        // leases VISIBLE TO THE ACTOR, the same party-scoped set the list above
+        // uses, so asking for a chain rooted at someone else's lease yields an
+        // empty array rather than that tenant's rental history.
         const allRows = await listLeasesForCommunity(communityId);
-        const allLeases = allRows.map(coerceLeaseRecord);
+        const allLeases = visibleToActor(allRows.map(coerceLeaseRecord));
         const chain = getRenewalChain(leaseId, allLeases);
         return chain;
       }
@@ -259,6 +307,11 @@ export const POST = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
+    // AZ-01: the apartment gate says this COMMUNITY tracks leases, not that this
+    // CALLER may write them. Minting a lease is a units-tier administrative
+    // action, so gate on units:write (the manager row only) and do it before
+    // any read, write or audit side effect below.
+    requirePermission(membership, 'units', 'write');
 
     // Validate unit belongs to this community
     const unit = await getUnitLeaseDefaults(communityId, payload.unitId);
@@ -395,6 +448,9 @@ export const PATCH = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
+    // AZ-01: units:write (manager row only) — rewriting someone else's lease
+    // terms (rent, dates, status) is exactly as administrative as creating one.
+    requirePermission(membership, 'units', 'write');
 
     // Find the existing lease
     const existing = await getLeaseById(communityId, id);
@@ -518,6 +574,10 @@ export const DELETE = withErrorHandler(
     const { id } = query;
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
+    // AZ-01: same units:write gate as POST/PATCH — soft-deleting someone else's
+    // lease is a management-tier action, and it must be refused before the row
+    // is read or touched.
+    requirePermission(membership, 'units', 'write');
 
     // Verify lease exists
     const existing = await getLeaseById(communityId, id);
