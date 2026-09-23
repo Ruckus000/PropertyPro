@@ -12,14 +12,24 @@
  *   - Centralized read-visibility / role-aware filtering
  *   - The boundary that lets the schema evolve independently of route code
  *
- * Existing violators: 89 files, grandfathered via
- * KNOWN_DIRECT_TABLE_IMPORT_FILES. They are NOT rewritten as part of this
- * guard's introduction (per ADR-003, "no big-bang refactors"). Existing
- * files remain on the allowlist; new files MUST go through services.
+ * Current state: the allowlist (KNOWN_DIRECT_TABLE_IMPORT_FILES) is an EMPTY
+ * SET. Every file that once violated this boundary was drained as of A3 Phase 2
+ * drain #77, which that set's own section header already recorded. This
+ * docblock contradicted it for months, describing a large grandfathered
+ * population and a drain still to be worked through; that stale count survived
+ * the drain and went on to generate a false premise in the 2026-09-22 audit,
+ * which is why it is corrected rather than merely deleted.
  *
- * Goal: drain KNOWN_DIRECT_TABLE_IMPORT_FILES over time. As features touch
- * a grandfathered file, the author should extract a service wrapper for
- * the table query and remove the file from this list.
+ * What the set is NOW: a HARD FLOOR at 0 — not a backlog.
+ *   - A route that violates the boundary and is not in the set is a NEW
+ *     violation and fails the guard (that has always been true).
+ *   - Adding an entry is therefore NOT "grandfathering existing debt". With the
+ *     drain finished, every addition registers NEW debt and requires explicit
+ *     review: a written reason in the PR, and a check that a service wrapper
+ *     genuinely is not the cheaper answer.
+ *   - The allowance that let violators sit still while the drain proceeded (per
+ *     ADR-003, "no big-bang refactors") has been fully exercised. There is
+ *     nothing left for it to apply to, so nothing should be in this set.
  *
  * Companion guards:
  *   - guard:component-api-calls (#198)        — first boundary (UI → route)
@@ -107,11 +117,14 @@ const ALLOWED_SYMBOLS = new Set<string>([
 // ---------------------------------------------------------------------------
 // Grandfather allowlist — drained to 0 files as of A3 Phase 2 drain #77.
 //
-// These files predate the guard and are allowed to keep their direct table
-// imports. New files MUST NOT be added without explicit review — the guard
-// errors on any new file.
+// HARD FLOOR: this set is empty and is expected to stay empty. Every file that
+// once appeared here has been migrated. An addition is new debt, not the
+// grandfathering of old debt, and requires explicit review with a stated reason
+// — the guard errors on any violating file that is NOT in this set, so adding an
+// entry is the only way to admit one, and that is deliberately the harder path.
 //
-// To migrate a file off the list:
+// If a route does need migrating off the boundary (or off this set, in the event
+// one was admitted under review):
 //   1. Identify the table queries inlined in the route handler.
 //   2. Move them to a service wrapper under `@/lib/services/<domain>-service.ts`
 //      (matches the existing convention; see `work-orders-service.ts`,
@@ -319,9 +332,16 @@ function main(): void {
     process.exit(1);
   }
 
+  // The allowlist was drained to 0 as of A3 Phase 2 drain #77, so a
+  // "remaining files, drain them" success line describes a world that no longer
+  // exists. Report which world we are actually in: an empty set is the expected
+  // floor, and a non-empty one is debt someone admitted under review.
+  const allowlistSize = KNOWN_DIRECT_TABLE_IMPORT_FILES.size;
   console.log(
     `\n✅ No new route → table imports outside the allowlist. ` +
-      `${KNOWN_DIRECT_TABLE_IMPORT_FILES.size} grandfathered files remain — drain over time.`,
+      (allowlistSize === 0
+        ? 'Allowlist is at its expected floor of 0 — adding an entry requires review.'
+        : `${allowlistSize} file(s) on the allowlist; the floor is 0, so each one is debt to remove, not to keep.`),
   );
 }
 
