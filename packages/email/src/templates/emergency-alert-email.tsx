@@ -1,8 +1,8 @@
-import { Heading, Hr, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
+import { Img } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
-import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import { FinePrint, Headline, MultilineText, Paragraph, Strong } from '../components/email-blocks';
+import { emailIconUrl } from '../components/email-assets';
+import { emailTheme, toneFill, type EmailTone } from '../components/theme';
 import type { BaseEmailProps } from '../types';
 
 export type EmergencyAlertSeverity = 'emergency' | 'urgent' | 'info';
@@ -15,6 +15,17 @@ export interface EmergencyAlertEmailProps extends BaseEmailProps {
   sentAt: string;
 }
 
+const SEVERITY: Record<EmergencyAlertSeverity, { label: string; tone: EmailTone }> = {
+  emergency: { label: 'Emergency alert', tone: 'red' },
+  urgent: { label: 'Urgent alert', tone: 'amber' },
+  info: { label: 'Community alert', tone: 'teal' },
+};
+
+/**
+ * Layout A6 · Emergency alert — read at 5am, on a lock screen, by someone half
+ * awake. The only layout with a filled band above the masthead and no imagery;
+ * severity picks the band's colour and label. Body copy is full-strength ink.
+ */
 export function EmergencyAlertEmail({
   branding,
   previewText,
@@ -24,66 +35,53 @@ export function EmergencyAlertEmail({
   severity,
   sentAt,
 }: EmergencyAlertEmailProps) {
+  const level = SEVERITY[severity];
+
   return (
     <EmailLayout
       branding={branding}
-      accentColor={emailColors.accentRed}
+      tone={level.tone}
       previewText={previewText ?? `Emergency Alert: ${alertTitle} — ${branding.communityName}`}
+      mastheadSize="compact"
+      mastheadMeta={<>Sent {sentAt}</>}
+      banner={<SeverityBand label={level.label} tone={level.tone} />}
     >
-      {/* Red emergency banner */}
-      <table
-        width="100%"
-        cellPadding={0}
-        cellSpacing={0}
-        style={{ background: emailColors.buttonDestructive, borderRadius: '6px', margin: '0 0 20px 0' }}
-      >
-        <tbody>
-          <tr>
-            <td style={{ padding: '12px', textAlign: 'center' as const }}>
-              <span
-                style={{
-                  color: emailColors.buttonDefaultText,
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  letterSpacing: '2px',
-                  textTransform: 'uppercase' as const,
-                }}
-              >
-                Emergency Alert
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <Heading as="h1" style={{ ...styles.heading, fontSize: '22px' }}>
-        {alertTitle}
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        This is an emergency notification from{' '}
-        <strong>{branding.communityName}</strong>.
-      </Text>
-
-      <EmailAlert variant="danger">
-        {alertBody.split('\n').map((line, i) => (
-          <span key={i}>
-            {line || '\u00A0'}
-            {i < alertBody.split('\n').length - 1 && <br />}
-          </span>
-        ))}
-      </EmailAlert>
-
-      <Text style={{ fontSize: '13px', color: emailColors.mutedForeground, margin: '0 0 20px 0' }}>
-        Sent at {sentAt}
-      </Text>
-
-      <Hr style={{ borderTop: `1px solid ${emailColors.border}`, margin: '0 0 20px 0' }} />
-
-      <Text style={styles.small}>
-        Emergency notifications cannot be unsubscribed.
-      </Text>
+      <Headline>{alertTitle}</Headline>
+      <Paragraph ink tight>
+        Hi {recipientName} — this is an emergency notification from <Strong>{branding.communityName}</Strong>.
+      </Paragraph>
+      <Paragraph ink>
+        <MultilineText text={alertBody} />
+      </Paragraph>
+      <FinePrint>Emergency notifications cannot be unsubscribed.</FinePrint>
     </EmailLayout>
+  );
+}
+
+/** The filled band above the masthead: white glyph + uppercase severity label. */
+function SeverityBand({ label, tone }: { label: string; tone: EmailTone }) {
+  return (
+    <tr>
+      <td style={{ backgroundColor: toneFill(tone), padding: '15px 30px', textAlign: 'center' }}>
+        <Img
+          src={emailIconUrl('alert-white')}
+          width={22}
+          height={22}
+          alt=""
+          style={{ display: 'inline-block', verticalAlign: '-6px', marginRight: '11px', width: '22px', height: '22px' }}
+        />
+        <span
+          style={{
+            fontSize: '12px',
+            fontWeight: 600,
+            color: emailTheme.onFill,
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+          }}
+        >
+          {label}
+        </span>
+      </td>
+    </tr>
   );
 }

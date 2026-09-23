@@ -35,6 +35,7 @@ import {
   MANAGER_TIER_DB_ROLES,
   PAID_GRACE_DAYS,
   paidGraceEndsAt,
+  planLabel,
   type CommunityRole,
 } from '@propertypro/shared';
 import { getBaseUrl } from '@/lib/utils/url';
@@ -63,6 +64,39 @@ function addDays(date: Date, days: number): Date {
 // Billing dates are rendered UTC via the shared formatter so the email and the
 // in-app banner (which uses the same helper) never disagree by a day.
 const formatDate = formatBillingDateUTC;
+
+/**
+ * "Professional plan" for a stored plan id, or undefined when the id is empty or
+ * not one we recognise — `planLabel` echoes an unknown raw value back, and a
+ * raw database value has no place in a customer email.
+ */
+function emailPlanLabel(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  const label = planLabel(raw);
+  return label === raw ? undefined : `${label} plan`;
+}
+
+/**
+ * What changes when a lapsed community's admin access locks — exactly what the
+ * code enforces, and nothing more:
+ * - admin mutations: `requireActiveSubscriptionForMutation`
+ *   (middleware/subscription-guard.ts) → 403 SUBSCRIPTION_REQUIRED
+ * - admin reads: `requireEntitledForAdminRead` (middleware/read-entitlement-guard.ts)
+ * - residents are never read-gated (same file), and their own dues/rent payments
+ *   bypass the mutation guard via `allowResidentSelfService`.
+ * - but the mutation guard is not role-aware: a resident's NEW ARC request
+ *   (`POST /api/v1/arc`) and violation report (`POST /api/v1/violations`) call
+ *   it with no carve-out, so both 403 at lockout. (ARC withdraw is deliberately
+ *   unguarded — see arc/[id]/withdraw/route.ts.)
+ * If either guard's scope changes, this list must change with it.
+ */
+export const LOCKOUT_EFFECTS = [
+  { label: 'Board & manager admin changes', status: 'Suspended', tone: 'red' },
+  { label: 'Board & manager access to admin pages', status: 'Suspended', tone: 'red' },
+  { label: 'New resident ARC requests & violation reports', status: 'Suspended', tone: 'red' },
+  { label: 'Resident access to the portal', status: 'Stays on', tone: 'green' },
+  { label: 'Resident dues & rent payments', status: 'Stays on', tone: 'green' },
+] as const satisfies ReadonlyArray<{ label: string; status: string; tone: 'red' | 'green' }>;
 
 // ---------------------------------------------------------------------------
 // Admin recipient lookup
@@ -144,9 +178,14 @@ async function sendToAll(
 // ---------------------------------------------------------------------------
 
 export interface SendPaymentFailedEmailOpts {
-  amountDue: string;
+  /** Formatted invoice amount; null when Stripe gave none (the email omits the figure). */
+  amountDue: string | null;
   lastFourDigits: string | null;
   communityName: string;
+  /** Stripe's `invoice.number` — the reference on the invoice the board receives. */
+  invoiceNumber?: string | null;
+  /** Stripe's `invoice.next_payment_attempt`; null when Stripe will not retry. */
+  nextPaymentAttempt?: Date | null;
 }
 
 /**
@@ -158,7 +197,10 @@ export async function sendPaymentFailedEmail(
 ): Promise<void> {
   const db = createUnscopedClient();
   const communityRows = await db
-    .select({ communityType: communities.communityType })
+    .select({
+      communityType: communities.communityType,
+      subscriptionPlan: communities.subscriptionPlan,
+    })
     .from(communities)
     .where(eq(communities.id, communityId))
     .limit(1);
@@ -168,10 +210,17 @@ export async function sendPaymentFailedEmail(
   if (recipients.length === 0) return;
 
   const billingPortalUrl = `${getBaseUrl()}/billing/portal?communityId=${communityId}`;
+  // Only Stripe's own next attempt is stated — its Smart Retries ladder beyond
+  // that is not ours to predict.
+  const retrySchedule = opts.nextPaymentAttempt
+    ? [{ label: 'Next automatic retry', value: formatDate(opts.nextPaymentAttempt) }]
+    : undefined;
 
   await sendToAll(
     recipients,
-    `Action required: Payment of ${opts.amountDue} failed for ${opts.communityName}`,
+    opts.amountDue
+      ? `Action required: Payment of ${opts.amountDue} failed for ${opts.communityName}`
+      : `Action required: Payment failed for ${opts.communityName}`,
     (r) =>
       createElement(PaymentFailedEmail, {
         branding: { communityName: opts.communityName },
@@ -179,6 +228,9 @@ export async function sendPaymentFailedEmail(
         amountDue: opts.amountDue,
         lastFourDigits: opts.lastFourDigits,
         billingPortalUrl,
+        invoiceNumber: opts.invoiceNumber ?? undefined,
+        planLabel: emailPlanLabel(communityRows[0]?.subscriptionPlan),
+        retrySchedule,
       }),
   );
 }
@@ -327,6 +379,7 @@ export async function processPaymentReminders(
       id: communities.id,
       name: communities.name,
       communityType: communities.communityType,
+      subscriptionPlan: communities.subscriptionPlan,
       paymentFailedAt: communities.paymentFailedAt,
       subscriptionCanceledAt: communities.subscriptionCanceledAt,
     })
@@ -365,6 +418,7 @@ type CommunityReminderRow = {
   id: number;
   name: string;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
+  subscriptionPlan: string | null;
   paymentFailedAt: Date | null;
   subscriptionCanceledAt: Date | null;
 };
@@ -432,6 +486,7 @@ async function processCommunityReminder(
           recipientName: r.fullName,
           expiryDate: formatDate(expiryDate),
           billingPortalUrl,
+          atLockout: [...LOCKOUT_EFFECTS],
         }),
     );
 
@@ -459,9 +514,12 @@ async function processCommunityReminder(
         createElement(PaymentFailedEmail, {
           branding: { communityName: community.name },
           recipientName: r.fullName,
-          amountDue: 'your overdue amount',
+          // No invoice amount is stored on the community, so none is stated —
+          // the template omits the "Outstanding balance" figure for null.
+          amountDue: null,
           lastFourDigits: null,
           billingPortalUrl,
+          planLabel: emailPlanLabel(community.subscriptionPlan),
         }),
     );
 

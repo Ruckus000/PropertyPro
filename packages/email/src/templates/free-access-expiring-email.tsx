@@ -1,8 +1,5 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface FreeAccessExpiringEmailProps extends BaseEmailProps {
@@ -12,6 +9,11 @@ export interface FreeAccessExpiringEmailProps extends BaseEmailProps {
   subscribeUrl: string;
 }
 
+/**
+ * Layout P4 variant · Free access expiring — the expiry frame for a free-access
+ * grant. (The design's coverage table pairs this with P8; mapped by meaning: an
+ * approaching deadline is P4, an ended one is P8.)
+ */
 export function FreeAccessExpiringEmail({
   branding,
   previewText,
@@ -25,32 +27,28 @@ export function FreeAccessExpiringEmail({
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        `Your free access to ${communityName} ends in ${dayLabel}`
-      }
-      accentColor={emailColors.accentWarning}
+      sender="platform"
+      tone="red"
+      previewText={previewText ?? `Your free access to ${communityName} ends in ${dayLabel}`}
+      mastheadContext={communityName}
+      mastheadChip={{ label: `${dayLabel} left`, tone: 'red' }}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="clock-red" label="Free access · ending soon" tone="red" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — your free access to <Strong>{communityName}</Strong> ends in <Strong>{dayLabel}</Strong>.
+            Subscribe now to continue uninterrupted access to your community portal.
+          </>
+        }
+      >
         Free access ending soon
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-
-      <Text style={styles.body}>
-        Your free access to <strong>{communityName}</strong> ends in{' '}
-        <strong>{dayLabel}</strong>. Subscribe now to continue uninterrupted
-        access to your community portal.
-      </Text>
-
-      <EmailButton href={subscribeUrl} variant="default">
-        Subscribe now
-      </EmailButton>
-
-      <Text style={styles.smallSpaced}>
-        After the free access period ends, a 30-day grace period begins before
-        your account is locked. Subscribe at any time to keep access.
-      </Text>
+      </Headline>
+      <ActionRow href={subscribeUrl} label="Subscribe now" variant="destructive" />
+      <FinePrint>
+        After the free access period ends, a 30-day grace period begins before your account is locked. Subscribe at any
+        time to keep access.
+      </FinePrint>
     </EmailLayout>
   );
 }

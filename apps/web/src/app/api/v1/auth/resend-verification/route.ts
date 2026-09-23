@@ -8,6 +8,7 @@
  * Plan A1 drain #154. Migrated to `runRoute(contract, handler)`; see
  * `./contract.ts`. Preserves 409/429 wire shapes via route-level dispatch.
  */
+import { signupRemainingSteps } from '@/lib/auth/signup-remaining-steps';
 import { NextResponse, type NextRequest } from 'next/server';
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -120,6 +121,7 @@ const runResendVerification = runRoute(
           primaryContactName: signup.primaryContactName ?? 'there',
           communityName: signup.communityName ?? 'your community',
           verificationLink: linkResult.verificationLink,
+          remainingSteps: signupRemainingSteps(signup.planKey),
         }),
       });
       messageId = result.id;

@@ -1,10 +1,6 @@
-import { Heading, Text } from '@react-email/components';
 import { PAID_GRACE_DAYS } from '@propertypro/shared';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, DataRows, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface SubscriptionCanceledEmailProps extends BaseEmailProps {
@@ -14,6 +10,7 @@ export interface SubscriptionCanceledEmailProps extends BaseEmailProps {
   billingPortalUrl: string;
 }
 
+/** Layout P8 · Subscription ended — close the account cleanly and leave the door open. Amber: nothing has gone wrong. */
 export function SubscriptionCanceledEmail({
   branding,
   previewText,
@@ -25,38 +22,38 @@ export function SubscriptionCanceledEmail({
   return (
     <EmailLayout
       branding={branding}
+      sender="platform"
+      tone="amber"
       previewText={
         previewText ??
         `Your subscription has been canceled — ${PAID_GRACE_DAYS}-day grace period ends ${gracePeriodEndDate}`
       }
-      accentColor={emailColors.accentWarning}
+      mastheadContext={branding.communityName}
+      mastheadChip={{ label: 'Canceled', tone: 'amber' }}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="clock-amber" label={`Canceled ${canceledAt}`} tone="amber" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — the subscription for <Strong>{branding.communityName}</Strong> was canceled on{' '}
+            {canceledAt}. You have {PAID_GRACE_DAYS} days of full access, and your community portal will remain accessible
+            until <Strong>{gracePeriodEndDate}</Strong>.
+          </>
+        }
+      >
         Subscription canceled
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        The subscription for <strong>{branding.communityName}</strong> was
-        canceled on {canceledAt}.
-      </Text>
-
-      <EmailAlert variant="warning" title={`${PAID_GRACE_DAYS}-day grace period`}>
-        You have {PAID_GRACE_DAYS} days of full access. Your community portal
-        will remain accessible until{' '}
-        <strong>{gracePeriodEndDate}</strong>. After that date, access will be
-        restricted and your data will be retained for 90 days.
-      </EmailAlert>
-
-      <EmailButton href={billingPortalUrl} variant="default">
-        Reactivate subscription
-      </EmailButton>
-
-      <Text style={styles.smallSpaced}>
-        To reactivate, click the button above to manage your billing. Your
-        community data and settings are preserved. Contact support if you need
-        assistance.
-      </Text>
+      </Headline>
+      <DataRows
+        rows={[
+          { label: `Full access (${PAID_GRACE_DAYS}-day grace period) until`, value: gracePeriodEndDate },
+          { label: 'After that date', value: 'Access restricted · data retained 90 days' },
+        ]}
+      />
+      <ActionRow href={billingPortalUrl} label="Reactivate subscription" variant="warning" />
+      <FinePrint>
+        To reactivate, click the button above to manage your billing. Your community data and settings are preserved.
+        Contact support if you need assistance.
+      </FinePrint>
     </EmailLayout>
   );
 }

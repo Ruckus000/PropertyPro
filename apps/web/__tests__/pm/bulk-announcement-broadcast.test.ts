@@ -45,7 +45,7 @@ describe('broadcastBulkAnnouncementToCommunity', () => {
     expect(getAnnouncementAuthorNameMock).toHaveBeenCalledWith(7, 'pm-1');
     expect(queryMock).not.toHaveBeenCalled();
     expect(queueAnnouncementDeliveryMock).toHaveBeenCalledWith(
-      expect.objectContaining({ communityId: 7, announcementId: 55, authorName: 'Pat Manager' }),
+      expect.objectContaining({ communityId: 7, announcementId: 55, authorName: 'Pat Manager', authorUserId: 'pm-1' }),
     );
   });
 });

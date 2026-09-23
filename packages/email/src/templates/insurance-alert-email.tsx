@@ -1,9 +1,6 @@
-import { Heading, Text, Section, Hr, Link } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import * as styles from '../components/shared-styles';
-import type { BaseEmailProps } from '../types';
+import { ActionRow, CategoryMark, FinePrint, Headline, Paragraph } from '../components/email-blocks';
+import type { BaseEmailProps, CommunityBranding } from '../types';
 
 export interface InsuranceAlertEmailProps extends BaseEmailProps {
   /** Board member / manager receiving the alert. */
@@ -26,10 +23,14 @@ export interface InsuranceAlertEmailProps extends BaseEmailProps {
 }
 
 /**
- * Board-facing renewal/expiry alert for the insurance hub (wind-mit report or
- * master policy). Non-transactional under CAN-SPAM: it carries the association's
- * postal address and a one-click unsubscribe. Copy is factual and reused from
- * the attorney-gated insurance disclaimers — no premium promises, no advice.
+ * Layout A4 · Compliance alert (insurance variant) — board-facing renewal /
+ * expiry alert for the insurance hub (wind-mit report or master policy).
+ *
+ * Non-transactional under CAN-SPAM: it carries the association's postal
+ * address and a one-click unsubscribe. Both live in the layout footer — the
+ * props are merged into `branding` so there is exactly ONE unsubscribe link,
+ * with a caller-supplied `branding` value winning. Copy is factual and reused
+ * from the attorney-gated insurance disclaimers — no premium promises, no advice.
  */
 export function InsuranceAlertEmail({
   branding,
@@ -43,44 +44,38 @@ export function InsuranceAlertEmail({
   senderAddressLines,
   unsubscribeUrl,
 }: InsuranceAlertEmailProps) {
+  const footerBranding: CommunityBranding = {
+    ...branding,
+    postalAddressLines: branding.postalAddressLines ?? senderAddressLines,
+    unsubscribeUrl: branding.unsubscribeUrl ?? unsubscribeUrl,
+    unsubscribeLabel: branding.unsubscribeLabel ?? 'Unsubscribe from insurance alerts',
+  };
+
   return (
-    <EmailLayout branding={branding} previewText={previewText ?? intro}>
-      <Heading as="h1" style={styles.heading}>
+    <EmailLayout
+      branding={footerBranding}
+      tone="red"
+      previewText={previewText ?? intro}
+      mastheadContext="Board & manager notice"
+      footerReason={`You're receiving this because you help manage ${branding.communityName}.`}
+    >
+      <CategoryMark icon="alert-red" label="Insurance alert" tone="red" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — {intro}
+          </>
+        }
+      >
         {heading}
-      </Heading>
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>{intro}</Text>
+      </Headline>
       {body.map((line, index) => (
-        <Text key={index} style={styles.body}>
+        <Paragraph key={index} tight={index < body.length - 1}>
           {line}
-        </Text>
+        </Paragraph>
       ))}
-
-      <Section style={styles.buttonSection}>
-        <EmailButton href={portalUrl}>Open the insurance hub</EmailButton>
-      </Section>
-
-      <Hr style={{ borderColor: emailColors.border, margin: '24px 0 12px' }} />
-      <Text style={styles.small}>{disclaimer}</Text>
-
-      {/* CAN-SPAM sender postal address — the association's own mailing address. */}
-      <Text style={{ ...styles.small, margin: '12px 0 0' }}>
-        {branding.communityName}
-        {senderAddressLines.map((line, index) => (
-          <span key={index}>
-            <br />
-            {line}
-          </span>
-        ))}
-      </Text>
-
-      <Text style={{ ...styles.small, margin: '8px 0 0' }}>
-        You're receiving this because you help manage {branding.communityName}.{' '}
-        <Link href={unsubscribeUrl} style={{ color: emailColors.textSecondary }}>
-          Unsubscribe from insurance alerts
-        </Link>
-        .
-      </Text>
+      <ActionRow href={portalUrl} label="Open the insurance hub" variant="destructive" />
+      <FinePrint>{disclaimer}</FinePrint>
     </EmailLayout>
   );
 }

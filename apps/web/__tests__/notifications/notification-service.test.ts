@@ -443,6 +443,29 @@ describe('notification-service', () => {
       );
     });
 
+    it('passes the compliance punch list through to the email', async () => {
+      setupMock(
+        [{ userId: 'u-cam', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager' }],
+        [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }],
+        [],
+      );
+
+      const items = [
+        { label: 'Annual Budget', status: 'missing' as const },
+        { label: 'Insurance Policy', status: 'overdue' as const },
+      ];
+      await sendNotification(
+        COMMUNITY_ID,
+        { type: 'compliance_alert', alertTitle: '2 compliance items overdue', alertDescription: 'x', severity: 'critical', items },
+        'community_admins',
+        'actor-1',
+      );
+
+      const emailArgs = sendEmailMock.mock.calls[0]![0] as { category: string; react: { props: { items: unknown } } };
+      expect(emailArgs.category).toBe('non-transactional');
+      expect(emailArgs.react.props.items).toEqual(items);
+    });
+
     it('sends document posted emails', async () => {
       setupMock(
         [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }],

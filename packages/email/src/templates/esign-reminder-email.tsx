@@ -1,10 +1,7 @@
-import { Heading, Section, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
+import { EsignDocumentPanel, type EsignSigner } from './esign-invitation-email';
 
 export interface EsignReminderEmailProps extends BaseEmailProps {
   signerName: string;
@@ -12,6 +9,10 @@ export interface EsignReminderEmailProps extends BaseEmailProps {
   signingUrl: string;
   reminderNumber: number;
   expiresAt?: string;
+  /** Optional signing order, as on the invitation. Rendered only when supplied. */
+  signers?: EsignSigner[];
+  /** Optional page count, shown under the document name. */
+  pageCount?: number;
 }
 
 function formatOrdinal(n: number): string {
@@ -26,6 +27,14 @@ function formatOrdinal(n: number): string {
   return `${n}${suffixes[rule] ?? 'th'}`;
 }
 
+/**
+ * Layout A5 · E-sign reminder — the invitation's structure again, with the
+ * masthead chip naming which reminder this is. The expiry sits beside the
+ * button, where the decision is made.
+ *
+ * Called as a plain function by esign-service (`EsignReminderEmail({...})`),
+ * so it must stay hook-free.
+ */
 export function EsignReminderEmail({
   branding,
   previewText,
@@ -34,43 +43,43 @@ export function EsignReminderEmail({
   signingUrl,
   reminderNumber,
   expiresAt,
+  signers,
+  pageCount,
 }: EsignReminderEmailProps) {
   const ordinal = formatOrdinal(reminderNumber);
 
   return (
     <EmailLayout
       branding={branding}
-      accentColor={emailColors.accentWarning}
-      previewText={
-        previewText ??
-        `Reminder: Your signature is needed on "${documentName}"`
-      }
+      tone="violet"
+      previewText={previewText ?? `Reminder: Your signature is needed on "${documentName}"`}
+      mastheadContext="Signature request"
+      mastheadChip={{ label: `${ordinal} reminder`, tone: 'violet' }}
     >
-      <Heading as="h1" style={styles.heading}>
-        Signature reminder
-      </Heading>
-
-      <Text style={styles.body}>Hi {signerName},</Text>
-      <Text style={styles.body}>
-        Reminder #{reminderNumber} — a document from{' '}
-        <strong>{branding.communityName}</strong> is awaiting your signature.
-      </Text>
-
-      <EmailAlert variant="warning" title={documentName}>
+      <CategoryMark icon="pen-violet" label="Signature reminder" tone="violet" />
+      <Headline
+        lede={
+          <>
+            Hi {signerName} — a document from <Strong>{branding.communityName}</Strong> is still awaiting your
+            signature.
+          </>
+        }
+      >
+        {documentName}
+      </Headline>
+      <EsignDocumentPanel documentName={documentName} pageCount={pageCount} signers={signers} />
+      <ActionRow
+        href={signingUrl}
+        label="Sign now"
+        variant="violet"
+        aside={expiresAt ? <>Expires {expiresAt}</> : undefined}
+      />
+      <FinePrint>
         {expiresAt
-          ? `This signing request expires on ${expiresAt}. Please sign before the deadline to avoid delays.`
-          : 'Please review and sign the document at your earliest convenience.'}
-      </EmailAlert>
-
-      <Section style={styles.buttonSection}>
-        <EmailButton href={signingUrl} variant="warning">
-          Sign now
-        </EmailButton>
-      </Section>
-
-      <Text style={styles.smallSpaced}>
+          ? <>This signing request expires on {expiresAt}. Please sign before the deadline to avoid delays. </>
+          : <>Please review and sign the document at your earliest convenience. </>}
         If you have already signed this document, please disregard this reminder.
-      </Text>
+      </FinePrint>
     </EmailLayout>
   );
 }

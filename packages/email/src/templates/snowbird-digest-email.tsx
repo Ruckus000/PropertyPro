@@ -1,9 +1,18 @@
-import { Heading, Text, Section, Hr, Link } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
+import { Link } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import * as styles from '../components/shared-styles';
-import type { BaseEmailProps } from '../types';
+import { EmailAlert } from '../components/email-alert';
+import {
+  ActionRow,
+  CategoryMark,
+  FinePrint,
+  Headline,
+  ItemRows,
+  PhotoBand,
+  Strong,
+  type ItemRow,
+} from '../components/email-blocks';
+import { emailTheme } from '../components/theme';
+import type { BaseEmailProps, CommunityBranding } from '../types';
 
 /** One line in a digest section. `date` is a pre-formatted human string. */
 export interface SnowbirdDigestItem {
@@ -25,41 +34,28 @@ export interface SnowbirdDigestEmailProps extends BaseEmailProps {
   unsubscribeUrl: string;
 }
 
-const sectionHeading: React.CSSProperties = {
-  fontSize: '15px',
-  fontWeight: 700,
-  color: emailColors.textPrimary,
-  margin: '20px 0 8px',
-};
-
-const itemRow: React.CSSProperties = {
-  padding: '8px 0',
-  borderBottom: `1px solid ${emailColors.border}`,
-};
-
-function DigestSection({ heading, items }: { heading: string; items: SnowbirdDigestItem[] }) {
-  if (items.length === 0) return null;
-  return (
-    <Section>
-      <Text style={sectionHeading}>{heading}</Text>
-      {items.map((item, index) => (
-        <div key={`${item.title}-${index}`} style={itemRow}>
-          <Link href={item.actionUrl} style={{ color: emailColors.textPrimary, textDecoration: 'none' }}>
-            <strong>{item.title}</strong>
-          </Link>
-          <Text style={{ ...styles.small, margin: '2px 0 0' }}>
-            {[item.detail, item.date].filter(Boolean).join(' · ')}
-          </Text>
-        </div>
-      ))}
-    </Section>
-  );
+function toRows(items: SnowbirdDigestItem[], kind: string): ItemRow[] {
+  return items.map((item) => {
+    const detail = [item.detail, item.date].filter(Boolean).join(' · ');
+    return {
+      kind,
+      title: (
+        <Link href={item.actionUrl} style={{ color: emailTheme.ink, textDecoration: 'none' }}>
+          {item.title}
+        </Link>
+      ),
+      detail: detail || undefined,
+    };
+  });
 }
 
 /**
- * Auto-generated activity recap for seasonal/absentee owners. Compiled from
- * platform data; the footer makes clear it is a courtesy summary, not an
- * official notice, and offers one-click cadence control.
+ * Layout A8 · Digest (snowbird variant) — auto-generated activity recap for
+ * seasonal/absentee owners, compiled from platform data. Type chips in the left
+ * column replace the old per-section headings. The fine print makes clear it
+ * is a courtesy summary, not an official notice; the one-click cadence control
+ * is the layout footer's single unsubscribe link (merged into `branding`, a
+ * caller-supplied `branding.unsubscribeUrl` winning).
  */
 export function SnowbirdDigestEmail({
   branding,
@@ -74,46 +70,48 @@ export function SnowbirdDigestEmail({
   unsubscribeUrl,
 }: SnowbirdDigestEmailProps) {
   const total = boardDecisions.length + newDocuments.length + upcoming.length;
+  const rows: ItemRow[] = [
+    ...toRows(boardDecisions, 'Decision'),
+    ...toRows(newDocuments, 'Document'),
+    ...toRows(upcoming, 'Coming up'),
+  ];
+  const footerBranding: CommunityBranding = {
+    ...branding,
+    unsubscribeUrl: branding.unsubscribeUrl ?? unsubscribeUrl,
+    unsubscribeLabel: branding.unsubscribeLabel ?? 'Unsubscribe or change how often you get this',
+  };
+
   return (
     <EmailLayout
-      branding={branding}
+      branding={footerBranding}
       previewText={previewText ?? `Your ${cadenceLabel} recap from ${branding.communityName} (${total} updates)`}
+      mastheadContext={`Your ${cadenceLabel} recap`}
+      mastheadChip={{ label: `${total} update${total === 1 ? '' : 's'}`, tone: 'coral' }}
+      footerReason={`You're receiving this because you own a unit at ${branding.communityName}.`}
     >
-      <Heading as="h1" style={styles.heading}>
+      <PhotoBand image="band-records.jpg" alt={branding.communityName} height={120} />
+      <CategoryMark icon="bell-slate" label="Owner recap" tone="meta" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — here&apos;s what happened at <Strong>{branding.communityName}</Strong> while you were
+            away.
+          </>
+        }
+      >
         Your {cadenceLabel} in review
-      </Heading>
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        Here's what happened at <strong>{branding.communityName}</strong> while you were away.
-      </Text>
-
-      <DigestSection heading="Board decisions" items={boardDecisions} />
-      <DigestSection heading="New documents" items={newDocuments} />
-      <DigestSection heading="Coming up" items={upcoming} />
-
+      </Headline>
+      <ItemRows items={rows} />
       {complianceNote && (
-        <Section>
-          <Text style={sectionHeading}>Compliance</Text>
-          <Text style={styles.body}>{complianceNote}</Text>
-        </Section>
+        <EmailAlert variant="info" title="Compliance">
+          {complianceNote}
+        </EmailAlert>
       )}
-
-      <Section style={styles.buttonSection}>
-        <EmailButton href={portalUrl}>Open the portal</EmailButton>
-      </Section>
-
-      <Hr style={{ borderColor: emailColors.border, margin: '24px 0 12px' }} />
-      <Text style={styles.small}>
-        This is a courtesy summary of recent activity — not an official notice under Florida law.
-        Official notices are sent separately. You're receiving this because you own a unit at{' '}
-        {branding.communityName}.
-      </Text>
-      <Text style={styles.small}>
-        <Link href={unsubscribeUrl} style={{ color: emailColors.textSecondary }}>
-          Unsubscribe or change how often you get this
-        </Link>
-        .
-      </Text>
+      <ActionRow href={portalUrl} label="Open the portal" />
+      <FinePrint>
+        This is a courtesy summary of recent activity — not an official notice under Florida law. Official notices are
+        sent separately.
+      </FinePrint>
     </EmailLayout>
   );
 }

@@ -77,6 +77,22 @@ describe('POST /api/v1/auth/resend-verification', () => {
     expect(markVerificationEmailSentMock).toHaveBeenCalledWith(1, 'msg-1');
   });
 
+  it('tells the user what follows verification: checkout for their plan, then setup', async () => {
+    getPendingSignupForResendMock.mockResolvedValue({ ...pendingSignup, planKey: 'professional' });
+
+    await POST(buildRequest({ signupRequestId: 'req-abc' }));
+
+    const sent = sendEmailMock.mock.calls[0]![0] as {
+      category: string;
+      react: { remainingSteps: unknown };
+    };
+    expect(sent.category).toBe('transactional');
+    expect(sent.react.remainingSteps).toEqual([
+      { label: 'Checkout', value: 'Professional plan' },
+      { label: 'Community setup', value: 'After checkout' },
+    ]);
+  });
+
   it('returns 404 when signup is not found', async () => {
     getPendingSignupForResendMock.mockResolvedValue(null);
     const res = await POST(buildRequest({ signupRequestId: 'missing' }));

@@ -1,9 +1,5 @@
-import { Heading, Text, Section } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import { EmailCard } from '../components/email-card';
-import * as styles from '../components/shared-styles';
+import { ActionRow, DataRows, FinePrint, Headline, InlineMark } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface DocumentPostedEmailProps extends BaseEmailProps {
@@ -14,6 +10,11 @@ export interface DocumentPostedEmailProps extends BaseEmailProps {
   portalUrl: string;
 }
 
+/**
+ * Layout A11 · Document posted — the compact end of the scale: small
+ * masthead, 24px headline, a couple of meta rows, one action. Routine mail
+ * must not borrow the weight of a notice.
+ */
 export function DocumentPostedEmail({
   branding,
   previewText,
@@ -26,70 +27,25 @@ export function DocumentPostedEmail({
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        `${branding.communityName}: New document posted`
-      }
+      previewText={previewText ?? `${branding.communityName}: New document posted`}
+      mastheadSize="compact"
+      mastheadMeta="Records"
     >
-      <Heading as="h1" style={styles.heading}>
-        New document posted
-      </Heading>
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        A new document has been posted at{' '}
-        <strong>{branding.communityName}</strong>.
-      </Text>
-
-      <EmailCard>
-        <p style={cardTitleStyle}>{documentTitle}</p>
-        <table
-          width="100%"
-          cellPadding={0}
-          cellSpacing={0}
-          style={{ borderCollapse: 'collapse', marginTop: '8px' }}
-        >
-          <tbody>
-            {documentCategory && (
-              <tr>
-                <td style={metaLabelCell}>Category</td>
-                <td style={metaValueCell}>{documentCategory}</td>
-              </tr>
-            )}
-            <tr>
-              <td style={metaLabelCell}>Uploaded by</td>
-              <td style={metaValueCell}>{uploadedByName}</td>
-            </tr>
-          </tbody>
-        </table>
-      </EmailCard>
-
-      <Section style={styles.buttonSection}>
-        <EmailButton href={portalUrl} variant="default">
-          View document
-        </EmailButton>
-      </Section>
-
-      <Text style={styles.smallSpaced}>
-        Per Florida Statute &sect;718.111(12)(g), association documents must be
-        available to unit owners through the association&apos;s website.
-      </Text>
+      <InlineMark icon="doc-coral" label="New document posted" tone="coral" />
+      <Headline compact lede={<>Hi {recipientName} — this document is now in the association record at {branding.communityName}.</>}>
+        {documentTitle}
+      </Headline>
+      <DataRows
+        rows={[
+          { label: 'Category', value: documentCategory },
+          { label: 'Uploaded by', value: uploadedByName },
+        ]}
+      />
+      <ActionRow href={portalUrl} label="View document" />
+      <FinePrint>
+        Per Florida Statute §718.111(12)(g), association documents must be available to unit owners through the
+        association&apos;s website.
+      </FinePrint>
     </EmailLayout>
   );
 }
-
-const cardTitleStyle: React.CSSProperties = {
-  fontSize: '15px',
-  fontWeight: 600,
-  color: emailColors.foreground,
-  margin: '0 0 4px 0',
-};
-
-const metaLabelCell: React.CSSProperties = {
-  ...styles.labelCell,
-  fontSize: '13px',
-};
-
-const metaValueCell: React.CSSProperties = {
-  ...styles.valueCell,
-  fontSize: '13px',
-};

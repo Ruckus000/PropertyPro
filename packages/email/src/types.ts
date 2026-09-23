@@ -30,6 +30,12 @@ export interface CommunityBranding {
   unsubscribeUrl?: string;
   /** Link text, e.g. "Unsubscribe from announcements". Defaults to "Unsubscribe". */
   unsubscribeLabel?: string;
+  /**
+   * Link to the recipient's notification preferences, rendered in the footer.
+   * Optional: the layout has no base URL and never invents one, so the link
+   * only appears when a caller supplies it.
+   */
+  preferencesUrl?: string;
 }
 
 /** Base props shared by all email templates. */

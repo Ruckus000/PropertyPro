@@ -290,3 +290,72 @@ describe('announcement email delivery', () => {
     expect(sentTo).not.toContain('pm@example.com');
   });
 });
+
+describe('announcement email signature title', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendEmailMock.mockResolvedValue({ id: 'msg-1' });
+  });
+
+  function scopedWithRoles(roleRows: Array<Record<string, unknown>>) {
+    const deliveryRows: Array<Record<string, unknown>> = [];
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn(async (table: unknown) => {
+        refuseUsersTable(table);
+        if (table === tables.userRoles) return roleRows;
+        if (table === tables.communities) return [{ id: 5, name: 'Sunset Condos' }];
+        return [];
+      }),
+      queryWhere: vi.fn(async () => deliveryRows.slice(0, 1)),
+      selectFrom: selectUsersFrom([{ id: 'u-reader', email: 'reader@example.com', fullName: 'Reader' }]),
+      insert: vi.fn(async (_table: unknown, data: Record<string, unknown>) => {
+        const row = { id: deliveryRows.length + 1, attemptCount: 0, ...data };
+        deliveryRows.push(row);
+        return [row];
+      }),
+      update: vi.fn().mockResolvedValue([]),
+    });
+  }
+
+  async function sentProps(authorUserId: string | undefined) {
+    await queueAnnouncementDelivery({
+      communityId: 5,
+      announcementId: 11,
+      audience: 'all',
+      title: 'Pool closure',
+      body: 'Body',
+      isPinned: false,
+      authorName: 'Dana Ruiz',
+      authorUserId,
+    });
+    const call = sendEmailMock.mock.calls[0]![0] as {
+      category: string;
+      react: { props: Record<string, unknown> };
+    };
+    return { category: call.category, props: call.react.props };
+  }
+
+  const reader = { userId: 'u-reader', role: 'resident', isUnitOwner: true, displayTitle: null, designation: null };
+
+  it("uses the author's displayTitle in this community", async () => {
+    scopedWithRoles([reader, { userId: 'u-author', role: 'property_manager', displayTitle: 'Community Manager', designation: null }]);
+    const { category, props } = await sentProps('u-author');
+    expect(category).toBe('non-transactional');
+    expect(props['authorRole']).toBe('Community Manager');
+  });
+
+  it('falls back to the board designation when no displayTitle is set', async () => {
+    scopedWithRoles([reader, { userId: 'u-author', role: 'resident', displayTitle: null, designation: 'board_president' }]);
+    const { props } = await sentProps('u-author');
+    expect(props['authorRole']).toBe('Board President');
+  });
+
+  it('invents no title for an author with neither (or no author id)', async () => {
+    scopedWithRoles([reader, { userId: 'u-author', role: 'property_manager', displayTitle: null, designation: null }]);
+    expect((await sentProps('u-author')).props['authorRole']).toBeUndefined();
+
+    sendEmailMock.mockClear();
+    scopedWithRoles([reader, { userId: 'u-author', role: 'resident', displayTitle: 'Treasurer', designation: 'board_member' }]);
+    expect((await sentProps(undefined)).props['authorRole']).toBeUndefined();
+  });
+});

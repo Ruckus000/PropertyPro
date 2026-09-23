@@ -9,7 +9,7 @@ import {
 } from '@propertypro/db';
 import { and, eq, inArray } from '@propertypro/db/filters';
 import { AnnouncementEmail, sendEmail } from '@propertypro/email';
-import { hasBoardDesignation } from '@propertypro/shared';
+import { hasBoardDesignation, isBoardPresident } from '@propertypro/shared';
 import {
   isDigestFrequency,
   isNeverFrequency,
@@ -33,6 +33,26 @@ interface QueueAnnouncementDeliveryParams {
   body: string;
   isPinned: boolean;
   authorName: string;
+  /**
+   * The author's user id, used only to label the email signature with their
+   * title in this community. Omit it and the signature shows no title.
+   */
+  authorUserId?: string;
+}
+
+/**
+ * The author's title for the email signature, from their role row in this
+ * community: an explicit `displayTitle` first, then board designation. Returns
+ * undefined rather than a guessed title (e.g. for a manager with no title set).
+ */
+export function authorTitleFromRoleRow(row: Record<string, unknown> | undefined): string | undefined {
+  if (!row) return undefined;
+  const displayTitle = row['displayTitle'];
+  if (typeof displayTitle === 'string' && displayTitle.trim().length > 0) return displayTitle.trim();
+  const designation = row['designation'];
+  if (isBoardPresident(designation)) return 'Board President';
+  if (hasBoardDesignation(designation)) return 'Board Member';
+  return undefined;
 }
 
 interface Recipient {
@@ -65,7 +85,8 @@ function chunk<T>(items: T[], size: number): T[][] {
 async function resolveRecipients(
   communityId: number,
   audience: AnnouncementAudience,
-): Promise<Recipient[]> {
+  authorUserId?: string,
+): Promise<{ recipients: Recipient[]; authorTitle: string | undefined }> {
   const scoped = createScopedClient(communityId);
   const [roleRows, preferenceRows] = await Promise.all([
     scoped.query(userRoles),
@@ -148,7 +169,13 @@ async function resolveRecipients(
     });
   }
 
-  return recipients;
+  // The role rows are already loaded for audience matching, so the author's
+  // title costs no extra query.
+  const authorTitle = authorUserId
+    ? authorTitleFromRoleRow(roleRows.find((row) => row['userId'] === authorUserId))
+    : undefined;
+
+  return { recipients, authorTitle };
 }
 
 async function markStatus(
@@ -238,6 +265,7 @@ async function enqueueDigestRecipients(
 async function deliverImmediateAnnouncementEmails(
   params: QueueAnnouncementDeliveryParams,
   recipients: Recipient[],
+  authorTitle: string | undefined,
 ): Promise<number> {
   if (recipients.length === 0) return 0;
 
@@ -273,6 +301,7 @@ async function deliverImmediateAnnouncementEmails(
               announcementTitle: params.title,
               announcementBody: params.body,
               authorName: params.authorName,
+              authorRole: authorTitle,
               portalUrl,
               isPinned: params.isPinned,
             }),
@@ -296,7 +325,11 @@ async function deliverImmediateAnnouncementEmails(
 }
 
 async function deliverAnnouncementEmails(params: QueueAnnouncementDeliveryParams): Promise<number> {
-  const recipients = await resolveRecipients(params.communityId, params.audience);
+  const { recipients, authorTitle } = await resolveRecipients(
+    params.communityId,
+    params.audience,
+    params.authorUserId,
+  );
 
   await createAnnouncementLogRows(params.communityId, params.announcementId, recipients);
 
@@ -304,7 +337,7 @@ async function deliverAnnouncementEmails(params: QueueAnnouncementDeliveryParams
   const digestRecipients = recipients.filter((recipient) => recipient.mode === 'digest');
 
   await enqueueDigestRecipients(params, digestRecipients);
-  await deliverImmediateAnnouncementEmails(params, immediateRecipients);
+  await deliverImmediateAnnouncementEmails(params, immediateRecipients, authorTitle);
 
   return recipients.length;
 }

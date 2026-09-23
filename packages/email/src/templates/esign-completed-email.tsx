@@ -1,8 +1,5 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailCard } from '../components/email-card';
-import * as styles from '../components/shared-styles';
+import { CategoryMark, DataRows, FinePrint, Headline, Paragraph, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface EsignCompletedEmailProps extends BaseEmailProps {
@@ -12,6 +9,12 @@ export interface EsignCompletedEmailProps extends BaseEmailProps {
   signerCount: number;
 }
 
+/**
+ * Layout A5 · E-sign completed — the invitation's frame in its finished
+ * state: a green "Completed" result chip in place of the signing action.
+ * There is no link to the executed document in the props, so there is no
+ * button — the copy points at the documents portal instead.
+ */
 export function EsignCompletedEmail({
   branding,
   previewText,
@@ -25,57 +28,31 @@ export function EsignCompletedEmail({
   return (
     <EmailLayout
       branding={branding}
-      accentColor={emailColors.accentGreen}
+      tone="green"
       previewText={previewText ?? `All signatures collected for "${documentName}"`}
+      mastheadContext="Signature request"
+      mastheadChip={{ label: 'Completed', tone: 'green' }}
     >
-      <Heading as="h1" style={styles.heading}>
-        All signatures collected
-      </Heading>
-
-      <Text style={styles.body}>Hi {senderName},</Text>
-      <Text style={styles.body}>
-        All signatures have been collected for the document below.
-      </Text>
-
-      {/* Success-styled card with green bg/border */}
-      <EmailCard
-        style={{
-          backgroundColor: emailColors.alertSuccessBg,
-          border: `1px solid ${emailColors.alertSuccessBorder}`,
-        }}
+      <CategoryMark icon="pen-violet" label="Signing complete" tone="violet" />
+      <Headline
+        lede={
+          <>
+            Hi {senderName} — all signatures have been collected for <Strong>{documentName}</Strong>.
+          </>
+        }
       >
-        <Text
-          style={{
-            fontSize: '15px',
-            fontWeight: 600,
-            color: emailColors.foreground,
-            margin: '0 0 10px 0',
-          }}
-        >
-          {documentName}
-        </Text>
-        <table width="100%" cellPadding={0} cellSpacing={0}>
-          <tbody>
-            <tr>
-              <td style={styles.labelCell}>Signers</td>
-              <td style={styles.valueCell}>{signerLabel}</td>
-            </tr>
-            <tr>
-              <td style={styles.labelCell}>Completed</td>
-              <td style={styles.valueCell}>{completedAt}</td>
-            </tr>
-          </tbody>
-        </table>
-      </EmailCard>
-
-      <Text style={styles.body}>
-        The fully executed document is now available in your documents portal.
-      </Text>
-
-      <Text style={styles.small}>
-        This document is stored in your document repository at{' '}
-        {branding.communityName}.
-      </Text>
+        All signatures collected
+      </Headline>
+      <DataRows
+        variant="panel"
+        rows={[
+          { label: 'Document', value: documentName },
+          { label: 'Signers', value: signerLabel },
+          { label: 'Completed', value: completedAt, tone: 'green' },
+        ]}
+      />
+      <Paragraph>The fully executed document is now available in your documents portal.</Paragraph>
+      <FinePrint>This document is stored in your document repository at {branding.communityName}.</FinePrint>
     </EmailLayout>
   );
 }

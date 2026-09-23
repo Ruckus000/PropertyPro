@@ -1,8 +1,5 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailCard } from '../components/email-card';
-import * as styles from '../components/shared-styles';
+import { CategoryMark, FinePrint, Headline, Paragraph, Quote, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface AccessRequestDeniedEmailProps extends BaseEmailProps {
@@ -10,43 +7,36 @@ export interface AccessRequestDeniedEmailProps extends BaseEmailProps {
   reason?: string;
 }
 
-export function AccessRequestDeniedEmail({
-  branding,
-  previewText,
-  recipientName,
-  reason,
-}: AccessRequestDeniedEmailProps) {
+/**
+ * Layout A9 · Access request (denied) — the pending layout with a neutral
+ * result chip and no actions. The administrator's reason, when given, is
+ * quoted in their words: a denial is a path with words, not a bare refusal.
+ */
+export function AccessRequestDeniedEmail({ branding, previewText, recipientName, reason }: AccessRequestDeniedEmailProps) {
   return (
     <EmailLayout
       branding={branding}
+      tone="neutral"
       previewText={previewText ?? 'Update on your access request'}
-      accentColor={emailColors.accentBorder}
+      mastheadContext="Resident portal"
+      mastheadChip={{ label: 'Not approved', tone: 'neutral' }}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="user-teal" label="Access request" tone="teal" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — your request to join <Strong>{branding.communityName}</Strong> was not approved at
+            this time.
+          </>
+        }
+      >
         Access request update
-      </Heading>
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        Your request to join <strong>{branding.communityName}</strong> was not
-        approved at this time.
-      </Text>
-
-      {reason && (
-        <EmailCard>
-          <Text style={{ ...styles.body, margin: 0 }}>
-            <strong>Reason:</strong> {reason}
-          </Text>
-        </EmailCard>
-      )}
-
-      <Text style={styles.body}>
-        If you believe this is an error or have questions, please contact your
-        community administrator directly.
-      </Text>
-
-      <Text style={styles.small}>
-        This is an automated message. Please do not reply to this email.
-      </Text>
+      </Headline>
+      {reason && <Quote attribution="Reason given by the association">{reason}</Quote>}
+      <Paragraph>
+        If you believe this is an error or have questions, please contact your community administrator directly.
+      </Paragraph>
+      <FinePrint>This is an automated message. Please do not reply to this email.</FinePrint>
     </EmailLayout>
   );
 }

@@ -405,6 +405,34 @@ describe('access-request-service', () => {
       expect(sendEmailMock).toHaveBeenCalled();
     });
 
+    it('reports the email verification as the record check, and nothing it did not check', async () => {
+      setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'user@example.com',
+            fullName: 'Test User',
+            status: 'pending_verification',
+            otpHash: TEST_OTP_HASH,
+            otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            otpAttempts: 0,
+            claimedUnitNumber: '101',
+          },
+        ],
+        roleRows: [{ userId: 'admin-1', role: 'property_manager', designation: null }],
+        userRows: [{ id: 'admin-1', email: 'admin@example.com', fullName: 'Admin User' }],
+      });
+
+      await verifyOtp({ requestId: 10, otp: TEST_OTP, communityId: COMMUNITY_ID });
+
+      const adminSend = sendEmailMock.mock.calls
+        .map((call) => call[0] as { subject: string; category: string; react: { props: Record<string, unknown> } })
+        .find((args) => args.subject.startsWith('New resident access request'));
+      expect(adminSend).toBeDefined();
+      expect(adminSend!.category).toBe('transactional');
+      expect(adminSend!.react.props['recordCheck']).toEqual({ label: 'Email verified', tone: 'green' });
+    });
+
     describe('admin notification recipients', () => {
       const pendingRequestRow = {
         id: 10,

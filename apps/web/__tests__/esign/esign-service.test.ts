@@ -893,6 +893,83 @@ describe('esign-service', () => {
       );
     });
 
+    function invitationSignersBySigner(): Map<string, unknown> {
+      return new Map(
+        esignInvitationEmailMock.mock.calls
+          .map((call) => (call as unknown[])[0] as { signerName: string; signers: unknown })
+          .map((props) => [props.signerName, props.signers] as const),
+      );
+    }
+
+    it('sequential: only the signer whose turn it is reads "Awaiting you"', async () => {
+      const scoped = makeSubmissionScoped();
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeTableAwareAdmin());
+
+      await createSubmission(1, 'user-1', {
+        templateId: 1,
+        signers: [
+          { email: 'b@test.com', name: 'Bob', role: 'signer', sortOrder: 1 },
+          { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
+          { email: 'nameless@test.com', name: '', role: 'signer', sortOrder: 2 },
+        ],
+        signingOrder: 'sequential',
+        sendEmail: true,
+      });
+
+      // Everyone is still emailed at creation — sequencing gates the signing
+      // page, not delivery (help: sending-an-esign-submission.mdx).
+      expect(sendEmailMock).toHaveBeenCalledTimes(3);
+      for (const call of sendEmailMock.mock.calls) {
+        expect((call[0] as { category: string }).category).toBe('transactional');
+      }
+
+      const bySigner = invitationSignersBySigner();
+      expect(bySigner.get('Alice')).toEqual([
+        { name: 'Alice', role: 'Signer', status: 'awaiting_you' },
+        { name: 'Bob', role: 'Signer', status: 'pending' },
+        { name: 'Signer', role: 'Signer', status: 'pending' },
+      ]);
+      // Bob is second: his own row must not claim it is his turn while Alice
+      // has yet to sign — the link would open "Waiting for another signer".
+      expect(bySigner.get('Bob')).toEqual([
+        { name: 'Alice', role: 'Signer', status: 'pending' },
+        { name: 'Bob', role: 'Signer', status: 'pending' },
+        // Nameless signer: shown by role, never by email address.
+        { name: 'Signer', role: 'Signer', status: 'pending' },
+      ]);
+      expect(JSON.stringify(bySigner.get('nameless@test.com'))).not.toContain('awaiting_you');
+
+      // No other signer's email address reaches anyone's email.
+      expect(JSON.stringify(bySigner.get('Alice'))).not.toContain('@test.com');
+    });
+
+    it('parallel: every recipient reads their own row as "Awaiting you"', async () => {
+      const scoped = makeSubmissionScoped();
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeTableAwareAdmin());
+
+      await createSubmission(1, 'user-1', {
+        templateId: 1,
+        signers: [
+          { email: 'a@test.com', name: 'Alice', role: 'signer', sortOrder: 0 },
+          { email: 'b@test.com', name: 'Bob', role: 'signer', sortOrder: 1 },
+        ],
+        signingOrder: 'parallel',
+        sendEmail: true,
+      });
+
+      const bySigner = invitationSignersBySigner();
+      expect(bySigner.get('Alice')).toEqual([
+        { name: 'Alice', role: 'Signer', status: 'awaiting_you' },
+        { name: 'Bob', role: 'Signer', status: 'pending' },
+      ]);
+      expect(bySigner.get('Bob')).toEqual([
+        { name: 'Alice', role: 'Signer', status: 'pending' },
+        { name: 'Bob', role: 'Signer', status: 'awaiting_you' },
+      ]);
+    });
+
     it('does NOT send emails when sendEmail=false', async () => {
       const scoped = makeSubmissionScoped();
       createScopedClientMock.mockReturnValue(scoped);
@@ -1188,6 +1265,39 @@ describe('esign-service', () => {
       await expect(sendReminder(1, 'user-1', 1, 1)).rejects.toThrow(
         'Maximum of 3 reminders reached',
       );
+    });
+
+    it('passes the live signing order: completed signers as signed with their date', async () => {
+      const scoped = makeScopedMock();
+      const recipient = makeReminderSigner({ id: 2, name: 'Alice', sortOrder: 1, reminderCount: 0 });
+      queueReminderSelects(scoped, {
+        signer: recipient,
+        signers: [
+          recipient,
+          makeReminderSigner({
+            id: 1,
+            name: 'Dana',
+            email: 'dana@test.com',
+            role: 'board_president',
+            sortOrder: 0,
+            status: 'completed',
+            completedAt: new Date('2026-09-16T15:00:00Z'),
+          }),
+          makeReminderSigner({ id: 3, name: 'Priya', email: 'p@test.com', sortOrder: 2 }),
+        ],
+      });
+      createScopedClientMock.mockReturnValue(scoped);
+      createAdminClientMock.mockReturnValue(makeCommunityAdmin());
+
+      await sendReminder(1, 'user-1', 10, 2);
+
+      expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ category: 'transactional' }));
+      const props = (esignReminderEmailMock.mock.calls[0] as unknown[])[0] as { signers: unknown };
+      expect(props.signers).toEqual([
+        { name: 'Dana', role: 'Board president', status: 'signed', signedAt: expect.stringMatching(/^Sep 16$/) },
+        { name: 'Alice', role: 'Signer', status: 'awaiting_you' },
+        { name: 'Priya', role: 'Signer', status: 'pending' },
+      ]);
     });
 
     it('increments reminder count and logs event on success', async () => {

@@ -574,6 +574,21 @@ describe('signup service', () => {
     expect(fallbackLink.searchParams.get('token_hash')).toBe('hashed-token-magic');
   });
 
+  it('lists the steps after verification, naming the chosen plan — and no durations', async () => {
+    await submitSignup(validSignupPayload);
+
+    const sent = sendEmailMock.mock.calls.at(-1)?.[0] as {
+      category: string;
+      react: { props: { remainingSteps: Array<{ label: string; value: string }> } };
+    };
+    expect(sent.category).toBe('transactional');
+    expect(sent.react.props.remainingSteps).toEqual([
+      { label: 'Checkout', value: 'Essentials plan' },
+      { label: 'Community setup', value: 'After checkout' },
+    ]);
+    expect(JSON.stringify(sent.react.props.remainingSteps)).not.toMatch(/minute/i);
+  });
+
   it('emails a link on OUR domain, not Supabase\'s action_link', async () => {
     await submitSignup(validSignupPayload);
 

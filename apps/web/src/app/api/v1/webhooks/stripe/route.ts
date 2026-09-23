@@ -469,7 +469,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
         invoice.amount_due / 100,
       )
-    : 'unknown amount';
+    : null;
 
   // Intentional: email fires on every Stripe retry (up to 3-4 per billing cycle).
   // paymentFailedAt and nextReminderAt are preserved from the first failure via ??.
@@ -477,6 +477,10 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     amountDue,
     lastFourDigits: null,
     communityName: community.name,
+    invoiceNumber: invoice.number,
+    nextPaymentAttempt: invoice.next_payment_attempt
+      ? new Date(invoice.next_payment_attempt * 1000)
+      : null,
   });
 }
 

@@ -309,6 +309,8 @@ describe('p1-17 announcements route', () => {
         communityId: 200,
         announcementId: 9,
         audience: 'all',
+        // The author's id labels the email signature with their title.
+        authorUserId: 'session-user-1',
       }),
     );
     expect(json.data.id).toBe(9);

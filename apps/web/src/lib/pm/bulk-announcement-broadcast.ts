@@ -65,5 +65,6 @@ export async function broadcastBulkAnnouncementToCommunity(params: {
     body,
     isPinned,
     authorName,
+    authorUserId: userId,
   });
 }

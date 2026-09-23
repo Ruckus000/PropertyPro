@@ -174,6 +174,30 @@ describe('checkAndAlertOverdueItems', () => {
     expect(result.notifiedCount).toBe(1);
   });
 
+  it('hands the email a punch list: missing when nothing is posted, overdue when posted late', async () => {
+    setupChecklistMock(
+      [
+        { title: 'Annual Budget', description: '', deadline: pastDate, documentId: null, documentPostedAt: null, rollingWindow: null, isApplicable: true, statuteReference: '§718.112(2)(f)' },
+        { title: 'Insurance Policy', description: '', deadline: pastDate, documentId: 42, documentPostedAt: new Date('2026-02-10T00:00:00.000Z').toISOString(), rollingWindow: null, isApplicable: true, statuteReference: '§718.111(11)' },
+        { title: 'Bylaws', description: '', deadline: pastDate, documentId: 43, documentPostedAt: new Date('2026-01-20T00:00:00.000Z').toISOString(), rollingWindow: null, isApplicable: true, statuteReference: '§718.111(12)' },
+      ],
+      [{ id: 43, deletedAt: new Date('2026-03-01T00:00:00.000Z').toISOString() }],
+    );
+
+    await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+
+    const event = sendNotificationMock.mock.calls[0]![1] as { items: unknown };
+    expect(event.items).toEqual([
+      { label: 'Annual Budget', status: 'missing' },
+      // A late post is not "missing" — the calculator calls it overdue.
+      { label: 'Insurance Policy', status: 'overdue' },
+      // A soft-deleted document leaves the item with nothing posted.
+      { label: 'Bylaws', status: 'missing' },
+    ]);
+    // Checklist items carry no assignee, so no owner is invented.
+    expect(JSON.stringify(event.items)).not.toContain('owner');
+  });
+
   it('does not flag items with future deadlines', async () => {
     setupChecklistMock([
       {

@@ -1,9 +1,6 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
 import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 /**
@@ -21,6 +18,9 @@ import type { BaseEmailProps } from '../types';
  * either.
  *
  * `lockedSinceDate` is therefore stated as a past fact, not a deadline.
+ *
+ * Layout P4 variant · the expiry frame after the deadline: the chip states the
+ * paused state instead of a countdown.
  */
 export interface SubscriptionLapsedEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -39,37 +39,32 @@ export function SubscriptionLapsedEmail({
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        'Admin access is now paused. Reactivate any time to restore it.'
-      }
-      accentColor={emailColors.accentRed}
+      sender="platform"
+      tone="red"
+      previewText={previewText ?? 'Admin access is now paused. Reactivate any time to restore it.'}
+      mastheadContext={branding.communityName}
+      mastheadChip={{ label: 'Admin access paused', tone: 'red' }}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="clock-red" label={`Subscription lapsed · ${lockedSinceDate}`} tone="red" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — the grace period for <Strong>{branding.communityName}</Strong> ended on{' '}
+            <Strong>{lockedSinceDate}</Strong>, so administrator access to the portal is now paused.
+          </>
+        }
+      >
         Admin access is paused
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        The grace period for <strong>{branding.communityName}</strong> ended on{' '}
-        <strong>{lockedSinceDate}</strong>, so administrator access to the
-        portal is now paused.
-      </Text>
-
-      <EmailAlert variant="danger" title="Nothing has been deleted">
-        Your community&apos;s documents, meetings and records are all still
-        there, and residents can still sign in. Reactivating restores full
-        administrator access immediately.
+      </Headline>
+      <EmailAlert variant="info" title="Nothing has been deleted">
+        Your community&apos;s documents, meetings and records are all still there, and residents can still sign in.
+        Reactivating restores full administrator access immediately.
       </EmailAlert>
-
-      <EmailButton href={billingPortalUrl} variant="destructive">
-        Reactivate subscription
-      </EmailButton>
-
-      <Text style={styles.smallSpaced}>
-        Your community data and settings are retained for 90 days from the date
-        above. Contact support if you need assistance.
-      </Text>
+      <ActionRow href={billingPortalUrl} label="Reactivate subscription" variant="destructive" />
+      <FinePrint>
+        Your community data and settings are retained for 90 days from the date above. Contact support if you need
+        assistance.
+      </FinePrint>
     </EmailLayout>
   );
 }
