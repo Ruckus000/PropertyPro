@@ -51,17 +51,24 @@ export const COMMUNITY_ROSTER_KEY = (communityId: number) =>
 
 /**
  * Fetches the FULL member roster for a community
- * (`GET /api/v1/residents?communityId=<id>`). We pass NO `roles` filter and
- * partition client-side by `role`.
+ * (`GET /api/v1/residents?communityId=<id>`) and partitions it client-side by
+ * `role`. No `roles` filter is sent — deliberately.
  *
- * The reason previously recorded here — that the route only accepts legacy
- * filter values and would 400 on `property_manager` — is the INVERSE of the
- * truth. `residents/route.ts` validates `roles` against `COMMUNITY_ROLES`
- * ({resident, property_manager, root_manager}) and would 400 on `manager` /
- * `pm_admin`. A server-side filter works today; this hook just does not use
- * one, so fetching the whole roster is a cost, not a constraint.
+ * The only consumer, `components/settings/RolesAccessClient.tsx`, renders all
+ * three community roles side by side on one screen (the current root manager,
+ * every property manager, every resident). A filter narrow enough to be worth
+ * sending would empty one of those sections, and a filter covering all three
+ * is a certified no-op: it removes zero rows. So the unfiltered read is what
+ * the screen needs, not a workaround for a missing capability —
+ * `residents/route.ts` does validate `roles` against the v3 set, so a server
+ * filter is available if a future consumer ever wants a subset.
  *
- * legacy-roles:exempt — quotes the retired names to correct an inverted claim.
+ * What that costs, honestly: the payload is the whole roster, and the
+ * projection is per-row FIELDS rather than rows — the hook keeps `userId`,
+ * `fullName` and `role` and discards the rest of what the route returns. The
+ * fix for a large community is therefore server-side field projection (or a
+ * paginated roster), not a `roles` filter. That is the follow-up; nothing here
+ * blocks it.
  *
  * The route emits the canonical `{ data: Row[] }` envelope; `requestJson`
  * strips the outer `data`, leaving the array.

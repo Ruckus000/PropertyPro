@@ -26,6 +26,7 @@ import {
   ValidationError,
 } from '@/lib/api/errors';
 import { listActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
+import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
 
 interface ElectionRecord {
   [key: string]: unknown;
@@ -313,15 +314,6 @@ function normalizeSelectionIds(selectedCandidateIds: number[] | undefined, maxSe
   }
 
   return unique;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === '23505'
-  );
 }
 
 function createSubmissionFingerprint(): string {
@@ -1004,7 +996,7 @@ export async function castElectionVoteForCommunity(
         electionStatus: election.status,
       };
     } catch (error) {
-      if (!isUniqueConstraintError(error)) {
+      if (!isTopLevelUniqueConstraintError(error)) {
         throw error;
       }
 
@@ -1260,7 +1252,7 @@ export async function createElectionProxyForCommunity(
 
       return typedProxy;
     } catch (error) {
-      if (isUniqueConstraintError(error)) {
+      if (isTopLevelUniqueConstraintError(error)) {
         throw new AppError('This unit already has a proxy designation for the election', 409, 'CONFLICT');
       }
 

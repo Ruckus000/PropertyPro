@@ -195,17 +195,6 @@ export async function ensureFaqsExist(communityId: number): Promise<void> {
   await scoped.insert(faqs, buildDefaultFaqRows());
 }
 
-/**
- * Return all FAQ rows for the community as raw rows. Caller decides on
- * role-filtering / shaping (see `filterFaqsForRole`).
- */
-export async function listFaqs(
-  communityId: number,
-): Promise<Record<string, unknown>[]> {
-  const scoped = createScopedClient(communityId);
-  return await scoped.query(faqs);
-}
-
 export interface CreateFaqInput {
   question: string;
   answer: string;
