@@ -11,6 +11,22 @@ adversarially verified; counts re-run at HEAD.
 > (getBaseUrl 11→1, the A1/role-v3 deferred phases, DBB-01/03/04), and this audit
 > corrects three of its numbers upward (see §1 and CON-01).
 
+> **Amendment (2026-09-23, human-approved at the Phase-1 phase-run spec gate):** two
+> numbers in this doc drifted from HEAD (`1566d03e3`) between audit and ship.
+> **(1) PAG-01 covers SEVEN un-indexed keyset feeds, not six** — the amenities
+> keyset sort (wired at `api/v1/amenities/route.ts` since #349) was missing from
+> the §4.6 list. Migration 0076 adds the doc's two named DDLs plus five analogous
+> = **7 CREATE INDEX statements**: `faqs_active_order_idx`,
+> `announcements_active_feed_idx`, `vendors_active_name_idx`,
+> `assessments_active_created_idx`, `visitor_log_arrival_idx`,
+> `forum_threads_pinned_created_idx`, `amenities_name_idx`.
+> **(2) SVC-06 measured `isUniqueConstraintError` ×5 at audit time; at
+> `1566d03e3` there are 8 definition files**, one (digest-queue) semantically
+> divergent. The consolidation is **by semantics** to **≤3 definition files** —
+> 2 shared predicates plus 1 documented-in-file digest-queue fork — held as a
+> shrink-only ratchet. Original measurements are left in place below; this note
+> is the normative statement for Phase 1.
+
 ## 1. Headline numbers
 
 | Surface | Measured at HEAD `07e56b6e7` | Source |
@@ -30,7 +46,7 @@ adversarially verified; counts re-run at HEAD.
 ## 2. Executive summary
 
 - **The architecture is sound; the debt is in file size, migration tails, and un-policed boundaries.** Zero of 65 findings proposed a redesign. The strongest evidence: every B3 hard-tier migration implemented the design doc's contract *verbatim* (cursor shape, tiebreaker, envelope), and all 46 contract allowlist entries carry a named, checkable runner limitation.
-- **Three programs to FINISH, not start:** (1) the tenantScope sweep — the prior audit's "121" was an undercount; the real backlog is **157**, and the "opportunistic convergence" bet has measurably failed (adoption flat 12→12 in nine weeks; last deliberate commit 2026-06-05) while no guard detects the floor falling (CON-01/02); (2) the B3 hard tier — the design doc's **two named index DDLs were never applied**, so six migrated keyset sorts currently beat the old path at scale only on paper (PAG-01); (3) A1 contract drain — close it out honestly: velocity has been zero since June while the set grew 37→46, but ~42 of 46 are structurally uncontractable (CON-03).
+- **Three programs to FINISH, not start:** (1) the tenantScope sweep — the prior audit's "121" was an undercount; the real backlog is **157**, and the "opportunistic convergence" bet has measurably failed (adoption flat 12→12 in nine weeks; last deliberate commit 2026-06-05) while no guard detects the floor falling (CON-01/02); (2) the B3 hard tier — the design doc's **two named index DDLs were never applied**, so seven migrated keyset sorts currently beat the old path at scale only on paper (PAG-01; six at audit, corrected 2026-09-23); (3) A1 contract drain — close it out honestly: velocity has been zero since June while the set grew 37→46, but ~42 of 46 are structurally uncontractable (CON-03).
 - **Three new items the prior audit never saw:** the **leases API has no role gate at all** — any community member, including tenants, can read and mutate every lease including rent amounts (AZ-01, high, S to fix); Tier-C didn't disappear, it **moved to page.tsx**, where no DB-boundary guard scans (DBB-01); and **admin's guard:db-access mode switches the unsafe-import ledger off entirely** — it prints PASS over 73 service-role-client files it never inventoried (DBB-02).
 - **Decomposition is gated on tests, and the audit says so per-file:** elections-service (the §718.128 state machine) and finance-service execute no real code in any fast test — route tests mock them whole (TST-01/02). SVC-02/SVC-03 carry explicit dependsOn gates. esign and provisioning, by contrast, are decomposition-ready today (SVC-08, TST-03).
 - **The ratchet machinery is excellent and under-reused.** `guard:contracts` proves the ceiling pattern works (its floor held); tenantScope, pagination bounds, dead exports, and file-local helpers all lack the same shrink-only ledger. Half of Phase 1–2 is cheap guards, not code moves.
@@ -63,7 +79,7 @@ Six oversized services carry the bulk of the LOC debt; the recurring shapes are 
 | SVC-03 | Elections open/close/certify/cancel = 4 copies of one transactional state machine; guard branches have zero direct tests | `apps/web/src/lib/services/elections-service.ts` | med | M | high |
 | SVC-04 ✎ | 103 `logAuditEvent` call sites in 25 service files; 64-fold-repeated metadata envelope → `mutateWithAudit` | 7 top services | med | M | low |
 | SVC-05 | Unsubscribe HMAC codec + write are line-for-line clones (207 lines, 4 files); the security-critical `timingSafeEqual` verify exists twice | snowbird/insurance token+service files | med | S | low |
-| SVC-06 | `isUniqueConstraintError` ×5, `hasPostgresErrorCode` ×3 local copies | 6 service files | low | S | low |
+| SVC-06 | `isUniqueConstraintError` ×5, `hasPostgresErrorCode` ×3 local copies (amended 2026-09-23: 8 `isUniqueConstraintError` definition files at `1566d03e3`; consolidated BY SEMANTICS to ≤3 — 2 shared predicates + 1 documented-in-file digest-queue fork, shrink-only) | 6 service files | low | S | low |
 | SVC-07 | 5 exported service functions have zero references anywhere; no dead-export guard | faq/work-orders/help/resource services | low | S | low |
 | SVC-08 ✎ | esign (1,799) and provisioning (1,628) carry declared subsystem banners never turned into module boundaries; site-blocks (2,091) is bigger than both | 3 service files | med | M | low |
 
@@ -142,7 +158,7 @@ The B3 program executed its design verbatim (the healthiest finding of the audit
 
 | ID | Finding | Files | Impact | Effort | Risk |
 |---|---|---|---|---|---|
-| PAG-01 ✎ | Six migrated hard-tier endpoints have **zero supporting indexes**; the design doc's two named DDLs (`faqs_active_order_idx`, `announcements_active_feed_idx`) were written and never applied | `packages/db/src/schema/{announcements,faqs,forum-threads,vendors,assessments,visitor-log}.ts` | **high** | S | low |
+| PAG-01 ✎ | Seven migrated hard-tier endpoints have **zero supporting indexes** (six at audit; amended 2026-09-23 with amenities per the header note); the design doc's two named DDLs (`faqs_active_order_idx`, `announcements_active_feed_idx`) were written and never applied | `packages/db/src/schema/{announcements,faqs,forum-threads,vendors,assessments,visitor-log,amenities}.ts` | **high** | S | low |
 | PAG-02 | Forum replies unbounded (`selectFrom(forumReplies, …)` no limit + a second unbounded deleted-replies read merged in JS) — highest per-day growth surface | `polls-service.ts:568-573`, `forum/threads/[id]/route.ts` | high | M | med |
 | PAG-03 | Reservations resident path = full fetch + client-side `.slice()` — an explicit B3 Non-Goal | `api/v1/reservations/route.ts:39-45`, `work-orders-service.ts:1031-1041` | med | M | low |
 | PAG-04 | Leases: two full-table reads on one request (`renewal_chain_for` branch), JS post-filters, zero pagination markers | `api/v1/leases/route.ts:204/:240`, `lease-service.ts:43-46` | med | M | med |
@@ -214,12 +230,12 @@ Sequenced by **dependency**, not impact. The two load-bearing gates: (a) TST-01/
 | # | Item | Effort | Risk | Depends on | Existing tooling |
 |---|---|---|---|---|---|
 | 1.1 | **AZ-01** — gate `POST/PATCH/DELETE /leases` with `requirePermission(membership,'units','write')`; declare GET intent (self-scoped rows for non-managers); 403-for-tenant test | S | low | — | `root-exclusive-routes.test.ts` pattern; invitations AZ-01 fix as precedent |
-| 1.2 | **PAG-01** — one expand migration adding the B3 doc's two named partial indexes + 4 analogous (vendors/assessments/visitors/forum_threads); apply before traffic per expand/contract discipline | S | low | — | doc DDLs verbatim at `b3-…-design.md:193,213` |
+| 1.2 | **PAG-01** — one expand migration adding the B3 doc's two named partial indexes + 5 analogous (vendors/assessments/visitors/forum_threads/amenities) = 7 CREATE INDEX statements (amended 2026-09-23 per the header note); apply before traffic per expand/contract discipline | S | low | — | doc DDLs verbatim at `b3-…-design.md:193,213`; the five analogous index names are listed in the header amendment |
 | 1.3 | **CON-01 + CON-02** (one PR) — idiom-agnostic 157-route census (union of resolver + finance-parser); port `checkCeiling` into `verify-tenant-scope.ts`, freeze at 157, print the denominator | S | low | — | `scripts/lib/ceiling.ts`, `verify-contracts.ts` shape |
 | 1.4 | **CON-07 + CON-03** — allowlist entries carry classification as data (`Map<path, reason>`); state the A1 floor (~42 permanent) explicitly and close the lane; regenerate drain-loop PERMANENT_SKIPS from the map, drop 3 stale entries | S | low | — | workflow's existing RUNNER_BLOCKED taxonomy; `drain-one-batch.workflow.js:222` one-line change |
 | 1.5 | **TST-06** — integration collected-count floor (port `expectedTestCount` shape) | S | low | — | `e2e.yml:378` |
 | 1.6 | **R3-05 + R3-06 + DBB-06** — doc corrections in one PR: ADR-006 addendum (designation grants read/egress breadth, never write; strike shipped-deferred bullets), guard-header truth | S | low | — | ADR addendum convention |
-| 1.7 | **SVC-06 + SVC-07 + R3-04 + R3-03 + DC-01 + DC-02** — the mechanical trash take: shared `isUniqueConstraintError`, delete 5 dead exports + 13 orphan files, delete the dead `'owner'` arm, pass the roles filter in useCommunityRoster | S | low | — | shrink-only baseline pattern for the dead-export guard |
+| 1.7 | **SVC-06 + SVC-07 + R3-04 + R3-03 + DC-01 + DC-02** — the mechanical trash take: shared `isUniqueConstraintError` consolidated BY SEMANTICS to ≤3 definition files (2 shared predicates + 1 documented-in-file digest-queue fork; amended 2026-09-23 per the header note), delete 5 dead exports + 13 orphan files, delete the dead `'owner'` arm, pass the roles filter in useCommunityRoster | S | low | — | shrink-only baseline pattern for the `guard:service-dead-exports` guard |
 
 ### Phase 2 — Choke-point consolidation (weeks 2–6)
 
