@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { AlertTriangle, Paperclip, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Paperclip, ShieldAlert, ShieldCheck } from 'lucide-react';
 
 import type { InboxMessage } from '@/lib/server/inbox';
 
@@ -28,6 +28,25 @@ const MUTED = 'text-content-tertiary';
 const SPAM_BADGE_THRESHOLD = 0.8;
 
 /**
+ * The authentication verdicts worth printing, in the order an operator reads
+ * them: envelope, signature, policy.
+ */
+const AUTH_METHODS = ['SPF', 'DKIM', 'DMARC'] as const;
+
+/**
+ * Exactly `pass` is a pass.
+ *
+ * `softfail`, `neutral`, `none`, `permerror` and `temperror` are all "not
+ * authenticated", and collapsing them into "fine" is how a spoofed message
+ * gets answered. The raw word is always printed beside the icon, so an
+ * operator can tell a policy gap (`none`) from an actual forgery (`fail`)
+ * without this function pretending to know the difference.
+ */
+function isPass(verdict: string | null): boolean {
+  return verdict?.toLowerCase() === 'pass';
+}
+
+/**
  * One message in the thread timeline.
  *
  * PLAIN TEXT IS THE DEFAULT. The HTML is attacker-controlled and only rendered
@@ -40,6 +59,24 @@ export function MessageBody({ message, sanitizedHtml }: MessageBodyProps) {
 
   const isNote = message.kind === 'note';
   const isOutbound = message.direction === 'outbound';
+
+  // Only inbound mail HAS an authentication result — our own replies and
+  // internal notes never crossed an MTA, so a verdict line on them would be
+  // meaningless. A missing verdict is dropped rather than printed as 'unknown':
+  // the provider not reporting DKIM is not the same claim as DKIM failing.
+  const authVerdicts = (
+    isNote || isOutbound
+      ? []
+      : ([
+          { method: AUTH_METHODS[0], verdict: message.spfResult },
+          { method: AUTH_METHODS[1], verdict: message.dkimResult },
+          { method: AUTH_METHODS[2], verdict: message.dmarcResult },
+        ] as const)
+  ).filter(
+    (entry): entry is { method: (typeof AUTH_METHODS)[number]; verdict: string } =>
+      entry.verdict !== null,
+  );
+  const allAuthPassed = authVerdicts.every((entry) => isPass(entry.verdict));
 
   return (
     <article
@@ -97,6 +134,31 @@ export function MessageBody({ message, sanitizedHtml }: MessageBodyProps) {
             likely spam, by a classifier trained on your own triage. The
             thread&rsquo;s status above is the authority on what was actually
             done about it.
+          </span>
+        </p>
+      ) : null}
+
+      {authVerdicts.length > 0 ? (
+        <p
+          className={`mb-2 flex items-start gap-2 text-sm ${
+            allAuthPassed ? MUTED : 'text-status-danger'
+          }`}
+        >
+          {allAuthPassed ? (
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          ) : (
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          )}
+          <span>
+            {allAuthPassed ? 'Sender authenticated' : 'Sender not authenticated'}
+            {': '}
+            {authVerdicts.map(({ method, verdict }, index) => (
+              <span key={method}>
+                {index > 0 ? ' · ' : null}
+                {method}{' '}
+                <span className={isPass(verdict) ? '' : 'font-medium'}>{verdict}</span>
+              </span>
+            ))}
           </span>
         </p>
       ) : null}
