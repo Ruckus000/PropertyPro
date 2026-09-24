@@ -102,7 +102,7 @@ docs/                   # Specs, ADRs, audits, design system
 > the defect lives in the relationship between two sibling files. And
 > `verify-admin-semantic-css` was converted `.cjs` → `.ts` and registered as
 > `pnpm guard:admin-semantic-css`; it now scans `apps/admin/src` **and**
-> `packages/ui/src`. There are **31** guards in `scripts/run-lint-guards.mjs`;
+> `packages/ui/src`. There are **32** guards in `scripts/run-lint-guards.mjs`;
 > `guard:admin-semantic-css` is deliberately not one of them, because it reads
 > `apps/admin/.next/static/css` and so needs a build first.
 
@@ -318,6 +318,7 @@ pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only b
 pnpm guard:page-padding         # Page gutter single-sourced in the shell; no per-page px / nested <main>
 pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 pnpm guard:class-resolution     # Every colour utility class in apps/web/src must emit CSS
+pnpm guard:service-dead-exports # Unreferenced exported service functions (shrink-only baseline)
 ```
 
 > **Design tokens (`guard:design-tokens`):** bans raw hex, raw Tailwind palette
@@ -379,6 +380,23 @@ pnpm guard:class-resolution     # Every colour utility class in apps/web/src mus
 > `scripts/page-padding-baseline.json` (currently empty); escape hatch
 > `// page-padding:exempt — <reason>`. To retune app-wide padding, edit
 > `PAGE_GUTTER_X` / `py-*` in `PageContainer` — one line, whole app.
+
+> **Service dead exports (`guard:service-dead-exports`, SVC-07):** every
+> top-level `export (async) function` name under `apps/web/src/lib/services/`
+> (TypeScript parser; `.d.ts`, ambient `declare`, overloaded duplicates, and
+> `*.test.*`/`*.spec.*`/`__tests__` files excluded) must be referenced — whole
+> word, OUTSIDE comments — somewhere in the `git ls-files`-enumerated code
+> corpus under `apps/`, `packages/`, `scripts/`. Test-file references count
+> (covered ≠ dead); string-literal tokens also count (conservative: red only on
+> evidence of death — which makes any quoted mention a de facto exemption, so
+> audit a suspicious "drain" before ratcheting). Violations freeze shrink-only,
+> per file and per NAME, in `scripts/service-dead-exports-baseline.json`
+> (seeded at 11, corrected measurement 2026-09-24); ratchet down with
+> `pnpm exec tsx scripts/verify-service-dead-exports.ts --write-baseline` in a
+> reviewed commit — GROWING the ledger additionally requires `--force`. The
+> default path for a violation is deleting the export (or un-exporting it).
+> Enumeration, parse failures on either side, git failures and a missing scan
+> root all refuse (exit 2) rather than scan a partial tree.
 
 > The list above is representative, not exhaustive. See the root `package.json`
 > `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,

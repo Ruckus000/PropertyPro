@@ -29,6 +29,10 @@ import {
   THREAD_FALLBACK_WINDOW_DAYS,
 } from './threading';
 import type { InboundEmail } from './types';
+// Family 2 (top-level `code` only, no `cause` walk). The copies this replaced
+// used to disagree on signature in three different files; see the header of
+// `@/lib/db/postgres-error` for why the two families are kept apart.
+import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
 
 /**
  * `INSERT ... RETURNING` always yields a row, but the driver's type does not
@@ -53,21 +57,6 @@ export interface PersistInboundEmailResult {
   messageId: number;
   /** True when this exact message had already been stored — nothing was written. */
   duplicate: boolean;
-}
-
-/**
- * Postgres unique-violation. Same shape as the local helper in the Stripe
- * webhook route; kept local here too rather than extracted, because the two
- * existing copies already disagree on signature and reconciling them is not
- * this feature's job.
- */
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: string }).code === '23505'
-  );
 }
 
 async function findMessageIdByDedupeKey(
@@ -213,7 +202,7 @@ export async function persistInboundEmail(
       };
     });
   } catch (error) {
-    if (!isUniqueConstraintError(error)) throw error;
+    if (!isTopLevelUniqueConstraintError(error)) throw error;
 
     // Lost a race with a concurrent delivery of the same message. The whole
     // transaction rolled back, so there is nothing to clean up — re-read the

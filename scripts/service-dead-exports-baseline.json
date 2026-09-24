@@ -1,0 +1,33 @@
+{
+  "apps/web/src/lib/services/contract-renewal-alerts.ts": [
+    "classifyExpirationWindow"
+  ],
+  "apps/web/src/lib/services/elections-service.ts": [
+    "getElectionByIdForCommunity"
+  ],
+  "apps/web/src/lib/services/emergency-broadcast-service.ts": [
+    "resolveEmergencyRecipients"
+  ],
+  "apps/web/src/lib/services/export/export-job-service.ts": [
+    "findActiveJob"
+  ],
+  "apps/web/src/lib/services/faq-service.ts": [
+    "toVisibleFaq"
+  ],
+  "apps/web/src/lib/services/package-visitor-service.ts": [
+    "listPackagesForCommunity"
+  ],
+  "apps/web/src/lib/services/polls-service.ts": [
+    "mapPollRow"
+  ],
+  "apps/web/src/lib/services/provisioning-service.ts": [
+    "findOrphanCommunities"
+  ],
+  "apps/web/src/lib/services/site-blocks-service.ts": [
+    "readSnapshotPayload",
+    "summarizePageChanges"
+  ],
+  "apps/web/src/lib/services/site-pages-service.ts": [
+    "assertUsableSlug"
+  ]
+}

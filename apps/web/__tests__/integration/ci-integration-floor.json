@@ -1,0 +1,21 @@
+{
+  "expectedExecutedCount": null,
+  "measuredAt": "2026-09-23T21:42:04Z",
+  "note": "asserted by integration-tests.yml; raise only by adding tests, lower only by removing them. NOT ARMED (plan ledger D15-D17, human-confirmed 2026-09-23): the workflow's floor step is PRINT-ONLY, and expectedExecutedCount stays null until a GREEN 'Integration Tests' run on this branch has PRINTED its executed count; arming then sets it to that CI-printed number - never a local run, never the audit's '52', which counted FILES, not blocks - and fills observedRunUrl + observedCommitSha. Until both are set with a real number, nothing in CI is enforced by this file. Skip/flaky/todo bucket mapping (verified against vitest 3.2.4 JsonReporter source, not assumed): the JSON report has NO separate flaky bucket - a test that fails then passes on retry lands in 'passed', so executed = passed + failed is complete even with retries on; skipped / todo / pending are the not-executed buckets. This differs from the Playwright report the ported-from e2e step reads, which has a fourth 'flaky' stats bucket.",
+  "localReferenceNotAFloor": {
+    "executed": 377,
+    "collected": 379,
+    "files": 54,
+    "passed": 377,
+    "failed": 0,
+    "skipped": 2,
+    "todo": 0,
+    "pending": 0,
+    "measuredAt": "2026-09-23T17:36:47+08:00",
+    "commit": "ece705f9f9031ec0f14c565b2d9dfa740ceef5ad",
+    "command": "scripts/test-integration-local.sh --reporter=default --reporter=json (the apps/web integration suite only; CI's floor governs that same step, not the packages/db RLS pair)",
+    "skipProvenance": "the 2 skips are auth/password-reset-login.integration.test.ts self-skipping via describe.skip without a Supabase Auth environment - env-conditional by design, and CI's vanilla-Postgres service container provides none, so a hard skipped>0 refusal would be red on day one; the executed floor is what guards the mass-skip failure mode"
+  },
+  "observedRunUrl": null,
+  "observedCommitSha": null
+}

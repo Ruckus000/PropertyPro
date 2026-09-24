@@ -87,8 +87,10 @@ interface OwnerRecipient {
 }
 
 /**
- * Resolve owner recipients for a community: role 'resident' with isUnitOwner,
- * plus the legacy 'owner' role, that have an email and aren't deleted.
+ * Resolve owner recipients for a community: members whose role is 'resident'
+ * with `isUnitOwner` true, that have an email and aren't deleted. The v3 role
+ * enum has no owner role — unit ownership is the `isUnitOwner` flag, so that
+ * predicate is the complete set.
  */
 export async function resolveOwnerRecipients(communityId: number): Promise<OwnerRecipient[]> {
   const scoped = createScopedClient(communityId);
@@ -99,7 +101,7 @@ export async function resolveOwnerRecipients(communityId: number): Promise<Owner
     const userId = r.userId;
     const role = r.role;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if ((role === 'resident' && r.isUnitOwner === true) || role === 'owner') ownerIds.add(userId);
+    if (role === 'resident' && r.isUnitOwner === true) ownerIds.add(userId);
   }
 
   // Only the owners — `users` is platform-global, so it is never read wholesale.

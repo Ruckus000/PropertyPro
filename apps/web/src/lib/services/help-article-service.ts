@@ -439,12 +439,6 @@ export function searchArticles(
   return scored.slice(0, SEARCH_RESULT_CAP).map((s) => s.article);
 }
 
-export function getArticleBySlug(slug: string): HelpArticleSource | null {
-  return (
-    getArticleSources().find((article) => article.metadata.slug === slug) ?? null
-  );
-}
-
 export function getArticle(category: string, slug: string): HelpArticleSource | null {
   return (
     getArticleSources().find(

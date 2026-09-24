@@ -52,6 +52,7 @@ import {
   updateCommunitySubscriptionFromStripe,
   updateStripePriceUnitAmount,
 } from '@/lib/services/stripe-webhook-service';
+import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -100,16 +101,6 @@ function logStripeWebhookEvent(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** PostgreSQL unique_violation error code. */
-function isUniqueConstraintError(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: string }).code === '23505'
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Event handlers
@@ -736,7 +727,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     try {
       await insertStripeWebhookFence(event.id);
     } catch (insertErr) {
-      if (!isUniqueConstraintError(insertErr)) {
+      if (!isTopLevelUniqueConstraintError(insertErr)) {
         // Not a unique constraint violation — genuine DB error
         logStripeWebhookEvent('error', 'Stripe webhook fence insert failed', {
           eventId: event.id,

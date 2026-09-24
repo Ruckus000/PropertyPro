@@ -34,7 +34,8 @@ import { resolveOwnerRecipients } from '../../src/lib/services/snowbird-digest-p
 const USERS = [
   { id: 'u-owner', email: 'owner@example.com', fullName: 'Olive Owner' },
   { id: 'u-tenant', email: 'tenant@example.com', fullName: 'Ted Tenant' },
-  { id: 'u-legacy', email: 'legacy@example.com', fullName: '' },
+  { id: 'u-blank-name', email: 'blank@example.com', fullName: '' },
+  { id: 'u-pm', email: 'pm@example.com', fullName: 'Pat Manager' },
 ];
 
 describe('resolveOwnerRecipients', () => {
@@ -46,7 +47,11 @@ describe('resolveOwnerRecipients', () => {
         return [
           { userId: 'u-owner', role: 'resident', isUnitOwner: true },
           { userId: 'u-tenant', role: 'resident', isUnitOwner: false },
-          { userId: 'u-legacy', role: 'owner', isUnitOwner: false },
+          // A management role is not an owner, however senior: the digest is
+          // for unit owners. Reachable in v3, so it is a real negative case.
+          { userId: 'u-pm', role: 'property_manager', isUnitOwner: false },
+          // Owner whose users row has no display name — exercises the fallback.
+          { userId: 'u-blank-name', role: 'resident', isUnitOwner: true },
           { userId: 'u-owner', role: 'resident', isUnitOwner: true },
           { userId: 'u-no-user-row', role: 'resident', isUnitOwner: true },
         ];
@@ -63,13 +68,13 @@ describe('resolveOwnerRecipients', () => {
 
     expect(recipients).toEqual([
       { userId: 'u-owner', email: 'owner@example.com', fullName: 'Olive Owner' },
-      { userId: 'u-legacy', email: 'legacy@example.com', fullName: 'Neighbor' },
+      { userId: 'u-blank-name', email: 'blank@example.com', fullName: 'Neighbor' },
     ]);
     expect(selectFromMock).toHaveBeenCalledTimes(1);
     expect(selectFromMock.mock.calls[0]?.[2]).toEqual({
       _type: 'inArray',
       col: tables.users.id,
-      vals: ['u-owner', 'u-legacy', 'u-no-user-row'],
+      vals: ['u-owner', 'u-blank-name', 'u-no-user-row'],
     });
   });
 });

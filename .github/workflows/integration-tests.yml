@@ -1,3 +1,35 @@
+# Integration Tests — WHAT RUNS AND WHY IT MATTERS
+#
+# This job is the required merge context `Integration Tests` AND the
+# production-deploy gate: `deploy.yml` waits for it on the CI run's head_sha,
+# so a red or over-tight floor here blocks merges and automatic deploys
+# repo-wide until a manual `workflow_dispatch` escape hatch.
+#
+# It runs two suites against a disposable vanilla-Postgres service container:
+#   1. `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
+#      — the apps/web integration suite (the step the floor below governs).
+#   2. the packages/db RLS pair (rls-policies + pipeline-and-transactions),
+#      scoped to two files on purpose — see the step comment.
+#
+# EXECUTED-COUNT FLOOR (TST-06) — PRINT-ONLY, NOT ARMED (plan ledger D15–D17,
+# human-confirmed 2026-09-23). The "Run integration tests" step also emits a
+# vitest JSON report (/tmp/vitest-integration.json); the post-step parses it
+# and PRINTS executed / collected / skipped / todo / pending against the
+# number declared in apps/web/__tests__/integration/ci-integration-floor.json.
+# It does not fail the job. Arming (turning the print into ::error:: + exit 1)
+# is allowed ONLY after a GREEN run on the branch has printed the executed
+# count, and then the floor must be set to that CI-printed number — never a
+# local measurement and never the audit's "52", which counted FILES.
+#
+# Why an EXECUTED floor exists when vitest 3.2.4 already exits 1 on zero
+# collection: the silent-green shape left is files being COLLECTED and then
+# collapse to zero EXECUTED blocks (a `describe.skip` at file scope, a global
+# env gate flipped to always-skip), which reports `Test Files 54 passed` and
+# exit 0 while running nothing. Only counting executed assertions catches it.
+# The pattern is ported from the e2e workflow's spec-count assertion; the
+# bucket mapping differs because vitest's JSON report has NO separate flaky
+# bucket (see the step comment) while Playwright's does.
+
 name: Integration Tests
 
 on:
@@ -137,8 +169,108 @@ jobs:
         # be re-applied now those tables exist.
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/sql/local-supabase-post-migrate.sql
 
+      # The default reporter stays so the log is still readable; `json` is
+      # added alongside it and writes ONLY to /tmp via the dot-notation
+      # outputFile (a bare --outputFile would make every reporter write there).
+      # Single `run:` command, no pipes — the step conclusion IS vitest's own
+      # exit code (see .claude/rules/verification.md: $? after a pipe is the
+      # LAST command's status).
       - name: Run integration tests
-        run: pnpm exec vitest run --config apps/web/vitest.integration.config.ts
+        id: tests
+        run: >-
+          pnpm exec vitest run --config apps/web/vitest.integration.config.ts
+          --reporter=default --reporter=json
+          --outputFile.json=/tmp/vitest-integration.json
+
+      # TST-06 — EXECUTED-count floor. PRINT-ONLY, NOT ARMED (plan ledger
+      # D15–D17, human-confirmed 2026-09-23): this step must not fail the job.
+      # Arming is a separate, evidence-gated change — see the file header and
+      # apps/web/__tests__/integration/ci-integration-floor.json.
+      #
+      # A genuine test failure needs no re-raise here: when vitest exits
+      # non-zero the `tests` step is already red, and this step runs anyway
+      # (conclusion == 'failure' is in the gate) purely to print the buckets of
+      # the failed run for diagnosis. When the floor IS armed, the ordering
+      # rule from the plan still holds: an actual failure outranks the floor.
+      #
+      # Gate mirrors the e2e workflow's lesson: `always() &&` is REQUIRED — a
+      # custom `if:` without a status function gets an implicit success()
+      # ANDed on, and the conclusion check narrows it back to "vitest actually
+      # ran", so an install/migrate failure does not get a misleading second
+      # red X about a missing report.
+      #
+      # Bucket mapping, VERIFIED against the vitest 3.2.4 JsonReporter source
+      # (StatusMap + logTasks), not assumed: the JSON report has NO separate
+      # flaky bucket. A test that fails and passes on retry ends in
+      # result.state "pass" and lands in `passed`, so executed = passed +
+      # failed is complete even with retries on. skipped / todo / pending are
+      # the not-executed buckets; an unknown state also falls back to
+      # "skipped". (The Playwright report the e2e step reads DOES have a
+      # fourth `flaky` stats bucket — omitting it there was required; the
+      # asymmetry here is vitest-vs-Playwright, not an omission.)
+      #
+      # Skips are printed by name as a warning, never refused: the suite has
+      # env-conditional self-skips at HEAD — measured locally at the
+      # implementation commit (2026-09-23): 54 files collected, 379 tests,
+      # 377 executed, 2 skipped — both in
+      # apps/web/__tests__/integration/auth/password-reset-login.integration.test.ts,
+      # which uses describe.skip without a Supabase Auth environment, exactly
+      # what CI's vanilla-Postgres service container provides. A hard
+      # skipped>0 refusal would be red on day one (the executed floor already
+      # catches the mass-skip failure this guards).
+      - name: Report integration executed-test floor (print-only)
+        if: always() && (steps.tests.conclusion == 'success' || steps.tests.conclusion == 'failure')
+        run: |
+          node -e '
+            const fs = require("fs");
+            const REPORT = "/tmp/vitest-integration.json";
+            const FLOOR_FILE = "apps/web/__tests__/integration/ci-integration-floor.json";
+            if (!fs.existsSync(REPORT)) {
+              // On arming, this becomes ::error:: + exit 1 (a run that cannot
+              // produce a report has no evidence of coverage): see e2e.yml.
+              console.error("::warning::no vitest JSON report at " + REPORT + " — the run died before the json reporter wrote one (crash/timeout). Floor is PRINT-ONLY, so not failing.");
+              process.exit(0);
+            }
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync(REPORT, "utf8"));
+            } catch (e) {
+              console.error("::warning::vitest JSON report unparseable (" + e.message + "). Floor is PRINT-ONLY, so not failing.");
+              process.exit(0);
+            }
+            const assertions = (report.testResults ?? []).flatMap((f) => f.assertionResults ?? []);
+            const count = (status) => assertions.filter((a) => a.status === status).length;
+            const passed = count("passed");
+            const failed = count("failed");
+            const skipped = count("skipped");
+            const todo = count("todo");
+            const pending = count("pending");
+            const executed = passed + failed;
+            const collected = assertions.length;
+            let floor = null;
+            let floorErr = null;
+            try {
+              floor = JSON.parse(fs.readFileSync(FLOOR_FILE, "utf8")).expectedExecutedCount;
+            } catch (e) {
+              floorErr = e.message;
+            }
+            console.log("integration floor (print-only): executed=" + executed + " collected=" + collected + " passed=" + passed + " failed=" + failed + " skipped=" + skipped + " todo=" + todo + " pending=" + pending + " declaredFloor=" + (floorErr ? "UNREADABLE(" + floorErr + ")" : String(floor)));
+            if (skipped > 0) {
+              // Name them: a new skip that was not there at measurement time is
+              // the earliest visible symptom of the failure mode this guards.
+              const names = (report.testResults ?? []).flatMap((f) =>
+                (f.assertionResults ?? []).filter((a) => a.status === "skipped" || a.status === "todo" || a.status === "pending")
+                  .map((a) => String(f.name ?? "").split("/").slice(-3).join("/") + " :: " + a.fullName)
+              );
+              console.error("::warning::" + skipped + " test(s) NOT executed (skipped/todo/pending): " + names.join(" ; "));
+            }
+            if (typeof floor === "number" && executed < floor) {
+              // WHEN ARMED (D16, evidence-gated): this block becomes
+              // ::error:: + process.exit(1). Until then it only announces.
+              console.error("::warning::executed=" + executed + " is BELOW the declared floor " + floor + " in " + FLOOR_FILE + " (floor is PRINT-ONLY — not failing the job; see the header of this workflow for the arming rule).");
+            }
+            process.exit(0);
+          '
 
       - name: Run database RLS policy tests
         # packages/db has its own integration config that no workflow ever

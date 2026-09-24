@@ -12,6 +12,7 @@ import {
   type PollType,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gt, isNull, lt, or } from '@propertypro/db/filters';
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
 import { AppError } from '@/lib/api/errors/AppError';
 import {
   BadRequestError,
@@ -121,26 +122,6 @@ interface ForumThreadOrderedCursorPayload {
 }
 
 const VALID_POLL_TYPES: readonly PollType[] = ['single_choice', 'multiple_choice'];
-
-function hasPostgresErrorCode(error: unknown, expectedCode: string): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  if ('code' in error && (error as { code: unknown }).code === expectedCode) {
-    return true;
-  }
-
-  if ('cause' in error) {
-    return hasPostgresErrorCode((error as { cause: unknown }).cause, expectedCode);
-  }
-
-  return false;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return hasPostgresErrorCode(error, '23505');
-}
 
 function assertPollType(value: string): PollType {
   if (!VALID_POLL_TYPES.includes(value as PollType)) {

@@ -16,7 +16,8 @@ Run:
 cd /Users/jphilistin/Documents/Coding/PropertyPro
 git fetch origin --quiet
 git log origin/main --oneline -3
-git show origin/main:scripts/verify-contracts.ts | grep -cE "^  'apps/web"
+# Map-literal form since CON-07 (entries are `  ['path', 'reason'],`):
+git show origin/main:scripts/verify-contracts.ts | grep -cE "^  \['apps/web"
 pnpm guard:contracts | tail -3
 ```
 
@@ -79,22 +80,24 @@ If the file does not exist, initialize:
 }
 ```
 
-Pre-seed the skip list with known runner-blocked routes (these are
-documented in MEMORY.md and the api-patterns rules):
+Pre-seed the skip list from the allowlist's reason map. The
+`ALLOWLIST_REASONS` `Map<path, AllowlistReason>` in
+`scripts/verify-contracts.ts` is the SINGLE source of truth for what can never
+go through the runner today — every entry carries its classification as data,
+and anything NOT `pending-drain` is a permanent skip; regenerate the pre-seed
+from `git show origin/main:scripts/verify-contracts.ts` rather than from any
+hard-coded list in this file. (Three entries previously hard-coded here — a
+step-up auth route, the transparency list route, and the public esign
+signing route — were verified already drained: all three call `runRoute()`
+and are off the allowlist, so they were dropped rather than re-derived.)
 
 ```javascript
-const PERMANENT_SKIPS = [
-  'apps/web/src/app/api/v1/webhooks/stripe/route.ts',
-  'apps/web/src/app/api/v1/webhooks/twilio/route.ts',
-  'apps/web/src/app/api/v1/phone/verify/confirm/route.ts',
-  'apps/web/src/app/api/v1/phone/verify/send/route.ts',
-  'apps/web/src/app/api/v1/reauth/verify/route.ts',
-  'apps/web/src/app/api/v1/transparency/route.ts',
-  'apps/web/src/app/api/v1/esign/sign/[submissionExternalId]/[slug]/route.ts',
-  // Plus any allowlist entry starting with 'apps/web/src/app/api/v1/internal/'
-  // — apply this filter dynamically by scanning the current allowlist.
-]
-// For each, ensure skipList[route] = { classification: 'PERMANENT', reason: ..., lastAttemptedAt: null, attemptCount: 0 }
+// Derived at run time from origin/main's ALLOWLIST_REASONS map:
+//   PERMANENT  = every entry whose reason !== 'pending-drain'
+//   (the only pending-drain routes are the three CON-05 CRUD routes:
+//    announcements, meetings, maintenance-requests — those are drain targets,
+//    never skips)
+// For each, ensure skipList[route] = { classification: 'PERMANENT', reason: <AllowlistReason>, lastAttemptedAt: null, attemptCount: 0 }
 ```
 
 ## 5. Parse user overrides from invocation arguments

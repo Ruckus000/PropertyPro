@@ -43,6 +43,7 @@ import {
   generateFinanceStatementPdf,
 } from '@/lib/utils/finance-pdf';
 import { getBaseUrl } from '@/lib/utils/url';
+import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
 
 export type AssessmentFrequency = 'monthly' | 'quarterly' | 'annual' | 'one_time';
 export type AssessmentLineItemStatus = 'pending' | 'paid' | 'overdue' | 'waived';
@@ -285,10 +286,6 @@ function assertLineItemStatus(value: string): AssessmentLineItemStatus {
     throw new UnprocessableEntityError(`Invalid line item status: ${value}`);
   }
   return value as AssessmentLineItemStatus;
-}
-
-function isUniqueConstraintError(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === '23505';
 }
 
 function isMissingRelationError(err: unknown): boolean {
@@ -1905,7 +1902,7 @@ async function recordFinanceStripeEvent(
     });
     return true;
   } catch (err) {
-    if (isUniqueConstraintError(err)) {
+    if (isTopLevelUniqueConstraintError(err)) {
       logFinanceWebhookEvent('info', 'Duplicate finance webhook event skipped', {
         eventId: event.id,
         eventType: event.type,
