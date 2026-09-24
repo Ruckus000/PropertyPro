@@ -57,6 +57,7 @@ const GUARDS = [
   'guard:token-auth-routes',
   'guard:shared-side-effects',
   'guard:admin-community-scope',
+  'guard:service-dead-exports',
 ];
 
 // Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.
