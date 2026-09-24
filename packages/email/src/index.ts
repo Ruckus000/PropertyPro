@@ -128,9 +128,7 @@ export type { CommunityExportReadyEmailProps } from "./templates/community-expor
 
 // Shared components (Florida Modern, email system v4)
 export { EmailButton } from "./components/email-button";
-export { EmailCard } from "./components/email-card";
 export { EmailAlert } from "./components/email-alert";
-export * as emailStyles from "./components/shared-styles";
 export type { EmailTone } from "./components/theme";
 export {
   DEFAULT_EMAIL_ASSET_BASE_URL,

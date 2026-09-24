@@ -119,7 +119,6 @@ const LOGOMARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height=
 const PHOTOS: ReadonlyArray<readonly [string, string, number, number]> = [
   ['close-coast-1440.webp', 'photo-coast.jpg', 1080, 300],
   ['who-condo-1100.webp', 'photo-condo.jpg', 1080, 300],
-  ['onboarding-800.webp', 'photo-onboarding.jpg', 1080, 300],
   ['records-band-1600.webp', 'band-records.jpg', 1200, 240],
 ];
 

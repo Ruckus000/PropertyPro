@@ -46,7 +46,6 @@ export const EMAIL_IMAGES = [
   'logomark-ink.png',
   'photo-coast.jpg',
   'photo-condo.jpg',
-  'photo-onboarding.jpg',
   'band-records.jpg',
 ] as const;
 
