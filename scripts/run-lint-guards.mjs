@@ -60,7 +60,9 @@ const GUARDS = [
   'guard:service-dead-exports',
 ];
 
-// Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.
+// Cap concurrency so the fleet of cold tsx processes (one per guard, a set
+// that grows — 32 as of guard:service-dead-exports) doesn't thrash a small
+// CI runner.
 const CONCURRENCY = Math.max(2, Math.min(8, (cpus().length || 4)));
 
 /** Run one `pnpm <script>`, buffering combined stdout/stderr. */

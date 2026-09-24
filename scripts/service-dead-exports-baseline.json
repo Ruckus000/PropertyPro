@@ -20,6 +20,9 @@
   "apps/web/src/lib/services/polls-service.ts": [
     "mapPollRow"
   ],
+  "apps/web/src/lib/services/provisioning-service.ts": [
+    "findOrphanCommunities"
+  ],
   "apps/web/src/lib/services/site-blocks-service.ts": [
     "readSnapshotPayload",
     "summarizePageChanges"
