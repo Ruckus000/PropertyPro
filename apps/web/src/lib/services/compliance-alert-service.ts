@@ -31,6 +31,8 @@ interface OverdueItem {
   description: string;
   deadline: string;
   statuteReference: string;
+  /** True when no live document is linked — nothing was ever posted (or it was deleted). */
+  hasNoDocument: boolean;
 }
 
 interface ExpiringVisitorRow {
@@ -165,7 +167,10 @@ export async function checkAndAlertOverdueItems(
     });
 
     if (status === 'overdue') {
+      const documentDeleted =
+        documentId != null && (documentDeletedAtById.get(documentId) ?? null) != null;
       overdueItems.push({
+        hasNoDocument: documentId == null || documentDeleted,
         title: typeof row['title'] === 'string' ? row['title'] : 'Compliance Item',
         description: typeof row['description'] === 'string' ? row['description'] : '',
         deadline: deadline
@@ -195,6 +200,11 @@ export async function checkAndAlertOverdueItems(
     dueDate: overdueItems[0]!.deadline,
     severity: 'critical',
     statuteReference: overdueItems.map((i) => i.statuteReference).join(', '),
+    // The email's punch list. No owner: checklist items carry no assignee.
+    items: overdueItems.map((i) => ({
+      label: i.title,
+      status: i.hasNoDocument ? ('missing' as const) : ('overdue' as const),
+    })),
     sourceType: 'compliance',
     sourceId: String(communityId),
   };

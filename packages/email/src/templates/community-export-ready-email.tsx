@@ -9,13 +9,14 @@
  * member who only ever reads the email still learns what is missing.
  *
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
+ *
+ * Layout P6 · Export ready — hand over a complete record, and disclose the parts
+ * that aren't. Warnings are promoted to a masthead chip and a named panel, and
+ * the accent turns amber only when warnings exist.
  */
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
 import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, DataRows, FinePrint, Headline, MultilineText, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface CommunityExportReadyEmailProps extends BaseEmailProps {
@@ -44,60 +45,65 @@ export function CommunityExportReadyEmail({
   expiresOn,
   warnings = [],
 }: CommunityExportReadyEmailProps) {
-  const volumeLabel =
-    partCount === 1 ? '1 file' : `${partCount} files (the archive was split by size)`;
+  const volumeLabel = partCount === 1 ? '1 file' : `${partCount} files (the archive was split by size)`;
+  const hasWarnings = warnings.length > 0;
+  const warningLabel = `${warnings.length} warning${warnings.length !== 1 ? 's' : ''}`;
 
   return (
     <EmailLayout
       branding={branding}
+      sender="platform"
+      tone={hasWarnings ? 'amber' : 'coral'}
       previewText={previewText ?? `Your ${communityName} data export is ready to download`}
-      accentColor={warnings.length > 0 ? emailColors.accentWarning : undefined}
+      mastheadContext={communityName}
+      mastheadChip={hasWarnings ? { label: warningLabel, tone: 'amber' } : undefined}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark
+        icon={hasWarnings ? 'download-amber' : 'download-slate'}
+        label="Data export · finished"
+        tone={hasWarnings ? 'amber' : 'meta'}
+      />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — the full data export you requested for <Strong>{communityName}</Strong> has finished.
+          </>
+        }
+      >
         Your data export is ready
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-
-      <Text style={styles.body}>
-        The full data export you requested for <strong>{communityName}</strong> has
-        finished. It contains {volumeLabel}, {totalSize} in total.
-      </Text>
-
-      <EmailButton href={downloadUrl} variant="default">
-        Download your export
-      </EmailButton>
-
-      {warnings.length > 0 && (
+      </Headline>
+      <DataRows
+        rows={[
+          { label: 'Archive', value: volumeLabel },
+          { label: 'Total size', value: totalSize },
+          { label: 'Files deleted on', value: expiresOn },
+        ]}
+      />
+      {hasWarnings && (
         <EmailAlert variant="warning" title="Some items could not be included">
-          {warnings.map((warning) => (
-            <Text key={warning} style={styles.small}>
-              &bull; {warning}
-            </Text>
+          {warnings.map((warning, index) => (
+            <div key={index} style={{ margin: '0 0 4px 0' }}>
+              &bull; <MultilineText text={warning} />
+            </div>
           ))}
-          <Text style={styles.smallSpaced}>
-            The rest of the export completed normally. The full list is also in
-            the <strong>manifest.json</strong> file inside the archive.
-          </Text>
+          <div style={{ marginTop: '10px' }}>
+            The rest of the export completed normally. The full list is also in the <Strong>manifest.json</Strong> file
+            inside the archive.
+          </div>
         </EmailAlert>
       )}
-
-      <Text style={styles.smallSpaced}>
-        These files are deleted on <strong>{expiresOn}</strong>. You can request a
-        new export at any time — there is no charge and no limit, including after
-        a subscription has lapsed.
-      </Text>
-
+      <ActionRow href={downloadUrl} label="Download your export" variant={hasWarnings ? 'warning' : 'default'} />
       {/*
         Deliberately NOT a direct signed link. An export volume is a copy of the
         entire association including resident PII, so every download is
         re-authorized and audit-logged at request time; a link that worked
         straight from a forwarded inbox would defeat both.
       */}
-      <Text style={styles.small}>
-        You&rsquo;ll be asked to sign in first. Each download is recorded in the
-        community&rsquo;s audit trail.
-      </Text>
+      <FinePrint>
+        You&rsquo;ll be asked to sign in first. Each download is recorded in the community&rsquo;s audit trail. These
+        files are deleted on <Strong>{expiresOn}</Strong>. You can request a new export at any time — there is no charge and
+        no limit, including after a subscription has lapsed.
+      </FinePrint>
     </EmailLayout>
   );
 }

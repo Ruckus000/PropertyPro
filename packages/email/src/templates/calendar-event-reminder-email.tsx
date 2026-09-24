@@ -1,9 +1,5 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import { EmailCard } from '../components/email-card';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, DataRows, FinePrint, Headline, Strong, type DataRow } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface CalendarEventReminderEmailProps extends BaseEmailProps {
@@ -18,6 +14,11 @@ export interface CalendarEventReminderEmailProps extends BaseEmailProps {
   ctaUrl: string;
 }
 
+/**
+ * Layout A7 · Meeting notice (reminder variant) — the event's when and where in
+ * a panel, one action. A courtesy reminder, not a statutory notice, so it
+ * carries no statute line.
+ */
 export function CalendarEventReminderEmail({
   branding,
   previewText,
@@ -31,57 +32,34 @@ export function CalendarEventReminderEmail({
   ctaLabel,
   ctaUrl,
 }: CalendarEventReminderEmailProps) {
+  const rows: DataRow[] = [
+    { label: 'When', value: `${eventDateLabel}${eventTimeLabel ? ` at ${eventTimeLabel}` : ''}` },
+    ...detailLines.map((line) => ({ label: 'Details', value: line })),
+  ];
+
   return (
     <EmailLayout
       branding={branding}
       previewText={previewText ?? `${eventLabel}: ${eventTitle} on ${eventDateLabel}`}
-      accentColor={emailColors.accentBrand}
+      mastheadContext="Calendar reminder"
     >
-      <Heading as="h1" style={styles.heading}>
-        {eventLabel} reminder
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        This is your {reminderTimingLabel.toLowerCase()} reminder for{' '}
-        <strong>{eventTitle}</strong> at <strong>{branding.communityName}</strong>.
-      </Text>
-
-      <EmailCard>
-        <table
-          width="100%"
-          cellPadding={0}
-          cellSpacing={0}
-          style={{ borderCollapse: 'collapse' }}
-        >
-          <tbody>
-            <tr>
-              <td style={styles.labelCell}>Event</td>
-              <td style={styles.valueCell}>{eventTitle}</td>
-            </tr>
-            <tr>
-              <td style={styles.labelCell}>When</td>
-              <td style={styles.valueCell}>
-                {eventDateLabel}
-                {eventTimeLabel ? ` at ${eventTimeLabel}` : ''}
-              </td>
-            </tr>
-            {detailLines.map((line) => (
-              <tr key={line}>
-                <td style={styles.labelCell}>Details</td>
-                <td style={styles.valueCell}>{line}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </EmailCard>
-
-      <EmailButton href={ctaUrl}>{ctaLabel}</EmailButton>
-
-      <Text style={styles.smallSpaced}>
-        You can change calendar event reminder timing or turn these emails off in your
-        notification settings at any time.
-      </Text>
+      <CategoryMark icon="calendar-coral" label={`${eventLabel} reminder`} tone="coral" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — this is your {reminderTimingLabel.toLowerCase()} reminder for <Strong>{eventTitle}</Strong>{' '}
+            at <Strong>{branding.communityName}</Strong>.
+          </>
+        }
+      >
+        {eventTitle}
+      </Headline>
+      <DataRows variant="panel" rows={rows} />
+      <ActionRow href={ctaUrl} label={ctaLabel} />
+      <FinePrint>
+        You can change calendar event reminder timing or turn these emails off in your notification settings at any
+        time.
+      </FinePrint>
     </EmailLayout>
   );
 }

@@ -1,9 +1,6 @@
-import { Heading, Link, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
 import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, Figure, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 /**
@@ -22,10 +19,14 @@ import type { BaseEmailProps } from '../types';
  * board can act while the renewal can still succeed. That is why it leads with
  * the authenticate link rather than the billing portal — the portal cannot
  * complete a 3-D Secure challenge.
+ *
+ * Layout P3 variant · the payment-failed frame in amber, not red: the same
+ * amount object, but the state is "waiting on you", not "failed".
  */
 export interface AuthenticateCardEmailProps extends BaseEmailProps {
   recipientName: string;
-  amountDue: string;
+  /** Formatted renewal amount, or null when Stripe gave none — null omits the figure. */
+  amountDue: string | null;
   /**
    * Stripe's `invoice.hosted_invoice_url` — the page that runs the 3-D Secure
    * challenge.
@@ -52,40 +53,44 @@ export function AuthenticateCardEmail({
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ?? `Confirm your bank's security check to complete ${amountDue}`
-      }
-      accentColor={emailColors.accentWarning}
+      sender="platform"
+      tone="amber"
+      previewText={previewText ?? `Confirm your bank's security check to complete ${amountDue ?? 'your renewal'}`}
+      mastheadContext={branding.communityName}
+      mastheadChip={{ label: 'Confirmation needed', tone: 'amber' }}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="money-slate" label="Billing · bank security check" tone="amber" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — your renewal{' '}
+            {amountDue && (
+              <>
+                of <Strong>{amountDue}</Strong>{' '}
+              </>
+            )}
+            for <Strong>{branding.communityName}</Strong>{' '}
+            is ready to go through, but your bank has asked for an extra security check before it will approve the charge.
+          </>
+        }
+      >
         Your bank needs you to confirm this payment
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        Your renewal of <strong>{amountDue}</strong> for{' '}
-        <strong>{branding.communityName}</strong> is ready to go through, but your
-        bank has asked for an extra security check before it will approve the
-        charge.
-      </Text>
-
-      <EmailAlert variant="warning">
-        <strong>Nothing has gone wrong with your card</strong> — there is no need
-        to replace it. The payment simply cannot complete until someone confirms
-        it with the bank. If it is not confirmed, the renewal will fail on its own
-        and the subscription will fall into arrears.
+      </Headline>
+      {amountDue && <Figure label="Renewal awaiting confirmation" icon="money-slate" amount={amountDue} tone="amber" />}
+      <EmailAlert variant="warning" title="Nothing has gone wrong with your card">
+        There is no need to replace it. The payment simply cannot complete until someone confirms it with the bank. If it
+        is not confirmed, the renewal will fail on its own and the subscription will fall into arrears.
       </EmailAlert>
-
-      <EmailButton href={authenticateUrl} variant="warning">
-        Confirm this payment
-      </EmailButton>
-
-      <Text style={styles.smallSpaced}>
-        The button takes you to Stripe to complete the check. Anyone with that
-        link can view and pay the invoice, so please don&apos;t forward this
-        email. You can also manage billing from{' '}
-        <Link href={billingPortalUrl}>your billing portal</Link>.
-      </Text>
+      <ActionRow
+        href={authenticateUrl}
+        label="Confirm this payment"
+        variant="warning"
+        secondary={{ href: billingPortalUrl, label: 'Manage billing' }}
+      />
+      <FinePrint>
+        The button takes you to Stripe to complete the check. Anyone with that link can view and pay the invoice, so please
+        don&apos;t forward this email. The secondary link opens your billing portal.
+      </FinePrint>
     </EmailLayout>
   );
 }

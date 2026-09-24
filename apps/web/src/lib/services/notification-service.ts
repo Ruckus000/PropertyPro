@@ -20,6 +20,7 @@ import {
 import { and, desc, eq, inArray, isNull, lt, sql } from '@propertypro/db/filters';
 import {
   ComplianceAlertEmail,
+  type ComplianceAlertItem,
   DocumentPostedEmail,
   MeetingNoticeEmail,
   MaintenanceUpdateEmail,
@@ -95,6 +96,8 @@ export interface ComplianceAlertEvent {
   dueDate?: string;
   severity: 'info' | 'warning' | 'critical';
   statuteReference?: string;
+  /** Optional per-item punch list for the email; only the checklist sweep supplies it. */
+  items?: ComplianceAlertItem[];
   sourceType?: 'compliance';
   sourceId?: string;
 }
@@ -509,6 +512,7 @@ function renderEmailForEvent(
           dueDate: event.dueDate,
           dashboardUrl: `${baseUrl}/compliance?communityId=${communityId}`,
           severity: event.severity,
+          items: event.items,
         }),
       };
     }

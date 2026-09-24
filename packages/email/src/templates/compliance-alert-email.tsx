@@ -1,10 +1,29 @@
-import { Heading, Section, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
+import {
+  ActionRow,
+  CategoryMark,
+  FinePrint,
+  Headline,
+  ItemRows,
+  SectionLabel,
+  Strong,
+  type ItemRow,
+} from '../components/email-blocks';
 import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import type { EmailTone } from '../components/theme';
 import type { BaseEmailProps } from '../types';
+
+/**
+ * `missing` — no document posted; `overdue` — a document exists but was posted
+ * late or has fallen outside its window (the compliance calculator's own term).
+ */
+export type ComplianceItemStatus = 'missing' | 'overdue' | 'in_review' | 'filed';
+
+export interface ComplianceAlertItem {
+  label: string;
+  owner?: string;
+  status: ComplianceItemStatus;
+}
 
 export interface ComplianceAlertEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -13,17 +32,24 @@ export interface ComplianceAlertEmailProps extends BaseEmailProps {
   dueDate?: string;
   dashboardUrl: string;
   severity: 'info' | 'warning' | 'critical';
+  /** Optional punch list: the outstanding items behind this alert. Rendered only when supplied. */
+  items?: ComplianceAlertItem[];
 }
 
-const severityBadge: Record<
-  'info' | 'warning' | 'critical',
-  { bg: string; color: string; label: string }
-> = {
-  critical: { bg: emailColors.alertDangerBg, color: emailColors.alertDangerText, label: 'Critical' },
-  warning: { bg: emailColors.alertWarningBg, color: emailColors.alertWarningText, label: 'Warning' },
-  info: { bg: emailColors.alertInfoBg, color: emailColors.alertInfoText, label: 'Info' },
+const SEVERITY: Record<ComplianceAlertEmailProps['severity'], { label: string; tone: EmailTone }> = {
+  critical: { label: 'Critical', tone: 'red' },
+  warning: { label: 'Warning', tone: 'amber' },
+  info: { label: 'Info', tone: 'teal' },
 };
 
+const ITEM_STATUS: Record<ComplianceItemStatus, { label: string; tone: EmailTone }> = {
+  missing: { label: 'Missing', tone: 'red' },
+  overdue: { label: 'Overdue', tone: 'red' },
+  in_review: { label: 'In review', tone: 'amber' },
+  filed: { label: 'Filed', tone: 'green' },
+};
+
+/** Layout A4 · Compliance alert — what is missing, who owns it, by when. */
 export function ComplianceAlertEmail({
   branding,
   previewText,
@@ -33,71 +59,48 @@ export function ComplianceAlertEmail({
   dueDate,
   dashboardUrl,
   severity,
+  items,
 }: ComplianceAlertEmailProps) {
-  const badge = severityBadge[severity];
+  const badge = SEVERITY[severity];
+  const rows: ItemRow[] = (items ?? []).map((item) => ({
+    title: item.label,
+    detail: item.owner ? `Owner: ${item.owner}` : undefined,
+    status: ITEM_STATUS[item.status],
+  }));
 
   return (
     <EmailLayout
       branding={branding}
-      accentColor={emailColors.accentRed}
+      tone="red"
       previewText={previewText ?? `Compliance alert: ${alertTitle}`}
+      mastheadContext="Board & manager notice"
+      mastheadChip={badge}
+      footerReason="Compliance alerts go to the association's board and managers."
     >
-      {/* Heading + badge side by side */}
-      <table width="100%" cellPadding={0} cellSpacing={0} style={{ margin: '0 0 20px 0' }}>
-        <tbody>
-          <tr>
-            <td style={{ verticalAlign: 'middle' }}>
-              <Heading as="h1" style={{ ...styles.heading, margin: '0' }}>
-                Compliance alert
-              </Heading>
-            </td>
-            <td style={{ verticalAlign: 'middle', textAlign: 'right' as const, paddingLeft: '12px' }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  background: badge.bg,
-                  color: badge.color,
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  textTransform: 'uppercase' as const,
-                  letterSpacing: '0.3px',
-                }}
-              >
-                {badge.label}
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        A compliance item requires your attention at{' '}
-        <strong>{branding.communityName}</strong>.
-      </Text>
-
-      <EmailAlert variant="danger" title={`Missing: ${alertTitle}`}>
-        {alertDescription}
-        {dueDate && (
+      <CategoryMark icon="alert-red" label="Compliance alert · §718.111(12)(g)" tone="red" />
+      <Headline
+        lede={
           <>
-            {' '}Due by:{' '}
-            <strong style={{ color: emailColors.alertDangerText }}>{dueDate}</strong>
+            Hi {recipientName} — a compliance item needs attention at <Strong>{branding.communityName}</Strong>.
           </>
-        )}
+        }
+      >
+        {alertTitle}
+      </Headline>
+      <EmailAlert variant="danger" title={dueDate ? <>Due by {dueDate}</> : `Missing: ${alertTitle}`}>
+        {alertDescription}
       </EmailAlert>
-
-      <Section style={styles.buttonSection}>
-        <EmailButton href={dashboardUrl} variant="destructive">
-          View compliance dashboard
-        </EmailButton>
-      </Section>
-
-      <Text style={{ ...styles.smallSpaced, fontStyle: 'italic' }}>
-        Florida Statute §718.111(12)(g) requires timely posting of association documents.
-        Failure to comply may result in regulatory action.
-      </Text>
+      {rows.length > 0 && (
+        <>
+          <SectionLabel icon="doc-slate">Outstanding items</SectionLabel>
+          <ItemRows items={rows} />
+        </>
+      )}
+      <ActionRow href={dashboardUrl} label="View compliance dashboard" variant="destructive" />
+      <FinePrint>
+        Florida Statute §718.111(12)(g) requires timely posting of association documents. Failure to comply may result in
+        regulatory action.
+      </FinePrint>
     </EmailLayout>
   );
 }

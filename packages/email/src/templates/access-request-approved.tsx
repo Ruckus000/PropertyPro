@@ -1,8 +1,5 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface AccessRequestApprovedEmailProps extends BaseEmailProps {
@@ -10,6 +7,10 @@ export interface AccessRequestApprovedEmailProps extends BaseEmailProps {
   loginUrl: string;
 }
 
+/**
+ * Layout A9 · Access request (approved) — the pending layout with a green
+ * result chip in place of the review actions, and one action: sign in.
+ */
 export function AccessRequestApprovedEmail({
   branding,
   previewText,
@@ -19,27 +20,24 @@ export function AccessRequestApprovedEmail({
   return (
     <EmailLayout
       branding={branding}
+      tone="green"
       previewText={previewText ?? 'Your access request has been approved'}
-      accentColor={emailColors.accentGreen}
+      mastheadContext="Resident portal"
+      mastheadChip={{ label: 'Approved', tone: 'green' }}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="user-teal" label="Access request" tone="teal" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — your request to join <Strong>{branding.communityName}</Strong> has been approved. You
+            now have full access to the resident portal.
+          </>
+        }
+      >
         Access request approved
-      </Heading>
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        Your request to join <strong>{branding.communityName}</strong> has been
-        approved. You now have full access to the resident portal.
-      </Text>
-
-      <div style={styles.buttonSection}>
-        <EmailButton href={loginUrl} variant="default">
-          Log in
-        </EmailButton>
-      </div>
-
-      <Text style={styles.smallSpaced}>
-        If you have any questions, please contact your community manager.
-      </Text>
+      </Headline>
+      <ActionRow href={loginUrl} label="Log in" variant="teal" />
+      <FinePrint>If you have any questions, please contact your community manager.</FinePrint>
     </EmailLayout>
   );
 }

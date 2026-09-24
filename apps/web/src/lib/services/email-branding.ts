@@ -15,10 +15,17 @@
  */
 import { communities, createScopedClient } from '@propertypro/db';
 import type { CommunityBranding } from '@propertypro/email';
+import { getBaseUrl } from '@/lib/utils/url';
 import { formatCommunityPostalAddress } from './postal-address';
 
 /**
- * Community name + postal address for an email footer.
+ * Community name, postal address and notification-preferences link for an
+ * email footer.
+ *
+ * `preferencesUrl` points at the in-app settings page (login-walled, unlike the
+ * one-click unsubscribe link). It is only set for a community that exists, so
+ * the fallback "PropertyPro" branding never links into a community that isn't
+ * there.
  *
  * Deliberately does NOT set `unsubscribeUrl` — that is per-recipient and
  * per-topic, so each sender spreads it onto the returned object itself.
@@ -41,5 +48,9 @@ export async function loadEmailBranding(communityId: number): Promise<CommunityB
     zipCode: community['zipCode'],
   });
 
-  return postalAddressLines ? { communityName, postalAddressLines } : { communityName };
+  const preferencesUrl = `${getBaseUrl()}/settings?communityId=${communityId}`;
+
+  return postalAddressLines
+    ? { communityName, postalAddressLines, preferencesUrl }
+    : { communityName, preferencesUrl };
 }

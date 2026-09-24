@@ -1,9 +1,5 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import { EmailCard } from '../components/email-card';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, DataRows, Figure, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface AssessmentPaymentReceivedEmailProps extends BaseEmailProps {
@@ -14,8 +10,16 @@ export interface AssessmentPaymentReceivedEmailProps extends BaseEmailProps {
   paymentDate: string;
   remainingBalance: string;
   portalUrl: string;
+  /** Optional: how the payment was made (e.g. "Bank transfer ···· 8871"). Rendered only when supplied. */
+  paymentMethod?: string;
+  /** Optional: processor confirmation number, set in mono. Rendered only when supplied. */
+  confirmationNumber?: string;
 }
 
+/**
+ * Layout A10 · Payment received — a receipt to be filed, not read. The green
+ * figure mirrors the amber one on the due reminder: same object, paid state.
+ */
 export function AssessmentPaymentReceivedEmail({
   branding,
   previewText,
@@ -26,57 +30,42 @@ export function AssessmentPaymentReceivedEmail({
   paymentDate,
   remainingBalance,
   portalUrl,
+  paymentMethod,
+  confirmationNumber,
 }: AssessmentPaymentReceivedEmailProps) {
   return (
     <EmailLayout
       branding={branding}
+      tone="green"
       previewText={previewText ?? `Payment of ${amountPaid} received`}
-      accentColor={emailColors.accentGreen}
+      mastheadContext="Payment receipt"
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="check-green" label={<>Payment received · {paymentDate}</>} tone="green" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — your payment of <Strong>{amountPaid}</Strong> for <Strong>{assessmentTitle}</Strong> (due{' '}
+            {dueDate}) has been successfully processed on {paymentDate}.
+          </>
+        }
+      >
         Payment received
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        Your payment of <strong>{amountPaid}</strong> for{' '}
-        <strong>{assessmentTitle}</strong> (due {dueDate}) has been successfully
-        processed on {paymentDate}.
-      </Text>
-
-      <EmailCard style={{ backgroundColor: emailColors.alertSuccessBg, border: `1px solid ${emailColors.alertSuccessBorder}` }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr>
-              <td style={styles.labelCell}>Assessment</td>
-              <td style={styles.valueCell}>{assessmentTitle}</td>
-            </tr>
-            <tr>
-              <td style={styles.labelCell}>Amount</td>
-              <td style={styles.valueCell}>{amountPaid}</td>
-            </tr>
-            <tr>
-              <td style={styles.labelCell}>Date</td>
-              <td style={styles.valueCell}>{paymentDate}</td>
-            </tr>
-            <tr>
-              <td style={styles.labelCell}>Balance</td>
-              <td style={{ ...styles.valueCell, color: emailColors.alertSuccessText, fontWeight: 600 }}>
-                {remainingBalance}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </EmailCard>
-
-      <EmailButton href={portalUrl} variant="default">
-        View payment history
-      </EmailButton>
-
-      <Text style={styles.smallSpaced}>
-        This is a confirmation of your payment. No further action is required.
-        If you have questions, please contact your association.
-      </Text>
+      </Headline>
+      <Figure label="Amount paid" amount={amountPaid} tone="green" asideLabel="Remaining balance" asideValue={remainingBalance} />
+      <DataRows
+        rows={[
+          { label: 'Assessment', value: assessmentTitle },
+          { label: 'Due date', value: dueDate },
+          { label: 'Payment date', value: paymentDate },
+          { label: 'Method', value: paymentMethod },
+          { label: 'Confirmation', value: confirmationNumber, mono: true },
+        ]}
+      />
+      <ActionRow href={portalUrl} label="View payment history" variant="success" />
+      <FinePrint>
+        This is a confirmation of your payment. No further action is required. If you have questions, please contact
+        your association.
+      </FinePrint>
     </EmailLayout>
   );
 }

@@ -297,6 +297,10 @@ export async function verifyOtp(params: {
         requesterName: request['fullName'] as string,
         requesterEmail: request['email'] as string,
         claimedUnit: (request['claimedUnitNumber'] as string) ?? undefined,
+        // The only check performed before this mail is sent is the OTP match
+        // above, so that is the only one reported. The claimed unit and
+        // ownership are self-reported until an admin approves.
+        recordCheck: { label: 'Email verified', tone: 'green' },
         dashboardUrl,
       }),
     }).catch((err: unknown) => console.error('[access-request] Admin notification email failed:', err));

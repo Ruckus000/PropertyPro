@@ -80,6 +80,14 @@ describe('notifyResidentsOfSitePublish', () => {
     });
   });
 
+  it('delivers as the publishing user, so the email signature carries their title', async () => {
+    await notifyResidentsOfSitePublish(INPUT);
+
+    expect(queueDeliveryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ communityId: 42, authorName: 'Dana Reyes', authorUserId: 'user-1' }),
+    );
+  });
+
   it('links the announcement to the community site it is announcing', async () => {
     await notifyResidentsOfSitePublish(INPUT);
 

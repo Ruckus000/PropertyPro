@@ -1,7 +1,5 @@
-import { Heading, Text } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, DataRows, FinePrint, Headline, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface InvitationEmailProps extends BaseEmailProps {
@@ -12,6 +10,11 @@ export interface InvitationEmailProps extends BaseEmailProps {
   expiresInDays?: number;
 }
 
+/**
+ * Layout A1 · Welcome (invitation variant) — get someone from "who is this?"
+ * to an accepted invite in one read: who asked, for which community, in what
+ * role, and how long the link lasts.
+ */
 export function InvitationEmail({
   branding,
   previewText,
@@ -26,27 +29,32 @@ export function InvitationEmail({
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        `You've been invited to join ${branding.communityName}`
-      }
+      previewText={previewText ?? `You've been invited to join ${branding.communityName}`}
+      mastheadContext="Community portal"
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="dashboard-coral" label="Invitation" tone="coral" />
+      <Headline
+        lede={
+          <>
+            Hi {inviteeName} — {inviterName} has invited you to join <Strong>{branding.communityName}</Strong> as a{' '}
+            <Strong>{role}</Strong>.
+          </>
+        }
+      >
         You&apos;ve been invited
-      </Heading>
-      <Text style={styles.body}>Hi {inviteeName},</Text>
-      <Text style={styles.body}>
-        {inviterName} has invited you to join{' '}
-        <strong>{branding.communityName}</strong> as a{' '}
-        <strong>{role}</strong>.
-      </Text>
-      <div style={styles.buttonSection}>
-        <EmailButton href={inviteUrl}>Accept invitation</EmailButton>
-      </div>
-      <Text style={styles.smallSpaced}>
-        This invitation expires in {expirationText}. If you did not expect this
-        invitation, you can safely ignore this email.
-      </Text>
+      </Headline>
+      <DataRows
+        rows={[
+          { label: 'Community', value: branding.communityName },
+          { label: 'Invited by', value: inviterName },
+          { label: 'Your role', value: role },
+        ]}
+      />
+      <ActionRow href={inviteUrl} label="Accept invitation" aside={`Expires in ${expirationText}`} />
+      <FinePrint>
+        This invitation expires in {expirationText}. If you did not expect this invitation, you can safely ignore this
+        email.
+      </FinePrint>
     </EmailLayout>
   );
 }

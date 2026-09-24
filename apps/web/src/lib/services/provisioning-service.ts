@@ -1462,6 +1462,7 @@ export interface PendingSignupForResend {
   email: string;
   primaryContactName: string | null;
   communityName: string | null;
+  planKey: string;
   status: string;
   expiresAt: Date | null;
   verificationEmailSentAt: Date | null;
@@ -1486,6 +1487,7 @@ export async function getPendingSignupForResend(
       email: pendingSignups.email,
       primaryContactName: pendingSignups.primaryContactName,
       communityName: pendingSignups.communityName,
+      planKey: pendingSignups.planKey,
       status: pendingSignups.status,
       expiresAt: pendingSignups.expiresAt,
       verificationEmailSentAt: pendingSignups.verificationEmailSentAt,

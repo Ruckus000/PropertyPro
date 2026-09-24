@@ -1,18 +1,19 @@
-import { Body, Container, Head, Hr, Html, Preview, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
+import { Body, Head, Html, Preview } from '@react-email/components';
+import { emailTheme as c, sans } from '../components/theme';
 
 /**
- * A human reply from the platform support inbox.
+ * Layout P9 · Support reply — the deliberate exception. Answer a person, and
+ * read like a person answering.
  *
- * Deliberately NOT wrapped in `EmailLayout`, which every other template uses.
- * EmailLayout requires `branding: CommunityBranding` with a mandatory
- * `communityName` and paints community-notification chrome — an accent stripe,
- * a logo cell, a card border and a "Powered by PropertyPro Florida" footer.
- * There is no community here: the correspondent is usually not a member of one.
- * Passing a synthetic `{ communityName: 'PropertyPro' }` would be a type-level
- * lie that renders the brand twice, and association branding on a one-to-one
- * reply reads as automated — the opposite of what a support answer must read
- * as.
+ * Deliberately NOT wrapped in `EmailLayout`, which every other template uses:
+ * no accent rule, no masthead, no footer. EmailLayout requires
+ * `branding: CommunityBranding` with a mandatory `communityName` and paints
+ * product chrome. There is no community here: the correspondent is usually not
+ * a member of one. Passing a synthetic `{ communityName: 'PropertyPro' }`
+ * would be a type-level lie that renders the brand twice, and product chrome on
+ * a one-to-one reply reads as automated — the opposite of what a support
+ * answer must read as. It shares only the Florida Modern type and surface
+ * tokens: sand canvas, one card, zinc ink.
  *
  * No unsubscribe link and no postal block, both correct: this is a reply to a
  * message the recipient sent us, so it is transactional. `buildHeaders()` only
@@ -43,72 +44,89 @@ function quote(text: string): string {
     .join('\n');
 }
 
-export function SupportReplyEmail({
-  bodyText,
-  quotedText,
-  mailboxName,
-  mailboxAddress,
-}: SupportReplyEmailProps) {
+export function SupportReplyEmail({ bodyText, quotedText, mailboxName, mailboxAddress }: SupportReplyEmailProps) {
   return (
-    <Html>
-      <Head />
+    <Html lang="en" dir="ltr">
+      <Head>
+        <meta name="color-scheme" content="light dark" />
+        <meta name="supported-color-schemes" content="light dark" />
+      </Head>
       <Preview>{bodyText.slice(0, 120)}</Preview>
       <Body
         style={{
-          backgroundColor: emailColors.surfaceCard,
-          color: emailColors.textPrimary,
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+          backgroundColor: c.canvas,
+          color: c.ink,
+          fontFamily: sans,
           margin: 0,
-          padding: '24px 0',
+          padding: 0,
+          WebkitTextSizeAdjust: '100%',
         }}
       >
-        <Container style={{ maxWidth: '580px', margin: '0 auto', padding: '0 24px' }}>
-          <Text
-            style={{
-              fontSize: '15px',
-              lineHeight: '24px',
-              color: emailColors.textPrimary,
-              // The operator typed line breaks and expects to see them. Without
-              // this the whole reply collapses into one paragraph.
-              whiteSpace: 'pre-wrap',
-              margin: 0,
-            }}
-          >
-            {bodyText}
-          </Text>
+        <table role="presentation" width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: c.canvas }}>
+          <tbody>
+            <tr>
+              <td style={{ padding: '32px 12px 40px' }}>
+                <table
+                  role="presentation"
+                  width="100%"
+                  align="center"
+                  cellPadding={0}
+                  cellSpacing={0}
+                  style={{
+                    maxWidth: '600px',
+                    margin: '0 auto',
+                    backgroundColor: c.card,
+                    border: `1px solid ${c.border}`,
+                    borderRadius: '14px',
+                    borderCollapse: 'separate',
+                  }}
+                >
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '34px 30px 38px', fontFamily: sans }}>
+                        <div
+                          style={{
+                            fontSize: '16px',
+                            lineHeight: 1.7,
+                            color: c.ink,
+                            // The operator typed line breaks and expects to see them. Without
+                            // this the whole reply collapses into one paragraph.
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            margin: '0 0 20px 0',
+                          }}
+                        >
+                          {bodyText}
+                        </div>
 
-          <Hr style={{ borderColor: emailColors.borderDefault, margin: '24px 0 16px' }} />
+                        <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: '16px' }}>
+                          <div style={{ fontSize: '13px', lineHeight: 1.5, color: c.ink, fontWeight: 600 }}>{mailboxName}</div>
+                          <div style={{ fontSize: '13px', lineHeight: 1.5, color: c.body, marginTop: '2px' }}>{mailboxAddress}</div>
+                        </div>
 
-          <Text
-            style={{
-              fontSize: '13px',
-              lineHeight: '20px',
-              color: emailColors.textSecondary,
-              margin: 0,
-            }}
-          >
-            {mailboxName}
-            <br />
-            {mailboxAddress}
-          </Text>
-
-          {quotedText ? (
-            <Text
-              style={{
-                fontSize: '13px',
-                lineHeight: '20px',
-                color: emailColors.textTertiary,
-                whiteSpace: 'pre-wrap',
-                borderLeft: `2px solid ${emailColors.borderDefault}`,
-                paddingLeft: '12px',
-                marginTop: '20px',
-              }}
-            >
-              {quote(quotedText)}
-            </Text>
-          ) : null}
-        </Container>
+                        {quotedText ? (
+                          <div style={{ borderLeft: `2px solid ${c.border}`, paddingLeft: '14px', marginTop: '22px' }}>
+                            <div
+                              style={{
+                                fontSize: '13px',
+                                lineHeight: 1.7,
+                                color: c.body,
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              {quote(quotedText)}
+                            </div>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </Body>
     </Html>
   );

@@ -17,6 +17,7 @@ import {
 } from './signup-schema';
 import { getBaseUrl } from '@/lib/utils/url';
 import { buildVerificationLink, buildVerificationRedirectUrl } from './verification-link';
+import { signupRemainingSteps } from './signup-remaining-steps';
 import { isUniqueConstraintError } from '@/lib/db/unique-constraint-error';
 import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 
@@ -280,6 +281,7 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
       input.communityName,
       normalizedEmail,
       authResult.verificationLink,
+      input.planKey,
     );
   } catch (emailError) {
     console.error(JSON.stringify({
@@ -533,6 +535,7 @@ async function sendSignupVerificationEmail(
   communityName: string,
   email: string,
   verificationLink: string,
+  planKey: string,
 ): Promise<string> {
   const result = await sendEmail({
     to: email,
@@ -543,6 +546,7 @@ async function sendSignupVerificationEmail(
       primaryContactName,
       communityName,
       verificationLink,
+      remainingSteps: signupRemainingSteps(planKey),
     }),
   });
 

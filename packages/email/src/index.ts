@@ -22,7 +22,7 @@ export { MeetingNoticeEmail } from "./templates/meeting-notice-email";
 export type { MeetingNoticeEmailProps } from "./templates/meeting-notice-email";
 
 export { ComplianceAlertEmail } from "./templates/compliance-alert-email";
-export type { ComplianceAlertEmailProps } from "./templates/compliance-alert-email";
+export type { ComplianceAlertEmailProps, ComplianceAlertItem, ComplianceItemStatus } from "./templates/compliance-alert-email";
 
 export { AnnouncementEmail } from "./templates/announcement-email";
 export type { AnnouncementEmailProps } from "./templates/announcement-email";
@@ -52,10 +52,10 @@ export { InsuranceAlertEmail } from "./templates/insurance-alert-email";
 export type { InsuranceAlertEmailProps } from "./templates/insurance-alert-email";
 
 export { SignupVerificationEmail } from "./templates/signup-verification-email";
-export type { SignupVerificationEmailProps } from "./templates/signup-verification-email";
+export type { SignupVerificationEmailProps, SignupRemainingStep } from "./templates/signup-verification-email";
 
 export { PaymentFailedEmail } from "./templates/payment-failed";
-export type { PaymentFailedEmailProps } from "./templates/payment-failed";
+export type { PaymentFailedEmailProps, PaymentRetryStep } from "./templates/payment-failed";
 
 export { AuthenticateCardEmail } from "./templates/authenticate-card";
 export type { AuthenticateCardEmailProps } from "./templates/authenticate-card";
@@ -64,7 +64,7 @@ export { SubscriptionCanceledEmail } from "./templates/subscription-canceled";
 export type { SubscriptionCanceledEmailProps } from "./templates/subscription-canceled";
 
 export { SubscriptionExpiryWarningEmail } from "./templates/subscription-expiry-warning";
-export type { SubscriptionExpiryWarningEmailProps } from "./templates/subscription-expiry-warning";
+export type { SubscriptionExpiryWarningEmailProps, SubscriptionLockoutItem } from "./templates/subscription-expiry-warning";
 
 export { SubscriptionLapsedEmail } from "./templates/subscription-lapsed";
 export type { SubscriptionLapsedEmailProps } from "./templates/subscription-lapsed";
@@ -79,7 +79,7 @@ export { AssessmentPaymentReceivedEmail } from "./templates/assessment-payment-r
 export type { AssessmentPaymentReceivedEmailProps } from "./templates/assessment-payment-received";
 
 export { AssessmentDueReminderEmail } from "./templates/assessment-due-reminder";
-export type { AssessmentDueReminderEmailProps } from "./templates/assessment-due-reminder";
+export type { AssessmentDueReminderEmailProps, AssessmentDetailRow, AssessmentLateFeeNotice } from "./templates/assessment-due-reminder";
 
 export { CalendarEventReminderEmail } from "./templates/calendar-event-reminder-email";
 export type { CalendarEventReminderEmailProps } from "./templates/calendar-event-reminder-email";
@@ -88,7 +88,7 @@ export { RootClaimedEmail } from "./templates/root-claimed-email";
 export type { RootClaimedEmailProps } from "./templates/root-claimed-email";
 
 export { EsignInvitationEmail } from "./templates/esign-invitation-email";
-export type { EsignInvitationEmailProps } from "./templates/esign-invitation-email";
+export type { EsignInvitationEmailProps, EsignSigner } from "./templates/esign-invitation-email";
 
 export { EsignCompletedEmail } from "./templates/esign-completed-email";
 export type { EsignCompletedEmailProps } from "./templates/esign-completed-email";
@@ -97,10 +97,10 @@ export { EsignReminderEmail } from "./templates/esign-reminder-email";
 export type { EsignReminderEmailProps } from "./templates/esign-reminder-email";
 
 export { OtpVerificationEmail } from "./templates/otp-verification";
-export type { OtpVerificationEmailProps } from "./templates/otp-verification";
+export type { OtpVerificationEmailProps, EmailRequestDetails } from "./templates/otp-verification";
 
 export { AccessRequestPendingEmail } from "./templates/access-request-pending";
-export type { AccessRequestPendingEmailProps } from "./templates/access-request-pending";
+export type { AccessRequestPendingEmailProps, AccessRequestRecordCheck } from "./templates/access-request-pending";
 
 export { AccessRequestApprovedEmail } from "./templates/access-request-approved";
 export type { AccessRequestApprovedEmailProps } from "./templates/access-request-approved";
@@ -126,11 +126,16 @@ export type { AccountRecoveredEmailProps } from "./templates/account-recovered-e
 export { CommunityExportReadyEmail } from "./templates/community-export-ready-email";
 export type { CommunityExportReadyEmailProps } from "./templates/community-export-ready-email";
 
-// Shared components (v2 redesign)
+// Shared components (Florida Modern, email system v4)
 export { EmailButton } from "./components/email-button";
-export { EmailCard } from "./components/email-card";
 export { EmailAlert } from "./components/email-alert";
-export * as emailStyles from "./components/shared-styles";
+export type { EmailTone } from "./components/theme";
+export {
+  DEFAULT_EMAIL_ASSET_BASE_URL,
+  EMAIL_ICONS,
+  EMAIL_IMAGES,
+  emailAssetBaseUrl,
+} from "./components/email-assets";
 
 // Send helper
 export { sendEmail, sendBulkEmail, testInbox, clearTestInbox } from "./send";

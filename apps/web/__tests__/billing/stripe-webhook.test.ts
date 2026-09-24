@@ -1610,6 +1610,8 @@ describe('POST /api/v1/webhooks/stripe', () => {
         customer: 'cus_pay_fail',
         parent: { subscription_details: { subscription: 'sub_pay_fail' }, type: 'subscription_details' },
         amount_due: 4900,
+        number: 'CR55-0007',
+        next_payment_attempt: 1_789_900_000,
       };
       const event = makeEvent('invoice.payment_failed', invoice, 'evt_inv_fail_001');
       constructEventMock.mockReturnValue(event);
@@ -1666,6 +1668,10 @@ describe('POST /api/v1/webhooks/stripe', () => {
         expect.objectContaining({
           amountDue: '$49.00',
           communityName: 'Coral Ridge',
+          // The email's invoice reference and "next automatic retry" row come
+          // straight from the Stripe invoice, unix seconds → Date.
+          invoiceNumber: 'CR55-0007',
+          nextPaymentAttempt: new Date(1_789_900_000 * 1000),
         }),
       );
 
@@ -1677,6 +1683,47 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(reminderAt).toBeInstanceOf(Date);
       expect(reminderAt.getTime()).toBeGreaterThanOrEqual(before + day3Ms);
       expect(reminderAt.getTime()).toBeLessThanOrEqual(after + day3Ms);
+    });
+
+    it('passes a null amount (not a placeholder string) when the invoice carries no amount_due', async () => {
+      const invoice = {
+        id: 'inv_no_amount',
+        parent: { subscription_details: { subscription: 'sub_no_amount' }, type: 'subscription_details' },
+        amount_due: 0,
+      };
+      constructEventMock.mockReturnValue(makeEvent('invoice.payment_failed', invoice, 'evt_inv_no_amount'));
+
+      const communityRow = {
+        id: 56,
+        name: 'Coral Ridge',
+        communityType: 'condo_718',
+        paymentFailedAt: null,
+        nextReminderAt: null,
+        stripeCustomerId: 'cus_no_amount',
+        stripeSubscriptionId: 'sub_no_amount',
+      };
+      let selectCallIdx = 0;
+      const selectSequence: unknown[][] = [[], [communityRow]];
+      createUnscopedClientMock.mockReturnValue({
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              limit: vi.fn(() => Promise.resolve(selectSequence[selectCallIdx++] ?? [])),
+            })),
+          })),
+        })),
+        insert: vi.fn(() => ({
+          values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+        })),
+        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) })),
+      });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      // The template omits the "Outstanding balance" figure for null; a string
+      // here would be rendered as if it were the balance.
+      expect(sendPaymentFailedEmailMock).toHaveBeenCalledWith(56, expect.objectContaining({ amountDue: null }));
     });
 
     it('sends email on every retry even when community already has paymentFailedAt set', async () => {
@@ -2043,6 +2090,34 @@ describe('POST /api/v1/webhooks/stripe', () => {
         communityName: 'Coral Ridge',
         authenticateUrl: 'https://invoice.stripe.com/i/acct_1/live_abc',
       });
+    });
+
+    it('passes a null amount (not a placeholder) when the invoice carries no amount_due', async () => {
+      constructEventMock.mockReturnValue(
+        makeEvent(
+          'invoice.payment_action_required',
+          {
+            id: 'inv_sca_zero',
+            customer: 'cus_sca',
+            parent: {
+              subscription_details: { subscription: 'sub_sca' },
+              type: 'subscription_details',
+            },
+            amount_due: 0,
+            hosted_invoice_url: 'https://invoice.stripe.com/i/acct_1/live_zero',
+          },
+          'evt_sca_zero',
+        ),
+      );
+      setupCommunity();
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(sendPaymentActionRequiredEmailMock).toHaveBeenCalledWith(
+        55,
+        expect.objectContaining({ amountDue: null }),
+      );
     });
 
     it('passes null when Stripe supplied no hosted invoice URL', async () => {

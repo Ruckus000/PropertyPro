@@ -179,6 +179,7 @@ export async function notifyResidentsOfSitePublish({
       body,
       isPinned: false,
       authorName,
+      authorUserId: actorUserId,
     });
 
     // Reuses the existing `announcement_email_sent` action rather than minting a

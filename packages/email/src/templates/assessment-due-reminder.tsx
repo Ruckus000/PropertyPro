@@ -1,10 +1,19 @@
-import { Heading, Text } from '@react-email/components';
-import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
 import { EmailAlert } from '../components/email-alert';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, DataRows, Figure, FinePrint, Headline, MultilineText, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
+
+/** One label/value line of statement detail (e.g. "Period covered"). */
+export interface AssessmentDetailRow {
+  label: string;
+  value: string;
+}
+
+/** A stated late-fee rule. Supply only real, association-specific terms. */
+export interface AssessmentLateFeeNotice {
+  title: string;
+  body: string;
+}
 
 export interface AssessmentDueReminderEmailProps extends BaseEmailProps {
   recipientName: string;
@@ -12,8 +21,19 @@ export interface AssessmentDueReminderEmailProps extends BaseEmailProps {
   amountDue: string;
   dueDate: string;
   portalUrl: string;
+  /** Optional statement detail rows under the amount. Rendered only when supplied. */
+  detailRows?: AssessmentDetailRow[];
+  /**
+   * Optional explicit late-fee notice. When supplied it replaces the generic
+   * "avoid any late fees" line; the template never invents fee terms.
+   */
+  lateFeeNotice?: AssessmentLateFeeNotice;
 }
 
+/**
+ * Layout A3 · Assessment due — get the assessment paid before it is late. The
+ * amount is the largest object in the email (amber: due, not yet late).
+ */
 export function AssessmentDueReminderEmail({
   branding,
   previewText,
@@ -22,40 +42,41 @@ export function AssessmentDueReminderEmail({
   amountDue,
   dueDate,
   portalUrl,
+  detailRows,
+  lateFeeNotice,
 }: AssessmentDueReminderEmailProps) {
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        `Reminder: ${assessmentTitle} of ${amountDue} is due ${dueDate}`
-      }
-      accentColor={emailColors.accentWarning}
+      tone="amber"
+      previewText={previewText ?? `Reminder: ${assessmentTitle} of ${amountDue} is due ${dueDate}`}
+      mastheadContext="Assessment reminder"
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="clock-amber" label="Payment reminder" tone="amber" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — this is a friendly reminder that your assessment <Strong>{assessmentTitle}</Strong> for{' '}
+            <Strong>{branding.communityName}</Strong> is due on <Strong>{dueDate}</Strong>.
+          </>
+        }
+      >
         Assessment due reminder
-      </Heading>
-
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        This is a friendly reminder that your assessment{' '}
-        <strong>{assessmentTitle}</strong> of <strong>{amountDue}</strong> for{' '}
-        <strong>{branding.communityName}</strong> is due on{' '}
-        <strong>{dueDate}</strong>.
-      </Text>
-
-      <EmailAlert variant="warning">
-        Please make your payment before the due date to avoid any late fees.
-      </EmailAlert>
-
-      <EmailButton href={portalUrl} variant="warning">
-        Pay now
-      </EmailButton>
-
-      <Text style={styles.smallSpaced}>
-        If you have already made this payment, please disregard this reminder.
-        For questions about your assessment, please contact your association.
-      </Text>
+      </Headline>
+      <Figure label="Amount due" amount={amountDue} tone="amber" asideLabel="Due date" asideValue={dueDate} />
+      {detailRows && detailRows.length > 0 && <DataRows rows={detailRows} />}
+      {lateFeeNotice ? (
+        <EmailAlert variant="warning" title={lateFeeNotice.title}>
+          <MultilineText text={lateFeeNotice.body} />
+        </EmailAlert>
+      ) : (
+        <EmailAlert variant="warning">Please make your payment before the due date to avoid any late fees.</EmailAlert>
+      )}
+      <ActionRow href={portalUrl} label="Pay now" variant="warning" />
+      <FinePrint>
+        If you have already made this payment, please disregard this reminder. For questions about your assessment,
+        please contact your association.
+      </FinePrint>
     </EmailLayout>
   );
 }

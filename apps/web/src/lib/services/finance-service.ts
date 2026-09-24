@@ -1927,6 +1927,7 @@ async function sendPaymentConfirmationEmail(
   payerUserId: string,
   amountCents: number,
   lineItem: Pick<AssessmentLineItemRecord, 'assessmentId' | 'unitId' | 'dueDate'>,
+  receipt: PaymentReceiptDetails = {},
 ): Promise<void> {
   const scoped = createScopedClient(communityId);
 
@@ -1980,8 +1981,59 @@ async function sendPaymentConfirmationEmail(
       paymentDate,
       remainingBalance: `$${centsToDollars(Math.abs(balanceCents))}`,
       portalUrl,
+      paymentMethod: receipt.paymentMethod,
+      confirmationNumber: receipt.confirmationNumber,
     }),
   });
+}
+
+export interface PaymentReceiptDetails {
+  paymentMethod?: string;
+  confirmationNumber?: string;
+}
+
+const CARD_BRAND_LABELS: Record<string, string> = {
+  amex: 'American Express',
+  diners: 'Diners Club',
+  discover: 'Discover',
+  eftpos_au: 'eftpos',
+  jcb: 'JCB',
+  mastercard: 'Mastercard',
+  unionpay: 'UnionPay',
+  visa: 'Visa',
+};
+
+/**
+ * What the payment receipt email can truthfully say about how and under what
+ * reference a payment was made — built only from the Stripe objects the
+ * webhook already holds.
+ *
+ * - Method: card brand + last four from the charge, else the bank account's
+ *   last four, else just the method type recorded in the intent's metadata.
+ * - Reference: Stripe's receipt number when one has been issued, else the
+ *   PaymentIntent id — the same id the ledger entry records as `sourceId`, so
+ *   a manager can find the payment from what the owner quotes.
+ */
+export function describePaymentForReceipt(
+  charge: Pick<Stripe.Charge, 'payment_method_details' | 'receipt_number'> | null,
+  paymentIntentId: string,
+  metadataMethod: 'card' | 'us_bank_account' | null,
+): PaymentReceiptDetails {
+  const details = charge?.payment_method_details ?? null;
+  let paymentMethod: string | undefined;
+  if (details?.card?.last4) {
+    const brand = details.card.brand ? CARD_BRAND_LABELS[details.card.brand] ?? 'Card' : 'Card';
+    paymentMethod = `${brand} ending in ${details.card.last4}`;
+  } else if (details?.us_bank_account?.last4) {
+    paymentMethod = `Bank account ending in ${details.us_bank_account.last4}`;
+  } else if (metadataMethod === 'card') {
+    paymentMethod = 'Card';
+  } else if (metadataMethod === 'us_bank_account') {
+    paymentMethod = 'Bank account';
+  }
+
+  const receiptNumber = charge?.receipt_number?.trim();
+  return { paymentMethod, confirmationNumber: receiptNumber || paymentIntentId };
 }
 
 /**
@@ -2052,8 +2104,9 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     : freshIntent.latest_charge?.id ?? null;
 
   let stripeFeeActualCents: number | undefined;
+  let latestCharge: Stripe.Charge | null = null;
   if (latestChargeId) {
-    const latestCharge = await stripe.charges.retrieve(
+    latestCharge = await stripe.charges.retrieve(
       latestChargeId,
       { expand: ['balance_transaction'] },
       requestOptions,
@@ -2172,11 +2225,17 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
   await markMatchingViolationFinePaid(communityId, unitId, paymentAmount, payerUserId);
 
   // Fire-and-forget payment confirmation email — never block webhook processing
-  sendPaymentConfirmationEmail(communityId, payerUserId, paymentAmount, {
-    assessmentId: payable.assessmentId,
-    unitId: payable.unitId,
-    dueDate: payable.dueDate,
-  }).catch(() => {
+  sendPaymentConfirmationEmail(
+    communityId,
+    payerUserId,
+    paymentAmount,
+    {
+      assessmentId: payable.assessmentId,
+      unitId: payable.unitId,
+      dueDate: payable.dueDate,
+    },
+    describePaymentForReceipt(latestCharge, freshIntent.id, paymentMethod),
+  ).catch(() => {
     // Swallowed intentionally — email failure must not block webhook
   });
 }

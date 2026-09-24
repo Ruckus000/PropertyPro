@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PAID_GRACE_DAYS, paidGraceEndsAt } from '@propertypro/shared';
 
@@ -67,8 +69,10 @@ import {
   sendEmail,
 } from '@propertypro/email';
 import {
+  LOCKOUT_EFFECTS,
   processPaymentReminders,
   sendPaymentActionRequiredEmail,
+  sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '../../src/lib/services/payment-alert-scheduler';
 
@@ -788,6 +792,21 @@ describe('sendPaymentActionRequiredEmail', () => {
     expect(sendEmail).toHaveBeenCalledTimes(2);
   });
 
+  it('states no amount in the subject when Stripe gave none', async () => {
+    const db = mockDbReturning([{ communityType: 'condo_718' }], [{ email: 'a@example.com', fullName: 'Alice' }]);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: null,
+      communityName: 'Sunset Ridge',
+      authenticateUrl: AUTHENTICATE_URL,
+    });
+
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: 'Confirm your payment for Sunset Ridge' }),
+    );
+  });
+
   it('sends nothing when the community has no admin recipients', async () => {
     const db = mockDbReturning([{ communityType: 'condo_718' }], []);
     (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
@@ -843,5 +862,145 @@ describe('admin recipient lookup — soft-deleted users', () => {
     // Still scoped to the one community, and to admin-tier roles only.
     expect(recipientWhere).toContain('userRoles.communityId');
     expect(recipientWhere).toContain('userRoles.role');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: optional detail props on billing emails (Florida Modern slots)
+// ---------------------------------------------------------------------------
+
+describe('billing email detail props', () => {
+  function mockDbReturning(communityRows: object[], recipients: object[]) {
+    resetDbMocks();
+    const limit = vi.fn().mockResolvedValue(communityRows);
+    mockDbWhere.mockReturnValueOnce({ limit }).mockResolvedValue(recipients);
+    mockDbInnerJoin.mockReturnValue({ where: mockDbWhere });
+    mockDbFrom.mockReturnValue({ where: mockDbWhere, innerJoin: mockDbInnerJoin });
+    mockDbSelect.mockReturnValue({ from: mockDbFrom });
+    return { select: mockDbSelect };
+  }
+
+  function propsFor(component: unknown): Record<string, unknown> | undefined {
+    const createElementMock = createElement as ReturnType<typeof vi.fn>;
+    return createElementMock.mock.calls.find(([comp]) => comp === component)?.[1] as
+      | Record<string, unknown>
+      | undefined;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (sendEmail as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  it('Day 0: passes the invoice number, plan and Stripe next retry — still transactional', async () => {
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockDbReturning(
+        [{ communityType: 'condo_718', subscriptionPlan: 'professional' }],
+        [{ email: 'board@example.com', fullName: 'Dana Board' }],
+      ),
+    );
+
+    await sendPaymentFailedEmail(42, {
+      amountDue: '$249.00',
+      lastFourDigits: null,
+      communityName: 'Palm Gardens',
+      invoiceNumber: 'A1B2C3-0008',
+      nextPaymentAttempt: new Date('2026-09-20T12:00:00Z'),
+    });
+
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ category: 'transactional' }));
+    expect(propsFor(PaymentFailedEmail)).toEqual(
+      expect.objectContaining({
+        invoiceNumber: 'A1B2C3-0008',
+        planLabel: 'Professional plan',
+        retrySchedule: [{ label: 'Next automatic retry', value: 'September 20, 2026' }],
+      }),
+    );
+  });
+
+  it('Day 0: states no retry when Stripe will not retry, and no plan it does not recognise', async () => {
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockDbReturning(
+        [{ communityType: 'condo_718', subscriptionPlan: 'mystery_tier' }],
+        [{ email: 'board@example.com', fullName: 'Dana Board' }],
+      ),
+    );
+
+    await sendPaymentFailedEmail(42, {
+      amountDue: '$249.00',
+      lastFourDigits: null,
+      communityName: 'Palm Gardens',
+      invoiceNumber: null,
+      nextPaymentAttempt: null,
+    });
+
+    const props = propsFor(PaymentFailedEmail);
+    expect(props?.['retrySchedule']).toBeUndefined();
+    expect(props?.['invoiceNumber']).toBeUndefined();
+    expect(props?.['planLabel']).toBeUndefined();
+  });
+
+  it('Day 3 cron: carries the plan label but no invoice detail it does not hold', async () => {
+    const db = buildMockDb(
+      [{ id: 1, name: 'Palm Gardens', communityType: 'apartment', subscriptionPlan: 'operations_plus', paymentFailedAt: daysAgo(3), subscriptionCanceledAt: null }],
+      [{ email: 'manager@example.com', fullName: 'Alice Manager' }],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await processPaymentReminders(new Date());
+
+    const props = propsFor(PaymentFailedEmail);
+    // No invoice amount is stored for the cron, so none is stated (was the
+    // placeholder 'your overdue amount' rendered as the balance figure).
+    expect(props?.['amountDue']).toBeNull();
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: 'Reminder: Payment failed for Palm Gardens' }),
+    );
+    expect(props?.['planLabel']).toMatch(/ plan$/);
+    expect(props?.['invoiceNumber']).toBeUndefined();
+    expect(props?.['retrySchedule']).toBeUndefined();
+  });
+
+  it('lock warning: lists exactly what the subscription guards enforce at lockout', async () => {
+    const db = buildMockDb(
+      [{ id: 3, name: 'Ocean Breeze HOA', communityType: 'hoa_720', subscriptionPlan: null, paymentFailedAt: daysAgo(30), subscriptionCanceledAt: daysAgo(5) }],
+      [{ email: 'president@example.com', fullName: 'Carol President' }],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await processPaymentReminders(new Date());
+
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ category: 'transactional' }));
+    expect(propsFor(SubscriptionExpiryWarningEmail)?.['atLockout']).toEqual([...LOCKOUT_EFFECTS]);
+  });
+
+  it('lock warning: an apartment is not told it loses ARC requests or violation reports it never had', async () => {
+    const db = buildMockDb(
+      [{ id: 4, name: 'Sunset Ridge Apartments', communityType: 'apartment', subscriptionPlan: null, paymentFailedAt: daysAgo(30), subscriptionCanceledAt: daysAgo(5) }],
+      [{ email: 'site@example.com', fullName: 'Sam Site' }],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await processPaymentReminders(new Date());
+
+    const rows = propsFor(SubscriptionExpiryWarningEmail)?.['atLockout'] as Array<{ label: string }>;
+    expect(rows.map((row) => row.label)).not.toContain('New resident ARC requests & violation reports');
+    expect(rows).toHaveLength(LOCKOUT_EFFECTS.length - 1);
+  });
+
+  it('lock warning: tells the board that residents lose ARC requests and violation reports, because those routes are guarded', () => {
+    // The guard is not role-aware, so a resident POST to either route 403s at
+    // lockout. The email must say so rather than promise full resident access.
+    const apiRoot = path.resolve(__dirname, '../../src/app/api/v1');
+    for (const route of ['arc/route.ts', 'violations/route.ts']) {
+      const source = fs.readFileSync(path.join(apiRoot, route), 'utf8');
+      expect(source, route).toMatch(/await requireActiveSubscriptionForMutation\(communityId\);/);
+      expect(source, route).not.toMatch(/allowResidentSelfService/);
+    }
+    expect(LOCKOUT_EFFECTS).toContainEqual({
+      label: 'New resident ARC requests & violation reports',
+      status: 'Suspended',
+      tone: 'red',
+    });
   });
 });

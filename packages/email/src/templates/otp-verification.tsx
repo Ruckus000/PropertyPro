@@ -1,57 +1,70 @@
-import { Heading, Text } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
-import { EmailCard } from '../components/email-card';
-import { emailColors } from '@propertypro/tokens/email';
-import * as styles from '../components/shared-styles';
+import { EmailAlert } from '../components/email-alert';
+import { CategoryMark, CodeBlock, DataRows, Headline, SectionLabel, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
+
+export interface EmailRequestDetails {
+  device?: string;
+  location?: string;
+  requestedAt?: string;
+}
 
 export interface OtpVerificationEmailProps extends BaseEmailProps {
   recipientName: string;
   otpCode: string;
   expiresInMinutes?: number;
+  /** Optional: where the request came from, so an unexpected code reads as an attack, not noise. */
+  requestDetails?: EmailRequestDetails;
 }
 
+/** Layout P1 · Verification code — six digits readable off a lock screen. */
 export function OtpVerificationEmail({
   branding,
   previewText,
   recipientName,
   otpCode,
   expiresInMinutes = 10,
+  requestDetails,
 }: OtpVerificationEmailProps) {
+  const minutes = `${expiresInMinutes} minute${expiresInMinutes !== 1 ? 's' : ''}`;
+  const details = requestDetails
+    ? [
+        { label: 'Device', value: requestDetails.device },
+        { label: 'Approximate location', value: requestDetails.location },
+        { label: 'Requested', value: requestDetails.requestedAt },
+      ].filter((row) => row.value)
+    : [];
+
   return (
     <EmailLayout
       branding={branding}
+      sender="platform"
       previewText={previewText ?? 'Your verification code'}
+      mastheadMeta="One-time code"
+      footerReason="Sent to the email address on this request. Security mail cannot be turned off."
     >
-      <Heading as="h1" style={styles.heading}>
-        Verification code
-      </Heading>
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>Enter the code below to verify your identity:</Text>
-      <EmailCard
-        style={{
-          margin: '20px 0',
-          textAlign: 'center',
-        }}
+      <CategoryMark icon="shield-coral" label="Verify it's you" tone="coral" />
+      <Headline
+        lede={
+          <>
+            Hi {recipientName} — enter this code to confirm your email address for <Strong>{branding.communityName}</Strong>.
+            It works once.
+          </>
+        }
       >
-        <span
-          style={{
-            fontSize: '32px',
-            fontWeight: 'bold',
-            color: emailColors.foreground,
-            letterSpacing: '12px',
-            fontFamily: "'Courier New', Courier, monospace",
-          }}
-        >
-          {otpCode}
-        </span>
-      </EmailCard>
-      <Text style={styles.body}>
-        This code expires in {expiresInMinutes} minute{expiresInMinutes !== 1 ? 's' : ''}.
-      </Text>
-      <Text style={styles.small}>
-        If you didn&apos;t request this, you can safely ignore this email.
-      </Text>
+        Your verification code
+      </Headline>
+      <CodeBlock code={otpCode} caption={`This code expires in ${minutes}.`} />
+      {details.length > 0 && (
+        <>
+          <SectionLabel icon="lock-slate">Request details</SectionLabel>
+          <DataRows rows={details} />
+        </>
+      )}
+      <EmailAlert variant="info" title="Didn't ask for this?">
+        You can safely ignore this email — nothing changes without the code. Never share it with anyone, including
+        support.
+      </EmailAlert>
     </EmailLayout>
   );
 }

@@ -1,9 +1,5 @@
-import { Heading, Text, Section } from '@react-email/components';
-import { emailColors, primitiveColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import { EmailCard } from '../components/email-card';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, Headline, MultilineText, Paragraph, PhotoBand, Signature } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface AnnouncementEmailProps extends BaseEmailProps {
@@ -13,8 +9,13 @@ export interface AnnouncementEmailProps extends BaseEmailProps {
   authorName: string;
   portalUrl: string;
   isPinned?: boolean;
+  /** Optional: the author's role, shown under their name in the signature. */
+  authorRole?: string;
+  /** Optional: show the community photo band. Off by default — photography is rationed. */
+  showPhoto?: boolean;
 }
 
+/** Layout A2 · Announcement — what's happening, in the board's voice, with a human sender. */
 export function AnnouncementEmail({
   branding,
   previewText,
@@ -24,59 +25,30 @@ export function AnnouncementEmail({
   authorName,
   portalUrl,
   isPinned = false,
+  authorRole,
+  showPhoto = false,
 }: AnnouncementEmailProps) {
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ??
-        `New announcement from ${branding.communityName}: ${announcementTitle}`
-      }
+      previewText={previewText ?? `New announcement from ${branding.communityName}: ${announcementTitle}`}
+      mastheadContext="Community announcement"
+      mastheadChip={isPinned ? { label: 'Pinned', tone: 'coral' } : undefined}
+      footerReason={`You receive announcements as a member of ${branding.communityName}.`}
     >
-      <Heading as="h1" style={styles.heading}>
-        {isPinned ? 'Important announcement' : 'New announcement'}
-      </Heading>
-      <Text style={styles.body}>Hi {recipientName},</Text>
-      <Text style={styles.body}>
-        A new announcement has been posted at{' '}
-        <strong>{branding.communityName}</strong>.
-      </Text>
-
-      <EmailCard>
-        <p style={cardTitleStyle}>{announcementTitle}</p>
-        <p style={cardBodyStyle}>{announcementBody}</p>
-        <p style={cardAuthorStyle}>Posted by {authorName}</p>
-      </EmailCard>
-
-      <Section style={styles.buttonSection}>
-        <EmailButton href={portalUrl} variant="default">
-          View in portal
-        </EmailButton>
-      </Section>
-
-      <Text style={styles.smallSpaced}>
-        You are receiving this as a member of {branding.communityName}.
-      </Text>
+      {showPhoto && <PhotoBand image="photo-condo.jpg" alt={`${branding.communityName}`} />}
+      <CategoryMark
+        icon={isPinned ? 'megaphone-coral' : 'megaphone-slate'}
+        label={isPinned ? 'Important announcement' : 'New announcement'}
+        tone={isPinned ? 'coral' : 'meta'}
+      />
+      <Headline>{announcementTitle}</Headline>
+      <Paragraph tight>Hi {recipientName},</Paragraph>
+      <Paragraph>
+        <MultilineText text={announcementBody} />
+      </Paragraph>
+      <ActionRow href={portalUrl} label="Read in the portal" />
+      <Signature name={authorName} role={authorRole ?? branding.communityName} />
     </EmailLayout>
   );
 }
-
-const cardTitleStyle: React.CSSProperties = {
-  fontSize: '15px',
-  fontWeight: 600,
-  color: emailColors.foreground,
-  margin: '0 0 8px 0',
-};
-
-const cardBodyStyle: React.CSSProperties = {
-  fontSize: '14px',
-  color: primitiveColors.zinc[700],
-  lineHeight: '1.6',
-  margin: '0 0 10px 0',
-};
-
-const cardAuthorStyle: React.CSSProperties = {
-  fontSize: '13px',
-  color: emailColors.mutedForeground,
-  margin: '0',
-};

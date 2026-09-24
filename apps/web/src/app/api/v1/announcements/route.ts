@@ -358,6 +358,7 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
       body: data.body,
       isPinned: data.isPinned,
       authorName,
+      authorUserId: audit.userId,
     });
 
     await logAuditEvent({

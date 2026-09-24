@@ -1,7 +1,5 @@
-import { Heading, Text } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, FinePrint, Headline, Paragraph, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface RootClaimedEmailProps extends BaseEmailProps {
@@ -10,37 +8,29 @@ export interface RootClaimedEmailProps extends BaseEmailProps {
   disputeUrl: string;
 }
 
-export function RootClaimedEmail({
-  branding,
-  previewText,
-  claimantName,
-  communityName,
-  disputeUrl,
-}: RootClaimedEmailProps) {
+/** Layout P7 variant · Root manager claimed — the verification frame without the photo: confirm, or dispute in one click. */
+export function RootClaimedEmail({ branding, previewText, claimantName, communityName, disputeUrl }: RootClaimedEmailProps) {
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ?? `${claimantName} is now the root manager of ${communityName}`
-      }
+      sender="platform"
+      previewText={previewText ?? `${claimantName} is now the root manager of ${communityName}`}
+      mastheadContext={communityName}
     >
-      <Heading as="h1" style={styles.heading}>
+      <CategoryMark icon="shield-coral" label="Root manager claimed" tone="coral" />
+      <Headline
+        lede={
+          <>
+            <Strong>{claimantName}</Strong> is now the root manager of <Strong>{communityName}</Strong>. The root manager has
+            full administrative control over this community.
+          </>
+        }
+      >
         Root manager claimed for {communityName}
-      </Heading>
-      <Text style={styles.body}>
-        <strong>{claimantName}</strong> is now the root manager of{' '}
-        <strong>{communityName}</strong>. The root manager has full administrative
-        control over this community.
-      </Text>
-      <Text style={styles.body}>
-        If this isn&apos;t right, you can dispute the claim below.
-      </Text>
-      <div style={styles.buttonSection}>
-        <EmailButton href={disputeUrl}>Dispute this claim</EmailButton>
-      </div>
-      <Text style={styles.smallSpaced}>
-        If you have questions, reply to this email or contact PropertyPro support.
-      </Text>
+      </Headline>
+      <Paragraph>If this isn&apos;t right, you can dispute the claim below.</Paragraph>
+      <ActionRow href={disputeUrl} label="Dispute this claim" />
+      <FinePrint>If you have questions, reply to this email or contact PropertyPro support.</FinePrint>
     </EmailLayout>
   );
 }

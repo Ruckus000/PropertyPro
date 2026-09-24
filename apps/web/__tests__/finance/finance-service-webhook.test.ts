@@ -18,6 +18,9 @@ const {
   stripeConnectedAccountsTable,
   unitsTable,
   userRolesTable,
+  usersTable,
+  communitiesTable,
+  sendEmailMock,
   eqMock,
   andMock,
   ascMock,
@@ -61,6 +64,9 @@ const {
   stripeConnectedAccountsTable: { id: Symbol('stripe_connected_accounts.id') },
   unitsTable: { id: Symbol('units.id') },
   userRolesTable: { id: Symbol('user_roles.id') },
+  usersTable: { id: Symbol('users.id'), email: Symbol('users.email'), fullName: Symbol('users.full_name') },
+  communitiesTable: { name: Symbol('communities.name') },
+  sendEmailMock: vi.fn(),
   eqMock: vi.fn((column: unknown, value: unknown) => ({ column, value })),
   andMock: vi.fn((...args: unknown[]) => ({ and: args })),
   ascMock: vi.fn((value: unknown) => value),
@@ -86,6 +92,13 @@ vi.mock('@propertypro/db', () => ({
   stripeConnectedAccounts: stripeConnectedAccountsTable,
   units: unitsTable,
   userRoles: userRolesTable,
+  users: usersTable,
+  communities: communitiesTable,
+}));
+
+vi.mock('@propertypro/email', () => ({
+  AssessmentPaymentReceivedEmail: (props: unknown) => ({ type: 'AssessmentPaymentReceivedEmail', props }),
+  sendEmail: sendEmailMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -106,7 +119,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: vi.fn(() => ({})),
 }));
 
-import { processFinanceStripeEvent } from '../../src/lib/services/finance-service';
+import { describePaymentForReceipt, processFinanceStripeEvent } from '../../src/lib/services/finance-service';
 
 interface MockScopedClient {
   insert: typeof insertMock;
@@ -651,5 +664,112 @@ describe('processFinanceStripeEvent', () => {
         sourceId: 'dp_1',
       }),
     );
+  });
+});
+
+describe('payment receipt email', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createScopedClientMock.mockImplementation(() => makeScopedClient());
+    insertMock.mockResolvedValue([{ id: 1 }]);
+    updateMock.mockResolvedValue([{ id: 44 }]);
+    postLedgerEntryMock.mockResolvedValue({ id: 991 });
+    sendEmailMock.mockResolvedValue({ id: 'msg-1' });
+    selectFromMock.mockImplementation((table: unknown) => {
+      if (table === assessmentLineItemsTable) {
+        return Promise.resolve([
+          { id: 44, assessmentId: null, communityId: 11, unitId: 88, amountCents: 25000, dueDate: '2026-01-15', status: 'pending', paidAt: null, paymentIntentId: null, lateFeeCents: 0 },
+        ]);
+      }
+      if (table === usersTable) return Promise.resolve([{ email: 'owner@example.com', fullName: 'Marisol Reyes' }]);
+      if (table === communitiesTable) return Promise.resolve([{ name: 'Sunset Palms HOA' }]);
+      return Promise.resolve([]);
+    });
+  });
+
+  async function receiptPropsFor(charge: Record<string, unknown>, metadata: Record<string, string> = {}) {
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: {
+        retrieve: vi.fn().mockResolvedValue({
+          id: 'pi_receipt_1',
+          metadata: { communityId: '11', lineItemId: '44', unitId: '88', userId: 'user-11', ...metadata },
+          amount_received: 25000,
+          amount: 25000,
+          latest_charge: 'ch_receipt_1',
+        }),
+      },
+      charges: { retrieve: vi.fn().mockResolvedValue({ id: 'ch_receipt_1', amount: 25000, amount_refunded: 0, ...charge }) },
+    });
+
+    await processFinanceStripeEvent(makeEvent('payment_intent.succeeded', 'evt_receipt_1', { id: 'pi_receipt_1' }));
+    // The confirmation email is fire-and-forget; let it settle.
+    await vi.waitFor(() => expect(sendEmailMock).toHaveBeenCalledTimes(1));
+
+    const call = sendEmailMock.mock.calls[0]![0] as { category: string; react: { props: Record<string, unknown> } };
+    return { category: call.category, props: call.react.props };
+  }
+
+  it('names the card and Stripe receipt number the owner will see on their statement', async () => {
+    const { category, props } = await receiptPropsFor({
+      payment_method_details: { type: 'card', card: { brand: 'visa', last4: '4242' } },
+      receipt_number: '1234-5678',
+    });
+
+    expect(category).toBe('transactional');
+    expect(props['paymentMethod']).toBe('Visa ending in 4242');
+    expect(props['confirmationNumber']).toBe('1234-5678');
+  });
+
+  it('falls back to the bank account and to the PaymentIntent id the ledger records', async () => {
+    const { props } = await receiptPropsFor({
+      payment_method_details: { type: 'us_bank_account', us_bank_account: { last4: '8871' } },
+      receipt_number: null,
+    });
+
+    expect(props['paymentMethod']).toBe('Bank account ending in 8871');
+    expect(props['confirmationNumber']).toBe('pi_receipt_1');
+  });
+
+  it('says only the method type when the charge carries no details', async () => {
+    const { props } = await receiptPropsFor({}, { paymentMethod: 'card' });
+
+    expect(props['paymentMethod']).toBe('Card');
+  });
+});
+
+/**
+ * Direct unit coverage for the receipt describer. The webhook tests above
+ * exercise it end-to-end for the three common shapes; these pin the branches
+ * no live event in the suite reaches, so a change to the fallback ladder
+ * cannot pass unnoticed.
+ */
+describe('describePaymentForReceipt', () => {
+  const INTENT_ID = 'pi_direct_1';
+
+  it('labels a bank payment from intent metadata when the charge carries no details', () => {
+    expect(describePaymentForReceipt(null, INTENT_ID, 'us_bank_account')).toEqual({
+      paymentMethod: 'Bank account',
+      confirmationNumber: INTENT_ID,
+    });
+  });
+
+  it('says "Card" for a brand Stripe has not taught us to spell', () => {
+    const details = { payment_method_details: { type: 'card', card: { brand: 'newbrand', last4: '1881' } }, receipt_number: null };
+    expect(describePaymentForReceipt(details as never, INTENT_ID, null).paymentMethod).toBe('Card ending in 1881');
+  });
+
+  it('states no method at all rather than guessing one', () => {
+    expect(describePaymentForReceipt(null, INTENT_ID, null)).toEqual({
+      paymentMethod: undefined,
+      confirmationNumber: INTENT_ID,
+    });
+  });
+
+  it('treats a blank receipt number as absent and quotes the PaymentIntent id the ledger records', () => {
+    const details = { payment_method_details: null, receipt_number: '   ' };
+    expect(describePaymentForReceipt(details as never, INTENT_ID, 'card')).toEqual({
+      paymentMethod: 'Card',
+      confirmationNumber: INTENT_ID,
+    });
   });
 });

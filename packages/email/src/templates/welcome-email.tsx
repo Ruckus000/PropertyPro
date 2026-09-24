@@ -1,7 +1,5 @@
-import { Heading, Text } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
-import { EmailButton } from '../components/email-button';
-import * as styles from '../components/shared-styles';
+import { ActionRow, CategoryMark, FinePrint, Headline, NumberedRows, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
 
 export interface WelcomeEmailProps extends BaseEmailProps {
@@ -10,35 +8,37 @@ export interface WelcomeEmailProps extends BaseEmailProps {
   loginUrl: string;
 }
 
-export function WelcomeEmail({
-  branding,
-  previewText,
-  primaryContactName,
-  communityName,
-  loginUrl,
-}: WelcomeEmailProps) {
+/**
+ * Layout A1 · Welcome — get someone signed in and oriented in a single read.
+ * Sent to BOTH newly provisioned admins and move-in residents, so the copy
+ * stays audience-neutral.
+ */
+export function WelcomeEmail({ branding, previewText, primaryContactName, communityName, loginUrl }: WelcomeEmailProps) {
   return (
     <EmailLayout
       branding={branding}
-      previewText={
-        previewText ?? `Welcome to PropertyPro — your ${communityName} portal is ready`
-      }
+      previewText={previewText ?? `Welcome to PropertyPro — your ${communityName} portal is ready`}
+      mastheadContext="Community portal"
     >
-      <Heading as="h1" style={styles.heading}>
-        Welcome to your community portal
-      </Heading>
-      <Text style={styles.body}>Hi {primaryContactName},</Text>
-      <Text style={styles.body}>
-        Your community portal for <strong>{communityName}</strong> has been set
-        up and is ready to use. You can now log in to manage documents, meetings,
-        announcements, and compliance requirements.
-      </Text>
-      <div style={styles.buttonSection}>
-        <EmailButton href={loginUrl}>Log in to your portal</EmailButton>
-      </div>
-      <Text style={styles.smallSpaced}>
-        If you have questions, reply to this email or contact PropertyPro support.
-      </Text>
+      <CategoryMark icon="dashboard-coral" label="Welcome aboard" tone="coral" />
+      <Headline
+        lede={
+          <>
+            Hi {primaryContactName} — the portal for <Strong>{communityName}</Strong> has been set up and is ready to use.
+          </>
+        }
+      >
+        Your community portal is open
+      </Headline>
+      <NumberedRows
+        rows={[
+          { title: 'Documents and records', detail: 'Governing documents, meeting notices and minutes, in one place.' },
+          { title: 'Meetings and announcements', detail: 'Updates from the association as soon as they are posted.' },
+          { title: 'Your account', detail: 'Sign in to choose how you hear from us.' },
+        ]}
+      />
+      <ActionRow href={loginUrl} label="Log in to your portal" />
+      <FinePrint>If you have questions, reply to this email or contact PropertyPro support.</FinePrint>
     </EmailLayout>
   );
 }
