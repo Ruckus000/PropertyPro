@@ -20,8 +20,6 @@ export const KNOWN_NON_MATRIX_PERMISSIONS: ReadonlySet<string> = new Set([
   'communities:write',
   'help:read',
   'billing_groups:read',
-  'leases:read',
-  'leases:write',
   'move_checklists:read',
   'move_checklists:write',
   'move_checklists:update',
