@@ -130,6 +130,8 @@ function makeScopedClient(): MockScopedClient {
   return { insert: insertMock, selectFrom: selectFromMock, update: updateMock };
 }
 
+const WEBHOOK_ACCOUNT = 'acct_fee_policy_11';
+
 function makeEvent(
   type: string,
   id: string,
@@ -141,6 +143,9 @@ function makeEvent(
     type,
     created: 1,
     object: 'event',
+    // Finance webhooks only process events signed for the named community's
+    // own connected account; see WEBHOOK_ACCOUNT below.
+    account: WEBHOOK_ACCOUNT,
     data: {
       object: payload as Stripe.Event.Data.Object,
       ...(previousAttributes ? { previous_attributes: previousAttributes } : {}),
@@ -320,7 +325,16 @@ describe('updatePaymentIntentFee', () => {
 describe('processFinanceStripeEvent — convenience fee handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createScopedClientMock.mockImplementation(() => makeScopedClient());
+    // The webhook's connected-account read is answered here so the per-test
+    // `selectFromMock.mockResolvedValue(...)` stubs keep describing only the
+    // payable, as they did before the account binding existed.
+    createScopedClientMock.mockImplementation(() => ({
+      ...makeScopedClient(),
+      selectFrom: (table: unknown, ...rest: unknown[]) =>
+        table === stripeConnectedAccountsTable
+          ? Promise.resolve([{ id: 1, communityId: 11, stripeAccountId: WEBHOOK_ACCOUNT }])
+          : selectFromMock(table, ...rest),
+    }));
     insertMock.mockResolvedValue([{ id: 1 }]);
     updateMock.mockResolvedValue([{ id: 44 }]);
     postLedgerEntryMock.mockResolvedValue({ id: 991 });

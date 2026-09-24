@@ -219,6 +219,8 @@ const FINANCE_WEBHOOK_ERROR_CODES = {
   REFUND_PREVIOUS_ATTRIBUTES_MISSING: 'FINANCE_WEBHOOK_REFUND_PREVIOUS_ATTRIBUTES_MISSING',
   REFUND_INVALID_INCREMENTAL_AMOUNT: 'FINANCE_WEBHOOK_REFUND_INVALID_INCREMENTAL_AMOUNT',
   DISPUTE_CHARGE_ID_MISSING: 'FINANCE_WEBHOOK_DISPUTE_CHARGE_ID_MISSING',
+  CONNECTED_ACCOUNT_MISMATCH: 'FINANCE_WEBHOOK_CONNECTED_ACCOUNT_MISMATCH',
+  UNDERPAYMENT: 'FINANCE_WEBHOOK_UNDERPAYMENT',
   UNHANDLED_EVENT_PROCESSING_ERROR: 'FINANCE_WEBHOOK_UNHANDLED_EVENT_PROCESSING_ERROR',
 } as const;
 
@@ -718,12 +720,18 @@ export async function generateAssessmentLineItemsForCommunity(
   };
 }
 
+async function findConnectAccount(
+  communityId: number,
+): Promise<StripeConnectedAccountRecord | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<StripeConnectedAccountRecord>(stripeConnectedAccounts, {});
+  return rows[0] ?? null;
+}
+
 async function requireConnectAccount(
   communityId: number,
 ): Promise<StripeConnectedAccountRecord> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom<StripeConnectedAccountRecord>(stripeConnectedAccounts, {});
-  const record = rows[0];
+  const record = await findConnectAccount(communityId);
   if (!record) {
     throw new UnprocessableEntityError('Stripe Connect account is not configured for this community');
   }
@@ -2004,6 +2012,59 @@ function connectRequestOptions(event: Stripe.Event): { stripeAccount: string } |
   return event.account ? { stripeAccount: event.account } : undefined;
 }
 
+/**
+ * Whether a finance event was signed for the connected account of the
+ * community its metadata names.
+ *
+ * `communityId` comes from PaymentIntent metadata, and Connect onboarding is
+ * Standard OAuth — the account owner holds full API keys and can write any
+ * metadata. Without this check one association could create a PaymentIntent on
+ * its OWN account whose metadata points at another community's line item, and
+ * the webhook would settle that item in the victim community.
+ *
+ * An event with no `event.account` is rejected too: every finance PaymentIntent
+ * is a direct charge on a connected account (F-15), so a platform-account event
+ * carrying payable metadata is not one we created.
+ *
+ * Logs and returns false rather than throwing — a throw makes Stripe redeliver
+ * indefinitely. Must run BEFORE `recordFinanceStripeEvent`, so a rejected event
+ * never claims an idempotency row in the named community.
+ */
+async function eventMatchesCommunityAccount(
+  event: Stripe.Event,
+  communityId: number,
+  context: Pick<FinanceWebhookLogContext, 'payableType' | 'payableId' | 'payloadSnippet'>,
+): Promise<boolean> {
+  const eventAccount = event.account ?? null;
+  let reason: string | null = null;
+  if (!eventAccount) {
+    reason = 'missing_event_account';
+  } else {
+    const record = await findConnectAccount(communityId);
+    if (!record) {
+      reason = 'community_has_no_connected_account';
+    } else if (record.stripeAccountId !== eventAccount) {
+      reason = 'connected_account_mismatch';
+    }
+  }
+  if (reason === null) return true;
+
+  logFinanceWebhookEvent('error', `Skipping ${event.type}; event account does not match community`, {
+    eventId: event.id,
+    eventType: event.type,
+    communityId,
+    payableType: context.payableType,
+    payableId: context.payableId,
+    errorCode: FINANCE_WEBHOOK_ERROR_CODES.CONNECTED_ACCOUNT_MISMATCH,
+    category: 'validation',
+    metricName: 'finance_webhook_event',
+    outcome: 'skipped',
+    reason,
+    payloadSnippet: { ...context.payloadSnippet, eventAccount },
+  });
+  return false;
+}
+
 async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> {
   const stripe = getStripeClient();
   const requestOptions = connectRequestOptions(event);
@@ -2043,6 +2104,15 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     return;
   }
 
+  const accountMatches = await eventMatchesCommunityAccount(event, communityId, {
+    payableType,
+    payableId,
+    payloadSnippet: { paymentIntentId: freshIntent.id },
+  });
+  if (!accountMatches) {
+    return;
+  }
+
   const shouldProcess = await recordFinanceStripeEvent(communityId, event);
   if (!shouldProcess) {
     return;
@@ -2056,9 +2126,13 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
 
   let stripeFeeActualCents: number | undefined;
   if (latestChargeId) {
-    const latestCharge = await stripe.charges.retrieve(latestChargeId, {
-      expand: ['balance_transaction'],
-    });
+    // requestOptions is load-bearing: the charge lives on the connected
+    // account, so a bare retrieve raises `No such charge` (F-15).
+    const latestCharge = await stripe.charges.retrieve(
+      latestChargeId,
+      { expand: ['balance_transaction'] },
+      requestOptions,
+    );
     if (latestCharge.amount_refunded >= latestCharge.amount) {
       return;
     }
@@ -2086,8 +2160,41 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     return;
   }
 
+  const convenienceFeeCents = parseMetadataInt(metadata, 'convenienceFeeCents') ?? 0;
+  const paymentMethod = parseMetadataString(metadata, 'paymentMethod') as 'card' | 'us_bank_account' | null;
+  const paymentAmount = freshIntent.amount_received > 0 ? freshIntent.amount_received : freshIntent.amount;
+
+  // Only settle the payable when the money received covers what is owed NOW.
+  // `outstanding` mirrors the amount createPaymentIntentForPayable charges, but
+  // read fresh: a late fee applied after the quote is still owed. Uses
+  // amount_received alone (no fallback to `amount`) and excludes any
+  // convenience fee, which is not payment toward the payable. An underpayment
+  // is still recorded in the ledger below — the money arrived — it just does
+  // not flip the status, so the residual balance stays visible.
+  const outstandingCents = payable.amountCents + payable.lateFeeCents;
+  const netReceivedCents = freshIntent.amount_received - convenienceFeeCents;
+  const coversOutstanding = netReceivedCents >= outstandingCents;
+
   const scoped = createScopedClient(communityId);
-  if (payable.payableType === 'assessment_line_item') {
+  if (!coversOutstanding) {
+    logFinanceWebhookEvent('warn', 'payment_intent.succeeded underpaid payable; not marking paid', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId,
+      payableType,
+      payableId,
+      errorCode: FINANCE_WEBHOOK_ERROR_CODES.UNDERPAYMENT,
+      category: 'reconciliation',
+      metricName: 'finance_webhook_event',
+      outcome: 'failure',
+      payloadSnippet: {
+        paymentIntentId: freshIntent.id,
+        amountReceivedCents: freshIntent.amount_received,
+        convenienceFeeCents,
+        outstandingCents,
+      },
+    });
+  } else if (payable.payableType === 'assessment_line_item') {
     await scoped.update(
       assessmentLineItems,
       {
@@ -2104,10 +2211,6 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
       eq(rentObligations.id, payable.payableId),
     );
   }
-
-  const convenienceFeeCents = parseMetadataInt(metadata, 'convenienceFeeCents') ?? 0;
-  const paymentMethod = parseMetadataString(metadata, 'paymentMethod') as 'card' | 'us_bank_account' | null;
-  const paymentAmount = freshIntent.amount_received > 0 ? freshIntent.amount_received : freshIntent.amount;
 
   await postLedgerEntry(scoped, {
     entryType: 'payment',
@@ -2221,6 +2324,15 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
         hasUserId: Boolean(payerUserId),
       },
     });
+    return;
+  }
+
+  const accountMatches = await eventMatchesCommunityAccount(event, communityId, {
+    payableType,
+    payableId,
+    payloadSnippet: { chargeId: charge.id },
+  });
+  if (!accountMatches) {
     return;
   }
 
@@ -2443,6 +2555,15 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
         hasUserId: Boolean(payerUserId),
       },
     });
+    return;
+  }
+
+  const accountMatches = await eventMatchesCommunityAccount(event, communityId, {
+    payableType,
+    payableId,
+    payloadSnippet: { disputeId: dispute.id, chargeId },
+  });
+  if (!accountMatches) {
     return;
   }
 

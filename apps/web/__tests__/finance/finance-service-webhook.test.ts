@@ -58,7 +58,10 @@ const {
     id: Symbol('violations.id'),
     unitId: Symbol('violations.unit_id'),
   },
-  stripeConnectedAccountsTable: { id: Symbol('stripe_connected_accounts.id') },
+  stripeConnectedAccountsTable: {
+    id: Symbol('stripe_connected_accounts.id'),
+    stripeAccountId: Symbol('stripe_connected_accounts.stripe_account_id'),
+  },
   unitsTable: { id: Symbol('units.id') },
   userRolesTable: { id: Symbol('user_roles.id') },
   eqMock: vi.fn((column: unknown, value: unknown) => ({ column, value })),
@@ -122,6 +125,9 @@ function makeScopedClient(): MockScopedClient {
   };
 }
 
+/** Community 11's connected account — the account its events must be signed for. */
+const COMMUNITY_ACCOUNT = 'acct_community_11';
+
 function makeEvent(
   type: string,
   id: string,
@@ -131,14 +137,55 @@ function makeEvent(
   // those cases exercise the "previous_attributes missing" branch. Declared
   // (and still ignored) so making the file type-check changes no behaviour.
   _previousAttributes?: Record<string, unknown>,
+  // The connected account the Connect event came from. `null` omits it, as a
+  // platform-account event would.
+  account: string | null = COMMUNITY_ACCOUNT,
 ): Stripe.Event {
   return {
     id,
     type,
     created: 1,
     object: 'event',
+    ...(account === null ? {} : { account }),
     data: { object: payload as Stripe.Event.Data.Object },
   } as unknown as Stripe.Event;
+}
+
+const LINE_ITEM_ROW = {
+  id: 44,
+  assessmentId: 7,
+  communityId: 11,
+  unitId: 88,
+  amountCents: 25000,
+  dueDate: '2026-01-15',
+  status: 'pending',
+  paidAt: null,
+  paymentIntentId: null,
+  lateFeeCents: 0,
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+};
+
+const CONNECTED_ACCOUNT_ROW = {
+  id: 1,
+  communityId: 11,
+  stripeAccountId: COMMUNITY_ACCOUNT,
+  onboardingComplete: true,
+  chargesEnabled: true,
+  payoutsEnabled: true,
+};
+
+/** Default table reads; per-test overrides fall back to this. */
+function defaultSelect(table: unknown): Promise<unknown[]> {
+  if (table === assessmentLineItemsTable) return Promise.resolve([LINE_ITEM_ROW]);
+  if (table === stripeConnectedAccountsTable) return Promise.resolve([CONNECTED_ACCOUNT_ROW]);
+  return Promise.resolve([]);
+}
+
+function errorLogsWithCode(spy: { mock: { calls: unknown[][] } }, errorCode: string) {
+  return spy.mock.calls.filter(
+    (call) => (call[1] as { errorCode?: string } | undefined)?.errorCode === errorCode,
+  );
 }
 
 describe('processFinanceStripeEvent', () => {
@@ -146,27 +193,7 @@ describe('processFinanceStripeEvent', () => {
     vi.clearAllMocks();
     createScopedClientMock.mockImplementation(() => makeScopedClient());
     insertMock.mockResolvedValue([{ id: 1 }]);
-    selectFromMock.mockImplementation((table: unknown) => {
-      if (table === assessmentLineItemsTable) {
-        return Promise.resolve([
-          {
-            id: 44,
-            assessmentId: 7,
-            communityId: 11,
-            unitId: 88,
-            amountCents: 25000,
-            dueDate: '2026-01-15',
-            status: 'pending',
-            paidAt: null,
-            paymentIntentId: null,
-            lateFeeCents: 0,
-            createdAt: new Date('2026-01-01T00:00:00.000Z'),
-            updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-          },
-        ]);
-      }
-      return Promise.resolve([]);
-    });
+    selectFromMock.mockImplementation(defaultSelect);
     updateMock.mockResolvedValue([{ id: 44 }]);
     postLedgerEntryMock.mockResolvedValue({ id: 991 });
   });
@@ -197,6 +224,13 @@ describe('processFinanceStripeEvent', () => {
 
     await processFinanceStripeEvent(
       makeEvent('payment_intent.succeeded', 'evt_fin_1', { id: 'pi_success_1' }),
+    );
+
+    // Direct charges: the latest charge lives on the connected account too.
+    expect(chargesRetrieve).toHaveBeenCalledWith(
+      'ch_success_1',
+      expect.anything(),
+      { stripeAccount: COMMUNITY_ACCOUNT },
     );
 
     expect(insertMock).toHaveBeenCalledWith(
@@ -294,7 +328,7 @@ describe('processFinanceStripeEvent', () => {
       amount: 160000,
       amount_refunded: 0,
     });
-    selectFromMock.mockImplementationOnce((table: unknown) => {
+    selectFromMock.mockImplementation((table: unknown) => {
       if (table === rentObligationsTable) {
         return Promise.resolve([{
           id: 501,
@@ -308,7 +342,7 @@ describe('processFinanceStripeEvent', () => {
           updatedAt: new Date('2026-01-01'),
         }]);
       }
-      return Promise.resolve([]);
+      return defaultSelect(table);
     });
 
     getStripeClientMock.mockReturnValue({
@@ -363,7 +397,7 @@ describe('processFinanceStripeEvent', () => {
       makeEvent('payment_intent.succeeded', 'evt_fin_dup', { id: 'pi_duplicate' }),
     );
 
-    expect(selectFromMock).not.toHaveBeenCalled();
+    expect(selectFromMock).not.toHaveBeenCalledWith(assessmentLineItemsTable, expect.anything(), expect.anything());
     expect(updateMock).not.toHaveBeenCalled();
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
   });
@@ -396,7 +430,7 @@ describe('processFinanceStripeEvent', () => {
       makeEvent('payment_intent.succeeded', 'evt_fin_reorder', { id: 'pi_refunded' }),
     );
 
-    expect(selectFromMock).not.toHaveBeenCalled();
+    expect(selectFromMock).not.toHaveBeenCalledWith(assessmentLineItemsTable, expect.anything(), expect.anything());
     expect(updateMock).not.toHaveBeenCalled();
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
   });
@@ -509,7 +543,7 @@ describe('processFinanceStripeEvent', () => {
       paymentIntents: { retrieve: paymentIntentRetrieve },
       charges: { retrieve: chargesRetrieve },
     });
-    selectFromMock.mockImplementationOnce((table: unknown) => {
+    selectFromMock.mockImplementation((table: unknown) => {
       if (table === rentObligationsTable) {
         return Promise.resolve([{
           id: 501,
@@ -523,7 +557,7 @@ describe('processFinanceStripeEvent', () => {
           updatedAt: new Date('2026-01-01'),
         }]);
       }
-      return Promise.resolve([]);
+      return defaultSelect(table);
     });
 
     await processFinanceStripeEvent(
@@ -590,5 +624,234 @@ describe('processFinanceStripeEvent', () => {
         sourceId: 'dp_1',
       }),
     );
+  });
+
+  describe('connected-account binding', () => {
+    function stripeFor(metadata: Record<string, string>, amountReceived = 25000) {
+      const paymentIntentRetrieve = vi.fn().mockResolvedValue({
+        id: 'pi_bind_1',
+        metadata,
+        amount_received: amountReceived,
+        amount: amountReceived,
+        latest_charge: 'ch_bind_1',
+      });
+      const chargesRetrieve = vi.fn().mockResolvedValue({
+        id: 'ch_bind_1',
+        amount: 25000,
+        amount_refunded: 25000,
+        payment_intent: 'pi_bind_1',
+      });
+      const disputesRetrieve = vi.fn().mockResolvedValue({
+        id: 'dp_bind_1',
+        charge: 'ch_bind_1',
+        amount: 1200,
+        reason: 'fraudulent',
+      });
+      getStripeClientMock.mockReturnValue({
+        paymentIntents: { retrieve: paymentIntentRetrieve },
+        charges: { retrieve: chargesRetrieve },
+        disputes: { retrieve: disputesRetrieve },
+      });
+    }
+
+    const victimMetadata = {
+      communityId: '11',
+      payableType: 'assessment_line_item',
+      payableId: '44',
+      unitId: '88',
+      userId: 'user-11',
+    };
+
+    function expectNoWrites() {
+      expect(insertMock).not.toHaveBeenCalled();
+      expect(updateMock).not.toHaveBeenCalled();
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    }
+
+    it.each([
+      ['payment_intent.succeeded', { id: 'pi_bind_1' }],
+      ['charge.refunded', { id: 'ch_bind_1', amount: 25000, amount_refunded: 25000 }],
+      ['charge.dispute.created', { id: 'dp_bind_1' }],
+    ])('skips %s signed for a different connected account', async (type, payload) => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      stripeFor(victimMetadata);
+
+      await expect(
+        processFinanceStripeEvent(makeEvent(type, `evt_attack_${type}`, payload, undefined, 'acct_attacker')),
+      ).resolves.toBeUndefined();
+
+      expectNoWrites();
+      const logs = errorLogsWithCode(errorSpy, 'FINANCE_WEBHOOK_CONNECTED_ACCOUNT_MISMATCH');
+      expect(logs).toHaveLength(1);
+      expect(logs[0]![1]).toEqual(
+        expect.objectContaining({
+          reason: 'connected_account_mismatch',
+          outcome: 'skipped',
+          communityId: 11,
+          payloadSnippet: expect.objectContaining({ eventAccount: 'acct_attacker' }),
+        }),
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('skips an event with no event.account (finance charges are always direct)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      stripeFor(victimMetadata);
+
+      await processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_platform', { id: 'pi_bind_1' }, undefined, null),
+      );
+
+      expectNoWrites();
+      const logs = errorLogsWithCode(errorSpy, 'FINANCE_WEBHOOK_CONNECTED_ACCOUNT_MISMATCH');
+      expect(logs).toHaveLength(1);
+      expect(logs[0]![1]).toEqual(expect.objectContaining({ reason: 'missing_event_account' }));
+      errorSpy.mockRestore();
+    });
+
+    it('skips when the named community has no connected account', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      selectFromMock.mockImplementation((table: unknown) =>
+        table === stripeConnectedAccountsTable ? Promise.resolve([]) : defaultSelect(table),
+      );
+      stripeFor(victimMetadata);
+
+      await processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_no_acct', { id: 'pi_bind_1' }),
+      );
+
+      expectNoWrites();
+      const logs = errorLogsWithCode(errorSpy, 'FINANCE_WEBHOOK_CONNECTED_ACCOUNT_MISMATCH');
+      expect(logs).toHaveLength(1);
+      expect(logs[0]![1]).toEqual(
+        expect.objectContaining({ reason: 'community_has_no_connected_account' }),
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('processes an event signed for the community\'s own connected account', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      stripeFor(victimMetadata);
+      getStripeClientMock.mockReturnValue({
+        paymentIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: 'pi_bind_1',
+            metadata: victimMetadata,
+            amount_received: 25000,
+            amount: 25000,
+            latest_charge: 'ch_bind_1',
+          }),
+        },
+        charges: {
+          retrieve: vi.fn().mockResolvedValue({ id: 'ch_bind_1', amount: 25000, amount_refunded: 0 }),
+        },
+      });
+
+      await processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_own', { id: 'pi_bind_1' }),
+      );
+
+      expect(updateMock).toHaveBeenCalledWith(
+        assessmentLineItemsTable,
+        expect.objectContaining({ status: 'paid' }),
+        expect.anything(),
+      );
+      expect(errorLogsWithCode(errorSpy, 'FINANCE_WEBHOOK_CONNECTED_ACCOUNT_MISMATCH')).toHaveLength(0);
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('underpayment', () => {
+    function stripeWithReceived(amountReceived: number, extraMetadata: Record<string, string> = {}) {
+      getStripeClientMock.mockReturnValue({
+        paymentIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: 'pi_under_1',
+            metadata: {
+              communityId: '11',
+              payableType: 'assessment_line_item',
+              payableId: '44',
+              unitId: '88',
+              userId: 'user-11',
+              ...extraMetadata,
+            },
+            amount_received: amountReceived,
+            amount: amountReceived,
+            latest_charge: 'ch_under_1',
+          }),
+        },
+        charges: {
+          retrieve: vi.fn().mockResolvedValue({ id: 'ch_under_1', amount: amountReceived, amount_refunded: 0 }),
+        },
+      });
+    }
+
+    function expectNotMarkedPaid() {
+      expect(updateMock).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ status: 'paid' }),
+        expect.anything(),
+      );
+    }
+
+    it('does not mark a $4,000 line item paid on a $1 payment, but still records the $1', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      selectFromMock.mockImplementation((table: unknown) =>
+        table === assessmentLineItemsTable
+          ? Promise.resolve([{ ...LINE_ITEM_ROW, amountCents: 400000 }])
+          : defaultSelect(table),
+      );
+      stripeWithReceived(100);
+
+      await processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_under_1', { id: 'pi_under_1' }),
+      );
+
+      expectNotMarkedPaid();
+      expect(postLedgerEntryMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ entryType: 'payment', amountCents: -100 }),
+      );
+      const logs = errorLogsWithCode(warnSpy, 'FINANCE_WEBHOOK_UNDERPAYMENT');
+      expect(logs).toHaveLength(1);
+      expect(logs[0]![1]).toEqual(
+        expect.objectContaining({
+          payloadSnippet: expect.objectContaining({ amountReceivedCents: 100, outstandingCents: 400000 }),
+        }),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('counts an applied late fee as outstanding', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      selectFromMock.mockImplementation((table: unknown) =>
+        table === assessmentLineItemsTable
+          ? Promise.resolve([{ ...LINE_ITEM_ROW, lateFeeCents: 2500 }])
+          : defaultSelect(table),
+      );
+      stripeWithReceived(25000);
+
+      await processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_under_late', { id: 'pi_under_1' }),
+      );
+
+      expectNotMarkedPaid();
+      expect(errorLogsWithCode(warnSpy, 'FINANCE_WEBHOOK_UNDERPAYMENT')).toHaveLength(1);
+      warnSpy.mockRestore();
+    });
+
+    it('does not count a convenience fee toward the payable', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // 25000 received, 900 of it a fee: 24100 toward a 25000 item.
+      stripeWithReceived(25000, { convenienceFeeCents: '900' });
+
+      await processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_under_fee', { id: 'pi_under_1' }),
+      );
+
+      expectNotMarkedPaid();
+      expect(errorLogsWithCode(warnSpy, 'FINANCE_WEBHOOK_UNDERPAYMENT')).toHaveLength(1);
+      warnSpy.mockRestore();
+    });
   });
 });
