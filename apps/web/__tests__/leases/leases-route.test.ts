@@ -1167,6 +1167,51 @@ describe('p2-37 leases route', () => {
       expect(res.status).toBe(200);
       expect(json.data.map((l) => l.id)).toEqual([1, 2]);
     });
+
+    // --- notes are manager-internal (product decision 2026-09-24, #1172) ------
+
+    const MANAGER_NOTE = 'late payer - send to collections';
+    const notedRows = twoTenantRows.map((row) => ({ ...row, notes: MANAGER_NOTE }));
+
+    it('GET redacts notes on the non-manager’s own lease', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(memberMembership());
+      seedLeases(notedRows);
+
+      const req = new NextRequest('http://localhost:3000/api/v1/leases?communityId=42');
+      const res = await GET(req);
+      const json = (await res.json()) as { data: Array<{ id: number; notes: string | null }> };
+
+      expect(res.status).toBe(200);
+      expect(json.data.map((l) => l.id)).toEqual([1]);
+      expect(json.data[0]!.notes).toBeNull();
+      expect(JSON.stringify(json.data)).not.toContain(MANAGER_NOTE);
+    });
+
+    it('renewal_chain_for redacts notes for a non-manager too', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(memberMembership());
+      seedLeases(notedRows);
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=1',
+      );
+      const res = await GET(req);
+      const json = (await res.json()) as { data: Array<{ id: number; notes: string | null }> };
+
+      expect(res.status).toBe(200);
+      expect(json.data.map((l) => l.id)).toEqual([1]);
+      expect(JSON.stringify(json.data)).not.toContain(MANAGER_NOTE);
+    });
+
+    it('GET still returns notes to the management tier (control)', async () => {
+      seedLeases(notedRows);
+
+      const req = new NextRequest('http://localhost:3000/api/v1/leases?communityId=42');
+      const res = await GET(req);
+      const json = (await res.json()) as { data: Array<{ id: number; notes: string | null }> };
+
+      expect(res.status).toBe(200);
+      expect(json.data.map((l) => l.notes)).toEqual([MANAGER_NOTE, MANAGER_NOTE]);
+    });
   });
 
   // -------------------------------------------------------------------------

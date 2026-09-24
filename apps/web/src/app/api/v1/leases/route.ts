@@ -242,9 +242,17 @@ export const GET = withErrorHandler(
     // Fail-closed by construction — `isAdminRole` resolves only the v3
     // management roles onto the admin row, so any other value gets the filter
     // rather than the full list.
+    //
+    // `notes` is manager-internal (product decision 2026-09-24, #1172): a party
+    // sees their own lease rows, but never the notes a manager wrote on them.
+    // Redacted here so the list AND the renewal-chain path both inherit it.
     const seesAllLeases = isAdminRole(membership.role);
     const visibleToActor = (records: LeaseRecord[]): LeaseRecord[] =>
-      seesAllLeases ? records : records.filter((l) => l.residentId === actorUserId);
+      seesAllLeases
+        ? records
+        : records
+            .filter((l) => l.residentId === actorUserId)
+            .map((l) => ({ ...l, notes: null }));
 
     const rows = await listLeasesForCommunity(communityId);
     let leaseRecords = visibleToActor(rows.map(coerceLeaseRecord));
