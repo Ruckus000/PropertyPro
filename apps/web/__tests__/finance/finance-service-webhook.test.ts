@@ -226,6 +226,67 @@ describe('processFinanceStripeEvent', () => {
     );
   });
 
+  it('reads the latest charge from the connected account for a Connect payment_intent.succeeded', async () => {
+    // Direct charges (F-15) live on the association's connected account, so
+    // EVERY re-read the webhook performs must carry `{ stripeAccount }` — a
+    // platform-account `charges.retrieve` raises `No such charge`, the handler
+    // throws before the line item is marked paid, and Stripe retries forever
+    // while the resident's dues never record.
+    const paymentIntentRetrieve = vi.fn().mockResolvedValue({
+      id: 'pi_connect_1',
+      metadata: {
+        communityId: '11',
+        lineItemId: '44',
+        unitId: '88',
+        userId: 'user-11',
+      },
+      amount_received: 25000,
+      amount: 25000,
+      latest_charge: 'ch_connect_1',
+    });
+    const chargesRetrieve = vi.fn().mockResolvedValue({
+      id: 'ch_connect_1',
+      amount: 25000,
+      amount_refunded: 0,
+      balance_transaction: { fee: 755 },
+    });
+
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: { retrieve: paymentIntentRetrieve },
+      charges: { retrieve: chargesRetrieve },
+    });
+
+    const connectEvent = {
+      ...makeEvent('payment_intent.succeeded', 'evt_fin_connect_1', { id: 'pi_connect_1' }),
+      account: 'acct_123',
+    } as unknown as Stripe.Event;
+
+    await processFinanceStripeEvent(connectEvent);
+
+    expect(chargesRetrieve).toHaveBeenCalledWith(
+      'ch_connect_1',
+      { expand: ['balance_transaction'] },
+      { stripeAccount: 'acct_123' },
+    );
+    // Control: the sibling re-read already carried the account, and must keep
+    // doing so. If this assertion reddens too, the whole handler is broken
+    // rather than just the charge lookup.
+    expect(paymentIntentRetrieve).toHaveBeenCalledWith('pi_connect_1', undefined, {
+      stripeAccount: 'acct_123',
+    });
+    // Control: the payment still records, and the real Stripe fee off the
+    // expanded balance_transaction reaches the ledger entry.
+    expect(postLedgerEntryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        entryType: 'payment',
+        amountCents: -25000,
+        sourceId: 'pi_connect_1',
+        metadata: expect.objectContaining({ stripeFeeActualCents: 755 }),
+      }),
+    );
+  });
+
   it('supports payable contract metadata for payment_intent.succeeded', async () => {
     const paymentIntentRetrieve = vi.fn().mockResolvedValue({
       id: 'pi_payable_contract_1',

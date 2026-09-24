@@ -2053,9 +2053,11 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
 
   let stripeFeeActualCents: number | undefined;
   if (latestChargeId) {
-    const latestCharge = await stripe.charges.retrieve(latestChargeId, {
-      expand: ['balance_transaction'],
-    });
+    const latestCharge = await stripe.charges.retrieve(
+      latestChargeId,
+      { expand: ['balance_transaction'] },
+      requestOptions,
+    );
     if (latestCharge.amount_refunded >= latestCharge.amount) {
       return;
     }
