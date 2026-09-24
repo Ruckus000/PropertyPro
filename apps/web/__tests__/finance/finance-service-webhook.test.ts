@@ -119,7 +119,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: vi.fn(() => ({})),
 }));
 
-import { processFinanceStripeEvent } from '../../src/lib/services/finance-service';
+import { describePaymentForReceipt, processFinanceStripeEvent } from '../../src/lib/services/finance-service';
 
 interface MockScopedClient {
   insert: typeof insertMock;
@@ -734,5 +734,42 @@ describe('payment receipt email', () => {
     const { props } = await receiptPropsFor({}, { paymentMethod: 'card' });
 
     expect(props['paymentMethod']).toBe('Card');
+  });
+});
+
+/**
+ * Direct unit coverage for the receipt describer. The webhook tests above
+ * exercise it end-to-end for the three common shapes; these pin the branches
+ * no live event in the suite reaches, so a change to the fallback ladder
+ * cannot pass unnoticed.
+ */
+describe('describePaymentForReceipt', () => {
+  const INTENT_ID = 'pi_direct_1';
+
+  it('labels a bank payment from intent metadata when the charge carries no details', () => {
+    expect(describePaymentForReceipt(null, INTENT_ID, 'us_bank_account')).toEqual({
+      paymentMethod: 'Bank account',
+      confirmationNumber: INTENT_ID,
+    });
+  });
+
+  it('says "Card" for a brand Stripe has not taught us to spell', () => {
+    const details = { payment_method_details: { type: 'card', card: { brand: 'newbrand', last4: '1881' } }, receipt_number: null };
+    expect(describePaymentForReceipt(details as never, INTENT_ID, null).paymentMethod).toBe('Card ending in 1881');
+  });
+
+  it('states no method at all rather than guessing one', () => {
+    expect(describePaymentForReceipt(null, INTENT_ID, null)).toEqual({
+      paymentMethod: undefined,
+      confirmationNumber: INTENT_ID,
+    });
+  });
+
+  it('treats a blank receipt number as absent and quotes the PaymentIntent id the ledger records', () => {
+    const details = { payment_method_details: null, receipt_number: '   ' };
+    expect(describePaymentForReceipt(details as never, INTENT_ID, 'card')).toEqual({
+      paymentMethod: 'Card',
+      confirmationNumber: INTENT_ID,
+    });
   });
 });

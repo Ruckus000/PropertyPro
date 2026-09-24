@@ -45,7 +45,7 @@ interface QueueAnnouncementDeliveryParams {
  * community: an explicit `displayTitle` first, then board designation. Returns
  * undefined rather than a guessed title (e.g. for a manager with no title set).
  */
-export function authorTitleFromRoleRow(row: Record<string, unknown> | undefined): string | undefined {
+function authorTitleFromRoleRow(row: Record<string, unknown> | undefined): string | undefined {
   if (!row) return undefined;
   const displayTitle = row['displayTitle'];
   if (typeof displayTitle === 'string' && displayTitle.trim().length > 0) return displayTitle.trim();

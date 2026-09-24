@@ -24,7 +24,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render } from '@react-email/components';
 import {
   AnnouncementEmail,
+  AssessmentDueReminderEmail,
   AuthenticateCardEmail,
+  CommunityExportReadyEmail,
+  MeetingNoticeEmail,
   CertificateRequestEmail,
   EmergencyAlertEmail,
   InvitationEmail,
@@ -291,6 +294,75 @@ describe('line breaks survive Outlook desktop', () => {
       />,
     );
     expect(html).toMatch(/Leave by the east stairs\.<br\/?>Do not use the elevators\.<br\/?>Meet at the pool deck\./);
+  });
+
+  // Every remaining MultilineText call site. The negative sweep above proves no
+  // template uses the CSS property; these prove the component is still THERE —
+  // a template that dropped it and rendered the raw string would pass the sweep
+  // while silently losing every line break.
+  it.each([
+    [
+      'announcement body',
+      () => (
+        <AnnouncementEmail
+          branding={{ communityName: 'Sunset Palms HOA' }}
+          recipientName="Marisol"
+          announcementTitle="Pool closure"
+          announcementBody={'The pool closes Monday.\nIt reopens Thursday.'}
+          authorName="Dana Reyes"
+          portalUrl="https://example.com/portal"
+        />
+      ),
+      /The pool closes Monday\.<br\/?>It reopens Thursday\./,
+    ],
+    [
+      'meeting location',
+      () => (
+        <MeetingNoticeEmail
+          branding={{ communityName: 'Sunset Palms HOA' }}
+          recipientName="Marisol"
+          meetingTitle="Budget meeting"
+          meetingDate="October 1, 2026"
+          meetingTime="6:00 PM"
+          location={'Clubhouse, 2nd floor\n455 Ocean Drive'}
+          meetingType="board"
+        />
+      ),
+      /Clubhouse, 2nd floor<br\/?>455 Ocean Drive/,
+    ],
+    [
+      'late-fee notice',
+      () => (
+        <AssessmentDueReminderEmail
+          branding={{ communityName: 'Sunset Palms HOA' }}
+          recipientName="Marisol"
+          assessmentTitle="Q4 Community Dues"
+          amountDue="$412.00"
+          dueDate="October 1, 2026"
+          portalUrl="https://example.com/payments"
+          lateFeeNotice={{ title: 'Late fees', body: 'A $25 fee applies after Oct 10.\nInterest accrues monthly.' }}
+        />
+      ),
+      /A \$25 fee applies after Oct 10\.<br\/?>Interest accrues monthly\./,
+    ],
+    [
+      'export warning',
+      () => (
+        <CommunityExportReadyEmail
+          branding={{ communityName: 'Sunset Palms HOA' }}
+          recipientName="Marisol"
+          communityName="Sunset Palms HOA"
+          downloadUrl="https://example.com/export"
+          partCount={1}
+          totalSize="42 MB"
+          expiresOn="October 1, 2026"
+          warnings={['Two documents were skipped.\nRetry from the exports page.']}
+        />
+      ),
+      /Two documents were skipped\.<br\/?>Retry from the exports page\./,
+    ],
+  ])('%s: line breaks render as <br>', async (_name, element, pattern) => {
+    expect(await render(element())).toMatch(pattern);
   });
 
   it('certificate request: single line breaks inside a paragraph become <br>', async () => {

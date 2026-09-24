@@ -111,7 +111,7 @@ const RESIDENT_REQUESTS_ROW = LOCKOUT_EFFECTS[2];
  * RBAC matrix's community-type exclusions) — telling them it is suspended would
  * describe a feature they never had.
  */
-export function lockoutEffectsFor(communityType: CommunityType) {
+function lockoutEffectsFor(communityType: CommunityType) {
   const residents = [RBAC_MATRIX[communityType].owner, RBAC_MATRIX[communityType].tenant];
   const residentsCanFile = residents.some(
     (cell) => cell.arc_submissions.write || cell.violations.write,

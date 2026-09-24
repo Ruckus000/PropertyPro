@@ -294,7 +294,7 @@ function buildSigningUrl(
  * sequential request every signer is emailed at creation, so a later signer's
  * own row must read Pending until the ones ahead of them have signed.
  */
-export function toEmailSigningOrder(
+function toEmailSigningOrder(
   signers: ReadonlyArray<Pick<EsignSignerRecord, 'id' | 'name' | 'email' | 'role' | 'sortOrder' | 'status' | 'completedAt'>>,
   recipientId: number,
   signingOrder: string,
