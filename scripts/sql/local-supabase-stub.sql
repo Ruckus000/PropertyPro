@@ -38,6 +38,15 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 -- Auth schema and helpers.
 CREATE SCHEMA IF NOT EXISTS auth;
 
+-- Production grants USAGE on auth to all three API roles (measured 2026-09-25:
+-- has_schema_privilege = true for anon, authenticated and service_role), and
+-- Supabase's own helpers depend on it: a SECURITY INVOKER function that calls
+-- auth.role()/auth.uid() by name — pp_rls_effective_role since 0079 — resolves
+-- that name at run time as the caller, so without USAGE it fails here with
+-- "permission denied for schema auth" while working in production. USAGE only,
+-- same reasoning as public above.
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+
 -- These MUST read the request GUCs, exactly as real Supabase does.
 --
 -- They previously returned constants — `auth.uid()` always NULL and

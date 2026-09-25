@@ -3,6 +3,14 @@
  *
  * This file is the source of truth for policy coverage tests so new tenant-scoped
  * tables do not silently miss RLS rollout.
+ *
+ * Read the families below as what RLS WOULD allow, not what the Supabase Data
+ * API allows. Since migration 0078, anon and authenticated hold no INSERT /
+ * UPDATE / DELETE privilege on any public table (and 0077 removed SELECT on
+ * DATA_API_REVOKED_TENANT_TABLES), so every write policy here is
+ * defence-in-depth: the application writes through a privileged role, and a
+ * user's JWT cannot write at all. rls-policies.integration.test.ts still
+ * exercises the policies, through a probe role holding the pre-0077 grants.
  */
 
 export type RlsPolicyFamily =
@@ -275,7 +283,7 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'user_roles',
     policyFamily: 'tenant_admin_write',
-    notes: 'INSERT/UPDATE/DELETE require admin-tier role (pp_rls_can_read_audit_log). SELECT uses community membership. No recursion risk: pp_rls_has_community_membership is SECURITY DEFINER.',
+    notes: 'INSERT/UPDATE/DELETE require admin-tier role (pp_rls_can_read_audit_log). SELECT is own rows OR admin tier since 0077 (it was plain community membership, so any member could list every member\'s role and designation through the Data API); not revoked outright because the community-site-assets storage policies subquery it as authenticated for the caller\'s own manager rows. No recursion risk: pp_rls_has_community_membership and pp_rls_can_read_audit_log are SECURITY DEFINER.',
   },
   {
     tableName: 'esign_templates',
@@ -454,7 +462,7 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
     reason:
       'Append-only audit trail for PLATFORM-level operator actions in apps/admin (0052). Deliberately NOT tenant-scoped: community_id is NULLABLE precisely because platform actions such as granting or revoking platform-admin access have no community at all — which is why neither compliance_audit_log nor support_access_log (both community_id NOT NULL) could hold them. Locked down on the platform-table pattern: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated, and service_role granted SELECT+INSERT ONLY — no UPDATE or DELETE, which is what makes it append-only. A BEFORE UPDATE OR DELETE trigger backstops the privileged Drizzle connection, which holds rolbypassrls and is not bound by the grant. Written exclusively by the service-role PostgREST client via apps/admin/src/lib/audit/log-admin-action.ts.',
   },
-  { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case; RLS is enabled (pp_communities_* policies, 0026) but community_id FK-based scoping does not apply' },
+  { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case; RLS is enabled (pp_communities_* policies, 0026) but community_id FK-based scoping does not apply. Since 0079 anon and authenticated hold no privilege on it (the row carries Stripe ids and cancellation notes; every app read uses the service-role client)' },
   // The three entries below carried reasons that explained only why COMMUNITY
   // SCOPING does not apply to them — which was true, and which read for years as
   // though it also settled the RLS question. It did not. All three sat with RLS
@@ -580,6 +588,47 @@ export const RLS_EXPECTED_TENANT_TABLE_COUNT = 83;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];
+
+/**
+ * Tenant tables that anon and authenticated hold NO table privilege on (0077).
+ *
+ * The policy family above describes what RLS would allow; this list says the
+ * Data API cannot reach the table at all, so those policies are defence-in-depth
+ * only. Every one of these had a membership-only SELECT policy
+ * (`pp_rls_can_access_community`), which let any member read every row through
+ * PostgREST with their own JWT and the public anon key — OAuth refresh tokens,
+ * invite tokens, ballot submissions, every neighbour's lease. The application
+ * never touches them as `authenticated` (createScopedClient runs on a privileged
+ * role; supabase-js tenant reads use the service-role client), so revoking the
+ * grant costs nothing and removes the whole class.
+ *
+ * `user_roles` is deliberately absent: storage.objects policies subquery it as
+ * `authenticated`, so 0077 narrows its SELECT policy instead of revoking it.
+ *
+ * Keep in sync with the migration's table array and with
+ * scripts/sql/local-supabase-post-migrate.sql —
+ * packages/db/__tests__/data-api-revoke-migration.test.ts enforces both.
+ */
+export const DATA_API_REVOKED_TENANT_TABLES = [
+  'access_requests', 'accounting_connections', 'amenities',
+  'amenity_reservations', 'announcements', 'arc_submissions',
+  'assessment_line_items', 'assessments', 'calendar_sync_tokens',
+  'community_join_requests', 'compliance_checklist_items', 'contract_bids',
+  'contracts', 'document_categories', 'document_drafts', 'documents',
+  'election_ballot_submissions', 'election_ballots', 'election_candidates',
+  'election_eligibility_snapshots', 'election_proxies', 'elections',
+  'emergency_broadcast_recipients', 'emergency_broadcasts',
+  'esign_consent', 'esign_events', 'esign_signers', 'esign_submissions',
+  'esign_templates', 'faqs', 'finance_stripe_webhook_events', 'forum_replies',
+  'forum_threads', 'help_article_feedback', 'help_article_views',
+  'insurance_policies', 'invitations', 'leases', 'ledger_entries',
+  'maintenance_comments', 'meeting_documents', 'meetings', 'move_checklists',
+  'onboarding_wizard_state', 'package_log', 'polls', 'rent_obligations',
+  'rent_payments', 'reserve_assets', 'stripe_connected_accounts',
+  'support_access_log', 'support_consent_grants', 'units', 'vendors',
+  'violation_fines', 'violations', 'visitor_log', 'wind_mitigation_reports',
+  'work_orders',
+] as const satisfies readonly RlsTenantTableName[];
 
 export function validateRlsConfigInvariant(): string[] {
   const problems: string[] = [];
