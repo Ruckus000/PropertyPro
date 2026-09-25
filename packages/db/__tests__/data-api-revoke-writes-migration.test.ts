@@ -75,9 +75,11 @@ describe('migration 0078 — the Data API is read-only', () => {
     expect(MIGRATION).toContain(RPC_GRANT);
   });
 
-  it('never revokes SELECT from authenticated (Realtime on notifications needs it)', () => {
-    expect(MIGRATION).not.toMatch(/REVOKE[^;]*\bSELECT\b[^;]*ON ALL TABLES/i);
-    expect(MIGRATION).not.toMatch(/REVOKE ALL ON ALL TABLES/i);
+  it('never touches SELECT (Realtime on notifications needs it)', () => {
+    // Any SELECT keyword in the statements, including an ALTER DEFAULT
+    // PRIVILEGES ... REVOKE SELECT ON TABLES, would be a read revoke.
+    expect(MIGRATION).not.toMatch(/\bSELECT\b/i);
+    expect(MIGRATION).not.toMatch(/REVOKE ALL ON (ALL )?TABLES/i);
   });
 
   it('grants nothing to anon or authenticated', () => {

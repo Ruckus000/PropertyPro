@@ -122,14 +122,32 @@ describeDb('P4-55 RLS policies (integration)', () => {
    * service_only block warns about.
    *
    * It carries the pre-0077 grants and runs with the same JWT claims, so every
-   * policy here (all `TO public`) and every pp_rls_* helper (which key on the
-   * `request.jwt.claim.role` claim, not current_user) evaluate exactly as they
-   * would for a Data API caller. Cluster-global and created idempotently; the
-   * CI and local test roles are both superusers, so CREATE ROLE is available.
+   * pp_rls_* helper (they key on the `request.jwt.claim.role` claim, not
+   * current_user) and every policy targeted `TO public` or `TO authenticated`
+   * (the probe is a member of authenticated) evaluate exactly as they would for
+   * a Data API caller. It is NOT a member of anon, so a policy targeted `TO anon`
+   * does not apply to it: the anon-claim probe below is only valid for tables
+   * whose write policies are `TO public` (the tenant tables' and site_pages'
+   * are). Cluster-global and created idempotently; the CI and local test roles
+   * are both superusers, so CREATE ROLE is available.
    */
   const POLICY_PROBE_ROLE = 'pp_rls_policy_probe';
 
   async function ensurePolicyProbeRole(sqlClient: SqlClient): Promise<void> {
+    // This role gets INSERT/UPDATE/DELETE on every public table, so it must never
+    // be created on a shared database. `.env.local`'s DATABASE_URL is PRODUCTION
+    // (see CLAUDE.md), and this suite is one `with-env-local.sh` away from it.
+    // Same escape hatch as scripts/local-test-db.sh.
+    const host = new URL(process.env.DIRECT_URL!).hostname;
+    if (
+      !['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) &&
+      process.env.PROPERTYPRO_ALLOW_REMOTE_TEST_DB !== '1'
+    ) {
+      throw new Error(
+        `Refusing to create ${POLICY_PROBE_ROLE} on non-local database host "${host}". ` +
+          'Run the RLS suite against the local test database (pnpm test:integration:local).',
+      );
+    }
     await sqlClient.unsafe(`
       do $$
       begin
@@ -3248,6 +3266,9 @@ describeDb('P4-55 RLS policies (integration)', () => {
     const ACL_DENIED = /permission denied for table/;
 
     it('anon and authenticated hold no write privilege on any public table', async () => {
+      // Views, materialized views and foreign tables too (PostgREST exposes all
+      // of them), and column-level grants: has_table_privilege is false for a
+      // role that holds UPDATE on only some columns, which PostgREST honours.
       const rows = await adminSql<{ relname: string; role: string; privilege: string }[]>`
         select c.relname, r.role, p.privilege
         from pg_class c
@@ -3255,8 +3276,12 @@ describeDb('P4-55 RLS policies (integration)', () => {
         cross join (values ('anon'), ('authenticated')) as r(role)
         cross join (values ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'),
                            ('REFERENCES'), ('TRIGGER')) as p(privilege)
-        where n.nspname = 'public' and c.relkind in ('r', 'p')
-          and has_table_privilege(r.role, c.oid, p.privilege)
+        where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')
+          and (
+            has_table_privilege(r.role, c.oid, p.privilege)
+            or (p.privilege in ('INSERT', 'UPDATE', 'REFERENCES')
+                and has_any_column_privilege(r.role, c.oid, p.privilege))
+          )
         order by 1, 2, 3
       `;
       expect(rows).toEqual([]);
@@ -3288,41 +3313,52 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // The default-privilege half. Without it the next migration's table would
       // inherit `authenticated=arwd` from postgres's default ACL and reopen the
       // hole in production, where there is no post-migrate backstop.
-      const tableName = `pp_0078_default_acl_probe_${seed.runTag}`;
-      await adminSql.unsafe(`create table public."${tableName}" (id bigserial primary key)`);
-      try {
-        const [row] = await adminSql<{
-          auth_select: boolean;
-          auth_write: boolean;
-          anon_write: boolean;
-          seq_usage: boolean;
-          owner: string;
-        }[]>`
-          select
-            has_table_privilege('authenticated', c.oid, 'SELECT') as auth_select,
-            has_table_privilege('authenticated', c.oid, 'INSERT')
-              or has_table_privilege('authenticated', c.oid, 'UPDATE')
-              or has_table_privilege('authenticated', c.oid, 'DELETE') as auth_write,
-            has_table_privilege('anon', c.oid, 'INSERT')
-              or has_table_privilege('anon', c.oid, 'UPDATE')
-              or has_table_privilege('anon', c.oid, 'DELETE') as anon_write,
-            has_sequence_privilege('authenticated', pg_get_serial_sequence(format('public.%I', c.relname), 'id'), 'USAGE') as seq_usage,
-            pg_get_userbyid(c.relowner) as owner
-          from pg_class c
-          where c.oid = format('public.%I', ${tableName}::text)::regclass
-        `;
-        // Anti-vacuity: the defaults under test are postgres's, so the probe
-        // table must be owned by postgres for this to prove anything.
-        expect(row?.owner).toBe('postgres');
-        expect(row?.auth_write).toBe(false);
-        expect(row?.anon_write).toBe(false);
-        expect(row?.seq_usage).toBe(false);
-        // Deliberately unchanged: SELECT still follows the default grant, and a
-        // new table's SELECT policy is policed by the 0077 invariant.
-        expect(row?.auth_select).toBe(true);
-      } finally {
-        await adminSql.unsafe(`drop table if exists public."${tableName}"`);
-      }
+      //
+      // Inside a transaction that is always rolled back (DDL is transactional in
+      // Postgres, and default privileges apply at CREATE), so a killed run cannot
+      // leave an unregistered table behind to break the registry test above.
+      const ROLLBACK = Symbol('rollback');
+      type BornRow = {
+        auth_select: boolean;
+        auth_write: boolean;
+        anon_write: boolean;
+        seq_usage: boolean;
+        owner: string;
+      };
+      let row: BornRow | undefined;
+      await adminSql
+        .begin(async (tx) => {
+          await tx.unsafe('create table public.pp_0078_default_acl_probe (id bigserial primary key)');
+          [row] = await tx<BornRow[]>`
+            select
+              has_table_privilege('authenticated', c.oid, 'SELECT') as auth_select,
+              has_table_privilege('authenticated', c.oid, 'INSERT')
+                or has_table_privilege('authenticated', c.oid, 'UPDATE')
+                or has_table_privilege('authenticated', c.oid, 'DELETE') as auth_write,
+              has_table_privilege('anon', c.oid, 'INSERT')
+                or has_table_privilege('anon', c.oid, 'UPDATE')
+                or has_table_privilege('anon', c.oid, 'DELETE') as anon_write,
+              has_sequence_privilege('authenticated',
+                pg_get_serial_sequence('public.pp_0078_default_acl_probe', 'id'), 'USAGE') as seq_usage,
+              pg_get_userbyid(c.relowner) as owner
+            from pg_class c
+            where c.oid = 'public.pp_0078_default_acl_probe'::regclass
+          `;
+          throw ROLLBACK;
+        })
+        .catch((error: unknown) => {
+          if (error !== ROLLBACK) throw error;
+        });
+
+      // Anti-vacuity: the defaults under test are postgres's, so the probe
+      // table must be owned by postgres for this to prove anything.
+      expect(row?.owner).toBe('postgres');
+      expect(row?.auth_write).toBe(false);
+      expect(row?.anon_write).toBe(false);
+      expect(row?.seq_usage).toBe(false);
+      // Deliberately unchanged: SELECT still follows the default grant, and a
+      // new table's SELECT policy is policed by the 0077 invariant.
+      expect(row?.auth_select).toBe(true);
     });
 
     it('a property manager can no longer rewrite user_roles through the Data API', async () => {
