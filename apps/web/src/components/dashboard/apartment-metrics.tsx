@@ -3,6 +3,9 @@
  *
  * Renders four metric cards consistent with the existing dashboard card style
  * (rounded-md border border-edge bg-surface-card p-5).
+ *
+ * Non-managers receive only the maintenance card: occupancy, lease expirations
+ * and revenue are never computed for them (see loadApartmentMetrics).
  */
 import type { ApartmentMetrics } from '@/lib/queries/apartment-metrics';
 
@@ -50,6 +53,21 @@ function MetricCard({ title, value, detail, subDetail, badge }: MetricCardProps)
 }
 
 export function ApartmentMetricsCards({ metrics }: ApartmentMetricsProps) {
+  const maintenanceCard = (
+    <MetricCard
+      title="Maintenance"
+      value={String(metrics.openMaintenanceRequests)}
+      detail="open requests"
+      badge={metrics.openMaintenanceRequests > 5 ? 'warning' : undefined}
+    />
+  );
+
+  // Lease-derived metrics are withheld server-side for non-managers
+  // (see loadApartmentMetrics); this branch only reflects that.
+  if (!metrics.leaseMetricsVisible) {
+    return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{maintenanceCard}</div>;
+  }
+
   const { within30Days, within60Days, within90Days } = metrics.leaseExpirations;
 
   return (
@@ -73,12 +91,7 @@ export function ApartmentMetricsCards({ metrics }: ApartmentMetricsProps) {
         value={formatCurrency(metrics.totalMonthlyRevenue)}
         detail="from active leases"
       />
-      <MetricCard
-        title="Maintenance"
-        value={String(metrics.openMaintenanceRequests)}
-        detail="open requests"
-        badge={metrics.openMaintenanceRequests > 5 ? 'warning' : undefined}
-      />
+      {maintenanceCard}
     </div>
   );
 }
