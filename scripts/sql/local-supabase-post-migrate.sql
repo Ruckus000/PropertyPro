@@ -257,3 +257,32 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Migration 0078: the Data API is READ-ONLY on every public table.
+--
+-- The stub runs before migrations and re-grants ALL on ALL TABLES (and resets
+-- default privileges) on every `local-test-db.sh setup`; on a persistent
+-- database the migrations do not re-run, so without this block every public
+-- table comes back writable by authenticated locally and in CI while production
+-- has none. The default-privilege revoke is repeated for the same reason: the
+-- stub re-opens it, and a table a later migration creates on this database
+-- would otherwise be born writable.
+--
+-- Keep in sync with 0078; data-api-revoke-writes-migration.test.ts enforces it.
+-- ---------------------------------------------------------------------------
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+DO $$
+BEGIN
+  IF to_regprocedure('public.pp_sync_unit_rent_amount_from_lease(bigint)') IS NOT NULL THEN
+    REVOKE EXECUTE ON FUNCTION public.pp_sync_unit_rent_amount_from_lease(bigint)
+      FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.pp_sync_unit_rent_amount_from_lease(bigint) TO service_role;
+  END IF;
+END $$;

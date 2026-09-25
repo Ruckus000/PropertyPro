@@ -3,6 +3,14 @@
  *
  * This file is the source of truth for policy coverage tests so new tenant-scoped
  * tables do not silently miss RLS rollout.
+ *
+ * Read the families below as what RLS WOULD allow, not what the Supabase Data
+ * API allows. Since migration 0078, anon and authenticated hold no INSERT /
+ * UPDATE / DELETE privilege on any public table (and 0077 removed SELECT on
+ * DATA_API_REVOKED_TENANT_TABLES), so every write policy here is
+ * defence-in-depth: the application writes through a privileged role, and a
+ * user's JWT cannot write at all. rls-policies.integration.test.ts still
+ * exercises the policies, through a probe role holding the pre-0077 grants.
  */
 
 export type RlsPolicyFamily =
