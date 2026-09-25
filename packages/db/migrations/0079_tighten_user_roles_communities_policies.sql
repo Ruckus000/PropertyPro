@@ -27,6 +27,18 @@
 --
 -- WHAT CHANGES:
 --
+--   0. pp_rls_effective_role() now also reads `request.jwt.claims` ->> 'role'.
+--      It read only the legacy per-claim GUC `request.jwt.claim.role`, which
+--      PostgREST stopped setting in v12 ("Removed db-use-legacy-gucs ... all
+--      PostgreSQL versions now use GUCs in JSON format"); Supabase on PG 17
+--      runs v12+. So a service_role Data API request (the admin console's
+--      createAdminClient) resolved to session_user `authenticator` and
+--      pp_rls_is_privileged() said false. RLS never showed it, because Supabase's
+--      service_role has BYPASSRLS; triggers are not bypassed, so the existing
+--      pp_rls_enforce_tenant_scope trigger and the new triggers below would
+--      refuse those writes. The legacy GUC is still honoured first (tests and
+--      older callers set it); the Drizzle connection has neither and still
+--      resolves to session_user `postgres`.
 --   1. pp_rls_is_root_manager(community_id): SECURITY DEFINER, same shape as
 --      pp_rls_can_read_audit_log (privileged -> true; no JWT -> false; else a
 --      root_manager row for auth.uid() in that community).
@@ -37,10 +49,14 @@
 --      own row is a manager row, so self-modification is out too (the residents
 --      route's "Cannot modify your own role").
 --   3. user_roles trigger: a non-root, non-privileged writer cannot set or
---      change `designation`. RLS cannot compare OLD with NEW, so this part is a
---      trigger.
+--      change `designation`, cannot move a role row to another user or
+--      community (which would hand a board seat to someone else without
+--      touching `designation`), and cannot delete a board-designated row.
+--      RLS cannot compare OLD with NEW, so this part is a trigger.
 --   4. communities trigger: a non-privileged UPDATE cannot change billing,
---      lifecycle, domain-verification or identity columns. Nobody, root
+--      lifecycle, domain or identity columns, nor the
+--      community_settings.electionsAttorneyReviewed key (the e-voting
+--      attorney-review gate, set only by platform admins). Nobody, root
 --      included, writes those except through a privileged path, so no role
 --      carve-out is needed.
 --   5. communities SELECT: table-level SELECT is replaced by a column grant to
@@ -60,6 +76,16 @@
 -- DROP ... IF EXISTS, and REVOKE/GRANT that no-op when already in place.
 
 SET LOCAL lock_timeout = '5s';--> statement-breakpoint
+
+CREATE OR REPLACE FUNCTION public.pp_rls_effective_role()
+ RETURNS text LANGUAGE sql STABLE
+ SET search_path TO 'public', 'pg_catalog' AS $function$
+  SELECT COALESCE(
+    NULLIF(current_setting('request.jwt.claim.role', true), ''),
+    NULLIF(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', ''),
+    session_user
+  )::text;
+$function$;--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION public.pp_rls_is_root_manager(target_community_id bigint)
  RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
@@ -102,6 +128,13 @@ CREATE OR REPLACE FUNCTION public.pp_user_roles_guard_designation()
  RETURNS trigger LANGUAGE plpgsql
  SET search_path TO 'public', 'pg_catalog' AS $function$
 BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.designation IS NOT NULL AND NOT pp_rls_is_root_manager(OLD.community_id) THEN
+      RAISE EXCEPTION 'only the root manager can remove a board-designated member'
+        USING ERRCODE = '42501';
+    END IF;
+    RETURN OLD;
+  END IF;
   IF pp_rls_is_root_manager(NEW.community_id) THEN
     RETURN NEW;
   END IF;
@@ -109,9 +142,16 @@ BEGIN
     RAISE EXCEPTION 'only the root manager can set a board designation'
       USING ERRCODE = '42501';
   END IF;
-  IF TG_OP = 'UPDATE' AND NEW.designation IS DISTINCT FROM OLD.designation THEN
-    RAISE EXCEPTION 'only the root manager can change a board designation'
-      USING ERRCODE = '42501';
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.designation IS DISTINCT FROM OLD.designation THEN
+      RAISE EXCEPTION 'only the root manager can change a board designation'
+        USING ERRCODE = '42501';
+    END IF;
+    IF NEW.user_id IS DISTINCT FROM OLD.user_id
+       OR NEW.community_id IS DISTINCT FROM OLD.community_id THEN
+      RAISE EXCEPTION 'only the root manager can reassign a role row'
+        USING ERRCODE = '42501';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -119,7 +159,7 @@ $function$;--> statement-breakpoint
 
 DROP TRIGGER IF EXISTS pp_user_roles_guard_designation ON public.user_roles;--> statement-breakpoint
 CREATE TRIGGER pp_user_roles_guard_designation
-  BEFORE INSERT OR UPDATE ON public.user_roles
+  BEFORE INSERT OR UPDATE OR DELETE ON public.user_roles
   FOR EACH ROW EXECUTE FUNCTION public.pp_user_roles_guard_designation();--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION public.pp_communities_guard_protected_columns()
@@ -144,7 +184,7 @@ BEGIN
     'cancellation_reason', 'cancellation_note', 'cancellation_captured_at',
     'free_access_expires_at', 'trial_ends_at',
     'is_demo', 'demo_expires_at', 'deleted_at',
-    'custom_domain_status', 'custom_domain_verified_at'
+    'custom_domain', 'custom_domain_status', 'custom_domain_verified_at'
   ]
   LOOP
     IF (new_row -> col) IS DISTINCT FROM (old_row -> col) THEN
@@ -152,6 +192,11 @@ BEGIN
         USING ERRCODE = '42501';
     END IF;
   END LOOP;
+  IF (new_row -> 'community_settings' -> 'electionsAttorneyReviewed')
+     IS DISTINCT FROM (old_row -> 'community_settings' -> 'electionsAttorneyReviewed') THEN
+    RAISE EXCEPTION 'communities.community_settings.electionsAttorneyReviewed can only be changed by the application'
+      USING ERRCODE = '42501';
+  END IF;
   RETURN NEW;
 END;
 $function$;--> statement-breakpoint

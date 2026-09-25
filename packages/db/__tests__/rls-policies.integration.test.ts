@@ -3456,7 +3456,15 @@ describeDb('P4-55 RLS policies (integration)', () => {
     const rootAUserId = randomUUID();
     const RLS_DENIED = /row-level security/;
 
+    // Snapshot of community A taken before any case runs, restored afterwards,
+    // so a regression that lets a forged write through (deleted_at, stripe ids)
+    // cannot leak into the describe blocks that run after this one.
+    let communityASnapshot: Record<string, unknown> | undefined;
+
     beforeAll(async () => {
+      [communityASnapshot] = await adminSql<Record<string, unknown>[]>`
+        select to_jsonb(c) as row from public.communities c where c.id = ${seed.communityAId}
+      `.then((rows) => rows.map((r) => r['row'] as Record<string, unknown>));
       await adminSql`
         insert into public.users (id, email, full_name)
         values (${rootAUserId}, ${`root-0079-${rootAUserId}@example.test`}, 'Root 0079')
@@ -3481,6 +3489,51 @@ describeDb('P4-55 RLS policies (integration)', () => {
         delete from public.user_roles
         where community_id = ${seed.communityAId} and user_id = ${seed.adminBUserId}
       `;
+      if (communityASnapshot) {
+        // jsonb_populate_record rebuilds the row from the snapshot; every
+        // column is written back as it was (adminSql is privileged, so the
+        // 0079 guard lets it through).
+        await adminSql`
+          update public.communities c
+             set (name, community_settings, custom_domain, subscription_plan,
+                  subscription_status, free_access_expires_at, is_demo,
+                  stripe_customer_id, deleted_at, cancellation_note) =
+                 (select r.name, r.community_settings, r.custom_domain, r.subscription_plan,
+                         r.subscription_status, r.free_access_expires_at, r.is_demo,
+                         r.stripe_customer_id, r.deleted_at, r.cancellation_note
+                    from jsonb_populate_record(null::public.communities, ${JSON.stringify(communityASnapshot)}::jsonb) r)
+           where c.id = ${seed.communityAId}
+        `;
+      }
+    });
+
+    it('resolves the role PostgREST v12 actually sends (request.jwt.claims JSON)', async () => {
+      // PostgREST >= 12 sets only `request.jwt.claims`; the legacy
+      // `request.jwt.claim.role` GUC is gone. Before 0079 the claim was ignored
+      // and the role fell back to session_user: `postgres` here (so an
+      // authenticated claim read as privileged), `authenticator` in production
+      // (so service_role read as unprivileged and the admin console's writes
+      // tripped the tenant-scope trigger).
+      const results = await adminSql.begin(async (tx) => {
+        await tx`select set_config('request.jwt.claim.role', '', true)`;
+        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'authenticated' })}, true)`;
+        const [asUser] = await tx<{ role: string; privileged: boolean }[]>`
+          select public.pp_rls_effective_role() as role, public.pp_rls_is_privileged() as privileged
+        `;
+        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'service_role' })}, true)`;
+        const [asService] = await tx<{ role: string; privileged: boolean }[]>`
+          select public.pp_rls_effective_role() as role, public.pp_rls_is_privileged() as privileged
+        `;
+        await tx`select set_config('request.jwt.claims', '', true)`;
+        const [asDrizzle] = await tx<{ role: string; privileged: boolean }[]>`
+          select public.pp_rls_effective_role() as role, public.pp_rls_is_privileged() as privileged
+        `;
+        return { asUser, asService, asDrizzle };
+      });
+      expect(results.asUser).toEqual({ role: 'authenticated', privileged: false });
+      expect(results.asService).toEqual({ role: 'service_role', privileged: true });
+      // No claims at all (the Drizzle connection): session_user decides.
+      expect(results.asDrizzle).toEqual({ role: 'postgres', privileged: true });
     });
 
     describe('user_roles', () => {
@@ -3557,6 +3610,47 @@ describeDb('P4-55 RLS policies (integration)', () => {
         ).rejects.toThrow(/only the root manager can change a board designation/);
       });
 
+      it('a property manager cannot move or remove a board seat', async () => {
+        // A seat is a designation on a resident row. Without the trigger's
+        // reassignment check a PM could hand it to someone else by changing
+        // user_id, never touching `designation`; or drop it by deleting the row.
+        await setPolicyProbeContext(authSql, rootAUserId, seed.communityAId);
+        await authSql`
+          update public.user_roles set designation = 'board_member'
+          where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+        `;
+        try {
+          await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+          await expect(
+            authSql`
+              update public.user_roles set user_id = ${seed.adminBUserId}
+              where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+            `,
+          ).rejects.toThrow(/only the root manager can reassign a role row/);
+          await expect(
+            authSql`
+              delete from public.user_roles
+              where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+            `,
+          ).rejects.toThrow(/only the root manager can remove a board-designated member/);
+        } finally {
+          // Privileged repair, so a regression that DID move the row cannot
+          // strip tenant A's membership for every later case in this run.
+          await adminSql`
+            update public.user_roles set user_id = ${seed.tenantAUserId}
+            where community_id = ${seed.communityAId} and user_id = ${seed.adminBUserId}
+              and not exists (
+                select 1 from public.user_roles
+                where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+              )
+          `;
+          await adminSql`
+            update public.user_roles set designation = null
+            where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+          `;
+        }
+      });
+
       it('the root manager can assign roles and designations', async () => {
         await setPolicyProbeContext(authSql, rootAUserId, seed.communityAId);
         const promoted = await authSql<{ role: string }[]>`
@@ -3601,6 +3695,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
         ['is_demo', 'is_demo = not is_demo'],
         ['stripe_customer_id', `stripe_customer_id = 'cus_forged'`],
         ['deleted_at', 'deleted_at = now()'],
+        ['custom_domain', `custom_domain = 'attacker.example'`],
+        [
+          'community_settings.electionsAttorneyReviewed',
+          `community_settings = coalesce(community_settings, '{}'::jsonb) || '{"electionsAttorneyReviewed": true}'::jsonb`,
+        ],
       ])('a property manager cannot write %s', async (column, assignment) => {
         await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
         await expect(
@@ -3615,6 +3714,29 @@ describeDb('P4-55 RLS policies (integration)', () => {
         await expect(
           authSql`update public.communities set subscription_plan = 'operations_plus' where id = ${seed.communityAId}`,
         ).rejects.toThrow('communities.subscription_plan can only be changed by the application');
+      });
+
+      it('a service_role Data API request (v12 claims only) still writes them', async () => {
+        // The admin console's createAdminClient: session_user is not postgres
+        // in production, only the JSON claim says service_role. Checked in a
+        // rolled-back transaction with the claim set and the legacy GUC blank.
+        const ROLLBACK = Symbol('rollback');
+        let written: string | null | undefined;
+        await adminSql
+          .begin(async (tx) => {
+            await tx`select set_config('request.jwt.claim.role', '', true)`;
+            await tx`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'service_role' })}, true)`;
+            const [row] = await tx<{ plan: string | null }[]>`
+              update public.communities set subscription_plan = 'operations_plus'
+              where id = ${seed.communityAId} returning subscription_plan as plan
+            `;
+            written = row?.plan;
+            throw ROLLBACK;
+          })
+          .catch((error: unknown) => {
+            if (error !== ROLLBACK) throw error;
+          });
+        expect(written).toBe('operations_plus');
       });
 
       it('the privileged path (webhooks, crons) still writes them', async () => {

@@ -99,9 +99,22 @@ describe('migration 0079 — user_roles / communities policies match ADR-006', (
     });
 
     it('guards designation with a trigger that only the root manager passes', () => {
-      expect(MIGRATION).toContain('CREATE TRIGGER pp_user_roles_guard_designation BEFORE INSERT OR UPDATE ON public.user_roles');
+      expect(MIGRATION).toContain(
+        'CREATE TRIGGER pp_user_roles_guard_designation BEFORE INSERT OR UPDATE OR DELETE ON public.user_roles',
+      );
       expect(MIGRATION).toContain('IF pp_rls_is_root_manager(NEW.community_id) THEN RETURN NEW;');
       expect(MIGRATION).toContain('NEW.designation IS DISTINCT FROM OLD.designation');
+    });
+
+    it('stops a non-root writer moving a role row (and its board seat) to someone else', () => {
+      expect(MIGRATION).toContain('NEW.user_id IS DISTINCT FROM OLD.user_id');
+      expect(MIGRATION).toContain('NEW.community_id IS DISTINCT FROM OLD.community_id');
+    });
+
+    it('stops a non-root writer deleting a board-designated row', () => {
+      expect(MIGRATION).toContain(
+        'IF OLD.designation IS NOT NULL AND NOT pp_rls_is_root_manager(OLD.community_id) THEN',
+      );
     });
 
     it('defines pp_rls_is_root_manager as SECURITY DEFINER with a pinned search_path', () => {
@@ -109,6 +122,19 @@ describe('migration 0079 — user_roles / communities policies match ADR-006', (
         /FUNCTION public\.pp_rls_is_root_manager\(target_community_id bigint\) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO/,
       );
       expect(MIGRATION).toContain("ur.role = 'root_manager'");
+    });
+  });
+
+  describe('pp_rls_effective_role', () => {
+    it('reads the JSON claims PostgREST v12 sends, after the legacy GUC, before session_user', () => {
+      const fn = /FUNCTION public\.pp_rls_effective_role\(\).*?\$function\$;/.exec(MIGRATION)?.[0] ?? '';
+      const legacy = fn.indexOf("current_setting('request.jwt.claim.role', true)");
+      const json = fn.indexOf("current_setting('request.jwt.claims', true)");
+      const session = fn.indexOf('session_user');
+      expect(legacy).toBeGreaterThan(-1);
+      expect(json).toBeGreaterThan(legacy);
+      expect(session).toBeGreaterThan(json);
+      expect(fn).toContain("->> 'role'");
     });
   });
 
@@ -128,9 +154,14 @@ describe('migration 0079 — user_roles / communities policies match ADR-006', (
         'deleted_at',
         'slug',
         'community_type',
+        'custom_domain',
       ]) {
         expect(guarded, column).toContain(`'${column}'`);
       }
+    });
+
+    it('guards the e-voting attorney-review key inside community_settings', () => {
+      expect(MIGRATION).toContain("(new_row -> 'community_settings' -> 'electionsAttorneyReviewed')");
     });
 
     it('replaces table-level SELECT with a column grant', () => {
