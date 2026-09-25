@@ -286,3 +286,31 @@ BEGIN
     GRANT EXECUTE ON FUNCTION public.pp_sync_unit_rent_amount_from_lease(bigint) TO service_role;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Migration 0079: communities is readable by authenticated COLUMN BY COLUMN.
+--
+-- The stub's blanket GRANT ALL ON ALL TABLES re-opens table-level SELECT on
+-- communities on every `local-test-db.sh setup`, which would silently expose
+-- stripe_customer_id / stripe_subscription_id / cancellation notes again on a
+-- persistent local database while production has only the column grant. The
+-- policies and triggers 0079 adds are untouched by the stub, so only the grant
+-- needs repeating here.
+--
+-- Keep the column list identical to 0079's;
+-- tighten-roles-communities-migration.test.ts enforces it.
+-- ---------------------------------------------------------------------------
+REVOKE SELECT ON TABLE public.communities FROM anon, authenticated;
+GRANT SELECT (
+  id, name, slug, community_type, timezone,
+  address_line1, address_line2, city, state, zip_code,
+  logo_path, branding, community_settings,
+  subscription_plan, subscription_status, is_demo, demo_expires_at, trial_ends_at,
+  custom_domain, custom_domain_status, custom_domain_verified_at,
+  site_published_at, site_onboarding_completed_at, site_onboarding_progress,
+  contact_name, contact_email, contact_phone,
+  transparency_enabled, transparency_acknowledged_at,
+  snowbird_digest_enabled,
+  urgent_notice_text, urgent_notice_expires_at, urgent_notice_set_at, urgent_notice_set_by,
+  created_at, updated_at, deleted_at
+) ON TABLE public.communities TO authenticated;

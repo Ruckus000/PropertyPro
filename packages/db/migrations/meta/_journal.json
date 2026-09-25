@@ -540,6 +540,13 @@
       "when": 1790338916019,
       "tag": "0078_revoke_data_api_writes",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1790348428178,
+      "tag": "0079_tighten_user_roles_communities_policies",
+      "breakpoints": true
     }
   ]
 }

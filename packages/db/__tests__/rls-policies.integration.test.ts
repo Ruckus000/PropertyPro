@@ -2591,7 +2591,16 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // rows, someone "fixed" the outage by adding an anon SELECT policy and
       // published subscription_plan, stripe_subscription_id and the street
       // address to the internet along with it.
+      //
+      // Two layers since 0079: anon holds no SELECT grant on communities at all
+      // (the ACL), and — checked through the anon probe, which still holds the
+      // grant — no policy would return the row either.
       await setAnonContext(authSql, seed.communityAId);
+      await expect(
+        authSql`select id from public.communities where id = ${seed.communityAId}`,
+      ).rejects.toThrow(/permission denied for table communities/);
+
+      await setAnonPolicyProbeContext(authSql, seed.communityAId);
       const rows = await authSql<{ id: number }[]>`
         select id from public.communities where id = ${seed.communityAId}
       `;
@@ -3434,6 +3443,212 @@ describeDb('P4-55 RLS policies (integration)', () => {
         select has_table_privilege('authenticated', 'public.notifications', 'SELECT') as select
       `;
       expect(row?.select).toBe(true);
+    });
+  });
+
+  describe('0079: user_roles and communities policies match ADR-006', () => {
+    // 0078 made these unreachable through the Data API; this block tests the
+    // POLICIES themselves (through the probe role, which still holds the
+    // pre-0077 grants), because they are what stands if a grant ever returns.
+    //
+    // Community A has a property_manager (adminA) and two residents. A
+    // root_manager is added here so the root-only paths have a positive case.
+    const rootAUserId = randomUUID();
+    const RLS_DENIED = /row-level security/;
+
+    beforeAll(async () => {
+      await adminSql`
+        insert into public.users (id, email, full_name)
+        values (${rootAUserId}, ${`root-0079-${rootAUserId}@example.test`}, 'Root 0079')
+      `;
+      await adminSql`
+        insert into public.user_roles (user_id, community_id, role, is_unit_owner)
+        values (${rootAUserId}, ${seed.communityAId}, 'root_manager', false)
+      `;
+    });
+
+    afterAll(async () => {
+      await resetSession(authSql);
+      await adminSql`delete from public.user_roles where user_id = ${rootAUserId}`;
+      await adminSql`delete from public.users where id = ${rootAUserId}`;
+      // Undo anything a failed assertion below may have left behind.
+      await adminSql`
+        update public.user_roles set role = 'resident', designation = null
+        where community_id = ${seed.communityAId}
+          and user_id in (${seed.tenantAUserId}, ${seed.tenantBSameCommAUserId})
+      `;
+      await adminSql`
+        delete from public.user_roles
+        where community_id = ${seed.communityAId} and user_id = ${seed.adminBUserId}
+      `;
+    });
+
+    describe('user_roles', () => {
+      it('a property manager cannot promote a resident to a manager role', async () => {
+        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+        await expect(
+          authSql`
+            update public.user_roles set role = 'property_manager'
+            where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+            returning id
+          `,
+        ).rejects.toThrow(RLS_DENIED);
+      });
+
+      it('a property manager cannot touch a manager row: not the root, not their own', async () => {
+        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+        const touched = await authSql<{ user_id: string }[]>`
+          update public.user_roles set display_title = display_title
+          where community_id = ${seed.communityAId}
+            and user_id in (${rootAUserId}, ${seed.adminAUserId})
+          returning user_id
+        `;
+        // Before 0079 both rows came back: the demote-the-root hole.
+        expect(touched).toEqual([]);
+
+        const deleted = await authSql<{ user_id: string }[]>`
+          delete from public.user_roles
+          where community_id = ${seed.communityAId} and user_id = ${rootAUserId}
+          returning user_id
+        `;
+        expect(deleted).toEqual([]);
+      });
+
+      it('a property manager can still manage resident rows (the residents route)', async () => {
+        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+        const touched = await authSql<{ user_id: string }[]>`
+          update public.user_roles set is_unit_owner = is_unit_owner
+          where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+          returning user_id
+        `;
+        expect(touched).toHaveLength(1);
+
+        const inserted = await authSql<{ user_id: string }[]>`
+          insert into public.user_roles (user_id, community_id, role, is_unit_owner)
+          values (${seed.adminBUserId}, ${seed.communityAId}, 'resident', false)
+          returning user_id
+        `;
+        expect(inserted).toHaveLength(1);
+        const removed = await authSql<{ user_id: string }[]>`
+          delete from public.user_roles
+          where community_id = ${seed.communityAId} and user_id = ${seed.adminBUserId}
+          returning user_id
+        `;
+        expect(removed).toHaveLength(1);
+      });
+
+      it('a property manager cannot insert a manager row', async () => {
+        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+        await expect(
+          authSql`
+            insert into public.user_roles (user_id, community_id, role, is_unit_owner)
+            values (${seed.adminBUserId}, ${seed.communityAId}, 'property_manager', false)
+          `,
+        ).rejects.toThrow(RLS_DENIED);
+      });
+
+      it('a property manager cannot set a board designation', async () => {
+        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+        await expect(
+          authSql`
+            update public.user_roles set designation = 'board_member'
+            where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
+          `,
+        ).rejects.toThrow(/only the root manager can change a board designation/);
+      });
+
+      it('the root manager can assign roles and designations', async () => {
+        await setPolicyProbeContext(authSql, rootAUserId, seed.communityAId);
+        const promoted = await authSql<{ role: string }[]>`
+          update public.user_roles set role = 'property_manager'
+          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
+          returning role
+        `;
+        expect(promoted).toEqual([{ role: 'property_manager' }]);
+        const restored = await authSql<{ role: string }[]>`
+          update public.user_roles set role = 'resident'
+          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
+          returning role
+        `;
+        expect(restored).toEqual([{ role: 'resident' }]);
+
+        const designated = await authSql<{ designation: string | null }[]>`
+          update public.user_roles set designation = 'board_member'
+          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
+          returning designation
+        `;
+        expect(designated).toEqual([{ designation: 'board_member' }]);
+        await authSql`
+          update public.user_roles set designation = null
+          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
+        `;
+      });
+    });
+
+    describe('communities', () => {
+      it('a property manager can still update ordinary community settings', async () => {
+        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+        const rows = await authSql<{ id: number }[]>`
+          update public.communities set name = name where id = ${seed.communityAId} returning id
+        `;
+        expect(rows).toHaveLength(1);
+      });
+
+      it.each([
+        ['subscription_plan', `subscription_plan = 'operations_plus'`],
+        ['subscription_status', `subscription_status = 'active'`],
+        ['free_access_expires_at', `free_access_expires_at = now() + interval '10 years'`],
+        ['is_demo', 'is_demo = not is_demo'],
+        ['stripe_customer_id', `stripe_customer_id = 'cus_forged'`],
+        ['deleted_at', 'deleted_at = now()'],
+      ])('a property manager cannot write %s', async (column, assignment) => {
+        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
+        await expect(
+          authSql.unsafe(
+            `update public.communities set ${assignment} where id = ${seed.communityAId}`,
+          ),
+        ).rejects.toThrow(`communities.${column} can only be changed by the application`);
+      });
+
+      it('nor can the root manager: billing columns are written only by privileged paths', async () => {
+        await setPolicyProbeContext(authSql, rootAUserId, seed.communityAId);
+        await expect(
+          authSql`update public.communities set subscription_plan = 'operations_plus' where id = ${seed.communityAId}`,
+        ).rejects.toThrow('communities.subscription_plan can only be changed by the application');
+      });
+
+      it('the privileged path (webhooks, crons) still writes them', async () => {
+        const [before] = await adminSql<{ note: string | null }[]>`
+          select cancellation_note as note from public.communities where id = ${seed.communityAId}
+        `;
+        await adminSql`update public.communities set cancellation_note = '0079 probe' where id = ${seed.communityAId}`;
+        const [after] = await adminSql<{ note: string | null }[]>`
+          select cancellation_note as note from public.communities where id = ${seed.communityAId}
+        `;
+        expect(after?.note).toBe('0079 probe');
+        await adminSql`update public.communities set cancellation_note = ${before?.note ?? null} where id = ${seed.communityAId}`;
+      });
+
+      it('a member reads their community row but not its Stripe or cancellation columns', async () => {
+        await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+        const rows = await authSql<{ id: number; name: string }[]>`
+          select id, name from public.communities where id = ${seed.communityAId}
+        `;
+        expect(rows).toHaveLength(1);
+
+        for (const column of ['stripe_customer_id', 'stripe_subscription_id', 'cancellation_note']) {
+          await expect(
+            authSql.unsafe(`select ${column} from public.communities where id = ${seed.communityAId}`),
+          ).rejects.toThrow(/permission denied for table communities/);
+        }
+      });
+
+      it('anon cannot read communities at all', async () => {
+        await setAnonContext(authSql, seed.communityAId);
+        await expect(
+          authSql`select id from public.communities limit 1`,
+        ).rejects.toThrow(/permission denied for table communities/);
+      });
     });
   });
 });
