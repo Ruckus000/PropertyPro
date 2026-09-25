@@ -74,9 +74,9 @@ const DEFAULT_MEMBERSHIP: CommunityMembership = {
   userId: USER_ID,
   communityId: COMMUNITY_ID,
   communityName: 'Test Community',
-  // `manager` pre-dates role-v3 and is not a CommunityRole. Inert here either
-  // way: the only reader is canReadAnnouncementAudience, which returns early on
-  // `isAdmin: true` and never consults `role`.
+  // Load-bearing: `isAdminRole(role)` decides whether the lease-derived metrics
+  // (occupancy, expirations, revenue) are computed at all. Every expiration,
+  // occupancy and revenue case below relies on this being a management role.
   role: 'property_manager',
   communityType: 'apartment',
   timezone: 'America/Chicago',

@@ -82,10 +82,12 @@ import { GET, POST } from '../../src/app/api/v1/units/route';
 const MEMBERSHIP = {
   userId: 'actor-1',
   communityId: 42,
-  role: 'cam' as const,
+  // A v3 management role: GET redacts rentAmount/ownerUserId unless
+  // isAdminRole(role), and a retired name resolves to non-admin.
+  role: 'property_manager' as const,
   isAdmin: true,
   isUnitOwner: false,
-  displayTitle: 'CAM',
+  displayTitle: 'Property Manager',
   communityType: 'condo_718' as const,
 };
 
