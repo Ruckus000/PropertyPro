@@ -581,6 +581,46 @@ export const RLS_EXPECTED_TENANT_TABLE_COUNT = 83;
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];
 
+/**
+ * Tenant tables that anon and authenticated hold NO table privilege on (0077).
+ *
+ * The policy family above describes what RLS would allow; this list says the
+ * Data API cannot reach the table at all, so those policies are defence-in-depth
+ * only. Every one of these had a membership-only SELECT policy
+ * (`pp_rls_can_access_community`), which let any member read every row through
+ * PostgREST with their own JWT and the public anon key — OAuth refresh tokens,
+ * invite tokens, ballot submissions, every neighbour's lease. The application
+ * never touches them as `authenticated` (createScopedClient runs on a privileged
+ * role; supabase-js tenant reads use the service-role client), so revoking the
+ * grant costs nothing and removes the whole class.
+ *
+ * `user_roles` is deliberately absent: storage.objects policies subquery it as
+ * `authenticated`, so 0077 narrows its SELECT policy instead of revoking it.
+ *
+ * Keep in sync with the migration's table array and with
+ * scripts/sql/local-supabase-post-migrate.sql —
+ * packages/db/__tests__/data-api-revoke-migration.test.ts enforces both.
+ */
+export const DATA_API_REVOKED_TENANT_TABLES = [
+  'access_requests', 'accounting_connections', 'amenities',
+  'amenity_reservations', 'announcements', 'arc_submissions',
+  'assessment_line_items', 'assessments', 'calendar_sync_tokens',
+  'community_join_requests', 'compliance_checklist_items', 'contract_bids',
+  'contracts', 'document_categories', 'document_drafts', 'documents',
+  'election_ballot_submissions', 'election_ballots', 'election_candidates',
+  'election_eligibility_snapshots', 'election_proxies', 'elections',
+  'esign_consent', 'esign_events', 'esign_signers', 'esign_submissions',
+  'esign_templates', 'faqs', 'finance_stripe_webhook_events', 'forum_replies',
+  'forum_threads', 'help_article_feedback', 'help_article_views',
+  'insurance_policies', 'invitations', 'leases', 'ledger_entries',
+  'maintenance_comments', 'meeting_documents', 'meetings', 'move_checklists',
+  'onboarding_wizard_state', 'package_log', 'polls', 'rent_obligations',
+  'rent_payments', 'reserve_assets', 'stripe_connected_accounts',
+  'support_access_log', 'support_consent_grants', 'units', 'vendors',
+  'violation_fines', 'violations', 'visitor_log', 'wind_mitigation_reports',
+  'work_orders',
+] as const satisfies readonly RlsTenantTableName[];
+
 export function validateRlsConfigInvariant(): string[] {
   const problems: string[] = [];
 

@@ -20,6 +20,7 @@ import { onboardingWizardState } from '../src/schema/onboarding-wizard-state';
 import { siteBlocks } from '../src/schema/site-blocks';
 import { sitePageRedirects, sitePages } from '../src/schema/site-pages';
 import {
+  DATA_API_REVOKED_TENANT_TABLES,
   RLS_GLOBAL_EXCLUSION_NAMES,
   RLS_TENANT_TABLES,
   RLS_TENANT_TABLE_NAMES,
@@ -105,6 +106,71 @@ describeDb('P4-55 RLS policies (integration)', () => {
     await sqlClient`select set_config('app.current_community_id', ${String(activeCommunityId)}, false)`;
   }
 
+  /**
+   * A role that sees the tenant tables exactly as `authenticated` did BEFORE
+   * migration 0077 shut them to the Data API.
+   *
+   * 0077 revokes anon/authenticated on DATA_API_REVOKED_TENANT_TABLES, so a
+   * `SET ROLE authenticated` query on one now fails at the ACL with 42501
+   * before any policy is evaluated. That is the production posture and is
+   * asserted directly in the 0077 block below. But the policies on those tables
+   * remain as defence-in-depth, and the tests of them need to reach them:
+   * without this role, every "blocks X" case would pass on the ACL's 42501
+   * instead of the policy's (an RLS WITH CHECK violation raises the SAME
+   * SQLSTATE), which is precisely the pass-for-the-wrong-reason this file's
+   * service_only block warns about.
+   *
+   * It carries the pre-0077 grants and runs with the same JWT claims, so every
+   * policy here (all `TO public`) and every pp_rls_* helper (which key on the
+   * `request.jwt.claim.role` claim, not current_user) evaluate exactly as they
+   * would for a Data API caller. Cluster-global and created idempotently; the
+   * CI and local test roles are both superusers, so CREATE ROLE is available.
+   */
+  const POLICY_PROBE_ROLE = 'pp_rls_policy_probe';
+
+  async function ensurePolicyProbeRole(sqlClient: SqlClient): Promise<void> {
+    await sqlClient.unsafe(`
+      do $$
+      begin
+        if not exists (select 1 from pg_roles where rolname = '${POLICY_PROBE_ROLE}') then
+          create role ${POLICY_PROBE_ROLE} nologin;
+        end if;
+      end $$
+    `);
+    await sqlClient.unsafe(`grant authenticated to ${POLICY_PROBE_ROLE}`);
+    await sqlClient.unsafe(`grant ${POLICY_PROBE_ROLE} to current_user`);
+    for (const table of DATA_API_REVOKED_TENANT_TABLES) {
+      await sqlClient.unsafe(
+        `grant select, insert, update, delete on table public."${table}" to ${POLICY_PROBE_ROLE}`,
+      );
+    }
+    await sqlClient.unsafe(
+      `grant usage, select on all sequences in schema public to ${POLICY_PROBE_ROLE}`,
+    );
+  }
+
+  async function setPolicyProbeContext(
+    sqlClient: SqlClient,
+    userId: string,
+    activeCommunityId: number,
+  ): Promise<void> {
+    await resetSession(sqlClient);
+    await sqlClient.unsafe(`set role ${POLICY_PROBE_ROLE}`);
+    await sqlClient`select set_config('request.jwt.claim.sub', ${userId}, false)`;
+    await sqlClient`select set_config('request.jwt.claim.role', 'authenticated', false)`;
+    await sqlClient`select set_config('app.current_community_id', ${String(activeCommunityId)}, false)`;
+  }
+
+  async function setAnonPolicyProbeContext(
+    sqlClient: SqlClient,
+    activeCommunityId: number,
+  ): Promise<void> {
+    await resetSession(sqlClient);
+    await sqlClient.unsafe(`set role ${POLICY_PROBE_ROLE}`);
+    await sqlClient`select set_config('request.jwt.claim.role', 'anon', false)`;
+    await sqlClient`select set_config('app.current_community_id', ${String(activeCommunityId)}, false)`;
+  }
+
   async function nextSequenceValue(sequenceName: string): Promise<number> {
     const rows = await adminSql<{ id: string }[]>`
       select nextval(${sequenceName}::regclass)::text as id
@@ -121,6 +187,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     authSql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
     serviceSql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
     db = drizzle(adminSql, { schema });
+    await ensurePolicyProbeRole(adminSql);
 
     const runTag = `p4_55_rls_${Date.now()}_${randomUUID().slice(0, 8)}`;
     const filePrefix = `__${runTag}_doc__`;
@@ -593,7 +660,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
   });
 
   it('restricts authenticated reads to the actor community on tenant CRUD tables (documents)', async () => {
-    await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+    await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
     const rows = await authSql<{ id: number; community_id: number; file_name: string }[]>`
       select id, community_id, file_name
@@ -613,7 +680,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     // requires pp_rls_can_read_audit_log() for INSERT. Tenant-tier actors are
     // blocked at the DB level; admin-tier actors may insert and have their
     // community_id rewritten by the pp_rls_enforce_tenant_community_id trigger.
-    await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+    await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
 
     const forgedFileName = `${seed.filePrefix}forged-${randomUUID().slice(0, 8)}.pdf`;
     const forgedDocumentId = await nextSequenceValue('public.documents_id_seq');
@@ -646,7 +713,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
   });
 
   it('blocks cross-tenant UPDATE and DELETE attempts', async () => {
-    await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+    await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
     const updated = await authSql<{ id: number }[]>`
       update public.documents
@@ -880,7 +947,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
   describe('tenant_member_configurable policy coverage', () => {
     it('allows member write on announcements when community_settings does not restrict', async () => {
       // Community A has default settings ({}), so member writes are permitted.
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
       const announcementId = await nextSequenceValue('public.announcements_id_seq');
       const inserted = await authSql<{ id: number }[]>`
@@ -916,7 +983,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
         where id = ${seed.communityAId}
       `;
 
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
       try {
         await authSql`
           insert into public.announcements (community_id, title, body, audience, is_pinned, published_by)
@@ -954,7 +1021,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
         where id = ${seed.communityAId}
       `;
 
-      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
       let insertedId: number | undefined;
       try {
         const announcementId = await nextSequenceValue('public.announcements_id_seq');
@@ -995,6 +1062,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     // checked for policy NAMES by the family loop and nothing else. Driving it
     // from RLS_TENANT_TABLES is what stops the next table landing in the same
     // blind spot; `site_publish_snapshots` is the one that exposed it.
+    const REVOKED_TABLES = new Set<string>(DATA_API_REVOKED_TENANT_TABLES);
     const serviceOnlyTables = RLS_TENANT_TABLES.filter(
       (entry) => entry.policyFamily === 'service_only',
     ).map((entry) => entry.tableName);
@@ -1009,7 +1077,14 @@ describeDb('P4-55 RLS policies (integration)', () => {
     it.each(serviceOnlyTables)(
       'blocks authenticated SELECT on service_only table %s',
       async (tableName) => {
-        await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+        // A table 0077 shut to the Data API is probed through the policy-probe
+        // role, so this still tests the POLICY; the ACL is asserted separately
+        // in the 0077 block.
+        if (REVOKED_TABLES.has(tableName)) {
+          await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
+        } else {
+          await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+        }
 
         // Zero rows, not an error: production grants authenticated SELECT on
         // these tables and relies on RLS to return nothing. An error here would
@@ -1025,7 +1100,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
       async (tableName) => {
         // Reuses authSql with `SET ROLE anon` — the file's existing precedent
         // (see the 0023 wrong-GUC block); there is no separate anon connection.
-        await setAnonContext(authSql, seed.communityAId);
+        if (REVOKED_TABLES.has(tableName)) {
+          await setAnonPolicyProbeContext(authSql, seed.communityAId);
+        } else {
+          await setAnonContext(authSql, seed.communityAId);
+        }
         const rows = await authSql`select * from public.${authSql(tableName)} limit 1`;
         expect(rows).toHaveLength(0);
       },
@@ -1254,7 +1333,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
 
   describe('Issue 3 (0026): onboarding_wizard_state write access restriction', () => {
     it('tenant role cannot UPDATE onboarding_wizard_state', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
       const updated = await authSql<{ id: number }[]>`
         update public.onboarding_wizard_state
@@ -1266,7 +1345,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('tenant role cannot INSERT into onboarding_wizard_state', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
       await expect(
         authSql`
@@ -1277,7 +1356,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('admin-tier role can UPDATE onboarding_wizard_state', async () => {
-      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
 
       const updated = await authSql<{ id: number }[]>`
         update public.onboarding_wizard_state
@@ -1299,7 +1378,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
   describe('Issue 4 (0026): maintenance_comments INSERT — must be authorized to view request', () => {
     it('user cannot INSERT a maintenance_comment with a spoofed user_id', async () => {
       // tenantAUserId (who owns the request) tries to attribute the comment to adminAUserId.
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
       await expect(
         authSql`
@@ -1316,7 +1395,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
 
     it('user cannot INSERT a comment on a request they did not submit', async () => {
       // tenantBSameCommAUserId tries to comment on tenantA's request.
-      await setAuthenticatedContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
 
       await expect(
         authSql`
@@ -1332,7 +1411,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('request owner can INSERT a comment on their own request', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
       const commentId = await nextSequenceValue('public.maintenance_comments_id_seq');
       const inserted = await authSql<{ id: number }[]>`
@@ -1355,7 +1434,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('admin-tier can INSERT a comment on any request in the community', async () => {
-      await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
 
       const commentId = await nextSequenceValue('public.maintenance_comments_id_seq');
       const inserted = await authSql<{ id: number }[]>`
@@ -2216,7 +2295,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // tenantA has a role in community A and qualifies for the tenant_crud
       // write path; the write-scope trigger rewrites any forged community_id
       // to the active tenant.
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
       const refCode = `${seed.runTag}-ar-forge`;
       const inserted = await authSql<{ id: number; community_id: number }[]>`
@@ -2267,7 +2346,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       createdAccessRequestIds.add(seededId);
 
       // Tenant A reading must not see community B's row.
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
       const visible = await authSql<{ id: number }[]>`
         select id from public.access_requests where id = ${seededId}
       `;
@@ -2298,7 +2377,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       createdCommunityJoinRequestIds.add(seededId);
 
       // Tenant A acting in community A must not be able to update community B's row.
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
       const updated = await authSql<{ id: number }[]>`
         update public.community_join_requests
         set status = 'approved'
@@ -2992,6 +3071,144 @@ describeDb('P4-55 RLS policies (integration)', () => {
       `;
       expect(remainingBlocks).toHaveLength(0);
       expect(remainingRedirects).toHaveLength(0);
+    });
+  });
+
+  describe('0077: tenant tables shut to the Supabase Data API', () => {
+    // Before 0077, every one of these had a membership-only SELECT policy and
+    // Supabase's open grant, so any member could read every row through
+    // PostgREST with their own JWT and the public anon key: OAuth refresh
+    // tokens (accounting_connections, calendar_sync_tokens), other people's
+    // invite tokens, ballot submissions, every neighbour's lease. Measured in
+    // production 2026-09-25 (has_table_privilege + pg_policy).
+    //
+    // Deny is a HARD 42501 at the ACL, same idiom as the locked-down platform
+    // tables above. The policies stay and are still exercised elsewhere in this
+    // file through the policy-probe role.
+
+    it.each([...DATA_API_REVOKED_TENANT_TABLES])(
+      'anon and authenticated hold no privilege on %s or its sequences',
+      async (tableName) => {
+        const rows = await adminSql<{ role: string; privilege: string; held: boolean }[]>`
+          select r.role, p.privilege,
+                 has_table_privilege(r.role, format('public.%I', ${tableName}::text)::regclass, p.privilege) as held
+          from (values ('anon'), ('authenticated')) as r(role),
+               (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+                       ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) as p(privilege)
+        `;
+        // Anti-vacuity: 2 roles x 7 privileges. A regclass cast on a missing
+        // table throws, so a typo in the list cannot pass silently either.
+        expect(rows).toHaveLength(14);
+        expect(rows.filter((row) => row.held)).toEqual([]);
+
+        const seqRows = await adminSql<{ seq: string; role: string; held: boolean }[]>`
+          select seq.relname as seq, r.role,
+                 has_sequence_privilege(r.role, seq.oid, 'USAGE')
+                   or has_sequence_privilege(r.role, seq.oid, 'SELECT')
+                   or has_sequence_privilege(r.role, seq.oid, 'UPDATE') as held
+          from pg_depend d
+          join pg_class seq on seq.oid = d.objid and seq.relkind = 'S'
+          cross join (values ('anon'), ('authenticated')) as r(role)
+          where d.refobjid = format('public.%I', ${tableName}::text)::regclass
+            and d.deptype in ('a', 'i')
+        `;
+        expect(seqRows.filter((row) => row.held)).toEqual([]);
+      },
+    );
+
+    it.each(['leases', 'units', 'calendar_sync_tokens', 'accounting_connections', 'invitations'])(
+      'a community member querying %s as authenticated is refused at the ACL',
+      async (tableName) => {
+        // Control first: the same member, the same query, through the probe role
+        // that still holds the pre-0077 grant, SUCCEEDS. So the 42501 below is
+        // the missing grant and nothing else (not a bad table name, not a policy).
+        await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
+        await expect(
+          authSql`select 1 from public.${authSql(tableName)} limit 1`,
+        ).resolves.toBeDefined();
+
+        await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+        await expect(
+          authSql`select 1 from public.${authSql(tableName)} limit 1`,
+        ).rejects.toMatchObject({ code: '42501' });
+      },
+    );
+
+    it('no public table readable by authenticated has a membership-only SELECT policy', async () => {
+      // The forward-looking half. A new tenant table inherits Supabase's open
+      // grant via ALTER DEFAULT PRIVILEGES, and the house pp_tenant_select
+      // template is membership-only, so the next migration to add one reopens
+      // exactly this hole. It must either revoke the grant (add the table to
+      // DATA_API_REVOKED_TENANT_TABLES + 0077's successor) or ship a narrower
+      // SELECT policy.
+      const rows = await adminSql<{ relname: string }[]>`
+        select c.relname
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and has_table_privilege('authenticated', c.oid, 'SELECT')
+          and exists (
+            select 1 from pg_policy p
+            where p.polrelid = c.oid and p.polcmd in ('r', '*')
+              and pg_get_expr(p.polqual, p.polrelid) = 'pp_rls_can_access_community(community_id)'
+          )
+        order by 1
+      `;
+      expect(rows.map((row) => row.relname)).toEqual([]);
+
+      // Anti-vacuity: the predicate text this matches must still be the one the
+      // policies actually carry, or the query above finds nothing forever. The
+      // revoked tables keep their policies, so it must match them.
+      const [probe] = await adminSql<{ n: number }[]>`
+        select count(*)::int as n from pg_policy p
+        where p.polrelid = 'public.leases'::regclass
+          and pg_get_expr(p.polqual, p.polrelid) = 'pp_rls_can_access_community(community_id)'
+      `;
+      expect(probe?.n).toBe(1);
+    });
+
+    describe('user_roles SELECT narrowed to own rows + admin tier', () => {
+      // Not revoked: the community-site-assets storage policies subquery
+      // user_roles as authenticated for the caller's OWN manager rows.
+      async function visibleRoleRows(userId: string, communityId: number) {
+        await setAuthenticatedContext(authSql, userId, communityId);
+        return authSql<{ user_id: string; community_id: number }[]>`
+          select user_id, community_id from public.user_roles
+          where community_id in (${seed.communityAId}, ${seed.communityBId})
+        `;
+      }
+
+      it('a resident sees only their own role row', async () => {
+        const rows = await visibleRoleRows(seed.tenantAUserId, seed.communityAId);
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows.every((row) => row.user_id === seed.tenantAUserId)).toBe(true);
+        // Before 0077 this returned the other resident and the manager too.
+        expect(rows.some((row) => row.user_id === seed.tenantBSameCommAUserId)).toBe(false);
+        expect(rows.some((row) => row.user_id === seed.adminAUserId)).toBe(false);
+      });
+
+      it('a manager sees every role row in the community they manage, and none in another', async () => {
+        const rows = await visibleRoleRows(seed.adminAUserId, seed.communityAId);
+        const ids = new Set(rows.map((row) => row.user_id));
+        expect(ids.has(seed.adminAUserId)).toBe(true);
+        expect(ids.has(seed.tenantAUserId)).toBe(true);
+        expect(ids.has(seed.tenantBSameCommAUserId)).toBe(true);
+        expect(rows.some((row) => Number(row.community_id) === seed.communityBId)).toBe(false);
+      });
+
+      it("still answers the storage policies' own-manager-rows subquery", async () => {
+        // Same shape as site_assets_pm_insert / site_assets_pm_delete, with the
+        // caller's id inlined: the storage policies call auth.uid() from a stored
+        // expression, but the local stub gives authenticated no USAGE on schema
+        // auth, so a literal auth.uid() in ad-hoc SQL would fail on that instead.
+        await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
+        const rows = await authSql<{ community_id: string }[]>`
+          select (community_id)::text as community_id from public.user_roles
+          where user_id = ${seed.adminAUserId}
+            and role in ('property_manager', 'root_manager')
+        `;
+        expect(rows.map((row) => row.community_id)).toContain(String(seed.communityAId));
+      });
     });
   });
 });
