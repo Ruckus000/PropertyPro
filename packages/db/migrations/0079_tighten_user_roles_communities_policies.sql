@@ -77,14 +77,14 @@
 
 SET LOCAL lock_timeout = '5s';--> statement-breakpoint
 
+-- Delegates to Supabase's own auth.role(), which already reads the legacy GUC
+-- first and then request.jwt.claims ->> 'role' (production definition, read
+-- 2026-09-25; scripts/sql/local-supabase-stub.sql mirrors it). Reusing it keeps
+-- one definition of "which role is this request" instead of two that can drift.
 CREATE OR REPLACE FUNCTION public.pp_rls_effective_role()
  RETURNS text LANGUAGE sql STABLE
  SET search_path TO 'public', 'pg_catalog' AS $function$
-  SELECT COALESCE(
-    NULLIF(current_setting('request.jwt.claim.role', true), ''),
-    NULLIF(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', ''),
-    session_user
-  )::text;
+  SELECT COALESCE(NULLIF(auth.role(), ''), session_user)::text;
 $function$;--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION public.pp_rls_is_root_manager(target_community_id bigint)

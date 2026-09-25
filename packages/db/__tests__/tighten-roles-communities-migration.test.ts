@@ -126,15 +126,18 @@ describe('migration 0079 — user_roles / communities policies match ADR-006', (
   });
 
   describe('pp_rls_effective_role', () => {
-    it('reads the JSON claims PostgREST v12 sends, after the legacy GUC, before session_user', () => {
+    it("delegates to auth.role() (which reads the v12 JSON claims), then session_user", () => {
       const fn = /FUNCTION public\.pp_rls_effective_role\(\).*?\$function\$;/.exec(MIGRATION)?.[0] ?? '';
-      const legacy = fn.indexOf("current_setting('request.jwt.claim.role', true)");
-      const json = fn.indexOf("current_setting('request.jwt.claims', true)");
-      const session = fn.indexOf('session_user');
-      expect(legacy).toBeGreaterThan(-1);
-      expect(json).toBeGreaterThan(legacy);
-      expect(session).toBeGreaterThan(json);
-      expect(fn).toContain("->> 'role'");
+      expect(fn).toContain("COALESCE(NULLIF(auth.role(), ''), session_user)");
+    });
+
+    it('relies on a local stub auth.role() that reads request.jwt.claims, like production', () => {
+      const stub = readFileSync(
+        path.resolve(__dirname, '../../../scripts/sql/local-supabase-stub.sql'),
+        'utf8',
+      );
+      const authRole = /FUNCTION auth\.role\(\)[\s\S]*?\$\$;|FUNCTION auth\.role\(\)[\s\S]*?END;/.exec(stub)?.[0] ?? stub.slice(stub.indexOf('FUNCTION auth.role()'), stub.indexOf('FUNCTION auth.role()') + 600);
+      expect(authRole).toContain("current_setting('request.jwt.claims', true)");
     });
   });
 
