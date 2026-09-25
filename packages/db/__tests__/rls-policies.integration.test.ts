@@ -4,15 +4,12 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as schema from '../src/schema';
-import { accessRequests } from '../src/schema/access-requests';
 import { announcementDeliveryLog } from '../src/schema/announcement-delivery-log';
 import { announcements } from '../src/schema/announcements';
 import { communities } from '../src/schema/communities';
-import { communityJoinRequests } from '../src/schema/community-join-requests';
 import { complianceAuditLog } from '../src/schema/compliance-audit-log';
 import { demoSeedRegistry } from '../src/schema/demo-seed-registry';
 import { documents } from '../src/schema/documents';
-import { maintenanceComments } from '../src/schema/maintenance-comments';
 import { maintenanceRequests } from '../src/schema/maintenance-requests';
 import { notificationPreferences } from '../src/schema/notification-preferences';
 import { onboardingChecklistItems } from '../src/schema/onboarding-checklist-items';
@@ -63,9 +60,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
   const createdDocumentIds = new Set<number>();
   const createdDemoSeedRegistryIds = new Set<number>();
   const createdAnnouncementDeliveryLogIds = new Set<number>();
-  const createdAccessRequestIds = new Set<number>();
-  const createdEmergencyBroadcastIds = new Set<number>();
-  const createdCommunityJoinRequestIds = new Set<number>();
   const createdChecklistItemIds = new Set<number>();
   const createdSiteBlockIds = new Set<number>();
   const createdSitePageIds = new Set<number>();
@@ -106,109 +100,20 @@ describeDb('P4-55 RLS policies (integration)', () => {
     await sqlClient`select set_config('app.current_community_id', ${String(activeCommunityId)}, false)`;
   }
 
-  /**
-   * A role that sees the public tables exactly as `authenticated` did BEFORE
-   * migrations 0077 and 0078 shut the Data API.
-   *
-   * 0077 revokes anon/authenticated on DATA_API_REVOKED_TENANT_TABLES, and 0078
-   * revokes every write privilege on every public table, so a `SET ROLE
-   * authenticated` read of the former, or write of anything, now fails at the
-   * ACL with 42501 before any policy is evaluated. That is the production posture and is
-   * asserted directly in the 0077 block below. But the policies on those tables
-   * remain as defence-in-depth, and the tests of them need to reach them:
-   * without this role, every "blocks X" case would pass on the ACL's 42501
-   * instead of the policy's (an RLS WITH CHECK violation raises the SAME
-   * SQLSTATE), which is precisely the pass-for-the-wrong-reason this file's
-   * service_only block warns about.
-   *
-   * It carries the pre-0077 grants and runs with the same JWT claims, so every
-   * pp_rls_* helper (they key on the `request.jwt.claim.role` claim, not
-   * current_user) and every policy targeted `TO public` or `TO authenticated`
-   * (the probe is a member of authenticated) evaluate exactly as they would for
-   * a Data API caller. It is NOT a member of anon, so a policy targeted `TO anon`
-   * does not apply to it: the anon-claim probe below is only valid for tables
-   * whose write policies are `TO public` (the tenant tables' and site_pages'
-   * are). Cluster-global and created idempotently; the CI and local test roles
-   * are both superusers, so CREATE ROLE is available.
-   */
-  const POLICY_PROBE_ROLE = 'pp_rls_policy_probe';
-
-  async function ensurePolicyProbeRole(sqlClient: SqlClient): Promise<void> {
-    // This role gets INSERT/UPDATE/DELETE on every public table, so it must never
-    // be created on a shared database. `.env.local`'s DATABASE_URL is PRODUCTION
-    // (see CLAUDE.md), and this suite is one `with-env-local.sh` away from it.
-    // Same escape hatch as scripts/local-test-db.sh.
-    const host = new URL(process.env.DIRECT_URL!).hostname;
-    if (
-      !['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) &&
-      process.env.PROPERTYPRO_ALLOW_REMOTE_TEST_DB !== '1'
-    ) {
-      throw new Error(
-        `Refusing to create ${POLICY_PROBE_ROLE} on non-local database host "${host}". ` +
-          'Run the RLS suite against the local test database (pnpm test:integration:local).',
-      );
-    }
-    await sqlClient.unsafe(`
-      do $$
-      begin
-        if not exists (select 1 from pg_roles where rolname = '${POLICY_PROBE_ROLE}') then
-          create role ${POLICY_PROBE_ROLE} nologin;
-        end if;
-      end $$
-    `);
-    await sqlClient.unsafe(`grant authenticated to ${POLICY_PROBE_ROLE}`);
-    await sqlClient.unsafe(`grant ${POLICY_PROBE_ROLE} to current_user`);
-    // Every public table, not just 0077's list: since 0078 `authenticated`
-    // holds no WRITE privilege anywhere, so the write policies on the tables it
-    // can still read are unreachable through it too. This is the grant set
-    // Supabase's baseline gave `authenticated` before 0077/0078.
-    await sqlClient.unsafe(
-      `grant select, insert, update, delete on all tables in schema public to ${POLICY_PROBE_ROLE}`,
-    );
-    await sqlClient.unsafe(
-      `grant usage, select on all sequences in schema public to ${POLICY_PROBE_ROLE}`,
-    );
-  }
-
-  async function setPolicyProbeContext(
-    sqlClient: SqlClient,
-    userId: string,
-    activeCommunityId: number,
-  ): Promise<void> {
-    await resetSession(sqlClient);
-    await sqlClient.unsafe(`set role ${POLICY_PROBE_ROLE}`);
-    await sqlClient`select set_config('request.jwt.claim.sub', ${userId}, false)`;
-    await sqlClient`select set_config('request.jwt.claim.role', 'authenticated', false)`;
-    await sqlClient`select set_config('app.current_community_id', ${String(activeCommunityId)}, false)`;
-  }
-
-  async function setAnonPolicyProbeContext(
-    sqlClient: SqlClient,
-    activeCommunityId: number,
-  ): Promise<void> {
-    await resetSession(sqlClient);
-    await sqlClient.unsafe(`set role ${POLICY_PROBE_ROLE}`);
-    await sqlClient`select set_config('request.jwt.claim.role', 'anon', false)`;
-    await sqlClient`select set_config('app.current_community_id', ${String(activeCommunityId)}, false)`;
-  }
-
-  async function nextSequenceValue(sequenceName: string): Promise<number> {
-    const rows = await adminSql<{ id: string }[]>`
-      select nextval(${sequenceName}::regclass)::text as id
-    `;
-    const id = Number(rows[0]?.id);
-    if (!Number.isSafeInteger(id)) {
-      throw new Error(`Failed to allocate test id from ${sequenceName}`);
-    }
-    return id;
-  }
+  // Since 0077/0078 the Data API cannot read the tenant tables in
+  // DATA_API_REVOKED_TENANT_TABLES nor write any public table, and those ACL
+  // facts are asserted in the 0077/0078 blocks below. The RLS policies behind
+  // them stay as defence-in-depth but are no longer reachable by any role, so
+  // this file no longer tests their branches. Until the ponytail pass on #1177
+  // they were exercised through a `pp_rls_policy_probe` role holding the
+  // pre-0077 grants; restore that helper and its cases from commit 38cfa5dd if
+  // a user-JWT read or write path is ever re-opened.
 
   beforeAll(async () => {
     adminSql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
     authSql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
     serviceSql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
     db = drizzle(adminSql, { schema });
-    await ensurePolicyProbeRole(adminSql);
 
     const runTag = `p4_55_rls_${Date.now()}_${randomUUID().slice(0, 8)}`;
     const filePrefix = `__${runTag}_doc__`;
@@ -490,23 +395,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
         await db.delete(documents).where(inArray(documents.id, documentIds));
       }
 
-      const accessRequestIds = [...createdAccessRequestIds];
-      if (accessRequestIds.length > 0) {
-        await db.delete(accessRequests).where(inArray(accessRequests.id, accessRequestIds));
-      }
-
-      const emergencyBroadcastIds = [...createdEmergencyBroadcastIds];
-      if (emergencyBroadcastIds.length > 0) {
-        await adminSql`delete from public.emergency_broadcasts where id in ${adminSql(emergencyBroadcastIds)}`;
-      }
-
-      const communityJoinRequestIds = [...createdCommunityJoinRequestIds];
-      if (communityJoinRequestIds.length > 0) {
-        await db
-          .delete(communityJoinRequests)
-          .where(inArray(communityJoinRequests.id, communityJoinRequestIds));
-      }
-
       const checklistItemIds = [...createdChecklistItemIds];
       if (checklistItemIds.length > 0) {
         await db
@@ -680,134 +568,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
     expect(phantom, `Config lists tables that do not exist: ${phantom.join(', ')}`).toEqual([]);
   });
 
-  it('restricts authenticated reads to the actor community on tenant CRUD tables (documents)', async () => {
-    await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-    const rows = await authSql<{ id: number; community_id: number; file_name: string }[]>`
-      select id, community_id, file_name
-      from public.documents
-      where file_name like ${`${seed.filePrefix}%`}
-      order by id
-    `;
-
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.every((row) => Number(row.community_id) === seed.communityAId)).toBe(true);
-    expect(rows.some((row) => Number(row.id) === seed.communityADocumentId)).toBe(true);
-    expect(rows.some((row) => Number(row.id) === seed.communityBDocumentId)).toBe(false);
-  });
-
-  it('auto-scopes forged inserts to the active tenant context', async () => {
-    // Use adminAUserId (board_member) — documents is now tenant_admin_write and
-    // requires pp_rls_can_read_audit_log() for INSERT. Tenant-tier actors are
-    // blocked at the DB level; admin-tier actors may insert and have their
-    // community_id rewritten by the pp_rls_enforce_tenant_community_id trigger.
-    await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-
-    const forgedFileName = `${seed.filePrefix}forged-${randomUUID().slice(0, 8)}.pdf`;
-    const forgedDocumentId = await nextSequenceValue('public.documents_id_seq');
-    const inserted = await authSql<{ id: number; community_id: number; file_name: string }[]>`
-      insert into public.documents (
-        id,
-        community_id,
-        title,
-        file_path,
-        file_name,
-        file_size,
-        mime_type
-      ) values (
-        ${forgedDocumentId},
-        ${seed.communityBId},
-        ${`Forged ${seed.runTag}`},
-        ${`communities/${seed.communityBId}/documents/${forgedFileName}`},
-        ${forgedFileName},
-        4096,
-        'application/pdf'
-      )
-      returning id, community_id, file_name
-    `;
-
-    expect(inserted).toHaveLength(1);
-    expect(Number(inserted[0]?.community_id)).toBe(seed.communityAId);
-    if (inserted[0]) {
-      createdDocumentIds.add(Number(inserted[0].id));
-    }
-  });
-
-  it('blocks cross-tenant UPDATE and DELETE attempts', async () => {
-    await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-    const updated = await authSql<{ id: number }[]>`
-      update public.documents
-      set title = 'RLS bypass attempt'
-      where id = ${seed.communityBDocumentId}
-      returning id
-    `;
-    expect(updated).toHaveLength(0);
-
-    const deleted = await authSql<{ id: number }[]>`
-      delete from public.documents
-      where id = ${seed.communityBDocumentId}
-      returning id
-    `;
-    expect(deleted).toHaveLength(0);
-  });
-
-  it('blocks tenant-role actor from inserting a privileged user_roles row (escalation prevention)', async () => {
-    // pp_user_roles_insert requires admin-tier role via pp_rls_can_read_audit_log.
-    // A tenant actor must not be able to INSERT a new user_roles row with an elevated role.
-    await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-    try {
-      await authSql`
-        insert into public.user_roles (user_id, community_id, role)
-        values (${seed.tenantAUserId}, ${seed.communityAId}, 'property_manager')
-      `;
-      expect.fail('Tenant INSERT on user_roles should be blocked by pp_user_roles_insert');
-    } catch (error: unknown) {
-      expect((error as { code?: string }).code).toBe('42501');
-    }
-  });
-
-  it('blocks tenant-role actor from escalating their own user_roles row via UPDATE', async () => {
-    // pp_user_roles_update requires admin-tier role via pp_rls_can_read_audit_log.
-    // A tenant actor must not be able to UPDATE their own role to an elevated value.
-    await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-    try {
-      await authSql`
-        update public.user_roles
-        set role = 'property_manager'
-        where user_id = ${seed.tenantAUserId} and community_id = ${seed.communityAId}
-      `;
-    } catch (error: unknown) {
-      // Some Postgres versions throw 42501; others silently return 0 rows on USING mismatch.
-      expect((error as { code?: string }).code).toBe('42501');
-      return;
-    }
-    // If no exception: verify the row was NOT escalated.
-    const check = await adminSql<{ role: string }[]>`
-      select role from public.user_roles
-      where user_id = ${seed.tenantAUserId} and community_id = ${seed.communityAId}
-    `;
-    expect(check[0]?.role, 'Tenant role must not have been escalated').toBe('resident');
-  });
-
-  it('blocks authenticated actor from inserting directly into compliance_audit_log', async () => {
-    // pp_audit_insert requires pp_rls_is_privileged() — authenticated actors are blocked.
-    // logAuditEvent() works because it uses the postgres-role db instance (drizzle.ts).
-    await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-    try {
-      await authSql`
-        insert into public.compliance_audit_log
-          (user_id, community_id, action, resource_type, resource_id)
-        values
-          (${seed.adminAUserId}, ${seed.communityAId}, 'document_created', 'document',
-           ${`${seed.auditResourcePrefix}_blocked`})
-      `;
-      expect.fail('Authenticated INSERT on compliance_audit_log should be blocked by pp_audit_insert');
-    } catch (error: unknown) {
-      expect((error as { code?: string }).code).toBe('42501');
-    }
-  });
-
   it('restricts compliance_audit_log reads to admin roles for the actor community', async () => {
     await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
     const tenantRows = await authSql<{ id: number; community_id: number }[]>`
@@ -908,27 +668,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
       expect(rows.some((row) => Number(row.id) === seed.tenantBSameCommANotifPrefId)).toBe(false);
     });
 
-    it('blocks actor from UPDATing another user notification_preferences', async () => {
-      // tenantAUserId must not be able to UPDATE tenantBSameCommA's preferences.
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const updated = await authSql<{ id: number }[]>`
-        update public.notification_preferences
-        set email_frequency = 'weekly'
-        where id = ${seed.tenantBSameCommANotifPrefId}
-        returning id
-      `;
-      expect(updated).toHaveLength(0);
-
-      // Verify the row was not changed.
-      await resetSession(authSql);
-      const check = await adminSql<{ email_frequency: string }[]>`
-        select email_frequency from public.notification_preferences
-        where id = ${seed.tenantBSameCommANotifPrefId}
-      `;
-      expect(check[0]?.email_frequency).toBe('daily');
-    });
-
     it('allows admin-tier actor to SELECT another user notification_preferences', async () => {
       // adminAUserId (board_member) should see both tenantA and tenantBSameCommA preferences.
       await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
@@ -943,137 +682,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
       expect(rows.some((row) => Number(row.id) === seed.tenantANotifPrefId)).toBe(true);
       expect(rows.some((row) => Number(row.id) === seed.tenantBSameCommANotifPrefId)).toBe(true);
     });
-
-    it('allows admin-tier actor to UPDATE another user notification_preferences', async () => {
-      // adminAUserId (board_member) should be able to UPDATE tenantBSameCommA's preferences.
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-
-      const updated = await authSql<{ id: number }[]>`
-        update public.notification_preferences
-        set email_frequency = 'weekly'
-        where id = ${seed.tenantBSameCommANotifPrefId}
-        returning id
-      `;
-      expect(updated).toHaveLength(1);
-
-      // Restore original value.
-      await adminSql`
-        update public.notification_preferences
-        set email_frequency = 'daily'
-        where id = ${seed.tenantBSameCommANotifPrefId}
-      `;
-    });
   });
 
-  describe('tenant_member_configurable policy coverage', () => {
-    it('allows member write on announcements when community_settings does not restrict', async () => {
-      // Community A has default settings ({}), so member writes are permitted.
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const announcementId = await nextSequenceValue('public.announcements_id_seq');
-      const inserted = await authSql<{ id: number }[]>`
-        insert into public.announcements (id, community_id, title, body, audience, is_pinned, published_by)
-        values (
-          ${announcementId},
-          ${seed.communityAId},
-          ${`RLS Configurable Test ${seed.runTag}`},
-          'Member write test',
-          'all',
-          false,
-          ${seed.tenantAUserId}
-        )
-        returning id
-      `;
-      expect(inserted).toHaveLength(1);
-
-      // Cleanup
-      if (inserted[0]) {
-        await adminSql`delete from public.announcements where id = ${inserted[0].id}`;
-      }
-    });
-
-    it('blocks member write on announcements when community_settings restricts to admin_only', async () => {
-      // Set announcementsWriteLevel = admin_only for community A.
-      await adminSql`
-        update public.communities
-        set community_settings = jsonb_set(
-          coalesce(community_settings, '{}'),
-          '{announcementsWriteLevel}',
-          '"admin_only"'
-        )
-        where id = ${seed.communityAId}
-      `;
-
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-      try {
-        await authSql`
-          insert into public.announcements (community_id, title, body, audience, is_pinned, published_by)
-          values (
-            ${seed.communityAId},
-            ${`RLS Restricted Test ${seed.runTag}`},
-            'Should be blocked',
-            'all',
-            false,
-            ${seed.tenantAUserId}
-          )
-        `;
-        expect.fail('Non-admin INSERT on admin_only announcements should have been blocked');
-      } catch (error: unknown) {
-        expect((error as { code?: string }).code).toBe('42501');
-      } finally {
-        // Always restore the setting so other tests are not affected.
-        await adminSql`
-          update public.communities
-          set community_settings = community_settings - 'announcementsWriteLevel'
-          where id = ${seed.communityAId}
-        `;
-      }
-    });
-
-    it('allows admin-tier write on announcements even when community_settings restricts members', async () => {
-      // Set announcementsWriteLevel = admin_only for community A.
-      await adminSql`
-        update public.communities
-        set community_settings = jsonb_set(
-          coalesce(community_settings, '{}'),
-          '{announcementsWriteLevel}',
-          '"admin_only"'
-        )
-        where id = ${seed.communityAId}
-      `;
-
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-      let insertedId: number | undefined;
-      try {
-        const announcementId = await nextSequenceValue('public.announcements_id_seq');
-        const inserted = await authSql<{ id: number }[]>`
-          insert into public.announcements (id, community_id, title, body, audience, is_pinned, published_by)
-          values (
-            ${announcementId},
-            ${seed.communityAId},
-            ${`RLS Admin Write Test ${seed.runTag}`},
-            'Admin write should succeed',
-            'all',
-            false,
-            ${seed.adminAUserId}
-          )
-          returning id
-        `;
-        expect(inserted).toHaveLength(1);
-        insertedId = inserted[0]?.id;
-      } finally {
-        // Restore setting and clean up inserted row.
-        await adminSql`
-          update public.communities
-          set community_settings = community_settings - 'announcementsWriteLevel'
-          where id = ${seed.communityAId}
-        `;
-        if (insertedId !== undefined) {
-          await adminSql`delete from public.announcements where id = ${insertedId}`;
-        }
-      }
-    });
-  });
 
   describe('service_only table coverage', () => {
     // Derived from the config, NOT a hardcoded list.
@@ -1087,25 +697,22 @@ describeDb('P4-55 RLS policies (integration)', () => {
     const serviceOnlyTables = RLS_TENANT_TABLES.filter(
       (entry) => entry.policyFamily === 'service_only',
     ).map((entry) => entry.tableName);
+    // A table 0077 shut to the Data API is refused at the ACL (asserted in the
+    // 0077 block), so its policy is unreachable and not probed here.
+    const readableServiceOnlyTables = serviceOnlyTables.filter((name) => !REVOKED_TABLES.has(name));
 
     it('covers every service_only table in the config, not a hardcoded subset', () => {
       // Guards the guard: if the filter ever silently yields nothing (a rename,
       // a family retired), the loops below would vacuously pass.
       expect(serviceOnlyTables.length).toBeGreaterThanOrEqual(6);
       expect(serviceOnlyTables).toContain('site_publish_snapshots');
+      expect(readableServiceOnlyTables.length).toBeGreaterThanOrEqual(5);
     });
 
-    it.each(serviceOnlyTables)(
+    it.each(readableServiceOnlyTables)(
       'blocks authenticated SELECT on service_only table %s',
       async (tableName) => {
-        // A table 0077 shut to the Data API is probed through the policy-probe
-        // role, so this still tests the POLICY; the ACL is asserted separately
-        // in the 0077 block.
-        if (REVOKED_TABLES.has(tableName)) {
-          await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-        } else {
-          await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
-        }
+        await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
 
         // Zero rows, not an error: production grants authenticated SELECT on
         // these tables and relies on RLS to return nothing. An error here would
@@ -1116,43 +723,16 @@ describeDb('P4-55 RLS policies (integration)', () => {
       },
     );
 
-    it.each(serviceOnlyTables)(
+    it.each(readableServiceOnlyTables)(
       'blocks anon SELECT on service_only table %s',
       async (tableName) => {
         // Reuses authSql with `SET ROLE anon` — the file's existing precedent
         // (see the 0023 wrong-GUC block); there is no separate anon connection.
-        if (REVOKED_TABLES.has(tableName)) {
-          await setAnonPolicyProbeContext(authSql, seed.communityAId);
-        } else {
-          await setAnonContext(authSql, seed.communityAId);
-        }
+        await setAnonContext(authSql, seed.communityAId);
         const rows = await authSql`select * from public.${authSql(tableName)} limit 1`;
         expect(rows).toHaveLength(0);
       },
     );
-
-    it('blocks authenticated INSERT on service_only tables', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      try {
-        await authSql`
-          insert into public.demo_seed_registry (entity_type, seed_key, entity_id, community_id)
-          values ('test', ${`${seed.runTag}_blocked`}, 'blocked-1', ${seed.communityAId})
-        `;
-        expect.fail('Authenticated INSERT on service_only table should have been blocked by RLS');
-      } catch (error: unknown) {
-        const pgError = error as { code?: string };
-        expect(pgError.code).toBe('42501');
-      }
-
-      // Verify no row was persisted regardless of error path
-      await setServiceRoleContext(serviceSql);
-      const check = await serviceSql`
-        select id from public.demo_seed_registry
-        where seed_key = ${`${seed.runTag}_blocked`}
-      `;
-      expect(check).toHaveLength(0);
-    });
 
     it('allows service_role full CRUD on demo_seed_registry', async () => {
       await setServiceRoleContext(serviceSql);
@@ -1225,303 +805,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
-  describe('Issue 1 (0026): maintenance_requests IDOR — UPDATE/DELETE hardening', () => {
-    it('non-admin cannot UPDATE another user\'s maintenance request', async () => {
-      // tenantBSameCommAUserId must not be able to update tenantA's request.
-      await setPolicyProbeContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
 
-      const updated = await authSql<{ id: number }[]>`
-        update public.maintenance_requests
-        set status = 'in_progress'
-        where id = ${seed.tenantAMaintenanceRequestId}
-        returning id
-      `;
-      expect(updated).toHaveLength(0);
-    });
 
-    it('non-admin cannot DELETE another user\'s maintenance request', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
 
-      const deleted = await authSql<{ id: number }[]>`
-        delete from public.maintenance_requests
-        where id = ${seed.tenantAMaintenanceRequestId}
-        returning id
-      `;
-      expect(deleted).toHaveLength(0);
-
-      // Verify row still exists.
-      await resetSession(authSql);
-      const check = await adminSql<{ id: number }[]>`
-        select id from public.maintenance_requests
-        where id = ${seed.tenantAMaintenanceRequestId}
-      `;
-      expect(check).toHaveLength(1);
-    });
-
-    it('request owner can UPDATE their own maintenance request', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const updated = await authSql<{ id: number }[]>`
-        update public.maintenance_requests
-        set status = 'in_progress'
-        where id = ${seed.tenantAMaintenanceRequestId}
-        returning id
-      `;
-      expect(updated).toHaveLength(1);
-
-      // Restore original status.
-      await adminSql`
-        update public.maintenance_requests
-        set status = 'open'
-        where id = ${seed.tenantAMaintenanceRequestId}
-      `;
-    });
-
-    it('admin-tier can UPDATE any maintenance request in the community', async () => {
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-
-      const updated = await authSql<{ id: number }[]>`
-        update public.maintenance_requests
-        set status = 'in_progress'
-        where id = ${seed.tenantAMaintenanceRequestId}
-        returning id
-      `;
-      expect(updated).toHaveLength(1);
-
-      // Restore.
-      await adminSql`
-        update public.maintenance_requests
-        set status = 'open'
-        where id = ${seed.tenantAMaintenanceRequestId}
-      `;
-    });
-  });
-
-  describe('Issue 2 (0026): notification_preferences IDOR — INSERT/DELETE hardening', () => {
-    it('user cannot INSERT notification_preferences for another user', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
-
-      // Attempt to insert a row with user_id belonging to tenantA (not the authenticated user).
-      await expect(
-        authSql`
-          insert into public.notification_preferences (user_id, community_id, email_frequency)
-          values (${seed.tenantAUserId}, ${seed.communityAId}, 'weekly')
-        `,
-      ).rejects.toThrow();
-    });
-
-    it('user can INSERT their own notification_preferences row', async () => {
-      await adminSql`
-        delete from public.notification_preferences
-        where id = ${seed.tenantBSameCommANotifPrefId}
-      `;
-
-      await setPolicyProbeContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
-
-      const notificationPreferenceId = await nextSequenceValue('public.notification_preferences_id_seq');
-      const inserted = await authSql<{ id: number }[]>`
-        insert into public.notification_preferences (id, user_id, community_id, email_frequency)
-        values (${notificationPreferenceId}, ${seed.tenantBSameCommAUserId}, ${seed.communityAId}, 'weekly')
-        returning id
-      `;
-      expect(inserted).toHaveLength(1);
-
-      // Cleanup.
-      if (inserted[0]) {
-        await adminSql`delete from public.notification_preferences where id = ${inserted[0].id}`;
-      }
-    });
-
-    it('user cannot DELETE another user\'s notification_preferences', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
-
-      const deleted = await authSql<{ id: number }[]>`
-        delete from public.notification_preferences
-        where id = ${seed.tenantANotifPrefId}
-        returning id
-      `;
-      expect(deleted).toHaveLength(0);
-
-      // Verify row still exists.
-      await resetSession(authSql);
-      const check = await adminSql<{ id: number }[]>`
-        select id from public.notification_preferences
-        where id = ${seed.tenantANotifPrefId}
-      `;
-      expect(check).toHaveLength(1);
-    });
-  });
-
-  describe('Issue 3 (0026): onboarding_wizard_state write access restriction', () => {
-    it('tenant role cannot UPDATE onboarding_wizard_state', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const updated = await authSql<{ id: number }[]>`
-        update public.onboarding_wizard_state
-        set status = 'completed'
-        where id = ${seed.communityAOnboardingWizardStateId}
-        returning id
-      `;
-      expect(updated).toHaveLength(0);
-    });
-
-    it('tenant role cannot INSERT into onboarding_wizard_state', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      await expect(
-        authSql`
-          insert into public.onboarding_wizard_state (community_id, wizard_type, status, step_data)
-          values (${seed.communityAId}, 'condo', 'in_progress', '{}')
-        `,
-      ).rejects.toThrow();
-    });
-
-    it('admin-tier role can UPDATE onboarding_wizard_state', async () => {
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-
-      const updated = await authSql<{ id: number }[]>`
-        update public.onboarding_wizard_state
-        set status = 'completed'
-        where id = ${seed.communityAOnboardingWizardStateId}
-        returning id
-      `;
-      expect(updated).toHaveLength(1);
-
-      // Restore.
-      await adminSql`
-        update public.onboarding_wizard_state
-        set status = 'in_progress'
-        where id = ${seed.communityAOnboardingWizardStateId}
-      `;
-    });
-  });
-
-  describe('Issue 4 (0026): maintenance_comments INSERT — must be authorized to view request', () => {
-    it('user cannot INSERT a maintenance_comment with a spoofed user_id', async () => {
-      // tenantAUserId (who owns the request) tries to attribute the comment to adminAUserId.
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      await expect(
-        authSql`
-          insert into public.maintenance_comments (community_id, request_id, user_id, text)
-          values (
-            ${seed.communityAId},
-            ${seed.tenantAMaintenanceRequestId},
-            ${seed.adminAUserId},
-            'spoofed attribution attempt'
-          )
-        `,
-      ).rejects.toThrow();
-    });
-
-    it('user cannot INSERT a comment on a request they did not submit', async () => {
-      // tenantBSameCommAUserId tries to comment on tenantA's request.
-      await setPolicyProbeContext(authSql, seed.tenantBSameCommAUserId, seed.communityAId);
-
-      await expect(
-        authSql`
-          insert into public.maintenance_comments (community_id, request_id, user_id, text)
-          values (
-            ${seed.communityAId},
-            ${seed.tenantAMaintenanceRequestId},
-            ${seed.tenantBSameCommAUserId},
-            'unauthorized comment attempt'
-          )
-        `,
-      ).rejects.toThrow();
-    });
-
-    it('request owner can INSERT a comment on their own request', async () => {
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const commentId = await nextSequenceValue('public.maintenance_comments_id_seq');
-      const inserted = await authSql<{ id: number }[]>`
-        insert into public.maintenance_comments (id, community_id, request_id, user_id, text)
-        values (
-          ${commentId},
-          ${seed.communityAId},
-          ${seed.tenantAMaintenanceRequestId},
-          ${seed.tenantAUserId},
-          'owner comment'
-        )
-        returning id
-      `;
-      expect(inserted).toHaveLength(1);
-
-      // Cleanup (use admin — append-only at RLS so we need a privileged delete).
-      if (inserted[0]) {
-        await adminSql`delete from public.maintenance_comments where id = ${inserted[0].id}`;
-      }
-    });
-
-    it('admin-tier can INSERT a comment on any request in the community', async () => {
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-
-      const commentId = await nextSequenceValue('public.maintenance_comments_id_seq');
-      const inserted = await authSql<{ id: number }[]>`
-        insert into public.maintenance_comments (id, community_id, request_id, user_id, text)
-        values (
-          ${commentId},
-          ${seed.communityAId},
-          ${seed.tenantAMaintenanceRequestId},
-          ${seed.adminAUserId},
-          'admin comment'
-        )
-        returning id
-      `;
-      expect(inserted).toHaveLength(1);
-
-      if (inserted[0]) {
-        await adminSql`delete from public.maintenance_comments where id = ${inserted[0].id}`;
-      }
-    });
-  });
 
   describe('Issue 5 (0026): communities table RLS', () => {
-    it('community member can SELECT their own community row', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const rows = await authSql<{ id: number }[]>`
-        select id from public.communities
-        where id = ${seed.communityAId}
-      `;
-      expect(rows).toHaveLength(1);
-      expect(Number(rows[0]!.id)).toBe(seed.communityAId);
-    });
-
-    it('community member cannot SELECT another community row', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const rows = await authSql<{ id: number }[]>`
-        select id from public.communities
-        where id = ${seed.communityBId}
-      `;
-      expect(rows).toHaveLength(0);
-    });
-
-    it('community member cannot SELECT stripe billing fields of another community', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      // A SELECT * should return at most 1 row (own community only).
-      const rows = await authSql<{ id: number }[]>`
-        select id from public.communities
-        where id in (${seed.communityAId}, ${seed.communityBId})
-      `;
-      expect(rows.every((r) => Number(r.id) === seed.communityAId)).toBe(true);
-      expect(rows.some((r) => Number(r.id) === seed.communityBId)).toBe(false);
-    });
-
-    it('authenticated user cannot INSERT a community directly', async () => {
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-
-      await expect(
-        authSql`
-          insert into public.communities (name, slug, community_type, timezone)
-          values ('Unauthorized Community', 'unauth-community', 'condo_718', 'America/New_York')
-        `,
-      ).rejects.toThrow();
-    });
-
     it('verifies communities policies exist in pg_policies', async () => {
       const rows = await adminSql<{ policyname: string }[]>`
         select policyname
@@ -2273,140 +1561,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
         ).toContain(expectedName);
       }
     });
-
-    it('rewrites a forged community_id on emergency_broadcasts INSERT (0037)', async () => {
-      // The behavioural reason gap 2 mattered. The four tenant policies only ever
-      // checked that the caller CAN access the community_id they supplied — and a
-      // user who belongs to two communities passes that check for either one. So
-      // before 0037 installed the write-scope trigger, such a caller could write a
-      // broadcast into whichever of their communities they named, regardless of the
-      // tenant context the request resolved to. The trigger rewrites it instead.
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const inserted = await authSql<{ id: number; community_id: number }[]>`
-        insert into public.emergency_broadcasts (
-          community_id,
-          title,
-          body,
-          initiated_by
-        ) values (
-          ${seed.communityBId},
-          ${`${seed.runTag}-eb-forge`},
-          'forged tenant test',
-          ${seed.tenantAUserId}
-        )
-        returning id, community_id
-      `;
-
-      // Track BEFORE asserting. If an assertion throws — which is exactly the
-      // failure this test exists to catch — an inline delete after it would never
-      // run and the row would leak into the shared local/CI database. afterAll
-      // cleanup is the pattern the documents and access_requests forged-insert
-      // tests already use, for the same reason.
-      if (inserted[0]) {
-        createdEmergencyBroadcastIds.add(Number(inserted[0].id));
-      }
-
-      expect(inserted).toHaveLength(1);
-      // Written into the ACTIVE tenant (A), not the forged one (B).
-      expect(Number(inserted[0]?.community_id)).toBe(seed.communityAId);
-    });
-
-    it('rewrites a forged community_id on access_requests INSERT to the active tenant', async () => {
-      // tenantA has a role in community A and qualifies for the tenant_crud
-      // write path; the write-scope trigger rewrites any forged community_id
-      // to the active tenant.
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-
-      const refCode = `${seed.runTag}-ar-forge`;
-      const inserted = await authSql<{ id: number; community_id: number }[]>`
-        insert into public.access_requests (
-          community_id,
-          email,
-          full_name,
-          role_requested,
-          ref_code
-        ) values (
-          ${seed.communityBId},
-          ${`${seed.runTag}-ar-forge@example.com`},
-          ${`Forged AR ${seed.runTag}`},
-          'resident',
-          ${refCode}
-        )
-        returning id, community_id
-      `;
-
-      expect(inserted).toHaveLength(1);
-      expect(Number(inserted[0]?.community_id)).toBe(seed.communityAId);
-      if (inserted[0]) {
-        createdAccessRequestIds.add(Number(inserted[0].id));
-      }
-    });
-
-    it('blocks cross-tenant SELECT on access_requests', async () => {
-      // Seed an access_requests row in community B via service role.
-      await setServiceRoleContext(serviceSql);
-      const seededId = await nextSequenceValue('public.access_requests_id_seq');
-      await serviceSql`
-        insert into public.access_requests (
-          id,
-          community_id,
-          email,
-          full_name,
-          role_requested,
-          ref_code
-        ) values (
-          ${seededId},
-          ${seed.communityBId},
-          ${`${seed.runTag}-ar-b@example.com`},
-          ${`AR B ${seed.runTag}`},
-          'resident',
-          ${`${seed.runTag}-ar-b`}
-        )
-      `;
-      createdAccessRequestIds.add(seededId);
-
-      // Tenant A reading must not see community B's row.
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-      const visible = await authSql<{ id: number }[]>`
-        select id from public.access_requests where id = ${seededId}
-      `;
-      expect(visible).toHaveLength(0);
-    });
-
-    it('blocks cross-tenant UPDATE on community_join_requests', async () => {
-      // Seed a community_join_requests row in community B via service role.
-      await setServiceRoleContext(serviceSql);
-      const seededId = await nextSequenceValue('public.community_join_requests_id_seq');
-      await serviceSql`
-        insert into public.community_join_requests (
-          id,
-          user_id,
-          community_id,
-          unit_identifier,
-          resident_type,
-          status
-        ) values (
-          ${seededId},
-          ${seed.adminBUserId},
-          ${seed.communityBId},
-          ${'B-101'},
-          'owner',
-          'pending'
-        )
-      `;
-      createdCommunityJoinRequestIds.add(seededId);
-
-      // Tenant A acting in community A must not be able to update community B's row.
-      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-      const updated = await authSql<{ id: number }[]>`
-        update public.community_join_requests
-        set status = 'approved'
-        where id = ${seededId}
-        returning id
-      `;
-      expect(updated).toHaveLength(0);
-    });
   });
 
   describe('0023: wrong-GUC policy repair (onboarding_checklist_items + site_blocks)', () => {
@@ -2592,19 +1746,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // published subscription_plan, stripe_subscription_id and the street
       // address to the internet along with it.
       //
-      // Two layers since 0079: anon holds no SELECT grant on communities at all
-      // (the ACL), and — checked through the anon probe, which still holds the
-      // grant — no policy would return the row either.
+      // Since 0079 anon holds no grant on communities at all.
       await setAnonContext(authSql, seed.communityAId);
       await expect(
         authSql`select id from public.communities where id = ${seed.communityAId}`,
       ).rejects.toThrow(/permission denied for table communities/);
-
-      await setAnonPolicyProbeContext(authSql, seed.communityAId);
-      const rows = await authSql<{ id: number }[]>`
-        select id from public.communities where id = ${seed.communityAId}
-      `;
-      expect(rows).toHaveLength(0);
     });
 
     it('lets anon read only published blocks of the GUC-selected community', async () => {
@@ -2806,30 +1952,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
         select id from public.site_page_redirects where id = ${redirectAId}
       `;
       expect(rows).toHaveLength(0);
-    });
-
-    it('refuses an anon INSERT into site_pages', async () => {
-      // 0078 made anon's lack of INSERT an ACL fact, which would satisfy a bare
-      // toThrow() before any policy ran; the anon probe keeps this on the policy.
-      await setAnonPolicyProbeContext(authSql, seed.communityAId);
-      await expect(
-        authSql`
-          insert into public.site_pages (community_id, name, slug)
-          values (${seed.communityAId}, 'anon write', 'anon-write-attempt')
-        `,
-      ).rejects.toThrow();
-    });
-
-    it('refuses an anon INSERT into site_page_redirects', async () => {
-      // 0078 made anon's lack of INSERT an ACL fact, which would satisfy a bare
-      // toThrow() before any policy ran; the anon probe keeps this on the policy.
-      await setAnonPolicyProbeContext(authSql, seed.communityAId);
-      await expect(
-        authSql`
-          insert into public.site_page_redirects (community_id, from_slug, page_id)
-          values (${seed.communityAId}, 'anon-write-attempt', ${publishedPageAId})
-        `,
-      ).rejects.toThrow();
     });
 
     it('has site_blocks.page_id NOT NULL — gate G3 closed (Phase 11c, 0048)', async () => {
@@ -3117,8 +2239,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     // production 2026-09-25 (has_table_privilege + pg_policy).
     //
     // Deny is a HARD 42501 at the ACL, same idiom as the locked-down platform
-    // tables above. The policies stay and are still exercised elsewhere in this
-    // file through the policy-probe role.
+    // tables above. The policies stay as defence-in-depth.
 
     it.each([...DATA_API_REVOKED_TENANT_TABLES])(
       'anon and authenticated hold no privilege on %s or its sequences',
@@ -3153,18 +2274,12 @@ describeDb('P4-55 RLS policies (integration)', () => {
     it.each(['leases', 'units', 'calendar_sync_tokens', 'accounting_connections', 'invitations'])(
       'a community member querying %s as authenticated is refused at the ACL',
       async (tableName) => {
-        // Control first: the same member, the same query, through the probe role
-        // that still holds the pre-0077 grant, SUCCEEDS. So the 42501 below is
-        // the missing grant and nothing else (not a bad table name, not a policy).
-        await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
-        await expect(
-          authSql`select 1 from public.${authSql(tableName)} limit 1`,
-        ).resolves.toBeDefined();
-
+        // By message, not only SQLSTATE: naming the table proves it exists and
+        // that the grant, not a policy, refused the read.
         await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
         await expect(
           authSql`select 1 from public.${authSql(tableName)} limit 1`,
-        ).rejects.toMatchObject({ code: '42501' });
+        ).rejects.toThrow(`permission denied for table ${tableName}`);
       },
     );
 
@@ -3195,12 +2310,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // A policy is narrowed if something beyond membership must ALSO hold:
       // the admin tier, or the row being the caller's own.
       const NARROWING = /pp_rls_can_read_audit_log\(|= auth\.uid\(\)|auth\.uid\(\) =/;
-      // `communities` is the root tenant table: a member reading their OWN
-      // community's row is the intended read. (Which of its columns that row
-      // should expose is a separate question — see the 0077 PR.)
-      const EXEMPT = new Set(['communities']);
       const unnarrowed = rows
-        .filter((row) => !EXEMPT.has(row.relname) && !NARROWING.test(row.qual))
+        .filter((row) => !NARROWING.test(row.qual))
         .map((row) => row.relname);
       expect(unnarrowed).toEqual([]);
 
@@ -3247,14 +2358,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
       });
 
       it("still answers the storage policies' own-manager-rows subquery", async () => {
-        // Same shape as site_assets_pm_insert / site_assets_pm_delete, with the
-        // caller's id inlined: the storage policies call auth.uid() from a stored
-        // expression, but the local stub gives authenticated no USAGE on schema
-        // auth, so a literal auth.uid() in ad-hoc SQL would fail on that instead.
+        // Same shape as site_assets_pm_insert / site_assets_pm_delete.
         await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
         const rows = await authSql<{ community_id: string }[]>`
           select (community_id)::text as community_id from public.user_roles
-          where user_id = ${seed.adminAUserId}
+          where user_id = auth.uid()
             and role in ('property_manager', 'root_manager')
         `;
         expect(rows.map((row) => row.community_id)).toContain(String(seed.communityAId));
@@ -3371,17 +2479,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('a property manager can no longer rewrite user_roles through the Data API', async () => {
-      // Control: the policy alone admits it (pp_rls_can_read_audit_log is the
-      // whole UPDATE predicate) — this is the self-promotion hole.
-      // `set role = role` proves the permission without changing a row.
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-      const viaPolicy = await authSql<{ user_id: string }[]>`
-        update public.user_roles set role = role
-        where community_id = ${seed.communityAId}
-        returning user_id
-      `;
-      expect(viaPolicy.length).toBeGreaterThan(1);
-
+      // The UPDATE policy alone (pp_rls_can_read_audit_log) would admit this:
+      // the self-promotion hole. `set role = role` changes no row.
       await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
       await expect(
         authSql`
@@ -3393,14 +2492,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('a property manager can no longer write communities billing columns through the Data API', async () => {
-      await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-      const viaPolicy = await authSql<{ id: number }[]>`
-        update public.communities set subscription_plan = subscription_plan
-        where id = ${seed.communityAId}
-        returning id
-      `;
-      expect(viaPolicy).toHaveLength(1);
-
       await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
       await expect(
         authSql`
@@ -3446,67 +2537,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
-  describe('0079: user_roles and communities policies match ADR-006', () => {
-    // 0078 made these unreachable through the Data API; this block tests the
-    // POLICIES themselves (through the probe role, which still holds the
-    // pre-0077 grants), because they are what stands if a grant ever returns.
-    //
-    // Community A has a property_manager (adminA) and two residents. A
-    // root_manager is added here so the root-only paths have a positive case.
-    const rootAUserId = randomUUID();
-    const RLS_DENIED = /row-level security/;
-
-    // Snapshot of community A taken before any case runs, restored afterwards,
-    // so a regression that lets a forged write through (deleted_at, stripe ids)
-    // cannot leak into the describe blocks that run after this one.
-    let communityASnapshot: Record<string, unknown> | undefined;
-
-    beforeAll(async () => {
-      [communityASnapshot] = await adminSql<Record<string, unknown>[]>`
-        select to_jsonb(c) as row from public.communities c where c.id = ${seed.communityAId}
-      `.then((rows) => rows.map((r) => r['row'] as Record<string, unknown>));
-      await adminSql`
-        insert into public.users (id, email, full_name)
-        values (${rootAUserId}, ${`root-0079-${rootAUserId}@example.test`}, 'Root 0079')
-      `;
-      await adminSql`
-        insert into public.user_roles (user_id, community_id, role, is_unit_owner)
-        values (${rootAUserId}, ${seed.communityAId}, 'root_manager', false)
-      `;
-    });
-
-    afterAll(async () => {
-      await resetSession(authSql);
-      await adminSql`delete from public.user_roles where user_id = ${rootAUserId}`;
-      await adminSql`delete from public.users where id = ${rootAUserId}`;
-      // Undo anything a failed assertion below may have left behind.
-      await adminSql`
-        update public.user_roles set role = 'resident', designation = null
-        where community_id = ${seed.communityAId}
-          and user_id in (${seed.tenantAUserId}, ${seed.tenantBSameCommAUserId})
-      `;
-      await adminSql`
-        delete from public.user_roles
-        where community_id = ${seed.communityAId} and user_id = ${seed.adminBUserId}
-      `;
-      if (communityASnapshot) {
-        // jsonb_populate_record rebuilds the row from the snapshot; every
-        // column is written back as it was (adminSql is privileged, so the
-        // 0079 guard lets it through).
-        await adminSql`
-          update public.communities c
-             set (name, community_settings, custom_domain, subscription_plan,
-                  subscription_status, free_access_expires_at, is_demo,
-                  stripe_customer_id, deleted_at, cancellation_note) =
-                 (select r.name, r.community_settings, r.custom_domain, r.subscription_plan,
-                         r.subscription_status, r.free_access_expires_at, r.is_demo,
-                         r.stripe_customer_id, r.deleted_at, r.cancellation_note
-                    from jsonb_populate_record(null::public.communities, ${JSON.stringify(communityASnapshot)}::jsonb) r)
-           where c.id = ${seed.communityAId}
-        `;
-      }
-    });
-
+  describe('0079: effective role from PostgREST v12 claims; communities shut', () => {
     it('resolves the role PostgREST v12 actually sends (request.jwt.claims JSON)', async () => {
       // PostgREST >= 12 sets only `request.jwt.claims`; the legacy
       // `request.jwt.claim.role` GUC is gone. Before 0079 the claim was ignored
@@ -3536,241 +2567,25 @@ describeDb('P4-55 RLS policies (integration)', () => {
       expect(results.asDrizzle).toEqual({ role: 'postgres', privileged: true });
     });
 
-    describe('user_roles', () => {
-      it('a property manager cannot promote a resident to a manager role', async () => {
-        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-        await expect(
-          authSql`
-            update public.user_roles set role = 'property_manager'
-            where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-            returning id
-          `,
-        ).rejects.toThrow(RLS_DENIED);
-      });
+    it('anon and authenticated hold no privilege on communities', async () => {
+      // The row carries stripe_customer_id, stripe_subscription_id and the
+      // cancellation notes, and before 0079 any member could read it.
+      const rows = await adminSql<{ role: string; privilege: string }[]>`
+        select r.role, p.privilege
+        from (values ('anon'), ('authenticated')) as r(role),
+             (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+                     ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) as p(privilege)
+        where has_table_privilege(r.role, 'public.communities', p.privilege)
+           or (p.privilege in ('SELECT', 'INSERT', 'UPDATE', 'REFERENCES')
+               and has_any_column_privilege(r.role, 'public.communities', p.privilege))
+      `;
+      expect(rows).toEqual([]);
 
-      it('a property manager cannot touch a manager row: not the root, not their own', async () => {
-        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-        const touched = await authSql<{ user_id: string }[]>`
-          update public.user_roles set display_title = display_title
-          where community_id = ${seed.communityAId}
-            and user_id in (${rootAUserId}, ${seed.adminAUserId})
-          returning user_id
-        `;
-        // Before 0079 both rows came back: the demote-the-root hole.
-        expect(touched).toEqual([]);
-
-        const deleted = await authSql<{ user_id: string }[]>`
-          delete from public.user_roles
-          where community_id = ${seed.communityAId} and user_id = ${rootAUserId}
-          returning user_id
-        `;
-        expect(deleted).toEqual([]);
-      });
-
-      it('a property manager can still manage resident rows (the residents route)', async () => {
-        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-        const touched = await authSql<{ user_id: string }[]>`
-          update public.user_roles set is_unit_owner = is_unit_owner
-          where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-          returning user_id
-        `;
-        expect(touched).toHaveLength(1);
-
-        const inserted = await authSql<{ user_id: string }[]>`
-          insert into public.user_roles (user_id, community_id, role, is_unit_owner)
-          values (${seed.adminBUserId}, ${seed.communityAId}, 'resident', false)
-          returning user_id
-        `;
-        expect(inserted).toHaveLength(1);
-        const removed = await authSql<{ user_id: string }[]>`
-          delete from public.user_roles
-          where community_id = ${seed.communityAId} and user_id = ${seed.adminBUserId}
-          returning user_id
-        `;
-        expect(removed).toHaveLength(1);
-      });
-
-      it('a property manager cannot insert a manager row', async () => {
-        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-        await expect(
-          authSql`
-            insert into public.user_roles (user_id, community_id, role, is_unit_owner)
-            values (${seed.adminBUserId}, ${seed.communityAId}, 'property_manager', false)
-          `,
-        ).rejects.toThrow(RLS_DENIED);
-      });
-
-      it('a property manager cannot set a board designation', async () => {
-        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-        await expect(
-          authSql`
-            update public.user_roles set designation = 'board_member'
-            where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-          `,
-        ).rejects.toThrow(/only the root manager can change a board designation/);
-      });
-
-      it('a property manager cannot move or remove a board seat', async () => {
-        // A seat is a designation on a resident row. Without the trigger's
-        // reassignment check a PM could hand it to someone else by changing
-        // user_id, never touching `designation`; or drop it by deleting the row.
-        await setPolicyProbeContext(authSql, rootAUserId, seed.communityAId);
-        await authSql`
-          update public.user_roles set designation = 'board_member'
-          where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-        `;
-        try {
-          await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-          await expect(
-            authSql`
-              update public.user_roles set user_id = ${seed.adminBUserId}
-              where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-            `,
-          ).rejects.toThrow(/only the root manager can reassign a role row/);
-          await expect(
-            authSql`
-              delete from public.user_roles
-              where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-            `,
-          ).rejects.toThrow(/only the root manager can remove a board-designated member/);
-        } finally {
-          // Privileged repair, so a regression that DID move the row cannot
-          // strip tenant A's membership for every later case in this run.
-          await adminSql`
-            update public.user_roles set user_id = ${seed.tenantAUserId}
-            where community_id = ${seed.communityAId} and user_id = ${seed.adminBUserId}
-              and not exists (
-                select 1 from public.user_roles
-                where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-              )
-          `;
-          await adminSql`
-            update public.user_roles set designation = null
-            where community_id = ${seed.communityAId} and user_id = ${seed.tenantAUserId}
-          `;
-        }
-      });
-
-      it('the root manager can assign roles and designations', async () => {
-        await setPolicyProbeContext(authSql, rootAUserId, seed.communityAId);
-        const promoted = await authSql<{ role: string }[]>`
-          update public.user_roles set role = 'property_manager'
-          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
-          returning role
-        `;
-        expect(promoted).toEqual([{ role: 'property_manager' }]);
-        const restored = await authSql<{ role: string }[]>`
-          update public.user_roles set role = 'resident'
-          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
-          returning role
-        `;
-        expect(restored).toEqual([{ role: 'resident' }]);
-
-        const designated = await authSql<{ designation: string | null }[]>`
-          update public.user_roles set designation = 'board_member'
-          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
-          returning designation
-        `;
-        expect(designated).toEqual([{ designation: 'board_member' }]);
-        await authSql`
-          update public.user_roles set designation = null
-          where community_id = ${seed.communityAId} and user_id = ${seed.tenantBSameCommAUserId}
-        `;
-      });
-    });
-
-    describe('communities', () => {
-      it('a property manager can still update ordinary community settings', async () => {
-        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-        const rows = await authSql<{ id: number }[]>`
-          update public.communities set name = name where id = ${seed.communityAId} returning id
-        `;
-        expect(rows).toHaveLength(1);
-      });
-
-      it.each([
-        ['subscription_plan', `subscription_plan = 'operations_plus'`],
-        ['subscription_status', `subscription_status = 'active'`],
-        ['free_access_expires_at', `free_access_expires_at = now() + interval '10 years'`],
-        ['is_demo', 'is_demo = not is_demo'],
-        ['stripe_customer_id', `stripe_customer_id = 'cus_forged'`],
-        ['deleted_at', 'deleted_at = now()'],
-        ['custom_domain', `custom_domain = 'attacker.example'`],
-        [
-          'community_settings.electionsAttorneyReviewed',
-          `community_settings = coalesce(community_settings, '{}'::jsonb) || '{"electionsAttorneyReviewed": true}'::jsonb`,
-        ],
-      ])('a property manager cannot write %s', async (column, assignment) => {
-        await setPolicyProbeContext(authSql, seed.adminAUserId, seed.communityAId);
-        await expect(
-          authSql.unsafe(
-            `update public.communities set ${assignment} where id = ${seed.communityAId}`,
-          ),
-        ).rejects.toThrow(`communities.${column} can only be changed by the application`);
-      });
-
-      it('nor can the root manager: billing columns are written only by privileged paths', async () => {
-        await setPolicyProbeContext(authSql, rootAUserId, seed.communityAId);
-        await expect(
-          authSql`update public.communities set subscription_plan = 'operations_plus' where id = ${seed.communityAId}`,
-        ).rejects.toThrow('communities.subscription_plan can only be changed by the application');
-      });
-
-      it('a service_role Data API request (v12 claims only) still writes them', async () => {
-        // The admin console's createAdminClient: session_user is not postgres
-        // in production, only the JSON claim says service_role. Checked in a
-        // rolled-back transaction with the claim set and the legacy GUC blank.
-        const ROLLBACK = Symbol('rollback');
-        let written: string | null | undefined;
-        await adminSql
-          .begin(async (tx) => {
-            await tx`select set_config('request.jwt.claim.role', '', true)`;
-            await tx`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'service_role' })}, true)`;
-            const [row] = await tx<{ plan: string | null }[]>`
-              update public.communities set subscription_plan = 'operations_plus'
-              where id = ${seed.communityAId} returning subscription_plan as plan
-            `;
-            written = row?.plan;
-            throw ROLLBACK;
-          })
-          .catch((error: unknown) => {
-            if (error !== ROLLBACK) throw error;
-          });
-        expect(written).toBe('operations_plus');
-      });
-
-      it('the privileged path (webhooks, crons) still writes them', async () => {
-        const [before] = await adminSql<{ note: string | null }[]>`
-          select cancellation_note as note from public.communities where id = ${seed.communityAId}
-        `;
-        await adminSql`update public.communities set cancellation_note = '0079 probe' where id = ${seed.communityAId}`;
-        const [after] = await adminSql<{ note: string | null }[]>`
-          select cancellation_note as note from public.communities where id = ${seed.communityAId}
-        `;
-        expect(after?.note).toBe('0079 probe');
-        await adminSql`update public.communities set cancellation_note = ${before?.note ?? null} where id = ${seed.communityAId}`;
-      });
-
-      it('a member reads their community row but not its Stripe or cancellation columns', async () => {
-        await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
-        const rows = await authSql<{ id: number; name: string }[]>`
-          select id, name from public.communities where id = ${seed.communityAId}
-        `;
-        expect(rows).toHaveLength(1);
-
-        for (const column of ['stripe_customer_id', 'stripe_subscription_id', 'cancellation_note']) {
-          await expect(
-            authSql.unsafe(`select ${column} from public.communities where id = ${seed.communityAId}`),
-          ).rejects.toThrow(/permission denied for table communities/);
-        }
-      });
-
-      it('anon cannot read communities at all', async () => {
-        await setAnonContext(authSql, seed.communityAId);
-        await expect(
-          authSql`select id from public.communities limit 1`,
-        ).rejects.toThrow(/permission denied for table communities/);
-      });
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await expect(
+        authSql`select id from public.communities where id = ${seed.communityAId}`,
+      ).rejects.toThrow(/permission denied for table communities/);
     });
   });
+
 });

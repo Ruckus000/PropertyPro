@@ -283,7 +283,7 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'user_roles',
     policyFamily: 'tenant_admin_write',
-    notes: 'Since 0079 the write policies match ADR-006: the root manager (pp_rls_is_root_manager) may write any row; the rest of the admin tier only role = \'resident\' rows, in USING and WITH CHECK, so a property_manager cannot touch a manager row (including their own) or mint one. designation is root-only via the pp_user_roles_guard_designation trigger (RLS cannot compare OLD/NEW). SELECT is own rows OR admin tier since 0077 (not revoked: the community-site-assets storage policies subquery it as authenticated). No recursion risk: pp_rls_has_community_membership, pp_rls_can_read_audit_log and pp_rls_is_root_manager are SECURITY DEFINER.',
+    notes: 'INSERT/UPDATE/DELETE require admin-tier role (pp_rls_can_read_audit_log). SELECT is own rows OR admin tier since 0077 (it was plain community membership, so any member could list every member\'s role and designation through the Data API); not revoked outright because the community-site-assets storage policies subquery it as authenticated for the caller\'s own manager rows. No recursion risk: pp_rls_has_community_membership and pp_rls_can_read_audit_log are SECURITY DEFINER.',
   },
   {
     tableName: 'esign_templates',
@@ -462,7 +462,7 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
     reason:
       'Append-only audit trail for PLATFORM-level operator actions in apps/admin (0052). Deliberately NOT tenant-scoped: community_id is NULLABLE precisely because platform actions such as granting or revoking platform-admin access have no community at all — which is why neither compliance_audit_log nor support_access_log (both community_id NOT NULL) could hold them. Locked down on the platform-table pattern: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated, and service_role granted SELECT+INSERT ONLY — no UPDATE or DELETE, which is what makes it append-only. A BEFORE UPDATE OR DELETE trigger backstops the privileged Drizzle connection, which holds rolbypassrls and is not bound by the grant. Written exclusively by the service-role PostgREST client via apps/admin/src/lib/audit/log-admin-action.ts.',
   },
-  { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case; RLS is enabled (pp_communities_* policies, 0026) but community_id FK-based scoping does not apply. Since 0079: authenticated reads it column-by-column (Stripe ids and billing/cancellation internals are not granted; anon gets nothing), and the pp_communities_guard_protected_columns trigger makes billing, lifecycle, domain-verification and identity columns immutable to every non-privileged caller, root included' },
+  { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case; RLS is enabled (pp_communities_* policies, 0026) but community_id FK-based scoping does not apply. Since 0079 anon and authenticated hold no privilege on it (the row carries Stripe ids and cancellation notes; every app read uses the service-role client)' },
   // The three entries below carried reasons that explained only why COMMUNITY
   // SCOPING does not apply to them — which was true, and which read for years as
   // though it also settled the RLS question. It did not. All three sat with RLS

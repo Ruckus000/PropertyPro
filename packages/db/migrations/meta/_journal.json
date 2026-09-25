@@ -545,7 +545,7 @@
       "idx": 79,
       "version": "7",
       "when": 1790348428178,
-      "tag": "0079_tighten_user_roles_communities_policies",
+      "tag": "0079_effective_role_claims_revoke_communities",
       "breakpoints": true
     }
   ]
