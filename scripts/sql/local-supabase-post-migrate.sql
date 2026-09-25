@@ -192,3 +192,68 @@ BEGIN
     GRANT USAGE, SELECT ON SEQUENCE public.platform_admin_audit_log_id_seq TO service_role;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Tenant tables shut to the Data API by migration 0077.
+--
+-- A SEPARATE loop from the platform-table one above, on purpose: that loop
+-- re-grants service_role full CRUD, and 0077 deliberately does not touch
+-- service_role (several of these are append-only, and a blanket re-grant could
+-- widen one). This block only revokes anon and authenticated, plus each table's
+-- owned sequences, which is exactly what 0077 does.
+--
+-- Same reason as every entry above: on a PERSISTENT local database the stub's
+-- blanket grant is re-applied by `local-test-db.sh setup` and the migrations do
+-- not re-run, so without this every one of these tables (OAuth refresh tokens,
+-- invite tokens, ballot submissions, leases) comes back member-readable locally
+-- and in CI while production has it shut.
+--
+-- Keep in sync with 0077 and DATA_API_REVOKED_TENANT_TABLES (rls-config.ts);
+-- packages/db/__tests__/data-api-revoke-migration.test.ts enforces it.
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE
+  t text;
+  s text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'access_requests', 'accounting_connections', 'amenities',
+    'amenity_reservations', 'announcements', 'arc_submissions',
+    'assessment_line_items', 'assessments', 'calendar_sync_tokens',
+    'community_join_requests', 'compliance_checklist_items', 'contract_bids',
+    'contracts', 'document_categories', 'document_drafts', 'documents',
+    'election_ballot_submissions', 'election_ballots', 'election_candidates',
+    'election_eligibility_snapshots', 'election_proxies', 'elections',
+    'emergency_broadcast_recipients', 'emergency_broadcasts',
+    'esign_consent', 'esign_events', 'esign_signers', 'esign_submissions',
+    'esign_templates', 'faqs', 'finance_stripe_webhook_events', 'forum_replies',
+    'forum_threads', 'help_article_feedback', 'help_article_views',
+    'insurance_policies', 'invitations', 'leases', 'ledger_entries',
+    'maintenance_comments', 'meeting_documents', 'meetings', 'move_checklists',
+    'onboarding_wizard_state', 'package_log', 'polls', 'rent_obligations',
+    'rent_payments', 'reserve_assets', 'stripe_connected_accounts',
+    'support_access_log', 'support_consent_grants', 'units', 'vendors',
+    'violation_fines', 'violations', 'visitor_log', 'wind_mitigation_reports',
+    'work_orders'
+  ]
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = t
+    ) THEN
+      EXECUTE format('REVOKE ALL ON TABLE public.%I FROM anon, authenticated', t);
+
+      FOR s IN
+        SELECT seq.relname
+          FROM pg_depend d
+          JOIN pg_class seq ON seq.oid = d.objid AND seq.relkind = 'S'
+          JOIN pg_namespace n ON n.oid = seq.relnamespace
+         WHERE d.refobjid = format('public.%I', t)::regclass
+           AND d.deptype IN ('a', 'i')
+           AND n.nspname = 'public'
+      LOOP
+        EXECUTE format('REVOKE ALL ON SEQUENCE public.%I FROM anon, authenticated', s);
+      END LOOP;
+    END IF;
+  END LOOP;
+END $$;
