@@ -224,6 +224,7 @@ BEGIN
     'contracts', 'document_categories', 'document_drafts', 'documents',
     'election_ballot_submissions', 'election_ballots', 'election_candidates',
     'election_eligibility_snapshots', 'election_proxies', 'elections',
+    'emergency_broadcast_recipients', 'emergency_broadcasts',
     'esign_consent', 'esign_events', 'esign_signers', 'esign_submissions',
     'esign_templates', 'faqs', 'finance_stripe_webhook_events', 'forum_replies',
     'forum_threads', 'help_article_feedback', 'help_article_views',

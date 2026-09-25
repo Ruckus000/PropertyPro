@@ -275,7 +275,7 @@ export const RLS_TENANT_TABLES = [
   {
     tableName: 'user_roles',
     policyFamily: 'tenant_admin_write',
-    notes: 'INSERT/UPDATE/DELETE require admin-tier role (pp_rls_can_read_audit_log). SELECT uses community membership. No recursion risk: pp_rls_has_community_membership is SECURITY DEFINER.',
+    notes: 'INSERT/UPDATE/DELETE require admin-tier role (pp_rls_can_read_audit_log). SELECT is own rows OR admin tier since 0077 (it was plain community membership, so any member could list every member\'s role and designation through the Data API); not revoked outright because the community-site-assets storage policies subquery it as authenticated for the caller\'s own manager rows. No recursion risk: pp_rls_has_community_membership and pp_rls_can_read_audit_log are SECURITY DEFINER.',
   },
   {
     tableName: 'esign_templates',
@@ -609,6 +609,7 @@ export const DATA_API_REVOKED_TENANT_TABLES = [
   'contracts', 'document_categories', 'document_drafts', 'documents',
   'election_ballot_submissions', 'election_ballots', 'election_candidates',
   'election_eligibility_snapshots', 'election_proxies', 'elections',
+  'emergency_broadcast_recipients', 'emergency_broadcasts',
   'esign_consent', 'esign_events', 'esign_signers', 'esign_submissions',
   'esign_templates', 'faqs', 'finance_stripe_webhook_events', 'forum_replies',
   'forum_threads', 'help_article_feedback', 'help_article_views',

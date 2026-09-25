@@ -4,12 +4,15 @@
 --
 -- Supabase's baseline grants ALL on every `public` table to anon and
 -- authenticated (see 0035's header), so RLS is the only gate on the Data API
--- (PostgREST / pg_graphql). Every table below has a SELECT policy,
--- `pp_tenant_select`, that is merely
+-- (PostgREST / pg_graphql). Every table below has a SELECT policy that is
+-- merely membership: `pp_tenant_select` is
 --
 --     USING (pp_rls_can_access_community(community_id))
 --
--- i.e. "the caller holds ANY user_roles row in this community". A tenant who
+-- and the emergency_broadcasts pair wraps the same check as
+-- `pp_rls_is_privileged() OR (auth.uid() IS NOT NULL AND
+-- pp_rls_can_access_community(community_id))`, on all four operations.
+-- Either way it means "the caller holds ANY user_roles row in this community". A tenant who
 -- takes their own session JWT and the public anon key can call
 -- `GET /rest/v1/<table>?community_id=eq.<theirs>` and read every row. The
 -- application's RBAC (requirePermission, isAdminRole, document category access,
@@ -27,12 +30,15 @@
 --   * leases / units / rent_obligations / rent_payments / ledger_entries: every
 --     neighbour's rent and balance (how this was found, PR #1174).
 --   * documents: including categories the RBAC matrix hides from tenants.
+--   * emergency_broadcast_recipients: every recipient's email and phone; and
+--     emergency_broadcasts was member-WRITABLE, so a resident could insert a
+--     fake alert or delete the history of a real one.
 --
 -- The write policies were reachable the same way: announcements, for one, admit
 -- member INSERT under the default community setting, which on this path skips
 -- the route's validation and logAuditEvent.
 --
--- WHY REVOKE RATHER THAN TIGHTEN 57 POLICIES: nothing in the application reads
+-- WHY REVOKE RATHER THAN TIGHTEN 59 POLICIES: nothing in the application reads
 -- or writes these tables as `authenticated`. Tenant queries go through
 -- createScopedClient (Drizzle on a role pp_rls_is_privileged() accepts), and
 -- every supabase-js `.from()` on a tenant table uses the service-role admin
@@ -83,6 +89,7 @@ BEGIN
     'contracts', 'document_categories', 'document_drafts', 'documents',
     'election_ballot_submissions', 'election_ballots', 'election_candidates',
     'election_eligibility_snapshots', 'election_proxies', 'elections',
+    'emergency_broadcast_recipients', 'emergency_broadcasts',
     'esign_consent', 'esign_events', 'esign_signers', 'esign_submissions',
     'esign_templates', 'faqs', 'finance_stripe_webhook_events', 'forum_replies',
     'forum_threads', 'help_article_feedback', 'help_article_views',
@@ -118,6 +125,12 @@ END $$;--> statement-breakpoint
 -- rows, or every row in a community you manage". That is exactly what those
 -- storage policies need. Every pp_rls_* helper that reads user_roles is
 -- SECURITY DEFINER, so none of them depends on this policy.
+--
+-- DROP/CREATE POLICY takes an ACCESS EXCLUSIVE lock on user_roles, which every
+-- RLS helper and the app's membership lookup read. Behind a long-running reader
+-- that lock would queue all app traffic, so give up after 5s instead and let
+-- the operator re-run it: the whole migration is one transaction and idempotent.
+SET LOCAL lock_timeout = '5s';--> statement-breakpoint
 DROP POLICY IF EXISTS "pp_tenant_select" ON public."user_roles";--> statement-breakpoint
 CREATE POLICY "pp_tenant_select" ON public."user_roles" AS PERMISSIVE FOR SELECT TO public
   USING (

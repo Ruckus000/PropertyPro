@@ -2260,7 +2260,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // before 0037 installed the write-scope trigger, such a caller could write a
       // broadcast into whichever of their communities they named, regardless of the
       // tenant context the request resolved to. The trigger rewrites it instead.
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await setPolicyProbeContext(authSql, seed.tenantAUserId, seed.communityAId);
 
       const inserted = await authSql<{ id: number; community_id: number }[]>`
         insert into public.emergency_broadcasts (
@@ -3139,26 +3139,42 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // grant via ALTER DEFAULT PRIVILEGES, and the house pp_tenant_select
       // template is membership-only, so the next migration to add one reopens
       // exactly this hole. It must either revoke the grant (add the table to
-      // DATA_API_REVOKED_TENANT_TABLES + 0077's successor) or ship a narrower
-      // SELECT policy.
-      const rows = await adminSql<{ relname: string }[]>`
-        select c.relname
-        from pg_class c
+      // DATA_API_REVOKED_TENANT_TABLES + 0077's successor) or ship a SELECT
+      // policy narrowed by an admin-tier or own-row predicate.
+      //
+      // Matches the membership check in ANY wrapping, not one exact string:
+      // the emergency_broadcasts pair spelled it `pp_rls_is_privileged() OR
+      // ((auth.uid() IS NOT NULL) AND pp_rls_can_access_community(...))` and
+      // slipped past an exact-text match the first time round.
+      const rows = await adminSql<{ relname: string; qual: string }[]>`
+        select c.relname, pg_get_expr(p.polqual, p.polrelid) as qual
+        from pg_policy p
+        join pg_class c on c.oid = p.polrelid
         join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public' and c.relkind = 'r'
+          and p.polpermissive and p.polcmd in ('r', '*')
           and has_table_privilege('authenticated', c.oid, 'SELECT')
-          and exists (
-            select 1 from pg_policy p
-            where p.polrelid = c.oid and p.polcmd in ('r', '*')
-              and pg_get_expr(p.polqual, p.polrelid) = 'pp_rls_can_access_community(community_id)'
-          )
+          and pg_get_expr(p.polqual, p.polrelid)
+                ~ '(pp_rls_can_access_community|pp_rls_has_community_membership)[(]'
         order by 1
       `;
-      expect(rows.map((row) => row.relname)).toEqual([]);
+      // A policy is narrowed if something beyond membership must ALSO hold:
+      // the admin tier, or the row being the caller's own.
+      const NARROWING = /pp_rls_can_read_audit_log\(|= auth\.uid\(\)|auth\.uid\(\) =/;
+      // `communities` is the root tenant table: a member reading their OWN
+      // community's row is the intended read. (Which of its columns that row
+      // should expose is a separate question — see the 0077 PR.)
+      const EXEMPT = new Set(['communities']);
+      const unnarrowed = rows
+        .filter((row) => !EXEMPT.has(row.relname) && !NARROWING.test(row.qual))
+        .map((row) => row.relname);
+      expect(unnarrowed).toEqual([]);
 
-      // Anti-vacuity: the predicate text this matches must still be the one the
-      // policies actually carry, or the query above finds nothing forever. The
-      // revoked tables keep their policies, so it must match them.
+      // Anti-vacuity, both directions. The scan must still SEE the narrowed
+      // policies (so the regex is not simply matching nothing)...
+      expect(rows.map((row) => row.relname)).toContain('maintenance_requests');
+      // ...and the membership text it keys on must still be what the policies
+      // carry: the revoked tables keep theirs, so it must match them.
       const [probe] = await adminSql<{ n: number }[]>`
         select count(*)::int as n from pg_policy p
         where p.polrelid = 'public.leases'::regclass

@@ -89,6 +89,14 @@ describe('migration 0077 — tenant tables shut to the Data API', () => {
       expect(firstArrayLiteral(MIGRATION)).not.toContain('user_roles');
     });
 
+    it('bounds the ACCESS EXCLUSIVE lock the policy swap takes on user_roles', () => {
+      // Every RLS helper and the app's membership lookup read user_roles; an
+      // unbounded wait behind a long reader would queue all of them.
+      const lockAt = MIGRATION.indexOf("SET LOCAL lock_timeout = '5s'");
+      expect(lockAt).toBeGreaterThan(-1);
+      expect(lockAt).toBeLessThan(MIGRATION.indexOf('DROP POLICY IF EXISTS "pp_tenant_select"'));
+    });
+
     it('drops the membership-only SELECT policy before recreating it', () => {
       expect(MIGRATION).toContain('DROP POLICY IF EXISTS "pp_tenant_select" ON public."user_roles"');
       expect(CREATE_USER_ROLES_SELECT).toContain('FOR SELECT');
@@ -114,7 +122,7 @@ describe('migration 0077 — tenant tables shut to the Data API', () => {
     });
 
     it.each(['calendar_sync_tokens', 'accounting_connections', 'invitations',
-      'election_ballot_submissions', 'leases', 'units'])(
+      'election_ballot_submissions', 'leases', 'units', 'emergency_broadcast_recipients'])(
       'still lists %s (a table whose exposure was the reason for 0077)',
       (table) => {
         expect(DATA_API_REVOKED_TENANT_TABLES).toContain(table);
