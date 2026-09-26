@@ -109,12 +109,13 @@
  * are comments) falsely alive.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { checkCeiling } from './lib/ceiling';
 import { collectCommentRanges, parseOrNull } from './lib/comment-ranges';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -650,21 +651,5 @@ function main(): void {
   console.log('\n✅ No dead service exports beyond the shrink-only baseline.');
 }
 
-// ESM main-detection via realpath + pathToFileURL. `import.meta.url` is
-// realpath-resolved AND percent-encoded; `process.argv[1]` is neither, so the
-// bare `file://${argv[1]}` template (still used by ~10 sibling guards)
-// silently fails whenever the invocation path has a symlink component (macOS
-// /tmp → /private/tmp) or a space: main() never runs, the process exits 0
-// having checked nothing, and the runner prints ✅ for a guard that examined
-// no population. The repo precedent (seed-demo.ts, reset-demo.ts,
-// demo-enable-gates.ts) applies pathToFileURL but NOT realpathSync, which
-// fixes the encoding class only — this guard resolves both.
-if (process.argv[1]) {
-  let invokedAs: string | null = null;
-  try {
-    invokedAs = pathToFileURL(realpathSync(process.argv[1])).href;
-  } catch {
-    invokedAs = null; // argv[1] not on disk — imported as a module, not invoked
-  }
-  if (import.meta.url === invokedAs) main();
-}
+// ESM main-detection via the shared helper (symlink- and encoding-safe).
+if (isMainModule(import.meta.url)) main();
