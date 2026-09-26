@@ -157,3 +157,38 @@ describe('comment extraction reaches the whole file', () => {
     expect(mergeAdjacent(collectComments('a.ts', src) ?? [])).toHaveLength(2);
   });
 });
+
+// The positions the old NODE-walk collector could not see: comments that sit
+// against a TOKEN rather than a node boundary. Each case failed (returned [])
+// under `forEachChild`; the shared token walk in `lib/comment-ranges.ts` finds
+// them. Each has a same-shape sibling in a string literal that must stay clean,
+// so a collector that over-reports reddens too.
+describe('comment extraction reaches nested token positions', () => {
+  it('an array literal, own-line before the closing bracket', () => {
+    const src = ['const ROLES = [', "  'resident',", '  // pm_admin was here', '];'].join('\n');
+    expect(lines(findCommentViolations('a.ts', src))).toEqual([3]);
+    expect(findCommentViolations('a.ts', "const R = [\n  'resident',\n  'pm_admin',\n];")).toEqual([]);
+  });
+
+  it('a call argument list, own-line before the closing paren', () => {
+    const src = ['requireRole(', '  membership,', '  // site_manager only', ');'].join('\n');
+    expect(lines(findCommentViolations('a.ts', src))).toEqual([3]);
+    expect(findCommentViolations('a.ts', "requireRole(\n  membership,\n  'site_manager',\n);")).toEqual([]);
+  });
+
+  it('a nested block, own-line before the closing brace', () => {
+    const src = ['export function a() {', '  if (x) {', '    return y;', '    // pm_admin path', '  }', '}'].join('\n');
+    expect(lines(findCommentViolations('a.ts', src))).toEqual([4]);
+  });
+
+  it('same-line trailing after a comma (the trivia-bucket case)', () => {
+    // TS assigns this comment to the CommaToken's TRAILING trivia; a
+    // leading-only query at the next token returns nothing for it.
+    const src = ['const ROLES = [', "  'resident', // pm_admin was here", '];'].join('\n');
+    expect(lines(findCommentViolations('a.ts', src))).toEqual([2]);
+  });
+
+  it('the parse-detector self-test covers a nested position, not just leading comments', () => {
+    expect(parseDetectorWorks()).toBe(true);
+  });
+});
