@@ -8,6 +8,14 @@
  * We parse it as UTC midnight using `dateStr + 'T00:00:00Z'` to avoid
  * local-timezone off-by-one errors (verified from lease-expiration-service.ts).
  * We do NOT use date-fns addDays because it uses local time internally.
+ *
+ * Lease-derived metrics are manager-only. Occupancy, lease expirations and
+ * monthly revenue are all aggregates over the community's leases, and in a
+ * small building an aggregate IS the neighbour's record (two units: total
+ * revenue minus your own rent is the other unit's rent). `/api/v1/leases` is
+ * manager-only (AZ-01), so these are too — and the gate is here, not in the
+ * UI, because the page renders whatever this function returns. For a
+ * non-manager the leases and units tables are not read at all.
  */
 import {
   announcements,
@@ -22,6 +30,7 @@ import {
   type Unit,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+import { isAdminRole } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import {
   selectRecentAnnouncements,
@@ -40,19 +49,48 @@ export interface LeaseExpirationWindows {
   within90Days: number;
 }
 
-export interface ApartmentMetrics {
+interface ApartmentMetricsBase {
   firstName: string;
   communityName: string;
   timezone: string;
+  openMaintenanceRequests: number;
+  announcements: DashboardAnnouncement[];
+}
+
+/** Lease-derived aggregates — computed for managers only. */
+interface ApartmentLeaseMetrics {
+  leaseMetricsVisible: true;
   occupiedUnits: number;
   vacantUnits: number;
   totalUnits: number;
   occupancyRate: number;
   leaseExpirations: LeaseExpirationWindows;
   totalMonthlyRevenue: number;
-  openMaintenanceRequests: number;
-  announcements: DashboardAnnouncement[];
 }
+
+/** What a non-manager receives: the lease-derived fields are never computed. */
+interface ApartmentLeaseMetricsWithheld {
+  leaseMetricsVisible: false;
+  occupiedUnits: null;
+  vacantUnits: null;
+  totalUnits: null;
+  occupancyRate: null;
+  leaseExpirations: null;
+  totalMonthlyRevenue: null;
+}
+
+export type ApartmentMetrics = ApartmentMetricsBase &
+  (ApartmentLeaseMetrics | ApartmentLeaseMetricsWithheld);
+
+const LEASE_METRICS_WITHHELD: ApartmentLeaseMetricsWithheld = {
+  leaseMetricsVisible: false,
+  occupiedUnits: null,
+  vacantUnits: null,
+  totalUnits: null,
+  occupancyRate: null,
+  leaseExpirations: null,
+  totalMonthlyRevenue: null,
+};
 
 /** Parse YYYY-MM-DD as UTC midnight. Same approach as lease-expiration-service.ts. */
 function parseUtcDate(dateStr: string): Date | null {
@@ -67,49 +105,14 @@ function utcDaysFromNow(days: number): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + days * 86400000;
 }
 
-export async function loadApartmentMetrics(
-  communityId: number,
-  userId: string,
-  membership: CommunityMembership,
-): Promise<ApartmentMetrics> {
-  const scoped = createScopedClient(communityId);
-
-  const [unitRows, leaseRows, maintenanceRows, announcementRows, communityRows, userRows] =
-    await Promise.all([
-      scoped.query(units),
-      scoped.query(leases),
-      scoped.query(maintenanceRequests),
-      scoped.query(announcements),
-      scoped.query(communities),
-      // Point lookup of the viewer's name only. `users` is platform-global (no
-      // community_id), so `scoped.query(users)` scanned every user on the
-      // platform — phone and OTP columns included — to read one name. Same
-      // shape as `getDashboardUserLookup` in dashboard/dashboard-queries.ts.
-      scoped
-        .selectFrom<{ fullName: string | null }>(
-          users,
-          { fullName: users.fullName },
-          eq(users.id, userId),
-        )
-        .limit(1),
-    ]);
-
-  // Community metadata
-  const community = communityRows.find((r) => r['id'] === communityId);
-  const communityName =
-    typeof community?.['name'] === 'string' ? (community['name'] as string) : 'Community';
-  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
-
-  // User first name
-  const fullName = typeof userRows[0]?.fullName === 'string' ? userRows[0].fullName : null;
-
+function computeLeaseMetrics(unitRows: Unit[], leaseRows: Lease[]): ApartmentLeaseMetrics {
   // Active leases (not soft-deleted)
-  const activeLeases = (leaseRows as Lease[]).filter(
+  const activeLeases = leaseRows.filter(
     (l) => l.status === 'active' && l.deletedAt == null,
   );
 
   // Occupancy
-  const liveUnits = (unitRows as Unit[]).filter((u) => u.deletedAt == null);
+  const liveUnits = unitRows.filter((u) => u.deletedAt == null);
   const occupiedUnitIds = new Set(activeLeases.map((l) => l.unitId));
   const totalUnits = liveUnits.length;
   const occupiedUnits = occupiedUnitIds.size;
@@ -144,6 +147,57 @@ export async function loadApartmentMetrics(
     return sum + (isNaN(amount) ? 0 : amount);
   }, 0);
 
+  return {
+    leaseMetricsVisible: true,
+    occupiedUnits,
+    vacantUnits,
+    totalUnits,
+    occupancyRate,
+    leaseExpirations,
+    totalMonthlyRevenue,
+  };
+}
+
+export async function loadApartmentMetrics(
+  communityId: number,
+  userId: string,
+  membership: CommunityMembership,
+): Promise<ApartmentMetrics> {
+  const scoped = createScopedClient(communityId);
+  const canViewLeaseMetrics = isAdminRole(membership.role);
+
+  const [leaseMetrics, maintenanceRows, announcementRows, communityRows, userRows] =
+    await Promise.all([
+      canViewLeaseMetrics
+        ? Promise.all([scoped.query(units), scoped.query(leases)]).then(([unitRows, leaseRows]) =>
+            computeLeaseMetrics(unitRows as Unit[], leaseRows as Lease[]),
+          )
+        : Promise.resolve(LEASE_METRICS_WITHHELD),
+      scoped.query(maintenanceRequests),
+      scoped.query(announcements),
+      scoped.query(communities),
+      // Point lookup of the viewer's name only. `users` is platform-global (no
+      // community_id), so `scoped.query(users)` scanned every user on the
+      // platform — phone and OTP columns included — to read one name. Same
+      // shape as `getDashboardUserLookup` in dashboard/dashboard-queries.ts.
+      scoped
+        .selectFrom<{ fullName: string | null }>(
+          users,
+          { fullName: users.fullName },
+          eq(users.id, userId),
+        )
+        .limit(1),
+    ]);
+
+  // Community metadata
+  const community = communityRows.find((r) => r['id'] === communityId);
+  const communityName =
+    typeof community?.['name'] === 'string' ? (community['name'] as string) : 'Community';
+  const timezone = resolveTimezone(community?.['timezone'] as string | undefined);
+
+  // User first name
+  const fullName = typeof userRows[0]?.fullName === 'string' ? userRows[0].fullName : null;
+
   // Open maintenance requests
   const openMaintenanceRequests = (
     maintenanceRows as { status: string; deletedAt: Date | null }[]
@@ -161,13 +215,8 @@ export async function loadApartmentMetrics(
     firstName: toFirstName(fullName),
     communityName,
     timezone,
-    occupiedUnits,
-    vacantUnits,
-    totalUnits,
-    occupancyRate,
-    leaseExpirations,
-    totalMonthlyRevenue,
     openMaintenanceRequests,
     announcements: recentAnnouncements,
+    ...leaseMetrics,
   };
 }

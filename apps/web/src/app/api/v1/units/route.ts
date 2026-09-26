@@ -6,6 +6,7 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
+import { isAdminRole } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -46,7 +47,15 @@ function requireApartmentCommunityForRent(communityType: string): void {
   }
 }
 
-function mapUnitRow(row: Record<string, unknown>) {
+/**
+ * `rentAmount` is derived from the unit's active lease by a DB trigger (0040),
+ * and `ownerUserId` identifies the owning user — both are per-unit records of
+ * OTHER residents. `units.read` admits owners and tenants (the unit picker and
+ * other resident features need the list), so the list must not carry them to a
+ * non-manager: a tenant would otherwise read every neighbour's rent. Leases are
+ * manager-only (AZ-01); this is the same data through a different door.
+ */
+function mapUnitRow(row: Record<string, unknown>, includeManagerFields: boolean) {
   return {
     id: row['id'] as number,
     communityId: row['communityId'] as number,
@@ -56,8 +65,8 @@ function mapUnitRow(row: Record<string, unknown>) {
     bedrooms: (row['bedrooms'] as number | null) ?? null,
     bathrooms: (row['bathrooms'] as number | null) ?? null,
     sqft: (row['sqft'] as number | null) ?? null,
-    rentAmount: (row['rentAmount'] as string | null) ?? null,
-    ownerUserId: (row['ownerUserId'] as string | null) ?? null,
+    rentAmount: includeManagerFields ? ((row['rentAmount'] as string | null) ?? null) : null,
+    ownerUserId: includeManagerFields ? ((row['ownerUserId'] as string | null) ?? null) : null,
     createdAt: row['createdAt'] as string,
     updatedAt: row['updatedAt'] as string,
   };
@@ -74,7 +83,10 @@ export const GET = withErrorHandler(
     const scoped = createScopedClient(communityId);
 
     const rows = await listUnitsForCommunity(scoped);
-    return (rows as Record<string, unknown>[]).map(mapUnitRow);
+    const includeManagerFields = isAdminRole(membership.role);
+    return (rows as Record<string, unknown>[]).map((row) =>
+      mapUnitRow(row, includeManagerFields),
+    );
   }),
 );
 

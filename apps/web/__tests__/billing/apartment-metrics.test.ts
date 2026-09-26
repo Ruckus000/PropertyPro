@@ -74,9 +74,9 @@ const DEFAULT_MEMBERSHIP: CommunityMembership = {
   userId: USER_ID,
   communityId: COMMUNITY_ID,
   communityName: 'Test Community',
-  // `manager` pre-dates role-v3 and is not a CommunityRole. Inert here either
-  // way: the only reader is canReadAnnouncementAudience, which returns early on
-  // `isAdmin: true` and never consults `role`.
+  // Load-bearing: `isAdminRole(role)` decides whether the lease-derived metrics
+  // (occupancy, expirations, revenue) are computed at all. Every expiration,
+  // occupancy and revenue case below relies on this being a management role.
   role: 'property_manager',
   communityType: 'apartment',
   timezone: 'America/Chicago',
@@ -193,9 +193,9 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
-    expect(metrics.leaseExpirations.within30Days).toBe(1);
-    expect(metrics.leaseExpirations.within60Days).toBe(1);
-    expect(metrics.leaseExpirations.within90Days).toBe(1);
+    expect(metrics.leaseExpirations?.within30Days).toBe(1);
+    expect(metrics.leaseExpirations?.within60Days).toBe(1);
+    expect(metrics.leaseExpirations?.within90Days).toBe(1);
   });
 
   it('does NOT count a lease that expired yesterday', async () => {
@@ -204,9 +204,9 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
-    expect(metrics.leaseExpirations.within30Days).toBe(0);
-    expect(metrics.leaseExpirations.within60Days).toBe(0);
-    expect(metrics.leaseExpirations.within90Days).toBe(0);
+    expect(metrics.leaseExpirations?.within30Days).toBe(0);
+    expect(metrics.leaseExpirations?.within60Days).toBe(0);
+    expect(metrics.leaseExpirations?.within90Days).toBe(0);
   });
 
   it('counts a lease expiring at exactly 30 days (boundary inclusive)', async () => {
@@ -215,7 +215,7 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
-    expect(metrics.leaseExpirations.within30Days).toBe(1);
+    expect(metrics.leaseExpirations?.within30Days).toBe(1);
   });
 
   it('does NOT count a lease expiring at 31 days in within30Days, but counts in within60Days', async () => {
@@ -224,8 +224,8 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
-    expect(metrics.leaseExpirations.within30Days).toBe(0);
-    expect(metrics.leaseExpirations.within60Days).toBe(1);
+    expect(metrics.leaseExpirations?.within30Days).toBe(0);
+    expect(metrics.leaseExpirations?.within60Days).toBe(1);
   });
 
   it('counts within60Days but not within30Days for a lease at day 60', async () => {
@@ -234,9 +234,9 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
-    expect(metrics.leaseExpirations.within30Days).toBe(0);
-    expect(metrics.leaseExpirations.within60Days).toBe(1);
-    expect(metrics.leaseExpirations.within90Days).toBe(1);
+    expect(metrics.leaseExpirations?.within30Days).toBe(0);
+    expect(metrics.leaseExpirations?.within60Days).toBe(1);
+    expect(metrics.leaseExpirations?.within90Days).toBe(1);
   });
 
   it('counts within90Days but not within60Days for a lease at day 61', async () => {
@@ -245,9 +245,9 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
-    expect(metrics.leaseExpirations.within30Days).toBe(0);
-    expect(metrics.leaseExpirations.within60Days).toBe(0);
-    expect(metrics.leaseExpirations.within90Days).toBe(1);
+    expect(metrics.leaseExpirations?.within30Days).toBe(0);
+    expect(metrics.leaseExpirations?.within60Days).toBe(0);
+    expect(metrics.leaseExpirations?.within90Days).toBe(1);
   });
 
   it('does not count a lease with an invalid endDate format', async () => {
@@ -255,9 +255,9 @@ describe('loadApartmentMetrics — lease expiration date arithmetic', () => {
 
     const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
 
-    expect(metrics.leaseExpirations.within30Days).toBe(0);
-    expect(metrics.leaseExpirations.within60Days).toBe(0);
-    expect(metrics.leaseExpirations.within90Days).toBe(0);
+    expect(metrics.leaseExpirations?.within30Days).toBe(0);
+    expect(metrics.leaseExpirations?.within60Days).toBe(0);
+    expect(metrics.leaseExpirations?.within90Days).toBe(0);
   });
 
   it('returns all-zero expiration windows when there are no leases', async () => {
@@ -491,4 +491,82 @@ describe('loadApartmentMetrics — metadata', () => {
     expect(limitFn).toHaveBeenCalledWith(1);
     expect(metrics.firstName).toBe('Henry');
   });
+});
+
+// ---------------------------------------------------------------------------
+// Lease-derived metrics are manager-only
+// ---------------------------------------------------------------------------
+
+describe('loadApartmentMetrics — lease-derived metrics are withheld from non-managers', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  // A two-unit building: with revenue visible, a tenant subtracts their own
+  // rent from the total and reads the neighbour's.
+  const TWO_UNIT_BUILDING: MockData = {
+    units: [{ id: 1, deletedAt: null }, { id: 2, deletedAt: null }],
+    leases: [
+      activeLease({ id: 1, unitId: 1, rentAmount: '1200', endDate: offsetDate(20) }),
+      activeLease({ id: 2, unitId: 2, rentAmount: '1800', endDate: offsetDate(200) }),
+    ],
+    maintenanceRequests: [{ status: 'open', deletedAt: null }],
+  };
+
+  it.each([
+    ['tenant', false],
+    ['owner', true],
+  ] as const)('%s: revenue, occupancy and expirations are null and leases/units are never read', async (_label, isUnitOwner) => {
+    const { queryFn } = buildScopedMock(TWO_UNIT_BUILDING);
+
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, {
+      ...DEFAULT_MEMBERSHIP,
+      role: 'resident',
+      isUnitOwner,
+      isAdmin: false,
+      displayTitle: isUnitOwner ? 'Owner' : 'Tenant',
+    });
+
+    expect(metrics.totalMonthlyRevenue).toBeNull();
+    expect(metrics.leaseMetricsVisible).toBe(false);
+    expect(metrics.occupiedUnits).toBeNull();
+    expect(metrics.vacantUnits).toBeNull();
+    expect(metrics.totalUnits).toBeNull();
+    expect(metrics.occupancyRate).toBeNull();
+    expect(metrics.leaseExpirations).toBeNull();
+    // Nothing lease-derived survives serialization either.
+    expect(JSON.stringify(metrics)).not.toMatch(/3000|1800|1200/);
+
+    const tablesRead = queryFn.mock.calls.map(([table]) => table._tag);
+    expect(tablesRead).not.toContain('leases');
+    expect(tablesRead).not.toContain('units');
+
+    // Non-lease content still loads.
+    expect(metrics.openMaintenanceRequests).toBe(1);
+    expect(metrics.communityName).toBe('Test Community');
+  });
+
+  it.each(['property_manager', 'root_manager'] as const)(
+    '%s: lease-derived metrics are computed',
+    async (role) => {
+      buildScopedMock(TWO_UNIT_BUILDING);
+
+      const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, {
+        ...DEFAULT_MEMBERSHIP,
+        role,
+      });
+
+      expect(metrics.leaseMetricsVisible).toBe(true);
+      expect(metrics.totalMonthlyRevenue).toBe(3000);
+      expect(metrics.occupiedUnits).toBe(2);
+      expect(metrics.occupancyRate).toBe(100);
+      expect(metrics.leaseExpirations).toEqual({ within30Days: 1, within60Days: 1, within90Days: 1 });
+    },
+  );
 });

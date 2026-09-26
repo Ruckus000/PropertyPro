@@ -82,10 +82,12 @@ import { GET, POST } from '../../src/app/api/v1/units/route';
 const MEMBERSHIP = {
   userId: 'actor-1',
   communityId: 42,
-  role: 'cam' as const,
+  // A v3 management role: GET redacts rentAmount/ownerUserId unless
+  // isAdminRole(role), and a retired name resolves to non-admin.
+  role: 'property_manager' as const,
   isAdmin: true,
   isUnitOwner: false,
-  displayTitle: 'CAM',
+  displayTitle: 'Property Manager',
   communityType: 'condo_718' as const,
 };
 
@@ -138,6 +140,77 @@ describe('/api/v1/units', () => {
 
     const res = await GET(new NextRequest('http://localhost:3000/api/v1/units?communityId=42'));
     expect(res.status).toBe(403);
+  });
+
+  describe('GET redacts manager-only fields for non-managers', () => {
+    const UNIT_ROWS = [
+      {
+        id: 1,
+        communityId: 42,
+        unitNumber: '101',
+        building: null,
+        floor: 1,
+        bedrooms: 2,
+        bathrooms: 1,
+        sqft: 900,
+        rentAmount: '1850.00',
+        ownerUserId: 'owner-101',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 2,
+        communityId: 42,
+        unitNumber: '102',
+        building: null,
+        floor: 1,
+        bedrooms: 1,
+        bathrooms: 1,
+        sqft: 650,
+        rentAmount: '1400.00',
+        ownerUserId: 'owner-102',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    async function listAs(role: string, isUnitOwner: boolean) {
+      requireCommunityMembershipMock.mockResolvedValue({
+        ...MEMBERSHIP,
+        role,
+        isUnitOwner,
+        isAdmin: role === 'property_manager' || role === 'root_manager',
+      });
+      listUnitsForCommunityMock.mockResolvedValue(UNIT_ROWS);
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/units?communityId=42'));
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as { data: Array<Record<string, unknown>> };
+      return json.data;
+    }
+
+    it.each([
+      ['tenant', 'resident', false],
+      ['owner', 'resident', true],
+    ] as const)('%s: every unit has rentAmount and ownerUserId nulled', async (_label, role, isUnitOwner) => {
+      const units = await listAs(role, isUnitOwner);
+      expect(units).toHaveLength(2);
+      for (const unit of units) {
+        expect(unit['rentAmount']).toBeNull();
+        expect(unit['ownerUserId']).toBeNull();
+      }
+      // Non-sensitive fields still flow — the unit picker keeps working.
+      expect(units.map((u) => u['unitNumber'])).toEqual(['101', '102']);
+      expect(units[0]!['bedrooms']).toBe(2);
+    });
+
+    it.each(['property_manager', 'root_manager'] as const)(
+      '%s: rentAmount and ownerUserId are returned',
+      async (role) => {
+        const units = await listAs(role, false);
+        expect(units.map((u) => u['rentAmount'])).toEqual(['1850.00', '1400.00']);
+        expect(units.map((u) => u['ownerUserId'])).toEqual(['owner-101', 'owner-102']);
+      },
+    );
   });
 
   it('POST creates unit and logs audit', async () => {
