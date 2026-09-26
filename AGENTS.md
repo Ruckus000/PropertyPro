@@ -58,7 +58,7 @@ The compliance engine tracks Florida statutory obligations for condos (§718, 17
 
 | Check | What it catches | Script |
 |-----|----------------|--------|
-| **lint** | TypeScript lint + DB access guard (DB001–DB005) | `pnpm lint` (includes `guard:db-access`) |
+| **lint** | ESLint, plus every guard listed in `scripts/run-lint-guards.mjs` (DB access DB001–DB005, tenant scope, contracts, legacy roles, design tokens, …) | `pnpm lint` (`turbo run lint` + `node scripts/run-lint-guards.mjs`) |
 | **typecheck** | Type errors across all packages | `pnpm typecheck` |
 | **unit-tests** | Vitest unit test failures | `pnpm test` |
 | **no-mock-guard** | `vi.mock()` / `jest.mock()` in integration tests | `scripts/verify-no-mocks-in-integration.ts` |

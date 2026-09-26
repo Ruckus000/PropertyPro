@@ -152,7 +152,7 @@ docs/                   # Specs, ADRs, audits, design system
 pnpm install                    # Install dependencies
 pnpm dev                        # Run dev server
 pnpm typecheck                  # Type-check all packages AND scripts/
-pnpm lint                       # Lint + DB access guard
+pnpm lint                       # ESLint + every guard in scripts/run-lint-guards.mjs
 pnpm build                      # Production build
 pnpm test                       # Unit tests
 pnpm seed:demo                  # Seed demo data

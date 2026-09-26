@@ -45,9 +45,9 @@
  *   - COMMENTS DO NOT COUNT. A docblock mention is prose, not a caller — the
  *     2026-09-22 audit's dead exports were all prose-mentioned somewhere.
  *     Comments are blanked with the TypeScript parser, not a regex, for the
- *     reason recorded in `scripts/lib/legacy-role-comments.ts`: a regex cannot
+ *     reason recorded in `scripts/lib/comment-ranges.ts`: a regex cannot
  *     tell a comment from a string literal or JSX text. The blanking walks
- *     TOKENS and queries BOTH trivia buckets — see `collectCommentRanges`;
+ *     TOKENS and queries BOTH trivia buckets — see `scripts/lib/comment-ranges.ts`;
  *     a corpus file that fails to parse REFUSES the run (exit 2) rather than
  *     silently counting its comment prose.
  *   - STRING LITERALS DO COUNT. A quoted mention may be a job name, a log key
@@ -109,11 +109,13 @@
  * are comments) falsely alive.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { checkCeiling } from './lib/ceiling';
+import { collectCommentRanges, parseOrNull } from './lib/comment-ranges';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -154,29 +156,13 @@ export interface BaselineEvaluation {
 // TypeScript-parser primitives
 // ---------------------------------------------------------------------------
 
-function scriptKindFor(fileName: string): ts.ScriptKind {
-  if (fileName.endsWith('.tsx')) return ts.ScriptKind.TSX;
-  if (fileName.endsWith('.jsx')) return ts.ScriptKind.JSX;
-  if (fileName.endsWith('.js') || fileName.endsWith('.mjs')) return ts.ScriptKind.JS;
-  return ts.ScriptKind.TS;
-}
-
-function parseOrRefuse(fileName: string, source: string): ts.SourceFile | null {
-  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false, scriptKindFor(fileName));
-  // parseDiagnostics is a TS internal — the same detector legacy-role-comments
-  // and class-resolution use, and which commentExtractorWorks() probes below.
-  const diagnostics = (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics;
-  if (Array.isArray(diagnostics) && diagnostics.length > 0) return null;
-  return sf;
-}
-
 /**
  * Top-level `export function` / `export async function` names, or `null` when
  * the file did not parse. Exported for the self-test; main() treats null as
  * could-not-check (exit 2), never as "no exports".
  */
 export function extractExportedFunctionNames(fileName: string, source: string): string[] | null {
-  const sf = parseOrRefuse(fileName, source);
+  const sf = parseOrNull(fileName, source);
   if (sf === null) return null;
   // A Set, not an array: an OVERLOADED export declares one name via N
   // signatures (`help-article-service.ts` declares searchArticles three
@@ -200,55 +186,6 @@ export function extractExportedFunctionNames(fileName: string, source: string): 
 }
 
 /**
- * Every comment range in the file, or `null` when it did not parse.
- *
- * TOKEN walk (`getChildren`), not a node walk (`forEachChild`): comments are
- * trivia attached to TOKEN positions, and a node walk only sees comments
- * adjacent to a node boundary. It silently misses trailing comments inside
- * array literals, call arguments and nested blocks — measured on this repo:
- * 436 of 3,851 corpus files leaked, and the leak kept a genuinely dead export
- * (`findOrphanCommunities`, whose only outside mention is a trailing comment
- * inside an array literal in its own unit test) looking alive. The error
- * direction is always toward a missed death — vacuously green, the failure
- * `.claude/rules/verification.md` exists to prevent.
- *
- * BOTH trivia buckets must be queried at every token. The TS trivia model
- * assigns a comment on the SAME LINE as a preceding token as that token's
- * TRAILING trivia, and `getLeadingCommentRanges` at the NEXT token's pos
- * returns `undefined` for it (probed empirically on TS 5.9.3: for
- * `const x = [\n 1, // note\n];` the comment appears only in
- * `getTrailingCommentRanges` at the CommaToken's end). Leading-only queries —
- * including the S9 review's proposed fix — miss exactly the class of leak
- * this rewrite exists to close. The seen-set de-duplicates the overlap.
- */
-function collectCommentRanges(fileName: string, source: string): ts.CommentRange[] | null {
-  const sf = parseOrRefuse(fileName, source);
-  if (sf === null) return null;
-  const seen = new Set<number>();
-  const out: ts.CommentRange[] = [];
-  const add = (ranges: ts.CommentRange[] | undefined): void => {
-    for (const r of ranges ?? []) {
-      if (seen.has(r.pos)) continue;
-      seen.add(r.pos);
-      out.push(r);
-    }
-  };
-  const visit = (node: ts.Node): void => {
-    // getChildren(sf) materializes TOKENS (forEachChild never yields them);
-    // the sourceFile argument is required because we parse without parents.
-    const children = node.getChildren(sf);
-    if (children.length === 0) {
-      add(ts.getLeadingCommentRanges(source, node.pos));
-      add(ts.getTrailingCommentRanges(source, node.end));
-      return;
-    }
-    for (const child of children) visit(child);
-  };
-  visit(sf);
-  return out;
-}
-
-/**
  * The source with every comment range replaced by spaces (newlines kept, so
  * line numbers survive). `null` when the file did not parse — callers decide
  * whether that is a refusal (service files) or a conservative fallback
@@ -256,8 +193,9 @@ function collectCommentRanges(fileName: string, source: string): ts.CommentRange
  * ADD references, never remove them).
  */
 export function blankComments(fileName: string, source: string): string | null {
-  const ranges = collectCommentRanges(fileName, source);
-  if (ranges === null) return null;
+  const found = collectCommentRanges(fileName, source);
+  if (found === null) return null;
+  const { ranges } = found;
   if (ranges.length === 0) return source;
   const chars = source.split('');
   for (const r of ranges) {
@@ -713,21 +651,5 @@ function main(): void {
   console.log('\n✅ No dead service exports beyond the shrink-only baseline.');
 }
 
-// ESM main-detection via realpath + pathToFileURL. `import.meta.url` is
-// realpath-resolved AND percent-encoded; `process.argv[1]` is neither, so the
-// bare `file://${argv[1]}` template (still used by ~10 sibling guards)
-// silently fails whenever the invocation path has a symlink component (macOS
-// /tmp → /private/tmp) or a space: main() never runs, the process exits 0
-// having checked nothing, and the runner prints ✅ for a guard that examined
-// no population. The repo precedent (seed-demo.ts, reset-demo.ts,
-// demo-enable-gates.ts) applies pathToFileURL but NOT realpathSync, which
-// fixes the encoding class only — this guard resolves both.
-if (process.argv[1]) {
-  let invokedAs: string | null = null;
-  try {
-    invokedAs = pathToFileURL(realpathSync(process.argv[1])).href;
-  } catch {
-    invokedAs = null; // argv[1] not on disk — imported as a module, not invoked
-  }
-  if (import.meta.url === invokedAs) main();
-}
+// ESM main-detection via the shared helper (symlink- and encoding-safe).
+if (isMainModule(import.meta.url)) main();

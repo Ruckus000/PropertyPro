@@ -160,6 +160,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { isMainModule } from './lib/is-main-module';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_ROOT_REL = 'apps/admin/src/lib';
@@ -941,7 +942,7 @@ function helperSignatureSelfTest(): string | null {
 // module from a unit test must not scan the tree or exit the runner; the
 // selftest and the parser proof still run on every real invocation, before any
 // scan result is trusted.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url)) {
   selftest();
 
   const helperSignatureError = helperSignatureSelfTest();
