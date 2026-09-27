@@ -94,6 +94,8 @@ on:
 
 permissions:
   contents: read
+  # Pull the Postgres service image from this repo's GHCR package.
+  packages: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -107,16 +109,24 @@ jobs:
 
     services:
       postgres:
-        # AWS ECR Public's mirror of the Docker Hub official image, NOT a
-        # third-party rebuild — `docker/library/*` on public.ecr.aws is the
-        # official-images mirror, so this is the same artifact by a second route.
+        # The Docker Hub official image (via AWS ECR Public's official-images
+        # mirror, `docker/library/*`), copied byte-for-byte into this repo's GHCR
+        # package by postgres-image-mirror.yml — the digest below IS upstream's.
         #
-        # This job is a REQUIRED status check, so its service container is on the
-        # critical path of every merge in the repo. Pulling it from Docker Hub
-        # anonymously made a Docker Hub blip block all merges: observed as three
+        # This job is a REQUIRED status check AND the production-deploy gate, so
+        # its service container is on the critical path of every merge and every
+        # deploy. Both anonymous pull routes have failed it: Docker Hub as three
         # consecutive `Get "https://registry-1.docker.io/v2/": context deadline
-        # exceeded` failures, which failed the required check on an unrelated PR.
-        image: public.ecr.aws/docker/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+        # exceeded`, then ECR Public on 2026-09-27 as `toomanyrequests: Data limit
+        # exceeded` twice (runs 36317688530 on main — which held the deploy — and
+        # 36343071278). Anonymous quota is per source IP and runners share IPs.
+        # So: pull AUTHENTICATED, from GHCR, with GITHUB_TOKEN (`packages: read`
+        # above). To move the pin, let postgres-digest-bump.yml do it — it
+        # mirrors the new digest before proposing it.
+        image: ghcr.io/ruckus000/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
