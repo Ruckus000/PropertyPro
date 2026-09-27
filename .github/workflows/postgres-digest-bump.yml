@@ -6,7 +6,11 @@ name: Postgres Image Digest Bump
 # somebody happens to notice. This job is that process.
 #
 # Weekly it resolves what `postgres:16` currently points at on the ECR Public
-# mirror and, if that differs from what is pinned, opens a PR moving the pin.
+# mirror and, if that differs from what is pinned, copies the new digest into
+# this repo's GHCR package (where the consumers actually pull from — see
+# postgres-image-mirror.yml) and opens a PR moving the pin. The mirror step MUST
+# precede the PR: the PR's integration-tests pulls the new digest from GHCR, and
+# a push made with GITHUB_TOKEN does not trigger postgres-image-mirror.yml.
 
 on:
   schedule:
@@ -29,9 +33,11 @@ jobs:
     timeout-minutes: 10
     permissions:
       # Needed to push the bump branch and open the PR. Deliberately scoped to
-      # this job rather than the workflow, and nothing wider than these two.
+      # this job rather than the workflow, and nothing wider than these three.
       contents: write
       pull-requests: write
+      # Copy the new digest into ghcr.io/<owner>/postgres before proposing it.
+      packages: write
 
     env:
       IMAGE_REPO: docker/library/postgres
@@ -91,6 +97,30 @@ jobs:
             echo "Pin is stale: $current -> $latest"
           fi
 
+      - name: Mirror the new digest to GHCR
+        if: steps.resolve.outputs.changed == 'true'
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          LATEST: ${{ steps.resolve.outputs.latest }}
+        run: |
+          set -euo pipefail
+          dest_repo="ghcr.io/${OWNER,,}/postgres"
+          hex="${LATEST#sha256:}"
+          printf '%s' "$GH_TOKEN" | skopeo login ghcr.io -u "$GH_ACTOR" --password-stdin
+          # --preserve-digests: the GHCR index must be byte-identical to
+          # upstream's, or the pin we are about to write would not resolve.
+          skopeo copy --all --preserve-digests --retry-times 3 \
+            "docker://${REGISTRY}/${IMAGE_REPO}@${LATEST}" \
+            "docker://${dest_repo}:${IMAGE_TAG}-${hex:0:12}"
+          got="sha256:$(skopeo inspect --raw "docker://${dest_repo}@${LATEST}" | sha256sum | cut -d' ' -f1)"
+          if [ "$got" != "$LATEST" ]; then
+            echo "::error::GHCR returned ${got} for ${LATEST} — not opening a PR"
+            exit 1
+          fi
+          echo "Verified: ${dest_repo}@${LATEST}"
+
       - name: Open a bump PR
         if: steps.resolve.outputs.changed == 'true'
         env:
@@ -138,7 +168,7 @@ jobs:
           git commit \
             -m "chore(ci): bump pinned postgres:16 digest" \
             -m "${CURRENT} -> ${LATEST}" \
-            -m "Opened automatically by .github/workflows/postgres-digest-bump.yml. The tag still resolves to postgres:16 on the ECR Public mirror; only the digest moved, which is how upstream ships patch releases."
+            -m "Opened automatically by .github/workflows/postgres-digest-bump.yml. The tag still resolves to postgres:16 on the ECR Public mirror; only the digest moved, which is how upstream ships patch releases. The new digest was copied to this repo's GHCR package before this commit."
 
           git push origin "$branch"
 
@@ -149,7 +179,9 @@ jobs:
             printf '| To | `%s` |\n\n' "$LATEST"
             printf '`postgres:16` on the ECR Public mirror now resolves to a new image\n'
             printf 'index — that is how upstream ships patch releases. The tag is\n'
-            printf 'unchanged; only the pin moves.\n\n'
+            printf 'unchanged; only the pin moves. The new digest has already been\n'
+            printf 'copied (digest-preserving) into the GHCR package, which is\n'
+            printf 'where the service containers pull from.\n\n'
             printf 'Merging is safe once `integration-tests` is green, since that job is\n'
             printf 'the primary consumer of this image and will pull the new digest.\n'
             if [ "$HAS_PAT" != "true" ]; then

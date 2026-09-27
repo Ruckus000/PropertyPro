@@ -1,0 +1,110 @@
+name: Postgres Image Mirror
+
+# Copies the pinned Postgres service image into this repo's GitHub Container
+# Registry package, so the jobs that use it pull AUTHENTICATED from GHCR instead
+# of anonymously from a shared-IP registry.
+#
+# Why: integration-tests.yml is a required check AND the production-deploy gate.
+# Its service container used to come anonymously from public.ecr.aws, and on
+# 2026-09-27 that failed twice in "Initialize containers" with
+# `toomanyrequests: Data limit exceeded` — the anonymous quota is per source IP,
+# and GitHub-hosted runners share IPs. No test ran either time, and the first
+# failure (run 36317688530, main @ 479a4be6) held the production deploy until a
+# manual re-run. Docker Hub had failed the same way before that (see the comment
+# on the service in integration-tests.yml).
+#
+# What this does NOT change: the image. `skopeo copy --all --preserve-digests`
+# copies the multi-arch index byte-for-byte, so the GHCR digest IS the pinned
+# upstream digest, and the job below refuses to pass unless it can read that
+# exact digest back from GHCR. The upstream stays public.ecr.aws's mirror of the
+# Docker Hub official image; only the place our runners pull from moves.
+#
+# The package is created by GITHUB_TOKEN from this repo's workflow, which links
+# it to the repo and grants this repo's workflows access. Consumers therefore
+# need `packages: read` and service `credentials:` — no new secrets.
+#
+# Triggers:
+#   - push touching a file that carries the pin: a branch that changes the pin
+#     mirrors its digest before (or while) its PR's checks try to pull it. Any
+#     branch, not just main, for exactly that reason. It is idempotent.
+#   - workflow_dispatch: manual re-mirror.
+# postgres-digest-bump.yml mirrors a NEW digest itself before opening its PR,
+# because a push made with GITHUB_TOKEN does not trigger this workflow.
+
+on:
+  push:
+    paths:
+      - '.github/workflows/integration-tests.yml'
+      - '.github/workflows/tenant-isolation-game-day.yml'
+      - '.github/workflows/postgres-image-mirror.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: mirror-postgres-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Create/update the ghcr.io/<owner>/postgres package. Scoped to this job.
+      packages: write
+
+    env:
+      SOURCE_REPO: public.ecr.aws/docker/library/postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Mirror the pinned digest to GHCR
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          # Every pinned digest, from whichever registry the ref currently names.
+          # Same pattern postgres-digest-bump.yml keys on.
+          digests=$(grep -ohE 'postgres:16@sha256:[0-9a-f]{64}' .github/workflows/*.yml \
+            | sed 's/.*@//' | sort -u)
+          if [ -z "$digests" ]; then
+            echo "::error::No pinned postgres digest found in .github/workflows"
+            exit 1
+          fi
+
+          dest_repo="ghcr.io/${OWNER,,}/postgres"
+          printf '%s' "$GH_TOKEN" | skopeo login ghcr.io -u "$GH_ACTOR" --password-stdin
+
+          for digest in $digests; do
+            hex="${digest#sha256:}"
+            # A tag per digest keeps every mirrored version tagged (never an
+            # orphaned untagged version) and lets the bump job add one without
+            # moving another. Consumers pull by digest; the tag is bookkeeping.
+            dest="${dest_repo}:16-${hex:0:12}"
+
+            if skopeo inspect --raw "docker://${dest_repo}@${digest}" >/dev/null 2>&1; then
+              echo "Already mirrored: ${dest_repo}@${digest}"
+            else
+              echo "Mirroring ${SOURCE_REPO}@${digest} -> ${dest}"
+              skopeo copy --all --preserve-digests --retry-times 3 \
+                "docker://${SOURCE_REPO}@${digest}" "docker://${dest}"
+            fi
+
+            # Fail closed: prove GHCR serves the EXACT pinned bytes. A copy that
+            # re-wrote the index would change its digest and every consumer's
+            # pull-by-digest would then fail on a required check.
+            got="sha256:$(skopeo inspect --raw "docker://${dest_repo}@${digest}" | sha256sum | cut -d' ' -f1)"
+            if [ "$got" != "$digest" ]; then
+              echo "::error::GHCR returned ${got} for ${digest}"
+              exit 1
+            fi
+            echo "Verified: ${dest_repo}@${digest}"
+          done
