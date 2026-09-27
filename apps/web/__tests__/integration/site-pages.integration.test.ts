@@ -783,8 +783,8 @@ describeDb('multi-page site (db-backed integration)', () => {
       const released = new Promise<void>((resolve) => {
         release = resolve;
       });
-      // Hand-rolled rather than `Promise.withResolvers` — the repo runs Node 20
-      // (.nvmrc), where that is not available.
+      // Hand-rolled rather than `Promise.withResolvers`, which the repo's Node 20
+      // lacked when this was written.
       let signalAcquired!: () => void;
       const acquired = new Promise<void>((resolve) => {
         signalAcquired = resolve;

@@ -15,7 +15,8 @@
  * (apps/web/next.config.ts — required, since jsdom reads its own stylesheet off
  * disk at module load), Node performs a REAL require() at runtime, so this is a
  * runtime failure, not a bundling one. It reproduced only on Vercel's Node 24;
- * local `.nvmrc` is Node 20, whose loader tolerated those subpaths.
+ * CI and local then ran Node 20, whose loader tolerated those subpaths (all
+ * three run 24 since 2026-09).
  *
  * Blast radius was large because the import is STATIC: the public tenant site
  * (public-site/page → block registry → html-sanitizer), announcements, violations,
@@ -51,8 +52,8 @@ function fail(message: string): never {
   console.error(
     'This guard protects against Sentry PROPERTY-PRO-7: an ESM-only @exodus/bytes in the\n' +
       'jsdom graph makes every HTML-sanitizing route (public tenant sites, announcements,\n' +
-      'violations, document drafts, help API) 500 on Vercel Node 24. It cannot be reproduced\n' +
-      'locally on Node 20. See the header of scripts/verify-sanitizer-deps.ts.',
+      'violations, document drafts, help API) 500 on Vercel Node 24. It went unseen while CI\n' +
+      'ran Node 20. See the header of scripts/verify-sanitizer-deps.ts.',
   );
   process.exit(1);
 }

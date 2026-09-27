@@ -427,7 +427,7 @@ Unit tests are split into two vitest projects — `node` (~505 files) and `jsdom
 
 ## Environment Setup
 
-Env vars stored in root `.env.local`. Run `./scripts/setup.sh` after cloning (creates symlink to `apps/web/.env.local`). Node 20 (`.nvmrc`). Turbo orchestrates build/dev/lint.
+Env vars stored in root `.env.local`. Run `./scripts/setup.sh` after cloning (creates symlink to `apps/web/.env.local`). Node 24 (`.nvmrc`), the same major Vercel runs: root `engines.node` pins Vercel to it and every workflow reads `.nvmrc`, so change the two together. Turbo orchestrates build/dev/lint.
 
 ## Demo Data
 

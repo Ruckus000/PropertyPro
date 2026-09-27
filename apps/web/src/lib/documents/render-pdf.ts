@@ -15,12 +15,12 @@
  * package's bundled AL2023 libraries (libnss3 & co.), which it only unpacks
  * when it recognises the platform; 131 had no Vercel check, so every publish
  * died with "libnss3.so: cannot open shared object file" (PROPERTY-PRO-1W).
- * 143 is the newest release that both detects Vercel on Node 24 and still runs
- * on CI's Node 20 (147+ declares Node >=22.17), and puppeteer-core 24.35.0 is
- * the release built against Chromium 143. Upstream breaks at PATCH level, so
- * no caret on either. Ceiling: this is a Chromium 143 browser rendering
- * author HTML unsandboxed; bump the pair to current once CI leaves Node 20
- * (EOL 2026-10).
+ * 143 was the newest release that both detects Vercel on Node 24 and ran on
+ * CI's then-Node 20 (147+ declares Node >=22.17), and puppeteer-core 24.35.0
+ * is the release built against Chromium 143. Upstream breaks at PATCH level,
+ * so no caret on either. Ceiling: this is a Chromium 143 browser rendering
+ * author HTML unsandboxed; CI now runs Node 24 (.nvmrc), so bump the pair to
+ * current, and re-run a real production publish when you do.
  *
  * NEVER import this module client-side and NEVER call it from edge runtime
  * — Chromium cannot run on edge. Routes that import this MUST set:
