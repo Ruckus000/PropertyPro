@@ -116,6 +116,30 @@ adversarially verified; counts re-run at HEAD.
 > (self-test: adding an entry to the seeded admin ledger exits non-zero under
 > the warn-mode semantics), never a grep for the `--warn` string.
 
+> **Amendment (2026-09-27, human decision — the disposition enum is TWO-valued
+> in Phase 2; idiom convergence is deferred):** resolves the third intake's
+> BLOCKER (run wf_46fe67df-5ff, W1: D2 "projections KEPT-by-rule" contradicted
+> D4/S17 "replace the projection idiom with isManagementTier" inside a slice
+> forbidden to touch non-DRAIN rows). The single human gate operates on a
+> **two-value `Disposition` enum: `DRAIN` or `KEPT`.** There is **no
+> `KEEP-SHAPE` class in Phase 2.** Every data-shaping projection —
+> `units` list (route.ts:86, the #1174 rent-leak gate), `leases` (route.ts:249),
+> `insurance/policies` (route.ts:70), `search/*`, the elections proxy revoke —
+> is **`KEPT`: untouched in Phase 2**, neither drained nor idiom-swapped. D5's
+> "converge nowhere in Phase 2" is read literally: Phase 2 changes deny-gate
+> *call sites* onto the matrix (DRAIN rows only) and leaves every projection's
+> `membership.isAdmin` read exactly as it is. The idiom convergence onto a
+> shared `isManagementTier` helper becomes a **named Phase 3 item** (it needs
+> its own parity harness and, for units/leases, sits atop the freshest
+> rent-leak fix — not an unattended-run edit). S17 operates ONLY on rows whose
+> human-approved disposition is DRAIN; **editing a KEPT row is a defect.** D2
+> and D4 are reconciled to this: D4's "KEPT-SHAPE idiom swap" is struck for
+> Phase 2 and re-filed under Phase 3. The per-site disposition table the human
+> approves at the gate therefore has two columns of consequence (DRAIN / KEPT),
+> and the gate's `--check-sync` validates regeneration against the
+> human-approved-overrides JSON (the persisted edit artifact), never against a
+> fresh KEPT-default regeneration.
+
 ## 1. Headline numbers
 
 | Surface | Measured at HEAD `07e56b6e7` | Source |
