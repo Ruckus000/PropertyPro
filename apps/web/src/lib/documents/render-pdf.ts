@@ -15,12 +15,14 @@
  * package's bundled AL2023 libraries (libnss3 & co.), which it only unpacks
  * when it recognises the platform; 131 had no Vercel check, so every publish
  * died with "libnss3.so: cannot open shared object file" (PROPERTY-PRO-1W).
- * 143 was the newest release that both detects Vercel on Node 24 and ran on
- * CI's then-Node 20 (147+ declares Node >=22.17), and puppeteer-core 24.35.0
- * is the release built against Chromium 143. Upstream breaks at PATCH level,
- * so no caret on either. Ceiling: this is a Chromium 143 browser rendering
- * author HTML unsandboxed; CI now runs Node 24 (.nvmrc), so bump the pair to
- * current, and re-run a real production publish when you do.
+ * Keep this browser CURRENT: it renders author HTML unsandboxed. Today that
+ * is @sparticuz/chromium 153.0.0 with puppeteer-core 25.11.0, the release
+ * built against Chrome 153 (upstream's own devDependency is ^25.0.4). A
+ * caret would let puppeteer drift to a newer Chrome, and upstream breaks at
+ * PATCH level, so pin both exactly and move them together. Both need Node
+ * >=22.17, which is why this waited for CI to reach Node 24 (.nvmrc). After
+ * any bump, re-run a real production publish; CI cannot see this class of
+ * failure (see the VERCEL=1 test in __tests__/documents/render-pdf.test.ts).
  *
  * NEVER import this module client-side and NEVER call it from edge runtime
  * — Chromium cannot run on edge. Routes that import this MUST set:
@@ -39,12 +41,13 @@
  * vendor does not allow large deployments" and names no Vercel figure, so the
  * "50MB compressed" number this file used to carry was never authoritative.
  *
- * Do NOT add the package to `outputFileTracingIncludes` to "make sure" the
- * binaries ship. nft already traces them through the serverExternalPackage
- * (verified by measuring the route's .nft.json), and adding it lists the SAME
- * file twice — once at the pnpm store path, once through the
- * apps/web/node_modules symlink — taking the traced total from 82.9 MB to
- * 146.0 MB. Measure the trace instead of pinning it.
+ * The binaries ship via `outputFileTracingIncludes` in next.config.ts. Up to
+ * 143 nft traced them on its own; from 149 the package is ESM-only and nft
+ * cannot follow its `import.meta.url` bin lookup, so the route silently
+ * deployed without a browser. The include resolves the real pnpm store path;
+ * listing the same files through the apps/web/node_modules symlink as well
+ * doubles them (measured 82.9 → 146.0 MB at 143). After any bump, check the
+ * route's .nft.json lists bin/*.br exactly once.
  *
  * Cold-start can run 10–18 seconds on Vercel; subsequent calls within the
  * function's warm window are fast. Callers must surface a clear loading

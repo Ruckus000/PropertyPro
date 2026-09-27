@@ -357,6 +357,24 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Document publish renders PDFs with the browser binaries in
+      # @sparticuz/chromium/bin. From v149 the package is ESM-only and nft stops
+      # tracing them, so the route builds green and deploys WITHOUT a browser.
+      # apps/web/next.config.ts includes them explicitly; this asserts the build
+      # really traced them. Exit 2 means it could not check, never a pass.
+      - name: Verify Chromium ships with the publish route
+        run: |
+          node -e '
+          const fs = require("fs");
+          const f = "apps/web/.next/server/app/api/v1/documents/drafts/[id]/publish/route.js.nft.json";
+          if (!fs.existsSync(f)) { console.error("could not check: " + f + " is missing"); process.exit(2); }
+          const files = JSON.parse(fs.readFileSync(f, "utf8")).files;
+          const need = ["chromium.br", "al2023.tar.br", "fonts.tar.br", "swiftshader.tar.br"];
+          const missing = need.filter((n) => !files.some((p) => p.endsWith("/bin/" + n)));
+          console.log("publish route traced files: " + files.length);
+          if (missing.length) { console.error("publish route trace is missing: " + missing.join(", ")); process.exit(1); }
+          console.log("ok: " + need.join(", ") + " traced");'
+
       - name: Save Next.js build cache
         # Only main writes. See the restore step above for why.
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
