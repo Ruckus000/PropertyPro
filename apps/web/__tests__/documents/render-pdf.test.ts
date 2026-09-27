@@ -31,8 +31,10 @@
  * packages, and it cannot be faked by ambient state.
  */
 import { createRequire } from 'node:module';
-import { existsSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { hardenChromiumArgs, renderHtmlToPdf } from '@/lib/documents/render-pdf';
 
@@ -62,10 +64,16 @@ describe('renderHtmlToPdf', () => {
   it('is backed by a chromium package that ships its own binary', () => {
     const require_ = createRequire(import.meta.url);
 
-    // Resolve the package the same way the package resolves itself:
-    // `join(__dirname, '..', 'bin')` from build/index.js.
-    const entry = require_.resolve('@sparticuz/chromium');
-    const binDir = join(dirname(entry), '..', 'bin');
+    // The package resolves `<package root>/bin`. Walk up from the entry to the
+    // root rather than hard-coding the depth: 143 moved its entry from build/
+    // to build/cjs/, so a fixed `'..'` silently points at build/bin. Match on
+    // the name: build/cjs/ carries its own stub package.json ({"type": ...}).
+    const isPkgRoot = (dir: string): boolean =>
+      existsSync(join(dir, 'package.json'))
+      && JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).name === '@sparticuz/chromium';
+    let pkgRoot = dirname(require_.resolve('@sparticuz/chromium'));
+    while (!isPkgRoot(pkgRoot) && dirname(pkgRoot) !== pkgRoot) pkgRoot = dirname(pkgRoot);
+    const binDir = join(pkgRoot, 'bin');
 
     expect(
       existsSync(binDir),
@@ -76,6 +84,36 @@ describe('renderHtmlToPdf', () => {
     const brotli = join(binDir, 'chromium.br');
     expect(existsSync(brotli), `${brotli} is missing`).toBe(true);
     expect(statSync(brotli).size).toBeGreaterThan(1_000_000);
+  });
+
+  // The render test above passes on a CI Linux runner and could not see the
+  // production failure: there Chromium borrows the runner's own libnss3, and
+  // VERCEL is unset. On Vercel (Node 24) the binary needs the package's bundled
+  // AL2023 libraries, which it only unpacks if it RECOGNISES the platform —
+  // @sparticuz/chromium@131 did not, so every publish died with
+  // "libnss3.so: cannot open shared object file" (PROPERTY-PRO-1W). The package
+  // wires LD_LIBRARY_PATH at import time, so import it fresh in a child
+  // process with Vercel's env and read what it set.
+  it('recognises the Vercel runtime and wires its bundled AL2023 libraries', () => {
+    const webRoot = fileURLToPath(new URL('../../', import.meta.url));
+    const env: NodeJS.ProcessEnv = { ...process.env, VERCEL: '1' };
+    for (const key of ['LD_LIBRARY_PATH', 'AWS_EXECUTION_ENV', 'AWS_LAMBDA_JS_RUNTIME', 'CODEBUILD_BUILD_IMAGE']) {
+      delete env[key];
+    }
+    const ldLibraryPath = execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        "await import('@sparticuz/chromium'); process.stdout.write(process.env.LD_LIBRARY_PATH ?? '<unset>')",
+      ],
+      { cwd: webRoot, env, encoding: 'utf8' },
+    );
+
+    expect(
+      ldLibraryPath,
+      'with VERCEL=1 the chromium package must put its AL2023 lib dir on LD_LIBRARY_PATH',
+    ).toContain(join('al2023', 'lib'));
   });
 
   itRenders('renders HTML to a real PDF byte stream', async () => {
