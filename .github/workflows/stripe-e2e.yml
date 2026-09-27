@@ -62,6 +62,8 @@ on:
 
 permissions:
   contents: read
+  # Pull the Supabase stack images from this repo's GHCR mirror.
+  packages: read
 
 concurrency:
   # Never run two of these at once: they share one Stripe test account, and a
@@ -76,6 +78,11 @@ jobs:
     timeout-minutes: 30
 
     env:
+      # Single source for the Supabase CLI version: setup-cli installs it, the
+      # pre-pull step asks scripts/ci/supabase-images.sh for THAT version's
+      # images, and ci-image-mirror.yml greps this line to know what to mirror.
+      # Keep it `SUPABASE_CLI_VERSION: x.y.z` on one line.
+      SUPABASE_CLI_VERSION: 2.116.0
       # DATABASE_URL / DIRECT_URL / the Supabase keys are deliberately NOT set
       # here. They come from `supabase status` via $GITHUB_ENV once the stack is
       # up.
@@ -154,8 +161,25 @@ jobs:
           # Pinned, matching e2e.yml — `latest` is an unauthenticated API lookup
           # that can be rate-limited by unrelated traffic (observed 2026-09-06,
           # killing a job in 26s before any spec ran), and the CLI version is
-          # behavioural for `supabase start`. Bump both files together.
-          version: 2.116.0
+          # behavioural for `supabase start`. Bump both files together — the
+          # value is the job's SUPABASE_CLI_VERSION.
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # Fetch the stack's images AUTHENTICATED from this repo's GHCR mirror and
+      # tag them with the public.ecr.aws names the CLI checks its cache for, so
+      # `supabase start` pulls nothing anonymously. Never fails the job: any
+      # image the mirror lacks is left for the CLI to pull itself, as before,
+      # with a ::warning::. See scripts/ci/supabase-images.sh.
+      - name: Pre-pull Supabase images from the GHCR mirror
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin \
+            || echo "::warning::docker login ghcr.io failed; pre-pull will run anonymously"
+          scripts/ci/supabase-images.sh prepull "$SUPABASE_CLI_VERSION" "ghcr.io/${OWNER,,}/supabase"
 
       # Own project directory, NOT the repo root. The repo deliberately ships no
       # `supabase/` config, and writing one here would collide with whatever a

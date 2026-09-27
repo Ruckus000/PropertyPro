@@ -8,9 +8,9 @@ name: Postgres Image Digest Bump
 # Weekly it resolves what `postgres:16` currently points at on the ECR Public
 # mirror and, if that differs from what is pinned, copies the new digest into
 # this repo's GHCR package (where the consumers actually pull from — see
-# postgres-image-mirror.yml) and opens a PR moving the pin. The mirror step MUST
+# ci-image-mirror.yml) and opens a PR moving the pin. The mirror step MUST
 # precede the PR: the PR's integration-tests pulls the new digest from GHCR, and
-# a push made with GITHUB_TOKEN does not trigger postgres-image-mirror.yml.
+# a push made with GITHUB_TOKEN does not trigger ci-image-mirror.yml.
 
 on:
   schedule:

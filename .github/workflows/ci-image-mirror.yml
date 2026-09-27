@@ -1,8 +1,12 @@
-name: Postgres Image Mirror
+name: CI Image Mirror
 
-# Copies the pinned Postgres service image into this repo's GitHub Container
-# Registry package, so the jobs that use it pull AUTHENTICATED from GHCR instead
-# of anonymously from a shared-IP registry.
+# Copies the container images CI depends on into this repo's GitHub Container
+# Registry packages, so the jobs that use them pull AUTHENTICATED from GHCR
+# instead of anonymously from a shared-IP registry. Two jobs:
+#   - mirror-postgres-image  — the pinned Postgres service container
+#                              (integration-tests.yml, tenant-isolation-game-day.yml)
+#   - mirror-supabase-images — the local Supabase stack `supabase start` runs
+#                              (e2e.yml, stripe-e2e.yml); see the job comment.
 #
 # Why: integration-tests.yml is a required check AND the production-deploy gate.
 # Its service container used to come anonymously from public.ecr.aws, and on
@@ -24,9 +28,10 @@ name: Postgres Image Mirror
 # need `packages: read` and service `credentials:` — no new secrets.
 #
 # Triggers:
-#   - push touching a file that carries the pin: a branch that changes the pin
-#     mirrors its digest before (or while) its PR's checks try to pull it. Any
-#     branch, not just main, for exactly that reason. It is idempotent.
+#   - push touching a file that carries a pin (the Postgres digest, or a
+#     SUPABASE_CLI_VERSION): a branch that changes a pin mirrors it before (or
+#     while) its PR's checks try to pull it. Any branch, not just main, for
+#     exactly that reason. Both jobs are idempotent.
 #   - workflow_dispatch: manual re-mirror.
 # postgres-digest-bump.yml mirrors a NEW digest itself before opening its PR,
 # because a push made with GITHUB_TOKEN does not trigger this workflow.
@@ -36,7 +41,10 @@ on:
     paths:
       - '.github/workflows/integration-tests.yml'
       - '.github/workflows/tenant-isolation-game-day.yml'
-      - '.github/workflows/postgres-image-mirror.yml'
+      - '.github/workflows/e2e.yml'
+      - '.github/workflows/stripe-e2e.yml'
+      - '.github/workflows/ci-image-mirror.yml'
+      - 'scripts/ci/supabase-images.sh'
   workflow_dispatch:
 
 permissions:
@@ -107,4 +115,52 @@ jobs:
               exit 1
             fi
             echo "Verified: ${dest_repo}@${digest}"
+          done
+
+  # `supabase start` pulls ~12 images from public.ecr.aws/supabase anonymously;
+  # the e2e run on main @ 8a4d374e hit `toomanyrequests: Rate exceeded` there
+  # and survived only on the CLI's retries. This copies the images for every
+  # pinned CLI version into ghcr.io/<owner>/supabase/<name>:<tag>, byte-identical,
+  # and the e2e jobs pre-pull from there (scripts/ci/supabase-images.sh).
+  #
+  # Upstream pins these by TAG, not digest (the CLI's own Dockerfile), so the
+  # mirror is copy-once: an existing tag is never overwritten, which freezes the
+  # bytes CI runs for a given CLI version.
+  mirror-supabase:
+    name: mirror-supabase-images
+    runs-on: ubuntu-latest
+    # Studio alone is ~1 GB per architecture; a cold mirror copies every arch.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Mirror the Supabase images for every pinned CLI version
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          # One value per workflow that runs `supabase start`; see the comment
+          # on SUPABASE_CLI_VERSION in e2e.yml.
+          versions=$(grep -hE '^[[:space:]]*SUPABASE_CLI_VERSION:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' \
+              .github/workflows/e2e.yml .github/workflows/stripe-e2e.yml \
+            | sed -E 's/.*:[[:space:]]*//; s/[[:space:]]*$//' | sort -u || true)
+          if [ -z "$versions" ]; then
+            echo "::error::No SUPABASE_CLI_VERSION found in e2e.yml / stripe-e2e.yml — reformatted?"
+            exit 1
+          fi
+
+          printf '%s' "$GH_TOKEN" | skopeo login ghcr.io -u "$GH_ACTOR" --password-stdin
+
+          for v in $versions; do
+            echo "::group::Supabase CLI v${v}"
+            scripts/ci/supabase-images.sh mirror "$v" "ghcr.io/${OWNER,,}/supabase"
+            echo "::endgroup::"
           done

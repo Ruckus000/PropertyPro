@@ -111,7 +111,7 @@ jobs:
       postgres:
         # The Docker Hub official image (via AWS ECR Public's official-images
         # mirror, `docker/library/*`), copied byte-for-byte into this repo's GHCR
-        # package by postgres-image-mirror.yml — the digest below IS upstream's.
+        # package by ci-image-mirror.yml — the digest below IS upstream's.
         #
         # This job is a REQUIRED status check AND the production-deploy gate, so
         # its service container is on the critical path of every merge and every
