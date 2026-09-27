@@ -79,6 +79,43 @@ adversarially verified; counts re-run at HEAD.
 > The phase-run must NOT itself query or mutate prod; this amendment is the
 > human having done so, on the record, before launch.
 
+> **Amendment (2026-09-27, human decisions — the S1b adjudication, parity
+> harness, S9 pause, and warn-flip ownership):**
+> **(1) S1b drains by LEDGER DISPOSITION, not by slice prose.** Item 2.1's
+> "drain `requireRole`/`isAdminRole`/inline forks" wording is bounded by this
+> rule: a `membership.isAdmin` / role-fork site drains ONLY if the decision
+> ledger carries an explicit per-site disposition (D7/D8 and successors) AND
+> the parity harness (below) covers it; **every site without a ledger
+> disposition defaults to KEPT** — drained in no unattended run. Known
+> behavior-branch sites are KEPT by this rule as of today:
+> `visitors/[id]/revoke` (admin-reason + resident-host-check branch UNDER a
+> real `requireVisitorsWritePermission` gate), `forum/threads/[id]/reply`
+> DELETE (`canModerateReplies` service-passed flag, `&&` short-circuit
+> preserved verbatim by its docblock contract), `documents/drafts/[id]/publish`
+> (`!isAuthor && !isAdmin` — data-dependent), `announcements` (`isAdmin &&`
+> matrix conjunction), and the calendar / storm-damage / maintenance-request
+> breadth-or-flag branches. The intake must emit the full per-site disposition
+> table for every executable-use file, and the human approves that table at
+> the run's single gate — the drain list is not normative text until then.
+> **(2) The parity harness lands FIRST, as its own reviewed commit, before any
+> drain commit.** Construction: the integration local Postgres (via the
+> `pnpm test:integration:local` machinery — never prod, never the stub URL),
+> roles hydrated WITHOUT mocking community-membership, and per-site scenario
+> rows for data-dependent gates (author/non-author, host/non-host), not just
+> the four-role matrix. **Any site the harness structurally cannot cover is
+> reclassified KEPT, not drained.**
+> **(3) The PR-B merge is a PLANNED MID-RUN PAUSE.** The run stops at the
+> help-bridge-deletion PR's merge gate and pings the human; the fresh dated
+> prod faqs census (read-only, per the run-mode amendment) is run by the human
+> or by an agent on the human's explicit go, and the run resumes only on that
+> evidence. Everything else in the phase keeps the 2026-09-26 auto-merge
+> authorization.
+> **(4) The admin unsafe-import ledger's `--warn`→enforce flip has NO calendar
+> deadline and no guard-refusal date.** Ownership: `TODO(Phase3, jphilistin)`
+> in the guard — Phase 3 owns the flip. The done-criterion is behavioral
+> (self-test: adding an entry to the seeded admin ledger exits non-zero under
+> the warn-mode semantics), never a grep for the `--warn` string.
+
 ## 1. Headline numbers
 
 | Surface | Measured at HEAD `07e56b6e7` | Source |
