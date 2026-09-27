@@ -38,8 +38,14 @@
 
 set -euo pipefail
 
-UPSTREAM_PRIMARY=public.ecr.aws/supabase
-UPSTREAM_SECONDARY=ghcr.io/supabase
+# The name the CLI inspects its cache for first; `prepull` tags under it.
+CLI_CACHE_PREFIX=public.ecr.aws/supabase
+# Where `mirror` copies FROM, in order. Supabase publishes the same images to
+# both (the CLI treats them as interchangeable fallbacks). ghcr.io/supabase is
+# first because the mirror job's `skopeo login ghcr.io` authenticates it: the
+# first mirror run found public.ecr.aws returning `toomanyrequests: Data limit
+# exceeded` for all 14 images, each burning ~2.5 min of retries first.
+MIRROR_UPSTREAMS="ghcr.io/supabase public.ecr.aws/supabase"
 
 list_images() {
   local version="$1" dockerfile="" path
@@ -95,7 +101,7 @@ mirror_images() {
       continue
     fi
     src=""
-    for upstream in "$UPSTREAM_PRIMARY" "$UPSTREAM_SECONDARY"; do
+    for upstream in $MIRROR_UPSTREAMS; do
       if skopeo copy --all --preserve-digests --retry-times 3 \
           "docker://${upstream}/${img}" "docker://${dest}"; then
         src="${upstream}/${img}"
@@ -135,7 +141,7 @@ prepull_images() {
     total=$((total + 1))
     (
       if docker pull --quiet "${mirror_prefix}/${img}" >/dev/null 2>"${dir}/${img}.err" \
-        && docker tag "${mirror_prefix}/${img}" "${UPSTREAM_PRIMARY}/${img}"; then
+        && docker tag "${mirror_prefix}/${img}" "${CLI_CACHE_PREFIX}/${img}"; then
         touch "${dir}/${img}.ok"
       fi
     ) &
