@@ -32,6 +32,29 @@ adversarially verified; counts re-run at HEAD.
 > permanent non-candidate for the Phase 3.6 sweep. Original measurements are
 > left in place below; this note is the normative statement for Phase 1.
 
+> **Amendment (2026-09-26, human decision — normative for Phase 2):**
+> **(1) Item 2.12 / DC-05 is DECIDED: wire the button, do not delete.** The two
+> violation-notice PDF routes (`violations/[id]/notice`, `violations/[id]/hearing-notice`)
+> stay, and the Phase 2 work is to make them reachable from the violations UI.
+> Consequences: the contract allowlist does **not** shrink by 2 (it stays at its
+> pinned 46 — the "deletion shrinks the floor" note on DC-05 is moot), and the
+> wiring must go through the existing fail-closed kill switch
+> (`noticePdfGenerationEnabled` in `communities.community_settings`, strict
+> `=== true`, enforced by `requireNoticePdfEnabled`). **The Phase 2 slice wires
+> the UI and the routes; it does NOT flip the kill switch for any community.**
+> Per legal-risk audit F-05 (`docs/audits/2026-08-09-legal-risk-audit.md`) the
+> generated notice states legal conclusions and names the Board where the statute
+> requires a fining committee — enablement stays a "fix before re-enable" legal
+> decision, which is a human stop, not an engineering default. A button that
+> renders a 403 "not available for this community" until that decision is made is
+> the correct shipped state.
+> **(2) Phase 2's authz lane builds on #1174.** The AZ findings were measured
+> before `fix(authz): stop leaking neighbours' rent to residents via units list
+> and apartment dashboard (#1174)` merged (2026-09-26); item 2.1's unification
+> must take the post-#1174 code as its baseline, and the audit's authz counts are
+> snapshots, not current truth. Likewise the RLS surface moved under #1177
+> (migrations 0077–0079: Data API revoked on tenant tables and `communities`).
+
 ## 1. Headline numbers
 
 | Surface | Measured at HEAD `07e56b6e7` | Source |
