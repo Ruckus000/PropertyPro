@@ -2,7 +2,7 @@
   "name": "propertypro",
   "private": true,
   "engines": {
-    "node": ">=20.0.0"
+    "node": "24.x"
   },
   "packageManager": "pnpm@10.28.0",
   "scripts": {
