@@ -37,6 +37,21 @@ const nextConfig: NextConfig = {
     "isomorphic-dompurify",
     "jsdom",
   ],
+  // Ship Chromium's Brotli binaries with the publish route. From v149 the
+  // package is ESM-only and finds bin/ via `import.meta.url`, which nft does
+  // not follow, so without this the route deploys WITHOUT a browser (traced
+  // 16.7 MB instead of ~88). Resolve the real store path the way the package
+  // resolves itself: a glob through the apps/web/node_modules symlink would
+  // put the files where the code never looks, and a version wildcard would
+  // also ship any stale copy left in a local store.
+  outputFileTracingIncludes: {
+    "/api/v1/documents/drafts/[id]/publish": [
+      path.relative(
+        __dirname,
+        path.join(path.dirname(require.resolve("@sparticuz/chromium")), "..", "bin", "*.br"),
+      ),
+    ],
+  },
   transpilePackages: [
     "@propertypro/ui",
     "@propertypro/shared",
