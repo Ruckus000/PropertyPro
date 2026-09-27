@@ -179,7 +179,9 @@ jobs:
         run: |
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin \
             || echo "::warning::docker login ghcr.io failed; pre-pull will run anonymously"
-          scripts/ci/supabase-images.sh prepull "$SUPABASE_CLI_VERSION" "ghcr.io/${OWNER,,}/supabase"
+          # `|| …`: the pre-pull is an optimisation; nothing in it may fail the job.
+          scripts/ci/supabase-images.sh prepull "$SUPABASE_CLI_VERSION" "ghcr.io/${OWNER,,}/supabase" \
+            || echo "::warning::Supabase pre-pull exited $?; supabase start will pull the images itself"
 
       # Own project directory, NOT the repo root. The repo deliberately ships no
       # `supabase/` config, and writing one here would collide with whatever a

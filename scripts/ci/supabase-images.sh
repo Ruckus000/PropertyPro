@@ -56,7 +56,8 @@ list_images() {
   # The Go CLI moved into apps/cli-go when the repo became a monorepo; older
   # tags keep it at the root.
   for path in apps/cli-go/pkg/config/templates/Dockerfile pkg/config/templates/Dockerfile; do
-    if dockerfile=$(curl -fsSL --retry 3 \
+    # Bounded: a stalled fetch must not hang the e2e job it is meant to help.
+    if dockerfile=$(curl -fsSL --connect-timeout 10 --max-time 30 --retry 3 \
         "https://raw.githubusercontent.com/supabase/cli/v${version}/${path}"); then
       break
     fi
