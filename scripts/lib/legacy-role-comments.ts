@@ -11,7 +11,7 @@
  * Extracted here as pure functions so `scripts/__tests__/verify-legacy-roles.test.ts`
  * can exercise them without running the repo-wide scan.
  */
-import ts from 'typescript';
+import { collectCommentRanges, commentRangesWork } from './comment-ranges';
 
 /**
  * Retired names that must never describe CURRENT behaviour.
@@ -48,44 +48,20 @@ export interface CommentViolation {
 /**
  * Every comment in `source`, or `null` if the file did not parse.
  *
- * Uses the parser rather than a regex because a regex over raw text cannot tell
- * a comment from a string literal or from JSX text — and these terms appear
- * legitimately in both (dev-login aliases, help-frontmatter vocabulary). The
- * same reasoning is recorded in `scripts/verify-web-class-resolution.ts`.
+ * Delegates to the shared TOKEN-walk collector in `./comment-ranges`. This
+ * module used to walk NODES (`forEachChild` + comment ranges at node
+ * boundaries), which the S9 review measured as blind to 1,154 of 21,830
+ * comment ranges: a trailing comment inside an array literal, after a call
+ * argument or in a nested body was never examined, so retired vocabulary there
+ * passed. See that module for why a node walk leaks and a token walk does not.
  */
 export function collectComments(fileName: string, source: string): CommentHit[] | null {
-  const scriptKind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-  // setParentNodes: FALSE. Nothing here walks upward — only `forEachChild`,
-  // the comment-range helpers and `getLineAndCharacterOfPosition`. Building
-  // parent pointers roughly doubles the parse (measured ~1.78s vs ~0.89s over
-  // the 2,327 files in scope) for a capability this module never uses.
-  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false, scriptKind);
-
-  const diagnostics = (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics;
-  if (Array.isArray(diagnostics) && diagnostics.length > 0) return null;
-
-  const seen = new Set<number>();
-  const out: CommentHit[] = [];
-  const add = (ranges: ts.CommentRange[] | undefined): void => {
-    for (const r of ranges ?? []) {
-      if (seen.has(r.pos)) continue;
-      seen.add(r.pos);
-      out.push({
-        line: sf.getLineAndCharacterOfPosition(r.pos).line + 1,
-        text: source.slice(r.pos, r.end),
-      });
-    }
-  };
-
-  const visit = (node: ts.Node): void => {
-    add(ts.getLeadingCommentRanges(source, node.pos));
-    add(ts.getTrailingCommentRanges(source, node.end));
-    node.forEachChild(visit);
-  };
-  visit(sf);
-  // forEachChild does not reach the EOF token, where a trailing file comment lives.
-  add(ts.getLeadingCommentRanges(source, sf.endOfFileToken.pos));
-  return out;
+  const found = collectCommentRanges(fileName, source);
+  if (found === null) return null;
+  return found.ranges.map((r) => ({
+    line: found.sourceFile.getLineAndCharacterOfPosition(r.pos).line + 1,
+    text: source.slice(r.pos, r.end),
+  }));
 }
 
 /**
@@ -182,11 +158,15 @@ export function scanFile(fileName: string, source: string): FileScan | null {
 }
 
 /**
- * Prove the parse-failure detector actually detects, before a clean scan is
- * trusted. `parseDiagnostics` is a TS internal; a version that stopped
- * populating it would make every file look parseable and this guard vacuously
- * green. Same self-test `verify-web-class-resolution.ts` performs.
+ * Prove the parse-failure detector actually detects, and the walk reaches
+ * nested token positions, before a clean scan is trusted. `parseDiagnostics`
+ * is a TS internal; a version that stopped populating it would make every file
+ * look parseable and this guard vacuously green. Delegates to the shared
+ * collector's self-test, then re-checks through THIS module's API.
  */
 export function parseDetectorWorks(): boolean {
-  return collectComments('probe.ts', 'const a = (((;') === null;
+  if (!commentRangesWork()) return false;
+  if (collectComments('probe.ts', 'const a = (((;') !== null) return false;
+  const nested = findCommentViolations('probe.ts', 'const x = [\n  1, // pm_admin\n];\n');
+  return nested !== null && nested.length === 1 && nested[0]?.line === 2;
 }

@@ -93,7 +93,7 @@ Then log in at `http://localhost:3001`.
 
 ```bash
 pnpm typecheck          # Type-check all packages
-pnpm lint               # Lint + DB access guard
+pnpm lint               # ESLint + every guard in scripts/run-lint-guards.mjs
 pnpm test               # Unit tests
 pnpm build              # Production build
 pnpm seed:demo          # Seed demo communities

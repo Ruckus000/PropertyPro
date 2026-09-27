@@ -27,6 +27,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve, relative, basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -131,7 +132,7 @@ function main(): void {
   console.log(`Page-title (breadcrumb) guard passed: ${files.length} in-scope pages verified.`);
 }
 
-// ESM main-detection (POSIX only — fine for the dev team's Mac/Linux setup).
-if (import.meta.url === `file://${process.argv[1]}`) {
+// ESM main-detection via the shared helper (symlink- and encoding-safe).
+if (isMainModule(import.meta.url)) {
   main();
 }

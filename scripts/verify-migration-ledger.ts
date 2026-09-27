@@ -69,6 +69,7 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 
 import { databaseHost } from './lib/stripe-guards';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -485,7 +486,7 @@ function report(r: ReconcileResult): number {
   return exitCode;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url)) {
   run()
     .then((exitCode) => process.exit(exitCode))
     .catch((error) => {

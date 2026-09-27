@@ -39,6 +39,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -150,6 +151,6 @@ function main(): void {
   console.log('responsive-geometry: passed.');
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url)) {
   main();
 }

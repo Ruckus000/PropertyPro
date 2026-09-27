@@ -51,6 +51,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -290,7 +291,7 @@ function main(): void {
   console.log('\n✅ Every internal route requires a cron secret.');
 }
 
-// ESM main-detection (POSIX only — matches the other guards).
-if (import.meta.url === `file://${process.argv[1]}`) {
+// ESM main-detection via the shared helper (symlink- and encoding-safe).
+if (isMainModule(import.meta.url)) {
   main();
 }

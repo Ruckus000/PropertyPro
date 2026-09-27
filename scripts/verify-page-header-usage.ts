@@ -32,6 +32,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -133,6 +134,6 @@ function main(): void {
   console.log(`page-header guard passed: ${files.length} files scanned, 0 literal <h1> (exempt: ${exempt}).`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url)) {
   main();
 }

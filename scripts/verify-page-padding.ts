@@ -38,6 +38,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -146,7 +147,7 @@ function main(): void {
   console.log(`Page-padding guard passed: ${files.length} authenticated pages verified.`);
 }
 
-// ESM main-detection (POSIX).
-if (import.meta.url === `file://${process.argv[1]}`) {
+// ESM main-detection via the shared helper (symlink- and encoding-safe).
+if (isMainModule(import.meta.url)) {
   main();
 }

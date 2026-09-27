@@ -74,5 +74,13 @@ Follow `scripts/verify-css-var-migration.sh` (`ce0ec269`) — the canonical shap
   verify both directions.
 - **Verify three ways**: passes on the real repo · fails in the broken environment where the old
   version passed · fails on an injected violation.
+- **Decide whether to run with `isMainModule(import.meta.url)`** (`scripts/lib/is-main-module.ts`),
+  never the bare `` import.meta.url === `file://${process.argv[1]}` `` comparison. The bare form
+  silently skips `main()` when the script is invoked through a symlink or a path with a space: the
+  guard exits 0 having examined nothing. Measured on 2026-09-25, 11 guards did exactly that.
+- **Need every comment in a file? Use `collectCommentRanges`** (`scripts/lib/comment-ranges.ts`),
+  which `guard:legacy-roles` and `guard:service-dead-exports` share. It walks TOKENS and queries both
+  trivia buckets. A node walk (`forEachChild`) misses comments before a closing bracket and trailing
+  comments after a comma: that blind spot hid 1,154 of 21,830 ranges from `guard:legacy-roles`.
 
 </important>

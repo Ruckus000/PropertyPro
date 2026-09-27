@@ -59,6 +59,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
+import { isMainModule } from './lib/is-main-module';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Both roots that apps/web/tailwind.config.ts lists in `content`. packages/ui
@@ -436,7 +437,7 @@ const run = async () => {
 
 // ESM main-detection (POSIX only -- matches the other guards). Importing this
 // module from a unit test must not scan the tree or exit the runner.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule(import.meta.url)) {
   run().catch((err) => {
     fail(`Guard could not complete: ${err?.stack ?? err}`);
   });
