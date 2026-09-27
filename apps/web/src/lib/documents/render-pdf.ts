@@ -11,6 +11,17 @@
  * exist and throws. That is exactly what shipped, and it meant no authored
  * document or set of meeting minutes could ever be published in production.
  *
+ * VERSIONS ARE PINNED AS A PAIR, exactly. On Vercel the binary needs the
+ * package's bundled AL2023 libraries (libnss3 & co.), which it only unpacks
+ * when it recognises the platform; 131 had no Vercel check, so every publish
+ * died with "libnss3.so: cannot open shared object file" (PROPERTY-PRO-1W).
+ * 143 is the newest release that both detects Vercel on Node 24 and still runs
+ * on CI's Node 20 (147+ declares Node >=22.17), and puppeteer-core 24.35.0 is
+ * the release built against Chromium 143. Upstream breaks at PATCH level, so
+ * no caret on either. Ceiling: this is a Chromium 143 browser rendering
+ * author HTML unsandboxed; bump the pair to current once CI leaves Node 20
+ * (EOL 2026-10).
+ *
  * NEVER import this module client-side and NEVER call it from edge runtime
  * — Chromium cannot run on edge. Routes that import this MUST set:
  *
@@ -72,7 +83,7 @@ type ChromiumApi = {
 type PuppeteerLaunchOptions = {
   args?: string[];
   executablePath?: string;
-  headless?: boolean;
+  headless?: boolean | 'shell';
   defaultViewport?: { width: number; height: number; deviceScaleFactor?: number };
 };
 
@@ -180,7 +191,10 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
     args: hardenChromiumArgs(chromium.args),
     defaultViewport: { width: 1240, height: 1754 },
     executablePath,
-    headless: true,
+    // The bundled binary is chrome-headless-shell, which only speaks 'shell'
+    // (upstream README, v137+). A developer's system Chrome is the opposite:
+    // Chrome 132 removed the old headless mode, so it needs `true`.
+    headless: explicitExecutablePath ? true : 'shell',
   })) as unknown as PuppeteerBrowser;
 
   try {
