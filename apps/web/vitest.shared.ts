@@ -104,6 +104,19 @@ export const nodeProject: UserWorkspaceConfig = {
     root: __dirname,
     include: ALL_TESTS,
     exclude: [...SHARED_EXCLUDE, ...JSDOM_FILES],
+    /**
+     * CLOCK BUDGETS, for the same reason as jsdomProject's below: the localci
+     * gate runs on a loaded laptop. On 2026-09-27 (load average ~21 on 14
+     * cores, Node 24) two node files failed on the vitest defaults and passed
+     * in isolation:
+     * - input-validation's first test pays the route module's cold
+     *   `await import()` (1.9–2.9s idle), and took 6s against 5000ms;
+     * - wizard-common's `beforeAll` import went past the 10000ms hook default.
+     * A cold import is the slowest thing a node test does, so the budget goes
+     * here once rather than into each file that imports lazily.
+     */
+    testTimeout: 15_000,
+    hookTimeout: 30_000,
   },
 };
 

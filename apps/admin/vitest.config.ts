@@ -21,6 +21,12 @@ export default defineConfig({
     // `beforeEach`. Deliberately NOT `mockReset`/`restoreMocks`, which would
     // also drop implementations defined in `vi.mock()` factories.
     clearMocks: true,
+    // CLOCK BUDGETS, not performance assertions: the localci gate runs these
+    // on a loaded laptop. Same budgets and rationale as apps/web/vitest.shared.ts.
+    // Added after support-access-tab's first test (a cold render) passed in
+    // isolation but timed out at the 5000ms default under load (2026-09-27).
+    testTimeout: 15_000,
+    hookTimeout: 30_000,
     include: ['__tests__/**/*.test.ts', '__tests__/**/*.test.tsx'],
     exclude: ['__tests__/**/*.integration.test.ts'],
     server: {
