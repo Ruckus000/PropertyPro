@@ -55,6 +55,30 @@ adversarially verified; counts re-run at HEAD.
 > snapshots, not current truth. Likewise the RLS surface moved under #1177
 > (migrations 0077–0079: Data API revoked on tenant tables and `communities`).
 
+> **Amendment (2026-09-26, human decision + dated prod evidence — Phase 2 run
+> mode):** The Phase 2 phase-run is authorized to **auto-merge after CI and the
+> four-lens review**, with ONE human-gated exception, because the three
+> prod-touching preconditions an unattended run may not execute were
+> **pre-executed read-only on 2026-09-26** (psql, `default_transaction_read_only=on`;
+> full evidence in `~/.claude/state/phase-run/phase2-prod-preconditions-2026-09-26.md`):
+> **(1)** migration `0076` holds exactly one ledger row (tip id=106, 77 rows) —
+> the deploy-live gate is satisfiable, and the working hash-compare form is
+> `hash LIKE '%<sha256>%'` (the column is text; `encode(hash,'hex')` errors).
+> **(2)** prod `faqs` holds 5 live rows, every `role_visibility` array EMPTY —
+> **zero legacy tokens**, so the alias-bridge deletion has no fuel in prod as of
+> that timestamp. **S7 still splits PR-A (content rewrite, auto-merge allowed)
+> from PR-B (bridge deletion), and PR-B keeps its human gate**: a fresh dated
+> `SELECT DISTINCT unnest(role_visibility) FROM faqs WHERE deleted_at IS NULL`
+> showing zero legacy tokens, re-run at merge time, because the census is a
+> snapshot and rows can be created meanwhile.
+> **(3)** `noticePdfGenerationEnabled` is OFF for every community (0 rows even
+> carry the key) with zero `platform_admin_audit_log` events touching it since
+> 2026-08-09 — **S11 may auto-merge** on this dated evidence, its PR body
+> carrying the query results and the "off as of 2026-09-26, enforced
+> per-community at request time" wording (never "can never").
+> The phase-run must NOT itself query or mutate prod; this amendment is the
+> human having done so, on the record, before launch.
+
 ## 1. Headline numbers
 
 | Surface | Measured at HEAD `07e56b6e7` | Source |
