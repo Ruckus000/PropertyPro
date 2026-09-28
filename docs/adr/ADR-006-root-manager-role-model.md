@@ -377,9 +377,17 @@ Recorded so these are not "finished" later by mistake.
   root-only would break the statutory erasure path for the one user most likely
   to need it.
 - `POST /api/v1/communities/[id]/cancel` — gates on **billing-group
-  ownership**, a portfolio-level financial identity orthogonal to community
-  role. The owner may not be a member of the child community at all, so a root
-  check would break the legitimate multi-community PM cancel flow.
+  ownership AND a current management role** (`property_manager` or
+  `root_manager`) in that community, not on root. A root check would break the
+  multi-community PM cancel flow, where the owner manages but may not be root.
+  *Corrected 2026-09-28:* this entry used to say the owner "may not be a member
+  of the child community at all". No legitimate path produces that — both link
+  paths (`getOrCreateBillingGroupForPm`, add-to-group provisioning) require the
+  owner to manage the community — and nothing ever detaches a community from a
+  group, so the only owner who is not a member is one the association has
+  removed. The route soft-deletes immediately, so that owner is now refused and
+  every cancellation writes a `community_canceled` audit event
+  (`docs/audits/2026-09-28-route-authz-census.md`, F6).
 - `/api/v1/stripe/connect/*` — the community's *inbound* dues collection, not
   PropertyPro's subscription. Root-gating would block routine PM operations.
 - `POST /api/v1/settings/support-access` and `PATCH /api/v1/transparency/settings`

@@ -6,7 +6,8 @@
  * billing-group ownership auth model with a POST body (reason + optional note).
  *
  * `permission: { resource: 'communities', action: 'write' }` documents intent;
- * the runner does not enforce it — billing-group ownership is the real gate.
+ * the runner does not enforce it — the real gate is billing-group ownership
+ * plus a current property_manager/root_manager role in the community (F6).
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 import { cancellationReasonSchema } from '@propertypro/shared';

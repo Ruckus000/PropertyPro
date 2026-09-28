@@ -54,6 +54,10 @@ export type AuditAction =
   // our site data destroyed" cannot usefully type 'update'. Recovery and
   // intervention stay on the generic 'update' — they are reversible.
   | 'community_purged'
+  // Community cancellation via POST /communities/[id]/cancel — cancels the
+  // Stripe subscription and soft-deletes the community in one step, outside
+  // the deletion-request lifecycle, so it must be findable by name too.
+  | 'community_canceled'
   // Support access audit actions
   | 'support_session_started' | 'support_session_ended'
   | 'support_consent_granted' | 'support_consent_revoked'
