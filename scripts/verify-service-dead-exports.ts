@@ -238,7 +238,10 @@ export function commentExtractorWorks(): boolean {
 // Reference scan
 // ---------------------------------------------------------------------------
 
-const IDENTIFIER_TOKEN = /[$A-Za-z_][$A-Za-z0-9]*/g;
+// `_` belongs in the continuation class too. Without it `list_thing` tokenised
+// as `list` + `_thing` (a snake_case export could never be referenced), and
+// `listThing_v2` yielded a bare `listThing` that kept a dead export alive.
+const IDENTIFIER_TOKEN = /[$A-Za-z_][$A-Za-z0-9_]*/g;
 
 /** Whole-word identifier tokens in a source text (includes strings, by design). */
 function extractIdentifierTokens(source: string): Set<string> {
@@ -336,6 +339,17 @@ export function findDeadExports(services: ScannedFile[], corpus: ScannedFile[]):
 // ---------------------------------------------------------------------------
 // Baseline (shrink-only, per name)
 // ---------------------------------------------------------------------------
+
+/**
+ * Does this evaluation fail the guard? A dead export beyond the baseline, a
+ * ceiling breach, OR a stale baseline entry. Stale entries used to be
+ * informational (exit 0), which let a shrink-only ledger sit above the real
+ * count indefinitely — slack that a later death could absorb unseen. This
+ * matches verify-contracts, which fails on a dead allowlist entry.
+ */
+export function baselineFails(evaluation: BaselineEvaluation, ceilingFailed: boolean): boolean {
+  return evaluation.violations.length > 0 || evaluation.stale.length > 0 || ceilingFailed;
+}
 
 export function evaluateBaseline(
   dead: DeadExport[],
@@ -632,19 +646,19 @@ function main(): void {
     console[ceiling.failed ? 'error' : 'log'](`\n${ceiling.failed ? '❌' : 'ℹ️'} ${ceiling.message}`);
   }
 
-  if (evaluation.stale.length > 0 && !ceiling.failed) {
-    console.log(
-      `\nℹ️ ${evaluation.stale.length} baseline entry(ies) are no longer dead — fixed, moved ` +
+  if (evaluation.stale.length > 0) {
+    console.error(
+      `\n❌ ${evaluation.stale.length} baseline entry(ies) are no longer dead — fixed, moved ` +
         'out of scan scope, converted to an `export const` arrow, or masked by a ' +
-        'string token; verify WHICH before ratcheting down with `pnpm exec tsx ' +
+        'string token. Verify WHICH, then ratchet the baseline down with `pnpm exec tsx ' +
         'scripts/verify-service-dead-exports.ts --write-baseline` in a reviewed commit:',
     );
     for (const s of evaluation.stale) {
-      console.log(`  ${s.file} → ${s.name}`);
+      console.error(`  ${s.file} → ${s.name}`);
     }
   }
 
-  if (evaluation.violations.length > 0 || ceiling.failed) {
+  if (baselineFails(evaluation, ceiling.failed)) {
     process.exit(1);
   }
 
