@@ -8,10 +8,7 @@ import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import {
-  createScopedClient,
-  notificationPreferences,
-} from '@propertypro/db';
+import { getNotificationPreferencesForUser } from '@/lib/services/notification-preferences-service';
 import {
   getDefaultPreferences,
   type CalendarReminderPreset,
@@ -65,9 +62,8 @@ export default async function MobileSettingsPage() {
   };
 
   try {
-    const scoped = createScopedClient(communityId);
-    const rows = await scoped.query(notificationPreferences);
-    const row = rows.find((r) => r['userId'] === userId);
+    // Only the caller's row (it used to read every member's and pick in JS).
+    const row = await getNotificationPreferencesForUser(communityId, userId);
 
     if (row) {
       notificationPrefs = {

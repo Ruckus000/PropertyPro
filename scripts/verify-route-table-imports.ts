@@ -1,35 +1,36 @@
 /**
  * A3 Third Boundary Guard — Route → Table Import Restriction (ADR-003 Phase 1)
  *
- * Enforces the routes-layer half of ADR-003: API route handlers under
- * `apps/web/src/app/api/**\/route.ts` may import from `@propertypro/db`,
- * but only the canonical helpers below. Direct table or schema-enum
- * value-imports must go through a service wrapper under
- * `@/lib/services/...`.
+ * Enforces the app-layer half of ADR-003: every server file under
+ * `apps/web/src/app` — API routes, AND pages, layouts and non-API route
+ * handlers (roadmap 2.3 / DBB-01) — may import from `@propertypro/db`, but
+ * only the canonical helpers below. Direct table or schema-enum value-imports
+ * must go through a service wrapper under `@/lib/services/...`.
+ *
+ * Why the scope widened: the API layer was drained to zero, and the same
+ * queries moved into `page.tsx`, where nothing scanned (21 files on
+ * 2026-09-28). Reading those 21 before freezing them found three pages that
+ * skipped a read gate their own API applies (fixed separately, #1206) — a
+ * baseline is a list of accepted debt, so it was read before it was written.
+ *
+ * Detection parses TypeScript (roadmap 2.4 / DBB-05). The regex scanner it
+ * replaced saw only `import { … } from` and so missed three shapes that reach
+ * the same tables: a namespace import (`import * as db`), a re-export
+ * (`export { x } from`), and a dynamic `import('@propertypro/db')`. Each is
+ * now a violation in its own right, as is a default import.
  *
  * Why: routes that import tables directly bypass:
  *   - Service-layer abstraction (test seams, behavior-naming, audit hooks)
  *   - Centralized read-visibility / role-aware filtering
  *   - The boundary that lets the schema evolve independently of route code
  *
- * Current state: the allowlist (KNOWN_DIRECT_TABLE_IMPORT_FILES) is an EMPTY
- * SET. Every file that once violated this boundary was drained as of A3 Phase 2
- * drain #77, which that set's own section header already recorded. This
- * docblock contradicted it for months, describing a large grandfathered
- * population and a drain still to be worked through; that stale count survived
- * the drain and went on to generate a false premise in the 2026-09-22 audit,
- * which is why it is corrected rather than merely deleted.
- *
- * What the set is NOW: a HARD FLOOR at 0 — not a backlog.
- *   - A route that violates the boundary and is not in the set is a NEW
- *     violation and fails the guard (that has always been true).
- *   - Adding an entry is therefore NOT "grandfathering existing debt". With the
- *     drain finished, every addition registers NEW debt and requires explicit
- *     review: a written reason in the PR, and a check that a service wrapper
- *     genuinely is not the cheaper answer.
- *   - The allowance that let violators sit still while the drain proceeded (per
- *     ADR-003, "no big-bang refactors") has been fully exercised. There is
- *     nothing left for it to apply to, so nothing should be in this set.
+ * Baseline: `KNOWN_DIRECT_TABLE_IMPORTS` freezes the server pages that still
+ * import tables, per file AND per symbol, shrink-only:
+ *   - a file not in the map, or a symbol not listed for its file, fails;
+ *   - a listed symbol the file no longer imports also fails (stale), so every
+ *     drain ratchets the map down in the same PR;
+ *   - `app/api/**` has NO entries and must stay at zero — the API layer was
+ *     drained to a hard floor by A3 Phase 2 drain #77.
  *
  * Companion guards:
  *   - guard:component-api-calls (#198)        — first boundary (UI → route)
@@ -39,8 +40,11 @@
  * Survey + rationale: docs/audits/a3-third-boundary-guard-survey-2026-05-08.md
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+
+import { parseOrNull } from './lib/comment-ranges';
 import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -50,7 +54,8 @@ const repoRoot = resolve(scriptDir, '..');
 // Scan scope
 // ---------------------------------------------------------------------------
 
-const SCAN_ROOT = 'apps/web/src/app/api';
+const SCAN_ROOT = 'apps/web/src/app';
+const DB_MODULE = '@propertypro/db';
 
 // ---------------------------------------------------------------------------
 // Allowed @propertypro/db symbols (canonical DB-layer surface for routes)
@@ -116,122 +121,125 @@ const ALLOWED_SYMBOLS = new Set<string>([
 ]);
 
 // ---------------------------------------------------------------------------
-// Grandfather allowlist — drained to 0 files as of A3 Phase 2 drain #77.
+// Baseline — shrink-only, per file AND per symbol (roadmap 2.3, 2026-09-28).
 //
-// HARD FLOOR: this set is empty and is expected to stay empty. Every file that
-// once appeared here has been migrated. An addition is new debt, not the
-// grandfathering of old debt, and requires explicit review with a stated reason
-// — the guard errors on any violating file that is NOT in this set, so adding an
-// entry is the only way to admit one, and that is deliberately the harder path.
+// Every entry is a server PAGE (or the one non-API route handler) that reads a
+// table directly. Each was read before it was frozen: see the census note in
+// docs/audits/2026-09-28-route-authz-census.md. To drain one, move its query
+// behind a service in `@/lib/services/…` (most already have one — named in
+// the comment) and delete the entry; the guard fails a stale entry, so the
+// map cannot keep debt that is already paid.
 //
-// If a route does need migrating off the boundary (or off this set, in the event
-// one was admitted under review):
-//   1. Identify the table queries inlined in the route handler.
-//   2. Move them to a service wrapper under `@/lib/services/<domain>-service.ts`
-//      (matches the existing convention; see `work-orders-service.ts`,
-//      `package-visitor-service.ts`, etc.).
-//   3. Update the route to call the wrapper instead of importing the table.
-//   4. Remove the file from this set.
+// `app/api/**` has NO entries: that layer is a hard floor at zero.
 // ---------------------------------------------------------------------------
 
-const KNOWN_DIRECT_TABLE_IMPORT_FILES = new Set<string>([]);
+export const KNOWN_DIRECT_TABLE_IMPORTS: ReadonlyMap<string, readonly string[]> = new Map([
+  // root-only Stripe portal redirect; one PK lookup of stripeCustomerId
+  ['apps/web/src/app/(authenticated)/billing/portal/route.ts', ['communities']],
+  // resident unit labels; getUnitLabelMap (lib/services/units-lookup) could replace it
+  ['apps/web/src/app/(authenticated)/communities/[id]/payments/page.tsx', ['units']],
+  // one column (allowResidentVisitorRevoke)
+  ['apps/web/src/app/(authenticated)/dashboard/visitors/page.tsx', ['communities']],
+  // community name only; membership.communityName already carries it
+  ['apps/web/src/app/(authenticated)/emergency/new/page.tsx', ['communities']],
+  // unbounded list ordered by initiatedAt; the service paginates by id (50)
+  ['apps/web/src/app/(authenticated)/emergency/page.tsx', ['emergencyBroadcasts']],
+  // manager-only FAQ editor (isAdmin redirect)
+  ['apps/web/src/app/(authenticated)/help/manage/page.tsx', ['faqs']],
+  // FAQ search filtered by filterFaqsForRole; searchCommunityFaqs is the service
+  ['apps/web/src/app/(authenticated)/help/search/page.tsx', ['faqs']],
+  // the caller's own users row
+  ['apps/web/src/app/(authenticated)/settings/account/page.tsx', ['users']],
+  // root-only change-plan
+  ['apps/web/src/app/(authenticated)/settings/billing/change-plan/page.tsx', ['communities']],
+  // billing fields; Stripe internals only reach the management tier (#1206)
+  ['apps/web/src/app/(authenticated)/settings/billing/page.tsx', ['communities']],
+  // the caller's own users row
+  ['apps/web/src/app/(authenticated)/settings/page.tsx', ['users']],
+  // one column (slug), behind settings:read
+  ['apps/web/src/app/(authenticated)/settings/transparency/page.tsx', ['communities']],
+  // announcements via filterVisibleAnnouncements; compliance gated (#1206)
+  [
+    'apps/web/src/app/(authenticated)/welcome/page.tsx',
+    ['announcements', 'complianceChecklistItems', 'units'],
+  ],
+  // public demo pages keyed by slug; getDemoInstanceForUpgrade is the service shape
+  ['apps/web/src/app/demo/[slug]/converted/page.tsx', ['communities', 'demoInstances']],
+  ['apps/web/src/app/demo/[slug]/page.tsx', ['communities', 'demoInstances']],
+  ['apps/web/src/app/demo/[slug]/upgrade/page.tsx', ['communities', 'demoInstances']],
+  // the caller's own requests; paginateMaintenanceRequestsForCommunity differs in scope
+  ['apps/web/src/app/mobile/maintenance/page.tsx', ['maintenanceRequests']],
+  // behind meetings:read; listMeetingsForCommunity (lib/services/meeting-service)
+  ['apps/web/src/app/mobile/meetings/page.tsx', ['meetings']],
+]);
 
 // ---------------------------------------------------------------------------
-// Detection
+// Detection (TypeScript AST)
 // ---------------------------------------------------------------------------
 
-interface Violation {
-  file: string;
-  symbols: string[];
-}
+/** "I could not check, so I refuse to pass" — the guard exits 2. */
+export class CouldNotCheckError extends Error {}
 
 /**
- * Collapse a file's import statements (which may span multiple lines into a
- * `{ ... }` block) into single-line strings. Only returns lines that import
- * from `@propertypro/db` exactly (NOT `/filters` or `/unsafe` — those have
- * their own handling).
+ * Every value-level reach into `@propertypro/db` that is not an allowed
+ * helper. Named value imports report the imported name; the other shapes
+ * report a description, because they reach every table at once.
+ * Type-only imports and exports are always allowed.
  */
-function collapseDbImports(content: string): string[] {
-  const lines = content.split('\n');
-  const collapsed: string[] = [];
-  let buffer = '';
-  let inImport = false;
+export function findDisallowedDbImports(fileName: string, source: string): string[] {
+  const sf = parseOrNull(fileName, source);
+  if (!sf) throw new CouldNotCheckError(`${fileName} does not parse`);
 
-  for (const line of lines) {
-    if (!inImport) {
-      // Single-line import (no curly brace) on @propertypro/db
-      if (/^import\s+[^{}]+from\s+['"]@propertypro\/db['"]/.test(line)) {
-        collapsed.push(line);
-        continue;
-      }
-      // Start of a multi-line `{ ... }` import
-      if (/^import\s+.*\{/.test(line)) {
-        buffer = line;
-        inImport = true;
-        if (line.includes('}')) {
-          if (/from\s+['"]@propertypro\/db['"]/.test(line)) {
-            collapsed.push(line);
+  const found = new Set<string>();
+  const isDb = (node: ts.Node | undefined): boolean =>
+    !!node && ts.isStringLiteral(node) && node.text === DB_MODULE;
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && isDb(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      if (clause && !clause.isTypeOnly) {
+        if (clause.name) found.add(`default import (${clause.name.text})`);
+        const bindings = clause.namedBindings;
+        if (bindings && ts.isNamespaceImport(bindings)) {
+          found.add(`namespace import (* as ${bindings.name.text})`);
+        } else if (bindings) {
+          for (const el of bindings.elements) {
+            if (el.isTypeOnly) continue;
+            const name = (el.propertyName ?? el.name).text;
+            if (!ALLOWED_SYMBOLS.has(name)) found.add(name);
           }
-          buffer = '';
-          inImport = false;
         }
       }
-    } else {
-      buffer += ' ' + line;
-      if (line.includes('}')) {
-        if (/from\s+['"]@propertypro\/db['"]/.test(buffer)) {
-          collapsed.push(buffer);
+    } else if (ts.isExportDeclaration(node) && isDb(node.moduleSpecifier) && !node.isTypeOnly) {
+      const clause = node.exportClause;
+      if (!clause) found.add('re-export (export * from)');
+      else if (ts.isNamespaceExport(clause)) found.add(`re-export (export * as ${clause.name.text})`);
+      else {
+        for (const el of clause.elements) {
+          if (el.isTypeOnly) continue;
+          const name = (el.propertyName ?? el.name).text;
+          if (!ALLOWED_SYMBOLS.has(name)) found.add(`re-export (${name})`);
         }
-        buffer = '';
-        inImport = false;
       }
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      isDb(node.arguments[0])
+    ) {
+      found.add('dynamic import()');
     }
-  }
-  return collapsed;
-}
-
-/**
- * Extract the imported value-symbols (NOT `type` imports) from a single
- * collapsed import statement.
- */
-function extractValueSymbols(importLine: string): string[] {
-  const braceMatch = importLine.match(/\{([^}]+)\}/);
-  if (!braceMatch?.[1]) return [];
-  return braceMatch[1]
-    .split(',')
-    .map((sym) => sym.trim())
-    .filter((sym) => sym.length > 0)
-    // Drop `type X` and `type { X }` imports — type-only is always allowed.
-    .filter((sym) => !sym.startsWith('type '))
-    // Strip `as Alias` if present — we only care about the source name.
-    .map((sym) => sym.split(/\s+as\s+/)[0]?.trim() ?? sym);
-}
-
-function findViolation(content: string, filePath: string): Violation | null {
-  const dbImports = collapseDbImports(content);
-  const offendingSymbols: string[] = [];
-
-  for (const imp of dbImports) {
-    // If the entire import is `import type { ... } from ...`, skip.
-    if (/^import\s+type\s+/.test(imp)) continue;
-    const syms = extractValueSymbols(imp);
-    for (const sym of syms) {
-      if (!ALLOWED_SYMBOLS.has(sym)) {
-        offendingSymbols.push(sym);
-      }
-    }
-  }
-
-  if (offendingSymbols.length === 0) return null;
-  return { file: filePath, symbols: [...new Set(offendingSymbols)] };
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return [...found].sort();
 }
 
 // ---------------------------------------------------------------------------
 // Filesystem walk
 // ---------------------------------------------------------------------------
 
-/** "I could not check, so I refuse to pass" — the guard exits 2. */
-class CouldNotCheckError extends Error {}
+const SOURCE_FILE = /\.(ts|tsx)$/;
+const TEST_FILE = /\.(test|spec)\.(ts|tsx)$/;
 
 function walkDir(dirAbs: string): string[] {
   const out: string[] = [];
@@ -242,7 +250,7 @@ function walkDir(dirAbs: string): string[] {
     throw new CouldNotCheckError(`could not read directory ${dirAbs}: ${(err as Error).message}`);
   }
   for (const entry of entries) {
-    if (entry === 'node_modules') continue;
+    if (entry === 'node_modules' || entry === '__tests__') continue;
     const abs = join(dirAbs, entry);
     let s;
     try {
@@ -252,12 +260,14 @@ function walkDir(dirAbs: string): string[] {
     }
     if (s.isDirectory()) {
       out.push(...walkDir(abs));
-    } else if (s.isFile() && entry === 'route.ts') {
+    } else if (s.isFile() && SOURCE_FILE.test(entry) && !TEST_FILE.test(entry) && !entry.endsWith('.d.ts')) {
       out.push(abs);
     }
   }
   return out;
 }
+
+const toPosix = (p: string) => p.split(sep).join('/');
 
 // ---------------------------------------------------------------------------
 // Main
@@ -266,113 +276,95 @@ function walkDir(dirAbs: string): string[] {
 /**
  * Run the guard over `baseDir/SCAN_ROOT` and return its exit code:
  * 0 clean · 1 violations · 2 could not check (missing root, walk or read
- * error, or zero route.ts files — a scan that examined nothing must not pass).
- * `baseDir` defaults to the repo root; tests point it at a fixture tree.
+ * error, a file that does not parse, or zero route.ts files — a scan that
+ * examined nothing must not pass). `baseDir` defaults to the repo root; tests
+ * point it at a fixture tree and may pass their own baseline.
  */
-export function checkRouteTableImports(baseDir: string = repoRoot): number {
-  console.log('🔍 Route → Table Import Guard (ADR-003 / A3 Phase 1)');
+export function checkRouteTableImports(
+  baseDir: string = repoRoot,
+  baseline: ReadonlyMap<string, readonly string[]> = KNOWN_DIRECT_TABLE_IMPORTS,
+): number {
+  console.log('🔍 App → Table Import Guard (ADR-003 / A3, widened by roadmap 2.3)');
   console.log('='.repeat(60));
 
   const rootAbs = resolve(baseDir, SCAN_ROOT);
+  const found = new Map<string, string[]>();
   let files: string[];
   try {
     if (!statSync(rootAbs, { throwIfNoEntry: false })?.isDirectory()) {
       throw new CouldNotCheckError(`scan root ${SCAN_ROOT} does not exist under ${baseDir}.`);
     }
     files = walkDir(rootAbs);
-    if (files.length === 0) {
+    if (!files.some((f) => /[\\/]route\.ts$/.test(f))) {
       throw new CouldNotCheckError(`0 route.ts files under ${SCAN_ROOT}.`);
+    }
+    for (const fileAbs of files) {
+      const rel = toPosix(relative(baseDir, fileAbs));
+      let content: string;
+      try {
+        content = readFileSync(fileAbs, 'utf-8');
+      } catch (err) {
+        throw new CouldNotCheckError(`could not read ${rel}: ${(err as Error).message}`);
+      }
+      const symbols = findDisallowedDbImports(rel, content);
+      if (symbols.length > 0) found.set(rel, symbols);
     }
   } catch (err) {
     if (!(err instanceof CouldNotCheckError)) throw err;
-    console.error(`\n❌ Could not check route → table imports (refusing to pass): ${err.message}`);
+    console.error(`\n❌ Could not check app → table imports (refusing to pass): ${err.message}`);
     return 2;
   }
 
-  const allowlistedHits = new Set<string>();
-  const newViolations: Violation[] = [];
-
-  for (const fileAbs of files) {
-    const rel = relative(baseDir, fileAbs);
-    let content: string;
-    try {
-      content = readFileSync(fileAbs, 'utf-8');
-    } catch (err) {
-      console.error(
-        `\n❌ Could not check route → table imports (refusing to pass): could not read ${rel}: ${(err as Error).message}`,
-      );
-      return 2;
-    }
-    const violation = findViolation(content, rel);
-    if (!violation) continue;
-
-    if (KNOWN_DIRECT_TABLE_IMPORT_FILES.has(rel)) {
-      allowlistedHits.add(rel);
-    } else {
-      newViolations.push(violation);
-    }
+  const newViolations: Array<{ file: string; symbols: string[] }> = [];
+  const stale: string[] = [];
+  for (const [file, symbols] of found) {
+    const allowed = new Set(baseline.get(file) ?? []);
+    const extra = symbols.filter((s) => !allowed.has(s));
+    if (extra.length > 0) newViolations.push({ file, symbols: extra });
+  }
+  for (const [file, symbols] of baseline) {
+    const present = new Set(found.get(file) ?? []);
+    for (const s of symbols) if (!present.has(s)) stale.push(`${file} → ${s}`);
   }
 
-  // Detect dead allowlist entries — files that no longer have a violation
-  // (or no longer exist). Pruning these keeps the debt ledger honest.
-  const deadAllowlistEntries: string[] = [];
-  for (const entry of KNOWN_DIRECT_TABLE_IMPORT_FILES) {
-    if (!allowlistedHits.has(entry)) {
-      deadAllowlistEntries.push(entry);
-    }
-  }
-
-  console.log(`\nScanned ${files.length} route.ts files under ${SCAN_ROOT}.`);
+  const baselined = [...baseline.values()].reduce((n, s) => n + s.length, 0);
   console.log(
-    `Allowlist: ${KNOWN_DIRECT_TABLE_IMPORT_FILES.size} grandfathered files; ` +
-      `${allowlistedHits.size} active hits.`,
+    `\nScanned ${files.length} server files under ${SCAN_ROOT} ` +
+      `(${files.filter((f) => /[\\/]route\.ts$/.test(f)).length} route.ts). ` +
+      `Baseline: ${baseline.size} files / ${baselined} symbols.`,
   );
 
-  if (deadAllowlistEntries.length > 0) {
+  if (stale.length > 0) {
     console.error(
-      `\n❌ ${deadAllowlistEntries.length} file(s) are in KNOWN_DIRECT_TABLE_IMPORT_FILES ` +
-        `but no longer import a non-helper symbol from @propertypro/db. ` +
-        `Remove them from the allowlist:`,
+      `\n❌ ${stale.length} baseline entr${stale.length === 1 ? 'y is' : 'ies are'} stale — ` +
+        'the file no longer imports that symbol. Remove it from KNOWN_DIRECT_TABLE_IMPORTS:',
     );
-    for (const entry of deadAllowlistEntries) {
-      console.error(`  - ${entry}`);
-    }
+    for (const s of stale) console.error(`  - ${s}`);
   }
 
   if (newViolations.length > 0) {
     console.error(
-      `\n❌ ${newViolations.length} new route(s) import non-helper symbols from @propertypro/db:`,
+      `\n❌ ${newViolations.length} file(s) import non-helper symbols from @propertypro/db:`,
     );
     for (const v of newViolations) {
       console.error(`  ${v.file}`);
-      console.error(`      → imports: ${v.symbols.join(', ')}`);
+      console.error(`      → ${v.symbols.join(', ')}`);
     }
     console.error(
-      '\nADR-003: route handlers should call services, not import tables ' +
+      '\nADR-003: app code (routes AND pages) should call services, not import tables ' +
         'or schema enums directly. Move the query into a service wrapper ' +
         'under `@/lib/services/<domain>-service.ts` and import the wrapper.\n' +
         'Allowed canonical helpers: createScopedClient, paginate, logAuditEvent, ' +
         'plus storage / search / notification / document-access helpers (see ' +
-        'ALLOWED_SYMBOLS in this script). Type-only imports (`import type { ... }`) ' +
-        'are always allowed.',
+        'ALLOWED_SYMBOLS in this script). Type-only imports are always allowed.',
     );
   }
 
-  const hasErrors = newViolations.length > 0 || deadAllowlistEntries.length > 0;
-  if (hasErrors) {
-    return 1;
-  }
+  if (stale.length > 0 || newViolations.length > 0) return 1;
 
-  // The allowlist was drained to 0 as of A3 Phase 2 drain #77, so a
-  // "remaining files, drain them" success line describes a world that no longer
-  // exists. Report which world we are actually in: an empty set is the expected
-  // floor, and a non-empty one is debt someone admitted under review.
-  const allowlistSize = KNOWN_DIRECT_TABLE_IMPORT_FILES.size;
   console.log(
-    `\n✅ No new route → table imports outside the allowlist. ` +
-      (allowlistSize === 0
-        ? 'Allowlist is at its expected floor of 0 — adding an entry requires review.'
-        : `${allowlistSize} file(s) on the allowlist; the floor is 0, so each one is debt to remove, not to keep.`),
+    '\n✅ No app → table imports outside the baseline. ' +
+      `${baseline.size} baselined file(s) remain; the map is shrink-only.`,
   );
   return 0;
 }
