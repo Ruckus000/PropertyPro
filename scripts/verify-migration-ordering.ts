@@ -18,6 +18,7 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -626,7 +627,6 @@ function main(): void {
 // Only run when invoked as a script. Without this, importing the module to unit
 // test an exported check would execute main() and process.exit() out of the test
 // runner.
-const invokedPath = process.argv[1] ? resolve(process.argv[1]) : '';
-if (invokedPath === resolve(fileURLToPath(import.meta.url))) {
+if (isMainModule(import.meta.url)) {
   main();
 }
