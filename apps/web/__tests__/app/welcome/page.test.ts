@@ -17,6 +17,7 @@ const {
   redirectMock,
   welcomeScreenMock,
   selectFromMock,
+  listActorUnitIdsMock,
 } = vi.hoisted(() => ({
   requirePageAuthenticatedUserMock: vi.fn(),
   requirePageCommunityMembershipMock: vi.fn(),
@@ -25,6 +26,7 @@ const {
   redirectMock: vi.fn(),
   welcomeScreenMock: vi.fn(() => null),
   selectFromMock: vi.fn(async (_table?: unknown, ..._rest: unknown[]): Promise<unknown[]> => []),
+  listActorUnitIdsMock: vi.fn(async (): Promise<number[]> => []),
 }));
 
 class RedirectError extends Error {
@@ -69,15 +71,19 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
 vi.mock('@propertypro/db', () => ({
   announcements: {},
   complianceChecklistItems: { documentId: {}, isApplicable: {}, deletedAt: {} },
-  units: { ownerUserId: {}, unitNumber: {}, building: {}, floor: {} },
+  units: { id: {}, ownerUserId: {}, unitNumber: {}, building: {}, floor: {} },
   createScopedClient: vi.fn(() => ({
     query: vi.fn(async () => []),
     selectFrom: selectFromMock,
   })),
 }));
 
+vi.mock('@/lib/units/actor-units', () => ({
+  listActorUnitIds: listActorUnitIdsMock,
+}));
+
 vi.mock('@propertypro/db/filters', () => ({
-  eq: vi.fn(),
+  eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
   isNull: vi.fn(),
 }));
 
@@ -94,7 +100,7 @@ vi.mock('@/components/onboarding/welcome-screen', () => ({
   WelcomeScreen: welcomeScreenMock,
 }));
 
-import { complianceChecklistItems } from '@propertypro/db';
+import { complianceChecklistItems, units } from '@propertypro/db';
 import WelcomePage from '../../../src/app/(authenticated)/welcome/page';
 
 describe('WelcomePage redirect behavior', () => {
@@ -279,3 +285,45 @@ describe('WelcomePage compliance snapshot gate', () => {
     expect(readCompliance()).toBe(true);
   });
 });
+
+/**
+ * A tenant's unit is the one assigned on their role (every resident requires
+ * one), not a unit they own — the page used to look it up by
+ * `units.ownerUserId`, so a tenant never saw theirs.
+ */
+describe('WelcomePage resident unit', () => {
+  const UNIT_7B = { unitNumber: '7B', building: 'North', floor: 7 };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveCommunityContextMock.mockReturnValue({ communityId: 42 });
+    requirePageAuthenticatedUserMock.mockResolvedValue({ id: 'tenant-1', fullName: 'Tina Tenant' });
+    hasChecklistItemsMock.mockResolvedValue(false);
+    requirePageCommunityMembershipMock.mockResolvedValue({
+      userId: 'tenant-1', communityId: 42, role: 'resident', isUnitOwner: false,
+      communityType: 'apartment', communityName: 'Sunset Ridge', city: 'Tampa', state: 'FL',
+      designation: null,
+    });
+    selectFromMock.mockImplementation(async (table: unknown, _cols: unknown, where: unknown) =>
+      table === units && (where as { val?: unknown })?.val === 701 ? [UNIT_7B] : [],
+    );
+  });
+
+  async function renderedUnit() {
+    const element = (await WelcomePage({
+      searchParams: Promise.resolve({ communityId: '42' }),
+    })) as unknown as { props: { unit: unknown } };
+    return element.props.unit;
+  }
+
+  it('shows a tenant the unit assigned on their role', async () => {
+    listActorUnitIdsMock.mockResolvedValue([701]);
+    expect(await renderedUnit()).toEqual(UNIT_7B);
+  });
+
+  it('shows no unit when the resident has no unit association (control)', async () => {
+    listActorUnitIdsMock.mockResolvedValue([]);
+    expect(await renderedUnit()).toBeNull();
+  });
+});
+
