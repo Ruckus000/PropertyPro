@@ -43,8 +43,10 @@ describe('statutory admin gates delegate to requireBoardDesignation', () => {
     it(`${name} passes management-tier`, () => {
       expect(() => fn(membership({ role: 'property_manager', isAdmin: true }))).not.toThrow();
     });
-    it(`${name} passes a resident + designation`, () => {
-      expect(() => fn(membership({ designation: 'board_president' }))).not.toThrow();
+    it(`${name} passes a NON-OWNER resident + designation (deliberate; seated via acknowledgeNonOwner)`, () => {
+      expect(() =>
+        fn(membership({ isUnitOwner: false, designation: 'board_president' })),
+      ).not.toThrow();
     });
     it(`${name} rejects a plain resident`, () => {
       expect(() => fn(membership({}))).toThrow(ForbiddenError);

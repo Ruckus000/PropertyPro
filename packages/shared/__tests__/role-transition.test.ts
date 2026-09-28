@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COMMUNITY_ROLES } from '../src/index';
+import { isAdminRole } from '../src/access-policies';
 import {
   ADMIN_TIER_DB_ROLES,
   MANAGER_TIER_DB_ROLES,
@@ -22,6 +23,19 @@ describe('role-transition constants', () => {
   });
   it('MANAGER_TIER covers the v3 manager-tier roles', () => {
     expect(MANAGER_TIER_DB_ROLES).toEqual(['property_manager', 'root_manager']);
+  });
+});
+
+describe('admin-tier idioms agree (roadmap 2.1: pin, don\u2019t drain)', () => {
+  // Route authz reads "is this a manager?" through several idioms:
+  // membership.isAdmin (ADMIN_TIER_DB_ROLES), isAdminRole (the matrix `manager`
+  // row via resolveMatrixRole), requireRole(PM_MANAGER_ROLES) (PM_SCOPE_DB_ROLES)
+  // and billing's isManagementTier (ADMIN_TIER_DB_ROLES). They are only safe to
+  // leave un-unified while they agree for every role — this is that pin.
+  it.each(COMMUNITY_ROLES)('%s: every idiom gives the same answer', (role) => {
+    const adminTier = (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
+    expect(isAdminRole(role)).toBe(adminTier);
+    expect((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)).toBe(adminTier);
   });
 });
 
