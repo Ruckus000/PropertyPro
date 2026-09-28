@@ -2,7 +2,7 @@
 // AUTHZ: Auth flow — pre-tenant state lookup, no community context yet.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, pendingSignups } from '@propertypro/db';
-import { and, eq, gt, isNull, notInArray, or } from '@propertypro/db/filters';
+import { and, eq, gt, isNull, lt, notInArray, or } from '@propertypro/db/filters';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { sendEmail } from '@propertypro/email';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
@@ -227,6 +227,27 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
     candidateSlug: authoritativeSubdomain.normalizedSubdomain,
   });
 
+  if (pendingRow === null) {
+    // The email already holds a LIVE signup this caller did not start (they did
+    // not present its signupRequestId). Answer exactly as a fresh signup would,
+    // but with the id we minted for this request, which links to nothing: the
+    // existing id is never disclosed, the existing row is untouched, and no
+    // auth link or email is generated. The rightful owner continues from the
+    // verification email already in their inbox, which carries their id.
+    console.info(JSON.stringify({
+      event: 'signup.conflict_suppressed',
+      signupRequestId,
+    }));
+    await enforceMinSignupResponseTime(startMs);
+    return {
+      signupRequestId,
+      subdomain: authoritativeSubdomain.normalizedSubdomain,
+      verificationRequired: true,
+      checkoutEligible: false,
+      message: SIGNUP_SUCCESS_MESSAGE,
+    };
+  }
+
   // Skip re-sending verification email if one was sent recently (anti-email-bombing).
   const emailRecentlySent =
     pendingRow.verificationEmailSentAt != null
@@ -324,7 +345,20 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
 // live/committed signup and must never be reset by a re-submission.
 const POST_PAYMENT_SIGNUP_STATUSES = ['payment_completed', 'provisioning', 'completed'] as const;
 
-async function upsertPendingSignup(input: SignupPersistenceInput): Promise<PersistedSignupRow> {
+/**
+ * Insert the pending signup, or update the existing row for this email ONLY when
+ * the caller owns it (presented its signupRequestId) or it has expired.
+ *
+ * Returns `null` when the email belongs to a live signup the caller did not
+ * start. Before 2026-09-28 the conflict branch updated that row regardless and
+ * returned ITS signupRequestId: anyone who knew a prospect's email could learn
+ * the id (and overwrite their community name, plan and subdomain), then race
+ * the prospect's browser on `GET /auth/provisioning-status`, whose first poller
+ * after provisioning receives a login token for the new root manager.
+ */
+async function upsertPendingSignup(
+  input: SignupPersistenceInput,
+): Promise<PersistedSignupRow | null> {
   const db = createUnscopedClient();
   const timestamp = new Date();
   const expiresAt = new Date(timestamp.getTime() + SIGNUP_EXPIRY_MS);
@@ -367,6 +401,10 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
       .onConflictDoUpdate({
         target: pendingSignups.emailNormalized,
         set: {
+          // Equal to the stored id when the caller owns the row; a NEW id when
+          // an expired row is being reused, so any earlier holder of the old id
+          // (it was once disclosed) loses it.
+          signupRequestId: input.signupRequestId,
           primaryContactName: input.primaryContactName,
           communityName: input.communityName,
           address: input.address,
@@ -392,7 +430,15 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
         },
         // A6: never clobber a paid/provisioned/completed signup back to
         // pending_verification if someone re-signs up with an already-used email.
-        setWhere: notInArray(pendingSignups.status, [...POST_PAYMENT_SIGNUP_STATUSES]),
+        // And only the caller who holds the row's id may update a live row; an
+        // expired row is free for anyone (see the docblock).
+        setWhere: and(
+          notInArray(pendingSignups.status, [...POST_PAYMENT_SIGNUP_STATUSES]),
+          or(
+            eq(pendingSignups.signupRequestId, input.signupRequestId),
+            lt(pendingSignups.expiresAt, timestamp),
+          ),
+        ),
       })
       .returning({
         id: pendingSignups.id,
@@ -403,12 +449,24 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
 
     const row = rows[0];
     if (!row) {
-      // With the setWhere guard above, an empty result means the email already
-      // belongs to a committed signup — surface an actionable message.
-      throw new ValidationError(
-        'An account already exists for this email address. Please log in.',
-        { field: 'email' },
-      );
+      // The setWhere guard refused the update: the email belongs either to a
+      // committed signup (tell them to log in, as before) or to a live signup
+      // this caller does not own (null: the caller answers generically).
+      const [existing] = await db
+        .select({ status: pendingSignups.status })
+        .from(pendingSignups)
+        .where(eq(pendingSignups.emailNormalized, input.email))
+        .limit(1);
+      if (
+        !existing
+        || (POST_PAYMENT_SIGNUP_STATUSES as readonly string[]).includes(existing.status)
+      ) {
+        throw new ValidationError(
+          'An account already exists for this email address. Please log in.',
+          { field: 'email' },
+        );
+      }
+      return null;
     }
     return row;
   } catch (error) {
@@ -612,6 +670,7 @@ async function enforceMinSignupResponseTime(startMs: number): Promise<void> {
 
 export const _testInternals = {
   MIN_SIGNUP_RESPONSE_MS,
+  upsertPendingSignup,
   SIGNUP_EXPIRY_MS,
   VERIFICATION_EMAIL_COOLDOWN_MS,
   enforceMinSignupResponseTime,
