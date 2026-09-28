@@ -307,8 +307,9 @@ export function SignupForm({
           client-side navigation to the same route keeps this component
           instance and its `verificationState: 'error'`, so the card would
           never go away. A document load is what gives back a blank form.
-          Resubmitting with the same email is safe: the email-keyed upsert in
-          lib/auth/signup.ts resets the row and keeps its signupRequestId.
+          Resubmitting with the same email is safe: lib/auth/signup.ts restarts
+          an EXPIRED signup under a new id, and never discloses or overwrites a
+          live one the caller does not hold the id for.
         */}
         <a
           href="/signup"

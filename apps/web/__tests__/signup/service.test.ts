@@ -11,6 +11,7 @@ const {
   orMock,
   isNullMock,
   gtMock,
+  ltMock,
   communitiesTable,
   pendingSignupsTable,
   userRolesTable,
@@ -24,6 +25,7 @@ const {
   orMock: vi.fn((...conditions: unknown[]) => ({ _type: 'or', conditions })),
   isNullMock: vi.fn((col: unknown) => ({ _type: 'isNull', col })),
   gtMock: vi.fn((col: unknown, value: unknown) => ({ _type: 'gt', col, value })),
+  ltMock: vi.fn((col: unknown, value: unknown) => ({ _type: 'lt', col, value })),
   communitiesTable: {
     id: 'communities.id',
     slug: 'communities.slug',
@@ -61,6 +63,7 @@ vi.mock('@propertypro/db/filters', () => ({
   or: orMock,
   isNull: isNullMock,
   gt: gtMock,
+  lt: ltMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -90,6 +93,8 @@ interface PendingSignupRow {
   authUserId: string | null;
   verificationEmailId: string | null;
   verificationEmailSentAt: Date | null;
+  communityName?: string;
+  planKey?: string;
 }
 
 interface MockDbState {
@@ -142,7 +147,20 @@ function createMockDb(state: MockDbState): {
             );
 
             if (existing) {
+              // Mirror upsertPendingSignup's setWhere: never a post-payment row,
+              // and a live row only for the caller holding its signupRequestId
+              // (an expired row is free, and takes the caller's id).
+              const postPayment = ['payment_completed', 'provisioning', 'completed']
+                .includes(existing.status);
+              const owned = existing.signupRequestId === signupRequestId;
+              const expired = existing.expiresAt !== null && existing.expiresAt < new Date();
+              if (postPayment || !(owned || expired)) {
+                return [];
+              }
+              existing.signupRequestId = signupRequestId;
               existing.candidateSlug = candidateSlug;
+              existing.communityName = String(data.communityName);
+              existing.planKey = String(data.planKey);
               return [
                 {
                   id: BigInt(existing.id),
@@ -172,6 +190,8 @@ function createMockDb(state: MockDbState): {
               authUserId: null,
               verificationEmailId: null,
               verificationEmailSentAt: null,
+              communityName: String(data.communityName),
+              planKey: String(data.planKey),
             };
             state.pendingSignups.push(inserted);
             return [
@@ -331,6 +351,17 @@ function createMockDb(state: MockDbState): {
         limit: async () => {
           // A6: status lookup by signupRequestId (used by the email-change branch).
           const cond = condition as Record<string, unknown>;
+          // Status lookup by email (upsertPendingSignup's refused-update branch).
+          if (
+            table === pendingSignupsTable &&
+            cond._type === 'eq' &&
+            cond.col === pendingSignupsTable.emailNormalized
+          ) {
+            const email = String(cond.value);
+            return state.pendingSignups
+              .filter((row) => row.emailNormalized === email)
+              .map((row) => ({ status: row.status }));
+          }
           if (
             table === pendingSignupsTable &&
             cond._type === 'eq' &&
@@ -648,6 +679,87 @@ describe('signup service', () => {
     // Original signup should be untouched.
     expect(state.pendingSignups[0]?.emailNormalized).toBe('jordan@example.com');
     expect(state.pendingSignups[0]?.candidateSlug).toBe('seaside-villas');
+  });
+
+  // F1 (route-authz census, 2026-09-28): the email-keyed upsert used to hand
+  // the EXISTING signupRequestId to anyone who submitted that email, and let
+  // them overwrite the prospect's community details. The id is the only key to
+  // GET /auth/provisioning-status, whose first poller after provisioning gets a
+  // login token for the new root manager.
+  describe('a second submission of an email with a live signup it did not start', () => {
+    const victimId = validSignupPayload.signupRequestId;
+    const attackerPayload = {
+      ...validSignupPayload,
+      signupRequestId: undefined,
+      password: 'Attacker!999',
+      communityName: 'Attacker Towers',
+      candidateSlug: 'attacker-towers',
+    };
+
+    async function victimSignsUp() {
+      await submitSignup(validSignupPayload);
+      state.pendingSignups[0]!.expiresAt = new Date(Date.now() + 3600_000);
+      generateLinkMock.mockClear();
+      sendEmailMock.mockClear();
+    }
+
+    it('never discloses the existing signupRequestId', async () => {
+      // Revert-check: drop the ownership arm of the setWhere (and this mock's
+      // mirror of it) and the attacker receives victimId again.
+      await victimSignsUp();
+
+      const result = await submitSignup(attackerPayload);
+
+      expect(result.signupRequestId).not.toBe(victimId);
+      expect(result.message).toContain('Check your email');
+    });
+
+    it('leaves the prospect\'s row untouched and makes no auth or email call', async () => {
+      await victimSignsUp();
+
+      await submitSignup(attackerPayload);
+
+      expect(state.pendingSignups).toHaveLength(1);
+      expect(state.pendingSignups[0]).toMatchObject({
+        signupRequestId: victimId,
+        communityName: 'Seaside Villas',
+        candidateSlug: 'seaside-villas',
+      });
+      expect(generateLinkMock).not.toHaveBeenCalled();
+      expect(sendEmailMock).not.toHaveBeenCalled();
+    });
+
+    it('also refuses a caller presenting a DIFFERENT id for that email', async () => {
+      await victimSignsUp();
+
+      const result = await submitSignup({
+        ...attackerPayload,
+        signupRequestId: '0b9f5c1e-2a4d-4e6f-8a1b-3c5d7e9f1a2b',
+      });
+
+      expect(result.signupRequestId).not.toBe(victimId);
+      expect(state.pendingSignups[0]?.communityName).toBe('Seaside Villas');
+    });
+
+    it('lets the owner (same id) keep updating their own signup', async () => {
+      await victimSignsUp();
+
+      const result = await submitSignup({ ...validSignupPayload, communityName: 'Seaside Villas II' });
+
+      expect(result.signupRequestId).toBe(victimId);
+      expect(state.pendingSignups[0]?.communityName).toBe('Seaside Villas II');
+    });
+
+    it('lets anyone restart an EXPIRED signup, under a new id', async () => {
+      await victimSignsUp();
+      state.pendingSignups[0]!.expiresAt = new Date('2020-01-01');
+
+      const result = await submitSignup(attackerPayload);
+
+      expect(result.signupRequestId).not.toBe(victimId);
+      expect(state.pendingSignups).toHaveLength(1);
+      expect(state.pendingSignups[0]?.signupRequestId).toBe(result.signupRequestId);
+    });
   });
 
   it('skips re-sending verification email within cooldown period', async () => {
