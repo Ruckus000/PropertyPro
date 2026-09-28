@@ -29,6 +29,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { paginateDocumentCategories } from '@/lib/services/document-category-service';
 import { documentCategoriesListContract } from './contract';
 
+// route-gate: community-open — category names for any member; document access is enforced where documents are read
 export const GET = withErrorHandler(
   runRoute(documentCategoriesListContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();

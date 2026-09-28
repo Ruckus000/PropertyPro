@@ -67,6 +67,7 @@ interface JobHealth {
   observed_for_minutes?: number;
 }
 
+// route-gate: public — uptime probe; exempt in guard:internal-cron-auth, returns job slugs and timestamps only
 export async function GET() {
   const runs = await listCronRuns();
   const byslug = new Map(runs.map((r) => [r.jobSlug, r]));

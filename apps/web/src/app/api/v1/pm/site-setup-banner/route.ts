@@ -24,6 +24,7 @@ function isDismissed(value: unknown): boolean {
   );
 }
 
+// route-gate: self-scoped — the caller's own banner-dismissed preference
 export const GET = withErrorHandler(
   runRoute(siteSetupBannerStatusContract, async () => {
     const userId = await requireAuthenticatedUserId();
@@ -32,6 +33,7 @@ export const GET = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — dismisses the banner for the caller only
 export const POST = withErrorHandler(
   runRoute(siteSetupBannerDismissContract, async () => {
     const userId = await requireAuthenticatedUserId();

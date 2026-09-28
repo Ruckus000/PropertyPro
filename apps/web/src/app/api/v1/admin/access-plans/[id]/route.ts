@@ -12,6 +12,7 @@ import { handleOptions, mergeAdminCorsHeaders } from '@/lib/api/admin-cors';
 import { revokeFreeAccess } from '@/lib/services/account-lifecycle-service';
 import { adminAccessPlanRevokeContract } from './contract';
 
+// route-gate: public — CORS preflight (admin-cors handleOptions); returns headers only, and the admin verbs beside it call requirePlatformAdmin
 export { handleOptions as OPTIONS };
 
 const runRevokeAccessPlan = runRoute(

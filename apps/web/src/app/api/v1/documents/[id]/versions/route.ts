@@ -49,6 +49,7 @@ interface DocRow {
   parentDocumentId: number | null;
 }
 
+// route-gate: community-open — getDocumentWithAccessCheck / getAccessibleDocuments filter by the caller's role
 export const GET = withErrorHandler(
   runRoute(documentsVersionsGetContract, async ({ params, query, req }) => {
     const userId = await requireAuthenticatedUserId();

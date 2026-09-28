@@ -56,6 +56,7 @@ function readCookie(header: string | null, name: string): string | undefined {
   return undefined;
 }
 
+// route-gate: self-scoped — ends the support session named by the caller's own HttpOnly cookie
 export const POST = withErrorHandler(async (request: NextRequest) => {
   const cookieValue = readCookie(request.headers.get('cookie'), SUPPORT_SESSION_COOKIE);
   const payload = await parseImpersonationCookie(cookieValue);

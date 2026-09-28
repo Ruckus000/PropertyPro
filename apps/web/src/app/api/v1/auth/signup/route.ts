@@ -14,6 +14,7 @@ import {
   authSignupPostContract,
 } from './contract';
 
+// route-gate: public — sessionless subdomain-availability check; returns a boolean and a suggestion
 export const GET = withErrorHandler(
   runRoute(authSignupGetContract, async ({ query }) =>
     checkSignupSubdomainAvailability(query.subdomain, {
@@ -23,6 +24,7 @@ export const GET = withErrorHandler(
   ),
 );
 
+// route-gate: public — sessionless signup submit; ownership of an existing row is enforced in upsertPendingSignup (#1198)
 export const POST = withErrorHandler(
   runRoute(authSignupPostContract, async ({ body }) => submitSignup(body)),
 );

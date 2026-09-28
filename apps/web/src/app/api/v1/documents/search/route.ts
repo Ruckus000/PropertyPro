@@ -14,6 +14,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 
 import { documentSearchContract } from './contract';
 
+// route-gate: community-open — search is filtered by the caller's role via the document access filter
 export const GET = withErrorHandler(
   runRoute(documentSearchContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();

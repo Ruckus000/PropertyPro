@@ -43,6 +43,7 @@ const inquiryHandler = runRoute(publicPmInquiriesPostContract, async ({ body }) 
   return { ok: true };
 });
 
+// route-gate: public — rate-limited, write-only marketing inquiry form
 export const POST = withErrorHandler(async (req, ctx) => {
   const ip = resolveClientIp(req);
   const result = getRateLimiter().check(

@@ -633,6 +633,7 @@ async function handleStripeEvent(event: Stripe.Event): Promise<void> {
 // Route handler — MUST NOT use withErrorHandler
 // ---------------------------------------------------------------------------
 
+// route-gate: public — Stripe webhook; stripe.webhooks.constructEvent verifies the signature before any work
 export const POST = async (req: NextRequest): Promise<NextResponse> => {
   // 1. Raw body — MUST use req.text() [AGENTS #27]
   const rawBody = await req.text();

@@ -120,6 +120,14 @@ function walkRouteFiles(dir: string, out: string[]): void {
 }
 
 /**
+ * The name shape of a signed-token verifier (`verifySnowbirdUnsubscribeToken`,
+ * `verifyForwardEmailWebhookToken`, …). Exported because `guard:route-gates`
+ * credits a call to one as a gate; one definition, so the two guards cannot
+ * disagree about what a token verifier is.
+ */
+export const TOKEN_VERIFIER_NAME = /^verify[A-Za-z0-9_]*Token$/;
+
+/**
  * Does this route authenticate with a signed token instead of a session?
  *
  * Comments are stripped first: a route that only MENTIONS `verifyFooToken` in
@@ -129,7 +137,7 @@ function walkRouteFiles(dir: string, out: string[]): void {
  */
 export function isTokenAuthenticated(source: string): boolean {
   const code = stripComments(source);
-  const verifiesToken = /\bverify[A-Za-z0-9_]*Token\s*\(/.test(code);
+  const verifiesToken = new RegExp(`\\b${TOKEN_VERIFIER_NAME.source.slice(1, -1)}\\s*\\(`).test(code);
   const requiresSession = /\brequireAuthenticatedUserId\s*\(/.test(code);
   return verifiesToken && !requiresSession;
 }

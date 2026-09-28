@@ -57,6 +57,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { updateUserProfile } from '@/lib/services/user-profile-service';
 import { accountProfilePatchContract } from './contract';
 
+// route-gate: self-scoped — updates only the caller's own profile
 export const PATCH = withErrorHandler(
   runRoute(accountProfilePatchContract, async ({ body }) => {
     const userId = await requireAuthenticatedUserId();

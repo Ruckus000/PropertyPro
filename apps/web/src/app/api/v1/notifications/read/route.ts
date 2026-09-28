@@ -41,6 +41,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { notificationsReadContract } from './contract';
 
+// route-gate: self-scoped — marks only the caller's own notifications read
 export const PATCH = withErrorHandler(
   runRoute(notificationsReadContract, async ({ body, req }) => {
     const communityId = resolveEffectiveCommunityId(req, body.communityId);

@@ -102,7 +102,7 @@ docs/                   # Specs, ADRs, audits, design system
 > the defect lives in the relationship between two sibling files. And
 > `verify-admin-semantic-css` was converted `.cjs` → `.ts` and registered as
 > `pnpm guard:admin-semantic-css`; it now scans `apps/admin/src` **and**
-> `packages/ui/src`. There are **32** guards in `scripts/run-lint-guards.mjs`;
+> `packages/ui/src`. There are **33** guards in `scripts/run-lint-guards.mjs`;
 > `guard:admin-semantic-css` is deliberately not one of them, because it reads
 > `apps/admin/.next/static/css` and so needs a build first.
 
@@ -319,6 +319,7 @@ pnpm guard:page-padding         # Page gutter single-sourced in the shell; no pe
 pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 pnpm guard:class-resolution     # Every colour utility class in apps/web/src must emit CSS
 pnpm guard:service-dead-exports # Unreferenced exported service functions (shrink-only baseline)
+pnpm guard:route-gates          # Every exported API route VERB is gated or carries a `// route-gate:` claim
 ```
 
 > **Design tokens (`guard:design-tokens`):** bans raw hex, raw Tailwind palette

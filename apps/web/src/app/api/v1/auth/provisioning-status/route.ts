@@ -27,6 +27,7 @@ import {
 } from '@/lib/services/provisioning-service';
 import { provisioningStatusGetContract } from './contract';
 
+// route-gate: public — sessionless provisioning poll keyed by signupRequestId, which is never disclosed to a non-owner since #1198
 export const GET = withErrorHandler(
   runRoute(provisioningStatusGetContract, async ({ query }) => {
     const { signupRequestId } = query;

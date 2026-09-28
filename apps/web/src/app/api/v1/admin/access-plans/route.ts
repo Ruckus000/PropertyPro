@@ -22,6 +22,7 @@ import {
   adminAccessPlansListContract,
 } from './contract';
 
+// route-gate: public — CORS preflight (admin-cors handleOptions); returns headers only, and the admin verbs beside it call requirePlatformAdmin
 export { handleOptions as OPTIONS };
 
 // ---------------------------------------------------------------------------

@@ -130,6 +130,7 @@ export const POST = withErrorHandler(
   }),
 );
 
+// route-gate: public — invitation acceptance; the one-time token looked up by findInvitationByToken is the credential
 export const PATCH = withErrorHandler(
   runRoute(acceptInvitationContract, async ({ body, req }) => {
     const communityId = resolveEffectiveCommunityId(req, body.communityId);

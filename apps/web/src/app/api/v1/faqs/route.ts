@@ -29,6 +29,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { faqsCreateContract, faqsListContract } from './contract';
 
+// route-gate: community-open — listVisibleFaqsPage filters by the viewer's role; POST is admin-only
 export const GET = withErrorHandler(
   runRoute(faqsListContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();

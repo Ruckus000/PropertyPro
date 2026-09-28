@@ -14,6 +14,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { recordArticleView } from '@/lib/services/help-views-service';
 import { postHelpViewContract } from './contract';
 
+// route-gate: self-scoped — records the caller's own article view
 export const POST = withErrorHandler(
   runRoute(postHelpViewContract, async ({ body, req }) => {
     const { articleSlug, articleCategory } = body;

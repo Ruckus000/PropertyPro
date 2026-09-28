@@ -26,6 +26,7 @@ import {
   onboardingChecklistPostContract,
 } from './contract';
 
+// route-gate: self-scoped — the caller's own onboarding checklist items
 export const GET = withErrorHandler(
   runRoute(onboardingChecklistGetContract, async ({ req }) => {
     const userId = await requireAuthenticatedUserId();
@@ -41,6 +42,7 @@ export const GET = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — completes one of the caller's own checklist items
 export const PATCH = withErrorHandler(
   runRoute(onboardingChecklistPatchContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
@@ -53,6 +55,7 @@ export const PATCH = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — bootstraps the caller's own checklist (idempotent)
 export const POST = withErrorHandler(
   runRoute(onboardingChecklistPostContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();

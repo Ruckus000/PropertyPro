@@ -15,6 +15,7 @@ import {
 } from '@/lib/services/esign-service';
 import { esignSignGetContract, esignSignPostContract } from './contract';
 
+// route-gate: public — external signer page; possession of submission externalId + signer slug is the credential (getSignerContext)
 export const GET = withErrorHandler(
   runRoute(esignSignGetContract, async ({ params }) => {
     const signerContext = await getSignerContext(
@@ -77,6 +78,7 @@ export const GET = withErrorHandler(
   }),
 );
 
+// route-gate: public — external signer submit; same externalId + slug credential, validated by getSignerContext
 export const POST = withErrorHandler(
   runRoute(esignSignPostContract, async ({ params, body, req }) => {
     if ('action' in body && body.action === 'decline') {

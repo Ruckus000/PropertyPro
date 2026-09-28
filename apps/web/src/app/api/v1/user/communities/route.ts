@@ -16,6 +16,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { countCommunitiesForUser } from '@/lib/api/user-communities';
 import { userCommunitiesGetContract } from './contract';
 
+// route-gate: self-scoped — count/list of the caller's own memberships
 export const GET = withErrorHandler(
   runRoute(userCommunitiesGetContract, async () => {
     const userId = await requireAuthenticatedUserId();

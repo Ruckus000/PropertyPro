@@ -36,6 +36,7 @@ async function createDocumentSignedUrl(filePath: string): Promise<string> {
   }
 }
 
+// route-gate: community-open — resolveLibraryDocumentRequest applies the per-role document access check before signing a URL
 export const GET = withErrorHandler(async (req: NextRequest, context) => {
   if (!context?.params) {
     throw new ValidationError('Missing route parameters');

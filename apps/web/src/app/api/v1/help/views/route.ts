@@ -23,6 +23,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { listViewedArticleSlugs } from '@/lib/services/help-views-service';
 import { helpViewsGetContract } from './contract';
 
+// route-gate: self-scoped — returns only the articles the caller has viewed
 export const GET = withErrorHandler(
   runRoute(helpViewsGetContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);

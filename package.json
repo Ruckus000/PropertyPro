@@ -77,6 +77,7 @@
     "guard:token-auth-routes": "tsx scripts/verify-token-auth-routes.ts",
     "guard:shared-side-effects": "tsx scripts/verify-shared-side-effects.ts",
     "guard:service-dead-exports": "tsx scripts/verify-service-dead-exports.ts",
+    "guard:route-gates": "tsx scripts/verify-route-gates.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",

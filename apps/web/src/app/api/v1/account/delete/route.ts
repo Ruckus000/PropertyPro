@@ -26,6 +26,7 @@ import {
   accountDeletePostContract,
 } from './contract';
 
+// route-gate: self-scoped — reads only the caller's own deletion request
 export const GET = withErrorHandler(
   runRoute(accountDeleteGetContract, async () => {
     const userId = await requireAuthenticatedUserId();
@@ -43,6 +44,7 @@ export const GET = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — requests deletion of the caller's own account
 export const POST = withErrorHandler(
   runRoute(accountDeletePostContract, async ({ body }) => {
     const userId = await requireAuthenticatedUserId();
@@ -69,6 +71,7 @@ export const POST = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — cancels the caller's own pending deletion request
 export const DELETE = withErrorHandler(
   runRoute(accountDeleteDeleteContract, async () => {
     const userId = await requireAuthenticatedUserId();

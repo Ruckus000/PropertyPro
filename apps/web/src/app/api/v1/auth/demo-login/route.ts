@@ -125,6 +125,7 @@ function loginError(baseUrl: string, error?: string): NextResponse {
   return createRedirectResponse(new URL(url, baseUrl));
 }
 
+// route-gate: public — sessionless demo auto-login; validateDemoToken checks the demo instance's HMAC before any session is minted
 export async function GET(request: Request) {
   const trustedBaseUrl = getTrustedBaseUrl(request);
   if (!trustedBaseUrl) {

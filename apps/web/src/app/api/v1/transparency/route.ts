@@ -50,6 +50,7 @@ const transparencyGetHandler = runRoute(
   },
 );
 
+// route-gate: public — public transparency page data, served only when the community opted in and its plan includes it
 export const GET = withErrorHandler(async (req, ctx) => {
   const res = await transparencyGetHandler(req, ctx);
   res.headers.set('Cache-Control', CACHE_CONTROL);

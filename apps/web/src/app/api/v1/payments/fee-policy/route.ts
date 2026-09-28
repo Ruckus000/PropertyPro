@@ -53,6 +53,7 @@ import {
 } from '@/lib/services/finance-service';
 import { getFeePolicyContract, patchFeePolicyContract } from './contract';
 
+// route-gate: community-open — residents need the fee policy to pay; PATCH is finance-write only
 export const GET = withErrorHandler(
   runRoute(getFeePolicyContract, async ({ query, req }) => {
     const actorUserId = await requireAuthenticatedUserId();

@@ -31,6 +31,7 @@ import {
   patchNotificationPreferencesContract,
 } from './contract';
 
+// route-gate: self-scoped — the caller's own preferences in a community they belong to
 export const GET = withErrorHandler(
   runRoute(getNotificationPreferencesContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
@@ -79,6 +80,7 @@ export const GET = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — updates the caller's own preferences
 export const PATCH = withErrorHandler(
   runRoute(patchNotificationPreferencesContract, async ({ body, req }) => {
     const communityId = resolveEffectiveCommunityId(req, body.communityId);

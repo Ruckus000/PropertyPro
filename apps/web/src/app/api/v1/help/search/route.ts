@@ -41,6 +41,7 @@ import { helpSearchGetContract } from './contract';
  */
 const SEARCH_QUERY_CAPTURE_MAX_LEN = 100;
 
+// route-gate: community-open — article and FAQ search filtered by the viewer's role (#1199)
 export const GET = withErrorHandler(
   runRoute(helpSearchGetContract, async ({ query, req }) => {
     const { q } = query;

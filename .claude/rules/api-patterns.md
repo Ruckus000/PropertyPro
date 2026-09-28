@@ -22,6 +22,14 @@ Every API route handler must:
 3. Validate request bodies with Zod schemas
 4. Use `createScopedClient(communityId)` for all DB access
 5. Log mutations via `logAuditEvent()` for compliance trail
+6. **Refuse someone, or say why not — per exported verb.** `pnpm guard:route-gates`
+   fails any `GET`/`POST`/… that neither calls a gate helper (`GATE_HELPERS` in
+   `scripts/verify-route-gates.ts`), a `verify*Token` verifier, or an inline
+   `if (<role/ownership>) throw new ForbiddenError(…)`, nor carries
+   `// route-gate: <self-scoped|community-open|public> — <reason>` directly
+   above its export. A gated sibling verb does not count, and neither does
+   `requireCommunityMembership` alone. The claim is reviewed prose, not proof;
+   see `docs/audits/2026-09-28-route-authz-census.md` for what it cannot see.
 
 **New routes should ALSO be written through `runRoute()` from
 `@propertypro/api-contract`** — see "Route Contracts" below. The

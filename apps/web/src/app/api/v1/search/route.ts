@@ -31,6 +31,7 @@ import { searchAccessibleGroups } from '@/lib/search/data-search-service';
 import type { AggregatedSearchResponse } from '@/lib/search/data-search-types';
 import { aggregatedSearchContract } from './contract';
 
+// route-gate: community-open — searchAccessibleGroups filters every group by the caller's membership permissions
 export const GET = withErrorHandler(
   runRoute(aggregatedSearchContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();

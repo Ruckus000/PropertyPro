@@ -19,6 +19,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { paginateNotificationsForUser } from '@/lib/services/notification-service';
 import { notificationsListContract } from './contract';
 
+// route-gate: self-scoped — the caller's own notifications in one community
 export const GET = withErrorHandler(
   runRoute(notificationsListContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();

@@ -14,6 +14,7 @@ import { handleOptions, mergeAdminCorsHeaders } from '@/lib/api/admin-cors';
 import { interveneCommunityDeletion } from '@/lib/services/account-lifecycle-service';
 import { adminDeletionRequestInterveneContract } from './contract';
 
+// route-gate: public — CORS preflight (admin-cors handleOptions); returns headers only, and the admin verbs beside it call requirePlatformAdmin
 export { handleOptions as OPTIONS };
 
 const runInterveneDeletionRequest = runRoute(

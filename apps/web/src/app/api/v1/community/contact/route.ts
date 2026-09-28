@@ -52,6 +52,7 @@ import {
   patchCommunityContactContract,
 } from './contract';
 
+// route-gate: community-open — any member may read the association's published contact details; PATCH is admin-only
 export const GET = withErrorHandler(
   runRoute(getCommunityContactContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);

@@ -50,6 +50,7 @@ function validateFileSize(mimeType: string, fileSize: number): void {
   }
 }
 
+// route-gate: community-open — any member may upload to a path under their own community prefix (census deferral: quota)
 export const POST = withErrorHandler(
   runRoute(uploadPresignContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
