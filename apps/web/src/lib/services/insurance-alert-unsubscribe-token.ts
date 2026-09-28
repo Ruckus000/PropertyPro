@@ -7,7 +7,7 @@
  * Mirrors snowbird-digest-token.ts, but with its own secret so leaking or
  * rotating one feature's key never affects the other.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { openHmacToken, signHmacToken } from '@/lib/crypto/hmac-token';
 
 function getSecret(): string {
   const secret = process.env.INSURANCE_ALERTS_UNSUBSCRIBE_SECRET;
@@ -27,23 +27,15 @@ function encodePayload(payload: InsuranceAlertUnsubscribePayload): string {
 
 /** Build the token: `<base64url(payload)>.<hmac>`. */
 export function signInsuranceAlertUnsubscribeToken(payload: InsuranceAlertUnsubscribePayload): string {
-  const encoded = encodePayload(payload);
-  const sig = createHmac('sha256', getSecret()).update(encoded).digest('base64url');
-  return `${encoded}.${sig}`;
+  return signHmacToken(encodePayload(payload), getSecret());
 }
 
 /** Verify + decode a token. Returns null when malformed, forged, or tampered. */
 export function verifyInsuranceAlertUnsubscribeToken(
   token: string,
 ): InsuranceAlertUnsubscribePayload | null {
-  const dot = token.lastIndexOf('.');
-  if (dot <= 0) return null;
-  const encoded = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-
-  const expectedSig = createHmac('sha256', getSecret()).update(encoded).digest('base64url');
-  if (expectedSig.length !== sig.length) return null;
-  if (!timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig))) return null;
+  const encoded = openHmacToken(token, getSecret());
+  if (encoded === null) return null;
 
   let decoded: string;
   try {

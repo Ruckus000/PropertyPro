@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { constantTimeEqual } from '@/lib/crypto/hmac-token';
 
 function getStateSecret(): string {
   const secret = process.env.OAUTH_STATE_SECRET;
@@ -13,7 +14,5 @@ export function signPayload(payload: string): string {
 }
 
 export function verifySignature(payload: string, signature: string): boolean {
-  const expected = signPayload(payload);
-  if (expected.length !== signature.length) return false;
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  return constantTimeEqual(signPayload(payload), signature);
 }

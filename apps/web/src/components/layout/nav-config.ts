@@ -5,6 +5,7 @@
  * active-state matching. NAV_SECTIONS defines the visual grouping
  * (null/Community/Management/Admin) consumed by AppSidebar → NavRail.
  */
+import { matchesRoleVisibility, type RoleVisibility } from '@/lib/navigation/role-visibility';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
@@ -30,7 +31,6 @@ import {
   LayoutTemplate,
 } from 'lucide-react';
 import {
-  isAdminRole,
   getFeaturesForCommunity,
   PLAN_FEATURES,
   findCheapestPlanEntryForFeature,
@@ -49,7 +49,7 @@ export type NavTier = 'default' | 'more';
  * - `'owner_or_admin'`: unit owners + management tier (finance-read surfaces).
  * Omit to make an item visible to all roles.
  */
-export type NavVisibility = 'admin' | 'owner_or_admin';
+export type NavVisibility = Exclude<RoleVisibility, 'all'>;
 
 export interface NavItemConfig {
   id: string;
@@ -470,8 +470,9 @@ export function resolveNavItemHref(
 }
 
 /**
- * v3-native role gate for a nav item (ADR-006). A null role skips the gate
- * (matches the pre-v3 behavior where a role-less shell saw every item).
+ * v3-native role gate for a nav item (ADR-006) — the shared
+ * `matchesRoleVisibility`, so the sidebar and the palette cannot disagree. A
+ * gated item with no role is hidden (it used to show; see role-visibility.ts).
  * `designation` is never consulted — management status comes from the role.
  */
 function itemVisibleForRole(
@@ -479,10 +480,7 @@ function itemVisibleForRole(
   role: CommunityRole | null,
   isUnitOwner?: boolean,
 ): boolean {
-  if (!item.visibility || !role) return true;
-  const admin = isAdminRole(role);
-  if (item.visibility === 'owner_or_admin') return admin || isUnitOwner === true;
-  return admin; // 'admin'
+  return matchesRoleVisibility(item.visibility ?? 'all', role, isUnitOwner);
 }
 
 /**

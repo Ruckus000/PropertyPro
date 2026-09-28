@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { constantTimeEqual } from '@/lib/crypto/hmac-token';
 
 import { InboundEmailSignatureError } from './types';
 
@@ -69,13 +70,10 @@ export function verifyForwardEmailWebhookToken(rawBody: string, headers: Headers
 
   const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
 
-  // Length must match BEFORE timingSafeEqual: it throws on unequal-length
-  // buffers rather than returning false, which would surface as a 500 instead
-  // of a 401 and tell an attacker their guess was the wrong shape.
-  if (expected.length !== provided.length) {
-    throw new InboundEmailSignatureError('mismatch', 'signature does not match');
-  }
-  if (!timingSafeEqual(Buffer.from(expected), Buffer.from(provided))) {
+  // constantTimeEqual compares BYTE lengths before timingSafeEqual, which throws
+  // on unequal-length buffers — a 500 instead of a 401. The string-length check
+  // this replaced let a same-length non-ASCII header through to that throw.
+  if (!constantTimeEqual(expected, provided)) {
     throw new InboundEmailSignatureError('mismatch', 'signature does not match');
   }
 }
