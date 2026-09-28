@@ -38,6 +38,7 @@ import {
   getAnnouncementCommunityContext,
 } from '@/lib/announcements/read-visibility';
 import { WelcomeScreen } from '@/components/onboarding/welcome-screen';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 
 interface WelcomePageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -94,20 +95,33 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
     redirect(`/dashboard?communityId=${communityId}`);
   }
 
+  // The score is only computed for members who may read compliance — the same
+  // gate as GET /api/v1/compliance. Tenants (and every apartment member) get
+  // the empty snapshot, which the cards already render as "not yet set up".
+  const canReadCompliance = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'compliance',
+    'read',
+    { isUnitOwner: membership.isUnitOwner },
+  );
+
   // Fetch data in parallel
   const scoped = createScopedClient(communityId);
   const [announcementRows, complianceRows, unitRows, branding] = await Promise.all([
     scoped.query(announcements),
 
     // Compliance checklist items for score computation
-    scoped.selectFrom(
-      complianceChecklistItems,
-      {
-        documentId: complianceChecklistItems.documentId,
-        isApplicable: complianceChecklistItems.isApplicable,
-      },
-      isNull(complianceChecklistItems.deletedAt),
-    ),
+    canReadCompliance
+      ? scoped.selectFrom(
+          complianceChecklistItems,
+          {
+            documentId: complianceChecklistItems.documentId,
+            isApplicable: complianceChecklistItems.isApplicable,
+          },
+          isNull(complianceChecklistItems.deletedAt),
+        )
+      : Promise.resolve([]),
 
     // User's unit (for residents)
     membership.role === 'resident'

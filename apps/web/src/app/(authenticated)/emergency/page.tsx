@@ -2,7 +2,8 @@
  * Emergency Broadcasts list page.
  *
  * Route: /emergency?communityId=X
- * Auth: any community member (read), admin for write.
+ * Auth: `emergency_broadcasts:read` (owners and managers; NOT tenants — the
+ * same gate the list API applies), admin for write.
  */
 import Link from 'next/link';
 import { headers } from 'next/headers';
@@ -11,7 +12,7 @@ import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context'
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { checkPermissionV2 } from '@/lib/db/access-control';
+import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { BroadcastHistoryTable } from '@/components/emergency/BroadcastHistoryTable';
 import { PageHeader } from '@/components/shared/page-header';
 
@@ -43,6 +44,9 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
 
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
+  // The page used to read every broadcast for ANY member, while
+  // GET /api/v1/emergency-broadcasts refuses tenants (matrix: read=false).
+  requirePermission(membership, 'emergency_broadcasts', 'read');
 
   const canWrite = checkPermissionV2(
     membership.role,
