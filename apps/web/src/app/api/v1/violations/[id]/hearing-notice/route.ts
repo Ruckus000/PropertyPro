@@ -66,6 +66,8 @@ export const GET = withErrorHandler(
       hearingDate: violation.hearingDate,
       hearingLocation: null, // Location not stored on violation record currently
       noticeDate,
+      // The caps the fine service enforces for this community (resolveFineCaps).
+      fineCaps: membership.fineCaps,
     });
 
     return new NextResponse(Buffer.from(pdfBytes), {

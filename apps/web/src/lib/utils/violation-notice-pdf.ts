@@ -1,7 +1,9 @@
 /**
  * Raw PDF 1.4 generation for violation notices and hearing notices.
- * Zero external dependencies — follows the same pattern as finance-pdf.ts.
+ * Zero third-party dependencies — follows the same pattern as finance-pdf.ts.
  */
+
+import { formatCents } from '@propertypro/shared';
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -356,6 +358,12 @@ export interface HearingNoticePayload {
   hearingDate: Date | string;
   hearingLocation: string | null;
   noticeDate: string;
+  /**
+   * The community's EFFECTIVE fine caps (`membership.fineCaps`, from
+   * `resolveFineCaps`) — the same numbers the fine service enforces. Required
+   * so the notice can never state a cap the association does not apply.
+   */
+  fineCaps: { perFineCents: number; aggregateCents: number };
 }
 
 export function generateHearingNoticePdf(payload: HearingNoticePayload): Uint8Array {
@@ -432,12 +440,23 @@ export function generateHearingNoticePdf(payload: HearingNoticePayload): Uint8Ar
   }
   lines.push({ text: '' });
 
-  // Rights
-  lines.push({ text: 'Your Rights at the Hearing:', bold: true });
-  lines.push({ text: '1. You have the right to attend the hearing and be heard.' });
-  lines.push({ text: '2. You may present evidence and witnesses in your defense.' });
-  lines.push({ text: '3. You may be represented by legal counsel at your own expense.' });
-  lines.push({ text: '4. You may request a continuance if you need additional time to prepare.' });
+  // Hearing procedure — a pointer, not an enumeration.
+  //
+  // This used to list four "rights" as fact, including a continuance the
+  // governing documents may not provide. Telling an owner what the law entitles
+  // them to is advice about their own position (legal-risk audit F-05), so the
+  // hearing notice now points at the governing documents exactly as the
+  // violation notice's rights section does.
+  lines.push({ text: 'Hearing Procedure:', bold: true });
+  lines.push({
+    text: 'The association\u2019s governing documents and Florida law set out how',
+  });
+  lines.push({
+    text: 'this hearing is conducted and what you may do at it. Refer to your',
+  });
+  lines.push({
+    text: 'governing documents, or consult an attorney, to determine what applies.',
+  });
   lines.push({ text: '' });
 
   // Consequences.
@@ -450,9 +469,17 @@ export function generateHearingNoticePdf(payload: HearingNoticePayload): Uint8Ar
   lines.push({ text: 'Possible Outcomes:', bold: true });
   lines.push({ text: 'After considering the evidence presented, the association may:' });
   lines.push({ text: '- Dismiss the violation' });
+  // The caps are the community's effective ones, not a hardcoded $100/$1,000:
+  // communities whose documents authorize more carry an override, and the fine
+  // service enforces that override — the notice must state the same numbers.
   lines.push({ text: '- Impose a fine, subject to approval by a committee of members who are' });
-  lines.push({ text: '  not officers, directors, or their relatives, and not to exceed $100 per' });
-  lines.push({ text: '  violation, up to $1,000 in aggregate (F.S. 718.303 / 720.305)' });
+  lines.push({ text: '  not officers, directors, or their relatives (F.S. 718.303 / 720.305),' });
+  lines.push({
+    text: `  within the association's fine limits of ${formatCents(payload.fineCaps.perFineCents)} per violation`,
+  });
+  lines.push({
+    text: `  and ${formatCents(payload.fineCaps.aggregateCents)} in aggregate`,
+  });
   lines.push({ text: '- Require corrective action within a specified timeframe' });
   lines.push({ text: '- Take other action as permitted by the governing documents' });
   lines.push({ text: '' });
