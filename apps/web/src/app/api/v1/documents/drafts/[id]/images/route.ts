@@ -11,6 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { createPresignedDownloadUrl } from '@propertypro/db';
+// AUTHZ: storage write to documents/authored-assets/<communityId>/<draftId>/ only, after documents:write + draft-author checks
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';

@@ -27,6 +27,7 @@
  * This module owns the auth identity only. It performs no DB writes, no
  * authorization, and no HTTP — callers keep those.
  */
+// AUTHZ: GoTrue admin createUser/deleteUser when binding or rolling back an invited/provisioned identity; no scoped equivalent
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 export type AuthUserBindingResult =

@@ -8,6 +8,7 @@
  */
 import { NextResponse } from 'next/server';
 import { nonLocalBackendReason } from '@propertypro/shared';
+// AUTHZ: GoTrue admin generateLink for local demo personas; the route 404s outside development
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 // AUTHZ: Dev auto-login — resolves user's community for /mobile redirect (dev-only, 404 in production)
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';

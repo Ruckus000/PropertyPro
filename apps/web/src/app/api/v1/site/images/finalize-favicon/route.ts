@@ -28,6 +28,7 @@ import { decrementAssetsUsage, incrementAssetsUsage } from '@/lib/site-assets/qu
 import { parseSiteAssetPath, SITE_ASSETS_BUCKET } from '@/lib/site-assets/storage-paths';
 import { resizeFavicon } from '@/lib/services/image-processor';
 import { setSiteFavicon } from '@/lib/services/site-settings-service';
+// AUTHZ: site-assets storage, on a path parseSiteAssetPath proves belongs to this community, after the property-manager check
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { faviconFinalizeContract } from './contract';
 

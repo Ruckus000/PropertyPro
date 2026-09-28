@@ -35,6 +35,7 @@ import {
 } from '@propertypro/db';
 // AUTHZ: P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+// AUTHZ: GoTrue admin createUser/generateLink/getUserById while provisioning a paid signup; no scoped equivalent
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { buildVerificationLink } from '@/lib/auth/verification-link';
 import {

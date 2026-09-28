@@ -16,6 +16,7 @@ import { stripePrices } from '@propertypro/db';
 import { and, eq, sql } from '@propertypro/db/filters';
 // AUTHZ: Readiness check — global stripe_prices + DB connectivity (no community context). Caller MUST validate the readiness secret before invoking.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+// AUTHZ: readiness probe — listUsers(perPage 1) only proves the service-role key works; returns no user data
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { SIGNUP_PLAN_OPTIONS } from '@/lib/auth/signup-schema';
 import type { CommunityType } from '@propertypro/shared';

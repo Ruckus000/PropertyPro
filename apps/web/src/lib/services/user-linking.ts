@@ -11,6 +11,7 @@ import { ForbiddenError } from '@/lib/api/errors';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 // AUTHZ: cross-community unscoped read of both users' memberships, to answer whether the actor can already see the target (see the file-level rationale above); reads only, never writes, and never returns the target's profile.
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
+// AUTHZ: GoTrue admin getUserById to tell a claimed identity from an unclaimed stub; fails closed
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 /** The subset of a membership row this guard reads. */

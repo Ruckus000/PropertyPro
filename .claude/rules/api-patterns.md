@@ -23,8 +23,9 @@ Every API route handler must:
 4. Use `createScopedClient(communityId)` for all DB access
 5. Log mutations via `logAuditEvent()` for compliance trail
 6. **Refuse someone, or say why not — per exported verb.** `pnpm guard:route-gates`
-   fails any `GET`/`POST`/… that neither calls a gate helper (`GATE_HELPERS` in
-   `scripts/verify-route-gates.ts`), a `verify*Token` verifier, or an inline
+   (web AND `apps/admin/src/app/api`, each with its own helper list)
+   fails any `GET`/`POST`/… that neither calls a gate helper (`GATE_HELPERS` /
+   `ADMIN_GATE_HELPERS` in `scripts/verify-route-gates.ts`), a `verify*Token` verifier, or an inline
    `if (<role/ownership>) throw new ForbiddenError(…)`, nor carries
    `// route-gate: <self-scoped|community-open|public> — <reason>` directly
    above its export. A gated sibling verb does not count, and neither does

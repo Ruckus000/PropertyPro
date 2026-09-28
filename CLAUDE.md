@@ -319,7 +319,8 @@ pnpm guard:page-padding         # Page gutter single-sourced in the shell; no pe
 pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 pnpm guard:class-resolution     # Every colour utility class in apps/web/src must emit CSS
 pnpm guard:service-dead-exports # Unreferenced exported service functions (shrink-only baseline)
-pnpm guard:route-gates          # Every exported API route VERB is gated or carries a `// route-gate:` claim
+pnpm guard:route-gates          # Every exported API route VERB (web + admin) is gated or carries a `// route-gate:` claim
+pnpm guard:authz-comments       # `// AUTHZ:` above every /unsafe import, and every service-role (supabase/admin) import outside apps/admin
 ```
 
 > **Design tokens (`guard:design-tokens`):** bans raw hex, raw Tailwind palette

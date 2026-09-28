@@ -50,6 +50,7 @@
  * even the envelope/error-shape changes are consumer-invisible.
  */
 import { runRoute } from '@propertypro/api-contract';
+// AUTHZ: GoTrue admin API — mirrors the caller's OWN full_name into auth user_metadata (userId from the session); no scoped equivalent
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';

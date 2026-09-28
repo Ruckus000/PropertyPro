@@ -22,6 +22,7 @@ import {
 } from '@propertypro/db';
 // AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+// AUTHZ: GoTrue admin create/ban/link for demo→paid conversion, run by provisioning after payment
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { reactivationClears, type CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';

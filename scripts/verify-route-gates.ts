@@ -2,8 +2,10 @@
 /**
  * Route Gate Guard (`pnpm guard:route-gates`, WS3)
  *
- * Every HTTP verb exported by a `route.ts` under `apps/web/src/app/api` must
- * either REFUSE someone or SAY, in writing, why it refuses no one.
+ * Every HTTP verb exported by a `route.ts` under `apps/web/src/app/api` or
+ * `apps/admin/src/app/api` must either REFUSE someone or SAY, in writing, why
+ * it refuses no one. Each app has its OWN helper list (`SCAN_TARGETS`), so a
+ * web route is never credited by an admin helper's name, or the reverse.
  *
  *   gated      — the verb's body (followed through same-file top-level
  *                functions) calls a helper in `GATE_HELPERS`, calls a signed-
@@ -34,8 +36,17 @@
  * - Whether an inline check's condition is RIGHT. An `if` naming a role or
  *   ownership identifier is credited; that it tests the right role is review's
  *   job. (Feature/plan/type checks are not credited — see IDENTITY_IDENTIFIER.)
- * - `apps/admin` routes (out of scope; trigger: the first admin route not
- *   behind `requirePlatformAdmin` / the admin session).
+ * - `route.ts` files OUTSIDE `app/api` (web: `billing/portal`,
+ *   `auth/verify-signup` and three dev routes; admin: `dev/agent-login`).
+ *   Trigger: a new non-dev `route.ts` outside `app/api`.
+ *
+ * ## Why admin is in scope (roadmap 2.5)
+ *
+ * Admin middleware already demands a `platform_admin_users` row — except on
+ * `/api/health` and the PREFIX `/api/admin/internal/`, which it lets through
+ * sessionless for the cron bearer. A route added under that prefix is
+ * protected by nothing but its own call, and middleware path matching is one
+ * edit away from exempting more. So each admin verb must refuse on its own.
  *
  * A helper NAME is not trusted, though: every `GATE_HELPERS` entry names the
  * file that defines it, and the guard checks that the definition exists there
@@ -59,7 +70,6 @@ import { TOKEN_VERIFIER_NAME } from './verify-token-auth-routes';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(scriptDir, '..');
 
-const SCAN_ROOT = 'apps/web/src/app/api';
 const HTTP_VERBS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 
 export const ROUTE_GATE_CLASSES = ['self-scoped', 'community-open', 'public'] as const;
@@ -127,6 +137,28 @@ export const GATE_HELPERS: ReadonlyArray<GateHelper> = [
   { name: 'requireElectionsAdminRole', file: 'apps/web/src/lib/elections/common.ts' },
   { name: 'requireExportPermission', file: 'apps/web/src/lib/services/export/export-route-auth.ts' },
   { name: 'requireExportAccess', file: 'apps/web/src/lib/services/export/export-route-auth.ts' },
+];
+
+/**
+ * The platform-admin console's gates (roadmap 2.5). `billingActionRoute` is a
+ * route FACTORY whose handler calls `requirePlatformAdmin()` first; the
+ * self-check below verifies that, the same way it verifies every web entry.
+ */
+export const ADMIN_GATE_HELPERS: ReadonlyArray<GateHelper> = [
+  { name: 'requirePlatformAdmin', file: 'apps/admin/src/lib/auth/platform-admin.ts' },
+  { name: 'requireCronSecret', file: 'apps/admin/src/lib/api/cron-auth.ts' },
+  { name: 'billingActionRoute', file: 'apps/admin/src/lib/api/billing-action-route.ts' },
+];
+
+export interface ScanTarget {
+  /** Repo-relative directory whose `route.ts` files are checked. */
+  root: string;
+  helpers: ReadonlyArray<GateHelper>;
+}
+
+export const SCAN_TARGETS: ReadonlyArray<ScanTarget> = [
+  { root: 'apps/web/src/app/api', helpers: GATE_HELPERS },
+  { root: 'apps/admin/src/app/api', helpers: ADMIN_GATE_HELPERS },
 ];
 
 export class CannotCheckError extends Error {}
@@ -429,56 +461,59 @@ function walkRouteFiles(dir: string, out: string[]): void {
 
 export function checkRouteGates(
   repoRoot: string = defaultRepoRoot,
-  helpers: ReadonlyArray<GateHelper> = GATE_HELPERS,
+  targets: ReadonlyArray<ScanTarget> = SCAN_TARGETS,
 ): 0 | 1 | 2 {
-  const scanRoot = join(repoRoot, SCAN_ROOT);
-  try {
-    if (!statSync(scanRoot).isDirectory()) throw new Error('not a directory');
-  } catch {
-    console.error(`❌ Cannot check: scan root ${SCAN_ROOT} does not exist.`);
-    return 2;
-  }
-
   const violations: string[] = [];
-  const counts: Record<VerbStatus, number> = { helper: 0, token: 0, inline: 0, annotated: 0, ungated: 0 };
-  const byClass: Record<RouteGateClass, number> = { 'self-scoped': 0, 'community-open': 0, public: 0 };
-  let files: string[] = [];
 
-  try {
-    violations.push(...checkGateHelpers(repoRoot, helpers));
-    walkRouteFiles(scanRoot, files);
-    files = files.sort();
-    if (files.length === 0) throw new CannotCheckError(`found 0 route files under ${SCAN_ROOT}`);
-
-    const gateNames = new Set(helpers.map((h) => h.name));
-    for (const file of files) {
-      const rel = relative(repoRoot, file);
-      const result = analyzeRouteFile(rel, readFileSync(file, 'utf8'), gateNames);
-      for (const v of result.verbs) {
-        counts[v.status] += 1;
-        if (v.gateClass) byClass[v.gateClass] += 1;
-      }
-      for (const p of result.problems) violations.push(`${rel}: ${p}`);
+  for (const { root, helpers } of targets) {
+    const scanRoot = join(repoRoot, root);
+    try {
+      if (!statSync(scanRoot).isDirectory()) throw new Error('not a directory');
+    } catch {
+      console.error(`❌ Cannot check: scan root ${root} does not exist.`);
+      return 2;
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`❌ Cannot check: ${message}`);
-    return 2;
-  }
 
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  if (total === 0) {
-    console.error(`❌ Cannot check: ${files.length} route files exported 0 HTTP verbs.`);
-    return 2;
-  }
+    const counts: Record<VerbStatus, number> = { helper: 0, token: 0, inline: 0, annotated: 0, ungated: 0 };
+    const byClass: Record<RouteGateClass, number> = { 'self-scoped': 0, 'community-open': 0, public: 0 };
+    let files: string[] = [];
 
-  console.log(
-    `Scanned ${files.length} route files, ${total} exported verbs: ` +
-      `${counts.helper} helper-gated, ${counts.token} token-verified, ${counts.inline} inline ForbiddenError, ` +
-      `${counts.annotated} claimed (${byClass['self-scoped']} self-scoped, ` +
-      `${byClass['community-open']} community-open, ${byClass.public} public). ` +
-      `${helpers.length} gate helpers verified.`,
-  );
+    try {
+      violations.push(...checkGateHelpers(repoRoot, helpers));
+      walkRouteFiles(scanRoot, files);
+      files = files.sort();
+      if (files.length === 0) throw new CannotCheckError(`found 0 route files under ${root}`);
+
+      const gateNames = new Set(helpers.map((h) => h.name));
+      for (const file of files) {
+        const rel = relative(repoRoot, file);
+        const result = analyzeRouteFile(rel, readFileSync(file, 'utf8'), gateNames);
+        for (const v of result.verbs) {
+          counts[v.status] += 1;
+          if (v.gateClass) byClass[v.gateClass] += 1;
+        }
+        for (const p of result.problems) violations.push(`${rel}: ${p}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Cannot check: ${message}`);
+      return 2;
+    }
+
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (total === 0) {
+      console.error(`❌ Cannot check: ${files.length} route files under ${root} exported 0 HTTP verbs.`);
+      return 2;
+    }
+
+    console.log(
+      `${root}: ${files.length} route files, ${total} exported verbs: ` +
+        `${counts.helper} helper-gated, ${counts.token} token-verified, ${counts.inline} inline ForbiddenError, ` +
+        `${counts.annotated} claimed (${byClass['self-scoped']} self-scoped, ` +
+        `${byClass['community-open']} community-open, ${byClass.public} public). ` +
+        `${helpers.length} gate helpers verified.`,
+    );
+  }
 
   if (violations.length > 0) {
     console.error(`\n❌ ${violations.length} route-gate violation(s):\n`);

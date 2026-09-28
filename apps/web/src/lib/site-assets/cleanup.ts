@@ -17,6 +17,7 @@
  * because it is "the association's record, not yours alone". Adding either
  * here would contradict a live policy, not close a gap.
  */
+// AUTHZ: lists/removes objects under ONE community's prefixes during community data purge; no user-supplied path
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { COMMUNITY_ASSETS_BUCKET } from '@propertypro/db/constants';
 import { SITE_ASSETS_BUCKET, SITE_ASSET_KINDS } from './storage-paths';

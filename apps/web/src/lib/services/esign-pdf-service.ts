@@ -16,6 +16,7 @@
  */
 import crypto from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
+// AUTHZ: documents storage download/upload of e-sign PDFs at paths taken from the community-scoped submission row
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import type { EsignFieldsSchema, EsignFieldDefinition } from '@propertypro/shared';
 
