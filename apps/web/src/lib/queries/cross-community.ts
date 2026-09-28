@@ -14,12 +14,15 @@
  */
 // AUTHZ: Cross-community query helpers — unified owner dashboard + aggregated notifications. User is the authorization anchor; callers MUST resolve the user's authorized community ids via getAuthorizedCommunityIds() and then run scoped queries per community.
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
-import { createScopedClient } from '@propertypro/db';
+import { buildAccessibleDocumentsFilter, createScopedClient } from '@propertypro/db';
+import type { RbacResource } from '@propertypro/shared';
+import { checkPermissionV2 } from '@/lib/db/access-control';
+import { requireCommunityMembership, type CommunityMembership } from '@/lib/api/community-membership';
+import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import {
   communities,
   complianceChecklistItems,
   documents,
-  announcements,
   meetings,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gte, lte } from '@propertypro/db/filters';
@@ -69,6 +72,28 @@ async function fetchCommunityMeta(
   return row ? { name: row.name, slug: row.slug, communityType: row.communityType } : null;
 }
 
+/**
+ * The caller's membership in `cId`, or null when they no longer hold one (a
+ * role revoked between the id lookup and this read). Every section of the
+ * overview is gated on it: the overview must show exactly what each feature's
+ * own route would, not a superset (route-authz census F2, 2026-09-28 — it used
+ * to list board-only announcements, role-restricted document titles and the
+ * compliance score to any member).
+ */
+async function membershipOrNull(cId: number, userId: string): Promise<CommunityMembership | null> {
+  try {
+    return await requireCommunityMembership(cId, userId);
+  } catch {
+    return null;
+  }
+}
+
+function can(membership: CommunityMembership, resource: RbacResource): boolean {
+  return checkPermissionV2(membership.role, membership.communityType, resource, 'read', {
+    isUnitOwner: membership.isUnitOwner,
+  });
+}
+
 function classifyComplianceEscalation(
   deadline: Date | null,
   now: Date,
@@ -91,7 +116,9 @@ export async function getCommunityCards(userId: string): Promise<CommunityCard[]
       const scoped = createScopedClient(cId);
       const meta = await fetchCommunityMeta(scoped, cId);
       if (!meta) return null;
-      if (meta.communityType === 'apartment') {
+      const membership = await membershipOrNull(cId, userId);
+      if (!membership) return null;
+      if (meta.communityType === 'apartment' || !can(membership, 'compliance')) {
         return {
           communityId: cId,
           communityName: meta.name,
@@ -144,26 +171,41 @@ export async function getActivityFeed(userId: string, days = 30): Promise<Activi
       const scoped = createScopedClient(cId);
       const meta = await fetchCommunityMeta(scoped, cId);
       if (!meta) return [];
+      const membership = await membershipOrNull(cId, userId);
+      if (!membership) return [];
       type TimedRow = { id: number; title: string; createdAt: Date };
+      // Documents: the same role/category + source-type predicate the documents
+      // routes use. Announcements: the same visibility function the
+      // announcements feed uses (audience, archived, expired, demo provenance).
       const [docs, anns] = (await Promise.all([
-        scoped
-          .selectFrom<Row>(
-            documents,
-            { id: documents.id, title: documents.title, createdAt: documents.createdAt },
-            gte(documents.createdAt, cutoff),
-          )
-          .orderBy(desc(documents.createdAt))
-          .limit(10)
-          .then((rows) => rows),
-        scoped
-          .selectFrom<Row>(
-            announcements,
-            { id: announcements.id, title: announcements.title, createdAt: announcements.createdAt },
-            gte(announcements.createdAt, cutoff),
-          )
-          .orderBy(desc(announcements.createdAt))
-          .limit(10)
-          .then((rows) => rows),
+        can(membership, 'documents')
+          ? (async () => {
+              const where = await buildAccessibleDocumentsFilter(
+                {
+                  communityId: cId,
+                  role: membership.role,
+                  communityType: membership.communityType,
+                  isUnitOwner: membership.isUnitOwner,
+                },
+                gte(documents.createdAt, cutoff),
+              );
+              return scoped
+                .selectFrom<Row>(
+                  documents,
+                  { id: documents.id, title: documents.title, createdAt: documents.createdAt },
+                  where,
+                )
+                .orderBy(desc(documents.createdAt))
+                .limit(10);
+            })()
+          : Promise.resolve([]),
+        listVisibleAnnouncements(cId, membership).then(({ rows }) =>
+          rows
+            .filter((a) => a.createdAt >= cutoff)
+            .sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime())
+            .slice(0, 10)
+            .map((a) => ({ id: a.id, title: a.title, createdAt: a.createdAt })),
+        ),
       ])) as [TimedRow[], TimedRow[]];
       const items: ActivityItem[] = [];
       for (const d of docs) {
@@ -206,6 +248,8 @@ export async function getUpcomingEvents(userId: string, days = 30): Promise<Upco
       const scoped = createScopedClient(cId);
       const meta = await fetchCommunityMeta(scoped, cId);
       if (!meta) return [];
+      const membership = await membershipOrNull(cId, userId);
+      if (!membership || !can(membership, 'meetings')) return [];
       const upcoming = (await scoped
         .selectFrom<Row>(
           meetings,

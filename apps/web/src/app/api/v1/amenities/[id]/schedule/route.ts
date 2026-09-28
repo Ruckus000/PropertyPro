@@ -43,6 +43,22 @@ export const GET = withErrorHandler(
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 
-    return getAmenityScheduleForCommunity(communityId, params.id);
+    const schedule = await getAmenityScheduleForCommunity(communityId, params.id);
+    if (membership.isAdmin) return schedule;
+    // Residents see when the amenity is booked, and the full details of their
+    // OWN bookings only — never another resident's userId, unit or notes
+    // (route-authz census F5; /reservations already scopes residents this way).
+    return schedule.map((row) =>
+      row.userId === actorUserId
+        ? { ...row, isMine: true }
+        : {
+            id: row.id,
+            amenityId: row.amenityId,
+            startTime: row.startTime,
+            endTime: row.endTime,
+            status: row.status,
+            isMine: false,
+          },
+    );
   }),
 );

@@ -36,6 +36,12 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
     redirect('/dashboard');
   }
 
+  // Manager-only: the wizard state carries invitee PII and unit rents, and the
+  // page passes it to the client (same gate as the /api/v1/onboarding routes).
+  if (!membership.isAdmin) {
+    redirect('/dashboard');
+  }
+
   const wizardState = await loadWizardState(context.communityId);
 
   if (wizardState?.status === 'completed' || wizardState?.status === 'skipped') {

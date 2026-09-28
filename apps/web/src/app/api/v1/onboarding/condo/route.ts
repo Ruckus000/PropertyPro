@@ -106,6 +106,9 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireCondoCommunity(membership.communityType);
+    // The wizard state is manager data (invitee name/email, unit rents), and
+    // this GET also creates the row on first read — same gate as PATCH/POST.
+    requireMutationAuthorization(membership.role);
 
     const scoped = createScopedClient(communityId);
 

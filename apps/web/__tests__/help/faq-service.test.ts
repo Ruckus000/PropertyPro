@@ -304,7 +304,7 @@ describe('faq service helpers', () => {
       const query = vi.fn().mockResolvedValue(rows);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'OPEN');
+      const result = await searchCommunityFaqs(42, 'OPEN', 'owner');
       expect(result.hits.map((h) => h.id).sort()).toEqual([1, 3]);
       expect(result.totalRowCount).toBe(4);
       expect(createScopedClientMock).toHaveBeenCalledWith(42);
@@ -314,7 +314,7 @@ describe('faq service helpers', () => {
       const query = vi.fn().mockResolvedValue(rows);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'xyzzy');
+      const result = await searchCommunityFaqs(42, 'xyzzy', 'owner');
       expect(result.hits).toEqual([]);
       expect(result.totalRowCount).toBe(4);
     });
@@ -328,9 +328,26 @@ describe('faq service helpers', () => {
       const query = vi.fn().mockResolvedValue(manyMatching);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'pool', 5);
+      const result = await searchCommunityFaqs(42, 'pool', 'owner', 5);
       expect(result.hits).toHaveLength(5);
       expect(result.totalRowCount).toBe(25);
+    });
+
+    // Route-authz census F4 (2026-09-28): search returned every FAQ's full
+    // answer regardless of roleVisibility. Revert-check: drop the
+    // isFaqVisibleToRole filter and this case goes red.
+    it('hides an FAQ restricted to other roles, and keeps unrestricted ones', async () => {
+      const query = vi.fn().mockResolvedValue([
+        { id: 1, question: 'Gate code?', answer: '4321', roleVisibility: ['property_manager_admin'] },
+        { id: 2, question: 'Gate hours?', answer: '6am-10pm', roleVisibility: [] },
+      ]);
+      createScopedClientMock.mockReturnValue({ query });
+
+      const asTenant = await searchCommunityFaqs(42, 'gate', 'tenant');
+      expect(asTenant.hits.map((h) => h.id)).toEqual([2]);
+
+      const asManager = await searchCommunityFaqs(42, 'gate', 'property_manager_admin');
+      expect(asManager.hits.map((h) => h.id).sort()).toEqual([1, 2]);
     });
 
     it('shapes each hit as { id, question, answer }', async () => {
@@ -339,7 +356,7 @@ describe('faq service helpers', () => {
       ]);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'Q');
+      const result = await searchCommunityFaqs(42, 'Q', 'owner');
       expect(result.hits[0]).toEqual({ id: 7, question: 'Q?', answer: 'A.' });
     });
   });

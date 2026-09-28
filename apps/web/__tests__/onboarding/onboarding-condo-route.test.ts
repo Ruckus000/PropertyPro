@@ -72,6 +72,7 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
 }));
 
 import { GET, POST } from '../../src/app/api/v1/onboarding/condo/route';
+import { requireMutationAuthorization } from '@/lib/onboarding/wizard-common';
 
 const MEMBERSHIP = {
   userId: 'actor-1',
@@ -88,6 +89,8 @@ const SCOPED = { communityId: 42 };
 describe('/api/v1/onboarding/condo', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // A once-throw left unconsumed must not leak into the next case.
+    vi.mocked(requireMutationAuthorization).mockReset();
     requireAuthenticatedUserIdMock.mockResolvedValue('actor-1');
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
@@ -103,6 +106,28 @@ describe('/api/v1/onboarding/condo', () => {
     });
     updateWizardStateRowMock.mockResolvedValue(undefined);
     createChecklistItemsMock.mockResolvedValue(undefined);
+  });
+
+  // Route-authz census F3 (2026-09-28): the GET checked membership only, so any
+  // resident could read the manager's wizard state (invitee name/email, unit
+  // rents) — and the read creates the row. Revert-check: remove the
+  // requireMutationAuthorization call from GET and both cases go red.
+  it('GET authorizes the wizard gate with the member\'s role before reading state', async () => {
+    await GET(new NextRequest('http://localhost:3000/api/v1/onboarding/condo?communityId=42'));
+    expect(requireMutationAuthorization).toHaveBeenCalledWith(MEMBERSHIP.role);
+  });
+
+  it('GET returns 403 to a resident and never reads or creates wizard state', async () => {
+    vi.mocked(requireMutationAuthorization).mockImplementationOnce(() => {
+      throw new ForbiddenError('Only a property manager or root manager can modify wizard state');
+    });
+
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/onboarding/condo?communityId=42'),
+    );
+
+    expect(res.status).toBe(403);
+    expect(getOrCreateWizardStateMock).not.toHaveBeenCalled();
   });
 
   it('GET returns wizard state', async () => {
