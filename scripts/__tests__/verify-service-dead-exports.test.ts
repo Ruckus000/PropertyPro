@@ -12,9 +12,9 @@
  * Pure in-memory fixtures — the repo-wide scan is main()'s job, not the tests'.
  */
 import { describe, it, expect } from 'vitest';
+import { blankComments } from '../lib/comment-ranges';
 import {
   extractExportedFunctionNames,
-  blankComments,
   commentExtractorWorks,
   findDeadExports,
   evaluateBaseline,

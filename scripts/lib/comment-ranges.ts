@@ -103,6 +103,29 @@ export function collectCommentRanges(fileName: string, source: string): CommentR
 }
 
 /**
+ * The source with every comment range replaced by spaces of equal length
+ * (newlines kept, so offsets and line numbers survive), so no regex or
+ * brace-matcher run over the result can read comment prose as code. `null`
+ * when the file did not parse — callers decide whether that is a refusal
+ * (`guard:tenant-scope`, `guard:service-dead-exports` service files) or a
+ * conservative fallback (dead-exports corpus files, where an unparseable file
+ * keeps its raw tokens and can only ADD references, never remove them).
+ */
+export function blankComments(fileName: string, source: string): string | null {
+  const found = collectCommentRanges(fileName, source);
+  if (found === null) return null;
+  const { ranges } = found;
+  if (ranges.length === 0) return source;
+  const chars = source.split('');
+  for (const r of ranges) {
+    for (let i = r.pos; i < r.end && i < chars.length; i++) {
+      if (chars[i] !== '\n') chars[i] = ' ';
+    }
+  }
+  return chars.join('');
+}
+
+/**
  * Prove the parse-failure detector AND the walk both work before a clean scan
  * is trusted. The probes include NESTED token positions deliberately: the
  * node-walk collector passed a leading-comment-only probe while leaking

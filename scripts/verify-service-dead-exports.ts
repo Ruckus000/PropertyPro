@@ -114,7 +114,7 @@ import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { checkCeiling } from './lib/ceiling';
-import { collectCommentRanges, parseOrNull } from './lib/comment-ranges';
+import { blankComments, parseOrNull } from './lib/comment-ranges';
 import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -183,27 +183,6 @@ export function extractExportedFunctionNames(fileName: string, source: string): 
     if (isExported && !isDefault && !isDeclare) names.add(statement.name.text);
   }
   return [...names];
-}
-
-/**
- * The source with every comment range replaced by spaces (newlines kept, so
- * line numbers survive). `null` when the file did not parse — callers decide
- * whether that is a refusal (service files) or a conservative fallback
- * (corpus files, where an unparseable file keeps its raw tokens and can only
- * ADD references, never remove them).
- */
-export function blankComments(fileName: string, source: string): string | null {
-  const found = collectCommentRanges(fileName, source);
-  if (found === null) return null;
-  const { ranges } = found;
-  if (ranges.length === 0) return source;
-  const chars = source.split('');
-  for (const r of ranges) {
-    for (let i = r.pos; i < r.end && i < chars.length; i++) {
-      if (chars[i] !== '\n') chars[i] = ' ';
-    }
-  }
-  return chars.join('');
 }
 
 /**

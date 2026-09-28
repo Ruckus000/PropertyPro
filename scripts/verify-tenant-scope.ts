@@ -39,7 +39,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkCeiling } from './lib/ceiling';
-import { collectCommentRanges, commentRangesWork } from './lib/comment-ranges';
+import { blankComments as blankCommentRanges, commentRangesWork } from './lib/comment-ranges';
 import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -84,18 +84,11 @@ export class CouldNotCheckError extends Error {}
  * read as "no comments".
  */
 export function blankComments(fileName: string, source: string): string {
-  const found = collectCommentRanges(fileName, source);
-  if (found === null) {
+  const code = blankCommentRanges(fileName, source);
+  if (code === null) {
     throw new CouldNotCheckError(`${fileName} did not parse, so its comments cannot be told from code.`);
   }
-  if (found.ranges.length === 0) return source;
-  const chars = source.split('');
-  for (const r of found.ranges) {
-    for (let i = r.pos; i < r.end && i < chars.length; i++) {
-      if (chars[i] !== '\n') chars[i] = ' ';
-    }
-  }
-  return chars.join('');
+  return code;
 }
 
 // ---------------------------------------------------------------------------
