@@ -42,7 +42,6 @@ export { ResidentSearchCombobox } from '../../apps/web/src/components/shared/Res
 export { UnitSearchCombobox } from '../../apps/web/src/components/shared/UnitSearchCombobox';
 export { UserSearchCombobox } from '../../apps/web/src/components/shared/UserSearchCombobox';
 export { AlertBanner } from '../../apps/web/src/components/shared/alert-banner';
-export { BulkActionBar } from '../../apps/web/src/components/shared/bulk-action-bar';
 export { ChartEmptyState } from '../../apps/web/src/components/shared/chart-empty-state';
 export { ChartSkeleton } from '../../apps/web/src/components/shared/chart-skeleton';
 export { ChecklistStepper } from '../../apps/web/src/components/shared/checklist-stepper';

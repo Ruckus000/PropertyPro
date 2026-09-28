@@ -363,7 +363,7 @@ tall components against `_screenshots/raw/*.png`, not the sheet (which scales ~0
 and hides small clipping).
 
 **`position: fixed` is already contained** — `emit.mjs` puts `translateZ(0)` on
-`.ds-cell`/`.ds-single`, so `BulkActionBar` pins to the story, not the viewport.
+`.ds-cell`/`.ds-single`, so a fixed-position component pins to the story, not the viewport.
 `lucide-react` imports work in previews (`story-imports.mjs` bundles them).
 `cardMode: single` costs no exports — capture shoots every export via `?story=`.
 
