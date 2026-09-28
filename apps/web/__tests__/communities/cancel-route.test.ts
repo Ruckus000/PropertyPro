@@ -14,6 +14,8 @@ const {
   recalculateVolumeTierMock,
   stripeCancelMock,
   getStripeClientMock,
+  requireCommunityMembershipMock,
+  logAuditEventMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   getCommunityForCancelMock: vi.fn(),
@@ -22,6 +24,8 @@ const {
   recalculateVolumeTierMock: vi.fn(),
   stripeCancelMock: vi.fn(),
   getStripeClientMock: vi.fn(),
+  requireCommunityMembershipMock: vi.fn(),
+  logAuditEventMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -37,6 +41,14 @@ vi.mock('@/lib/billing/billing-group-service', () => ({
 
 vi.mock('@/lib/services/stripe-service', () => ({
   getStripeClient: getStripeClientMock,
+}));
+
+vi.mock('@/lib/api/community-membership', () => ({
+  requireCommunityMembership: requireCommunityMembershipMock,
+}));
+
+vi.mock('@propertypro/db', () => ({
+  logAuditEvent: logAuditEventMock,
 }));
 
 import { POST } from '../../src/app/api/v1/communities/[id]/cancel/route';
@@ -70,6 +82,8 @@ describe('POST /api/v1/communities/[id]/cancel', () => {
     });
     softDeleteCommunityForCancellationMock.mockResolvedValue(undefined);
     recalculateVolumeTierMock.mockResolvedValue(undefined);
+    requireCommunityMembershipMock.mockResolvedValue({ role: 'property_manager' });
+    logAuditEventMock.mockResolvedValue(undefined);
   });
 
   it('cancels subscription, soft-deletes community, and recalculates tier', async () => {
@@ -145,5 +159,50 @@ describe('POST /api/v1/communities/[id]/cancel', () => {
     const res = await POST(buildReq({ reason: 'price' }), ctx(42));
     expect(res.status).toBe(200);
     expect(softDeleteCommunityForCancellationMock).toHaveBeenCalled();
+  });
+
+  // A removed manager keeps billing-group ownership: nothing detaches a
+  // community from its group or changes the owner. Before this gate, such an
+  // owner could still cancel the subscription and soft-delete the community.
+  it('refuses a billing-group owner who no longer manages the community (not a member)', async () => {
+    requireCommunityMembershipMock.mockRejectedValue(
+      new ForbiddenError('User is not a member of this community'),
+    );
+    const res = await POST(buildReq({ reason: 'price' }), ctx(42));
+    expect(res.status).toBe(403);
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-1');
+    expect(stripeCancelMock).not.toHaveBeenCalled();
+    expect(softDeleteCommunityForCancellationMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a billing-group owner who is now only a resident of the community', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({ role: 'resident' });
+    const res = await POST(buildReq({ reason: 'price' }), ctx(42));
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.error.message).toBe('Only a current manager of this community can cancel it');
+    expect(stripeCancelMock).not.toHaveBeenCalled();
+    expect(softDeleteCommunityForCancellationMock).not.toHaveBeenCalled();
+  });
+
+  it('allows an owner who is root_manager of the community', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({ role: 'root_manager' });
+    const res = await POST(buildReq({ reason: 'price' }), ctx(42));
+    expect(res.status).toBe(200);
+    expect(softDeleteCommunityForCancellationMock).toHaveBeenCalled();
+  });
+
+  it('records a community_canceled audit event for the cancellation', async () => {
+    await POST(buildReq({ reason: 'price', note: 'too expensive' }), ctx(42));
+    expect(logAuditEventMock).toHaveBeenCalledWith({
+      userId: 'user-1',
+      action: 'community_canceled',
+      resourceType: 'community',
+      resourceId: '42',
+      communityId: 42,
+      newValues: { reason: 'price', note: 'too expensive' },
+      metadata: { billingGroupId: 7, stripeSubscriptionId: 'sub_abc' },
+    });
   });
 });

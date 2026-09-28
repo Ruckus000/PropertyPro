@@ -1307,6 +1307,15 @@ Confirm the committee requirement, the caps, and the ARC denial-content
 requirements, and have them review the notice templates. Bundle this with item 2
 — same attorney, same session, overlapping material.
 
+*Added 2026-09-28, same session:* **e-sign consent withdrawal.** Ask whether the
+ESIGN Act's consumer-disclosure rules (the right to withdraw consent, and how)
+apply when an association sends owners documents to e-sign. Facts to bring:
+consent is recorded implicitly the first time a user completes a signing;
+withdrawal exists only as a manager-only API with no UI, so a resident cannot
+withdraw their own; and the next signing silently re-records consent.
+Production held zero consent records on 2026-09-28. Build nothing until counsel
+answers or the first real e-sign request goes to a resident.
+
 **Explicitly *not* worth early money:** the privacy policy (fix the accuracy
 yourself — the structure is fine), CAM licensing (low risk, and a disclaimer
 covers the realistic exposure), ADA (an attorney cannot make your site accessible;

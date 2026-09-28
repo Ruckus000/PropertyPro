@@ -6,6 +6,7 @@ and re-measured at `3a5afb6` (guard). `apps/admin` is out of scope; see
 
 **Outcome:**
 - Five real read or authorization leaks were found. All five are fixed: F1 in #1198, F2–F5 in #1199.
+- A sixth (F6, the cancel route) came out of verifying a deferral after the guard landed; it is fixed in the follow-up PR.
 - The WS3 guard (`pnpm guard:route-gates`) then landed with **no frozen baseline**. Every exported verb is either gated or carries a reviewed claim.
 
 ## Why a census, not a baseline
@@ -33,6 +34,7 @@ Freezing that number would have written every hole in it into the ledger as "acc
 | F3 | medium | `GET /onboarding/{apartment,condo}` was readable by any member: residents' names and emails, and unit rents. It also created a wizard row as a side effect. The POST and PATCH in the same files were gated. | #1199: `requireMutationAuthorization` on both GETs; the pages redirect non-admins. |
 | F4 | low–medium | `GET /help/search` ignored role visibility: manager-only article titles, and FAQ answers restricted by role. | #1199: role passed to `searchArticles`; `searchCommunityFaqs` filters with `isFaqVisibleToRole`. |
 | F5 | low | `GET /amenities/[id]/schedule` returned every reservation's `userId`, `unitId` and notes to any member. | #1199: admins get full rows; residents get their own rows plus anonymised slots. |
+| F6 | medium (latent) | **A removed manager could still cancel and soft-delete a client community.** `POST /communities/[id]/cancel` checked only billing-group ownership, and nothing ever detaches a community from a group or changes its owner. The soft-delete is immediate, outside the deletion-request lifecycle, and wrote no audit event. Production exposure on 2026-09-28: zero (3 linked communities, every owner still a manager; the path has never been used). | Requires billing-group ownership **and** a current `property_manager`/`root_manager` role in that community; writes a `community_canceled` audit event. ADR-006's exception corrected. |
 
 ## Would the guard have caught them?
 
@@ -81,6 +83,7 @@ Each deferral has a trigger. None of them is fixed here.
 - **The access-request OTP can be deliberately locked out.** Trigger: the first report.
 - **Unsubscribe tokens never expire, and a GET mutates.** Trigger: a link-scanner incident.
 - **`DELETE /esign/consent` is manager-only, so residents cannot withdraw consent** (ESIGN Act). A legal question, on the counsel list with the notice templates.
-- **Unverified: can a former property manager cancel a client community?** `communities/[id]/cancel` checks billing-group ownership (`ownerUserId !== userId`). Verify whether ownership transfers on offboarding; if it does not, promote this to a finding.
+- **Cancel-path soft-delete bypasses the deletion lifecycle** (follow-up to F6). `communities/[id]/cancel` soft-deletes immediately with no deletion request, so `recoverCommunity` cannot restore it and the purge never processes it; restoring one takes a manual data repair. Trigger: the first real cancellation (none in production on 2026-09-28), or onboarding the first multi-community management company — whichever comes first.
+- **No way to move a community out of a billing group.** Nothing ever clears `communities.billing_group_id` or changes a group's owner, so an association that leaves its management company stays in that company's group (and billing). Trigger: the first association that switches management companies.
 - **`apps/admin` routes (61) are outside the guard.** Trigger: the first admin route not behind `requirePlatformAdmin` or the admin session.
 - **`contract.permission` metadata** (on 239 contracted routes, enforced nowhere) is not cross-checked against the real gate. Trigger: `runRoute` starts enforcing `permission`, or a review finds the two disagreeing.

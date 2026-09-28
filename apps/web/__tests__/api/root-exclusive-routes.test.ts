@@ -89,19 +89,21 @@ describe('root-exclusive routes (ADR-006 §2 / R3-03)', () => {
  *
  * `/api/v1/communities/[id]/cancel` cancels the subscription and soft-deletes
  * the community — both root-exclusive powers on their face — but it gates on
- * BILLING-GROUP OWNERSHIP, a portfolio-level financial identity that is
- * orthogonal to community role. The owner may not be a member of the child
- * community at all, so adding a root check here would break the legitimate
- * multi-community PM cancel flow.
+ * BILLING-GROUP OWNERSHIP plus a current management role in that community,
+ * not on root: the owner of a multi-community portfolio manages each community
+ * but need not be its root, so a root check would break that cancel flow.
+ * (The management-role half closes the removed-manager case — census F6.)
  */
-describe('billing-group cancel is owner-gated, not root-gated (deliberate)', () => {
-  it('gates on the billing-group owner and not on a community role', () => {
+describe('billing-group cancel is owner + manager gated, not root-gated (deliberate)', () => {
+  it('gates on the billing-group owner and a current management role, not on root', () => {
     const source = fs.readFileSync(
       path.join(webSrc, 'app/api/v1/communities/[id]/cancel/route.ts'),
       'utf8',
     );
 
     expect(source).toMatch(/getBillingGroupOwner/);
+    expect(source).toMatch(/requireCommunityMembership\(/);
+    expect(source).toMatch(/PM_SCOPE_DB_ROLES/);
     expect(source).not.toMatch(/requireRootManager\(/);
     expect(source).not.toMatch(SETTINGS_WRITE);
   });
