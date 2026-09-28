@@ -320,6 +320,7 @@ pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 pnpm guard:class-resolution     # Every colour utility class in apps/web/src must emit CSS
 pnpm guard:service-dead-exports # Unreferenced exported service functions (shrink-only baseline)
 pnpm guard:route-gates          # Every exported API route VERB (web + admin) is gated or carries a `// route-gate:` claim
+pnpm guard:route-table-imports  # ADR-003: no table imports anywhere in apps/web/src/app (routes AND pages); shrink-only per-symbol baseline
 pnpm guard:authz-comments       # `// AUTHZ:` above every /unsafe import, and every service-role (supabase/admin) import outside apps/admin
 ```
 

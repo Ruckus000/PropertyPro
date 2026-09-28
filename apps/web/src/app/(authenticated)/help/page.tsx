@@ -1,5 +1,4 @@
-import { createScopedClient, communities, type Community } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { getCommunityContact } from '@/lib/services/community-contact-service';
 import { HelpHubContent } from '@/components/help/help-hub-content';
 import { StartHereHero } from '@/components/help/start-here-hero';
 import { PageHeader } from '@/components/shared/page-header';
@@ -25,16 +24,10 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
   const context = await requireHelpPageContext(resolvedSearchParams, '/help');
   const viewer = resolveHelpViewerTokens(context.membership);
 
-  const scoped = createScopedClient(context.communityId);
-  const [communityRows, readSlugs] = await Promise.all([
-    scoped.selectFrom(
-      communities,
-      {},
-      eq(communities.id, context.communityId),
-    ),
+  const [community, readSlugs] = await Promise.all([
+    getCommunityContact(context.communityId),
     getReadArticleSlugs(context.communityId, context.userId),
   ]);
-  const community = communityRows[0] as Community | undefined;
 
   const startHereContent = getStartHereContentForRole(viewer);
   const startHereArticles = resolveStartHereArticles(
@@ -64,9 +57,9 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
         )}
         featuredArticles={getFeaturedForRole(viewer)}
         contact={{
-          name: community?.contactName ?? null,
-          email: community?.contactEmail ?? null,
-          phone: community?.contactPhone ?? null,
+          name: community.contactName,
+          email: community.contactEmail,
+          phone: community.contactPhone,
         }}
       />
     </div>

@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { createScopedClient, communities, type Community } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { getCommunityContact } from '@/lib/services/community-contact-service';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
 
@@ -11,17 +10,11 @@ interface HelpContactPageProps {
 export default async function HelpContactPage({ searchParams }: HelpContactPageProps) {
   const resolvedSearchParams = await searchParams;
   const context = await requireHelpPageContext(resolvedSearchParams, '/help/contact');
-  const scoped = createScopedClient(context.communityId);
-  const communityRows = await scoped.selectFrom(
-    communities,
-    {},
-    eq(communities.id, context.communityId),
-  );
-  const community = communityRows[0] as Community | undefined;
+  const community = await getCommunityContact(context.communityId);
   const hasAnyContact = !!(
-    community?.contactName ||
-    community?.contactEmail ||
-    community?.contactPhone
+    community.contactName ||
+    community.contactEmail ||
+    community.contactPhone
   );
 
   return (
@@ -38,19 +31,19 @@ export default async function HelpContactPage({ searchParams }: HelpContactPageP
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-content-tertiary">
                 Contact name
               </p>
-              <p className="mt-2 text-sm text-content">{community?.contactName ?? 'Not provided'}</p>
+              <p className="mt-2 text-sm text-content">{community.contactName ?? 'Not provided'}</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-content-tertiary">
                 Email
               </p>
-              <p className="mt-2 text-sm text-content">{community?.contactEmail ?? 'Not provided'}</p>
+              <p className="mt-2 text-sm text-content">{community.contactEmail ?? 'Not provided'}</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-content-tertiary">
                 Phone
               </p>
-              <p className="mt-2 text-sm text-content">{community?.contactPhone ?? 'Not provided'}</p>
+              <p className="mt-2 text-sm text-content">{community.contactPhone ?? 'Not provided'}</p>
             </div>
           </div>
         ) : (

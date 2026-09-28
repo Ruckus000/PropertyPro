@@ -88,3 +88,20 @@ Each deferral has a trigger. None of them is fixed here.
 - ~~**`apps/admin` routes (61) are outside the guard.**~~ **Closed by roadmap 2.5:** `apps/admin/src/app/api` is a second scan target with its own verified helper list (`requirePlatformAdmin`, `requireCronSecret`, `billingActionRoute`). 83 verbs: 82 gated, 1 claim (`/api/health`). The reason it was worth doing before the trigger fired: admin middleware lets the PREFIX `/api/admin/internal/` through sessionless for the cron bearer, so a route added there is protected only by its own call.
 - **`route.ts` files outside `app/api` are outside the guard** (web: `billing/portal`, `auth/verify-signup`, three dev routes; admin: `dev/agent-login`). Trigger: a new non-dev `route.ts` outside `app/api`.
 - **`contract.permission` metadata** (on 239 contracted routes, enforced nowhere) is not cross-checked against the real gate. Trigger: `runRoute` starts enforcing `permission`, or a review finds the two disagreeing.
+
+## Addendum: server pages that read tables directly (roadmap 2.3)
+
+Before freezing the 21 server files that import tables directly into `guard:route-table-imports`'s baseline, each was read with the same method as above: who can reach it, whether the read is scoped, and whether it skips a visibility rule the API for the same data applies.
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| P1 | medium | `/emergency` listed every broadcast (title, severity, delivery counts) to any member. Tenants have `emergency_broadcasts: read = false`, and the list API refuses them. | #1206: `requirePermission(..., 'read')` before the read. |
+| P2 | low | `/settings/billing` put `stripeCustomerId` and `paymentFailedAt` in every member's RSC payload. | #1206: management tier only. |
+| P3 | low | `/welcome` computed and sent the compliance score to members without `compliance:read`. | #1206: the checklist is read only when that check passes. |
+
+The other 18 files are gated, or read only the caller's own row or a single low-sensitivity column. Two notes that are not leaks:
+- `mobile/settings` read every member's notification preferences and picked the caller's in JS. It is now drained onto `getNotificationPreferencesForUser`.
+- `mobile/meetings` skips the API's lapsed-subscription check (`requireEntitledForAdminRead`) for managers. That is billing policy, not visibility.
+
+A separate bug came out of the same read, and is tracked apart from this work: `/welcome` finds the caller's unit by `ownerUserId`, so a tenant never sees theirs.
+
