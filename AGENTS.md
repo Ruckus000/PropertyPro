@@ -138,3 +138,11 @@ reads `.env.local`.
   local-only; do not add a remote fixture endpoint or platform-admin fixture.
 - Do not read `.env.local`, extract credentials, or point a live-test command
   at a shared/remote Supabase project. The loopback guard is a security boundary.
+- **Document publishing (PDF) in the sandbox.** The renderer's bundled Chromium
+  is Linux x64 only. `agent:live:web` passes a shell-exported
+  `PUPPETEER_EXECUTABLE_PATH` through; failing that, on macOS it uses
+  `/Applications/Google Chrome.app` (or `Chromium.app`). It prints which browser
+  it chose, and warns when it found none. On Linux x64 the host needs `libnss3`. A sandbox publish exercises
+  the route, Storage and the row; it proves **nothing** about Vercel, whose
+  runtime, libraries and function trace differ. After a Chromium or puppeteer
+  bump, verify with a real publish on the deployed SHA (see `render-pdf.ts`).

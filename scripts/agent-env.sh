@@ -179,10 +179,58 @@ assert_no_app_env_files() {
   [[ -z "$env_file" ]] || { echo "Refusing agent live testing: app-local env file exists at $env_file." >&2; exit 70; }
 }
 
+# Document publishing renders PDFs with a browser
+# (apps/web/src/lib/documents/render-pdf.ts). Its bundled @sparticuz/chromium is
+# a Linux x64 binary and nothing else, so every other host needs
+# PUPPETEER_EXECUTABLE_PATH -- and `env -i` below strips a shell export, which
+# made publishing impossible in this sandbox on macOS. Pass that ONE variable
+# through: a browser path is not a credential, so this does not weaken what
+# `env -i` exists to prevent. Sets `pdf_browser` (empty = use the bundled binary).
+resolve_pdf_browser() {
+  pdf_browser=''
+  local requested="${PUPPETEER_EXECUTABLE_PATH:-}"
+  if [[ -n "${requested//[[:space:]]/}" ]]; then
+    [[ -f "$requested" && -x "$requested" ]] || {
+      echo "PUPPETEER_EXECUTABLE_PATH is not an executable file: '$requested'" >&2; exit 64;
+    }
+    pdf_browser="$requested"
+    return 0
+  fi
+  [[ "$(uname -s)" == Darwin ]] || return 0
+  local candidate
+  for candidate in \
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+    '/Applications/Chromium.app/Contents/MacOS/Chromium'; do
+    if [[ -x "$candidate" ]]; then pdf_browser="$candidate"; return 0; fi
+  done
+}
+
+report_pdf_browser() {
+  local host libs
+  host="$(uname -s)/$(uname -m)"
+  if [[ -n "$pdf_browser" ]]; then
+    echo "PDF publishing: $pdf_browser"
+  elif [[ "$host" == Linux/x86_64 ]]; then
+    # Outside Lambda/Vercel the bundled binary uses the host's NSS libraries.
+    # Capture first: `ldconfig -p | grep -q` under pipefail reports a SIGPIPE
+    # as "missing".
+    libs="$(ldconfig -p 2>/dev/null || true)"
+    if [[ -n "$libs" && ( "$libs" != *libnss3.so* || "$libs" != *libnspr4.so* ) ]]; then
+      echo 'WARNING: PDF publishing will fail: libnss3/libnspr4 not found (apt-get install libnss3).' >&2
+    else
+      # Empty = no readable ldconfig cache, so say nothing we cannot back up.
+      echo 'PDF publishing: bundled @sparticuz/chromium'
+    fi
+  else
+    echo "WARNING: PDF publishing will fail on $host: the bundled browser is Linux x64 only and no Chrome was found. Export PUPPETEER_EXECUTABLE_PATH=/path/to/chrome and rerun." >&2
+  fi
+}
+
 run_sandbox_command() {
   local cwd="$1"
   shift
   [[ -f "$runtime_env" ]] || { echo 'Agent sandbox is not prepared. Run pnpm agent:env:prepare.' >&2; exit 64; }
+  resolve_pdf_browser
   # A clean environment prevents exported production values from leaking into
   # app, seed, and fixture processes. Next runs from the app directory, where
   # app-local .env files are rejected below.
@@ -190,6 +238,7 @@ run_sandbox_command() {
     PATH="$PATH" \
     HOME="${HOME:-/tmp}" \
     TMPDIR="${TMPDIR:-/tmp}" \
+    ${pdf_browser:+"PUPPETEER_EXECUTABLE_PATH=$pdf_browser"} \
     bash -c 'set -a; source "$1"; set +a; cd "$2"; shift 2; exec "$@"' \
     sandbox-runtime "$runtime_env" "$cwd" "$@"
 }
@@ -252,7 +301,7 @@ case "${1:-}" in
   status) status ;;
   stop) stop ;;
   exec) shift; prepare >/dev/null; run_sandbox_command "$repo_root" "$@" ;;
-  web) prepare; assert_no_app_env_files "$repo_root/apps/web"; run_sandbox_command "$repo_root/apps/web" pnpm --dir "$repo_root" --filter @propertypro/web exec next dev --turbopack --port "$web_port" --hostname 127.0.0.1 ;;
+  web) prepare; assert_no_app_env_files "$repo_root/apps/web"; resolve_pdf_browser; report_pdf_browser; run_sandbox_command "$repo_root/apps/web" pnpm --dir "$repo_root" --filter @propertypro/web exec next dev --turbopack --port "$web_port" --hostname 127.0.0.1 ;;
   admin) prepare; assert_no_app_env_files "$repo_root/apps/admin"; run_sandbox_command "$repo_root/apps/admin" pnpm --dir "$repo_root" --filter @propertypro/admin exec next dev --turbopack --port "$admin_port" --hostname 127.0.0.1 ;;
   *) usage >&2; exit 64 ;;
 esac
