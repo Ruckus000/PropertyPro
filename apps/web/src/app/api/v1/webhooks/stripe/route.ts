@@ -52,7 +52,7 @@ import {
   updateCommunitySubscriptionFromStripe,
   updateStripePriceUnitAmount,
 } from '@/lib/services/stripe-webhook-service';
-import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -731,7 +731,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     try {
       await insertStripeWebhookFence(event.id);
     } catch (insertErr) {
-      if (!isTopLevelUniqueConstraintError(insertErr)) {
+      if (!isUniqueConstraintError(insertErr)) {
         // Not a unique constraint violation — genuine DB error
         logStripeWebhookEvent('error', 'Stripe webhook fence insert failed', {
           eventId: event.id,
@@ -749,7 +749,19 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
       if (raceCheck && raceCheck.processedAt !== null) {
         return NextResponse.json({ received: true });
       }
-      // processedAt is null — another attempt also failed or in progress, continue
+      // processedAt is null — the request that won the fence is still running
+      // (or failed a moment ago). Do NOT fall through: that would run
+      // handleStripeEvent concurrently with the winner. A non-2xx makes Stripe
+      // redeliver later, when the winner has either finished (duplicate skipped
+      // at step 3) or failed (retried through the isRetry path).
+      logStripeWebhookEvent('info', 'Stripe webhook fence race; deferring to the in-flight attempt', {
+        eventId: event.id,
+        eventType: event.type,
+        category: 'idempotency',
+        metricName: 'stripe_webhook_event',
+        outcome: 'duplicate',
+      });
+      return NextResponse.json({ error: 'Webhook event already in progress' }, { status: 409 });
     }
   }
 

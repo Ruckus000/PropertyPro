@@ -84,7 +84,11 @@ vi.mock('@/lib/units/actor-units', () => ({
 }));
 
 import { AppError } from '@/lib/api/errors';
-import { castElectionVoteForCommunity } from '@/lib/services/elections-service';
+import {
+  castElectionVoteForCommunity,
+  createElectionProxyForCommunity,
+} from '@/lib/services/elections-service';
+import { drizzleUniqueViolation } from '../helpers/pg-errors';
 
 const ACTOR = 'voter-user-1';
 const ELECTION_ID = 3;
@@ -160,20 +164,16 @@ function castVote() {
 }
 
 /**
- * SVC-06's highest-stakes branch: the §718.128 duplicate-ballot path.
+ * The §718.128 duplicate-ballot and duplicate-proxy paths.
  *
- * `castElectionVoteForCommunity` classifies the error thrown by the ballot
- * insert with the TOP-LEVEL unique-violation predicate, so the SHAPE of the
- * error decides whether the voter is told "your unit already voted" or the
- * request fails outright. These cases pin that decision from both sides.
+ * Both classify the insert's error by CONSTRAINT NAME, read through drizzle's
+ * `cause` wrapper (`isNamedUniqueViolation`). Until 2026-09-28 they used a
+ * top-level-only predicate that never matches a drizzle error, so a real
+ * duplicate returned a 500; this file used to pin that as correct by feeding a
+ * hand-built top-level shape the driver never produces.
  *
- * Revert-check for the family split: point the service at the cause-walking
- * `isUniqueConstraintError` instead (i.e. collapse family 2 into family 1) and
- * the wrapped case below stops re-throwing — it becomes a 409 claiming a
- * duplicate ballot the unit may never have cast. The opposite collapse
- * (dropping the cause walk) reddens the family-1 discriminators in
- * `__tests__/lib/db/postgres-error.test.ts` and the wrapped case in
- * `__tests__/site-editor/site-publish-schedule-service.test.ts`.
+ * Revert-check: point either site back at a top-level-only check and its
+ * DRIZZLE case goes red with "expected … to be an instance of AppError".
  */
 describe('castElectionVoteForCommunity duplicate-ballot classification', () => {
   beforeEach(() => {
@@ -181,13 +181,8 @@ describe('castElectionVoteForCommunity duplicate-ballot classification', () => {
     stubHappyPathReads();
   });
 
-  it('turns a top-level 23505 into the 409 duplicate-ballot conflict', async () => {
-    insertMock.mockRejectedValueOnce(
-      Object.assign(
-        new Error('duplicate key value violates unique constraint "election_ballot_submissions_unit_id_key"'),
-        { code: '23505' },
-      ),
-    );
+  it('DRIZZLE — turns the ballot index\'s wrapped 23505 into the 409 duplicate-ballot conflict', async () => {
+    insertMock.mockRejectedValueOnce(drizzleUniqueViolation('uq_election_ballot_submissions_unit'));
 
     const error = await castVote().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
@@ -197,18 +192,14 @@ describe('castElectionVoteForCommunity duplicate-ballot classification', () => {
     });
   });
 
-  it('re-throws a 23505 wrapped in `cause` rather than reporting a duplicate ballot', async () => {
-    // This is the case the two predicate families disagree on. The service
-    // must NOT classify it as a duplicate: a wrapped error is the driver
-    // failing the QUERY, not the constraint rejecting the ballot, and the
-    // insert may well have succeeded. Answering "you already voted" there
-    // would be a wrong-but-200 on a statutory path.
-    const wrapped = Object.assign(new Error('failed query'), {
-      cause: Object.assign(new Error('duplicate key'), { code: '23505' }),
-    });
-    insertMock.mockRejectedValueOnce(wrapped);
+  it('re-throws a 23505 from a DIFFERENT index rather than reporting a duplicate ballot', async () => {
+    // Only the (election, unit) index means "this unit already voted"; any
+    // other uniqueness failure is a real error and must not be told to a voter
+    // as a duplicate ballot.
+    const other = drizzleUniqueViolation('some_other_unique_index');
+    insertMock.mockRejectedValueOnce(other);
 
-    await expect(castVote()).rejects.toBe(wrapped);
+    await expect(castVote()).rejects.toBe(other);
   });
 
   it('does not turn an unrelated insert failure into a conflict', async () => {
@@ -233,5 +224,39 @@ describe('castElectionVoteForCommunity duplicate-ballot classification', () => {
     expect(insertMock).toHaveBeenCalled();
     // The audit row is written inside the same transaction.
     expect(valuesMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createElectionProxyForCommunity duplicate-designation classification', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubHappyPathReads();
+  });
+
+  function designate() {
+    return createElectionProxyForCommunity(42, ELECTION_ID, ACTOR, {
+      proxyHolderUserId: 'holder-user-2',
+      grantorUnitId: UNIT_ID,
+    });
+  }
+
+  it('DRIZZLE — turns the grantor index\'s wrapped 23505 into a 409', async () => {
+    // There is no pre-check on this path, so this is not a rare race: every
+    // second designation for the same unit lands here.
+    insertMock.mockRejectedValueOnce(drizzleUniqueViolation('uq_election_proxies_grantor'));
+
+    const error = await designate().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      statusCode: 409,
+      message: 'This unit already has a proxy designation for the election',
+    });
+  });
+
+  it('re-throws an unrelated insert failure', async () => {
+    const boom = new Error('connection reset');
+    insertMock.mockRejectedValueOnce(boom);
+
+    await expect(designate()).rejects.toBe(boom);
   });
 });

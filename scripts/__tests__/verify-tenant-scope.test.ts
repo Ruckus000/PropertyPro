@@ -7,6 +7,8 @@ import {
   extractDefineRouteBlocks,
   isBacklogRoute,
   collectBacklogCensus,
+  blankComments,
+  CouldNotCheckError,
   type CensusRoute,
 } from '../verify-tenant-scope';
 
@@ -219,6 +221,57 @@ describe('isBacklogRoute — the prose-vs-declaration trap (ledger D9)', () => {
     );
     expect(real).toContain('tenantScope'); // prose present…
     expect(real).not.toMatch(/tenantScope\s*:/); // …but no declaration.
+  });
+});
+
+describe('comment prose is never read as code', () => {
+  it('a contract whose ONLY `tenantScope:` is in a comment still counts as backlog', () => {
+    // `// tenantScope: n/a` matches the declaration regex character for
+    // character; read raw, it silently removed the route from the census.
+    const route = censusRoute({
+      contractContent:
+        "// tenantScope: n/a — resolved by hand below\ndefineRoute({ method: 'GET', path: '/api/v1/widgets', request: { query: z.object({}) } });",
+    });
+    expect(isBacklogRoute(route)).toBe(true);
+  });
+
+  it("a `// don't` inside the first defineRoute block does not hide a later block's violation", () => {
+    // The `'` in the comment used to open a phantom string in the brace
+    // matcher, which then swallowed the second block into the first — where
+    // checkBlock only ever reads the FIRST tenantScope (block a's valid one).
+    const route = `${BOUND_IMPORT}
+export const a = defineRoute({
+  // don't resolve the community here
+  method: 'GET',
+  path: '/api/v1/widgets',
+  request: { query: z.object({}) },
+  response: z.unknown(),
+  tenantScope: { in: 'query' },
+});
+export const b = defineRoute({
+  method: 'POST',
+  path: '/api/v1/widgets',
+  request: { query: z.object({}) },
+  response: z.unknown(),
+  tenantScope: { in: 'header' },
+});`;
+    const v = validateRoute(route, '', 'route.ts');
+    expect(v.map((x) => x.message)).toEqual([
+      "tenantScope.in='header' is invalid (expected 'query' | 'body' | 'path').",
+    ]);
+  });
+
+  it('blanking preserves length and newlines', () => {
+    const source = 'const a = 1; // note\n/* two\nlines */ const b = 2;\n';
+    const out = blankComments('x.ts', source);
+    expect(out).toHaveLength(source.length);
+    expect(out.split('\n')).toHaveLength(source.split('\n').length);
+    expect(out).not.toMatch(/note|two|lines/);
+    expect(out).toContain('const b = 2;');
+  });
+
+  it('refuses (CouldNotCheckError) on a file that does not parse', () => {
+    expect(() => blankComments('x.ts', 'const a = (((;')).toThrow(CouldNotCheckError);
   });
 });
 

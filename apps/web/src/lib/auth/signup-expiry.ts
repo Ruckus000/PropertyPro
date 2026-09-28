@@ -2,11 +2,10 @@
  * How long a pending signup holds its candidate subdomain before the sweep may
  * release it.
  *
- * Deliberately its own module with no imports, for the same reason
- * `lib/db/unique-constraint-error.ts` is: the obvious home is `lib/auth/signup.ts`,
- * but that file pulls in `@propertypro/email`, the Supabase admin client and the
- * DB. Importing one number from it would drag that whole graph into every
- * billing test.
+ * Deliberately its own module with no imports: the obvious home is
+ * `lib/auth/signup.ts`, but that file pulls in `@propertypro/email`, the
+ * Supabase admin client and the DB. Importing one number from it would drag
+ * that whole graph into every billing test.
  *
  * TWO producers must agree on this value, and until 2026-09-10 only one of them
  * used it at all:

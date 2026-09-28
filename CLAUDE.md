@@ -393,7 +393,10 @@ pnpm guard:service-dead-exports # Unreferenced exported service functions (shrin
 > per file and per NAME, in `scripts/service-dead-exports-baseline.json`
 > (seeded at 11, corrected measurement 2026-09-24); ratchet down with
 > `pnpm exec tsx scripts/verify-service-dead-exports.ts --write-baseline` in a
-> reviewed commit — GROWING the ledger additionally requires `--force`. The
+> reviewed commit — GROWING the ledger additionally requires `--force`. A
+> **stale** entry (baselined but no longer dead) FAILS the guard, as a dead
+> allowlist entry does in `guard:contracts`, so deleting a baselined export
+> ratchets the baseline in the same PR. The
 > default path for a violation is deleting the export (or un-exporting it).
 > Enumeration, parse failures on either side, git failures and a missing scan
 > root all refuse (exit 2) rather than scan a partial tree.

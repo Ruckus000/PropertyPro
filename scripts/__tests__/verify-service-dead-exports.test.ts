@@ -1,5 +1,5 @@
 /**
- * Self-test for `guard:service-dead-exports` (SVC-07).
+ * Self-test for `guard:service-dead-exports` (SERVICE-07).
  *
  * verification.md requires BOTH directions: a guard that cannot pass is as
  * useless as one that cannot fail. These fixtures are the two-direction proof:
@@ -12,12 +12,13 @@
  * Pure in-memory fixtures — the repo-wide scan is main()'s job, not the tests'.
  */
 import { describe, it, expect } from 'vitest';
+import { blankComments } from '../lib/comment-ranges';
 import {
   extractExportedFunctionNames,
-  blankComments,
   commentExtractorWorks,
   findDeadExports,
   evaluateBaseline,
+  baselineFails,
   isDefinitionFile,
   type ScannedFile,
 } from '../verify-service-dead-exports';
@@ -320,6 +321,36 @@ describe('findDeadExports', () => {
   });
 });
 
+describe('findDeadExports — `_` inside identifiers', () => {
+  const snakeServices: ScannedFile[] = [
+    serviceFile(
+      ['export function list_thing(): void {}', 'export function listThing(): void {}', ''].join('\n'),
+    ),
+  ];
+
+  it('a snake_case export referenced elsewhere is NOT dead', () => {
+    const corpus: ScannedFile[] = [
+      {
+        path: 'apps/web/src/app/page.tsx',
+        content: "import { list_thing } from '@/lib/services/faq-service';\nlist_thing();\n",
+      },
+    ];
+    const { dead } = findDeadExports(snakeServices, corpus);
+    expect(dead).not.toContainEqual({ file: SERVICE, name: 'list_thing' });
+  });
+
+  it('`listThing_v2` is not a reference to `listThing` — still dead', () => {
+    const corpus: ScannedFile[] = [
+      {
+        path: 'apps/web/src/app/page.tsx',
+        content: 'const listThing_v2 = 1;\nlistThing_v2.toString();\n',
+      },
+    ];
+    const { dead } = findDeadExports(snakeServices, corpus);
+    expect(dead).toContainEqual({ file: SERVICE, name: 'listThing' });
+  });
+});
+
 describe('isDefinitionFile — defining-side scan predicate', () => {
   const S = 'apps/web/src/lib/services';
 
@@ -395,5 +426,26 @@ describe('evaluateBaseline — shrink-only semantics', () => {
     expect(result.stale).toEqual([]);
     expect(result.measured).toBe(0);
     expect(result.baselineTotal).toBe(0);
+  });
+});
+
+describe('baselineFails — what exits 1', () => {
+  it('a stale baseline entry FAILS the guard, even with no violation and no ceiling breach', () => {
+    const evaluation = evaluateBaseline([{ file: SERVICE, name: 'orphanFn' }], {
+      [SERVICE]: ['orphanFn', 'fixedFn'],
+    });
+    expect(evaluation.violations).toEqual([]);
+    expect(evaluation.stale).toEqual([{ file: SERVICE, name: 'fixedFn' }]);
+    expect(baselineFails(evaluation, false)).toBe(true);
+  });
+
+  it('a dead export beyond the baseline fails', () => {
+    const evaluation = evaluateBaseline([{ file: SERVICE, name: 'brandNew' }], {});
+    expect(baselineFails(evaluation, true)).toBe(true);
+  });
+
+  it('a baseline that matches the dead set exactly passes', () => {
+    const evaluation = evaluateBaseline([{ file: SERVICE, name: 'orphanFn' }], { [SERVICE]: ['orphanFn'] });
+    expect(baselineFails(evaluation, false)).toBe(false);
   });
 });
