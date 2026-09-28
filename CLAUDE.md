@@ -419,6 +419,29 @@ Integration Tests gates the production deploy instead. Enforcement is
 Scoped DB Access workflow was deleted (INF-04): it re-ran `guard:db-access`,
 which the required `Lint` job already runs on every path it triggered on.
 
+> **Both gaps are left open ON PURPOSE (decided 2026-09-28) — do not "fix" them
+> without meeting a trigger.** Measured over 100 pushes to `main` each: the one
+> red CI run (#907) and the one red integration run (#1186, the ECR rate-limit
+> outage) both came from PRs that were **green** when merged — the admin bypass
+> has never let a red PR in, and requiring `integration-tests` would have caught
+> neither. What the bypass actually carries is **docs-only PRs**: `ci.yml` and
+> `integration-tests.yml` `paths-ignore` `docs/**`, `*.md` and `.claude/**`, so
+> such a PR gets no required check at all (#1192) and merges only as admin.
+> Turning on "Do not allow bypassing" today would make every docs-only PR
+> unmergeable.
+>
+> - **Enforce on admins** when a PR merges with a required check red on its
+>   head, or a second person gets write access. **First** make docs-only PRs
+>   report: move the inert-path skip into `ci.yml` as a job-level `changes`
+>   decision so every required job still reports. **Never** add a stub workflow
+>   that reports the same check names — on a mixed PR its green would satisfy a
+>   required check whose real run failed.
+> - **Require `integration-tests`** when a code defect reaches `main` that the
+>   PR's own integration run flagged; same docs-only precondition.
+> - Until then: merge through the API only after reading the head's check runs
+>   (and pass `expectedHeadSha`); in the UI, never tick "Merge without waiting
+>   for requirements to be met".
+
 `localci` is optional local feedback only. It may still run a fast pre-push gate
 and detached suite, but neither result authorizes a merge and neither may be a
 required GitHub status. A developer's shell, credentials, or machine availability
