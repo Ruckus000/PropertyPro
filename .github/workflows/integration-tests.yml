@@ -113,9 +113,9 @@ jobs:
         # mirror, `docker/library/*`), copied byte-for-byte into this repo's GHCR
         # package by ci-image-mirror.yml — the digest below IS upstream's.
         #
-        # This job is a REQUIRED status check AND the production-deploy gate, so
-        # its service container is on the critical path of every merge and every
-        # deploy. Both anonymous pull routes have failed it: Docker Hub as three
+        # This job is the production-deploy gate (it is NOT a required merge
+        # check — measured 2026-09-28), so its service container is on the
+        # critical path of every deploy. Both anonymous pull routes have failed it: Docker Hub as three
         # consecutive `Get "https://registry-1.docker.io/v2/": context deadline
         # exceeded`, then ECR Public on 2026-09-27 as `toomanyrequests: Data limit
         # exceeded` twice (runs 36317688530 on main — which held the deploy — and

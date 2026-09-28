@@ -44,7 +44,8 @@ jobs:
       actions: read
 
     steps:
-      # `Integration Tests` is a required check for MERGING, but it is a separate
+      # `Integration Tests` is NOT a required merge check (measured 2026-09-28:
+      # branch protection requires only the seven ci.yml jobs), and it is a separate
       # workflow. Back when this triggered on `workflow_run: [CI]`, green CI
       # plus red integration-tests used to deploy to production anyway.
       #

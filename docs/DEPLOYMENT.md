@@ -614,7 +614,6 @@ an unavoidable outage across all six addresses, and the expected failure is sile
 | **Deploy** | `deploy.yml` | Successful CI run on `main` | Production deploy, gated on Integration Tests for the CI-validated SHA |
 | **Deploy (manual)** | `deploy.yml` | `workflow_dispatch` | Same deploy, deliberately bypassing the automatic Integration Tests wait |
 | **Integration Tests** | `integration-tests.yml` | PR + push to main | Database integration tests (requires Postgres service) |
-| **DB Access Guard** | `scoped-db-access-guard.yml` | PR + push (src changes) | Scoped DB access pattern verification |
 | **Branch Freshness** | `branch-freshness-guard.yml` | PR | Rebase enforcement (max 20 commits behind) |
 | **Demo Reset** | `reset-demo.yml` | Daily 3:00 AM ET | Nightly demo data reset |
 
