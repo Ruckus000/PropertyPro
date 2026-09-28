@@ -41,6 +41,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -229,13 +230,16 @@ function findViolation(content: string, filePath: string): Violation | null {
 // Filesystem walk
 // ---------------------------------------------------------------------------
 
+/** "I could not check, so I refuse to pass" — the guard exits 2. */
+class CouldNotCheckError extends Error {}
+
 function walkDir(dirAbs: string): string[] {
   const out: string[] = [];
   let entries: string[];
   try {
     entries = readdirSync(dirAbs);
-  } catch {
-    return out;
+  } catch (err) {
+    throw new CouldNotCheckError(`could not read directory ${dirAbs}: ${(err as Error).message}`);
   }
   for (const entry of entries) {
     if (entry === 'node_modules') continue;
@@ -243,8 +247,8 @@ function walkDir(dirAbs: string): string[] {
     let s;
     try {
       s = statSync(abs);
-    } catch {
-      continue;
+    } catch (err) {
+      throw new CouldNotCheckError(`could not stat ${abs}: ${(err as Error).message}`);
     }
     if (s.isDirectory()) {
       out.push(...walkDir(abs));
@@ -259,19 +263,46 @@ function walkDir(dirAbs: string): string[] {
 // Main
 // ---------------------------------------------------------------------------
 
-function main(): void {
+/**
+ * Run the guard over `baseDir/SCAN_ROOT` and return its exit code:
+ * 0 clean · 1 violations · 2 could not check (missing root, walk or read
+ * error, or zero route.ts files — a scan that examined nothing must not pass).
+ * `baseDir` defaults to the repo root; tests point it at a fixture tree.
+ */
+export function checkRouteTableImports(baseDir: string = repoRoot): number {
   console.log('🔍 Route → Table Import Guard (ADR-003 / A3 Phase 1)');
   console.log('='.repeat(60));
 
-  const rootAbs = resolve(repoRoot, SCAN_ROOT);
-  const files = walkDir(rootAbs);
+  const rootAbs = resolve(baseDir, SCAN_ROOT);
+  let files: string[];
+  try {
+    if (!statSync(rootAbs, { throwIfNoEntry: false })?.isDirectory()) {
+      throw new CouldNotCheckError(`scan root ${SCAN_ROOT} does not exist under ${baseDir}.`);
+    }
+    files = walkDir(rootAbs);
+    if (files.length === 0) {
+      throw new CouldNotCheckError(`0 route.ts files under ${SCAN_ROOT}.`);
+    }
+  } catch (err) {
+    if (!(err instanceof CouldNotCheckError)) throw err;
+    console.error(`\n❌ Could not check route → table imports (refusing to pass): ${err.message}`);
+    return 2;
+  }
 
   const allowlistedHits = new Set<string>();
   const newViolations: Violation[] = [];
 
   for (const fileAbs of files) {
-    const rel = relative(repoRoot, fileAbs);
-    const content = readFileSync(fileAbs, 'utf-8');
+    const rel = relative(baseDir, fileAbs);
+    let content: string;
+    try {
+      content = readFileSync(fileAbs, 'utf-8');
+    } catch (err) {
+      console.error(
+        `\n❌ Could not check route → table imports (refusing to pass): could not read ${rel}: ${(err as Error).message}`,
+      );
+      return 2;
+    }
     const violation = findViolation(content, rel);
     if (!violation) continue;
 
@@ -291,7 +322,7 @@ function main(): void {
     }
   }
 
-  console.log(`\nScanned ${files.length} route.ts files.`);
+  console.log(`\nScanned ${files.length} route.ts files under ${SCAN_ROOT}.`);
   console.log(
     `Allowlist: ${KNOWN_DIRECT_TABLE_IMPORT_FILES.size} grandfathered files; ` +
       `${allowlistedHits.size} active hits.`,
@@ -329,7 +360,7 @@ function main(): void {
 
   const hasErrors = newViolations.length > 0 || deadAllowlistEntries.length > 0;
   if (hasErrors) {
-    process.exit(1);
+    return 1;
   }
 
   // The allowlist was drained to 0 as of A3 Phase 2 drain #77, so a
@@ -343,6 +374,10 @@ function main(): void {
         ? 'Allowlist is at its expected floor of 0 — adding an entry requires review.'
         : `${allowlistSize} file(s) on the allowlist; the floor is 0, so each one is debt to remove, not to keep.`),
   );
+  return 0;
 }
 
-main();
+// ESM main-detection via the shared helper (symlink- and encoding-safe).
+if (isMainModule(import.meta.url)) {
+  process.exit(checkRouteTableImports());
+}

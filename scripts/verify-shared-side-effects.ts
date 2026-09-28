@@ -75,6 +75,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { isMainModule } from './lib/is-main-module';
 
 /** Repo root, resolved from this file rather than cwd. */
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
@@ -439,7 +440,6 @@ function main(): void {
 // Only run when invoked as a script. Without this, importing the module to unit
 // test an exported check would execute main() and process.exit() out of the test
 // runner.
-const invokedPath = process.argv[1] ? resolve(process.argv[1]) : '';
-if (invokedPath === resolve(fileURLToPath(import.meta.url))) {
+if (isMainModule(import.meta.url)) {
   main();
 }
