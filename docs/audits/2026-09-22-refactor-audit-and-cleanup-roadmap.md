@@ -32,226 +32,35 @@ adversarially verified; counts re-run at HEAD.
 > permanent non-candidate for the Phase 3.6 sweep. Original measurements are
 > left in place below; this note is the normative statement for Phase 1.
 
-> **Amendment (2026-09-26, human decision — normative for Phase 2):**
-> **(1) Item 2.12 / DC-05 is DECIDED: wire the button, do not delete.** The two
-> violation-notice PDF routes (`violations/[id]/notice`, `violations/[id]/hearing-notice`)
-> stay, and the Phase 2 work is to make them reachable from the violations UI.
-> Consequences: the contract allowlist does **not** shrink by 2 (it stays at its
-> pinned 46 — the "deletion shrinks the floor" note on DC-05 is moot), and the
-> wiring must go through the existing fail-closed kill switch
-> (`noticePdfGenerationEnabled` in `communities.community_settings`, strict
-> `=== true`, enforced by `requireNoticePdfEnabled`). **The Phase 2 slice wires
-> the UI and the routes; it does NOT flip the kill switch for any community.**
-> Legal posture, corrected 2026-09-28 against the shipped generator
-> (`apps/web/src/lib/utils/violation-notice-pdf.ts`). **Remediation is PARTIAL —
-> do not read it as done.** Remediated: every generated notice opens with a
-> "DRAFT — FOR REVIEW BY THE ASSOCIATION AND ITS COUNSEL" banner (:202); the
-> 14-day period is a *measurement with a verify-before-sending note*, not an
-> assertion (:421-430); the outcomes text names approval by "a committee of
-> members who are not officers, directors, or their relatives" (:453-454), not
-> the Board (the Board-naming finding is F-04's; F-05's remediation ledger
-> records the signature block no longer signing as the Board —
-> `docs/audits/2026-08-09-legal-risk-audit.md` §F-04/§F-05, remediation table);
-> and the **violation** notice's rights section became a pointer to the
-> governing documents (:313-330). **NOT remediated:** (a) the **hearing**
-> notice still enumerates "Your Rights at the Hearing" as four assertions
-> (:435-440), including "You may request a continuance" — the exact class of
-> text F-05 names and its remediation table records as removed; (b) the
-> hearing notice hardcodes "$100 per violation, up to $1,000 in aggregate" (:454-455)
-> while the fine service enforces per-community overrides via
-> `resolveFineCaps` (`packages/shared/src/compliance/fine-caps.ts`), so a
-> notice can state caps the association does not apply. Enablement therefore
-> stays a **human/legal stop pending counsel review**, and (a)/(b) are
-> fix-before-re-enable items for the notice-wiring slice's follow-up, not
-> for the kill-switch decision to absorb silently. Kill-switch enablement is
-> the launch gating decision, not an engineering default. A button that
-> renders the 403 "not available for this community" until that decision is
-> made is the correct shipped state. The stale audit-time docblock on
-> `requireNoticePdfEnabled` (`apps/web/src/lib/violations/common.ts:65-71`) is
-> corrected by whichever Phase 2 slice next touches that file (the lib-domain
-> guard drain owns it).
-> **(2) Phase 2's authz lane builds on #1174.** The AZ findings were measured
-> before `fix(authz): stop leaking neighbours' rent to residents via units list
-> and apartment dashboard (#1174)` merged (2026-09-26); item 2.1's unification
-> must take the post-#1174 code as its baseline, and the audit's authz counts are
-> snapshots, not current truth. Likewise the RLS surface moved under #1177
-> (migrations 0077–0079: 0077 revokes Data API SELECT on 59 tenant tables, 0078
-> is a BLANKET revoke of every write-class privilege on EVERY public table, and
-> 0079 revokes all of `communities` for anon/authenticated and repairs
-> role-claim resolution for PostgREST v12 — treat 'writes via the Data API'
-> as unavailable everywhere, not only on tenant tables).
-
-> **Amendment (2026-09-26, human decision + dated prod evidence — Phase 2 run
-> mode):** The Phase 2 phase-run is authorized to **auto-merge after CI and the
-> four-lens review**, with exactly TWO planned in-run human stops (Gate 0 —
-> the disposition-table approval before any drain merges, per the 2026-09-27
-> amendment — and the PR-B census pause below; notice kill-switch enablement
-> is a third human decision but sits OUTSIDE the run, which never flips it),
-> because the three
-> prod-touching preconditions an unattended run may not execute were
-> **pre-executed read-only on 2026-09-26** (psql, `default_transaction_read_only=on`;
-> full evidence in `docs/audits/2026-09-26-phase2-prod-preconditions.md` — the
-> canonical repo copy; the runner's state-dir file of the same date is a working
-> duplicate):
-> **(1)** migration `0076` holds exactly **one** ledger row of its own (the
-> whole-ledger snapshot on 2026-09-26 was tip id=106, 77 rows — those two
-> numbers belong to the ledger, drift with every apply, and are NOT to be
-> re-pinned into any gate) —
-> the deploy-live gate is satisfiable, and the working hash-compare form is
-> `hash LIKE '%<sha256>%'` (the column is text; `encode(hash,'hex')` errors).
-> **(2)** prod `faqs` holds 5 live rows, every `role_visibility` array EMPTY —
-> **zero legacy tokens**, so the alias-bridge deletion has no fuel in prod as of
-> that timestamp. **The help-content lane still splits PR-A (content rewrite, auto-merge allowed)
-> from PR-B (bridge deletion), and PR-B keeps its human gate** (slice IDs for
-> these two PRs renumber between spec derivations — PR-A/PR-B are the stable
-> names): a fresh dated
-> `SELECT DISTINCT unnest(role_visibility) FROM faqs WHERE deleted_at IS NULL`
-> showing zero legacy tokens, re-run at merge time, because the census is a
-> snapshot and rows can be created meanwhile.
-> **(3)** `noticePdfGenerationEnabled` is OFF for every community (0 rows even
-> carry the key) with zero `platform_admin_audit_log` events touching it since
-> 2026-08-09 — **the notice-wiring slice (PR body: violation-notice buttons)
-> may auto-merge** on this dated evidence, its PR body
-> carrying the query results and the "off as of 2026-09-26, enforced
-> per-community at request time" wording (never "can never").
-> The phase-run must NOT itself query or mutate prod; this amendment is the
-> human having done so, on the record, before launch.
-
-> **Amendment (2026-09-27, human decisions — the drain adjudication, parity
-> harness, PR-B pause, and warn-flip ownership; reconciled 2026-09-28).**
-> Slice/ledger IDs in this amendment are ROLE names, not stable keys: they
-> renumber between spec derivations (the drain lane was S1b in round 2 and is
-> S5/S6/S7 in the 2026-09-28 corrected spec; the PR-B slice was S9 in round 2,
-> S13 in round 3, S16b in the corrected spec). Where an ID appears below, read
-> the role.
-> **(1) The authz-drain lane drains by GENERATED LEDGER DISPOSITION, not by
-> slice prose.** Item 2.1's
-> "drain `requireRole`/`isAdminRole`/inline forks" wording is bounded by this
-> rule: a `membership.isAdmin` / role-fork site drains ONLY if the GENERATED
-> per-site disposition ledger (the census artifact's rows, approved via the
-> overrides JSON — NOT decision-ledger IDs, which renumber between
-> derivations) carries an explicit disposition AND the parity harness (below)
-> covers it; **every site without a ledger
-> disposition defaults to KEPT** — drained in no unattended run. The list
-> below is a convenience snapshot, NOT the inventory: the census regenerated at
-> the pinned commit is authoritative, and where the two disagree the census
-> wins and this list is corrected in the next amendment (it already diverged
-> once — the elections proxy revoke, reclassified 2026-09-28). Known
-> behavior-branch sites are KEPT by this rule as of today:
-> `visitors/[id]/revoke` (admin-reason + resident-host-check branch UNDER a
-> real `requireVisitorsWritePermission` gate), `forum/threads/[id]/reply`
-> DELETE (`canModerateReplies` service-passed flag, `&&` short-circuit
-> preserved verbatim by its docblock contract), `documents/drafts/[id]/publish`
-> (`!isAuthor && !isAdmin` — data-dependent), `announcements` (`isAdmin &&`
-> matrix conjunction), and the calendar / storm-damage / maintenance-request
-> breadth-or-flag branches. The intake must emit the full per-site disposition
-> table for every executable-use file, and the human approves that table at
-> **Gate 0** (one of exactly two human stops; the other is the PR-B census
-> pause in (3)) — the drain list is not normative text until then.
-> **(2) The parity harness lands FIRST, as its own reviewed commit, before any
-> drain commit.** Construction: the integration local Postgres (via the
-> `pnpm test:integration:local` machinery — never prod, never the stub URL),
-> roles hydrated WITHOUT mocking community-membership, and per-site scenario
-> rows for data-dependent gates (author/non-author, host/non-host), not just
-> the four-role matrix. **Any site the harness structurally cannot cover is
-> reclassified KEPT, not drained.**
-> **(3) The PR-B merge is a PLANNED MID-RUN PAUSE.** The run stops at the
-> help-bridge-deletion PR's merge gate and pings the human; the fresh dated
-> prod faqs census (read-only, per the run-mode amendment) is run by the human
-> or by an agent on the human's explicit go, and the run resumes only on that
-> evidence. Everything else in the phase keeps the 2026-09-26 auto-merge
-> authorization.
-> **(4) The `--warn`→enforce flip is VACUOUS at HEAD — corrected 2026-09-28.**
-> Verified in `scripts/verify-scoped-db-access.ts` (978 lines): there is NO
-> `--warn` flag, NO argv parsing (mode is a compile-time config entry), and NO
-> seeded admin unsafe-import ledger — the DB004 unsafe-import branch fires only
-> in scoped mode, so admin mode cannot flag unsafe imports today. Body 2.5's
-> "73 named entries, `--warn` first" described an intended state that was never
-> built and is superseded. There is consequently nothing to flip and no date to
-> set: ownership of BUILDING the real admin ledger (DBB-02) is Phase 2's; the
-> enforcement posture of that ledger when built is `TODO(Phase3, jphilistin)`
-> recorded HERE (roadmap text, not a code marker). Done-criteria for the ledger
-> slice must be behavioral against the code that actually exists — never a grep
-> for `--warn`, never an assertion that a nonexistent flag behaves a certain way.
-
-> **Amendment (2026-09-27, human decision — the disposition enum is TWO-valued
-> in Phase 2; idiom convergence is deferred):** resolves the third intake's
-> BLOCKER (run wf_46fe67df-5ff, W1: round-3 ledger D2 "projections KEPT-by-rule"
-> contradicted round-3 D4/S17 "replace the projection idiom with
-> isManagementTier" inside a slice forbidden to touch non-DRAIN rows; those IDs
-> are round-3 referents). The Gate-0 human approval operates on a
-> **two-value `Disposition` enum: `DRAIN` or `KEPT`.** There is **no
-> `KEEP-SHAPE` class in Phase 2.** Every data-shaping projection —
-> `units` list (route.ts:86, the #1174 rent-leak gate), `leases` (route.ts:249),
-> `insurance/policies` (route.ts:70), and the `search/*` breadth flags — is
-> **`KEPT`: untouched in Phase 2**, neither drained nor idiom-swapped. Idiom,
-> stated exactly (a census grep must match BOTH): `units/route.ts:86`,
-> `leases/route.ts:249` and `insurance/policies/route.ts:70` read
-> `isAdminRole(membership.role)`; `search/maintenance/route.ts:41` and
-> `search/violations/route.ts:44` read `membership.isAdmin`. D5's "converge
-> nowhere in Phase 2" is read literally: Phase 2 changes deny-gate *call sites*
-> onto the matrix (DRAIN rows only) and leaves every projection's admin read
-> exactly as it is. **The elections proxy revoke is NOT a projection** —
-> corrected 2026-09-28: it is a deny-gate MUTATION call site (the
-> grantor-or-admin fork at `elections-service.ts:1299-1304`, on an `actorIsAdmin`
-> flag passed by a route with no admin gate of its own — its only gate is
-> `requirePermission('elections','write')`, which owner, tenant AND manager all
-> hold). The census MUST emit it as a visible row, but its disposition is
-> **KEPT, with no DRAIN option**: the fork is a grantor-OWNERSHIP check OR'd
-> with admin, and the RBAC matrix has no ownership concept. Every
-> matrix-expressible replacement is wrong — `elections:write` is true for all
-> three rows, so "draining" the admin half onto the matrix would let any
-> member revoke any other member's §718.128 proxy. A DRAIN disposition on this
-> row is a defect, not an adjudication. The idiom convergence becomes a
-> **named Phase 3 item**, and it is smaller than earlier text claimed: the
-> management-tier predicate already exists EXPORTED as `isAdminRole`
-> (`packages/shared/src/access-policies.ts:217`, via `resolveMatrixRole`) and as
-> the constant `ADMIN_TIER_DB_ROLES` (`packages/shared/src/role-transition.ts:16`),
-> from which `membership.isAdmin` is derived
-> (`apps/web/src/lib/api/community-membership.ts:128`). The two idioms above
-> are therefore **semantically identical today** (role ∈ {property_manager,
-> root_manager}); a third, module-private copy is `isManagementTier`
-> (`packages/shared/src/billing/permissions.ts:30`), and `resolveMatrixRole`
-> (`access-policies.ts:202`) inlines the same test.
-> (`search/users/route.ts:29` is a display-label mapper, not a predicate copy —
-> out of scope.) Phase 3's work is choosing ONE of the existing names and
-> deduping — a rename-level change whose safety argument is the equivalence
-> above, pinned by a unit test over the three roles × isUnitOwner, not a new
-> parity harness. It still stays out of Phase 2 (units/leases sit atop the
-> freshest rent-leak fix, and KEPT rows are not edited). Exporting
-> `isManagementTier` changes no call site and is not itself a swap. The drain-lane
-> rule: authz-drain slices operate ONLY on rows whose human-approved disposition
-> is DRAIN; **editing a KEPT row is a defect.** Round-3 D2 and D4 are reconciled
-> to this: the round-3 "KEPT-SHAPE idiom swap" is struck for Phase 2 and
-> re-filed under Phase 3. The per-site disposition table the human
-> approves at the gate therefore has two columns of consequence (DRAIN / KEPT),
-> and the gate's `--check-sync` validates regeneration against the
-> human-approved-overrides JSON (the persisted edit artifact), never against a
-> fresh KEPT-default regeneration.
-
-> **Precedence (2026-09-28 reconciliation):** the 2026-09-26/27 amendments, as
-> corrected in place on 2026-09-28 (git history carries the prior text), are
-> jointly normative for the Phase 2 run OVER the §4–§5 tables and any stale body
-> prose they supersede — including body 2.5's "`--warn` first" (never built),
-> 2.12/DC-05's delete option (decided: wire), and DC-05's "deletion shrinks the
-> floor" dedupe note (moot). `.claude/rules/api-patterns.md` is updated in the
-> same commit so no auto-loaded rule still commands the deletion. Where an
-> amendment names a slice ID, the ID is a role label for the derivation current
-> at that date; the executed spec's own IDs are authoritative at run time. The
-> same applies to `docs/audits/2026-09-26-phase2-prod-preconditions.md`, whose
-> round-2 IDs are mapped in its own reconciliation note.
-> `scripts/verify-contracts.ts`'s docblock and pass message are corrected in the
-> same PR (it is the allowlist's named source of truth and still printed the
-> DC-05 deletion on every `pnpm lint`).
->
-> **Launch precondition (2026-09-28):** the auto-merge authorization above is
-> NOT exercisable until the spec-side must-fixes that ENFORCE it have landed in
-> the executed spec: a targeted authz-parity run as a done-criterion on every
-> drain slice; `--check-drained` registered as a `guard:*` in the lint fleet;
-> the Gate-0 overrides JSON declared human-write-only (a slice or repair agent
-> writing it is a defect); and the two human stops encoded as structured gates,
-> not prose. Until then, the "exactly two human stops" rule is prose with no
-> mechanism, and Stage 2 runs in PR-only mode (no auto-merge).
+> **Phase 2 re-plan (2026-09-28, human-approved) — replaces the 2026-09-26/27/28
+> amendment chain.** The §5 Phase 2 table below is now the **only** copy of the
+> Phase 2 plan. The earlier amendments (run mode, drain adjudication, parity
+> harness, Gate 0, disposition enum, precedence, launch precondition — PRs #1181,
+> #1183, #1185, #1188, #1191) live in git history; they specified controls the
+> phase-run tooling cannot express (`gate.kind` is only `deploy-live`/`none`, one
+> integration PR per phase, "three stops, not configurable") and a spec that lived
+> outside git. Instead:
+> - **Human stops are native:** rows marked *human-merged PR* are never put in a
+>   phase-run; a session opens the PR and stops, and a human merges it.
+>   `ponytail:` convention, not enforcement — upgrade trigger: a phase-run ever
+>   merges a change to `violation-notice-pdf.ts`, `access-control.ts`,
+>   `rbac-matrix.ts` or `role-transition.ts` → add a CI path-check.
+> - **No authz drains in Phase 2.** Every admin idiom (`membership.isAdmin`,
+>   `isAdminRole`, `requireRole(PM_MANAGER_ROLES)`, `isManagementTier`) already
+>   means `role ∈ ADMIN_TIER_DB_ROLES`; the audit cites no bug caused by the forks.
+>   Of ~60 deny-gates only ~10 duplicate the matrix; the rest are stricter by
+>   design (the documented two-tier model) or the only gate, and would need new
+>   matrix policy. Phase 2 pins the equivalence instead. No census, disposition
+>   ledger, overrides JSON, `--check-drained` or parity harness is built.
+> - **Still binding from the earlier chain:** DC-05 is wire-not-delete (allowlist
+>   stays 46); `noticePdfGenerationEnabled` is never flipped by engineering work —
+>   enabling it is a human/legal decision; the elections proxy revoke
+>   (`elections-service.ts:1299-1304`, grantor OR admin, and every role holds
+>   `elections:write`) is **never drained**; Phase 2 builds on post-#1174 code;
+>   after #1177 (0077–0079) Data API writes are unavailable on every public table.
+> - Dated prod facts (read-only): migration 0076 live (2026-09-26); 5 live `faqs`
+>   rows, every `role_visibility` empty, and the kill switch off for every
+>   community (2026-09-26, re-checked 2026-09-28). Evidence: `docs/audits/2026-09-26-phase2-prod-preconditions.md`.
 
 ## 1. Headline numbers
 
@@ -384,7 +193,7 @@ The B3 program executed its design verbatim (the healthiest finding of the audit
 
 | ID | Finding | Files | Impact | Effort | Risk |
 |---|---|---|---|---|---|
-| PAG-01 ✎ | Seven migrated hard-tier endpoints have **zero supporting indexes** (six at audit; amended 2026-09-23 with amenities per the header note); the design doc's two named DDLs (`faqs_active_order_idx`, `announcements_active_feed_idx`) were written and never applied. **Status (2026-09-23): shipped as expand migration `0076_keyset_indexes_hard_tier`, all seven DDLs — (applied: pending — tracking issue opened with the Phase-1 PR)**, because prod applies migrations by hand. Re-run the grep below to re-measure; a green suite is NOT evidence the indexes are live | `packages/db/src/schema/{announcements,faqs,forum-threads,vendors,assessments,visitor-log,amenities}.ts` | **high** | S | low |
+| PAG-01 ✎ | Seven migrated hard-tier endpoints have **zero supporting indexes** (six at audit; amended 2026-09-23 with amenities per the header note); the design doc's two named DDLs (`faqs_active_order_idx`, `announcements_active_feed_idx`) were written and never applied. **Status: shipped as expand migration `0076_keyset_indexes_hard_tier`, all seven DDLs; applied to prod (one ledger row, verified read-only 2026-09-26)**. Prod applies migrations by hand. Re-run the grep below to re-measure; a green suite is NOT evidence the indexes are live | `packages/db/src/schema/{announcements,faqs,forum-threads,vendors,assessments,visitor-log,amenities}.ts` | **high** | S | low |
 | PAG-02 | Forum replies unbounded (`selectFrom(forumReplies, …)` no limit + a second unbounded deleted-replies read merged in JS) — highest per-day growth surface | `polls-service.ts:568-573`, `forum/threads/[id]/route.ts` | high | M | med |
 | PAG-03 | Reservations resident path = full fetch + client-side `.slice()` — an explicit B3 Non-Goal | `api/v1/reservations/route.ts:39-45`, `work-orders-service.ts:1031-1041` | med | M | low |
 | PAG-04 | Leases: two full-table reads on one request (`renewal_chain_for` branch), JS post-filters, zero pagination markers | `api/v1/leases/route.ts:204/:240`, `lease-service.ts:43-46` | med | M | med |
@@ -443,9 +252,9 @@ Evidence notes: INF-01 block sizes measured by awk: 203 (public-host fork), 130 
 | DC-02 | Retired flat `site-blocks.ts` (231 LOC) still ships behind a barrel re-export with zero consumers; its own docblock says "retired in PR #9" | `packages/shared/src/site-blocks.ts` | low | S | low |
 | DC-03 | 119 of 419 `packages/shared` public exports have zero external references; 16 dead repo-wide; packages/ui tokens add 4 | `branding.ts`, `esign-constants.ts`, `ui/tokens/*` etc. | med | M | med |
 | DC-04 | 44 file-local date helpers despite canonical `lib/utils/format-date.ts` (6 consumers); `cn()` ×3 | `visitor-columns.tsx` ≡ `package-columns.tsx` pair byte-identical | med | M | low |
-| DC-05 | Two statutory violation-notice PDF routes have zero client call sites — likely gated-and-unwired (feature flag OFF per legal-risk audit), needs product intent before deletion | `violations/[id]/notice`, `violations/[id]/hearing-notice` | low | S | med |
+| DC-05 | Two statutory violation-notice PDF routes have zero client call sites — likely gated-and-unwired (feature flag OFF per legal-risk audit), needs product intent before deletion (**decided 2026-09-26: keep + wire**; see 2.12) | `violations/[id]/notice`, `violations/[id]/hearing-notice` | low | S | med |
 
-Cross-dimension dedupe: SVC-07 (5 dead service exports) and DC-01/03 are the same sweep — one `guard:service-dead-exports` / export-usage ratchet covers all three. DC-05's routes are also 2 of CON-03's 46 allowlist entries (deletion shrinks the floor).
+Cross-dimension dedupe: SVC-07 (5 dead service exports) and DC-01/03 are the same sweep — one `guard:service-dead-exports` / export-usage ratchet covers all three. DC-05's routes are also 2 of CON-03's 46 allowlist entries (kept, so the floor stays 46).
 
 ## 5. Phased cleanup roadmap
 
@@ -465,20 +274,20 @@ Sequenced by **dependency**, not impact. The two load-bearing gates: (a) TST-01/
 
 ### Phase 2 — Choke-point consolidation (weeks 2–6)
 
-| # | Item | Effort | Risk | Depends on |
+| # | Item | Effort | Risk | Depends on · route |
 |---|---|---|---|---|
-| 2.1 | **AZ-02/03 authz unification** — extend RBAC_RESOURCES (leases, faqs, site-editor, forum moderation), drain `requireRole`/`isAdminRole`/inline forks onto the matrix; keep `requireRootManager`/`requirePlatformAdmin`/`requireCronSecret` as declared exceptions; add the five-vocabulary pin test | L | med | role-v3 shipped (verified); 1.1 lands leases' resource first |
-| 2.2 | **AZ-05** — `guard:route-authz`: contract.permission ↔ call-site cross-check + mandatory `// AUTHZ:` declaration for zero-idiom routes; converts AZ-01-class gaps into build failures | M | low | 2.1's resource set; reuse verify-authz-comments grammar |
-| 2.3 | **DBB-01** — widen route-table guard to all of `apps/web/src/app`, seed 21 as shrink-only grandfather, drain to services (most targets already exist); forbid new `page.tsx` DB004 entries | M | low | — |
-| 2.4 | **DBB-05** — port the AST visitor into the route-table guard + self-test both directions | S | low | lands best inside 2.3's PR |
-| 2.5 | **DBB-02 + DBB-03** — admin gets a real unsafe-import ledger (73 named entries, `--warn` first); widen AUTHZ-comment requirement to `/supabase/admin` (210 checked imports) behind a shrink-only baseline | M | med | — |
-| 2.6 | **DBB-04** — per-file call-site ceilings on `createUnscopedClient()`; table-naming rationale made grep-checkable | M | low | 2.5 |
-| 2.7 | **PAG-08** — unbounded-list ratchet guard, baseline from the 133-route triage, named non-candidates with rationale strings | M | low | 1.2 (indexes before pressure); triage feeds PAG items in 3.x |
-| 2.8 | **R3-01** — the help/FAQ vocabulary drain: content rewrite first (46 MDX + prod FAQ rows via the repair convention), then delete the alias fan-out, tighten frontmatter schema to v3 enum, zero the guard HELP bucket; **then R3-02** guard holes close with no residue left to hide in | M | low | 1.6 (ADR wording settled first) |
-| 2.9 | **SVC-05 + INF-02 + FE-03 + DC-04(step 1)** — small single-source wins: `createUnsubscribeTokenCodec(envVar)`, one shared visibility predicate, `cn()` re-export shims, format-date step 1 | S–M | low | — |
-| 2.10 | **TST-05 (first tranche)** — guard self-tests for the five highest-stakes untested guards | M | low | — |
-| 2.11 | **INF-04** — retire or annotate the duplicate scoped-db-access workflow | S | low | branch-protection list check |
-| 2.12 | **DC-05** — product decision on violation-notice PDF routes (wire the button or delete + shrink allowlist by 2) | S | med | product input |
+| 2.1 | **AZ-02/03, re-scoped 2026-09-28: pin, don't drain.** `isManagementTier` derives from `ADMIN_TIER_DB_ROLES`; one test asserts `isAdminRole` ≡ `ADMIN_TIER_DB_ROLES` ≡ `PM_SCOPE_DB_ROLES` over every role; correct `requireBoardDesignation`'s docblock (designation holders incl. acknowledged non-owners pass) and pin it in `statutory-gates.test.ts`; mark the proxy revoke never-drain. **Cut:** new resources + drains — trigger: an authz bug at an only-gate site, or a feature needing a resident/admin split the matrix can't express (then restore `scripts/generate-rbac-snapshots.ts` first). Leases is gated via `units:write`, not its own resource | S | low | — · **phase-run** |
+| 2.2 | **AZ-05, re-scoped: route gate-presence guard.** Every `apps/web/src/app/api/**/route.ts` carries a gate idiom or `// AUTHZ: <reason>`; authentication alone does not count (the AZ-01 leases class). Shrink-only per-name baseline (~34 today), tri-state exits, self-test both ways. `ponytail:` per-file, not per-verb — trigger: a file with one gated and one ungated verb. **Cut:** the `contract.permission` cross-check (unenforced metadata) — trigger: `runRoute` enforces `permission` | M | low | 2.1 · **phase-run** |
+| 2.3 | **DBB-01** — widen route-table guard to all of `apps/web/src/app`, seed 21 as shrink-only grandfather, drain only files whose service target already exists | M | low | — · **phase-run** |
+| 2.4 | **DBB-05** — port the AST visitor into the route-table guard + self-test both directions | S | low | inside 2.3's PR |
+| 2.5 | **DBB-02/03, re-scoped:** (a) require `// AUTHZ:` on `@propertypro/db/supabase/admin` imports in `apps/web` + `scripts` (~25); (b) a source-text test that every `apps/admin/src/app/api/**/route.ts` calls `requirePlatformAdmin` or `requireCronSecret` (exception: `/api/health`). **Cut:** the 73-entry admin ledger — service-role access is how admin normally reaches the DB, and its `/unsafe` importers are already under `guard:authz-comments`. Trigger: admin gains a non-platform-admin user class or a tenant-reachable surface | S | low | — · **phase-run** |
+| 2.6 | **DBB-04** — per-file call-site ceilings on `createUnscopedClient()` via `scripts/lib/ceiling.ts` | M | low | — · **phase-run** |
+| 2.7 | **PAG-08** — unbounded-list ratchet guard, per-name baseline reusing the dead-exports baseline code | M | low | 1.2 · **phase-run** |
+| 2.8 | **R3-01/02 as ONE PR** — resolver honours `designation` for every role (today a board-designated resident resolves to owner/tenant — and managers lose the designation on promotion — so no viewer ever matches a `board_*` tag: board members miss the 27 of 34 board-tagged help articles that don't also list `owner`, and the board-tagged default FAQs; measured 2026-09-28); one canonical token per audience (`manager`/`owner`/`tenant`/`board_member`/`board_president`) in MDX + `default-faqs.ts`; delete the alias fan-out; `frontmatter-schema.ts` `roles` → `z.enum`; zero the guard HELP bucket. No PR-A/PR-B split: nothing in the app writes `faqs.role_visibility` and all prod rows are empty — the PR body re-runs `select count(*) from faqs where cardinality(role_visibility) > 0` → 0 | M | low | — · **phase-run** |
+| 2.9 | **SVC-05 + INF-02 + FE-03 + DC-04(step 1)** — small single-source wins | S–M | low | — · **phase-run** |
+| 2.10 | **TST-05 (first tranche)** — guard self-tests for the five highest-stakes untested guards, one anti-vacuity probe each | M | low | — · **phase-run** |
+| 2.11 | **INF-04** — retire or annotate the duplicate scoped-db-access workflow; a repo admin checks the required-checks list first | S | low | **human-merged PR** |
+| 2.12 | **DC-05, decided: keep + wire, UI deferred.** Now: fix the hearing notice's legal text — rights enumeration → pointer to governing documents; fine caps from `membership.fineCaps`, not a hardcoded $100/$1,000 — and the stale `requireNoticePdfEnabled` docblock. **Deferred:** UI buttons — trigger: counsel approves enabling for a first community; wire them in that PR | S | med | **human-merged PR** |
 
 ### Phase 3 — Structural decomposition, tests first (weeks 4–12, overlapping)
 
@@ -529,11 +338,11 @@ flowchart LR
     MECH[SVC-06/07 · R3-03/04 · DC-01/02]
   end
   subgraph P2["Phase 2 — choke points"]
-    AZ02[AZ-02/03 authz unification]
-    AZ05[AZ-05 route-authz guard]
+    AZ02[AZ-02/03 idiom pin — no drains]
+    AZ05[AZ-05 route gate-presence guard]
     DBB[DBB-01/05/02/03/04]
     PAG08[PAG-08 bound guard]
-    R301[R3-01 help drain → R3-02]
+    R301[R3-01/02 help vocab + board audience]
     SMALL[SVC-05 · INF-02 · FE-03]
   end
   subgraph P3T["Phase 3.T — test floor"]

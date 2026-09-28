@@ -1,5 +1,10 @@
 # Phase 2 prod preconditions — executed read-only 2026-09-26 ~21:10 EDT
 
+> **SUPERSEDED (2026-09-28)** by the Phase 2 re-plan in
+> `docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md` (header note +
+> §5 Phase 2 table). Kept for its dated read-only query results only; its
+> run-mode, slice-ID and "Consequence" text no longer applies.
+
 Authorized by the human (merge-policy decision: "Pre-run prod checks, then
 auto-merge"). All queries ran through `psql` against `.env.local`'s
 DATABASE_URL with `PGOPTIONS="-c default_transaction_read_only=on"`. No secret
