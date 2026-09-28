@@ -63,22 +63,28 @@ export default async function BillingPage({
     ? await getActiveSubscriptionInterval(stripeSubscriptionId).catch(() => null)
     : null;
 
+  // Every member may see the plan and status. Stripe internals may not reach a
+  // non-manager's payload: the client uses the customer id only behind
+  // `canManage`, and a resident cannot act on a payment failure.
+  const canView = canViewBilling(membership.role);
+
   const billingData = {
     communityId: context.communityId,
     communityName: membership.communityName,
     subscriptionPlan: (community?.['subscriptionPlan'] as string) ?? null,
     subscriptionStatus: (community?.['subscriptionStatus'] as string) ?? null,
     subscriptionInterval,
-    stripeCustomerId: (community?.['stripeCustomerId'] as string) ?? null,
-    paymentFailedAt: community?.['paymentFailedAt']
-      ? new Date(community['paymentFailedAt'] as string).toISOString()
-      : null,
+    stripeCustomerId: canView ? ((community?.['stripeCustomerId'] as string) ?? null) : null,
+    paymentFailedAt:
+      canView && community?.['paymentFailedAt']
+        ? new Date(community['paymentFailedAt'] as string).toISOString()
+        : null,
     // R3-03 splits VIEW from MANAGE. `canView` is the whole management tier —
     // a property manager keeps sight of plan/status/interval. `canManage` is
     // root-only and gates every action, matching `requireRootManager` on the
     // routes behind them. Deriving both from the shared predicates keeps the
     // UI and the API from drifting apart.
-    canView: canViewBilling(membership.role),
+    canView,
     canManage: canManageBilling(membership.role),
     // Set by /billing/portal and change-plan when they bounce a non-root back
     // here, so the page can explain the bounce instead of silently rendering.

@@ -16,6 +16,7 @@ const {
   hasChecklistItemsMock,
   redirectMock,
   welcomeScreenMock,
+  selectFromMock,
 } = vi.hoisted(() => ({
   requirePageAuthenticatedUserMock: vi.fn(),
   requirePageCommunityMembershipMock: vi.fn(),
@@ -23,6 +24,7 @@ const {
   hasChecklistItemsMock: vi.fn(),
   redirectMock: vi.fn(),
   welcomeScreenMock: vi.fn(() => null),
+  selectFromMock: vi.fn(async (_table?: unknown, ..._rest: unknown[]): Promise<unknown[]> => []),
 }));
 
 class RedirectError extends Error {
@@ -70,7 +72,7 @@ vi.mock('@propertypro/db', () => ({
   units: { ownerUserId: {}, unitNumber: {}, building: {}, floor: {} },
   createScopedClient: vi.fn(() => ({
     query: vi.fn(async () => []),
-    selectFrom: vi.fn(async () => []),
+    selectFrom: selectFromMock,
   })),
 }));
 
@@ -92,6 +94,7 @@ vi.mock('@/components/onboarding/welcome-screen', () => ({
   WelcomeScreen: welcomeScreenMock,
 }));
 
+import { complianceChecklistItems } from '@propertypro/db';
 import WelcomePage from '../../../src/app/(authenticated)/welcome/page';
 
 describe('WelcomePage redirect behavior', () => {
@@ -217,5 +220,62 @@ describe('WelcomePage role/designation prop passing', () => {
     expect(props.role).toBe('resident');
     expect(props.designation).toBeNull();
     expect(props.isUnitOwner).toBe(true);
+  });
+});
+
+/**
+ * The compliance score is gated like GET /api/v1/compliance
+ * (`compliance: read`): tenants — and every apartment member — must not get it
+ * in their payload, even though TenantCards never renders it.
+ */
+describe('WelcomePage compliance snapshot gate', () => {
+  const CHECKLIST = [
+    { documentId: 1, isApplicable: true },
+    { documentId: null, isApplicable: true },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveCommunityContextMock.mockReturnValue({ communityId: 42 });
+    requirePageAuthenticatedUserMock.mockResolvedValue({ id: 'user-1', fullName: 'Test User' });
+    hasChecklistItemsMock.mockResolvedValue(false);
+    selectFromMock.mockImplementation(async (table: unknown) =>
+      table === complianceChecklistItems ? CHECKLIST : [],
+    );
+  });
+
+  async function complianceFor(membership: Record<string, unknown>) {
+    requirePageCommunityMembershipMock.mockResolvedValue({
+      userId: 'user-1',
+      communityId: 42,
+      communityName: 'Sunset Condos',
+      city: 'Miami',
+      state: 'FL',
+      designation: null,
+      ...membership,
+    });
+    const element = (await WelcomePage({
+      searchParams: Promise.resolve({ communityId: '42' }),
+    })) as unknown as { props: { compliance: unknown } };
+    return element.props.compliance;
+  }
+
+  const readCompliance = () =>
+    selectFromMock.mock.calls.some(([table]) => table === complianceChecklistItems);
+
+  it('never reads or sends the score for a tenant', async () => {
+    const compliance = await complianceFor({
+      role: 'resident', isUnitOwner: false, communityType: 'condo_718',
+    });
+    expect(compliance).toEqual({ score: 0, totalItems: 0, satisfiedItems: 0 });
+    expect(readCompliance()).toBe(false);
+  });
+
+  it('still computes it for a condo owner (control)', async () => {
+    const compliance = await complianceFor({
+      role: 'resident', isUnitOwner: true, communityType: 'condo_718',
+    });
+    expect(compliance).toEqual({ score: 50, totalItems: 2, satisfiedItems: 1 });
+    expect(readCompliance()).toBe(true);
   });
 });
