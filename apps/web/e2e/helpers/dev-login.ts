@@ -82,9 +82,31 @@ export async function loginAs(
     let response;
     let body = '';
     for (let attempt = 0; attempt < 3; attempt++) {
-      response = await page.request.get(`/dev/agent-login?${query}`, {
-        headers: { accept: 'application/json' },
-      });
+      try {
+        response = await page.request.get(`/dev/agent-login?${query}`, {
+          headers: { accept: 'application/json' },
+        });
+      } catch (error) {
+        // A connection reset THROWS, so the 5xx retry below never saw it: one
+        // reset failed the whole test (`read ECONNRESET` on the first request of
+        // phase1-roadmap-smoke's violations test, e2e run 36360686135, with no
+        // server restart logged). `page.request` sends through Playwright's
+        // process-wide keep-alive agent, so the first request of a test can land
+        // on a socket pooled by an EARLIER test that the dev server is closing
+        // (Node's 5s keepAliveTimeout). This GET is safe to repeat — the loop
+        // already repeats it on 5xx.
+        //
+        // Deliberately NOT Playwright's `maxRetries`, which retries the same
+        // error silently. The warning is the record: if resets come from
+        // `next dev` restarting mid-request (see the NODE_OPTIONS comment in
+        // playwright.ci.config.ts), this line is how anyone finds out.
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/ECONNRESET|socket hang up/i.test(message) || attempt === 2) throw error;
+        console.warn(
+          `[dev-login] connection reset on /dev/agent-login?${query} (attempt ${attempt + 1}/3): ${message.split('\n')[0]} — retrying`,
+        );
+        continue;
+      }
       if (response.ok()) break;
 
       // Read the body as TEXT, not JSON. The route answers 500 with a useful
