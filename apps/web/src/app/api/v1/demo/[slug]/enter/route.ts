@@ -55,6 +55,7 @@ async function parseRole(request: Request): Promise<{ role: 'board' | 'resident'
   return null;
 }
 
+// route-gate: public — demo entry; slug possession is the credential by design, demo data is synthetic, middleware rate-limits
 export const POST = withErrorHandler(async (request: NextRequest, context: RouteParams) => {
   const { slug } = await context.params;
 

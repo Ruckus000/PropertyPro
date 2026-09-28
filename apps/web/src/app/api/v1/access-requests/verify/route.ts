@@ -19,6 +19,7 @@ import { accessRequestsVerifyContract } from './contract';
 // POST — public: verify OTP for an access request
 // ---------------------------------------------------------------------------
 
+// route-gate: public — OTP confirmation of a pending access request; verifyOtp is the check, and approval still needs an admin
 export const POST = withErrorHandler(
   runRoute(accessRequestsVerifyContract, async ({ body }) => {
     return verifyOtp(body);

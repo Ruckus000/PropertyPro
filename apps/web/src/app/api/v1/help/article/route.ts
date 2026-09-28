@@ -48,6 +48,7 @@ interface CompiledArticle {
   toc: TocItem[];
 }
 
+// route-gate: community-open — help content filtered by the viewer's role
 export const GET = withErrorHandler(
   runRoute(helpArticleContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);

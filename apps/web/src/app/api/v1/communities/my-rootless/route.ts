@@ -18,6 +18,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { findMyRootlessCommunities } from '@propertypro/db/unsafe';
 import { myRootlessContract } from './contract';
 
+// route-gate: self-scoped — lists rootless communities where the caller holds property_manager
 export const GET = withErrorHandler(
   runRoute(myRootlessContract, async () => {
     const userId = await requireAuthenticatedUserId();

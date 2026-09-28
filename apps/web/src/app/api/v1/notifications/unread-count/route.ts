@@ -30,6 +30,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { notificationsUnreadCountContract } from './contract';
 
+// route-gate: self-scoped — count of the caller's own unread notifications
 export const GET = withErrorHandler(
   runRoute(notificationsUnreadCountContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();

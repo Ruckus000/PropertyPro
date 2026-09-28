@@ -215,6 +215,7 @@ function ensureRenewalContinuity(
 // GET — List leases for a community with optional filters
 // ---------------------------------------------------------------------------
 
+// route-gate: self-scoped — non-managers see only leases they are a party to, notes redacted (AZ-01); managers see all
 export const GET = withErrorHandler(
   runRoute(leasesGetContract, async ({ req, communityId }) => {
     const actorUserId = await requireAuthenticatedUserId();

@@ -35,6 +35,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
 import { userNamesContract } from './contract';
 
+// route-gate: community-open — resolves display names of members of the caller's community only
 export const GET = withErrorHandler(
   runRoute(userNamesContract, async ({ query, req }) => {
     const actorUserId = await requireAuthenticatedUserId();

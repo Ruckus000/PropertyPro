@@ -32,6 +32,7 @@ import {
 } from '@/lib/queries/cross-community';
 import { overviewContract } from './contract';
 
+// route-gate: community-open — each card and feed item is filtered by the caller's per-community permissions (#1199)
 export const GET = withErrorHandler(
   runRoute(overviewContract, async () => {
     const userId = await requireAuthenticatedUserId();

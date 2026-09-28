@@ -24,6 +24,7 @@ import {
 const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+// route-gate: self-scoped — the caller submits their own join request; an admin must approve it
 export const POST = withErrorHandler(
   runRoute(accountJoinRequestsCreateContract, async ({ body }) => {
     const userId = await requireAuthenticatedUserId();
@@ -60,6 +61,7 @@ export const POST = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — lists only the caller's own join requests
 export const GET = withErrorHandler(
   runRoute(accountJoinRequestsListContract, async () => {
     const userId = await requireAuthenticatedUserId();

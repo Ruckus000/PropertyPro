@@ -22,6 +22,7 @@ import { confirmVerificationPostContract } from './contract';
 
 const EXPIRED_MESSAGE = 'This signup request has expired. Please start a new signup.';
 
+// route-gate: public — sessionless signup email confirmation (TOKEN_AUTH_ROUTES); keyed by the signupRequestId the caller already holds
 export const POST = withErrorHandler(
   runRoute(confirmVerificationPostContract, async ({ body }) => {
     const signup = await getPendingSignupForVerification(body.signupRequestId);

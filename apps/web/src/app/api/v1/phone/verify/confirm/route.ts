@@ -28,6 +28,7 @@ const confirmOtpSchema = z.object({
   code: z.string().min(4).max(10),
 });
 
+// route-gate: self-scoped — confirms the caller's own phone number with their OTP
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
 

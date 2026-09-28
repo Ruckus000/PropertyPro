@@ -152,6 +152,7 @@ const runResendVerification = runRoute(
   },
 );
 
+// route-gate: public — sessionless resend of the caller's own signup verification email (rate-limited)
 export const POST = withErrorHandler(async (req: NextRequest) => {
   try {
     return await runResendVerification(req);

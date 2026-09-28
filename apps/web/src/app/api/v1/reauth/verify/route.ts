@@ -20,6 +20,7 @@ import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { mintReauthCookie } from '@/lib/api/reauth-guard';
 import { reauthVerifyPostContract } from './contract';
 
+// route-gate: self-scoped — re-verifies the caller's own password to refresh their reauth window
 export const POST = withErrorHandler(async (req, ctx) => {
   let cookieParams: Awaited<ReturnType<typeof mintReauthCookie>> | undefined;
 

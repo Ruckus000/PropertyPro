@@ -17,6 +17,7 @@ import {
 } from '@/lib/services/claim-root-service';
 import { claimRootContract } from './contract';
 
+// route-gate: self-scoped — claim service admits only a property_manager of a rootless community, acting for themselves (ADR-006 spec 3.5)
 export const POST = withErrorHandler(
   runRoute(claimRootContract, async ({ body }) => {
     const userId = await requireAuthenticatedUserId();

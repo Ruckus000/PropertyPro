@@ -25,6 +25,7 @@ const sendOtpSchema = z.object({
   phone: phoneE164Schema,
 });
 
+// route-gate: self-scoped — sends an OTP to the caller's own phone (census deferral: SMS-pumping limits)
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const userId = await requireAuthenticatedUserId();
 

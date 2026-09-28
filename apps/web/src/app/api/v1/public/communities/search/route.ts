@@ -37,6 +37,7 @@ const searchHandler = runRoute(
     }),
 );
 
+// route-gate: public — rate-limited community discovery returning minimal metadata (census deferral: demo communities listed)
 export const GET = withErrorHandler(async (req, ctx) => {
   const ip = resolveClientIp(req);
   const result = getRateLimiter().check(

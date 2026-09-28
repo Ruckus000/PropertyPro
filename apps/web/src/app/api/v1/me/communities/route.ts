@@ -24,6 +24,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { meCommunitiesContract } from './contract';
 
+// route-gate: self-scoped — lists the caller's own memberships
 export const GET = withErrorHandler(
   runRoute(meCommunitiesContract, async () => {
     const userId = await requireAuthenticatedUserId();

@@ -49,6 +49,7 @@ const querySchema = z.object({
 /** Short-lived: the link is handed to an anonymous browser. */
 const SIGNED_URL_TTL_SECONDS = 300;
 
+// route-gate: public — getPublicDocumentFile returns a row only when public_access is true for that community (718.111(12)(g))
 export const GET = withErrorHandler(async (req: NextRequest, context) => {
   if (!context?.params) {
     throw new ValidationError('Missing route parameters');

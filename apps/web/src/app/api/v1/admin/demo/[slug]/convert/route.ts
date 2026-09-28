@@ -21,6 +21,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError } from '@/lib/api/errors';
 import { demoConvertContract } from './contract';
 
+// route-gate: public — 410 tombstone (moved to the admin app); reads and writes nothing
 export const POST = withErrorHandler(
   runRoute(demoConvertContract, async () => {
     throw new AppError(
@@ -34,6 +35,7 @@ export const POST = withErrorHandler(
 // OPTIONS preflight returns the same 410 envelope. Not handled by the runner —
 // `runRoute` only dispatches by exported method name matching the contract
 // method, so `OPTIONS` remains a plain Next.js export.
+// route-gate: public — CORS preflight (admin-cors handleOptions); returns headers only, and the admin verbs beside it call requirePlatformAdmin
 export async function OPTIONS() {
   return NextResponse.json(
     { error: { code: 'DEPRECATED', message: 'This endpoint has been moved to the admin app API' } },

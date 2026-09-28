@@ -11,6 +11,7 @@ import { getLatestRevenueSnapshotForHealth } from '@/lib/services/revenue-snapsh
 
 const STALE_THRESHOLD_MS = 26 * 60 * 60 * 1000;
 
+// route-gate: public — uptime probe; exempt in guard:internal-cron-auth, returns freshness only
 export async function GET() {
   const latest = await getLatestRevenueSnapshotForHealth();
 

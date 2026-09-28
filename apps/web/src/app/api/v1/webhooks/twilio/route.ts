@@ -46,6 +46,7 @@ async function parseFormBody(req: NextRequest): Promise<Record<string, string>> 
   return body;
 }
 
+// route-gate: public — Twilio webhook; validateSmsWebhookSignature verifies the signature before any work
 export async function POST(req: NextRequest) {
   try {
     // Parse form body

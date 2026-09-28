@@ -33,6 +33,7 @@ import {
 } from '@/lib/services/help-article-service';
 import { helpFeaturedContract } from './contract';
 
+// route-gate: community-open — getFeaturedForRole filters by the viewer's role
 export const GET = withErrorHandler(
   runRoute(helpFeaturedContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);

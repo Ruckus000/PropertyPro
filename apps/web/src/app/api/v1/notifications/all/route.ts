@@ -63,6 +63,7 @@ import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 import { listCrossCommunityNotificationsForUser } from '@/lib/services/notification-service';
 import { notificationsAllContract } from './contract';
 
+// route-gate: self-scoped — the caller's own notifications across their communities
 export const GET = withErrorHandler(
   runRoute(notificationsAllContract, async ({ query }) => {
     const userId = await requireAuthenticatedUserId();

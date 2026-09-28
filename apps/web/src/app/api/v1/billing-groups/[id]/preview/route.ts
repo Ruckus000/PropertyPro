@@ -49,6 +49,7 @@ import {
 import { PLAN_MONTHLY_PRICES_USD } from '@propertypro/shared';
 import { billingGroupPreviewContract } from './contract';
 
+// route-gate: self-scoped — getBillingGroupByOwner(userId) returns only the caller's own group; any other id is refused
 export const GET = withErrorHandler(
   runRoute(billingGroupPreviewContract, async ({ params, query }) => {
     const userId = await requireAuthenticatedUserId();

@@ -36,6 +36,7 @@ const listQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().optional(),
 });
 
+// route-gate: public — self-service access request submit; sessionless by design (TOKEN_AUTH_ROUTES), creates a PENDING request an admin must approve
 export const POST = withErrorHandler(
   runRoute(accessRequestsSubmitContract, async ({ body }) => {
     return submitAccessRequest(body);

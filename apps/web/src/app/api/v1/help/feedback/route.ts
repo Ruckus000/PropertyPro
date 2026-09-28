@@ -22,6 +22,7 @@ import { getHelpFeedbackContract, postHelpFeedbackContract } from './contract';
 
 const NEGATIVE_FEEDBACK_COMMENT_MAX_LEN = 500;
 
+// route-gate: self-scoped — returns only the caller's own feedback on one article
 export const GET = withErrorHandler(
   runRoute(getHelpFeedbackContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
@@ -34,6 +35,7 @@ export const GET = withErrorHandler(
   }),
 );
 
+// route-gate: self-scoped — records the caller's own feedback on an article
 export const POST = withErrorHandler(
   runRoute(postHelpFeedbackContract, async ({ body, req }) => {
     const { articleSlug, articleCategory, rating, comment } = body;
