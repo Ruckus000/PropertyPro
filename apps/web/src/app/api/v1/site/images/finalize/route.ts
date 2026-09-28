@@ -19,6 +19,7 @@ import { incrementAssetsUsage } from '@/lib/site-assets/quota';
 import { parseSiteAssetPath, SITE_ASSETS_BUCKET } from '@/lib/site-assets/storage-paths';
 import { transformSiteImage } from '@/lib/site-assets/transform';
 import { logAuditEvent } from '@propertypro/db';
+// AUTHZ: site-assets storage, on a path parseSiteAssetPath proves belongs to this community, after the property-manager check
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { siteFinalizeContract } from './contract';
 

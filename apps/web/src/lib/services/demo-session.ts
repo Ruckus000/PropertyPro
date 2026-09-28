@@ -8,6 +8,7 @@
  */
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
+// AUTHZ: GoTrue admin generateLink for a synthetic demo persona; callers are the demo-login (HMAC token) and demo-enter (slug) routes
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
 

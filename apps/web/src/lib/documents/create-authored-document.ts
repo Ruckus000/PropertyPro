@@ -13,6 +13,7 @@
  * derived by extension swap on read.
  */
 import { createScopedClient, documents, logAuditEvent } from '@propertypro/db';
+// AUTHZ: storage upload of a rendered authored document to a path the caller built under the gated community
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AppError } from '@/lib/api/errors';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';

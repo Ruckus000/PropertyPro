@@ -19,6 +19,7 @@
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
  */
 import { COMMUNITY_EXPORTS_BUCKET } from '@propertypro/db';
+// AUTHZ: purges export archives from storage for the export worker cron and community data purge; no user-supplied path
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 const PAGE_SIZE = 1000;

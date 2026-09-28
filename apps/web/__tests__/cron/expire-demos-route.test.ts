@@ -79,6 +79,7 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn(
 
 // AUTHZ: Integration test fixture setup — bypass needed to seed/inspect rows across test communities.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+// AUTHZ: test — the module is vi.mock()ed above; this import only reaches the mock to program it
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { bulkEmitConversionEvents, emitConversionEvent } from '@/lib/services/conversion-events';
 import { POST } from '../../src/app/api/v1/internal/expire-demos/route';

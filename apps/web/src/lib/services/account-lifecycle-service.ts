@@ -32,6 +32,7 @@ import {
 import type { AccessPlan } from '@propertypro/db';
 // AUTHZ: Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+// AUTHZ: GoTrue admin updateUserById to ban/unban accounts in the deletion lifecycle; called by the gated account routes and the lifecycle cron
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { purgeCommunityAdminAssets, purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 import { purgeCommunityExportArchives } from '@/lib/services/export/purge-export-archives';

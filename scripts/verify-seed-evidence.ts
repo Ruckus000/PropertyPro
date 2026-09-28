@@ -2,6 +2,7 @@
 import postgres from 'postgres';
 // AUTHZ: CLI/verification script — the service-role client is only reachable
 // from this guarded subpath (DBB-01, #803 removed the root-barrel re-export).
+// AUTHZ: operator verification script — reads seeded documents from storage; never runs in a request
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { getDefaultDocumentCategories, type CommunityType } from '@propertypro/shared';
 

@@ -22,6 +22,7 @@ import {
 import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 // AUTHZ: CLI/seed script — the service-role client is only reachable from this
 // guarded subpath (DBB-01, #803 removed the root-barrel re-export).
+// AUTHZ: operator seed script — GoTrue admin and storage writes for the demo personas; never runs in a request
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
   SEED_DOCUMENTS_BUCKET,

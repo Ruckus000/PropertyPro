@@ -28,6 +28,7 @@ import { computeDemoStatus } from '@propertypro/shared';
  */
 export async function assertNotDemoGrace(communityId: number): Promise<void> {
   // Lazy imports to avoid triggering DB connection at module load time
+  // AUTHZ: one PK read of communities (root tenant table, not community-scoped) to test demo-grace status
   const { createUnscopedClient } = await import('@propertypro/db/unsafe');
   const { communities } = await import('@propertypro/db');
   const { eq } = await import('@propertypro/db/filters');

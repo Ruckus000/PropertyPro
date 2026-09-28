@@ -11,6 +11,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
+// AUTHZ: support_* tables have no RLS path for residents; every read/write is filtered to the caller's community after settings:read/write
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { logAuditEvent } from '@propertypro/db';
 import {

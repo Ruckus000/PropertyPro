@@ -20,6 +20,7 @@ import {
   logAuditEvent,
   users,
 } from '@propertypro/db';
+// AUTHZ: reads sender name and community name/timezone for invitation and reminder emails; ids come from the gated caller
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { and, eq, gte, inArray, isNull, lt, or } from '@propertypro/db/filters';
 // AUTHZ: Public e-sign links are authorized by possession of submissionExternalId + signer slug and must resolve across tenants before any community context exists.

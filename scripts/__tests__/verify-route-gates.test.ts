@@ -4,8 +4,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
+  ADMIN_GATE_HELPERS,
   CannotCheckError,
   GATE_HELPERS,
+  SCAN_TARGETS,
+  type GateHelper,
   analyzeRouteFile,
   checkGateHelpers,
   checkRouteGates,
@@ -231,8 +234,11 @@ describe('checkRouteGates', () => {
     rmSync(base, { recursive: true, force: true });
   });
 
-  const writeRoute = (relDir: string, content: string) => {
-    const file = join(base, 'apps/web/src/app/api', relDir, 'route.ts');
+  const WEB = 'apps/web/src/app/api';
+  const ADMIN = 'apps/admin/src/app/api';
+  const web = (helpers: GateHelper[]) => [{ root: WEB, helpers }];
+  const writeRoute = (relDir: string, content: string, root = WEB) => {
+    const file = join(base, root, relDir, 'route.ts');
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, content);
   };
@@ -247,7 +253,7 @@ describe('checkRouteGates', () => {
 
   it('fails (1) on an injected ungated verb, naming the file and verb', () => {
     writeRoute('v1/widgets', `export async function GET() { return listWidgets(); }`);
-    expect(checkRouteGates(base, [])).toBe(1);
+    expect(checkRouteGates(base, web([]))).toBe(1);
     expect(errors()).toMatch(/v1\/widgets\/route\.ts: GET: calls no gate/);
   });
 
@@ -257,28 +263,72 @@ describe('checkRouteGates', () => {
       `// route-gate: community-open — any member may list widgets\nexport async function GET() {}\n` +
         `export async function POST() { if (!membership.isAdmin) throw new ForbiddenError('no'); }`,
     );
-    expect(checkRouteGates(base, [])).toBe(0);
+    expect(checkRouteGates(base, web([]))).toBe(0);
   });
 
   it('REFUSES (2) when the scan root does not exist', () => {
-    expect(checkRouteGates(base, [])).toBe(2);
+    expect(checkRouteGates(base, web([]))).toBe(2);
     expect(errors()).toContain('scan root apps/web/src/app/api does not exist');
   });
 
   it('REFUSES (2) when the scan root holds no route files', () => {
     mkdirSync(join(base, 'apps/web/src/app/api/v1/widgets'), { recursive: true });
-    expect(checkRouteGates(base, [])).toBe(2);
+    expect(checkRouteGates(base, web([]))).toBe(2);
     expect(errors()).toContain('found 0 route files');
   });
 
   it('REFUSES (2) when route files export no verbs at all', () => {
     writeRoute('v1/widgets', `export const dynamic = 'force-dynamic';`);
-    expect(checkRouteGates(base, [])).toBe(2);
+    expect(checkRouteGates(base, web([]))).toBe(2);
     expect(errors()).toContain('exported 0 HTTP verbs');
   });
 
   it('REFUSES (2) when a GATE_HELPERS entry points at nothing', () => {
     writeRoute('v1/widgets', `export async function GET() { requireGone(m); }`);
-    expect(checkRouteGates(base, [{ name: 'requireGone', file: 'lib/nope.ts' }])).toBe(2);
+    expect(checkRouteGates(base, web([{ name: 'requireGone', file: 'lib/nope.ts' }]))).toBe(2);
+  });
+  it('admin: an ungated admin verb fails; a sibling calling an admin gate passes', () => {
+    writeRoute('v1/widgets', `// route-gate: public — fixture\nexport async function GET() {}`);
+    writeRoute('admin/things', `export async function GET() { return listThings(); }`, ADMIN);
+    writeRoute('admin/gated', `export async function GET() { await requirePlatformAdmin(); }`, ADMIN);
+    mkdirSync(join(base, 'lib'), { recursive: true });
+    writeFileSync(join(base, 'lib/pa.ts'), `export async function requirePlatformAdmin() { throw new Error('no'); }`);
+    const admin = { root: ADMIN, helpers: [{ name: 'requirePlatformAdmin', file: 'lib/pa.ts' }] };
+    expect(checkRouteGates(base, [...web([]), admin])).toBe(1);
+    expect(errors()).toMatch(/admin\/things\/route\.ts: GET: calls no gate/);
+    expect(errors()).not.toMatch(/admin\/gated/);
+  });
+
+  it('keeps the two helper lists apart: an admin-only gate name does not gate a WEB verb', () => {
+    writeRoute('v1/billing', `export const POST = billingActionRoute({ run });`);
+    writeRoute('admin/billing', `export const POST = billingActionRoute({ run });`, ADMIN);
+    const lib = 'lib/billing.ts';
+    mkdirSync(join(base, 'lib'), { recursive: true });
+    writeFileSync(
+      join(base, lib),
+      `export function billingActionRoute(c) { return async () => { await requirePlatformAdmin(); }; }\n` +
+        `export async function requirePlatformAdmin() { throw new Error('no'); }`,
+    );
+    const adminHelpers = [
+      { name: 'billingActionRoute', file: lib },
+      { name: 'requirePlatformAdmin', file: lib },
+    ];
+    expect(checkRouteGates(base, [...web([]), { root: ADMIN, helpers: adminHelpers }])).toBe(1);
+    const errs = errors();
+    expect(errs).toMatch(/v1\/billing\/route\.ts: POST: calls no gate/);
+    expect(errs).not.toMatch(/admin\/billing/);
+  });
+
+  it('REFUSES (2) when the admin scan root does not exist, even if web is clean', () => {
+    writeRoute('v1/widgets', `// route-gate: public — fixture\nexport async function GET() {}`);
+    expect(checkRouteGates(base, [...web([]), { root: ADMIN, helpers: [] }])).toBe(2);
+    expect(errors()).toContain(`scan root ${ADMIN} does not exist`);
+  });
+
+  it('scans both apps by default, each with its own verified helper list', () => {
+    const repoRoot = join(__dirname, '..', '..');
+    expect(SCAN_TARGETS.map((t) => t.root)).toEqual([WEB, ADMIN]);
+    expect(SCAN_TARGETS[1]!.helpers).toBe(ADMIN_GATE_HELPERS);
+    expect(checkGateHelpers(repoRoot, ADMIN_GATE_HELPERS)).toEqual([]);
   });
 });

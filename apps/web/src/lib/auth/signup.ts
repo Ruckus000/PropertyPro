@@ -3,6 +3,7 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, pendingSignups } from '@propertypro/db';
 import { and, eq, gt, isNull, lt, notInArray, or } from '@propertypro/db/filters';
+// AUTHZ: GoTrue admin generateLink for the signup being provisioned; only reached once the caller owns the signupRequestId (census F1)
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { sendEmail } from '@propertypro/email';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';

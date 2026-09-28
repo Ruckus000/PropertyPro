@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { createServerClient } from '@propertypro/db/supabase/server';
+// AUTHZ: reads display identity (id, email, full_name) for the effective user only, after middleware validated the session
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import type { User } from '@supabase/supabase-js';
 import { UnauthorizedError } from './errors';

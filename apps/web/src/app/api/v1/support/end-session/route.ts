@@ -34,6 +34,7 @@ import {
   buildSupportSessionClearCookie,
   resolveSupportCookieHostname,
 } from '@propertypro/shared/http';
+// AUTHZ: closes only the support_sessions row named by the caller's verified signed support cookie
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { parseImpersonationCookie } from '@/lib/support/impersonation';

@@ -3,6 +3,7 @@ import {
   type SupportAccessLevel,
   type SupportSessionJwtPayload,
 } from '@propertypro/shared';
+// AUTHZ: confirms the support_sessions row named by a verified signed support cookie is still active
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

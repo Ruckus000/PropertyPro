@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server';
 import { nonLocalBackendReason } from '@propertypro/shared';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+// AUTHZ: GoTrue admin generateLink for local demo personas; the route 404s outside development
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
 // AUTHZ: Dev agent-login — password-based login for agents (dev-only, 404 in production)
