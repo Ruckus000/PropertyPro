@@ -61,14 +61,6 @@ export async function loadPdfJs(cacheBustKey?: string): Promise<PdfJsModule> {
   return pdfjs;
 }
 
-export async function preloadPdfJs(): Promise<void> {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  await loadPdfJs();
-}
-
 export function isPdfRenderCancellation(error: unknown): boolean {
   return error instanceof Error && error.message.includes('Rendering cancelled');
 }

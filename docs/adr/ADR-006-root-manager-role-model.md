@@ -54,11 +54,26 @@ the census at the end of this section (several files carry more than one call).
 This matters because Phase 2 is expected to turn §2 into a guard, and a guard
 written from the shorthand would flag legal code.
 
-**The rule, stated precisely: `designation` grants
-read/egress breadth, never write** — including *initiating* egress operations,
-whose bookkeeping writes (creating an export-job row, cancelling one) are the
-mechanism by which the egress happens — and it never authorizes a write to a
-community business record.
+**The rule, stated precisely (corrected 2026-09-28): `designation` grants
+read/egress breadth** — including *initiating* egress operations, whose
+bookkeeping writes (creating an export-job row, cancelling one) are the
+mechanism by which the egress happens — **plus one closed set of statutory
+board writes on elections and violations**, enumerated below. Outside that set
+it never authorizes a write to a community business record.
+
+> **Correction (2026-09-28).** The 2026-09-23 text of this section said
+> designation "never grants write" and that `requireBoardDesignation`'s
+> designation arm is "unreachable". That was true of **meetings** only. The
+> RBAC matrix deliberately gives owners AND tenants `write` on `elections` and
+> `violations` (the two-tier model: residents vote and self-report; admin
+> actions are checked at the route), so on those two resources
+> `requireBoardDesignation` is the ONLY thing between a resident and the admin
+> actions — and a board-designated resident passes it. That is deliberate
+> (board members run elections and enforce covenants; `setDesignation` seats a
+> non-owner only with `acknowledgeNonOwner`, and
+> `apps/web/__tests__/lib/statutory-gates.test.ts` pins that a non-owner
+> designee passes), but it IS a designation-granted business-record write, and
+> a guard written from the old text would have certified it as narrowing.
 
 Two halves of that sentence do different work, and collapsing them is the
 failure mode:
@@ -81,58 +96,58 @@ enters a decision in one of two syntactic shapes, and they are opposite:
   **add** a caller that the role gate would have refused. Every one of the twelve
   shipped sites that uses this shape is a read, an egress, an audience
   selection, or a UI affordance. **None reaches a community business record.**
-- **Restricting shape** — `requireBoardDesignation(membership)` from
-  `apps/web/src/lib/db/access-control.ts:97-101`, applied as a **second gate
-  after** `requirePermission(resource, 'write')`. Its own docblock at `:88-96`
-  states the contract: "Apply as a SECOND gate AFTER requirePermission(...) on
-  statutory routes only — general permissions still come from the role." Because
-  it can only refuse a caller who already passed the role gate, it **narrows**;
-  the authority for the write still comes from the role. It sits on three
-  statutory **mutation** routes (board-meeting calls, election
-  certify/close/cancel, violation admin writes) — so those ARE business-record
-  mutations whose access `designation` gates, in the restrictive direction.
+- **`requireBoardDesignation(membership)`** — `apps/web/src/lib/db/access-control.ts:103-107`
+  (docblock `:85-102`), written `membership.isAdmin || membership.designation != null`
+  and applied as a **second gate after** `requirePermission(resource, 'write')`.
+  Whether it restricts or grants depends on what the role gate before it
+  already admitted:
+  - **Meetings — restricting.** Residents hold no `meetings:write` (matrix
+    owner/tenant rows), so everyone who reaches the second gate
+    (`api/v1/meetings/route.ts:178`, board-type meetings) is already `isAdmin`:
+    the designation arm cannot fire. Narrowing-only; the ROLE authorizes.
+  - **Elections and violations — granting.** Owners and tenants hold `write`
+    on both, so a resident reaches the second gate, and a board-designated one
+    passes it. Here designation IS the authority for the admin action.
 
-**Therefore Phase 2's guard must encode: no `designation` may GRANT access to a
-path that mutates a community business record — NOT "no designation-gated
-mutation".** The blunt version would fail the three statutory routes above,
-which §2 itself sanctions and which `requireBoardDesignation` documents as
-narrowing-only; a gate that cries wolf on legal code gets an exemption added to
-it rather than read.
+**Sanctioned designation-granted statutory writes (the complete set today).**
+Via `requireElectionsAdminRole` (`apps/web/src/lib/elections/common.ts:23`) on
+`api/v1/elections/[id]/` **open, close, certify, cancel, eligibility**, and
+**proxies/[proxyId]/approve, reject**; and via `requireViolationAdminWrite`
+(`apps/web/src/lib/violations/common.ts:34`) on `api/v1/violations/[id]`
+**PATCH**, and `[id]/`**resolve, dismiss, fine, notice, hearing-notice**. Both
+resources are excluded for apartments, which have no board (`setDesignation`
+refuses them). Adding a route to this list requires amending this ADR.
 
-**The guard has to key on composition, not on syntax.** `requireBoardDesignation`
-is itself written `membership.isAdmin || membership.designation != null`
-(`access-control.ts:97-101`), so a regex hunting for an OR'd `designation` test
-flags it, and that would be a false positive. What makes it restricting rather
-than granting is not its shape but its **position**: it is only ever reached
-after `requirePermission(resource, 'write')` has already confined the caller to
-the management tier (`api/v1/elections/[id]/certify/route.ts:51-52` is the
-canonical pair — role gate on line 51, designation gate on line 52). So the
-checkable proposition is: *the single definition of `requireBoardDesignation` is
-the only place an OR'd `designation` predicate may stand on a mutation path, and
-every call of it must be preceded by a `requirePermission(..., 'write')` on the
-same request.* Any other granting predicate reaching a mutation is a violation.
-A guard that cannot see call order should whitelist that one function by name and
-say so in its output, rather than pretending the syntax is the rule.
+**Therefore the guard must encode: `designation` may GRANT access to a path that
+mutates a community business record ONLY through `requireBoardDesignation` on
+the routes enumerated above (plus the two export-bookkeeping POSTs below) —
+NOT "no designation-gated mutation"**, which would fail every sanctioned
+statutory route and earn an exemption instead of a read.
+
+**The guard has to key on an allow-list, not on syntax or call order.** A regex
+hunting for an OR'd `designation` test flags `requireBoardDesignation` itself,
+and "preceded by `requirePermission(..., 'write')`" proves nothing on elections
+or violations, where that role gate admits residents
+(`api/v1/elections/[id]/certify/route.ts:51-52` is the canonical pair). So the
+checkable proposition is: *`requireBoardDesignation` is the only OR'd
+`designation` predicate on a mutation path, and every call site of it (or of
+the two wrappers) is on the enumerated list above or is the meetings route.*
+Any other granting predicate reaching a mutation is a violation.
 
 Two things the guard must NOT be, which the wording above invites:
 
-- Not a claim that `requireBoardDesignation` is load-bearing today. Its
-  designation arm is **unreachable** — `requirePermission(..., 'write')` already
-  restricts meetings / elections / violations to the management tier, and no
-  resident role holds `write` on those resources, so every caller who reaches the
-  second gate is already `isAdmin`. The helper is deliberate forward scaffolding
-  for a resident-held board seat and is behaviour-neutral until then
-  (`access-control.ts:91-96`). A guard that asserts "statutory writes require a
-  designation" would be reporting a gate the code does not perform — the exact
-  defect class `guard:legacy-roles` pass 2 was built to catch.
-- Not a licence to add a fourth granting site. If the resident-board-seat
-  work lands, board-meeting creation becomes a designation-**granted**
-  business-record write, and that is a statutory exception needing its own
-  ADR amendment — not a silent update to this section.
+- Not a claim that statutory writes *require* a designation. Management-tier
+  callers pass every one of these gates on `isAdmin` alone; a guard asserting
+  "statutory writes require a designation" would report a gate the code does not
+  perform — the exact defect class `guard:legacy-roles` pass 2 was built to catch.
+- Not a licence to widen the list. Granting residents `meetings:write` (a
+  resident-held board seat calling board meetings) would turn the meetings
+  site into a designation-**granted** write too; that is a statutory exception
+  needing its own ADR amendment — not a silent update to this section.
 
-**Sanctioned granting-shape writes (the complete set today).** These two are the
-only writes a granting `designation` predicate admits, and adding a third
-requires amending this ADR:
+**Sanctioned egress-bookkeeping writes.** Besides the statutory list above, these
+two are the only writes a granting `designation` predicate admits, and adding a
+third requires amending this ADR:
 
 - `POST /api/v1/export/jobs` — creates the export job
   (`apps/web/src/app/api/v1/export/jobs/route.ts:21-22`).
@@ -168,13 +183,13 @@ all the same kind of thing:
 | 8 | `apps/web/src/components/compliance/compliance-command-center.tsx:37` | grant | **UI gating** | board vs. manager persona label |
 | 9 | `apps/web/src/components/compliance/compliance-command-center.tsx:41` | grant | **UI gating** | board vs. manager view of the compliance centre |
 | 10 | `apps/web/src/components/onboarding/welcome-screen.tsx:65,77,94` | grant | **UI gating** | welcome-screen persona and panel selection |
-| 11 | `apps/web/src/app/api/v1/meetings/route.ts:178` | **restrict** | statutory mutation, narrowing-only | `requireBoardDesignation` gates creating / updating a `meetingType: 'board'`; `meetings:write` from the ROLE is what authorizes the write |
-| 12 | `apps/web/src/lib/elections/common.ts:23` (`requireElectionsAdminRole`, called at e.g. `api/v1/elections/[id]/certify/route.ts:52`) and `apps/web/src/lib/violations/common.ts:34` (`requireViolationAdminWrite`) | **restrict** | statutory mutation, narrowing-only | second gate after `requirePermission(elections｜violations, 'write')` |
+| 11 | `apps/web/src/app/api/v1/meetings/route.ts:178` | **restrict** | statutory mutation, narrowing-only | `requireBoardDesignation` gates creating / updating a `meetingType: 'board'`; residents hold no `meetings:write`, so the ROLE authorizes the write |
+| 12 | `apps/web/src/lib/elections/common.ts:23` (`requireElectionsAdminRole`) and `apps/web/src/lib/violations/common.ts:34` (`requireViolationAdminWrite`), on the routes enumerated above | **grant** | **sanctioned statutory write** | residents hold `elections`/`violations` write, so the designation arm is what admits a board-designated resident (incl. an acknowledged non-owner) to the admin actions |
 
-Items 1–10 are granting-shape and none of them mutates a business record. Items
-11–12 are the restricting shape, and their mutations are authorized by the role,
-not the designation. So the rule holds at every shipped site, and the guard
-proposition above is the one that encodes it without false positives.
+Items 1–10 grant, and none of them mutates a business record. Item 11
+restricts. Item 12 grants a business-record write — the sanctioned statutory set
+enumerated above, and the only one. (Row 12 was classified "restrict,
+narrowing-only" until 2026-09-28; see the correction note at the top of §2a.)
 
 Note also what the census proves by absence: `RBAC_MATRIX` / `checkPermissionV2`
 (§3) still do not read `designation` at all. The "general permissions" claim has

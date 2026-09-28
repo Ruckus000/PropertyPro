@@ -162,9 +162,6 @@
   "apps/web/src/components/shared/alert-banner.tsx": [
     "AlertBanner"
   ],
-  "apps/web/src/components/shared/bulk-action-bar.tsx": [
-    "BulkActionBar"
-  ],
   "apps/web/src/components/shared/chart-empty-state.tsx": [
     "ChartEmptyState"
   ],

@@ -61,6 +61,31 @@ adversarially verified; counts re-run at HEAD.
 > - Dated prod facts (read-only): migration 0076 live (2026-09-26); 5 live `faqs`
 >   rows, every `role_visibility` empty, and the kill switch off for every
 >   community (2026-09-26, re-checked 2026-09-28). Evidence: `docs/audits/2026-09-26-phase2-prod-preconditions.md`.
+>
+> **Phase 1 post-merge review (2026-09-28).** #1172/#1179 merged unreviewed; the
+> review found no security hole (AZ-01 leases is sound) but three things, fixed in
+> their own PRs:
+> - **SVC-06 got the error shape backwards.** drizzle 0.45 wraps every failed
+>   query (`DrizzleQueryError`, Postgres `code` on `.cause`), so the kept
+>   top-level-only duplicate predicate — and several hand-rolled copies — never
+>   matched: intended 409s were 500s (elections ballot race, every repeat proxy
+>   designation, signup's slug message, onboarding bootstrap reruns). Fixed and
+>   pinned against a real database.
+> - **ADR-006 §2a said designation "never grants write".** False on elections and
+>   violations, where residents hold `write` and `requireBoardDesignation` is the
+>   grant; corrected to an enumerated sanctioned set.
+> - **Four guards could pass without checking** (symlink main-detection, comment
+>   prose read as code, empty scan, stale baseline slack).
+>
+> Deferred with triggers: **finance fence atomicity** — the fence is written
+> before, not with, the ledger postings, so a fenced event now fails loudly
+> (`FinanceWebhookFenceConflict`) rather than being skipped or re-posted; real fix
+> is fence+writes in one transaction after 3.T2 (trigger: 3.T2 lands, or the
+> first live finance event — 0 rows 2026-09-28). **Stripe `isRetry` in-flight
+> re-run** (`webhooks/stripe/route.ts` step 3: a retry arriving while the first
+> attempt still runs re-processes concurrently; pre-dates Phase 1, needs an
+> in-flight lease column) — trigger: billing launch or any double-processing
+> report.
 
 ## 1. Headline numbers
 
@@ -269,7 +294,7 @@ Sequenced by **dependency**, not impact. The two load-bearing gates: (a) TST-01/
 | 1.3 | **CON-01 + CON-02** (one PR) — idiom-agnostic 157-route census (union of resolver + finance-parser); port `checkCeiling` into `verify-tenant-scope.ts`, freeze at 157, print the denominator; plus the ledger-D9 self-test in `scripts/__tests__/verify-tenant-scope.test.ts` including a `calendar/google/callback` case — a prose-only `tenantScope` mention must NOT count as declaring (amended 2026-09-23 per the header note) | S | low | — | `scripts/lib/ceiling.ts`, `verify-contracts.ts` shape |
 | 1.4 | **CON-07 + CON-03** — allowlist entries carry classification as data (`Map<path, reason>`); state the A1 floor (~42 permanent) explicitly and close the lane; regenerate drain-loop PERMANENT_SKIPS from the map, drop 3 stale entries | S | low | — | workflow's existing RUNNER_BLOCKED taxonomy; `drain-one-batch.workflow.js:222` one-line change |
 | 1.5 | **TST-06** — integration collected-count floor (port `expectedTestCount` shape) | S | low | — | `e2e.yml:378` |
-| 1.6 | **R3-05 + R3-06 + DBB-06** — doc corrections in one PR: ADR-006 addendum (designation grants read/egress breadth, never write; strike shipped-deferred bullets), guard-header truth | S | low | — | ADR addendum convention |
+| 1.6 | **R3-05 + R3-06 + DBB-06** — doc corrections in one PR: ADR-006 addendum (designation grants read/egress breadth — *corrected 2026-09-28: plus the enumerated elections/violations statutory writes, see ADR-006 §2a*; strike shipped-deferred bullets), guard-header truth | S | low | — | ADR addendum convention |
 | 1.7 | **SVC-06 + SVC-07 + R3-04 + R3-03 + DC-01 + DC-02** — the mechanical trash take: shared `isUniqueConstraintError` consolidated BY SEMANTICS to ≤3 definition files (2 shared predicates + 1 documented-in-file digest-queue fork; amended 2026-09-23 per the header note), delete 5 dead exports + 13 orphan files, delete the dead `'owner'` arm, pass the roles filter in useCommunityRoster | S | low | — | shrink-only baseline pattern for the `guard:service-dead-exports` guard |
 
 ### Phase 2 — Choke-point consolidation (weeks 2–6)

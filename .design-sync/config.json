@@ -140,7 +140,6 @@
     "UnitSearchCombobox": "../../apps/web/src/components/shared/UnitSearchCombobox.tsx",
     "UserSearchCombobox": "../../apps/web/src/components/shared/UserSearchCombobox.tsx",
     "AlertBanner": "../../apps/web/src/components/shared/alert-banner.tsx",
-    "BulkActionBar": "../../apps/web/src/components/shared/bulk-action-bar.tsx",
     "ChartEmptyState": "../../apps/web/src/components/shared/chart-empty-state.tsx",
     "ChartSkeleton": "../../apps/web/src/components/shared/chart-skeleton.tsx",
     "ChecklistStepper": "../../apps/web/src/components/shared/checklist-stepper.tsx",
@@ -504,11 +503,6 @@
     },
     "NavRail": {
       "cardMode": "column"
-    },
-    "BulkActionBar": {
-      "cardMode": "single",
-      "primaryStory": "DocumentsSelected",
-      "viewport": "900x620"
     },
     "PageHeaderHelpButton": {
       "cardMode": "column"
