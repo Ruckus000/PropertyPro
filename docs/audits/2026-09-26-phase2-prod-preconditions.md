@@ -6,6 +6,19 @@ DATABASE_URL with `PGOPTIONS="-c default_transaction_read_only=on"`. No secret
 was echoed. No write was attempted; the read-only transaction mode would have
 refused one.
 
+> **Reconciliation note (2026-09-28).** The query results below are the
+> dated record and are unchanged. The slice/decision IDs in this file are
+> **round-2 role labels** and renumber between spec derivations — read them
+> by role, never by number: "S7 PR-B" = the **help-content bridge-deletion
+> PR (PR-B)**, S16b in the 2026-09-28 corrected spec (S7 there is an
+> authz-drain slice); "S11" = the **notice-wiring slice** (violation-notice
+> buttons; S11 in the corrected spec is the admin ledgers); "D19" = the
+> merge-time re-census rule for PR-B. The "Consequence for the run" section
+> is superseded by the roadmap amendments as corrected 2026-09-28
+> (`docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md`): there are
+> exactly **two** in-run human stops (Gate 0 and the PR-B census pause), and
+> auto-merge is not exercisable until the roadmap's launch precondition is met.
+
 Intake BLOCKER W1 (run `wf_46fe67df-5ff`) named three prod-touching
 preconditions that an unattended run may not execute. Results:
 
@@ -56,6 +69,13 @@ PR body must still carry the dated query results and the "off as of
 
 ## Consequence for the run
 
+*(As recorded 2026-09-26 — superseded; see the reconciliation note above.)*
 Per the human's decision: the Phase 2 run may **auto-merge** after CI and the
 four-lens review, EXCEPT S7's PR-B (bridge deletion), which stays human-gated
 on a fresh dated census at merge time. S11 may merge on the evidence above.
+
+*(Current, 2026-09-28):* two in-run human stops — **Gate 0** (disposition-table
+approval before any drain merges) and the **PR-B** census pause (fresh dated
+`role_visibility` census at merge time). The notice-wiring slice may merge on
+the evidence above; it never flips the kill switch. Auto-merge for everything
+else is gated on the roadmap's 2026-09-28 launch precondition.

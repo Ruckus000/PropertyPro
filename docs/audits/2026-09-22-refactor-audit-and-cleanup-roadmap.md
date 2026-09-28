@@ -42,20 +42,31 @@ adversarially verified; counts re-run at HEAD.
 > (`noticePdfGenerationEnabled` in `communities.community_settings`, strict
 > `=== true`, enforced by `requireNoticePdfEnabled`). **The Phase 2 slice wires
 > the UI and the routes; it does NOT flip the kill switch for any community.**
-> Legal posture, corrected 2026-09-28 against the shipped generator: the two
-> audit-time defects behind the gate are **already remediated** in
-> `apps/web/src/lib/utils/violation-notice-pdf.ts` — every generated notice opens
-> with a "DRAFT — FOR REVIEW BY THE ASSOCIATION AND ITS COUNSEL" banner (:202),
-> the 14-day period is a *measurement with a verify-before-sending note*, not an
-> assertion (:421-430), and the outcomes text names approval by "a committee of
-> members who are not officers, directors, or their relatives" (:453), not the
-> Board (the Board-naming finding is F-04's, not F-05's;
-> `docs/audits/2026-08-09-legal-risk-audit.md`). Enablement nonetheless stays a
-> **human/legal stop pending counsel review** — F-05's class-(C) UPL analysis is
-> broader than the two remediated defects, and kill-switch enablement is the
-> launch gating decision, not an engineering default. A button that renders the
-> 403 "not available for this community" until that decision is made is the
-> correct shipped state. The stale audit-time docblock on
+> Legal posture, corrected 2026-09-28 against the shipped generator
+> (`apps/web/src/lib/utils/violation-notice-pdf.ts`). **Remediation is PARTIAL —
+> do not read it as done.** Remediated: every generated notice opens with a
+> "DRAFT — FOR REVIEW BY THE ASSOCIATION AND ITS COUNSEL" banner (:202); the
+> 14-day period is a *measurement with a verify-before-sending note*, not an
+> assertion (:421-430); the outcomes text names approval by "a committee of
+> members who are not officers, directors, or their relatives" (:453-454), not
+> the Board (the Board-naming finding is F-04's; F-05's remediation ledger
+> records the signature block no longer signing as the Board —
+> `docs/audits/2026-08-09-legal-risk-audit.md` §F-04/§F-05, remediation table);
+> and the **violation** notice's rights section became a pointer to the
+> governing documents (:313-330). **NOT remediated:** (a) the **hearing**
+> notice still enumerates "Your Rights at the Hearing" as four assertions
+> (:435-440), including "You may request a continuance" — the exact class of
+> text F-05 names and its remediation table records as removed; (b) the
+> hearing notice hardcodes "$100 per violation, up to $1,000 in aggregate" (:454-455)
+> while the fine service enforces per-community overrides via
+> `resolveFineCaps` (`packages/shared/src/compliance/fine-caps.ts`), so a
+> notice can state caps the association does not apply. Enablement therefore
+> stays a **human/legal stop pending counsel review**, and (a)/(b) are
+> fix-before-re-enable items for the notice-wiring slice's follow-up, not
+> for the kill-switch decision to absorb silently. Kill-switch enablement is
+> the launch gating decision, not an engineering default. A button that
+> renders the 403 "not available for this community" until that decision is
+> made is the correct shipped state. The stale audit-time docblock on
 > `requireNoticePdfEnabled` (`apps/web/src/lib/violations/common.ts:65-71`) is
 > corrected by whichever Phase 2 slice next touches that file (the lib-domain
 > guard drain owns it).
@@ -72,9 +83,11 @@ adversarially verified; counts re-run at HEAD.
 
 > **Amendment (2026-09-26, human decision + dated prod evidence — Phase 2 run
 > mode):** The Phase 2 phase-run is authorized to **auto-merge after CI and the
-> four-lens review**, with exactly TWO planned human stops (Gate 0 — the
-> disposition-table approval before any drain merges, per the 2026-09-27
-> amendment — and the PR-B census pause below), because the three
+> four-lens review**, with exactly TWO planned in-run human stops (Gate 0 —
+> the disposition-table approval before any drain merges, per the 2026-09-27
+> amendment — and the PR-B census pause below; notice kill-switch enablement
+> is a third human decision but sits OUTSIDE the run, which never flips it),
+> because the three
 > prod-touching preconditions an unattended run may not execute were
 > **pre-executed read-only on 2026-09-26** (psql, `default_transaction_read_only=on`;
 > full evidence in `docs/audits/2026-09-26-phase2-prod-preconditions.md` — the
@@ -181,18 +194,32 @@ adversarially verified; counts re-run at HEAD.
 > exactly as it is. **The elections proxy revoke is NOT a projection** —
 > corrected 2026-09-28: it is a deny-gate MUTATION call site (the
 > grantor-or-admin fork at `elections-service.ts:1299-1304`, on an `actorIsAdmin`
-> flag passed by a route with no admin gate of its own). The census MUST emit it
-> as an adjudicable row; it is KEPT only by the no-disposition default, and if
-> the human DRAINs it, the parity harness rows must cover grantor/non-grantor ×
-> admin/non-admin. The idiom convergence onto the shared `isManagementTier`
-> helper — which ALREADY EXISTS module-private at
-> `packages/shared/src/billing/permissions.ts:30` (unexported, so the barrel
-> star-export does not expose it; the Phase 3 work is EXPORTING it and deduping
-> the inline copies at `packages/shared/src/access-policies.ts:202` and
-> `apps/web/src/app/api/v1/search/users/route.ts:29`, not writing it) — becomes
-> a **named Phase 3 item** (it needs its own parity harness and, for
-> units/leases, sits atop the freshest rent-leak fix — not an unattended-run
-> edit). It stays private through Phase 2, pinned by spot-check. The drain-lane
+> flag passed by a route with no admin gate of its own — its only gate is
+> `requirePermission('elections','write')`, which owner, tenant AND manager all
+> hold). The census MUST emit it as a visible row, but its disposition is
+> **KEPT, with no DRAIN option**: the fork is a grantor-OWNERSHIP check OR'd
+> with admin, and the RBAC matrix has no ownership concept. Every
+> matrix-expressible replacement is wrong — `elections:write` is true for all
+> three rows, so "draining" the admin half onto the matrix would let any
+> member revoke any other member's §718.128 proxy. A DRAIN disposition on this
+> row is a defect, not an adjudication. The idiom convergence becomes a
+> **named Phase 3 item**, and it is smaller than earlier text claimed: the
+> management-tier predicate already exists EXPORTED as `isAdminRole`
+> (`packages/shared/src/access-policies.ts:217`, via `resolveMatrixRole`) and as
+> the constant `ADMIN_TIER_DB_ROLES` (`packages/shared/src/role-transition.ts:16`),
+> from which `membership.isAdmin` is derived
+> (`apps/web/src/lib/api/community-membership.ts:128`). The two idioms above
+> are therefore **semantically identical today** (role ∈ {property_manager,
+> root_manager}); a third, module-private copy is `isManagementTier`
+> (`packages/shared/src/billing/permissions.ts:30`), and `resolveMatrixRole`
+> (`access-policies.ts:202`) inlines the same test.
+> (`search/users/route.ts:29` is a display-label mapper, not a predicate copy —
+> out of scope.) Phase 3's work is choosing ONE of the existing names and
+> deduping — a rename-level change whose safety argument is the equivalence
+> above, pinned by a unit test over the three roles × isUnitOwner, not a new
+> parity harness. It still stays out of Phase 2 (units/leases sit atop the
+> freshest rent-leak fix, and KEPT rows are not edited). Exporting
+> `isManagementTier` changes no call site and is not itself a swap. The drain-lane
 > rule: authz-drain slices operate ONLY on rows whose human-approved disposition
 > is DRAIN; **editing a KEPT row is a defect.** Round-3 D2 and D4 are reconciled
 > to this: the round-3 "KEPT-SHAPE idiom swap" is struck for Phase 2 and
@@ -210,7 +237,21 @@ adversarially verified; counts re-run at HEAD.
 > floor" dedupe note (moot). `.claude/rules/api-patterns.md` is updated in the
 > same commit so no auto-loaded rule still commands the deletion. Where an
 > amendment names a slice ID, the ID is a role label for the derivation current
-> at that date; the executed spec's own IDs are authoritative at run time.
+> at that date; the executed spec's own IDs are authoritative at run time. The
+> same applies to `docs/audits/2026-09-26-phase2-prod-preconditions.md`, whose
+> round-2 IDs are mapped in its own reconciliation note.
+> `scripts/verify-contracts.ts`'s docblock and pass message are corrected in the
+> same PR (it is the allowlist's named source of truth and still printed the
+> DC-05 deletion on every `pnpm lint`).
+>
+> **Launch precondition (2026-09-28):** the auto-merge authorization above is
+> NOT exercisable until the spec-side must-fixes that ENFORCE it have landed in
+> the executed spec: a targeted authz-parity run as a done-criterion on every
+> drain slice; `--check-drained` registered as a `guard:*` in the lint fleet;
+> the Gate-0 overrides JSON declared human-write-only (a slice or repair agent
+> writing it is a defect); and the two human stops encoded as structured gates,
+> not prose. Until then, the "exactly two human stops" rule is prose with no
+> mechanism, and Stage 2 runs in PR-only mode (no auto-merge).
 
 ## 1. Headline numbers
 
