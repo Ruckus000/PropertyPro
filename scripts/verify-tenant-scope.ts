@@ -39,6 +39,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkCeiling } from './lib/ceiling';
+import { collectCommentRanges, commentRangesWork } from './lib/comment-ranges';
 import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -60,6 +61,43 @@ export interface Violation {
   message: string;
 }
 
+/**
+ * "I could not check, so I refuse to pass" — an unreadable file, a failed
+ * directory walk, or a source that did not parse. main() turns it into exit 2.
+ * Each of these used to shrink the scan silently: an unreadable route read as
+ * '' and simply dropped out of the census.
+ */
+export class CouldNotCheckError extends Error {}
+
+// ---------------------------------------------------------------------------
+// Comment blanking
+// ---------------------------------------------------------------------------
+
+/**
+ * The source with every comment replaced by spaces of equal length (newlines
+ * kept), so offsets survive and no regex or brace-matcher below can read
+ * comment prose as code. Without it, `// tenantScope: n/a` read as a
+ * declaration and dropped a route from the census, and the `'` in `// don't`
+ * opened a phantom string that swallowed every later `defineRoute` block.
+ *
+ * Throws CouldNotCheckError when the file does not parse: that must never be
+ * read as "no comments".
+ */
+export function blankComments(fileName: string, source: string): string {
+  const found = collectCommentRanges(fileName, source);
+  if (found === null) {
+    throw new CouldNotCheckError(`${fileName} did not parse, so its comments cannot be told from code.`);
+  }
+  if (found.ranges.length === 0) return source;
+  const chars = source.split('');
+  for (const r of found.ranges) {
+    for (let i = r.pos; i < r.end && i < chars.length; i++) {
+      if (chars[i] !== '\n') chars[i] = ' ';
+    }
+  }
+  return chars.join('');
+}
+
 // ---------------------------------------------------------------------------
 // File walking
 // ---------------------------------------------------------------------------
@@ -68,16 +106,16 @@ function walkRouteFiles(dir: string, out: string[]): void {
   let entries;
   try {
     entries = readdirSync(dir);
-  } catch {
-    return;
+  } catch (err) {
+    throw new CouldNotCheckError(`could not read directory ${dir}: ${(err as Error).message}`);
   }
   for (const entry of entries) {
     const full = join(dir, entry);
     let stats;
     try {
       stats = statSync(full);
-    } catch {
-      continue;
+    } catch (err) {
+      throw new CouldNotCheckError(`could not stat ${full}: ${(err as Error).message}`);
     }
     if (stats.isDirectory()) {
       if (entry === '__tests__' || entry === 'node_modules') continue;
@@ -190,11 +228,14 @@ export function validateRoute(
   file: string,
 ): Violation[] {
   const violations: Violation[] = [];
-  const combined = `${routeContent}\n${contractContent}`;
+  // Comment prose is blanked first, so neither the block extractor nor any
+  // regex below can read a comment as code.
+  const routeCode = blankComments(file, routeContent);
+  const combined = `${routeCode}\n${blankComments(contractFileFor(file), contractContent)}`;
   for (const block of extractDefineRouteBlocks(combined)) {
     checkBlock(block, file, violations);
   }
-  if (hasQueryOrBodyScope(combined) && !BOUND_RUNROUTE_IMPORT.test(routeContent)) {
+  if (hasQueryOrBodyScope(combined) && !BOUND_RUNROUTE_IMPORT.test(routeCode)) {
     violations.push({
       file,
       message:
@@ -280,7 +321,7 @@ const CROSS_TENANT_PATH = /\/api\/v1\/(pm|admin|internal|webhooks)\//;
 export interface CensusRoute {
   /** Repo-relative path to the `route.ts`. */
   path: string;
-  /** Its source, or '' when unreadable. */
+  /** Its source (an unreadable file refuses the scan with exit 2). */
   routeContent: string;
   /** The SIBLING `contract.ts` source, or null when that file does not exist. */
   contractContent: string | null;
@@ -310,14 +351,15 @@ export interface CensusRoute {
  * predicates without touching the filesystem.
  */
 export function isBacklogRoute(route: CensusRoute): boolean {
-  if (!RUN_ROUTE_CALL.test(route.routeContent)) return false;
-  const handResolving =
-    RESOLVER_CALL.test(route.routeContent) ||
-    RESOLVER_DELEGATE_IMPORT.test(route.routeContent);
+  // Every predicate reads code, never comment prose (see blankComments).
+  const routeCode = blankComments(route.path, route.routeContent);
+  if (!RUN_ROUTE_CALL.test(routeCode)) return false;
+  const handResolving = RESOLVER_CALL.test(routeCode) || RESOLVER_DELEGATE_IMPORT.test(routeCode);
   if (!handResolving) return false;
   if (CROSS_TENANT_PATH.test(route.path)) return false;
   if (route.contractContent === null) return false;
-  return !TENANT_SCOPE_DECLARATION.test(route.contractContent);
+  const contractCode = blankComments(contractFileFor(route.path), route.contractContent);
+  return !TENANT_SCOPE_DECLARATION.test(contractCode);
 }
 
 /** The census: every route in the drain population, in scan order. */
@@ -329,16 +371,11 @@ export function collectBacklogCensus(routes: CensusRoute[]): CensusRoute[] {
 function readCensusRoutes(): CensusRoute[] {
   const files: string[] = [];
   walkRouteFiles(join(repoRoot, API_V1_ROOT), files);
-  return files.map((file) => {
-    const contractPath = join(dirname(file), 'contract.ts');
-    let contractContent: string | null;
-    try {
-      contractContent = readFileSync(contractPath, 'utf-8');
-    } catch {
-      contractContent = null;
-    }
-    return { path: relative(repoRoot, file), routeContent: safeRead(file), contractContent };
-  });
+  return files.map((file) => ({
+    path: relative(repoRoot, file),
+    routeContent: readRequired(file),
+    contractContent: readOptional(join(dirname(file), 'contract.ts')),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +386,12 @@ function main(): void {
   console.log('🔍 Tenant-scope Guard (Plan B2 well-formedness + CON-01/02 backlog ratchet)');
   console.log('='.repeat(60));
 
+  // parseDiagnostics is a TS internal: prove the parse-failure detector and the
+  // comment walk still work before a clean scan is trusted.
+  if (!commentRangesWork()) {
+    throw new CouldNotCheckError('the comment-range extractor failed its self-test.');
+  }
+
   const routeFiles: string[] = [];
   walkRouteFiles(join(repoRoot, API_ROOT), routeFiles);
 
@@ -357,9 +400,10 @@ function main(): void {
 
   for (const routeFile of routeFiles) {
     const routeRel = relative(repoRoot, routeFile);
-    const routeContent = safeRead(routeFile);
-    const contractContent = safeRead(join(dirname(routeFile), 'contract.ts'));
-    if (hasQueryOrBodyScope(`${routeContent}\n${contractContent}`)) scopedRoutes++;
+    const routeContent = readRequired(routeFile);
+    const contractContent = readOptional(join(dirname(routeFile), 'contract.ts')) ?? '';
+    const code = `${blankComments(routeRel, routeContent)}\n${blankComments(contractFileFor(routeRel), contractContent)}`;
+    if (hasQueryOrBodyScope(code)) scopedRoutes++;
     violations.push(...validateRoute(routeContent, contractContent, routeRel));
   }
 
@@ -421,15 +465,37 @@ function main(): void {
   console.log('\n✅ All declared tenantScopes are well-formed and the backlog is within ceiling.');
 }
 
-function safeRead(file: string): string {
+/** The sibling `contract.ts` path for a route file (used for parse + messages). */
+function contractFileFor(routeFile: string): string {
+  return join(dirname(routeFile), 'contract.ts');
+}
+
+/** A file that must exist — any read error is could-not-check, never ''. */
+function readRequired(file: string): string {
   try {
     return readFileSync(file, 'utf-8');
-  } catch {
-    return '';
+  } catch (err) {
+    throw new CouldNotCheckError(`could not read ${file}: ${(err as Error).message}`);
+  }
+}
+
+/** A file that may legitimately be absent (ENOENT → null); any other error refuses. */
+function readOptional(file: string): string | null {
+  try {
+    return readFileSync(file, 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new CouldNotCheckError(`could not read ${file}: ${(err as Error).message}`);
   }
 }
 
 // ESM main-detection via the shared helper (symlink- and encoding-safe).
 if (isMainModule(import.meta.url)) {
-  main();
+  try {
+    main();
+  } catch (err) {
+    if (!(err instanceof CouldNotCheckError)) throw err;
+    console.error(`\n❌ Could not check tenantScope (refusing to pass): ${err.message}`);
+    process.exit(2);
+  }
 }
