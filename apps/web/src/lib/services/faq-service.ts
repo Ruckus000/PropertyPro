@@ -332,6 +332,10 @@ export interface SearchCommunityFaqsResult {
 export async function searchCommunityFaqs(
   communityId: number,
   query: string,
+  // The resolved help viewer role (resolveHelpViewerRoleFromMembership).
+  // Required: this search used to return every FAQ's full answer regardless of
+  // its roleVisibility, unlike listVisibleFaqsPage (route-authz census F4).
+  role: string | null | undefined,
   limit = 10,
 ): Promise<SearchCommunityFaqsResult> {
   const scoped = createScopedClient(communityId);
@@ -339,6 +343,7 @@ export async function searchCommunityFaqs(
   const qLower = query.toLowerCase();
   const hits = rows
     .filter((f) => {
+      if (!isFaqVisibleToRole(f, role)) return false;
       const question = String(f['question'] ?? '').toLowerCase();
       const answer = String(f['answer'] ?? '').toLowerCase();
       return question.includes(qLower) || answer.includes(qLower);

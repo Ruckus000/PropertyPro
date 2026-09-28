@@ -125,7 +125,11 @@ describe('GET /api/v1/help/search', () => {
       },
     ]);
     expect(json.data.faqs).toEqual([{ id: 1, question: 'Q', answer: 'A' }]);
-    expect(searchCommunityFaqsMock).toHaveBeenCalledWith(42, 'compliance', 10);
+    // Route-authz census F4: both sources are filtered by the viewer's help role
+    // (a resident owner resolves to 'owner'). Revert-check: drop effectiveRole
+    // from either call and this goes red.
+    expect(searchCommunityFaqsMock).toHaveBeenCalledWith(42, 'compliance', 'owner', 10);
+    expect(searchArticlesMock).toHaveBeenCalledWith(expect.anything(), 'compliance', 'owner');
   });
 
   it('fails open when getFeaturesForCommunity throws — still returns results', async () => {

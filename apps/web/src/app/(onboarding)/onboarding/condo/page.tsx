@@ -35,6 +35,12 @@ export default async function CondoOnboardingPage({ searchParams }: OnboardingPa
         redirect('/dashboard');
     }
 
+    // Manager-only: the wizard state carries invitee PII and unit rents, and the
+    // page passes it to the client (same gate as the /api/v1/onboarding routes).
+    if (!membership.isAdmin) {
+      redirect('/dashboard');
+    }
+
     const wizardState = await loadWizardState<CondoWizardStatePayload>(context.communityId, 'condo');
 
     // Once completed or definitively skipped, hide wizard

@@ -84,6 +84,37 @@ describe('GET /api/v1/amenities/[id]/schedule', () => {
     expect(getAmenityScheduleForCommunityMock).toHaveBeenCalledWith(42, 5);
   });
 
+  // Route-authz census F5 (2026-09-28): any member received every reservation's
+  // userId, unitId and notes. Revert-check: return the schedule unredacted for
+  // non-admins and this case goes red.
+  it('shows a resident only busy slots for others, and full details of their own', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      ...MEMBERSHIP,
+      role: 'resident',
+      isAdmin: false,
+    });
+    const start = new Date('2026-10-01T15:00:00Z');
+    const end = new Date('2026-10-01T16:00:00Z');
+    getAmenityScheduleForCommunityMock.mockResolvedValue([
+      { id: 1, communityId: 42, amenityId: 5, userId: 'user-1', unitId: 11, startTime: start, endTime: end, status: 'confirmed', notes: 'my party', createdAt: start, updatedAt: start },
+      { id: 2, communityId: 42, amenityId: 5, userId: 'neighbour', unitId: 12, startTime: start, endTime: end, status: 'confirmed', notes: 'private note', createdAt: start, updatedAt: start },
+    ]);
+
+    const res = await GET(req(), ctx());
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: Array<Record<string, unknown>> };
+
+    expect(json.data[0]).toMatchObject({ id: 1, userId: 'user-1', unitId: 11, notes: 'my party', isMine: true });
+    expect(json.data[1]).toEqual({
+      id: 2,
+      amenityId: 5,
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      status: 'confirmed',
+      isMine: false,
+    });
+  });
+
   it('returns 401 when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
     const res = await GET(req(), ctx());
