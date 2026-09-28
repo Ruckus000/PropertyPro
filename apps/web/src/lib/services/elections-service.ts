@@ -1297,6 +1297,10 @@ async function updateProxyStatusForCommunity(
     }
 
     if (nextStatus === 'revoked') {
+      // NEVER drain this onto the RBAC matrix (roadmap 2.1): it is a grantor-
+      // OWNERSHIP check OR'd with admin, the matrix has no ownership concept, and
+      // owner/tenant/manager all hold `elections:write` — a matrix-only gate would
+      // let any member revoke any other member's §718.128 proxy.
       const isGrantor = proxy.grantorUserId === actorUserId;
       if (!isGrantor && !actorIsAdmin) {
         throw new ForbiddenError('Only the proxy grantor or an admin can revoke a proxy');

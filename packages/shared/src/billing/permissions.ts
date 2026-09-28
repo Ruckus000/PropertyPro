@@ -18,17 +18,18 @@
  * `board_member` designation strip an operational manager's billing-admin power.
  */
 import type { CommunityRole } from '../index';
-import { isRootManager } from '../role-transition';
+import { ADMIN_TIER_DB_ROLES, isRootManager } from '../role-transition';
 
 export type LockedFeatureBehavior = 'upgrade' | 'request' | 'hidden';
 
 /**
  * Management-tier predicate. Only the two v3 manager roles qualify; residents
- * (owner or tenant) never do. Runtime roles are always v3 — a legacy string
- * simply falls through to `false`.
+ * (owner or tenant) never do. Reads `ADMIN_TIER_DB_ROLES` — the same source as
+ * `membership.isAdmin` and `isAdminRole` — so the tiers cannot drift apart
+ * (pinned in `packages/shared/__tests__/role-transition.test.ts`).
  */
 function isManagementTier(role: CommunityRole | null): boolean {
-  return role === 'property_manager' || role === 'root_manager';
+  return role !== null && (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
 }
 
 /**

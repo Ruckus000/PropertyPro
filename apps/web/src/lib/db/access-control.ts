@@ -88,11 +88,17 @@ export function requirePermission(
  * designation. Apply as a SECOND gate AFTER requirePermission(resource, action) on
  * statutory routes only — general permissions still come from the role.
  *
- * NOTE: the designation arm is currently unreachable on the statutory routes,
- * because requirePermission(..., 'write') already filters to management-tier
- * (residents lack write on meetings/elections/violations). It is intentional
- * forward-looking scaffolding for a future resident-held board seat; today this
- * helper is equivalent to the isAdmin check it replaces (behavior-neutral).
+ * Who passes, per route family (matrix in packages/shared/src/rbac-matrix.ts):
+ *   - meetings: residents lack `meetings:write`, so requirePermission already
+ *     filters to the management tier and the designation arm never fires here.
+ *   - elections / violations (via requireElectionsAdminRole /
+ *     requireViolationAdminWrite): owners AND tenants hold `write`, so the
+ *     designation arm IS live — any board-designated resident passes, including
+ *     a non-owner. That is deliberate: setDesignation requires an explicit
+ *     `acknowledgeNonOwner` to seat a non-owner (role-management-service.ts),
+ *     and apps/web/__tests__/lib/statutory-gates.test.ts pins it.
+ * Managers lose their designation on promotion, so in practice the arm admits
+ * resident board members only.
  */
 export function requireBoardDesignation(membership: CommunityMembership): void {
   if (!(membership.isAdmin || membership.designation != null)) {
