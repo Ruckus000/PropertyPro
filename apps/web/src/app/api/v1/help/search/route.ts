@@ -28,7 +28,7 @@ import {
   searchArticles,
 } from '@/lib/services/help-article-service';
 import { searchCommunityFaqs } from '@/lib/services/faq-service';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import { helpSearchGetContract } from './contract';
 
 /**
@@ -84,13 +84,13 @@ export const GET = withErrorHandler(
     });
     // Both sources are filtered by the viewer's help role, as /help/article and
     // /faqs already are (route-authz census F4: this route used to skip it).
-    const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
-    const articleResults = searchArticles(allArticles, q, effectiveRole);
+    const viewer = resolveHelpViewerTokens(membership);
+    const articleResults = searchArticles(allArticles, q, viewer);
 
     const { hits: faqResults, totalRowCount: faqCount } = await searchCommunityFaqs(
       communityId,
       q,
-      effectiveRole,
+      viewer,
       10,
     );
 

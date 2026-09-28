@@ -91,7 +91,7 @@ describe('GET /api/v1/help/contextual', () => {
       },
     ]);
     // MEMBERSHIP is role 'resident' + isUnitOwner, which resolves to 'owner'.
-    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'owner', 8);
+    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', ['owner'], 8);
   });
 
   it('honors a board designation on a property_manager membership for the viewer role', async () => {
@@ -106,7 +106,7 @@ describe('GET /api/v1/help/contextual', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'board_member', 8);
+    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', ['manager', 'board_member'], 8);
   });
 
   it('returns 401 when unauthenticated', async () => {

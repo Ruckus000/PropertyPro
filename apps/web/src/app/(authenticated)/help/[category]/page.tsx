@@ -6,7 +6,7 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getReadArticleSlugs } from '@/lib/help/read-state';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import {
   getCategoryTree,
   isArticleVisibleToRole,
@@ -24,7 +24,7 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
   const { category } = await params;
   const userId = await requirePageAuthenticatedUserId();
   const membership = await requireCommunityMembership();
-  const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
+  const viewer = resolveHelpViewerTokens(membership);
 
   const categoryTree = getCategoryTree();
   const allArticles = categoryTree[category];
@@ -71,8 +71,8 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
 
   // Sort: role-matched first, then alphabetical
   const sorted = [...articles].sort((a, b) => {
-    const aIsRelevant = isArticleVisibleToRole(a, effectiveRole);
-    const bIsRelevant = isArticleVisibleToRole(b, effectiveRole);
+    const aIsRelevant = isArticleVisibleToRole(a, viewer);
+    const bIsRelevant = isArticleVisibleToRole(b, viewer);
     if (aIsRelevant !== bIsRelevant) return aIsRelevant ? -1 : 1;
     return a.title.localeCompare(b.title);
   });

@@ -15,6 +15,7 @@
  * will fail.
  */
 import { z } from 'zod';
+import { HELP_AUDIENCES } from '@propertypro/shared';
 // Shared with the public marketing-resources corpus — see
 // lib/content/frontmatter-patterns.ts for why these are single-sourced.
 import {
@@ -70,7 +71,9 @@ export const helpFrontmatterSchema = z
       .string()
       .min(1, 'slug is required')
       .regex(SLUG_REGEX, 'slug must be lowercase kebab-case (e.g. "welcome-to-propertypro")'),
-    roles: z.array(z.string()).default([]),
+    // One closed vocabulary (HELP_AUDIENCES): a typo'd or retired token used to
+    // hide an article silently, because visibility matched nobody.
+    roles: z.array(z.enum(HELP_AUDIENCES)).default([]),
     keywords: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
     relatedArticles: z.array(z.string()).default([]),

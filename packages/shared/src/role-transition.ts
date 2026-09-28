@@ -63,20 +63,23 @@ export const BOARD_DESIGNATIONS = ['board_president', 'board_member'] as const;
 export type BoardDesignation = (typeof BOARD_DESIGNATIONS)[number];
 
 /**
- * v1 community-role strings as used in help-article frontmatter `roles:` arrays
- * and FAQ `roleVisibility` — CONTENT vocabulary, distinct from the runtime role
- * migration (the `.mdx`/FAQ rows still spell roles this way). Defined here, in
- * the guard-exempt module, so the help viewer-role bridge can reference them
- * without inlining literals that `guard:legacy-roles` would count. Same pattern
- * as BOARD_DESIGNATIONS above.
+ * The audience vocabulary of help content — help-article frontmatter `roles:`
+ * and FAQ `roleVisibility`. CONTENT vocabulary, not runtime roles: a viewer
+ * resolves to a SET of these (`resolveHelpViewerTokens` in apps/web), one base
+ * audience (`manager` for property/root managers, `owner`/`tenant` for
+ * residents) plus the board designation when they hold one.
+ *
+ * Tag content `board_*` ONLY where a board designation actually grants the
+ * action it describes — elections admin, violation admin writes, community
+ * export (`requireBoardDesignation`, `isExportEligible`). Everywhere else a
+ * board member is just an owner or tenant: tagging admin how-tos `board_*`
+ * shows residents instructions that end in a 403.
+ *
+ * Lives in this guard-exempt module because the two board values are the
+ * designation strings, which `guard:legacy-roles` would count elsewhere.
  */
-export const HELP_FRONTMATTER_ROLES = {
-  boardMember: 'board_member',
-  boardPresident: 'board_president',
-  cam: 'cam',
-  siteManager: 'site_manager',
-  propertyManagerAdmin: 'property_manager_admin',
-} as const;
+export const HELP_AUDIENCES = ['manager', 'owner', 'tenant', ...BOARD_DESIGNATIONS] as const;
+export type HelpAudience = (typeof HELP_AUDIENCES)[number];
 
 /**
  * Canonical "is a board member" predicate (role-v3 §3.2, Phase 3.2).

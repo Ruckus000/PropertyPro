@@ -26,7 +26,7 @@ import {
 } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import { faqsCreateContract, faqsListContract } from './contract';
 
 // route-gate: community-open — listVisibleFaqsPage filters by the viewer's role; POST is admin-only
@@ -40,8 +40,8 @@ export const GET = withErrorHandler(
 
     await ensureFaqsExist(communityId);
 
-    const viewerRole = resolveHelpViewerRoleFromMembership(membership);
-    const result = await listVisibleFaqsPage(communityId, viewerRole, {
+    const viewer = resolveHelpViewerTokens(membership);
+    const result = await listVisibleFaqsPage(communityId, viewer, {
       cursor: query.cursor,
       pageSize: query.pageSize,
     });

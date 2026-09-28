@@ -101,7 +101,10 @@ vi.mock('@/lib/api/tenant-context', () => ({
   resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
 }));
 
-vi.mock('@propertypro/shared', () => ({
+// Real module (it is side-effect free), with only the feature lookup stubbed:
+// the help viewer resolver reads hasBoardDesignation from here.
+vi.mock('@propertypro/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@propertypro/shared')>()),
   getFeaturesForCommunity: getFeaturesForCommunityMock,
 }));
 
@@ -141,7 +144,9 @@ describe('GET /api/v1/help/article', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue({
-      role: 'board_member',
+      role: 'resident',
+      isUnitOwner: true,
+      designation: 'board_member',
       presetKey: null,
       communityType: 'condo_718',
     });
