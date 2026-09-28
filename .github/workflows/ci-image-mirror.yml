@@ -8,7 +8,8 @@ name: CI Image Mirror
 #   - mirror-supabase-images — the local Supabase stack `supabase start` runs
 #                              (e2e.yml, stripe-e2e.yml); see the job comment.
 #
-# Why: integration-tests.yml is a required check AND the production-deploy gate.
+# Why: integration-tests.yml is the production-deploy gate (deploy.yml waits on it;
+# it is NOT a required merge check — measured 2026-09-28, see CLAUDE.md).
 # Its service container used to come anonymously from public.ecr.aws, and on
 # 2026-09-27 that failed twice in "Initialize containers" with
 # `toomanyrequests: Data limit exceeded` — the anonymous quota is per source IP,
@@ -108,7 +109,7 @@ jobs:
 
             # Fail closed: prove GHCR serves the EXACT pinned bytes. A copy that
             # re-wrote the index would change its digest and every consumer's
-            # pull-by-digest would then fail on a required check.
+            # pull-by-digest would then fail, and with it the deploy gate.
             got="sha256:$(skopeo inspect --raw "docker://${dest_repo}@${digest}" | sha256sum | cut -d' ' -f1)"
             if [ "$got" != "$digest" ]; then
               echo "::error::GHCR returned ${got} for ${digest}"

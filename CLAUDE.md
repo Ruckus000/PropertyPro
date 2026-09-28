@@ -411,8 +411,13 @@ lint, typecheck, unit tests, the no-mock guard, migration ordering, the producti
 build, production-safe E2E smoke tests, and the performance budget on every PR to
 `main` and every non-inert push to `main`. Its job names — `Lint`, `Typecheck`,
 `Unit Tests`, `no-mock-guard`, `migration-ordering`, `perf-check`, and `Build` —
-are the required branch-protection contexts. Integration Tests, E2E, Branch
-Freshness Guard, and Scoped DB Access Guard remain separate GitHub workflows.
+are the required branch-protection contexts — and the ONLY ones (measured
+2026-09-28 via the `branches/main` API). Integration Tests, E2E and Branch
+Freshness Guard are separate workflows and are **not** required to merge;
+Integration Tests gates the production deploy instead. Enforcement is
+`non_admins`, so an admin merge bypasses even the seven. The separate
+Scoped DB Access workflow was deleted (INF-04): it re-ran `guard:db-access`,
+which the required `Lint` job already runs on every path it triggered on.
 
 `localci` is optional local feedback only. It may still run a fast pre-push gate
 and detached suite, but neither result authorizes a merge and neither may be a

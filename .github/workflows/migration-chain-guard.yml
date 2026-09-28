@@ -44,10 +44,9 @@ on:
       - scripts/verify-migration-ordering.ts
       - package.json
       - pnpm-lock.yaml
-  # Post-merge belt-and-braces. Filtered to main for the INF-04 reason
-  # scoped-db-access-guard.yml documents: feature-branch pushes are already
-  # covered by the pull_request trigger, and an unfiltered push trigger just
-  # doubles every run on the same commit.
+  # Post-merge belt-and-braces. Filtered to main (INF-04): feature-branch
+  # pushes are already covered by the pull_request trigger, and an unfiltered
+  # push trigger just doubles every run on the same commit.
   push:
     branches: [main]
     paths:

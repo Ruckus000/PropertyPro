@@ -69,7 +69,7 @@ jobs:
 
           # Fail closed. Writing an unvalidated string into a workflow file would
           # be worse than not bumping at all — a malformed pin breaks every job
-          # that uses the image, including a REQUIRED status check.
+          # that uses the image, including the production-deploy gate.
           if ! printf '%s' "$latest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
             echo "::error::Registry did not return a usable digest (got: '${latest:-<empty>}')"
             exit 1
