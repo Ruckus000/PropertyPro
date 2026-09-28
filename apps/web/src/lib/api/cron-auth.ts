@@ -22,8 +22,8 @@
  * platform cron secret. Undefined/empty candidates are ignored, and if every
  * candidate is missing the request is refused — it still fails closed.
  */
-import { timingSafeEqual } from 'node:crypto';
 import type { NextRequest } from 'next/server';
+import { constantTimeEqual } from '@/lib/crypto/hmac-token';
 import { UnauthorizedError } from '@/lib/api/errors/UnauthorizedError';
 
 function readBearerToken(req: NextRequest): string | null {
@@ -33,13 +33,6 @@ function readBearerToken(req: NextRequest): string | null {
   return raw.slice('bearer '.length).trim();
 }
 
-/** Constant-time equality. Length is compared first because timingSafeEqual throws on a mismatch. */
-function secretMatches(expected: string, actual: string): boolean {
-  const a = Buffer.from(expected);
-  const b = Buffer.from(actual);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
 
 /**
  * Validates that the request carries a Bearer token matching at least one of
@@ -68,7 +61,7 @@ export function requireCronSecret(
   // work done is independent of which one matches.
   let matched = false;
   for (const candidate of candidates) {
-    if (secretMatches(candidate, token)) matched = true;
+    if (constantTimeEqual(candidate, token)) matched = true;
   }
 
   if (!matched) {

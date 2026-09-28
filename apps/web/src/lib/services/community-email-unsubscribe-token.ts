@@ -18,7 +18,7 @@
  *
  * See docs/audits/2026-08-09-legal-risk-audit.md F-11.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { openHmacToken, signHmacToken } from '@/lib/crypto/hmac-token';
 
 /**
  * What the reader is opting out of.
@@ -62,9 +62,7 @@ export function signCommunityEmailUnsubscribeToken(
 ): string | null {
   const secret = getSecret();
   if (!secret) return null;
-  const encoded = encodePayload(payload);
-  const sig = createHmac('sha256', secret).update(encoded).digest('base64url');
-  return `${encoded}.${sig}`;
+  return signHmacToken(encodePayload(payload), secret);
 }
 
 /** Verify + decode. Returns null when malformed, forged, tampered, or unconfigured. */
@@ -74,14 +72,8 @@ export function verifyCommunityEmailUnsubscribeToken(
   const secret = getSecret();
   if (!secret) return null;
 
-  const dot = token.lastIndexOf('.');
-  if (dot <= 0) return null;
-  const encoded = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-
-  const expectedSig = createHmac('sha256', secret).update(encoded).digest('base64url');
-  if (expectedSig.length !== sig.length) return null;
-  if (!timingSafeEqual(Buffer.from(expectedSig), Buffer.from(sig))) return null;
+  const encoded = openHmacToken(token, secret);
+  if (encoded === null) return null;
 
   let decoded: string;
   try {

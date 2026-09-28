@@ -154,12 +154,10 @@ export function AppSidebar({
         resolvedPlanId,
         isUnitOwner,
         lapsedAdmin,
-      )
-        // Without a community there is no role, so itemVisibleForRole lets every
-        // role-gated item through. Harmless when they were inert links to
-        // /select-community; now that the picker makes them navigate, keep them
-        // out rather than route someone into a permission-denied page.
-        .filter((item) => !(needsCommunityPicker && item.visibility));
+      );
+  // Without a community there is no role, and the shared role-visibility gate
+  // (lib/navigation/role-visibility.ts) hides every role-gated item for a null
+  // role — so the picker never routes someone into a permission-denied page.
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
   const useSlimNav = !isPmContext && shouldUseSlimNav(role, resolvedPlanId);

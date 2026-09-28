@@ -178,9 +178,15 @@ describe('getVisibleItems', () => {
     expect(ids).not.toContain('violations-inbox');
   });
 
-  it('shows all items when role/features are null', () => {
+  // Roadmap 2.9 / INF-02: a null role used to see every item here, while the
+  // palette's copy of the gate hid role-gated ones. The shared gate hides them
+  // (fails closed); null FEATURES still skip the feature gate.
+  it('shows every ungated item, and no role-gated one, when role/features are null', () => {
     const items = getVisibleItems(NAV_ITEMS, null, null);
-    expect(items.length).toBe(NAV_ITEMS.length);
+    expect(items.map((i) => i.id)).toEqual(
+      NAV_ITEMS.filter((i) => !i.visibility).map((i) => i.id),
+    );
+    expect(NAV_ITEMS.some((i) => i.visibility)).toBe(true);
   });
 
   it('hides packages and visitors for HOA communities (regression)', () => {

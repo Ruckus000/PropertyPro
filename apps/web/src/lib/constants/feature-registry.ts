@@ -40,7 +40,7 @@ import {
   ClipboardCheck,
 } from 'lucide-react';
 import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
-import { isAdminRole } from '@propertypro/shared';
+import { matchesRoleVisibility, type RoleVisibility } from '@/lib/navigation/role-visibility';
 import type { RbacAction, RbacResource } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 
@@ -57,7 +57,7 @@ export type RegistryAudience = 'resident' | 'admin' | 'all';
  * - `'admin'`: management tier only (`property_manager` / `root_manager`).
  * - `'owner_or_admin'`: unit owners + management tier (finance-read surfaces).
  */
-export type RegistryVisibility = 'all' | 'admin' | 'owner_or_admin';
+export type RegistryVisibility = RoleVisibility;
 
 export interface FeatureRegistryItem {
   id: string;
@@ -766,10 +766,7 @@ export function roleMatchesRegistryItem(
   gate: RegistryVisibility,
   isUnitOwner?: boolean,
 ): boolean {
-  if (gate === 'all') return true;
-  const admin = isAdminRole(role);
-  if (gate === 'owner_or_admin') return admin || isUnitOwner === true;
-  return admin; // 'admin'
+  return matchesRoleVisibility(gate, role, isUnitOwner);
 }
 
 // ---------------------------------------------------------------------------
