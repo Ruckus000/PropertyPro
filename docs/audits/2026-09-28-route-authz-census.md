@@ -103,5 +103,11 @@ The other 18 files are gated, or read only the caller's own row or a single low-
 - `mobile/settings` read every member's notification preferences and picked the caller's in JS. It is now drained onto `getNotificationPreferencesForUser`.
 - `mobile/meetings` skips the API's lapsed-subscription check (`requireEntitledForAdminRead`) for managers. That is billing policy, not visibility.
 
-A separate bug came out of the same read, and is tracked apart from this work: `/welcome` finds the caller's unit by `ownerUserId`, so a tenant never sees theirs.
+A separate bug came out of the same read: `/welcome` found the caller's unit by `ownerUserId`, so a tenant never saw theirs. It is fixed by resolving the unit through `listActorUnitIds`, like the ~40 other consumers.
+
+**Deferral: demo tenants have no role unit.** On 2026-09-28 production had 16 tenants, all in demo communities, and none with `user_roles.unit_id`: the seed bypassed `validateRoleAssignment`, which requires a unit for every resident. 15 of them are linked only by a lease; 1 has no link at all. Every `listActorUnitIds` consumer (packages, visitors, work orders, payments, ARC, violations, elections, and now `/welcome`) therefore sees no unit for them. Two fixes exist:
+- repair the seed data (cheap);
+- make `listActorUnitIds` read active leases. That widens what ~40 consumers let a tenant touch, so it needs its own authorization review.
+
+Trigger: the first real apartment community, or a demo-quality report that tenants "have no unit".
 

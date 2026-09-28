@@ -39,6 +39,7 @@ import {
 } from '@/lib/announcements/read-visibility';
 import { WelcomeScreen } from '@/components/onboarding/welcome-screen';
 import { checkPermissionV2 } from '@/lib/db/access-control';
+import { listActorUnitIds } from '@/lib/units/actor-units';
 
 interface WelcomePageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -60,6 +61,24 @@ function computeComplianceScore(
     totalItems: total,
     satisfiedItems: satisfied,
   };
+}
+
+/** The resident's unit: the role's assigned unit first, then any unit they own. */
+async function findResidentUnit(
+  scoped: ReturnType<typeof createScopedClient>,
+  userId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const [unitId] = await listActorUnitIds(scoped, userId);
+  if (unitId === undefined) return [];
+  return scoped.selectFrom(
+    units,
+    {
+      unitNumber: units.unitNumber,
+      building: units.building,
+      floor: units.floor,
+    },
+    eq(units.id, unitId),
+  );
 }
 
 function resolveLogoUrl(logoPath: string | undefined): string | null {
@@ -123,18 +142,11 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
         )
       : Promise.resolve([]),
 
-    // User's unit (for residents)
-    membership.role === 'resident'
-      ? scoped.selectFrom(
-          units,
-          {
-            unitNumber: units.unitNumber,
-            building: units.building,
-            floor: units.floor,
-          },
-          eq(units.ownerUserId, user.id),
-        )
-      : Promise.resolve([]),
+    // User's unit (for residents). The assigned unit lives on the role row
+    // (every resident requires one — role-validator's UNIT_REQUIRED_ROLES), so
+    // resolve it the way the rest of the app does. Looking it up by
+    // `units.ownerUserId` alone meant a tenant never saw their unit.
+    membership.role === 'resident' ? findResidentUnit(scoped, user.id) : Promise.resolve([]),
 
     // Branding
     getBrandingForCommunity(communityId),
