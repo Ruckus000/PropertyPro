@@ -3,8 +3,10 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
+import { isMainModule } from './lib/is-main-module';
+
 type RuleCode = 'DB001' | 'DB002' | 'DB003' | 'DB004' | 'DB005';
-type GuardMode = 'scoped' | 'admin';
+export type GuardMode = 'scoped' | 'admin';
 
 interface Violation {
   file: string;
@@ -14,7 +16,7 @@ interface Violation {
   message: string;
 }
 
-interface AppGuardConfig {
+export interface AppGuardConfig {
   appDir: string;
   mode: GuardMode;
   unsafeAllowlist: Set<string>;
@@ -540,7 +542,7 @@ function validateSpecifier(
   }
 }
 
-function collectViolationsForFile(file: string, config: AppGuardConfig): Violation[] {
+export function collectViolationsForFile(file: string, config: AppGuardConfig): Violation[] {
   const content = readFileSync(file, 'utf8');
   const sourceFile = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
   const violations: Violation[] = [];
@@ -695,14 +697,25 @@ function stripSqlComments(sql: string): string {
   return s;
 }
 
-function runAppGuard(config: AppGuardConfig): number {
+/**
+ * Exit codes are tri-state, per `.claude/rules/verification.md`: 0 clean ·
+ * 1 violations · 2 could not check. Roadmap 2.10: a missing app directory used
+ * to print `SKIP` and return 0, so a moved `apps/admin` would have passed
+ * green having scanned nothing. It now refuses, as does an empty scan.
+ */
+export function runAppGuard(config: AppGuardConfig): 0 | 1 | 2 {
   if (!isDirectory(config.appDir)) {
     // eslint-disable-next-line no-console
-    console.log(`SKIP: DB access guard skipped for ${config.appDir} (${config.mode} mode, directory not found).`);
-    return 0;
+    console.error(`CANNOT CHECK: ${config.appDir} (${config.mode} mode) does not exist — refusing to pass.`);
+    return 2;
   }
 
   const files = listRuntimeSourceFiles(config.appDir);
+  if (files.length === 0) {
+    // eslint-disable-next-line no-console
+    console.error(`CANNOT CHECK: 0 runtime source files in ${config.appDir} (${config.mode} mode).`);
+    return 2;
+  }
   const violations = files.flatMap((file) => collectViolationsForFile(file, config));
 
   // Dead allowlist entries: allowlisted files that no longer import an
@@ -751,8 +764,8 @@ function runAppGuard(config: AppGuardConfig): number {
 function runRlsPolicyCheck(): number {
   if (!isDirectory(migrationsRoot)) {
     // eslint-disable-next-line no-console
-    console.error(`Migrations directory not found: ${migrationsRoot}`);
-    return 1;
+    console.error(`CANNOT CHECK: migrations directory not found: ${migrationsRoot}`);
+    return 2;
   }
 
   const migrationFiles = readdirSync(migrationsRoot, { withFileTypes: true })
@@ -821,8 +834,8 @@ function runRlsPolicyCheck(): number {
 async function runRlsTenantTableCoverageCheck(): Promise<number> {
   if (!isDirectory(migrationsRoot)) {
     // eslint-disable-next-line no-console
-    console.error(`Migrations directory not found: ${migrationsRoot}`);
-    return 1;
+    console.error(`CANNOT CHECK: migrations directory not found: ${migrationsRoot}`);
+    return 2;
   }
 
   const migrationFiles = readdirSync(migrationsRoot, { withFileTypes: true })
@@ -845,10 +858,10 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(
-      'Could not load RLS_TENANT_TABLES from packages/db/src/schema/rls-config.ts:',
+      'CANNOT CHECK: could not load RLS_TENANT_TABLES from packages/db/src/schema/rls-config.ts:',
       err,
     );
-    return 1;
+    return 2;
   }
 
   // service_only and audit_log_restricted tables are written exclusively under
@@ -952,27 +965,17 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
   return 1;
 }
 
-async function main(): Promise<number> {
-  let exitCode = 0;
-
-  for (const config of APP_CONFIGS) {
-    const code = runAppGuard(config);
-    if (code !== 0) {
-      exitCode = code;
-    }
-  }
-
-  const rlsCode = runRlsPolicyCheck();
-  if (rlsCode !== 0) {
-    exitCode = rlsCode;
-  }
-
-  const coverageCode = await runRlsTenantTableCoverageCheck();
-  if (coverageCode !== 0) {
-    exitCode = coverageCode;
-  }
-
-  return exitCode;
+/**
+ * Every check runs; the worst result wins, so a "could not check" (2) is never
+ * masked by a later violation (1) — the old "last non-zero wins" could do that.
+ */
+export async function checkScopedDbAccess(): Promise<number> {
+  const codes: number[] = APP_CONFIGS.map((config) => runAppGuard(config));
+  codes.push(runRlsPolicyCheck());
+  codes.push(await runRlsTenantTableCoverageCheck());
+  return Math.max(...codes);
 }
 
-main().then((code) => process.exit(code));
+if (isMainModule(import.meta.url)) {
+  checkScopedDbAccess().then((code) => process.exit(code));
+}

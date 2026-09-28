@@ -43,6 +43,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkCeiling } from './lib/ceiling';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -171,7 +172,7 @@ const PENDING_DRAIN_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/meetings/route.ts',
 ]);
 
-const ALLOWLIST_REASONS = new Map<string, AllowlistReason>([
+export const ALLOWLIST_REASONS: ReadonlyMap<string, AllowlistReason> = new Map<string, AllowlistReason>([
   // `runRoute`'s `buildResponse` always constructs a fresh
   // `NextResponse.json(...)`, so a handler has no way to attach a `Set-Cookie`.
   // This route's whole job is to close the support session AND expire the
@@ -301,13 +302,20 @@ const ALLOWLIST_REASONS = new Map<string, AllowlistReason>([
 // Filesystem walk
 // ---------------------------------------------------------------------------
 
+/** "I could not check, so I refuse to pass" — the guard exits 2. */
+class CannotCheckError extends Error {}
+
+// Roadmap 2.10: this walk used to swallow read and stat errors and return [],
+// so a missing scan root scanned 0 routes. That still exited 1 — but only
+// because every allowlist entry then looked "dead", the wrong reason and the
+// wrong exit code for "I could not check". Both now refuse.
 function walkDir(dirAbs: string): string[] {
   const out: string[] = [];
   let entries: string[];
   try {
     entries = readdirSync(dirAbs);
-  } catch {
-    return out;
+  } catch (err) {
+    throw new CannotCheckError(`could not read ${dirAbs}: ${(err as Error).message}`);
   }
   for (const entry of entries) {
     if (entry === 'node_modules') continue;
@@ -315,8 +323,8 @@ function walkDir(dirAbs: string): string[] {
     let s;
     try {
       s = statSync(abs);
-    } catch {
-      continue;
+    } catch (err) {
+      throw new CannotCheckError(`could not stat ${abs}: ${(err as Error).message}`);
     }
     if (s.isDirectory()) {
       out.push(...walkDir(abs));
@@ -331,18 +339,37 @@ function walkDir(dirAbs: string): string[] {
 // Main
 // ---------------------------------------------------------------------------
 
-function main(): void {
+/**
+ * Run the guard over `baseDir/SCAN_ROOT`: 0 clean · 1 violations · 2 could not
+ * check (missing root, walk error, or zero route.ts files). Tests pass a
+ * fixture tree and their own allowlist.
+ */
+export function checkContracts(
+  baseDir: string = repoRoot,
+  allowlist: ReadonlyMap<string, AllowlistReason> = ALLOWLIST_REASONS,
+): 0 | 1 | 2 {
   console.log('🔍 Route Contract Adoption Guard (Plan A1)');
   console.log('='.repeat(60));
 
-  const rootAbs = resolve(repoRoot, SCAN_ROOT);
-  const files = walkDir(rootAbs);
+  const rootAbs = resolve(baseDir, SCAN_ROOT);
+  let files: string[];
+  try {
+    if (!statSync(rootAbs, { throwIfNoEntry: false })?.isDirectory()) {
+      throw new CannotCheckError(`scan root ${SCAN_ROOT} does not exist under ${baseDir}`);
+    }
+    files = walkDir(rootAbs);
+    if (files.length === 0) throw new CannotCheckError(`0 route.ts files under ${SCAN_ROOT}`);
+  } catch (err) {
+    if (!(err instanceof CannotCheckError)) throw err;
+    console.error(`\n❌ Could not check route contracts (refusing to pass): ${err.message}`);
+    return 2;
+  }
 
   // For each route: is it contracted?
   const uncontractedFiles: string[] = [];
   const contractedFiles: string[] = [];
   for (const fileAbs of files) {
-    const rel = relative(repoRoot, fileAbs);
+    const rel = relative(baseDir, fileAbs).split('\\').join('/');
     const content = readFileSync(fileAbs, 'utf-8');
     if (RUN_ROUTE_REGEX.test(content)) {
       contractedFiles.push(rel);
@@ -355,7 +382,7 @@ function main(): void {
   const allowlistedHits = new Set<string>();
   const newViolations: string[] = [];
   for (const rel of uncontractedFiles) {
-    if (ALLOWLIST_REASONS.has(rel)) {
+    if (allowlist.has(rel)) {
       allowlistedHits.add(rel);
     } else {
       newViolations.push(rel);
@@ -366,7 +393,7 @@ function main(): void {
   // longer exist). Pruning these keeps the debt ledger honest and the
   // count meaningful as a progress metric.
   const deadAllowlistEntries: string[] = [];
-  for (const entry of ALLOWLIST_REASONS.keys()) {
+  for (const entry of allowlist.keys()) {
     if (!allowlistedHits.has(entry)) {
       deadAllowlistEntries.push(entry);
     }
@@ -395,7 +422,7 @@ function main(): void {
   ]);
   const unclassifiedEntries: string[] = [];
   const misusedPendingDrain: string[] = [];
-  for (const [entry, reason] of ALLOWLIST_REASONS) {
+  for (const [entry, reason] of allowlist) {
     if (!reason || !VALID_REASONS.has(reason)) {
       unclassifiedEntries.push(`${entry} (reason: ${JSON.stringify(reason)})`);
     }
@@ -407,7 +434,7 @@ function main(): void {
   // closed lane around routes the plan says must drain in Phase 3.5.
   const pendingDrainFrozen: string[] = [];
   for (const drainable of PENDING_DRAIN_ROUTES) {
-    if (ALLOWLIST_REASONS.has(drainable) && ALLOWLIST_REASONS.get(drainable) !== 'pending-drain') {
+    if (allowlist.has(drainable) && allowlist.get(drainable) !== 'pending-drain') {
       pendingDrainFrozen.push(drainable);
     }
   }
@@ -415,7 +442,7 @@ function main(): void {
   console.log(`\nScanned ${files.length} route.ts files.`);
   console.log(
     `Contracted: ${contractedFiles.length}; ` +
-      `Allowlist: ${ALLOWLIST_REASONS.size} grandfathered files; ` +
+      `Allowlist: ${allowlist.size} grandfathered files; ` +
       `${allowlistedHits.size} active hits.`,
   );
 
@@ -483,7 +510,7 @@ function main(): void {
   // after the 2026-07-18 audit measured it.
   const ceiling = checkCeiling(
     'Uncontracted-route allowlist',
-    ALLOWLIST_REASONS.size,
+    allowlist.size,
     ALLOWLIST_CEILING,
     'Contract the route through runRoute() instead of allowlisting it — see ' +
       '`.claude/rules/api-patterns.md` for the runner constraints that make a ' +
@@ -496,15 +523,16 @@ function main(): void {
   const hasErrors =
     newViolations.length > 0 || deadAllowlistEntries.length > 0 || unclassifiedEntries.length > 0 ||
     misusedPendingDrain.length > 0 || pendingDrainFrozen.length > 0 || ceiling.failed;
-  if (hasErrors) {
-    process.exit(1);
-  }
+  if (hasErrors) return 1;
 
   console.log(
     `\n✅ No new uncontracted routes outside the allowlist. ` +
-      `${ALLOWLIST_REASONS.size} classified files remain (ceiling ${ALLOWLIST_CEILING}) — A1 lane CLOSED; ` +
+      `${allowlist.size} classified files remain (ceiling ${ALLOWLIST_CEILING}) — A1 lane CLOSED; ` +
       `it shrinks only via CON-05 (3 pending-drain CRUD routes, Phase 3.5).`,
   );
+  return 0;
 }
 
-main();
+if (isMainModule(import.meta.url)) {
+  process.exit(checkContracts());
+}
