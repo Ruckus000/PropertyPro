@@ -54,11 +54,18 @@ const CHROMIUM_TIMEOUT_MS = 120_000;
  * The two cheap assertions below stay UNCONDITIONAL: they are
  * platform-independent and they are what actually catches the regression class.
  * The render is confirmation, not the guard.
+ *
+ * Two gates, because the override changes WHICH browser runs. `itRenders` runs
+ * whatever renderHtmlToPdf will launch — with PUPPETEER_EXECUTABLE_PATH set on a
+ * Mac that is desktop Chrome, which is how that branch gets exercised.
+ * `itRendersBundled` is for cases that blank the override and so always fall
+ * back to the Linux x64 binary; gating those on the override too reddened them
+ * on every Mac that followed .env.example.
  */
-const canRunBundledChromium =
-  (process.platform === 'linux' && process.arch === 'x64')
-  || Boolean(process.env.PUPPETEER_EXECUTABLE_PATH?.trim());
-const itRenders = canRunBundledChromium ? it : it.skip;
+const bundledChromiumRuns = process.platform === 'linux' && process.arch === 'x64';
+const itRenders =
+  bundledChromiumRuns || Boolean(process.env.PUPPETEER_EXECUTABLE_PATH?.trim()) ? it : it.skip;
+const itRendersBundled = bundledChromiumRuns ? it : it.skip;
 
 describe('renderHtmlToPdf', () => {
   it('is backed by a chromium package that ships its own binary', () => {
@@ -171,7 +178,7 @@ describe('renderHtmlToPdf', () => {
     expect(hardened).toHaveLength(stockArgs.length - removed.length);
   }, CHROMIUM_TIMEOUT_MS);
 
-  itRenders.each([
+  itRendersBundled.each([
     ['empty', ''],
     ['whitespace', '   '],
   ])(

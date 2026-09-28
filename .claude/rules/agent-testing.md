@@ -30,6 +30,14 @@ The sandbox never sources `.env.local`; it starts local Supabase Auth, Storage,
 and Postgres, then migrates and seeds the demo personas. `pnpm agent:env:reset`
 returns only this worktree to a clean baseline.
 
+**Publishing a document (PDF)** needs a browser the host can run. The bundled
+Chromium is Linux x64 only, so on macOS `agent:live:web` uses installed
+Chrome/Chromium or a shell-exported `PUPPETEER_EXECUTABLE_PATH` (it prints which,
+or warns). A slim Linux container needs `libnss3`. A sandbox publish never
+verifies Vercel: after a Chromium or puppeteer bump, the evidence is a real
+publish on the deployed SHA (a `documents` row with `source_type = 'authored'`
+plus its Storage object), not this sandbox.
+
 ## Disposable Fixture Login
 
 Create a fixture when a seeded persona cannot express the scenario. The CLI
