@@ -20,7 +20,7 @@ jobs:
     services:
       postgres:
         # The Docker Hub official image, mirrored into this repo's GHCR package by
-        # postgres-image-mirror.yml and pulled authenticated — same rationale as
+        # ci-image-mirror.yml and pulled authenticated — same rationale as
         # integration-tests.yml: anonymous pulls from shared runner IPs get
         # rate-limited (Docker Hub, then ECR Public on 2026-09-27).
         image: ghcr.io/ruckus000/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
