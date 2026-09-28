@@ -38,10 +38,12 @@ allowlist holds exactly 46 classified files** (`Map<path, AllowlistReason>` in
 what can never be contracted; counts measured via `pnpm guard:contracts` at
 implementation, 2026-09-23 — re-run it rather than trusting these numbers).
 No NEW entries: the ceiling stays pinned at 46, and the lane shrinks only via
-its two named paths — **CON-05** (Phase 3.5: drain the three `pending-drain`
-CRUD routes — announcements / meetings / maintenance-requests — once CON-04/06
-extend the runner) and **DC-05** (Phase 2.12: DELETE the two violation-notice
-PDF routes, shrinking the set by deletion rather than drainage). The other 43
+its remaining named shrink path — **CON-05** (Phase 3.5: drain the three
+`pending-drain` CRUD routes — announcements / meetings / maintenance-requests
+— once CON-04/06 extend the runner). **DC-05 was the second path and is
+CLOSED by decision (2026-09-26): the two violation-notice PDF routes are KEPT
+and WIRED, not deleted** — the ceiling stays pinned at 46 (roadmap amendment
+2026-09-26). The other 43
 entries are permanent: internal-cron token-auth, raw-body webhooks, redirects,
 set-cookie, non-JSON binary/HTML responses, non-200 status-code contracts,
 multipart uploads, and one headless-Chromium publisher.

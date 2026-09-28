@@ -69,10 +69,10 @@ const SCAN_ROOT = 'apps/web/src/app/api';
  *   - CON-05 (Phase 3.5): drain the 3 `pending-drain` CRUD routes
  *     (announcements / meetings / maintenance-requests) once the runner grows
  *     the envelope-sibling + audit-context channels (CON-04/06). −3.
- *   - DC-05 (Phase 2.12): DELETE the two statutory violation-notice PDF
- *     routes (violations/[id]/notice, violations/[id]/hearing-notice) if
- *     product confirms they stay unwired. −2 by deletion, not drainage.
- * Together those take the floor to ~41. Do not expect zero.
+ * DC-05 (Phase 2.12) was the second path and is CLOSED by decision
+ * (2026-09-26): the two statutory violation-notice PDF routes
+ * (violations/[id]/notice, violations/[id]/hearing-notice) are KEPT and
+ * WIRED, not deleted. So CON-05 takes the floor to ~43. Do not expect zero.
  *
  * Growth history, for the record: it went 37 -> 46 in the seven weeks after
  * the 2026-07-18 audit measured it, one appended line at a time (same
@@ -270,9 +270,9 @@ const ALLOWLIST_REASONS = new Map<string, AllowlistReason>([
   // (rate-limit, provider-down, invalid-code). `runRoute` hardcodes 200.
   ['apps/web/src/app/api/v1/phone/verify/confirm/route.ts', 'status-codes'],
   ['apps/web/src/app/api/v1/phone/verify/send/route.ts', 'status-codes'],
-  // DC-05 candidates: statutory violation-notice PDFs with zero client call
-  // sites — these shrink via DELETION in Phase 2.12, not drainage. `runtime
-  // = 'nodejs'` PDF render + `application/pdf` attachment.
+  // Statutory violation-notice PDFs — KEPT and WIRED (DC-05 decided
+  // 2026-09-26; do not delete). Permanent: `runtime = 'nodejs'` PDF render +
+  // `application/pdf` attachment, still behind `requireNoticePdfEnabled`.
   ['apps/web/src/app/api/v1/violations/[id]/hearing-notice/route.ts', 'non-json-binary'],
   ['apps/web/src/app/api/v1/violations/[id]/notice/route.ts', 'non-json-binary'],
   // Stripe webhook: signature verification needs the RAW body before any
@@ -503,7 +503,7 @@ function main(): void {
   console.log(
     `\n✅ No new uncontracted routes outside the allowlist. ` +
       `${ALLOWLIST_REASONS.size} classified files remain (ceiling ${ALLOWLIST_CEILING}) — A1 lane CLOSED; ` +
-      `it shrinks only via CON-05 (3 pending-drain CRUD routes, Phase 3.5) and DC-05 (2 PDF routes by deletion, Phase 2.12).`,
+      `it shrinks only via CON-05 (3 pending-drain CRUD routes, Phase 3.5).`,
   );
 }
 

@@ -42,51 +42,101 @@ adversarially verified; counts re-run at HEAD.
 > (`noticePdfGenerationEnabled` in `communities.community_settings`, strict
 > `=== true`, enforced by `requireNoticePdfEnabled`). **The Phase 2 slice wires
 > the UI and the routes; it does NOT flip the kill switch for any community.**
-> Per legal-risk audit F-05 (`docs/audits/2026-08-09-legal-risk-audit.md`) the
-> generated notice states legal conclusions and names the Board where the statute
-> requires a fining committee — enablement stays a "fix before re-enable" legal
-> decision, which is a human stop, not an engineering default. A button that
-> renders a 403 "not available for this community" until that decision is made is
-> the correct shipped state.
+> Legal posture, corrected 2026-09-28 against the shipped generator
+> (`apps/web/src/lib/utils/violation-notice-pdf.ts`). **Remediation is PARTIAL —
+> do not read it as done.** Remediated: every generated notice opens with a
+> "DRAFT — FOR REVIEW BY THE ASSOCIATION AND ITS COUNSEL" banner (:202); the
+> 14-day period is a *measurement with a verify-before-sending note*, not an
+> assertion (:421-430); the outcomes text names approval by "a committee of
+> members who are not officers, directors, or their relatives" (:453-454), not
+> the Board (the Board-naming finding is F-04's; F-05's remediation ledger
+> records the signature block no longer signing as the Board —
+> `docs/audits/2026-08-09-legal-risk-audit.md` §F-04/§F-05, remediation table);
+> and the **violation** notice's rights section became a pointer to the
+> governing documents (:313-330). **NOT remediated:** (a) the **hearing**
+> notice still enumerates "Your Rights at the Hearing" as four assertions
+> (:435-440), including "You may request a continuance" — the exact class of
+> text F-05 names and its remediation table records as removed; (b) the
+> hearing notice hardcodes "$100 per violation, up to $1,000 in aggregate" (:454-455)
+> while the fine service enforces per-community overrides via
+> `resolveFineCaps` (`packages/shared/src/compliance/fine-caps.ts`), so a
+> notice can state caps the association does not apply. Enablement therefore
+> stays a **human/legal stop pending counsel review**, and (a)/(b) are
+> fix-before-re-enable items for the notice-wiring slice's follow-up, not
+> for the kill-switch decision to absorb silently. Kill-switch enablement is
+> the launch gating decision, not an engineering default. A button that
+> renders the 403 "not available for this community" until that decision is
+> made is the correct shipped state. The stale audit-time docblock on
+> `requireNoticePdfEnabled` (`apps/web/src/lib/violations/common.ts:65-71`) is
+> corrected by whichever Phase 2 slice next touches that file (the lib-domain
+> guard drain owns it).
 > **(2) Phase 2's authz lane builds on #1174.** The AZ findings were measured
 > before `fix(authz): stop leaking neighbours' rent to residents via units list
 > and apartment dashboard (#1174)` merged (2026-09-26); item 2.1's unification
 > must take the post-#1174 code as its baseline, and the audit's authz counts are
 > snapshots, not current truth. Likewise the RLS surface moved under #1177
-> (migrations 0077–0079: Data API revoked on tenant tables and `communities`).
+> (migrations 0077–0079: 0077 revokes Data API SELECT on 59 tenant tables, 0078
+> is a BLANKET revoke of every write-class privilege on EVERY public table, and
+> 0079 revokes all of `communities` for anon/authenticated and repairs
+> role-claim resolution for PostgREST v12 — treat 'writes via the Data API'
+> as unavailable everywhere, not only on tenant tables).
 
 > **Amendment (2026-09-26, human decision + dated prod evidence — Phase 2 run
 > mode):** The Phase 2 phase-run is authorized to **auto-merge after CI and the
-> four-lens review**, with ONE human-gated exception, because the three
+> four-lens review**, with exactly TWO planned in-run human stops (Gate 0 —
+> the disposition-table approval before any drain merges, per the 2026-09-27
+> amendment — and the PR-B census pause below; notice kill-switch enablement
+> is a third human decision but sits OUTSIDE the run, which never flips it),
+> because the three
 > prod-touching preconditions an unattended run may not execute were
 > **pre-executed read-only on 2026-09-26** (psql, `default_transaction_read_only=on`;
-> full evidence in `~/.claude/state/phase-run/phase2-prod-preconditions-2026-09-26.md`):
-> **(1)** migration `0076` holds exactly one ledger row (tip id=106, 77 rows) —
+> full evidence in `docs/audits/2026-09-26-phase2-prod-preconditions.md` — the
+> canonical repo copy; the runner's state-dir file of the same date is a working
+> duplicate):
+> **(1)** migration `0076` holds exactly **one** ledger row of its own (the
+> whole-ledger snapshot on 2026-09-26 was tip id=106, 77 rows — those two
+> numbers belong to the ledger, drift with every apply, and are NOT to be
+> re-pinned into any gate) —
 > the deploy-live gate is satisfiable, and the working hash-compare form is
 > `hash LIKE '%<sha256>%'` (the column is text; `encode(hash,'hex')` errors).
 > **(2)** prod `faqs` holds 5 live rows, every `role_visibility` array EMPTY —
 > **zero legacy tokens**, so the alias-bridge deletion has no fuel in prod as of
-> that timestamp. **S7 still splits PR-A (content rewrite, auto-merge allowed)
-> from PR-B (bridge deletion), and PR-B keeps its human gate**: a fresh dated
+> that timestamp. **The help-content lane still splits PR-A (content rewrite, auto-merge allowed)
+> from PR-B (bridge deletion), and PR-B keeps its human gate** (slice IDs for
+> these two PRs renumber between spec derivations — PR-A/PR-B are the stable
+> names): a fresh dated
 > `SELECT DISTINCT unnest(role_visibility) FROM faqs WHERE deleted_at IS NULL`
 > showing zero legacy tokens, re-run at merge time, because the census is a
 > snapshot and rows can be created meanwhile.
 > **(3)** `noticePdfGenerationEnabled` is OFF for every community (0 rows even
 > carry the key) with zero `platform_admin_audit_log` events touching it since
-> 2026-08-09 — **S11 may auto-merge** on this dated evidence, its PR body
+> 2026-08-09 — **the notice-wiring slice (PR body: violation-notice buttons)
+> may auto-merge** on this dated evidence, its PR body
 > carrying the query results and the "off as of 2026-09-26, enforced
 > per-community at request time" wording (never "can never").
 > The phase-run must NOT itself query or mutate prod; this amendment is the
 > human having done so, on the record, before launch.
 
-> **Amendment (2026-09-27, human decisions — the S1b adjudication, parity
-> harness, S9 pause, and warn-flip ownership):**
-> **(1) S1b drains by LEDGER DISPOSITION, not by slice prose.** Item 2.1's
+> **Amendment (2026-09-27, human decisions — the drain adjudication, parity
+> harness, PR-B pause, and warn-flip ownership; reconciled 2026-09-28).**
+> Slice/ledger IDs in this amendment are ROLE names, not stable keys: they
+> renumber between spec derivations (the drain lane was S1b in round 2 and is
+> S5/S6/S7 in the 2026-09-28 corrected spec; the PR-B slice was S9 in round 2,
+> S13 in round 3, S16b in the corrected spec). Where an ID appears below, read
+> the role.
+> **(1) The authz-drain lane drains by GENERATED LEDGER DISPOSITION, not by
+> slice prose.** Item 2.1's
 > "drain `requireRole`/`isAdminRole`/inline forks" wording is bounded by this
-> rule: a `membership.isAdmin` / role-fork site drains ONLY if the decision
-> ledger carries an explicit per-site disposition (D7/D8 and successors) AND
-> the parity harness (below) covers it; **every site without a ledger
-> disposition defaults to KEPT** — drained in no unattended run. Known
+> rule: a `membership.isAdmin` / role-fork site drains ONLY if the GENERATED
+> per-site disposition ledger (the census artifact's rows, approved via the
+> overrides JSON — NOT decision-ledger IDs, which renumber between
+> derivations) carries an explicit disposition AND the parity harness (below)
+> covers it; **every site without a ledger
+> disposition defaults to KEPT** — drained in no unattended run. The list
+> below is a convenience snapshot, NOT the inventory: the census regenerated at
+> the pinned commit is authoritative, and where the two disagree the census
+> wins and this list is corrected in the next amendment (it already diverged
+> once — the elections proxy revoke, reclassified 2026-09-28). Known
 > behavior-branch sites are KEPT by this rule as of today:
 > `visitors/[id]/revoke` (admin-reason + resident-host-check branch UNDER a
 > real `requireVisitorsWritePermission` gate), `forum/threads/[id]/reply`
@@ -96,7 +146,8 @@ adversarially verified; counts re-run at HEAD.
 > matrix conjunction), and the calendar / storm-damage / maintenance-request
 > breadth-or-flag branches. The intake must emit the full per-site disposition
 > table for every executable-use file, and the human approves that table at
-> the run's single gate — the drain list is not normative text until then.
+> **Gate 0** (one of exactly two human stops; the other is the PR-B census
+> pause in (3)) — the drain list is not normative text until then.
 > **(2) The parity harness lands FIRST, as its own reviewed commit, before any
 > drain commit.** Construction: the integration local Postgres (via the
 > `pnpm test:integration:local` machinery — never prod, never the stub URL),
@@ -110,35 +161,97 @@ adversarially verified; counts re-run at HEAD.
 > or by an agent on the human's explicit go, and the run resumes only on that
 > evidence. Everything else in the phase keeps the 2026-09-26 auto-merge
 > authorization.
-> **(4) The admin unsafe-import ledger's `--warn`→enforce flip has NO calendar
-> deadline and no guard-refusal date.** Ownership: `TODO(Phase3, jphilistin)`
-> in the guard — Phase 3 owns the flip. The done-criterion is behavioral
-> (self-test: adding an entry to the seeded admin ledger exits non-zero under
-> the warn-mode semantics), never a grep for the `--warn` string.
+> **(4) The `--warn`→enforce flip is VACUOUS at HEAD — corrected 2026-09-28.**
+> Verified in `scripts/verify-scoped-db-access.ts` (978 lines): there is NO
+> `--warn` flag, NO argv parsing (mode is a compile-time config entry), and NO
+> seeded admin unsafe-import ledger — the DB004 unsafe-import branch fires only
+> in scoped mode, so admin mode cannot flag unsafe imports today. Body 2.5's
+> "73 named entries, `--warn` first" described an intended state that was never
+> built and is superseded. There is consequently nothing to flip and no date to
+> set: ownership of BUILDING the real admin ledger (DBB-02) is Phase 2's; the
+> enforcement posture of that ledger when built is `TODO(Phase3, jphilistin)`
+> recorded HERE (roadmap text, not a code marker). Done-criteria for the ledger
+> slice must be behavioral against the code that actually exists — never a grep
+> for `--warn`, never an assertion that a nonexistent flag behaves a certain way.
 
 > **Amendment (2026-09-27, human decision — the disposition enum is TWO-valued
 > in Phase 2; idiom convergence is deferred):** resolves the third intake's
-> BLOCKER (run wf_46fe67df-5ff, W1: D2 "projections KEPT-by-rule" contradicted
-> D4/S17 "replace the projection idiom with isManagementTier" inside a slice
-> forbidden to touch non-DRAIN rows). The single human gate operates on a
+> BLOCKER (run wf_46fe67df-5ff, W1: round-3 ledger D2 "projections KEPT-by-rule"
+> contradicted round-3 D4/S17 "replace the projection idiom with
+> isManagementTier" inside a slice forbidden to touch non-DRAIN rows; those IDs
+> are round-3 referents). The Gate-0 human approval operates on a
 > **two-value `Disposition` enum: `DRAIN` or `KEPT`.** There is **no
 > `KEEP-SHAPE` class in Phase 2.** Every data-shaping projection —
 > `units` list (route.ts:86, the #1174 rent-leak gate), `leases` (route.ts:249),
-> `insurance/policies` (route.ts:70), `search/*`, the elections proxy revoke —
-> is **`KEPT`: untouched in Phase 2**, neither drained nor idiom-swapped. D5's
-> "converge nowhere in Phase 2" is read literally: Phase 2 changes deny-gate
-> *call sites* onto the matrix (DRAIN rows only) and leaves every projection's
-> `membership.isAdmin` read exactly as it is. The idiom convergence onto a
-> shared `isManagementTier` helper becomes a **named Phase 3 item** (it needs
-> its own parity harness and, for units/leases, sits atop the freshest
-> rent-leak fix — not an unattended-run edit). S17 operates ONLY on rows whose
-> human-approved disposition is DRAIN; **editing a KEPT row is a defect.** D2
-> and D4 are reconciled to this: D4's "KEPT-SHAPE idiom swap" is struck for
-> Phase 2 and re-filed under Phase 3. The per-site disposition table the human
+> `insurance/policies` (route.ts:70), and the `search/*` breadth flags — is
+> **`KEPT`: untouched in Phase 2**, neither drained nor idiom-swapped. Idiom,
+> stated exactly (a census grep must match BOTH): `units/route.ts:86`,
+> `leases/route.ts:249` and `insurance/policies/route.ts:70` read
+> `isAdminRole(membership.role)`; `search/maintenance/route.ts:41` and
+> `search/violations/route.ts:44` read `membership.isAdmin`. D5's "converge
+> nowhere in Phase 2" is read literally: Phase 2 changes deny-gate *call sites*
+> onto the matrix (DRAIN rows only) and leaves every projection's admin read
+> exactly as it is. **The elections proxy revoke is NOT a projection** —
+> corrected 2026-09-28: it is a deny-gate MUTATION call site (the
+> grantor-or-admin fork at `elections-service.ts:1299-1304`, on an `actorIsAdmin`
+> flag passed by a route with no admin gate of its own — its only gate is
+> `requirePermission('elections','write')`, which owner, tenant AND manager all
+> hold). The census MUST emit it as a visible row, but its disposition is
+> **KEPT, with no DRAIN option**: the fork is a grantor-OWNERSHIP check OR'd
+> with admin, and the RBAC matrix has no ownership concept. Every
+> matrix-expressible replacement is wrong — `elections:write` is true for all
+> three rows, so "draining" the admin half onto the matrix would let any
+> member revoke any other member's §718.128 proxy. A DRAIN disposition on this
+> row is a defect, not an adjudication. The idiom convergence becomes a
+> **named Phase 3 item**, and it is smaller than earlier text claimed: the
+> management-tier predicate already exists EXPORTED as `isAdminRole`
+> (`packages/shared/src/access-policies.ts:217`, via `resolveMatrixRole`) and as
+> the constant `ADMIN_TIER_DB_ROLES` (`packages/shared/src/role-transition.ts:16`),
+> from which `membership.isAdmin` is derived
+> (`apps/web/src/lib/api/community-membership.ts:128`). The two idioms above
+> are therefore **semantically identical today** (role ∈ {property_manager,
+> root_manager}); a third, module-private copy is `isManagementTier`
+> (`packages/shared/src/billing/permissions.ts:30`), and `resolveMatrixRole`
+> (`access-policies.ts:202`) inlines the same test.
+> (`search/users/route.ts:29` is a display-label mapper, not a predicate copy —
+> out of scope.) Phase 3's work is choosing ONE of the existing names and
+> deduping — a rename-level change whose safety argument is the equivalence
+> above, pinned by a unit test over the three roles × isUnitOwner, not a new
+> parity harness. It still stays out of Phase 2 (units/leases sit atop the
+> freshest rent-leak fix, and KEPT rows are not edited). Exporting
+> `isManagementTier` changes no call site and is not itself a swap. The drain-lane
+> rule: authz-drain slices operate ONLY on rows whose human-approved disposition
+> is DRAIN; **editing a KEPT row is a defect.** Round-3 D2 and D4 are reconciled
+> to this: the round-3 "KEPT-SHAPE idiom swap" is struck for Phase 2 and
+> re-filed under Phase 3. The per-site disposition table the human
 > approves at the gate therefore has two columns of consequence (DRAIN / KEPT),
 > and the gate's `--check-sync` validates regeneration against the
 > human-approved-overrides JSON (the persisted edit artifact), never against a
 > fresh KEPT-default regeneration.
+
+> **Precedence (2026-09-28 reconciliation):** the 2026-09-26/27 amendments, as
+> corrected in place on 2026-09-28 (git history carries the prior text), are
+> jointly normative for the Phase 2 run OVER the §4–§5 tables and any stale body
+> prose they supersede — including body 2.5's "`--warn` first" (never built),
+> 2.12/DC-05's delete option (decided: wire), and DC-05's "deletion shrinks the
+> floor" dedupe note (moot). `.claude/rules/api-patterns.md` is updated in the
+> same commit so no auto-loaded rule still commands the deletion. Where an
+> amendment names a slice ID, the ID is a role label for the derivation current
+> at that date; the executed spec's own IDs are authoritative at run time. The
+> same applies to `docs/audits/2026-09-26-phase2-prod-preconditions.md`, whose
+> round-2 IDs are mapped in its own reconciliation note.
+> `scripts/verify-contracts.ts`'s docblock and pass message are corrected in the
+> same PR (it is the allowlist's named source of truth and still printed the
+> DC-05 deletion on every `pnpm lint`).
+>
+> **Launch precondition (2026-09-28):** the auto-merge authorization above is
+> NOT exercisable until the spec-side must-fixes that ENFORCE it have landed in
+> the executed spec: a targeted authz-parity run as a done-criterion on every
+> drain slice; `--check-drained` registered as a `guard:*` in the lint fleet;
+> the Gate-0 overrides JSON declared human-write-only (a slice or repair agent
+> writing it is a defect); and the two human stops encoded as structured gates,
+> not prose. Until then, the "exactly two human stops" rule is prose with no
+> mechanism, and Stage 2 runs in PR-only mode (no auto-merge).
 
 ## 1. Headline numbers
 
