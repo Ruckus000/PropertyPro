@@ -31,6 +31,7 @@ const BASE_HEARING: HearingNoticePayload = {
   hearingDate: '2026-04-01',
   hearingLocation: 'Community Room A',
   noticeDate: '2026-03-14',
+  fineCaps: { perFineCents: 100_00, aggregateCents: 1_000_00 },
 };
 
 describe('generateViolationNoticePdf', () => {
@@ -193,9 +194,17 @@ describe('hearing notice — no compliance conclusion', () => {
   it('does not enumerate the reader\u2019s rights as fact', () => {
     // Telling an owner what Florida law entitles them to is advice about their
     // own position, and wrong in any association whose documents differ.
-    const text = textOf(generateViolationNoticePdf(BASE_NOTICE));
-    expect(text).not.toContain('You have the right to request a hearing');
-    expect(text).toContain('consult an attorney');
+    // Covers BOTH documents: this case used to sit under the hearing-notice
+    // heading while rendering only the violation notice, which is how the
+    // hearing notice's four-item rights list survived with the suite green.
+    const violation = textOf(generateViolationNoticePdf(BASE_NOTICE));
+    expect(violation).not.toContain('You have the right to request a hearing');
+    expect(violation).toContain('consult an attorney');
+
+    const hearing = textOf(generateHearingNoticePdf(BASE_HEARING));
+    expect(hearing).not.toContain('Your Rights at the Hearing');
+    expect(hearing).not.toContain('continuance');
+    expect(hearing).toContain('consult an attorney');
   });
 });
 
@@ -211,9 +220,25 @@ describe('hearing notice — the fining committee, not the board (F-04)', () => 
     expect(text).toContain('not officers, directors, or their relatives');
   });
 
-  it('still cites the statutory caps', () => {
+  it('states the default statutory caps for a community with no override', () => {
     const text = textOf(generateHearingNoticePdf(BASE_HEARING));
-    expect(text).toContain('$100 per');
-    expect(text).toContain('$1,000 in aggregate');
+    expect(text).toContain('$100.00 per violation');
+    expect(text).toContain('$1000.00 in aggregate');
+  });
+
+  it('states the community\u2019s EFFECTIVE caps, not a hardcoded $100/$1,000', () => {
+    // The fine service enforces per-community overrides (resolveFineCaps); a
+    // notice that printed the statutory default would tell the owner a cap the
+    // association does not apply.
+    const text = textOf(
+      generateHearingNoticePdf({
+        ...BASE_HEARING,
+        fineCaps: { perFineCents: 50_00, aggregateCents: 500_00 },
+      }),
+    );
+    expect(text).toContain('$50.00 per violation');
+    expect(text).toContain('$500.00 in aggregate');
+    expect(text).not.toContain('$100');
+    expect(text).not.toContain('$1,000');
   });
 });

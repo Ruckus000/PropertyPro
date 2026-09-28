@@ -65,10 +65,18 @@ export function requireViolationFinesEnabled(membership: CommunityMembership): v
 /**
  * Gate on generating a violation / hearing notice PDF.
  *
- * Disabled because the generated notice states legal conclusions (it computes and
- * asserts whether the 14-day notice period was satisfied), enumerates the owner's
- * rights, and names the *Board* as imposing the fine where the statute requires a
- * fining committee.
+ * Off for every community unless a platform admin sets
+ * `noticePdfGenerationEnabled`, and enabling it is a human/legal decision, never
+ * an engineering default (legal-risk audit F-05: a generated notice is the
+ * sharpest unauthorized-practice-of-law edge). The audit-time text defects are
+ * fixed in `violation-notice-pdf.ts` — DRAFT banner, the 14-day period stated as
+ * a measurement, the fining committee rather than the Board, rights as a pointer
+ * to the governing documents, and the community's effective fine caps — but
+ * counsel has not reviewed the templates.
+ *
+ * ponytail: the two notice routes have no UI caller (roadmap 2.12 / DC-05:
+ * keep + wire). Trigger to wire the buttons: counsel approves enabling notices
+ * for a first community — wire them in that PR, not before.
  */
 export function requireNoticePdfEnabled(membership: CommunityMembership): void {
   if (!membership.noticePdfGenerationEnabled) {
