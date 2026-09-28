@@ -119,7 +119,12 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: vi.fn(() => ({})),
 }));
 
-import { describePaymentForReceipt, processFinanceStripeEvent } from '../../src/lib/services/finance-service';
+import {
+  describePaymentForReceipt,
+  FinanceWebhookFenceConflict,
+  processFinanceStripeEvent,
+} from '../../src/lib/services/finance-service';
+import { drizzleUniqueViolation } from '../helpers/pg-errors';
 
 interface MockScopedClient {
   insert: typeof insertMock;
@@ -411,9 +416,15 @@ describe('processFinanceStripeEvent', () => {
     );
   });
 
-  it('is idempotent for duplicate Stripe events (unique-constraint insert)', async () => {
-    const uniqueViolation = Object.assign(new Error('duplicate key'), { code: '23505' });
-    insertMock.mockRejectedValueOnce(uniqueViolation);
+  it('refuses — loudly, writing nothing — an event whose finance fence already exists', async () => {
+    // The fence cannot tell "fully processed" from "failed halfway" (it is
+    // written before the ledger, not atomically with it), so neither skipping
+    // nor re-processing is safe. See FinanceWebhookFenceConflict.
+    // Revert-check: classify the fence conflict as "skip" (return early) and
+    // the rejects assertion below goes red.
+    insertMock.mockRejectedValueOnce(
+      drizzleUniqueViolation('finance_stripe_webhook_events_event_id_unique'),
+    );
 
     const paymentIntentRetrieve = vi.fn().mockResolvedValue({
       id: 'pi_duplicate',
@@ -433,9 +444,11 @@ describe('processFinanceStripeEvent', () => {
       charges: { retrieve: vi.fn() },
     });
 
-    await processFinanceStripeEvent(
-      makeEvent('payment_intent.succeeded', 'evt_fin_dup', { id: 'pi_duplicate' }),
-    );
+    await expect(
+      processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_fin_dup', { id: 'pi_duplicate' }),
+      ),
+    ).rejects.toBeInstanceOf(FinanceWebhookFenceConflict);
 
     expect(selectFromMock).not.toHaveBeenCalled();
     expect(updateMock).not.toHaveBeenCalled();

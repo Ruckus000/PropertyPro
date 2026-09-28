@@ -43,7 +43,7 @@ import {
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
 import { ConflictError } from '@/lib/api/errors';
-import { isUniqueConstraintError } from '@/lib/db/unique-constraint-error';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import {
   getComplianceTemplate,
@@ -1429,7 +1429,7 @@ export async function markPendingSignupEmailVerifiedIfPending(
       )
       .returning({ id: pendingSignups.id });
   } catch (error) {
-    if (isUniqueConstraintError(error, 'pending_signups_candidate_slug_active_unique')) {
+    if (isNamedUniqueViolation(error, 'pending_signups_candidate_slug_active_unique')) {
       throw new ConflictError(
         'That subdomain was claimed by another signup while you were verifying. '
           + 'Please start a new signup and choose a different subdomain.',

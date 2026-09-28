@@ -43,7 +43,7 @@ import {
   generateFinanceStatementPdf,
 } from '@/lib/utils/finance-pdf';
 import { getBaseUrl } from '@/lib/utils/url';
-import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 
 export type AssessmentFrequency = 'monthly' | 'quarterly' | 'annual' | 'one_time';
 export type AssessmentLineItemStatus = 'pending' | 'paid' | 'overdue' | 'waived';
@@ -1885,10 +1885,34 @@ export async function getConnectStatus(
   };
 }
 
+/**
+ * An event whose finance fence row already exists reached processing again.
+ *
+ * This is NOT treated as "already processed, skip". The fence is inserted
+ * BEFORE the payable update, ledger postings, rent-payment insert and fine
+ * update, and none of that runs in one transaction with it — so an existing
+ * fence cannot tell "fully processed" from "failed halfway". Skipping would
+ * silently drop whatever the failed attempt never wrote; re-processing would
+ * double-post the ledger (`ledger_entries` has no unique key). Failing loudly
+ * keeps the platform fence's `processedAt` null, so the event stays visible
+ * (Sentry, 500s, Stripe's retry dashboard) for a human to reconcile.
+ *
+ * ponytail: the real fix is fence + writes in one transaction. Deferred to the
+ * finance characterization work (roadmap 3.T2), which must land before any
+ * finance restructuring. Trigger: 3.T2 lands, or the first live finance event
+ * (`finance_stripe_webhook_events` held 0 rows in production on 2026-09-28).
+ */
+export class FinanceWebhookFenceConflict extends Error {
+  constructor(readonly eventId: string) {
+    super(`Finance webhook event ${eventId} was already fenced; refusing to skip or re-process it`);
+    this.name = 'FinanceWebhookFenceConflict';
+  }
+}
+
 async function recordFinanceStripeEvent(
   communityId: number,
   event: Stripe.Event,
-): Promise<boolean> {
+): Promise<void> {
   const scoped = createScopedClient(communityId);
   try {
     await scoped.insert(financeStripeWebhookEvents, {
@@ -1900,19 +1924,18 @@ async function recordFinanceStripeEvent(
         created: event.created,
       },
     });
-    return true;
   } catch (err) {
-    if (isTopLevelUniqueConstraintError(err)) {
-      logFinanceWebhookEvent('info', 'Duplicate finance webhook event skipped', {
+    if (isNamedUniqueViolation(err, 'finance_stripe_webhook_events_event_id_unique')) {
+      logFinanceWebhookEvent('error', 'Finance webhook event already fenced; needs reconciliation', {
         eventId: event.id,
         eventType: event.type,
         communityId,
         errorCode: FINANCE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT,
         category: 'idempotency',
         metricName: 'finance_webhook_event',
-        outcome: 'duplicate',
+        outcome: 'failure',
       });
-      return false;
+      throw new FinanceWebhookFenceConflict(event.id);
     }
     throw err;
   }
@@ -2092,10 +2115,7 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     return;
   }
 
-  const shouldProcess = await recordFinanceStripeEvent(communityId, event);
-  if (!shouldProcess) {
-    return;
-  }
+  await recordFinanceStripeEvent(communityId, event);
 
   // Out-of-order defense: if the latest charge is already fully refunded, a delayed
   // payment_intent.succeeded event must not flip the line item back to paid.
@@ -2282,10 +2302,7 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  const shouldProcess = await recordFinanceStripeEvent(communityId, event);
-  if (!shouldProcess) {
-    return;
-  }
+  await recordFinanceStripeEvent(communityId, event);
 
   const payable = await getPayableById(communityId, payableType, payableId);
   if (!payable) {
@@ -2504,10 +2521,7 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  const shouldProcess = await recordFinanceStripeEvent(communityId, event);
-  if (!shouldProcess) {
-    return;
-  }
+  await recordFinanceStripeEvent(communityId, event);
 
   const scoped = createScopedClient(communityId);
   await postLedgerEntry(scoped, {

@@ -18,7 +18,7 @@ import {
 import { getBaseUrl } from '@/lib/utils/url';
 import { buildVerificationLink, buildVerificationRedirectUrl } from './verification-link';
 import { signupRemainingSteps } from './signup-remaining-steps';
-import { isUniqueConstraintError } from '@/lib/db/unique-constraint-error';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 
 const SIGNUP_SUCCESS_MESSAGE =
@@ -412,13 +412,13 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
     }
     return row;
   } catch (error) {
-    if (isUniqueConstraintError(error, 'pending_signups_candidate_slug_active_unique')) {
+    if (isNamedUniqueViolation(error, 'pending_signups_candidate_slug_active_unique')) {
       throw new ValidationError('That subdomain is no longer available.', {
         field: 'candidateSlug',
       });
     }
 
-    if (isUniqueConstraintError(error, 'pending_signups_signup_request_unique')) {
+    if (isNamedUniqueViolation(error, 'pending_signups_signup_request_unique')) {
       // A6: the submitted email differs from the one this signupRequestId was
       // created with (a matching email would have been handled by the
       // email-keyed upsert above). We must NOT reassign the signup to the new

@@ -26,7 +26,7 @@ import {
   ValidationError,
 } from '@/lib/api/errors';
 import { listActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
-import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 
 interface ElectionRecord {
   [key: string]: unknown;
@@ -996,7 +996,7 @@ export async function castElectionVoteForCommunity(
         electionStatus: election.status,
       };
     } catch (error) {
-      if (!isTopLevelUniqueConstraintError(error)) {
+      if (!isNamedUniqueViolation(error, 'uq_election_ballot_submissions_unit')) {
         throw error;
       }
 
@@ -1252,7 +1252,7 @@ export async function createElectionProxyForCommunity(
 
       return typedProxy;
     } catch (error) {
-      if (isTopLevelUniqueConstraintError(error)) {
+      if (isNamedUniqueViolation(error, 'uq_election_proxies_grantor')) {
         throw new AppError('This unit already has a proxy designation for the election', 409, 'CONFLICT');
       }
 

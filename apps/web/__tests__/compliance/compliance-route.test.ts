@@ -117,6 +117,7 @@ vi.mock('@/lib/services/compliance-service', () => ({
 }));
 
 import { GET, POST, PATCH } from '../../src/app/api/v1/compliance/route';
+import { drizzleUniqueViolation } from '../helpers/pg-errors';
 
 const USER_ID = 'f8a6fbc9-ae4f-4f13-ad8b-a5217af0bd81';
 
@@ -358,7 +359,9 @@ describe('POST /api/v1/compliance', () => {
     listComplianceChecklistItemsMock
       .mockResolvedValueOnce([]) // existing check
       .mockResolvedValueOnce([{ id: 11, templateKey: '718_budget' }]); // raced re-read
-    insertComplianceChecklistItemsMock.mockRejectedValueOnce({ code: '23505' });
+    insertComplianceChecklistItemsMock.mockRejectedValueOnce(
+      drizzleUniqueViolation('compliance_checklist_community_template_key_active'),
+    );
 
     const res = await POST(bodyReq('POST', { communityId: 42 }), undefined);
 

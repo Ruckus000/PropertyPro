@@ -1,41 +1,38 @@
 /**
  * Shared Postgres error predicates.
  *
- * This module exists because the repo had seven hand-written copies of
- * "is this a unique violation?" in **three mutually incompatible semantics**
- * (audit SVC-06). Copies were previously being collapsed on sight, which is
- * unsafe: the families disagree about whether a *wrapped* error counts, and
- * that single axis decides whether a request gets a 409 or a 500.
+ * ## The one fact every caller needs
  *
- * ## Family 1 — `hasPostgresErrorCode` / `isUniqueConstraintError`: WALKS `cause`
+ * drizzle-orm (0.45.x) wraps EVERY failed query: `pg-core/session.js`
+ * `queryWithCache` does `throw new DrizzleQueryError(query, params, e)`. So a
+ * unique violation reaches application code as a `DrizzleQueryError` with NO
+ * top-level `code`; Postgres's `code: '23505'` and `constraint_name` are on
+ * `.cause`. A predicate that reads only the top-level `code` never matches on a
+ * drizzle path — it is dead code that turns every intended 409 / "duplicate,
+ * skip" branch into a 500. Pinned against a real database by
+ * `__tests__/integration/postgres-error-shape.integration.test.ts`.
  *
- * The driver wraps the original error, so a top-level `code` check alone
- * misses the shape it actually throws. Used by the reservation, poll-ballot
- * and site-publish paths, all of which *swallow* a 23505 as a duplicate.
+ * (Phase 1's SVC-06 pass got this backwards: it kept a top-level-only
+ * `isTopLevelUniqueConstraintError` on the premise that a wrapped error means
+ * "the driver failed the query, not the constraint". It is the reverse — the
+ * wrapped form is exactly what a constraint rejection looks like — so that
+ * predicate is gone and its callers were re-audited one by one.)
  *
- * ## Family 2 — `isTopLevelUniqueConstraintError`: reads `code` ONLY
+ * ## Which predicate
  *
- * Deliberately **not** merged with family 1, even though family 1 is the
- * strictly more capable predicate. Folding the two would change behaviour at
- * the highest-stakes call site in the set: `elections-service.ts` catches a
- * top-level 23505 and turns it into the statutory "this unit has already
- * submitted a ballot" 409, but a *wrapped* 23505 falls through to `throw
- * error` (a 500) at both `:1007` and `:1263`. Post-collapse, a wrapped error
- * would be reported to a voter as a duplicate ballot — a wrong-but-200-class
- * failure on the §718.128 path, with every existing test still green because
- * no test feeds that shape today. Widening the family-2 predicate is a policy
- * decision with an elections consequence attached, not a dedup.
+ * - `isNamedUniqueViolation(error, name)` — prefer this wherever the caller
+ *   turns a duplicate into a user-facing answer (a 409, "already submitted").
+ *   It answers "did THIS index reject the write", so an unrelated unique index
+ *   touched in the same try block cannot be misreported as the duplicate.
+ * - `isUniqueConstraintError(error)` — any 23505 in the chain. For idempotent
+ *   inserts whose try block touches exactly one unique index.
  *
  * ## Not here on purpose
  *
- * - `lib/db/unique-constraint-error.ts` requires code 23505 **and** a matching
- *   constraint NAME. It is strictly narrower than either predicate above and
- *   answers a different question ("did THIS index reject the write"), so it
- *   stays its own module and these call sites do not route through it.
- * - `notification-digest-queue.ts` keeps its own variant (an `instanceof Error`
- *   gate plus a `/unique/i` message regex). Collapsing it would flip
- *   `enqueueDigestItem` from throwing to silently reporting `{ enqueued: false }`
- *   for message-only failures — a dropped digest nobody sees.
+ * - `notification-digest-queue.ts` keeps its own variant (it also treats a
+ *   `/unique/i` message as a duplicate); see the note there.
+ * - `finance-service.ts` `recordFinanceStripeEvent` deliberately does NOT treat
+ *   a fenced event as "already processed" — see `FinanceWebhookFenceConflict`.
  *
  * @see docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md (SVC-06)
  */
@@ -44,44 +41,49 @@
 const UNIQUE_VIOLATION = '23505';
 
 /**
- * True when `error`, or anything it wraps via `cause`, carries `expectedCode`.
- *
- * Lifted verbatim from the three byte-identical copies in
- * `work-orders-service`, `polls-service` and `site-publish-schedule-service`.
+ * Bound on the `cause` walk. drizzle adds exactly one level; the bound only
+ * guards against a cyclic `cause` chain.
  */
+const MAX_CAUSE_DEPTH = 8;
+
+/** `error` followed by each `cause` it wraps, outermost first. */
+function* causeChain(error: unknown): Generator<Record<string, unknown>> {
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== 'object' || current === null) return;
+    const record = current as Record<string, unknown>;
+    yield record;
+    if (!('cause' in record)) return;
+    current = record.cause;
+  }
+}
+
+/** True when `error`, or anything it wraps via `cause`, carries `expectedCode`. */
 export function hasPostgresErrorCode(error: unknown, expectedCode: string): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
+  for (const link of causeChain(error)) {
+    if (link.code === expectedCode) return true;
   }
-
-  if ('code' in error && (error as { code: unknown }).code === expectedCode) {
-    return true;
-  }
-
-  if ('cause' in error) {
-    return hasPostgresErrorCode((error as { cause: unknown }).cause, expectedCode);
-  }
-
   return false;
 }
 
-/**
- * 23505 anywhere in the chain, including under `cause`. Family 1 — see the
- * file header before using this where family 2 is called for.
- */
+/** 23505 anywhere in the chain, including under `cause`. */
 export function isUniqueConstraintError(error: unknown): boolean {
   return hasPostgresErrorCode(error, UNIQUE_VIOLATION);
 }
 
 /**
- * 23505 on the error itself, with no `cause` walk. Family 2 — see the file
- * header for why the absence of a walk is load-bearing.
+ * 23505 raised by the constraint named `constraintName`, anywhere in the chain.
+ * Both `constraint_name` (postgres-js) and `constraint` (node-postgres) are
+ * read, because drivers disagree on which they populate.
  */
-export function isTopLevelUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === UNIQUE_VIOLATION
-  );
+export function isNamedUniqueViolation(error: unknown, constraintName: string): boolean {
+  for (const link of causeChain(error)) {
+    if (
+      link.code === UNIQUE_VIOLATION &&
+      (link.constraint_name === constraintName || link.constraint === constraintName)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
