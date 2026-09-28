@@ -31,6 +31,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   calculateComplianceStatus,
@@ -59,15 +60,6 @@ function requireCondoCommunity(communityType: CommunityType): void {
   if (!features.hasCompliance) {
     throw new ForbiddenError('Compliance features are only available for condo/HOA communities');
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  const maybeCode = (error as { code?: unknown }).code;
-  return maybeCode === '23505';
 }
 
 /**
@@ -190,7 +182,7 @@ export const POST = withErrorHandler(
     try {
       await insertComplianceChecklistItems(communityId, rows);
     } catch (error) {
-      if (!isUniqueViolation(error)) {
+      if (!isNamedUniqueViolation(error, 'compliance_checklist_community_template_key_active')) {
         throw error;
       }
 

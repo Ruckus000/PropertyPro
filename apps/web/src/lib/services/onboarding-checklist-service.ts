@@ -1,6 +1,7 @@
 import { createScopedClient } from '@propertypro/db';
 import { onboardingChecklistItems } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import {
   PM_SCOPE_DB_ROLES,
   isBoardPresident,
@@ -120,14 +121,10 @@ export async function createChecklistItems(
         itemKey,
       });
     } catch (err) {
-      // Swallow unique-constraint violations (duplicate key / 23505).
-      // Any other error is re-thrown.
-      const isUniqueViolation =
-        err instanceof Error &&
-        (err.message.includes('unique') ||
-          err.message.includes('duplicate') ||
-          (err as { code?: string }).code === '23505');
-      if (!isUniqueViolation) throw err;
+      // Swallow only this table's own duplicate; any other error is re-thrown.
+      // drizzle wraps the Postgres error, so the check reads `.cause` — the
+      // message is drizzle's "Failed query: …" and names no constraint.
+      if (!isNamedUniqueViolation(err, 'onboarding_checklist_community_user_key')) throw err;
     }
   }
 }

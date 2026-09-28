@@ -32,7 +32,7 @@ import type { InboundEmail } from './types';
 // Family 2 (top-level `code` only, no `cause` walk). The copies this replaced
 // used to disagree on signature in three different files; see the header of
 // `@/lib/db/postgres-error` for why the two families are kept apart.
-import { isTopLevelUniqueConstraintError } from '@/lib/db/postgres-error';
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
 
 /**
  * `INSERT ... RETURNING` always yields a row, but the driver's type does not
@@ -202,7 +202,7 @@ export async function persistInboundEmail(
       };
     });
   } catch (error) {
-    if (!isTopLevelUniqueConstraintError(error)) throw error;
+    if (!isUniqueConstraintError(error)) throw error;
 
     // Lost a race with a concurrent delivery of the same message. The whole
     // transaction rolled back, so there is nothing to clean up — re-read the

@@ -42,6 +42,7 @@ vi.mock('@/lib/services/claim-root-notify', () => ({
 
 import { claimRoot, claimAllRoots } from '@/lib/services/claim-root-service';
 import { ForbiddenError } from '@/lib/api/errors';
+import { drizzleUniqueViolation } from '../../helpers/pg-errors';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -97,7 +98,7 @@ describe('claimRoot', () => {
   it('returns already_claimed on a 23505 unique violation during update', async () => {
     selectFromMock.mockResolvedValueOnce([{ id: 7 }]); // PM here
     selectFromMock.mockResolvedValueOnce([]); // no root yet
-    updateMock.mockRejectedValueOnce(Object.assign(new Error('dup'), { code: '23505' }));
+    updateMock.mockRejectedValueOnce(drizzleUniqueViolation('user_roles_one_root_per_community'));
 
     const result = await claimRoot('user-1', 42);
 

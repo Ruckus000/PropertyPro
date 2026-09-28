@@ -9,6 +9,7 @@ import { findMyRootlessCommunities } from '@propertypro/db/unsafe';
 import { createScopedClient, logAuditEvent, userRoles } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { notifyRootClaimed } from '@/lib/services/claim-root-notify';
 
 export interface ClaimResult {
@@ -61,7 +62,8 @@ export async function claimRoot(
       and(eq(userRoles.userId, userId), eq(userRoles.role, 'property_manager')),
     );
   } catch (err: unknown) {
-    if (isUniqueViolation(err)) {
+    // Another manager claimed root first: `user_roles_one_root_per_community`.
+    if (isNamedUniqueViolation(err, 'user_roles_one_root_per_community')) {
       return { communityId, claimed: false, reason: 'already_claimed' };
     }
     throw err;
@@ -117,13 +119,4 @@ export async function claimAllRoots(userId: string): Promise<ClaimResult[]> {
     }
   }
   return results;
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code?: string }).code === '23505'
-  );
 }

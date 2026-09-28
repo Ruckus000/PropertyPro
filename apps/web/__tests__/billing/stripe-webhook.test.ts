@@ -185,6 +185,7 @@ vi.mock('@/lib/services/provisioning-service', () => ({
 
 // Route import must come after all vi.mock calls
 import { POST } from '../../src/app/api/v1/webhooks/stripe/route';
+import { drizzleUniqueViolation } from '../helpers/pg-errors';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -404,7 +405,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       });
       constructEventMock.mockReturnValue(event);
 
-      const uniqueErr = Object.assign(new Error('duplicate key'), { code: '23505' });
+      const uniqueErr = drizzleUniqueViolation('stripe_webhook_events_pkey');
 
       // First select returns empty (not yet processed), race-check select returns processed row
       const limitMock = vi.fn()
@@ -437,6 +438,45 @@ describe('POST /api/v1/webhooks/stripe', () => {
 
       expect(res.status).toBe(200);
       expect(body.received).toBe(true);
+      expect(captureExceptionMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 and does NOT run the handler when the fence race winner is still in flight', async () => {
+      // Before 2026-09-28 this branch fell through and ran handleStripeEvent
+      // CONCURRENTLY with the request that won the fence. It was masked only
+      // because the predicate above it never matched drizzle's wrapped error.
+      // Revert-check: restore the fall-through and this case goes red ("expected
+      // 500 to be 409" — the handler runs and fails against this fixture).
+      const event = makeEvent('customer.subscription.deleted', { id: 'sub_inflight' });
+      constructEventMock.mockReturnValue(event);
+
+      const limitMock = vi.fn()
+        .mockResolvedValueOnce([]) // idempotency pre-check: no row yet
+        .mockResolvedValueOnce([{ processedAt: null }]); // race-check: winner not finished
+      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      const setMock = vi.fn(() => ({ where: whereForUpdateMock }));
+      const updateMock = vi.fn(() => ({ set: setMock }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => {
+          throw drizzleUniqueViolation('stripe_webhook_events_pkey');
+        }),
+      }));
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: limitMock })),
+        })),
+      }));
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(409);
+      expect(updateMock).not.toHaveBeenCalled();
+      expect(sendSubscriptionCanceledEmailMock).not.toHaveBeenCalled();
       expect(captureExceptionMock).not.toHaveBeenCalled();
     });
 

@@ -1,5 +1,6 @@
 import { createScopedClient, notificationDigestQueue } from '@propertypro/db';
 import type { EmailFrequency } from '../utils/email-preferences';
+import { isUniqueConstraintError as isUniqueViolationInChain } from '../db/postgres-error';
 
 export type DigestSourceType =
   | 'meeting'
@@ -24,15 +25,13 @@ export interface EnqueueDigestResult {
   enqueued: boolean;
 }
 
-// DELIBERATELY DIVERGENT from `@/lib/db/postgres-error` (SVC-06): the
-// `instanceof Error` gate plus the `/unique/i` message regex mean a message-only
-// failure counts as a duplicate here, so collapsing this onto the shared
-// predicate would turn `enqueueDigestItem`'s throw into a silent
-// `{ enqueued: false }` — a dropped digest nobody sees. Pending a policy decision.
+// A 23505 anywhere in the cause chain (drizzle wraps it — see
+// `@/lib/db/postgres-error`), OR a message mentioning "unique". The message arm
+// is a wider net than the shared predicate and is kept pending a policy
+// decision; it rarely fires on drizzle paths, whose message is "Failed query: …".
 function isUniqueConstraintError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  const asRecord = error as Error & { code?: string };
-  return asRecord.code === '23505' || /unique/i.test(error.message);
+  return isUniqueViolationInChain(error) || /unique/i.test(error.message);
 }
 
 export async function enqueueDigestItem(

@@ -19,6 +19,7 @@ import {
   enqueueDigestItem,
   enqueueDigestItems,
 } from '../../src/lib/services/notification-digest-queue';
+import { drizzleUniqueViolation } from '../helpers/pg-errors';
 
 describe('notification digest queue service', () => {
   beforeEach(() => {
@@ -61,10 +62,12 @@ describe('notification digest queue service', () => {
   });
 
   it('treats unique violations as idempotent duplicate inserts', async () => {
-    const duplicateError = Object.assign(new Error('duplicate key value violates unique constraint'), {
-      code: '23505',
-    });
-    insertMock.mockRejectedValueOnce(duplicateError);
+    // drizzle's real shape: the message is "Failed query: …" (no "unique"), so
+    // this is decided by the `cause` walk, not the message fallback.
+    // Revert-check: drop `isUniqueViolationInChain(error) ||` and this goes red.
+    insertMock.mockRejectedValueOnce(
+      drizzleUniqueViolation('notification_digest_queue_unique_idempotency'),
+    );
 
     const result = await enqueueDigestItem({
       communityId: 11,

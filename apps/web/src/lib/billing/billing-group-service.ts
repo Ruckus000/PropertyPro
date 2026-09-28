@@ -3,7 +3,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { billingGroups, communities, pendingSignups, userRoles } from '@propertypro/db';
 import { eq, and, isNull, lt, ne, sql, inArray } from '@propertypro/db/filters';
 import { AppError, ValidationError } from '../api/errors';
-import { isUniqueConstraintError } from '../db/unique-constraint-error';
+import { isNamedUniqueViolation } from '../db/postgres-error';
 import { SIGNUP_EXPIRY_MS } from '../auth/signup-expiry';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
@@ -512,11 +512,9 @@ export async function getOrCreateBillingGroupForPm(
   } catch (err) {
     // billing_groups.stripe_customer_id is UNIQUE — if a different PM already
     // owns a portfolio for this customer, surface a typed 409 instead of a
-    // generic 500. (Postgres unique-violation SQLSTATE = 23505.)
-    if (
-      err instanceof Error &&
-      (err as { code?: string }).code === '23505'
-    ) {
+    // generic 500. Named, and read through drizzle's `cause` wrapper — a
+    // top-level `code` check never matched (see lib/db/postgres-error.ts).
+    if (isNamedUniqueViolation(err, 'billing_groups_stripe_customer_id_unique')) {
       throw new AppError(
         'Portfolio billing can’t be initialized because this Stripe customer already belongs to another portfolio.',
         409,
@@ -602,7 +600,7 @@ export async function createPendingAddToGroupSignup(input: {
     // Postgres error escapes `withErrorHandler`, which only special-cases
     // `AppError`, and the PM sees a 500. Mirrors `signup.ts`'s handling of the
     // same index on the public path.
-    if (isUniqueConstraintError(error, 'pending_signups_candidate_slug_active_unique')) {
+    if (isNamedUniqueViolation(error, 'pending_signups_candidate_slug_active_unique')) {
       throw new ValidationError('That subdomain is no longer available.', {
         field: 'subdomain',
       });
