@@ -21,7 +21,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import { getContextualArticles } from '@/lib/services/help-article-service';
 import { helpContextualGetContract } from './contract';
 
@@ -35,12 +35,12 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
-    const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
+    const viewer = resolveHelpViewerTokens(membership);
 
     // All contextual matches, capped defensively. The modal's search panel
     // lists everything (with show-more); 3 was an arbitrary truncation that
     // silently hid articles on over-matched routes (/documents matches 6).
-    const articles = getContextualArticles(query.path, effectiveRole, CONTEXTUAL_MATCH_CAP);
+    const articles = getContextualArticles(query.path, viewer, CONTEXTUAL_MATCH_CAP);
     return articles.map((a) => ({
       title: a.title,
       description: a.description,

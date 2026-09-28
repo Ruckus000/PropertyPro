@@ -26,7 +26,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import {
   getFeaturedForRole,
   filterArticlesByFeatures,
@@ -41,11 +41,11 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
-    const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
+    const viewer = resolveHelpViewerTokens(membership);
 
     const features = getFeaturesForCommunity(membership.communityType);
     const articles = filterArticlesByFeatures(
-      getFeaturedForRole(effectiveRole),
+      getFeaturedForRole(viewer),
       features,
     );
 

@@ -5,7 +5,7 @@ import matter from 'gray-matter';
 import type { CommunityFeatures } from '@propertypro/shared';
 import { validateFrontmatter } from '@/lib/help/frontmatter-schema';
 import { expandQuery, type ExpandedQuery } from '@/lib/help/aliases';
-import { expandHelpViewerRoleAliases } from '@/lib/help/viewer-role';
+import { isVisibleToAudience } from '@/lib/help/viewer-role';
 
 /**
  * Maximum article results returned by searchArticles. Help search runs in
@@ -214,23 +214,15 @@ export function getAllArticles(): HelpArticleMetadata[] {
   return getArticleSources().map((article) => article.metadata);
 }
 
+/**
+ * `viewer` is the token set from `resolveHelpViewerTokens` (e.g.
+ * `['owner', 'board_member']`), not a single role.
+ */
 export function isArticleVisibleToRole(
   article: Pick<HelpArticleMetadata, 'roles'>,
-  role: string | null | undefined,
+  viewer: readonly string[],
 ): boolean {
-  if (!article.roles.length) {
-    return true;
-  }
-
-  if (!role) {
-    return false;
-  }
-
-  // Lazy import avoided — expandHelpViewerRoleAliases is re-exported from viewer-role
-  // and tested independently; help-article-service imports it at module scope.
-  return article.roles.some((articleRole) =>
-    expandHelpViewerRoleAliases(role).includes(articleRole),
-  );
+  return isVisibleToAudience(article.roles, viewer);
 }
 
 export function isArticleAvailableForFeatures(
@@ -384,38 +376,38 @@ export function getAllTags(): string[] {
   return Array.from(tags).sort();
 }
 
-export function getFeaturedForRole(role: string): HelpArticleMetadata[] {
+export function getFeaturedForRole(viewer: readonly string[]): HelpArticleMetadata[] {
   return getAllArticles()
-    .filter((article) => article.featured && isArticleVisibleToRole(article, role))
+    .filter((article) => article.featured && isArticleVisibleToRole(article, viewer))
     .slice(0, 4);
 }
 
 export function searchArticles(
   query: string,
-  role: string,
+  viewer: readonly string[],
 ): HelpArticleMetadata[];
 export function searchArticles(
   articles: readonly HelpArticleMetadata[],
   query: string,
-  role?: string,
+  viewer?: readonly string[],
 ): HelpArticleMetadata[];
 export function searchArticles(
   source: string | readonly HelpArticleMetadata[],
-  queryOrRole: string,
-  maybeRole?: string,
+  queryOrViewer: string | readonly string[],
+  maybeViewer?: readonly string[],
 ): HelpArticleMetadata[] {
   let articles: readonly HelpArticleMetadata[];
   let query: string;
-  let role: string | undefined;
+  let viewer: readonly string[] | undefined;
 
   if (Array.isArray(source)) {
     articles = source as readonly HelpArticleMetadata[];
-    query = queryOrRole;
-    role = maybeRole;
+    query = queryOrViewer as string;
+    viewer = maybeViewer;
   } else {
     articles = getAllArticles();
     query = source as string;
-    role = queryOrRole;
+    viewer = queryOrViewer as readonly string[];
   }
 
   const expanded = expandQuery(query);
@@ -423,7 +415,7 @@ export function searchArticles(
 
   const scored: Array<{ article: HelpArticleMetadata; score: number }> = [];
   for (const article of articles) {
-    if (role && !isArticleVisibleToRole(article, role)) continue;
+    if (viewer && !isArticleVisibleToRole(article, viewer)) continue;
     const score = scoreArticleForQuery(article, expanded);
     if (score > 0) {
       scored.push({ article, score });
@@ -470,11 +462,11 @@ export function matchContextPath(pattern: string, pathname: string): boolean {
 
 export function getContextualArticles(
   pathname: string,
-  role: string,
+  viewer: readonly string[],
   limit = 3,
 ): HelpArticleMetadata[] {
   return getAllArticles()
-    .filter((article) => isArticleVisibleToRole(article, role))
+    .filter((article) => isArticleVisibleToRole(article, viewer))
     .filter((article) =>
       (article.contextPaths ?? []).some((pattern) => matchContextPath(pattern, pathname)),
     )

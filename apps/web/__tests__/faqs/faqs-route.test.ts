@@ -63,7 +63,8 @@ const VISIBLE_FAQ = {
 const ADMIN_MEMBERSHIP = {
   userId: USER_ID,
   communityId: COMMUNITY_ID,
-  role: 'board_president',
+  // v3 shape: an admin is a property/root manager, not a board role.
+  role: 'property_manager',
   isAdmin: true,
   isUnitOwner: false,
   displayTitle: 'Board President',
@@ -72,7 +73,7 @@ const ADMIN_MEMBERSHIP = {
 
 const TENANT_MEMBERSHIP = {
   ...ADMIN_MEMBERSHIP,
-  role: 'tenant',
+  role: 'resident',
   isAdmin: false,
 };
 
@@ -112,7 +113,7 @@ describe('GET /api/v1/faqs', () => {
       },
     });
     expect(ensureFaqsExistMock).toHaveBeenCalledWith(COMMUNITY_ID);
-    expect(listVisibleFaqsPageMock).toHaveBeenCalledWith(COMMUNITY_ID, 'tenant', {
+    expect(listVisibleFaqsPageMock).toHaveBeenCalledWith(COMMUNITY_ID, ['tenant'], {
       cursor: undefined,
       pageSize: undefined,
     });

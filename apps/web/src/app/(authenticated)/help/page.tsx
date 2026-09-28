@@ -4,7 +4,7 @@ import { HelpHubContent } from '@/components/help/help-hub-content';
 import { StartHereHero } from '@/components/help/start-here-hero';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import { getReadArticleSlugs } from '@/lib/help/read-state';
 import { buildHelpTaskCardsFromFeatures } from '@/lib/help/task-cards';
 import {
@@ -23,7 +23,7 @@ interface HelpPageProps {
 export default async function HelpPage({ searchParams }: HelpPageProps) {
   const resolvedSearchParams = await searchParams;
   const context = await requireHelpPageContext(resolvedSearchParams, '/help');
-  const effectiveRole = resolveHelpViewerRoleFromMembership(context.membership);
+  const viewer = resolveHelpViewerTokens(context.membership);
 
   const scoped = createScopedClient(context.communityId);
   const [communityRows, readSlugs] = await Promise.all([
@@ -36,7 +36,7 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
   ]);
   const community = communityRows[0] as Community | undefined;
 
-  const startHereContent = getStartHereContentForRole(effectiveRole);
+  const startHereContent = getStartHereContentForRole(viewer);
   const startHereArticles = resolveStartHereArticles(
     startHereContent,
     getAllArticles(),
@@ -62,7 +62,7 @@ export default async function HelpPage({ searchParams }: HelpPageProps) {
           context.features,
           context.membership.isAdmin,
         )}
-        featuredArticles={getFeaturedForRole(effectiveRole)}
+        featuredArticles={getFeaturedForRole(viewer)}
         contact={{
           name: community?.contactName ?? null,
           email: community?.contactEmail ?? null,

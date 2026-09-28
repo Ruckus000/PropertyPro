@@ -1,5 +1,11 @@
 # Help Content Authoring
 
+## Audience (`roles:`)
+
+- Five tokens, enforced by `frontmatter-schema.ts` (an unknown token fails `guard:help-content`): `manager`, `owner`, `tenant`, `board_member`, `board_president`. Omit `roles:` for content every member should see.
+- A viewer is a SET: one base audience (`manager` for property/root managers; `owner`/`tenant` for residents) plus their board designation, if any. Content is visible when it shares one token with the viewer.
+- Tag `board_*` **only** where a board designation actually grants the action the article describes: elections admin, violation admin writes, and community export. Everywhere else a board member is an owner or tenant — a board tag on an admin how-to shows a resident instructions that end in a 403.
+
 ## Media
 
 - Use `<MediaFrame src alt width height caption? />` for screenshots and clips. Markdown `![...]` renders a basic framed image with NO layout-shift protection — avoid it for real media.

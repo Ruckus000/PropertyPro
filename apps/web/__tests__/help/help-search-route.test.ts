@@ -49,7 +49,10 @@ vi.mock('@/lib/services/faq-service', () => ({
   searchCommunityFaqs: searchCommunityFaqsMock,
 }));
 
-vi.mock('@propertypro/shared', () => ({
+// Real module (it is side-effect free), with only the feature lookup stubbed:
+// the help viewer resolver reads hasBoardDesignation from here.
+vi.mock('@propertypro/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@propertypro/shared')>()),
   getFeaturesForCommunity: getFeaturesForCommunityMock,
 }));
 
@@ -128,8 +131,8 @@ describe('GET /api/v1/help/search', () => {
     // Route-authz census F4: both sources are filtered by the viewer's help role
     // (a resident owner resolves to 'owner'). Revert-check: drop effectiveRole
     // from either call and this goes red.
-    expect(searchCommunityFaqsMock).toHaveBeenCalledWith(42, 'compliance', 'owner', 10);
-    expect(searchArticlesMock).toHaveBeenCalledWith(expect.anything(), 'compliance', 'owner');
+    expect(searchCommunityFaqsMock).toHaveBeenCalledWith(42, 'compliance', ['owner'], 10);
+    expect(searchArticlesMock).toHaveBeenCalledWith(expect.anything(), 'compliance', ['owner']);
   });
 
   it('fails open when getFeaturesForCommunity throws — still returns results', async () => {

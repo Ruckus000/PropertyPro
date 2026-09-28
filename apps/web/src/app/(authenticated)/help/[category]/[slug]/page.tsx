@@ -7,7 +7,7 @@ import { HelpArticleDisclaimer } from '@/components/help/help-article-disclaimer
 import { TableOfContents, helpMdxComponents } from '@/components/help/mdx-components';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import { extractTableOfContents } from '@/lib/help/toc';
 import {
   getAllArticles,
@@ -39,10 +39,10 @@ export default async function HelpArticlePage({
     resolvedSearchParams,
     `/help/${category}/${slug}`,
   );
-  const effectiveRole = resolveHelpViewerRoleFromMembership(context.membership);
+  const viewer = resolveHelpViewerTokens(context.membership);
   const article = getArticle(category, slug);
 
-  if (!article || !isArticleVisibleToRole(article.metadata, effectiveRole)) {
+  if (!article || !isArticleVisibleToRole(article.metadata, viewer)) {
     notFound();
   }
 
@@ -59,7 +59,7 @@ export default async function HelpArticlePage({
     .map((relatedSlug) => getAllArticles().find((candidate) => candidate.slug === relatedSlug))
     .filter(
       (candidate): candidate is NonNullable<typeof candidate> =>
-        !!candidate && isArticleVisibleToRole(candidate, effectiveRole),
+        !!candidate && isArticleVisibleToRole(candidate, viewer),
     );
 
   return (

@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { Clock } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import {
   findArticlesByStatute,
   isArticleVisibleToRole,
@@ -35,11 +35,11 @@ export default async function StatuteDetailPage({
     resolvedSearchParams,
     `/help/statutes/${ref}`,
   );
-  const effectiveRole = resolveHelpViewerRoleFromMembership(context.membership);
+  const viewer = resolveHelpViewerTokens(context.membership);
 
   const allMatches = findArticlesByStatute(decodedRef);
   const articles = allMatches.filter((article) =>
-    isArticleVisibleToRole(article, effectiveRole),
+    isArticleVisibleToRole(article, viewer),
   );
 
   if (articles.length === 0) {

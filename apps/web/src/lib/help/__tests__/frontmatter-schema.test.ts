@@ -32,3 +32,20 @@ describe('heroMedia / upNext frontmatter', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe('roles — one closed audience vocabulary (roadmap 2.8)', () => {
+  it('accepts the five audiences', () => {
+    const r = validateFrontmatter({
+      ...base,
+      roles: ['manager', 'owner', 'tenant', 'board_member', 'board_president'],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it.each(['pm_admin', 'site-manager', 'Manager'])(
+    'rejects %s — an unknown token used to hide the article from everyone, silently',
+    (token) => {
+      expect(validateFrontmatter({ ...base, roles: [token] }).ok).toBe(false);
+    },
+  );
+});

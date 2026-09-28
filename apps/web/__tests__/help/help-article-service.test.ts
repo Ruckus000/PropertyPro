@@ -6,6 +6,7 @@ import {
   getAllTags,
   getArticlesByTag,
   getFeaturedForRole,
+  isArticleVisibleToRole,
   isArticleAvailableForFeatures,
   matchesArticleQuery,
   parseArticleFrontmatter,
@@ -52,8 +53,8 @@ This is the example body.
   });
 
   it('returns featured articles filtered by role', async () => {
-    const tenantArticles = await getFeaturedForRole('tenant');
-    const managerArticles = await getFeaturedForRole('manager');
+    const tenantArticles = await getFeaturedForRole(['tenant']);
+    const managerArticles = await getFeaturedForRole(['manager']);
 
     expect(tenantArticles.length).toBeGreaterThan(0);
     expect(managerArticles.some((article) => article.slug === 'reviewing-the-compliance-dashboard')).toBe(true);
@@ -61,7 +62,7 @@ This is the example body.
   });
 
   it('searches by title and keywords', async () => {
-    const results = await searchArticles('maintenance', 'tenant');
+    const results = await searchArticles('maintenance', ['tenant']);
 
     expect(results.some((article) => article.slug === 'submitting-a-maintenance-request')).toBe(true);
     expect(matchesArticleQuery(results[0]!, 'maintenance')).toBe(true);
@@ -236,3 +237,36 @@ Body.
     expect(matches.some((article) => article.slug === firstTagged.slug)).toBe(true);
   });
 });
+
+/**
+ * Roadmap 2.8, against the REAL corpus. A board designation grants power in
+ * exactly three places — elections admin, violation admin writes, community
+ * export — so it may add exactly those three articles to a resident's view.
+ * Every other `board_*` tag was a v1 leftover that sends residents into a 403.
+ *
+ * Revert-check: add `board_member` to documents/uploading-documents.mdx and
+ * the matching case goes red, naming that slug in the diff.
+ */
+describe('help corpus — what a board designation adds', () => {
+  const BOARD_GRANTED = [
+    'account/exporting-your-data',
+    'elections/running-a-board-election',
+    'violations/reporting-and-managing-violations',
+  ];
+  const visible = (viewer: readonly string[]) =>
+    getAllArticles()
+      .filter((article) => isArticleVisibleToRole(article, viewer))
+      .map((article) => `${article.category}/${article.slug}`);
+  const added = (base: string, designation: string) => {
+    const without = new Set(visible([base]));
+    return visible([base, designation]).filter((slug) => !without.has(slug)).sort();
+  };
+
+  it.each([
+    ['owner', 'board_member'],
+    ['tenant', 'board_president'],
+  ])('%s + %s adds exactly the three statutory articles', (base, designation) => {
+    expect(added(base, designation)).toEqual(BOARD_GRANTED);
+  });
+});
+

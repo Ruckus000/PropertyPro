@@ -1,3 +1,5 @@
+import type { HelpAudience } from './role-transition';
+
 export interface DefaultFaqDefinition {
   question: string;
   answer: string;
@@ -7,15 +9,11 @@ export interface DefaultFaqDefinition {
 
 export type DefaultFaq = DefaultFaqDefinition;
 
-const ADMIN_HELP_ROLES = [
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-  'manager',
-  'pm_admin',
-] as const;
+// Every FAQ below that carries this is a manager action (meeting notices, the
+// compliance dashboard, announcements, uploads, residents). A board designation
+// does not grant those, so the board tokens are not listed — see HELP_AUDIENCES
+// in role-transition.ts for the tagging rule.
+const ADMIN_HELP_ROLES = ['manager'] as const satisfies readonly HelpAudience[];
 
 export const DEFAULT_FAQS: DefaultFaqDefinition[] = [
   {

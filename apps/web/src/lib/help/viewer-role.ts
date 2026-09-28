@@ -1,21 +1,21 @@
 /**
- * Resolve membership fields to the help-article frontmatter role vocabulary.
+ * Resolve a membership to the SET of help audiences it belongs to.
  *
- * v3 mapping:
- * - resident → owner/tenant (via isUnitOwner)
- * - root_manager → property_manager_admin
- * - property_manager with board designation → board_president / board_member
- * - property_manager without designation → property_manager_admin (full ops)
+ * A viewer is one base audience plus their board designation, if any:
+ *   property_manager / root_manager → manager
+ *   resident                        → owner | tenant (by isUnitOwner)
+ *   + board_member | board_president when `designation` holds one
  *
- * legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
+ * It is a set, not a single role, because "owner AND board member" is one
+ * person. The previous resolver returned one string: it read the designation
+ * only for property managers (who lose it on promotion), so a board-designated
+ * resident never matched a `board_*` tag — and a designated manager resolved to
+ * `board_*` ALONE, losing every manager article.
  *
- * Spec: docs/superpowers/specs/2026-06-10-root-manager-role-simplification-design.md
- *
- * Frontmatter role strings come from HELP_FRONTMATTER_ROLES (guard-exempt
- * role-transition.ts) so this bridge doesn't inline literals counted by
- * guard:legacy-roles — these are help-content vocabulary, not runtime roles.
+ * Content vocabulary and tagging rule: HELP_AUDIENCES in
+ * packages/shared/src/role-transition.ts.
  */
-import { HELP_FRONTMATTER_ROLES as R } from '@propertypro/shared';
+import { hasBoardDesignation, type HelpAudience } from '@propertypro/shared';
 
 export interface HelpViewerMembership {
   role: string;
@@ -23,63 +23,31 @@ export interface HelpViewerMembership {
   isUnitOwner?: boolean;
 }
 
-/**
- * Map raw membership to a single frontmatter-compatible viewer role.
- */
-export function resolveHelpViewerRole(
-  role: string,
-  designation?: string | null,
-  isUnitOwner?: boolean,
-): string {
-  if (role === 'root_manager') {
-    return R.propertyManagerAdmin;
-  }
-
-  if (role === 'property_manager') {
-    if (designation === R.boardPresident) return R.boardPresident;
-    if (designation === R.boardMember) return R.boardMember;
-    return R.propertyManagerAdmin;
-  }
-
-  if (role === 'resident') {
-    return isUnitOwner ? 'owner' : 'tenant';
-  }
-
-  return role;
-}
-
-export function resolveHelpViewerRoleFromMembership(
+export function resolveHelpViewerTokens(
   membership: HelpViewerMembership,
-): string {
-  return resolveHelpViewerRole(
-    membership.role,
-    membership.designation,
-    membership.isUnitOwner,
-  );
+): readonly HelpAudience[] {
+  const tokens: HelpAudience[] = [];
+  if (membership.role === 'property_manager' || membership.role === 'root_manager') {
+    tokens.push('manager');
+  } else if (membership.role === 'resident') {
+    tokens.push(membership.isUnitOwner ? 'owner' : 'tenant');
+  }
+  if (hasBoardDesignation(membership.designation)) {
+    tokens.push(membership.designation);
+  }
+  return tokens;
 }
 
 /**
- * Frontmatter role strings that should satisfy visibility for a resolved viewer role.
- * Keeps articles working when frontmatter lists transition aliases (pm_admin, manager, …).
- *
- * legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
+ * Whether content tagged `audiences` is visible to a viewer holding `tokens`.
+ * Untagged content is visible to everyone; tagged content needs one shared
+ * token. The single visibility rule for articles and FAQs alike (the FAQ SQL
+ * path in faq-service mirrors it).
  */
-export function expandHelpViewerRoleAliases(resolvedRole: string): readonly string[] {
-  switch (resolvedRole) {
-    case R.propertyManagerAdmin:
-      return [
-        R.propertyManagerAdmin,
-        'pm_admin',
-        'property_manager',
-        'root_manager',
-        'manager',
-      ];
-    case R.cam:
-      return [R.cam, 'manager'];
-    default:
-      // legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
-      // board_president, board_member, site_manager, owner, tenant, and any
-      // already-canonical role resolve to themselves.
-      return [resolvedRole];
-  }
+export function isVisibleToAudience(
+  audiences: readonly string[] | null | undefined,
+  tokens: readonly string[],
+): boolean {
+  if (!audiences || audiences.length === 0) return true;
+  return tokens.some((token) => audiences.includes(token));
 }

@@ -132,7 +132,7 @@ describe('scoreArticleForQuery — ranking', () => {
 
 describe('searchArticles — ranking + result cap', () => {
   it('returns alias-derived hits in the in-repo corpus (fees → assessments articles)', async () => {
-    const results = await searchArticles('fees', 'cam');
+    const results = await searchArticles('fees', ['manager']);
     // The corpus has finance/paying-dues-and-assessments.mdx plus payments
     // articles; alias expansion should surface these.
     expect(results.length).toBeGreaterThan(0);
@@ -145,11 +145,11 @@ describe('searchArticles — ranking + result cap', () => {
   it('caps results at 50', async () => {
     // A super-broad query should not exceed the hard cap even if every
     // article matched.
-    const broad = await searchArticles('the', 'cam');
+    const broad = await searchArticles('the', ['manager']);
     expect(broad.length).toBeLessThanOrEqual(50);
   });
 
   it('returns no results for an empty query', async () => {
-    expect(await searchArticles('', 'cam')).toEqual([]);
+    expect(await searchArticles('', ['manager'])).toEqual([]);
   });
 });

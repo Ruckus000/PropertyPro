@@ -32,7 +32,10 @@ vi.mock('@/lib/services/help-article-service', () => ({
   filterArticlesByFeatures: filterArticlesByFeaturesMock,
 }));
 
-vi.mock('@propertypro/shared', () => ({
+// Real module (it is side-effect free), with only the feature lookup stubbed:
+// the help viewer resolver reads hasBoardDesignation from here.
+vi.mock('@propertypro/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@propertypro/shared')>()),
   getFeaturesForCommunity: getFeaturesForCommunityMock,
 }));
 
@@ -59,7 +62,9 @@ describe('GET /api/v1/help/featured', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue({
-      role: 'owner',
+      // v3 shape: what requireCommunityMembership actually returns for an owner.
+      role: 'resident',
+      isUnitOwner: true,
       presetKey: null,
       communityType: 'condo_718',
     });
@@ -80,7 +85,7 @@ describe('GET /api/v1/help/featured', () => {
     const body = await res.json();
     expect(body.data).toHaveLength(1);
     expect(body.data[0].slug).toBe('welcome');
-    expect(getFeaturedForRoleMock).toHaveBeenCalledWith('owner');
+    expect(getFeaturedForRoleMock).toHaveBeenCalledWith(['owner']);
   });
 
   it('returns an empty array when no featured articles match the role', async () => {

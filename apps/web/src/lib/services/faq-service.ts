@@ -7,7 +7,7 @@ import {
 } from '@propertypro/db';
 import { and, asc, eq, gt, isNull, or, sql } from '@propertypro/db/filters';
 import { DEFAULT_FAQS } from '@propertypro/shared';
-import { expandHelpViewerRoleAliases } from '@/lib/help/viewer-role';
+import { isVisibleToAudience } from '@/lib/help/viewer-role';
 
 export interface VisibleFaq {
   id: number;
@@ -30,29 +30,15 @@ export function buildDefaultFaqRows() {
   }));
 }
 
+/** `viewer` is the token set from `resolveHelpViewerTokens`. */
 export function isFaqVisibleToRole(
   faq: Pick<VisibleFaq, 'roleVisibility'> | FaqLike,
-  role: string | null | undefined,
+  viewer: readonly string[],
 ): boolean {
   const allowedRoles = (
     'roleVisibility' in faq ? faq.roleVisibility : faq['roleVisibility']
   ) as string[] | null | undefined;
-
-  if (!allowedRoles || allowedRoles.length === 0) {
-    return true;
-  }
-
-  if (!role) {
-    return false;
-  }
-
-  // Match on the resolved viewer role AND its frontmatter aliases, so a FAQ
-  // tagged with a v2 alias (e.g. `pm_admin`, `manager`) stays visible to the
-  // canonical viewer role (`property_manager_admin`, `cam`). Callers pass the
-  // already-resolved viewer role (see resolveHelpViewerRoleFromMembership).
-  // legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
-  const viewerAliases = expandHelpViewerRoleAliases(role);
-  return viewerAliases.some((alias) => allowedRoles.includes(alias));
+  return isVisibleToAudience(allowedRoles, viewer);
 }
 
 export function sortFaqs<T extends FaqLike>(items: readonly T[]): T[] {
@@ -76,10 +62,10 @@ export function toVisibleFaq(faq: FaqLike): VisibleFaq {
 
 export function filterFaqsForRole(
   faqRows: readonly FaqLike[],
-  role: string | null | undefined,
+  viewer: readonly string[],
 ): VisibleFaq[] {
   return sortFaqs(faqRows)
-    .filter((faq) => isFaqVisibleToRole(faq, role))
+    .filter((faq) => isFaqVisibleToRole(faq, viewer))
     .map(toVisibleFaq);
 }
 
@@ -115,24 +101,21 @@ function decodeFaqOrderedCursor(
   return null;
 }
 
-function buildFaqRoleVisibilityWhere(role: string | null | undefined) {
+function buildFaqRoleVisibilityWhere(viewer: readonly string[]) {
   const globallyVisible = or(
     isNull(faqs.roleVisibility),
     sql`cardinality(${faqs.roleVisibility}) = 0`,
   );
 
-  if (!role) {
+  if (viewer.length === 0) {
     return globallyVisible;
   }
 
-  // Match the resolved viewer role AND its v2 frontmatter aliases, so this SQL
-  // path agrees with the in-memory `isFaqVisibleToRole` path. Callers pass the
-  // already-resolved viewer role (see resolveHelpViewerRoleFromMembership).
-  // legacy-roles:exempt — help-article frontmatter vocabulary, not runtime roles.
-  const aliases = expandHelpViewerRoleAliases(role);
+  // The SQL twin of isVisibleToAudience: untagged, or tagged with one of the
+  // viewer's tokens. The in-memory path (isFaqVisibleToRole) must agree.
   return or(
     globallyVisible,
-    ...aliases.map((alias) => sql`${alias} = ANY(${faqs.roleVisibility})`),
+    ...viewer.map((token) => sql`${token} = ANY(${faqs.roleVisibility})`),
   );
 }
 
@@ -146,12 +129,12 @@ function buildFaqOrderedCursorWhere(cursor: FaqOrderedCursorPayload | null) {
 
 export async function listVisibleFaqsPage(
   communityId: number,
-  role: string | null | undefined,
+  viewer: readonly string[],
   input: PaginationInput = {},
 ): Promise<PaginatedResult<VisibleFaq>> {
   const pageSize = clampPageSize(input.pageSize);
   const cursor = decodeFaqOrderedCursor(input.cursor);
-  const roleWhere = buildFaqRoleVisibilityWhere(role);
+  const roleWhere = buildFaqRoleVisibilityWhere(viewer);
   const cursorWhere = buildFaqOrderedCursorWhere(cursor);
   const where = cursorWhere ? and(roleWhere, cursorWhere) : roleWhere;
 
@@ -332,10 +315,10 @@ export interface SearchCommunityFaqsResult {
 export async function searchCommunityFaqs(
   communityId: number,
   query: string,
-  // The resolved help viewer role (resolveHelpViewerRoleFromMembership).
-  // Required: this search used to return every FAQ's full answer regardless of
-  // its roleVisibility, unlike listVisibleFaqsPage (route-authz census F4).
-  role: string | null | undefined,
+  // The viewer's token set (resolveHelpViewerTokens). Required: this search
+  // used to return every FAQ's full answer regardless of its roleVisibility,
+  // unlike listVisibleFaqsPage (route-authz census F4).
+  viewer: readonly string[],
   limit = 10,
 ): Promise<SearchCommunityFaqsResult> {
   const scoped = createScopedClient(communityId);
@@ -343,7 +326,7 @@ export async function searchCommunityFaqs(
   const qLower = query.toLowerCase();
   const hits = rows
     .filter((f) => {
-      if (!isFaqVisibleToRole(f, role)) return false;
+      if (!isFaqVisibleToRole(f, viewer)) return false;
       const question = String(f['question'] ?? '').toLowerCase();
       const answer = String(f['answer'] ?? '').toLowerCase();
       return question.includes(qLower) || answer.includes(qLower);

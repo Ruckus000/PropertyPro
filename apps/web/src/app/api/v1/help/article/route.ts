@@ -28,7 +28,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import {
   getAllArticles,
   getArticle,
@@ -57,12 +57,12 @@ export const GET = withErrorHandler(
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
     const features = getFeaturesForCommunity(membership.communityType);
-    const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
+    const viewer = resolveHelpViewerTokens(membership);
 
     const article = getArticle(query.category, query.slug);
     if (
       !article ||
-      !isArticleVisibleToRole(article.metadata, effectiveRole) ||
+      !isArticleVisibleToRole(article.metadata, viewer) ||
       filterArticlesByFeatures([article.metadata], features).length === 0
     ) {
       // 404, NOT 403 — don't leak existence of role-gated articles
@@ -70,8 +70,8 @@ export const GET = withErrorHandler(
     }
 
     const compiled = await getCompiledArticle(article);
-    const related = getRelatedArticles(article, effectiveRole, features);
-    const upNext = resolveUpNext(article, effectiveRole, features);
+    const related = getRelatedArticles(article, viewer, features);
+    const upNext = resolveUpNext(article, viewer, features);
 
     return {
       html: compiled.html,
@@ -130,7 +130,7 @@ async function getCompiledArticle(article: HelpArticleSource): Promise<CompiledA
  */
 function getRelatedArticles(
   article: HelpArticleSource,
-  effectiveRole: string,
+  viewer: readonly string[],
   features: ReturnType<typeof getFeaturesForCommunity>,
 ): HelpArticleMetadata[] {
   return article.metadata.relatedArticles
@@ -138,7 +138,7 @@ function getRelatedArticles(
     .filter(
       (a): a is HelpArticleMetadata =>
         !!a &&
-        isArticleVisibleToRole(a, effectiveRole) &&
+        isArticleVisibleToRole(a, viewer) &&
         filterArticlesByFeatures([a], features).length > 0,
     );
 }
@@ -150,7 +150,7 @@ function getRelatedArticles(
  */
 function resolveUpNext(
   article: HelpArticleSource,
-  effectiveRole: string,
+  viewer: readonly string[],
   features: ReturnType<typeof getFeaturesForCommunity>,
 ): HelpArticleMetadata | null {
   const slug = article.metadata.upNext;
@@ -158,7 +158,7 @@ function resolveUpNext(
   const target = getAllArticles().find((a) => a.slug === slug);
   if (
     !target ||
-    !isArticleVisibleToRole(target, effectiveRole) ||
+    !isArticleVisibleToRole(target, viewer) ||
     filterArticlesByFeatures([target], features).length === 0
   ) {
     return null;

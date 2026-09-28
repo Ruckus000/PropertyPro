@@ -4,7 +4,7 @@ import { HelpSearchInput } from '@/components/help/help-search-input';
 import { HelpSearchResults } from '@/components/help/help-search-results';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
-import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
+import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import { ensureFaqsExist, filterFaqsForRole } from '@/lib/services/faq-service';
 import { searchArticles } from '@/lib/services/help-article-service';
 
@@ -25,7 +25,7 @@ export default async function HelpSearchPage({
 }: HelpSearchPageProps) {
   const resolvedSearchParams = await searchParams;
   const context = await requireHelpPageContext(resolvedSearchParams, '/help/search');
-  const effectiveRole = resolveHelpViewerRoleFromMembership(context.membership);
+  const viewer = resolveHelpViewerTokens(context.membership);
   const query = toSearchValue(resolvedSearchParams.q).trim();
 
   if (!query) {
@@ -36,7 +36,7 @@ export default async function HelpSearchPage({
 
   const scoped = createScopedClient(context.communityId);
   const faqRows = await scoped.query(faqs);
-  const faqResults = filterFaqsForRole(faqRows, effectiveRole).filter((faq) => {
+  const faqResults = filterFaqsForRole(faqRows, viewer).filter((faq) => {
     const haystack = `${faq.question} ${faq.answer} ${faq.category ?? ''}`.toLowerCase();
     return haystack.includes(query.toLowerCase());
   });
@@ -51,7 +51,7 @@ export default async function HelpSearchPage({
       <HelpSearchResults
         communityId={context.communityId}
         query={query}
-        articleResults={searchArticles(query, effectiveRole)}
+        articleResults={searchArticles(query, viewer)}
         faqResults={faqResults}
       />
     </div>

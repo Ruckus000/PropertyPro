@@ -40,32 +40,11 @@ const DEFAULT_SLUGS: readonly string[] = [
   'using-the-mobile-app',
 ];
 
-const BOARD_SLUGS: readonly string[] = [
-  'welcome-to-propertypro',
-  'reviewing-the-compliance-dashboard',
-  'creating-meeting-notices',
-  'reporting-and-managing-violations',
-];
-
-const CAM_SLUGS: readonly string[] = [
-  'reviewing-the-compliance-dashboard',
-  'compliance-scoring-explained',
-  'document-posting-requirements',
-  'creating-meeting-notices',
-];
-
-const PM_ADMIN_SLUGS: readonly string[] = [
+const MANAGER_SLUGS: readonly string[] = [
   'managing-multiple-communities',
   'running-portfolio-reports',
   'reviewing-the-compliance-dashboard',
   'sending-bulk-announcements-and-documents',
-];
-
-const SITE_MANAGER_SLUGS: readonly string[] = [
-  'welcome-to-propertypro',
-  'managing-leases',
-  'tracking-maintenance-status',
-  'logging-packages',
 ];
 
 const TENANT_SLUGS: readonly string[] = [
@@ -82,6 +61,10 @@ const OWNER_SLUGS: readonly string[] = [
   'understanding-your-assessment-balance',
 ];
 
+// Keyed by the viewer's BASE audience (resolveHelpViewerTokens' first token).
+// A board designation does not change the hero: a board member is an owner or
+// tenant here, and the old board/CAM/site-manager entries were unreachable (the
+// resolver never produced those keys) and pointed at manager-only articles.
 const ROLE_MAP: Readonly<Record<string, StartHereContent>> = {
   owner: {
     headline: 'Get the most out of PropertyPro',
@@ -93,35 +76,10 @@ const ROLE_MAP: Readonly<Record<string, StartHereContent>> = {
     subhead: 'A short orientation tour so you can find what you need fast.',
     slugs: TENANT_SLUGS,
   },
-  board_member: {
-    headline: 'Your board playbook',
-    subhead: 'Compliance, meetings, and violations — what to do every week.',
-    slugs: BOARD_SLUGS,
-  },
-  board_president: {
-    headline: 'Lead your board with confidence',
-    subhead: 'Run meetings, keep compliance green, and respond to violations.',
-    slugs: BOARD_SLUGS,
-  },
-  cam: {
-    headline: 'CAM essentials',
-    subhead: 'Compliance scoring, document posting, and meeting notices.',
-    slugs: CAM_SLUGS,
-  },
-  property_manager_admin: {
+  manager: {
     headline: 'Manage your portfolio',
     subhead: 'Multi-community workflows and reports built for PMs.',
-    slugs: PM_ADMIN_SLUGS,
-  },
-  pm_admin: {
-    headline: 'Manage your portfolio',
-    subhead: 'Multi-community workflows and reports built for PMs.',
-    slugs: PM_ADMIN_SLUGS,
-  },
-  site_manager: {
-    headline: 'Run your site day-to-day',
-    subhead: 'Leases, maintenance, packages, and resident requests.',
-    slugs: SITE_MANAGER_SLUGS,
+    slugs: MANAGER_SLUGS,
   },
 };
 
@@ -136,8 +94,9 @@ const DEFAULT_CONTENT: StartHereContent = {
  * if the role isn't mapped. The CTA links into `/help/getting-started` so
  * users can reach the full orientation arc.
  */
-export function getStartHereContentForRole(role: string | null | undefined): StartHereContent {
-  const base = (role && ROLE_MAP[role]) || DEFAULT_CONTENT;
+export function getStartHereContentForRole(viewer: readonly string[]): StartHereContent {
+  const baseAudience = viewer[0];
+  const base = (baseAudience && ROLE_MAP[baseAudience]) || DEFAULT_CONTENT;
   return {
     ...base,
     cta: {

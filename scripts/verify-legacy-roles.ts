@@ -51,8 +51,8 @@ const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'package
 const LITERAL = /'(cam|site_manager|property_manager_admin)'/g;
 const V2_CAST = /'resident'\s*\|\s*'manager'\s*\|\s*'pm_admin'/g;
 const EXEMPT = new Set([
-  // The v3 source-of-truth module — holds the guard-exempt HELP_FRONTMATTER_ROLES
-  // content vocabulary (help-article frontmatter, not runtime roles).
+  // The v3 source-of-truth module — holds the role/designation constants,
+  // including the help-content audience vocabulary (HELP_AUDIENCES).
   'packages/shared/src/role-transition.ts',
 ]);
 
@@ -72,14 +72,11 @@ const ALLOWLIST = new Map<string, number>([
   // (access-policies.ts). The runtime role vocabulary is now v3-only.
   // BRIDGE — drained to zero in Phase 4.4. Bucket intentionally empty.
   // HELP
-  ['packages/shared/src/default-faqs.ts', 3],
   ['apps/web/src/lib/help/aliases.ts', 1],
   // DEV
   ['apps/web/src/app/dev/agent-login/route.ts', 2],
   ['apps/web/src/app/dev/login/route.ts', 2],
   // TEST
-  ['apps/web/src/lib/help/__tests__/viewer-role.test.ts', 3],
-  ['apps/web/src/lib/services/__tests__/help-article-service.test.ts', 1],
   ['apps/web/src/lib/work-orders/__tests__/common.test.ts', 1],
 ]);
 

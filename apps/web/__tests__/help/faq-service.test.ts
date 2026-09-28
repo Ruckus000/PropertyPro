@@ -55,9 +55,9 @@ describe('faq service helpers', () => {
   });
 
   it('filters role-restricted FAQs correctly', () => {
-    expect(isFaqVisibleToRole({ roleVisibility: null }, 'tenant')).toBe(true);
-    expect(isFaqVisibleToRole({ roleVisibility: ['manager'] }, 'tenant')).toBe(false);
-    expect(isFaqVisibleToRole({ roleVisibility: ['manager'] }, 'manager')).toBe(true);
+    expect(isFaqVisibleToRole({ roleVisibility: null }, ['tenant'])).toBe(true);
+    expect(isFaqVisibleToRole({ roleVisibility: ['manager'] }, ['tenant'])).toBe(false);
+    expect(isFaqVisibleToRole({ roleVisibility: ['manager'] }, ['manager'])).toBe(true);
 
     const visible = filterFaqsForRole(
       [
@@ -78,26 +78,26 @@ describe('faq service helpers', () => {
           roleVisibility: ['manager'],
         },
       ] as never,
-      'tenant',
+      ['tenant'],
     );
 
     expect(visible.map((faq) => faq.id)).toEqual([1]);
   });
 
-  it('matches v2 frontmatter aliases against the resolved viewer role', () => {
-    // A FAQ tagged with the legacy alias stays visible to the canonical
-    // resolved viewer role (regression: help/search now passes the resolved
-    // role to filterFaqsForRole).
-    expect(
-      isFaqVisibleToRole({ roleVisibility: ['pm_admin'] }, 'property_manager_admin'),
-    ).toBe(true);
-    expect(
-      isFaqVisibleToRole({ roleVisibility: ['manager'] }, 'cam'),
-    ).toBe(true);
-    // Aliases do not leak across unrelated roles.
-    expect(
-      isFaqVisibleToRole({ roleVisibility: ['property_manager_admin'] }, 'tenant'),
-    ).toBe(false);
+  it('matches on any of the viewer\'s tokens (roadmap 2.8 — a board owner is owner AND board)', () => {
+    const boardOwner = ['owner', 'board_member'];
+    expect(isFaqVisibleToRole({ roleVisibility: ['owner'] }, boardOwner)).toBe(true);
+    expect(isFaqVisibleToRole({ roleVisibility: ['board_member'] }, boardOwner)).toBe(true);
+    expect(isFaqVisibleToRole({ roleVisibility: ['manager'] }, boardOwner)).toBe(false);
+  });
+
+  it('keeps every admin default FAQ manager-only — a board designation does not grant those actions', () => {
+    const adminDefaults = buildDefaultFaqRows().filter((row) => row.roleVisibility?.length);
+    expect(adminDefaults.length).toBeGreaterThan(0);
+    for (const row of adminDefaults) {
+      expect(isFaqVisibleToRole(row, ['manager'])).toBe(true);
+      expect(isFaqVisibleToRole(row, ['owner', 'board_president'])).toBe(false);
+    }
   });
 
   it('seeds defaults when a community has no FAQs yet', async () => {
@@ -160,7 +160,7 @@ describe('faq service helpers', () => {
         },
       ]);
 
-      const result = await listVisibleFaqsPage(42, 'tenant', { pageSize: 2 });
+      const result = await listVisibleFaqsPage(42, ['tenant'], { pageSize: 2 });
 
       expect(result.data.map((faq) => faq.id)).toEqual([10, 11]);
       expect(result.pagination.hasMore).toBe(true);
@@ -192,11 +192,11 @@ describe('faq service helpers', () => {
           answer: 'A21',
           sortOrder: 4,
           category: null,
-          roleVisibility: ['cam'],
+          roleVisibility: ['board_member'],
         },
       ]);
 
-      const result = await listVisibleFaqsPage(42, 'cam', { cursor, pageSize: 10 });
+      const result = await listVisibleFaqsPage(42, ['owner', 'board_member'], { cursor, pageSize: 10 });
 
       expect(result.data.map((faq) => faq.id)).toEqual([21]);
       expect(result.pagination.nextCursor).toBeNull();
@@ -218,13 +218,13 @@ describe('faq service helpers', () => {
               {
                 __sql: {
                   strings: ['', ' = ANY(', ')'],
-                  values: ['cam', faqsTableMock.roleVisibility],
+                  values: ['owner', faqsTableMock.roleVisibility],
                 },
               },
               {
                 __sql: {
                   strings: ['', ' = ANY(', ')'],
-                  values: ['manager', faqsTableMock.roleVisibility],
+                  values: ['board_member', faqsTableMock.roleVisibility],
                 },
               },
             ],
@@ -247,7 +247,7 @@ describe('faq service helpers', () => {
     it('limits anonymous/no-role visibility to global FAQs before pagination', async () => {
       const { selectFrom } = mockSelectRows([]);
 
-      await listVisibleFaqsPage(42, null, { pageSize: 5 });
+      await listVisibleFaqsPage(42, [], { pageSize: 5 });
 
       expect(selectFrom.mock.calls[0]?.[2]).toEqual({
         __or: [
@@ -265,7 +265,7 @@ describe('faq service helpers', () => {
     it('treats malformed cursors as a first-page request', async () => {
       const { selectFrom } = mockSelectRows([]);
 
-      await listVisibleFaqsPage(42, 'tenant', { cursor: 'not-valid-base64', pageSize: 5 });
+      await listVisibleFaqsPage(42, ['tenant'], { cursor: 'not-valid-base64', pageSize: 5 });
 
       const where = selectFrom.mock.calls[0]?.[2] as { __or: unknown[] };
       expect(where).toEqual({
@@ -304,7 +304,7 @@ describe('faq service helpers', () => {
       const query = vi.fn().mockResolvedValue(rows);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'OPEN', 'owner');
+      const result = await searchCommunityFaqs(42, 'OPEN', ['owner']);
       expect(result.hits.map((h) => h.id).sort()).toEqual([1, 3]);
       expect(result.totalRowCount).toBe(4);
       expect(createScopedClientMock).toHaveBeenCalledWith(42);
@@ -314,7 +314,7 @@ describe('faq service helpers', () => {
       const query = vi.fn().mockResolvedValue(rows);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'xyzzy', 'owner');
+      const result = await searchCommunityFaqs(42, 'xyzzy', ['owner']);
       expect(result.hits).toEqual([]);
       expect(result.totalRowCount).toBe(4);
     });
@@ -328,7 +328,7 @@ describe('faq service helpers', () => {
       const query = vi.fn().mockResolvedValue(manyMatching);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'pool', 'owner', 5);
+      const result = await searchCommunityFaqs(42, 'pool', ['owner'], 5);
       expect(result.hits).toHaveLength(5);
       expect(result.totalRowCount).toBe(25);
     });
@@ -338,15 +338,15 @@ describe('faq service helpers', () => {
     // isFaqVisibleToRole filter and this case goes red.
     it('hides an FAQ restricted to other roles, and keeps unrestricted ones', async () => {
       const query = vi.fn().mockResolvedValue([
-        { id: 1, question: 'Gate code?', answer: '4321', roleVisibility: ['property_manager_admin'] },
+        { id: 1, question: 'Gate code?', answer: '4321', roleVisibility: ['manager'] },
         { id: 2, question: 'Gate hours?', answer: '6am-10pm', roleVisibility: [] },
       ]);
       createScopedClientMock.mockReturnValue({ query });
 
-      const asTenant = await searchCommunityFaqs(42, 'gate', 'tenant');
+      const asTenant = await searchCommunityFaqs(42, 'gate', ['tenant']);
       expect(asTenant.hits.map((h) => h.id)).toEqual([2]);
 
-      const asManager = await searchCommunityFaqs(42, 'gate', 'property_manager_admin');
+      const asManager = await searchCommunityFaqs(42, 'gate', ['manager']);
       expect(asManager.hits.map((h) => h.id).sort()).toEqual([1, 2]);
     });
 
@@ -356,7 +356,7 @@ describe('faq service helpers', () => {
       ]);
       createScopedClientMock.mockReturnValue({ query });
 
-      const result = await searchCommunityFaqs(42, 'Q', 'owner');
+      const result = await searchCommunityFaqs(42, 'Q', ['owner']);
       expect(result.hits[0]).toEqual({ id: 7, question: 'Q?', answer: 'A.' });
     });
   });

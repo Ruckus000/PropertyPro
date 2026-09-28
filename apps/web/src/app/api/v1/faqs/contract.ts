@@ -8,7 +8,7 @@
  *     → resolveEffectiveCommunityId(req, query.communityId)
  *     → requireCommunityMembership
  *     → ensureFaqsExist(communityId)
- *     → listVisibleFaqsPage(communityId, membership.role, { cursor, pageSize })
+ *     → listVisibleFaqsPage(communityId, resolveHelpViewerTokens(membership), { cursor, pageSize })
  *
  * POST auth surface:
  *   resolveEffectiveCommunityId(req, body.communityId)
