@@ -8,8 +8,8 @@
 # It runs two suites against a disposable vanilla-Postgres service container:
 #   1. `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
 #      — the apps/web integration suite (the step the floor below governs).
-#   2. the packages/db RLS pair (rls-policies + pipeline-and-transactions),
-#      scoped to two files on purpose — see the step comment.
+#   2. the packages/db RLS pair (rls-policies + pipeline-and-transactions) and
+#      seed-resident-units, scoped to named files on purpose — see the step comment.
 #
 # EXECUTED-COUNT FLOOR (TST-06) — PRINT-ONLY, NOT ARMED (plan ledger D15–D17,
 # human-confirmed 2026-09-23). The "Run integration tests" step also emits a
@@ -301,8 +301,14 @@ jobs:
         # pipeline-and-transactions rides along: it needs only a bare Postgres
         # and pins the patched postgres.js (patches/postgres@3.4.8.patch), whose
         # loss would make every db.transaction throw UNSAFE_TRANSACTION.
+        #
+        # seed-resident-units rides along too: it needs only a bare Postgres
+        # (Supabase auth/storage go to an in-process HTTP double) and pins that
+        # every seeded demo resident — including each admin-console sales demo's
+        # persona — gets a unit, and that a reseed never wipes it.
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
           __tests__/rls-policies.integration.test.ts
           __tests__/pipeline-and-transactions.integration.test.ts
+          __tests__/seed-resident-units.integration.test.ts
