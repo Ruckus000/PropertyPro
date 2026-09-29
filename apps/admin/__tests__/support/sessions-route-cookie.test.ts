@@ -217,8 +217,20 @@ describe('POST /api/admin/support/sessions — target must belong to the consent
     membershipLookup.mockResolvedValue({ data: null, error: { message: 'boom' } });
     const res = await callCreate();
 
-    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(res.status).toBe(500);
     expect(sessionInsert).not.toHaveBeenCalled();
     expect(signSupportToken).not.toHaveBeenCalled();
+  });
+
+  it('refuses to hand out a session whose session_started row could not be written', async () => {
+    membershipLookup.mockResolvedValue({
+      data: { user_id: '11111111-2222-4333-8444-555555555555' },
+      error: null,
+    });
+    accessLogInsert.mockResolvedValue({ error: { message: 'insert failed' } });
+    const res = await callCreate();
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('set-cookie')).toBeNull();
   });
 });

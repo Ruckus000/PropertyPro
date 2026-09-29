@@ -19,9 +19,10 @@
  *     in front of the wrong managers);
  *   - the operator or session id is unreadable → 403 (an entry that cannot
  *     name who acted is not an audit entry);
- *   - the account being changed is not a member of that community, or its
- *     membership cannot be read → 403 (the change would be made under a
- *     consent the account's own community never gave);
+ *   - the account being changed is not a member of that community → 403
+ *     (the change would be made under a consent the account's own community
+ *     never gave); its membership cannot be read → 500
+ *     SUPPORT_AUDIT_FAILED, "not made";
  *   - the insert fails → 500 SUPPORT_AUDIT_FAILED, "not made".
  * Outside a support session it returns `false` and writes nothing, so the
  * routes behave exactly as they did.
@@ -107,6 +108,9 @@ export const SUPPORT_AUDIT_UNATTRIBUTABLE_MESSAGE =
 export const SUPPORT_AUDIT_NOT_MEMBER_MESSAGE =
   'This change cannot be made during this support session because this account is not a member of the community that granted support access.';
 
+export const SUPPORT_AUDIT_MEMBERSHIP_UNREADABLE_MESSAGE =
+  'This change could not be checked against the community that granted support access, so it was not made. Please try again.';
+
 export const SUPPORT_AUDIT_FAILED_MESSAGE =
   'This change could not be recorded in the support access log, so it was not made. Please try again.';
 
@@ -181,7 +185,7 @@ export async function recordSupportAction(
   // before that check existed. user_roles has no soft delete: a row is
   // membership. Unreadable → refuse, like every other branch here.
   const db = createAdminTypedClient();
-  let isMember = false;
+  let membership: 'member' | 'not_member' | 'unreadable';
   try {
     const { data, error } = await db
       .from('user_roles')
@@ -189,12 +193,21 @@ export async function recordSupportAction(
       .eq('user_id', input.targetUserId)
       .eq('community_id', scope.communityId)
       .maybeSingle();
-    isMember = !error && data !== null;
+    membership = error ? 'unreadable' : data !== null ? 'member' : 'not_member';
   } catch {
-    isMember = false;
+    membership = 'unreadable';
   }
-  if (!isMember) {
+  if (membership === 'not_member') {
     throw supportAuditError(new ForbiddenError(SUPPORT_AUDIT_NOT_MEMBER_MESSAGE));
+  }
+  if (membership === 'unreadable') {
+    console.error('[support-audit] membership read failed; refusing the change', {
+      event: input.event,
+      sessionId: actor.sessionId,
+    });
+    throw supportAuditError(
+      new AppError(SUPPORT_AUDIT_MEMBERSHIP_UNREADABLE_MESSAGE, 500, SUPPORT_AUDIT_FAILED_CODE),
+    );
   }
 
   let insertError: unknown = null;

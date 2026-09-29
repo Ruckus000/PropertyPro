@@ -370,24 +370,31 @@ describe('PATCH /api/v1/account/profile under a support session', () => {
     expect(h.updateUserProfileMock).not.toHaveBeenCalled();
   });
 
-  it('FAILS CLOSED: an unreadable membership → 403, nothing written, no update', async () => {
+  // A read failure is not evidence the user is a non-member: refuse, but say
+  // what happened (500 SUPPORT_AUDIT_FAILED), not "not a member".
+  it('FAILS CLOSED: a membership read error → 500 SUPPORT_AUDIT_FAILED, nothing written, no update', async () => {
     h.membershipMock.mockResolvedValue({ data: null, error: { message: 'boom' } });
     const res = await profilePATCH(
       request('/api/v1/account/profile', 'PATCH', { fullName: 'Olivia Newname' }, true),
     );
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('SUPPORT_AUDIT_FAILED');
+    expect(body.error.message).toMatch(/could not be checked against the community/);
     expect(h.auditInsertMock).not.toHaveBeenCalled();
     expect(h.updateUserProfileMock).not.toHaveBeenCalled();
   });
 
-  it('FAILS CLOSED: a non-member cannot have a pending deletion cancelled either', async () => {
-    h.membershipMock.mockResolvedValue({ data: null, error: null });
-    const res = await accountDELETE(request('/api/v1/account/delete', 'DELETE', undefined, true));
+  it('FAILS CLOSED: a thrown membership read → 500, nothing written, no update', async () => {
+    h.membershipMock.mockRejectedValue(new Error('socket hang up'));
+    const res = await profilePATCH(
+      request('/api/v1/account/profile', 'PATCH', { fullName: 'Olivia Newname' }, true),
+    );
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(500);
     expect(h.auditInsertMock).not.toHaveBeenCalled();
-    expect(h.cancelUserDeletionMock).not.toHaveBeenCalled();
+    expect(h.updateUserProfileMock).not.toHaveBeenCalled();
   });
 
   it('FAILS CLOSED: a missing operator id → 403, nothing written, no update', async () => {
@@ -449,6 +456,19 @@ describe('POST /api/v1/phone/verify/send under a support session', () => {
     expect((auditRows()[0]!.metadata as { before: unknown }).before).toEqual({
       otpLastSentAt: '2026-09-01T08:00:00.000Z',
     });
+  });
+
+  it('FAILS CLOSED: a target who is not a member of the consented community → 403, no SMS sent', async () => {
+    h.membershipMock.mockResolvedValue({ data: null, error: null });
+
+    const res = await sendPOST(
+      request('/api/v1/phone/verify/send', 'POST', { phone: '+13055559876' }, true),
+    );
+
+    expect(res.status).toBe(403);
+    expect(h.auditInsertMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(h.markOtpSentMock).not.toHaveBeenCalled();
   });
 
   it('FAILS CLOSED: an insert error → 500, no SMS sent, cooldown not stamped', async () => {
@@ -651,6 +671,15 @@ describe('DELETE /api/v1/account/delete under a support session', () => {
       target: { deletionRequestId: 91 },
     });
     expect(h.cancelUserDeletionMock).toHaveBeenCalledWith(91, TARGET);
+  });
+
+  it('FAILS CLOSED: a target who is not a member of the consented community → 403, deletion NOT cancelled', async () => {
+    h.membershipMock.mockResolvedValue({ data: null, error: null });
+    const res = await accountDELETE(request('/api/v1/account/delete', 'DELETE', undefined, true));
+
+    expect(res.status).toBe(403);
+    expect(h.auditInsertMock).not.toHaveBeenCalled();
+    expect(h.cancelUserDeletionMock).not.toHaveBeenCalled();
   });
 
   it('FAILS CLOSED: an insert error → 500 and the deletion is NOT cancelled', async () => {
