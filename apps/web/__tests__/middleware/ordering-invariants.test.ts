@@ -233,20 +233,37 @@ describe('invariant 1: tenant resolution runs before the support-impersonation b
 // ---------------------------------------------------------------------------
 
 describe('support session stamps its consented community when no tenant resolves', () => {
-  it('(a) apex /api/v1/communities/<B>/... is pinned to the session community A, not the path', async () => {
+  it('(a) apex /api/v1/communities/<B>/... REJECTS a session consented to by A', async () => {
+    // cancel-preview reads the community from params.id and never reconciles
+    // x-community-id, so a stamp alone could not pin it: the path id is used as
+    // the expected community, and the mismatch rejects the session.
     const res = await middleware(
       req(`https://${ROOT_DOMAIN}/api/v1/communities/2/cancel-preview`, {
         supportToken: await signSupportToken(),
       }),
     );
 
-    expect(res.status).toBe(200);
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    expect(res.headers.get('set-cookie') ?? '').toMatch(
+      new RegExp(`${SUPPORT_SESSION_COOKIE}=;.*Max-Age=0`, 'i'),
+    );
+    // Rejected on the community comparison, BEFORE the DB read.
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  });
+
+  it('(a2) apex /api/v1/communities/<A>/... accepts the session and stamps A', async () => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/${TOKEN_COMMUNITY_ID}/cancel-preview`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
     expect(forwarded(res, 'x-support-session')).toBe('1');
     expect(forwarded(res, 'x-user-id')).toBe('target-user-uuid');
-    // A (the token's community), never B (the API path's): the middleware
-    // must not derive a tenant from an /api/v1/communities/<id> path.
     expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
     expect(forwarded(res, 'x-tenant-source')).toBe('support_session');
+    expect(maybeSingleMock).toHaveBeenCalledTimes(1);
   });
 
   it('(b) a resolved tenant EQUAL to the session community is accepted and left unchanged', async () => {

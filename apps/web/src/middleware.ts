@@ -1094,11 +1094,21 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const supportCookieValue = request.cookies.get(SUPPORT_SESSION_COOKIE)?.value;
   if (supportCookieValue) {
     const currentCommunityId = Number(forwardedHeaders.get(COMMUNITY_ID_HEADER));
+    // Tenant resolution never stamps from an /api/v1/communities/<id>/... path,
+    // and routes under it (e.g. cancel-preview) read the community from
+    // params.id without reconciling x-community-id, so the stamp below cannot
+    // pin them. When no tenant resolved, the path's id is the community the
+    // session is about to act on: compare against it, so a session consented to
+    // by A is rejected (exactly like a resolved-tenant mismatch) on B's path.
+    const apiPathCommunityMatch = /^\/api\/v1\/communities\/(\d+)(?:\/|$)/.exec(pathname);
+    const apiPathCommunityId = apiPathCommunityMatch ? Number(apiPathCommunityMatch[1]) : NaN;
     const supportSession = await resolveActiveSupportSession(supportCookieValue, {
       expectedCommunityId:
         Number.isInteger(currentCommunityId) && currentCommunityId > 0
           ? currentCommunityId
-          : null,
+          : Number.isInteger(apiPathCommunityId) && apiPathCommunityId > 0
+            ? apiPathCommunityId
+            : null,
     });
 
     if (!supportSession) {
