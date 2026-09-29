@@ -92,6 +92,7 @@ import {
   softDeleteLeaseForCommunity,
   updateLeaseForCommunity,
   updateLeaseIfVersion,
+  updateLeaseDeposit,
   type LeaseDepositRow,
   type LeaseResidentRow,
   type ResidentContactRow,
@@ -409,6 +410,7 @@ export const PATCH = withErrorHandler(
     // ── Scheduling or clearing a move-out ──────────────────────────────────
     const allRows = await listLeasesForCommunity(communityId);
     const allLeases = allRows as unknown as LeaseLikeRow[];
+    let releaseCarriedDeposit = false;
     if (fields.moveOutOn !== undefined) {
       if (fields.moveOutOn === null) {
         // Clearing a move-out. Refuse while a pre-lease (not this lease's own
@@ -439,6 +441,7 @@ export const PATCH = withErrorHandler(
             upcomingLeaseId: transferTarget.id,
           });
         }
+        releaseCarriedDeposit = existing['endVia'] === 'transfer';
         for (const k of ['endVia', 'endReason', 'noticeReceivedOn'] as const) {
           if (fields[k] === undefined) {
             updateData[k] = null;
@@ -527,6 +530,15 @@ export const PATCH = withErrorHandler(
         ...updateData,
         version: ((existing['version'] as number | undefined) ?? 1) + 1,
       });
+    }
+
+    // A cancelled transfer: the deposit stays with this lease after all.
+    if (releaseCarriedDeposit) {
+      for (const d of await listLeaseDeposits(communityId, [id])) {
+        if (d.disposition === 'carried_to_transfer') {
+          await updateLeaseDeposit(communityId, d.id, { disposition: null, dispositionOn: null });
+        }
+      }
     }
 
     await logAuditEvent({

@@ -317,7 +317,9 @@ export async function createLease(
   // The checklist is keyed to a user, so it goes to the first resident who
   // has one; a lease of contact-only residents gets none.
   const checklistUserId = primary.userId ?? resolved.find((r) => r.userId)?.userId ?? null;
-  if (communityType === 'apartment' && checklistUserId) {
+  // A renewal's residents already live in the unit: no move-in checklist.
+  const isRenewal = !!(payload.isRenewal || payload.previousLeaseId);
+  if (communityType === 'apartment' && checklistUserId && !isRenewal) {
     try {
       await createMoveChecklist(
         {

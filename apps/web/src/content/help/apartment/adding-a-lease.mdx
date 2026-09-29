@@ -1,0 +1,100 @@
+---
+title: "Add a lease or pre-lease a unit"
+description: "Create a lease for a vacant unit, or sign the next resident before the current one moves out."
+category: "apartment"
+slug: "adding-a-lease"
+roles:
+  - manager
+keywords:
+  - new lease
+  - create lease
+  - add lease
+  - pre-lease
+  - preleased
+  - co-tenant
+  - primary resident
+  - security deposit
+  - start date
+  - custom term
+  - zero rent
+  - staff unit
+  - no email
+tags:
+  - apartment
+  - admin
+  - leases
+  - florida
+statutes:
+  - "§83.49"
+  - "§83.575"
+updatedAt: "2026-09-29"
+lastReviewedAt: "2026-09-29"
+featureGates:
+  - hasLeaseTracking
+relatedArticles:
+  - upcoming-lease
+  - deposit-notice
+  - move-out-and-holdovers
+featured: false
+upNext: "upcoming-lease"
+contextPaths:
+  - /dashboard/leases
+---
+
+Use **New lease** for a vacant unit, or to pre-lease a unit whose current resident has a move-out date.
+
+## Create the lease
+
+<StepByStep>
+<Step title="Select New lease">
+**New lease** is in the list header, next to **Expiry alerts**. You can also start from a unit: a vacant unit's row ends with **New lease**, and a unit that is moving out ends with **Pre-lease**. In the unit panel the buttons are **New lease** and **Pre-lease this unit**. The **New lease** dialog opens. If you started from a unit, that unit is already chosen.
+</Step>
+
+<Step title="Choose the unit">
+The **Unit** list shows vacant units, such as **Unit 304 · vacant**, and units with a recorded move-out, such as **Unit 101 · available from Nov 1, 2026 (pre-lease)**. Offline units and units that already have an upcoming lease are not listed. If no unit can take a lease, the dialog says **No unit can take a new lease right now.**
+</Step>
+
+<Step title="Add the residents">
+In **Residents**, type part of a name or email, then select the person from the list. The first person you add is marked **Primary**, and everyone after is **Co-tenant**. To change the primary resident, select the star next to a co-tenant. To remove someone, select the **X** next to their name. The list shows people already on the Residents page. If someone is missing, add them there first.
+</Step>
+
+<Step title="Set the start date and term">
+**Start date** is filled in with the first date the unit is free, moved to the 1st of a month. Leases must start on the 1st. Under **Term**, choose **6 months**, **12 months**, **18 months**, **Month-to-month** or **Custom**. The end date shows below the choice, for example **Ends Oct 31, 2027.** **Custom** adds **Last day of the lease**, up to 36 months after the start.
+</Step>
+
+<Step title="Enter the rent">
+**Monthly rent** is filled in with the rent on file for the unit, shown under the field. If you enter 0, a **Why is there no rent?** list appears. Choose **Staff or on-site employee**, **Courtesy officer**, **Rent-free agreement** or **Other (explain in notes)**. With **Other**, **Notes** becomes required.
+</Step>
+
+<Step title="Record the deposit">
+Enter the amount in **Security deposit**, or leave it blank if none was collected. When there is an amount, more fields appear. Choose **How the deposit is held**, then enter **Bank name and Florida address** (not needed for a surety bond). Check **Deposit received on**. The hint below it shows when the written notice is due. Under **Deposit notice**, choose **I sent it today**, **Sent on another date** (then enter **Notice sent on**) or **Not sent yet**.
+</Step>
+
+<Step title="Enter the notice period">
+**Notice to leave at term end (days)** starts at 60. Enter what the signed lease says, from 0 to 60. This field is hidden for a month-to-month lease.
+</Step>
+
+<Step title="Select Create lease">
+Add anything else in **Notes**, then select **Create lease**. A confirmation says **Lease created for Unit 304.** If the lease starts later, it adds when. A lease that has started shows the unit as **Leased** or **Expiring**. A lease that starts later shows **Pre-leased**, with **Moves in** and the date under the resident's name.
+</Step>
+</StepByStep>
+
+If something is missing, the dialog does not close. The field that needs attention is highlighted, with a message under it, and the cursor moves to it.
+
+<Callout type="info" title="PropertyPro records the deposit notice. It does not send it.">
+**I sent it today** and **Sent on another date** record a notice you gave the resident yourself. Choose **Not sent yet** if you haven't sent it. The unit panel then shows the notice as due until you record it. For a lease that starts later, **Deposit** is under the **Upcoming lease** section of the unit panel. See [Record a security deposit and its notice](/help/apartment/deposit-notice).
+</Callout>
+
+## Pre-lease a unit that is moving out
+
+After a notice to vacate, a declined renewal offer, an early end or a transfer is recorded, the unit's row shows **Pre-lease**. In the unit panel, the button is **Pre-lease this unit**. The **New lease** dialog opens with that unit chosen, and **Start date** set to the 1st of the month after the resident's last day. The hint says **Occupied through** the last day. These units are also listed when you select the **Vacant** tile, in the **Moving out** group.
+
+After you create the pre-lease, the unit keeps its current status until the resident leaves. The **Renewal** column adds **· pre-leased**. The unit panel shows an **Upcoming lease** section. To change or cancel it, see [Edit or cancel an upcoming lease](/help/apartment/upcoming-lease).
+
+## Residents without an email address
+
+If your community allows residents without an email address, **Add a person without email** appears under **Residents**. The root manager turns this on in the **Expiry alerts** menu: under **Lease settings**, select **Allow residents without email**. Enter **Full name**, and optionally **Phone** and **Mailing address**. Under **How notices are delivered**, choose **By mail** or **By hand**, then select **Add person**. This person can't use the resident portal until an email address is added. If you don't see **Add a person without email**, the setting is off.
+
+<Callout type="florida-statute" title="Florida Statutes §83.49(2) and §83.575">
+The hint under **Deposit received on** shows a date 30 days after the deposit was received. That is when the written notice of how and where the deposit is held is due under §83.49(2). The **Notice to leave at term end (days)** hint says it must match the signed lease, and that Florida caps it at 60 days (§83.575).
+</Callout>

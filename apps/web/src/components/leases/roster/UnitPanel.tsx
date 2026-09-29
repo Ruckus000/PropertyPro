@@ -114,7 +114,7 @@ export function UnitPanel({
     citesStatute = true;
   }
   if (s.kind === 'holdover' && c?.endDate) {
-    facts.push({ tone: 'warning', text: `The lease ended on ${fmt(c.endDate)} and the resident is still in the unit. Send a renewal offer or record a move-out.` });
+    facts.push({ tone: 'warning', text: `The lease ended on ${fmt(c.endDate)} and the resident is still in the unit. Choose Convert to month-to-month if they are staying, or Record move-out if they are leaving.` });
   }
   if (c?.rentAmount == null && c) {
     facts.push({ tone: 'warning', text: 'Rent is not recorded for this lease. Edit the lease to add it.' });

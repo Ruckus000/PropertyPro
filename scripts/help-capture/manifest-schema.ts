@@ -11,6 +11,8 @@ import { z } from 'zod';
 export const captureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('click'), selector: z.string() }),
   z.object({ type: z.literal('fill'), selector: z.string(), value: z.string() }),
+  /** Choose an option in a native <select> by its value (Playwright selectOption). */
+  z.object({ type: z.literal('select'), selector: z.string(), value: z.string() }),
   z.object({ type: z.literal('waitFor'), selector: z.string() }),
   z.object({ type: z.literal('wait'), ms: z.number().int().positive().max(10_000) }),
   z.object({ type: z.literal('scrollTo'), selector: z.string() }),

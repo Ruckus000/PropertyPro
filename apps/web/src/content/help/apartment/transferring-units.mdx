@@ -1,0 +1,89 @@
+---
+title: "Transfer residents to another unit"
+description: "Move the residents of one unit to another unit on a new lease, with the deposit carried over."
+category: "apartment"
+slug: "transferring-units"
+roles:
+  - manager
+keywords:
+  - transfer
+  - move unit
+  - another unit
+  - relocate
+  - upgrade
+  - downgrade
+  - carry deposit
+  - new unit
+  - transferring
+  - cancel transfer
+tags:
+  - apartment
+  - admin
+  - leases
+  - florida
+statutes:
+  - "§83.49"
+updatedAt: "2026-09-29"
+lastReviewedAt: "2026-09-29"
+featureGates:
+  - hasLeaseTracking
+relatedArticles:
+  - ending-a-lease-early
+  - deposit-notice
+  - adding-a-lease
+featured: false
+upNext: "unit-offline"
+contextPaths:
+  - /dashboard/leases
+---
+
+A transfer ends the current lease on the residents' last day in their unit, and creates a new lease for everyone on it in the new unit. The deposit can move with them.
+
+<StepByStep>
+<Step title="Open the residents' current unit">
+Select the unit's row. The unit panel opens.
+</Step>
+
+<Step title="Select Transfer to another unit">
+It is with the other buttons near the top of the panel, after **End early**. The **Transfer to another unit** dialog opens and names the residents who are moving.
+</Step>
+
+<Step title="Choose the new unit">
+**New unit** lists vacant units and units with a recorded move-out, with the date each is available. Offline units and units with an upcoming lease are not listed. **Monthly rent** fills in with the new unit's rent on file.
+</Step>
+
+<Step title="Set the dates">
+**Last day in** the current unit starts at the last day of this month, and can't be earlier than today. **New lease starts** fills in with the 1st of a month after that day, and not before the new unit is available. Leases start on the 1st of a month.
+</Step>
+
+<Step title="Set the term and rent">
+Choose the **Term**, and check **Monthly rent**. The current rent is shown under it. Check **Notice to leave at term end (days)**. It starts with the current lease's notice period.
+</Step>
+
+<Step title="Decide what happens to the deposit">
+**Carry the deposit to the new lease** is on when there is a deposit. The text below it says the deposit moves with the residents, and that no refund or claim is due for the old unit. To change the amount, enter **New deposit amount**. Leave it blank to keep the same amount. Turn the switch off to settle the deposit on move-out from the old unit instead. Add a **Reason** if you like.
+</Step>
+
+<Step title="Select Record transfer">
+Check the summary at the bottom, then select **Record transfer**. A confirmation says **Transfer recorded.**, with who moves to which unit and when. The old unit shows **Ending**, with **Transferring** and **Pre-lease** in the **Renewal** column. The new unit shows **Pre-leased**, with **Moves in** and the start date.
+</Step>
+</StepByStep>
+
+The residents stay in the old unit until their last day. You can pre-lease the old unit now. See [Add a lease or pre-lease a unit](/help/apartment/adding-a-lease). After the last day, **Past leases** lists the old lease as **Transferred**.
+
+## Cancel a transfer
+
+A transfer has no **Undo** on its confirmation. The old unit's panel says how to cancel it:
+
+1. Open the new unit and select **Cancel before move-in** under **Upcoming lease**. See [Edit or cancel an upcoming lease](/help/apartment/upcoming-lease).
+2. Open the old unit and select **Cancel move-out**. The residents stay on their current lease.
+
+If you try the second step first, it is refused with "Cancel the new lease this resident is transferring to before cancelling the move-out."
+
+<Callout type="info" title="When a transfer is refused">
+A lease with unpaid rent charges can't be transferred. The dialog shows the number of unpaid charges. Settle or waive them first. If no other unit can take a lease, the dialog says **No other unit can take a new lease right now.**
+</Callout>
+
+<Callout type="florida-statute" title="Florida Statute §83.49">
+With the deposit carried over, the old unit's panel says no §83.49 refund or claim is due for that unit. Without it, the panel shows the refund and claim dates instead. A changed deposit amount needs a new written notice (§83.49(2)). Record it from **Deposit** once the new lease starts. If you turn off **Carry the deposit to the new lease**, the deposit is settled on move-out from the old unit (§83.49(3)).
+</Callout>

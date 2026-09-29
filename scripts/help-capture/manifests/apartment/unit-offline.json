@@ -1,0 +1,210 @@
+{
+  "category": "apartment",
+  "slug": "unit-offline",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 304\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 304\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\")) button:text-is(\"Take offline\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 304\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\")) button:text-is(\"Take offline\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
+        },
+        {
+          "type": "select",
+          "selector": "#ol-reason",
+          "value": "storm_damage"
+        },
+        {
+          "type": "fill",
+          "selector": "#ol-until",
+          "value": "2026-11-30"
+        },
+        {
+          "type": "fill",
+          "selector": "#ol-note",
+          "value": "Water damage repairs, claim filed."
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
+    },
+    {
+      "name": "step-4",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 304\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\")) button:text-is(\"Take offline\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
+        },
+        {
+          "type": "select",
+          "selector": "#ol-reason",
+          "value": "storm_damage"
+        },
+        {
+          "type": "fill",
+          "selector": "#ol-until",
+          "value": "2026-11-30"
+        },
+        {
+          "type": "fill",
+          "selector": "#ol-note",
+          "value": "Water damage repairs, claim filed."
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 304\"])"
+    },
+    {
+      "name": "step-5",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 304\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+    },
+    {
+      "name": "step-6",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 304\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\")) button:text-is(\"Bring back online\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Bring back online\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Bring back online\"))"
+    }
+  ]
+}

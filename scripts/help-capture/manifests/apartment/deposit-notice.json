@@ -1,0 +1,200 @@
+{
+  "category": "apartment",
+  "slug": "deposit-notice",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 103\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\")) button:text-is(\"Deposit\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\"))"
+        },
+        {
+          "type": "fill",
+          "selector": "#dp-amount",
+          "value": "1325"
+        },
+        {
+          "type": "fill",
+          "selector": "#dp-received",
+          "value": "2026-09-10"
+        },
+        {
+          "type": "select",
+          "selector": "#dp-held",
+          "value": "separate_noninterest"
+        },
+        {
+          "type": "fill",
+          "selector": "#dp-depository",
+          "value": "First Coast Bank, 100 Main St, Jacksonville FL"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        },
+        {
+          "type": "scrollTo",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\")) h3:text-is(\"Deposit (\u00a783.49)\")"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\"))"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 103\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\")) button:text-is(\"Deposit\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\"))"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 103\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\")) button:text-is(\"Deposit\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"dp-task\"][value=\"update\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#dp-u-sent"
+        },
+        {
+          "type": "fill",
+          "selector": "#dp-u-sent",
+          "value": "2026-09-15"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\"))"
+    },
+    {
+      "name": "step-4",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 103\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\")) button:text-is(\"Deposit\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"dp-task\"][value=\"update\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#dp-u-sent"
+        },
+        {
+          "type": "fill",
+          "selector": "#dp-u-sent",
+          "value": "2026-09-15"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Deposit \u00b7\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 103\"))"
+    }
+  ]
+}

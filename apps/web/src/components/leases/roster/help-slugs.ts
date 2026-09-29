@@ -3,9 +3,9 @@
  *
  * Every value is the filename of an MDX article in
  * `apps/web/src/content/help/apartment/<slug>.mdx` (category `apartment`).
- * The roster components should pass these constants to `onHelp` instead of
- * string literals, so renaming an article is a compile error here rather than
- * a dead help link on the page.
+ * UnitPanel and AlertWindowsMenu pass these constants to `onHelp`, and
+ * `__tests__/help-slugs.test.ts` fails if any slug has no article, so renaming
+ * an article can't leave a dead help link on the page.
  */
 export const LEASE_HELP_CATEGORY = 'apartment' as const;
 

@@ -1,0 +1,73 @@
+---
+title: "Set expiry alerts"
+description: "Choose how far ahead leases count as Expiring and appear in Renewals due, and whether residents without an email address can be added to leases."
+category: "apartment"
+slug: "expiry-alert-windows"
+roles:
+  - manager
+keywords:
+  - expiry alerts
+  - alert window
+  - alert windows
+  - expiring
+  - renewals due
+  - 30 60 90 days
+  - 120 days
+  - lead time
+  - settings
+  - root manager
+  - residents without email
+  - lease settings
+tags:
+  - apartment
+  - admin
+  - leases
+updatedAt: "2026-09-29"
+lastReviewedAt: "2026-09-29"
+featureGates:
+  - hasLeaseTracking
+relatedArticles:
+  - lease-statuses
+  - renewing-a-lease
+featured: false
+upNext: "managing-leases"
+contextPaths:
+  - /dashboard/leases
+---
+
+The expiry alert setting decides how early a lease counts as **Expiring** and appears in **Renewals due**. The widest window is the one that counts. With **30, 60, 90 days**, a lease shows up 90 days before it ends.
+
+## Change the setting
+
+<StepByStep>
+<Step title="Select Expiry alerts">
+It is in the list header, between **Past leases** and **New lease**, and shows the current setting, for example **Expiry alerts: 30, 60, 90 days**. A menu opens. Its first line says **Leases ending within the widest window count as Renewals due.**
+</Step>
+
+<Step title="Choose an option">
+Choose **30, 60, 90 days**, **30, 60 days**, **60, 90, 120 days**, **30 days** or **90 days**. The current setting is marked.
+</Step>
+
+<Step title="Check the result">
+A confirmation says **Expiry alerts set to** the new windows, and includes **Undo**. The **Renewals due** tile changes to **Ending within** the new widest window, and units move between **Leased** and **Expiring** to match.
+</Step>
+</StepByStep>
+
+The setting applies to every manager of this community.
+
+<Callout type="info" title="Only the root manager can change this">
+Other managers see the same menu with the options greyed out and the line **Only the root manager can change this.**
+</Callout>
+
+## Allow residents without email
+
+The same menu has a **Lease settings** heading with one checkbox, **Allow residents without email**. It is off unless the root manager turns it on. Select it to turn it on or off. A confirmation says **Residents without an email address can now be added to leases** or **Residents without an email address are turned off**. This confirmation has no **Undo**: select the checkbox again to switch back.
+
+When it is on, **Add a person without email** appears under **Residents** in the **New lease** and renewal offer dialogs. See [Add a lease or pre-lease a unit](/help/apartment/adding-a-lease#residents-without-an-email-address).
+
+## Choosing a window
+
+- A lease's **Notice to leave at term end (days)** can be up to 60 days. For those leases, a widest window of 90 or 120 days leaves time to send a renewal offer before the resident's notice deadline. The unit panel shows each lease's deadline.
+- **30, 60 days** or **30 days** suits short terms, where 90 days would put most leases in **Renewals due**.
+
+The windows don't send reminders. They only change which leases count as **Expiring** and **Renewals due**. The colours in the **Lease end** column don't change with this setting: amber within 30 days, a clock within 7 days, and red once the end date has passed.

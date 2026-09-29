@@ -1,0 +1,392 @@
+{
+  "category": "apartment",
+  "slug": "renewing-a-lease",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"roster-title\"]"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Send offer, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"of-term\"][value=\"12\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "#of-rent",
+          "value": "1295"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\"))"
+    },
+    {
+      "name": "step-4",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Send offer, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\"))"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "#of-residents"
+        }
+      ],
+      "clipTo": "div.space-y-2:has(> label[for=\"of-residents\"])"
+    },
+    {
+      "name": "step-5",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Send offer, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\"))"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "#of-expires"
+        }
+      ],
+      "clipTo": "div.space-y-2:has(> label[for=\"of-expires\"])"
+    },
+    {
+      "name": "step-6",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Send offer, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"of-term\"][value=\"12\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "#of-rent",
+          "value": "1295"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label=\"Record response, Unit 101\"]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])"
+    },
+    {
+      "name": "step-7",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Record response, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
+    },
+    {
+      "name": "step-8",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Record response, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"or-response\"][value=\"decline\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#or-move-out"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
+    },
+    {
+      "name": "step-9",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Record response, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"or-response\"][value=\"accept\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record response\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label=\"Record renewal, Unit 101\"]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])"
+    },
+    {
+      "name": "step-10",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 105\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\"))"
+    },
+    {
+      "name": "step-11",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 105\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\")) button:text-is(\"Offer a fixed term\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Offer a fixed term\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"of-term\"][value=\"12\"]"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Offer a fixed term\"))"
+    },
+    {
+      "name": "step-12",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 105\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\")) button:text-is(\"Offer a fixed term\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Offer a fixed term\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"of-term\"][value=\"12\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Offer a fixed term\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label=\"Record response, Unit 105\"]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 105\"])"
+    }
+  ]
+}

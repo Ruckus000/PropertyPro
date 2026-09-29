@@ -28,7 +28,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 import { createLease, type LeaseResidentInput } from '@/lib/leases/create-lease';
-import { ensureNoUnpaidObligations, isZeroRent } from '@/lib/leases/lease-rules';
+import { ensureNoUnpaidObligations, isZeroRent, startMoveOutChecklist } from '@/lib/leases/lease-rules';
 import {
   getLeaseById,
   listLeaseDeposits,
@@ -139,6 +139,8 @@ export const POST = withErrorHandler(
       });
       throw err;
     }
+
+    await startMoveOutChecklist(communityId, from, actorUserId, membership.communityType);
 
     await logAuditEvent({
       userId: actorUserId,

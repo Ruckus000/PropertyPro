@@ -7,6 +7,7 @@
  */
 import { ConflictError, ValidationError } from '@/lib/api/errors';
 import { listUnpaidObligationsForLease, type LeaseResidentRow } from '@/lib/services/lease-service';
+import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 
 export type LeaseLikeRow = {
   id: number;
@@ -158,3 +159,37 @@ export async function ensureNoUnpaidObligations(communityId: number, leaseId: nu
   }
 }
 
+
+/**
+ * Best-effort: start the move-out checklist when a move-out is first
+ * scheduled (notice, declined offer, early end, transfer). The unique index
+ * on (lease_id, type) makes a repeat a no-op failure, logged and ignored.
+ * Checklists are keyed to a user, so a contact-only primary gets none.
+ */
+export async function startMoveOutChecklist(
+  communityId: number,
+  lease: Record<string, unknown>,
+  actorUserId: string,
+  communityType: string,
+): Promise<void> {
+  if (communityType !== 'apartment' || !lease['residentId']) return;
+  try {
+    await createMoveChecklist(
+      {
+        communityId,
+        leaseId: lease['id'] as number,
+        unitId: lease['unitId'] as number,
+        residentId: lease['residentId'] as string,
+        type: 'move_out',
+      },
+      actorUserId,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[leases] auto-create move-out checklist failed', {
+      communityId,
+      leaseId: lease['id'],
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}

@@ -1,0 +1,199 @@
+{
+  "category": "apartment",
+  "slug": "move-out-and-holdovers",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 102\"])"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 102\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\"))"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 102\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\")) button:text-is(\"Resident gave notice\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\"))"
+    },
+    {
+      "name": "step-4",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 102\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\")) button:text-is(\"Resident gave notice\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\"))"
+        },
+        {
+          "type": "fill",
+          "selector": "#mo-details",
+          "value": "Forwarding address on file."
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 102\"])"
+    },
+    {
+      "name": "step-5",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 106\"])"
+    },
+    {
+      "name": "step-6",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Resolve holdover, Unit 106\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 106\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 106\"))"
+    },
+    {
+      "name": "step-7",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 106\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 106\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 106\")) button:text-is(\"Record move-out\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\"))"
+        },
+        {
+          "type": "fill",
+          "selector": "#mo-move-out",
+          "value": "2026-09-30"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 106\"])"
+    }
+  ]
+}

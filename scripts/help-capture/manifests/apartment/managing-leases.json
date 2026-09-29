@@ -1,0 +1,57 @@
+{
+  "category": "apartment",
+  "slug": "managing-leases",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        }
+      ],
+      "clipTo": "[aria-label=\"Filter units\"]"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"roster-title\"] > div:first-child"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\"))"
+    }
+  ]
+}

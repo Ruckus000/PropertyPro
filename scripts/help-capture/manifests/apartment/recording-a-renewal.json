@@ -1,0 +1,89 @@
+{
+  "category": "apartment",
+  "slug": "recording-a-renewal",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Record renewal, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record renewal\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record renewal\"))"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Record renewal, Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record renewal\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record renewal\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        },
+        {
+          "type": "wait",
+          "ms": 800
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 101\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\"))"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\")) h3:text-is(\"Signed renewal\")"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\"))"
+    }
+  ]
+}

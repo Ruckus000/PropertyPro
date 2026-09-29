@@ -1,0 +1,226 @@
+{
+  "category": "apartment",
+  "slug": "upcoming-lease",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"New lease, Unit 305\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"New lease\"))"
+        },
+        {
+          "type": "wait",
+          "ms": 300
+        },
+        {
+          "type": "fill",
+          "selector": "#lf-residents",
+          "value": "a"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#lf-residents-list"
+        },
+        {
+          "type": "click",
+          "selector": "#lf-residents-list [role=\"option\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "#lf-rent",
+          "value": "1400"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"New lease\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        },
+        {
+          "type": "wait",
+          "ms": 1500
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 305\"])"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 305\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\")) button:text-is(\"Edit\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 305\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\")) button:text-is(\"Edit\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"le-term\"][value=\"6\"]"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))"
+    },
+    {
+      "name": "step-4",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 305\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\")) button:text-is(\"Cancel before move-in\")"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))"
+    },
+    {
+      "name": "step-5",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 305\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\")) button:text-is(\"Cancel before move-in\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Cancel upcoming lease\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"cl-reason\"][value=\"Applicant withdrew\"]"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Cancel upcoming lease\"))"
+    },
+    {
+      "name": "step-6",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 305\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\")) button:text-is(\"Cancel before move-in\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Cancel upcoming lease\"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"cl-reason\"][value=\"Applicant withdrew\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Cancel upcoming lease\")) button[type=\"submit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-sonner-toast]"
+        }
+      ],
+      "clipTo": "[data-sonner-toast]"
+    }
+  ]
+}

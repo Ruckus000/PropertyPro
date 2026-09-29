@@ -26,6 +26,7 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 import { createLease, type LeaseResidentInput } from '@/lib/leases/create-lease';
+import { startMoveOutChecklist } from '@/lib/leases/lease-rules';
 import { addDays, termEndDate } from '@/lib/leases/lease-state';
 import { isUniqueViolation, isZeroRent } from '@/lib/leases/lease-rules';
 import {
@@ -220,6 +221,9 @@ export const PATCH = withErrorHandler(
           updatedBy: actorUserId,
           version: ((lease['version'] as number | undefined) ?? 1) + 1,
         });
+        if (!lease['moveOutOn']) {
+          await startMoveOutChecklist(communityId, lease, actorUserId, membership.communityType);
+        }
         break;
       }
 

@@ -1,0 +1,60 @@
+{
+  "category": "apartment",
+  "slug": "lease-statuses",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        }
+      ],
+      "clipTo": "[aria-label=\"Filter units\"]"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId=3",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"Renewals due\")"
+        },
+        {
+          "type": "click",
+          "selector": "[aria-label=\"Filter units\"] button:has-text(\"Renewals due\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#roster-title:text-is(\"All units\")"
+        }
+      ],
+      "clipTo": "[aria-label=\"Filter units\"]"
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+---
+title: "Unit statuses, tiles and next steps"
+description: "What each status, summary tile, date colour and next-step link on the Leases page means."
+category: "apartment"
+slug: "lease-statuses"
+roles:
+  - manager
+keywords:
+  - status
+  - statuses
+  - tiles
+  - leased
+  - expiring
+  - ending
+  - holdover
+  - vacant
+  - offline
+  - pre-leased
+  - month-to-month
+  - occupancy
+  - renewals due
+  - next step
+  - legend
+tags:
+  - apartment
+  - admin
+  - leases
+updatedAt: "2026-09-29"
+lastReviewedAt: "2026-09-29"
+featureGates:
+  - hasLeaseTracking
+relatedArticles:
+  - managing-leases
+  - expiry-alert-windows
+  - renewing-a-lease
+featured: false
+upNext: "adding-a-lease"
+contextPaths:
+  - /dashboard/leases
+---
+
+Each row on the Leases page is a unit. Its status describes the lease in effect today, worked out from the lease dates. A lease that starts next month does not make a unit occupied today, and an early end does not empty the unit until the last day.
+
+## Filter the list with a tile
+
+<StepByStep>
+<Step title="Select a tile">
+Select **All units**, **Renewals due**, **Vacant** or **Month-to-month**. The selected tile gets a coloured bar along its bottom edge, and the list shows only the units that tile counts.
+</Step>
+
+<Step title="Select it again to clear the filter">
+Selecting the selected tile again, or selecting **All units**, shows every unit.
+</Step>
+</StepByStep>
+
+## What the tiles count
+
+- **All units** counts every unit. The line below it shows how many are occupied and the occupancy rate, for example **24 occupied · 92.3% occupancy**. A unit is occupied when a lease is in effect today, including a holdover or a unit that is moving out. Offline units are left out of the occupancy rate, and the tile adds **· 2 offline** when there are any.
+- **Renewals due** counts **Expiring** and **Holdover** units whose renewal still needs a decision: no offer yet, an offer sent or expired, or an offer accepted but not yet recorded as signed. The line below says **Ending within 90 days · 3 without an offer**. The number of days is your widest [expiry alert](/help/apartment/expiry-alert-windows). A red line, such as **1 past end date**, counts holdovers.
+- **Vacant** counts units with no lease in effect today, including pre-leased units, but not offline units. The line below shows **Avg. N days empty** for units with no upcoming lease, and how many are pre-leased, moving out or offline. Selecting it shows **Vacant and moving out**, in three groups: **Vacant**, **Moving out** ("Pre-lease these before they empty") and **Offline** ("Not rentable, so not counted as vacant").
+- **Month-to-month** counts current leases with no end date.
+
+## Unit statuses
+
+Calm statuses read as text with a small dot:
+
+- **Leased**: a lease is in effect, and it ends after your widest alert window, or its renewal is already signed.
+- **Month-to-month**: a lease is in effect and has no end date.
+- **Pre-leased**: nobody lives in the unit today, but a lease starts later. The resident's name shows with **Moves in** and the date.
+
+Statuses that need attention show as a badge with an icon:
+
+- **Expiring**: the lease ends within your widest alert window.
+- **Ending**: the lease has an early end or a transfer recorded. The resident stays until the last day.
+- **Holdover**: the end date has passed, the resident is still in the unit, and no renewal or move-out has been recorded.
+- **Vacant**: no lease is in effect and none is coming up. The resident column says how long, for example **Vacant 12 days**.
+- **Offline**: the unit is out of service. The resident column shows the reason, for example **Offline · storm damage**.
+
+A resident who gave notice keeps the **Leased** or **Expiring** status until they leave. The **Renewal** column shows **Moving out** with the date.
+
+## Lease end colours
+
+The **Lease end** column shows the end date and how far away it is.
+
+- Red with a warning icon: past the end date, for example **6 days past end**.
+- Amber with a clock icon: ends within 7 days.
+- Amber: ends within 30 days.
+- Grey: later, or the unit is renewed or moving out.
+
+These thresholds are fixed. They do not change with the expiry alert setting. A month-to-month lease shows **No end date** and **Since** its start date. An early end or transfer shows the last day, with **Ends early** or **Transfer**.
+
+The **Lease end** and **Rent** columns are hidden on narrow screens. For a unit with no lease, **Rent** shows the rent on file for the unit, labelled **Market**.
+
+## The Renewal column
+
+The first line says where the renewal stands. The link under it is the next step, if there is one.
+
+- **No offer yet**, with **Send offer**. See [Send a renewal offer](/help/apartment/renewing-a-lease).
+- **No offer yet**, with **Resolve holdover**, on a **Holdover** row. It opens the unit panel. See [Record a move-out or a holdover](/help/apartment/move-out-and-holdovers).
+- **Offer sent today**, or **Offer sent** with a date, with **Record response**. See [Send a renewal offer](/help/apartment/renewing-a-lease).
+- **Offer expired** with a date, with **Resend offer**. See [Send a renewal offer](/help/apartment/renewing-a-lease).
+- **Accepted · not signed**, with **Record renewal**. See [Record a signed renewal](/help/apartment/recording-a-renewal).
+- **Renewed · starts** with a date, and no link. See [Edit or cancel an upcoming lease](/help/apartment/upcoming-lease).
+- **Declined · out** with a date, with **Pre-lease**. See [Record a move-out](/help/apartment/move-out-and-holdovers).
+- **Moving out** with a date, with **Pre-lease**. See [Record a move-out](/help/apartment/move-out-and-holdovers).
+- **Ending early** or **Transferring**, with **Pre-lease**. See [End a lease early](/help/apartment/ending-a-lease-early).
+- A vacant unit has no renewal text, and shows **New lease**. See [Add a lease](/help/apartment/adding-a-lease).
+
+When a unit that is moving out has already been pre-leased, the text ends with **· pre-leased** and there is no link. Rows with nothing to do have no link. Select the row to open the unit.
