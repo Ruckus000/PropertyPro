@@ -2,6 +2,10 @@ import { clearTestInbox } from '@propertypro/email';
 import { beforeEach, vi } from 'vitest';
 import { getTestAuthUserId } from './providers/test-auth-provider';
 import {
+  authAdminCreateUserDouble,
+  clearCapturedAuthCreateUsers,
+} from './providers/test-auth-admin-provider';
+import {
   captureAnnouncementDelivery,
   captureNotification,
   clearCapturedAnnouncementDeliveries,
@@ -87,16 +91,12 @@ vi.mock('@propertypro/db/supabase/admin', async (importOriginal) => {
       auth: {
         admin: {
           // Echo the requested id back, as real GoTrue does when `id` is
-          // supplied. The invitation accept path passes the pre-provisioned
-          // user id and verifies the created account adopted it, so a stub
-          // hard-coding a different id would fail a check that production
-          // passes.
-          createUser: async (attrs?: { id?: string }) => ({
-            data: {
-              user: { id: attrs?.id ?? 'test-auth-user' },
-            },
-            error: null,
-          }),
+          // supplied, and mint a UUID otherwise. The invitation accept path
+          // passes the pre-provisioned user id and verifies the created
+          // account adopted it, so a stub hard-coding a different id would
+          // fail a check that production passes. See the provider for the
+          // call log and the fail-once hook.
+          createUser: authAdminCreateUserDouble,
         },
       },
       storage: {
@@ -126,4 +126,5 @@ beforeEach(() => {
   clearCapturedAnnouncementDeliveries();
   clearCapturedStorageOps();
   clearCapturedPdfExtractions();
+  clearCapturedAuthCreateUsers();
 });

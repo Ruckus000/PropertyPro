@@ -13,14 +13,33 @@
  * `signup_request_id`, the `stripe_webhook_events` primary key), so only a real
  * database can pin it.
  *
- * What is REAL here: the Stripe webhook route handler, `stripe-webhook-service`,
- * the whole provisioning state machine and its watchdog, and every table.
- * What is faked, and only because it leaves the process:
- *   - Stripe (`retrieveCheckoutSession`, signature verification, key mode)
- *   - Supabase Auth admin (`createUser`)
- *   - email delivery (`sendEmail`) — wrapped to count sends and fail on demand
- *   - two pure template lookups in `@propertypro/shared`, wrapped ONLY so a test
- *     can make a step throw once (failure injection); they otherwise delegate.
+ * No module is mocked (the no-mock guard, scripts/verify-no-mocks-in-integration.ts,
+ * applies to this file). Everything runs for real — the Stripe webhook route
+ * with genuine signature verification, `stripe-webhook-service`, the whole
+ * provisioning state machine and its watchdog, every table — and the three
+ * things that leave the process are pointed at local stand-ins instead:
+ *   - Stripe API: the real SDK client, re-targeted at an in-process HTTP double
+ *     (host/port/protocol set on the `getStripeClient()` instance). Webhook
+ *     bodies are signed with `generateTestHeaderString` and the real secret.
+ *   - Supabase Auth admin: the suite-wide provider every integration file gets
+ *     from setup-integration.ts (providers/test-auth-admin-provider.ts), which
+ *     logs each `createUser` and can fail the next one for an email.
+ *   - Email: `RESEND_API_KEY` is unset, so `sendEmail` collects into the
+ *     package's own `testInbox`.
+ *
+ * The watchdog is GLOBAL: `recoverStuckProvisioningJobs` picks every recoverable
+ * job in whatever database this suite points at. Before every tick,
+ * `watchdogTick` re-runs the watchdog's selection itself and FAILS, without
+ * ticking, if any job it would pick was not created by this run — so pointed at
+ * a shared database (e.g. through scripts/with-env-local.sh) it refuses rather
+ * than provisioning someone else's signup under these stand-ins. It then asserts
+ * the tick attempted exactly that set.
+ *
+ * Failure injection uses no seam in the code under test:
+ *   - the email step fails because `NEXT_PUBLIC_APP_URL` is unset for that run;
+ *   - `createUser` fails via the auth-admin provider's fail-once hook;
+ *   - checklist / categories inserts fail on a temporary BEFORE INSERT trigger
+ *     that raises only for this test's own community slug, dropped in `finally`.
  *
  * "Lost checkpoint" scenarios: a step can commit its rows and then the process
  * can die before `runProvisioning` persists `last_successful_status`. That
@@ -29,18 +48,21 @@
  *
  * These are characterization tests: they pin what the code does today so the
  * provisioning decomposition (roadmap 3.11 / SVC-08) cannot change it silently.
- * Two retry paths that are NOT idempotent today (document categories re-inserted
- * on a lost `categories_created` checkpoint; no mutual exclusion between two
- * concurrent runs of one job) are deliberately NOT pinned here — see the 3.T3
- * row in docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md.
+ * Three retry paths that are NOT idempotent today (document categories
+ * re-inserted on a lost `categories_created` checkpoint; no mutual exclusion
+ * between two concurrent runs of one job; a re-delivered event moving a
+ * `completed` signup back to `payment_completed`) are deliberately NOT pinned
+ * here — see the 3.T3 row in docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md.
  *
  * Every row is keyed by a run-unique slug / email / Stripe id and deleted in
  * afterAll. Slugs match the reaper's `^p2-43-.*-[0-9a-f]{8}$` pattern so a
  * crashed run's communities are swept by the next run's global setup.
  */
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { NextRequest } from 'next/server';
-import { afterAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   communities,
   complianceChecklistItems,
@@ -52,98 +74,89 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { and, eq, inArray, like } from '@propertypro/db/filters';
+import { and, eq, inArray, isNull, like, lt, or, sql } from '@propertypro/db/filters';
 // AUTHZ: Integration test for the platform-level provisioning pipeline; signups and jobs precede any community.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { getDescribeDb, requireDatabaseUrlInCI } from './helpers/multi-tenant-test-kit';
-
-// ---------------------------------------------------------------------------
-// Edge fakes
-// ---------------------------------------------------------------------------
-
-const h = vi.hoisted(() => ({
-  retrieveCheckoutSession: vi.fn(),
-  createUser: vi.fn(),
-  /** Every sendEmail attempt, by recipient. */
-  emailAttempts: [] as string[],
-  /** Only the sends that succeeded, by recipient. */
-  emailsDelivered: [] as string[],
-  /** Recipients whose NEXT send throws once. */
-  failNextEmailTo: new Set<string>(),
-  /** Community types whose next checklist / categories template lookup throws once. */
-  failChecklistOnce: false,
-  failCategoriesOnce: false,
-}));
-
-vi.mock('@/lib/services/stripe-service', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/services/stripe-service')>();
-  return {
-    ...actual,
-    retrieveCheckoutSession: h.retrieveCheckoutSession,
-    // Signature verification is Stripe's; the body is trusted as-is here.
-    getStripeClient: () => ({
-      webhooks: { constructEvent: (raw: string) => JSON.parse(raw) as unknown },
-    }),
-    getExpectedLivemode: () => null,
-  };
-});
-
-vi.mock('@propertypro/db/supabase/admin', () => ({
-  createAdminClient: () => ({ auth: { admin: { createUser: h.createUser } } }),
-}));
-
-vi.mock('@propertypro/email', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@propertypro/email')>();
-  return {
-    ...actual,
-    sendEmail: async (options: { to: string | string[] }) => {
-      const to = Array.isArray(options.to) ? options.to.join(',') : options.to;
-      h.emailAttempts.push(to);
-      if (h.failNextEmailTo.delete(to)) {
-        throw new Error('injected: email provider unavailable');
-      }
-      h.emailsDelivered.push(to);
-      return { id: `test_${h.emailsDelivered.length}` };
-    },
-  };
-});
-
-vi.mock('@propertypro/shared', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@propertypro/shared')>();
-  return {
-    ...actual,
-    getComplianceTemplate: (...args: Parameters<typeof actual.getComplianceTemplate>) => {
-      if (h.failChecklistOnce) {
-        h.failChecklistOnce = false;
-        throw new Error('injected: checklist_generated failed');
-      }
-      return actual.getComplianceTemplate(...args);
-    },
-    getDefaultDocumentCategories: (
-      ...args: Parameters<typeof actual.getDefaultDocumentCategories>
-    ) => {
-      if (h.failCategoriesOnce) {
-        h.failCategoriesOnce = false;
-        throw new Error('injected: categories_created failed');
-      }
-      return actual.getDefaultDocumentCategories(...args);
-    },
-  };
-});
-
-// Imports under test come after the mocks.
+import { testInbox } from '@propertypro/email';
+import { getComplianceTemplate, getDefaultDocumentCategories } from '@propertypro/shared';
 import { POST as stripeWebhookPOST } from '../../src/app/api/v1/webhooks/stripe/route';
 import {
   recoverStuckProvisioningJobs,
   runProvisioning,
 } from '../../src/lib/services/provisioning-service';
+import { getStripeClient } from '../../src/lib/services/stripe-service';
 import {
   insertProvisioningJobFence,
   markPendingSignupPaymentCompleted,
 } from '../../src/lib/services/stripe-webhook-service';
+import { getDescribeDb, requireDatabaseUrlInCI } from './helpers/multi-tenant-test-kit';
+import {
+  failNextAuthCreateUserFor,
+  getCapturedAuthCreateUsers,
+  INJECTED_AUTH_CREATE_USER_ERROR,
+} from './providers/test-auth-admin-provider';
 
 requireDatabaseUrlInCI('provisioning-idempotency');
 const describeDb = getDescribeDb();
+
+// ---------------------------------------------------------------------------
+// In-process HTTP double for the Stripe API
+// ---------------------------------------------------------------------------
+
+type Doubles = {
+  server: Server;
+  url: string;
+  /** `GET /v1/checkout/sessions/<id>` requests, by session id. */
+  stripeSessionReads: string[];
+  unexpected: string[];
+};
+
+function startDoubles(): Promise<Doubles> {
+  const state = {
+    stripeSessionReads: [] as string[],
+    unexpected: [] as string[],
+  };
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      const url = new URL(req.url ?? '/', 'http://double');
+      const json = (status: number, payload: unknown) => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(payload));
+      };
+
+      const session = url.pathname.match(/^\/v1\/checkout\/sessions\/([^/]+)$/);
+      if (req.method === 'GET' && session) {
+        const id = decodeURIComponent(session[1]!);
+        state.stripeSessionReads.push(id);
+        return json(200, {
+          id,
+          object: 'checkout.session',
+          status: 'complete',
+          customer: `cus_${id}`,
+          subscription: {
+            id: `sub_${id}`,
+            object: 'subscription',
+            status: 'trialing',
+            trial_end: Math.floor(Date.now() / 1000) + 14 * 86_400,
+            items: { object: 'list', data: [] },
+          },
+          metadata: {},
+        });
+      }
+
+      state.unexpected.push(`${req.method ?? '?'} ${url.pathname}`);
+      return json(404, { message: 'not in the double' });
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({ server, url: `http://127.0.0.1:${String(port)}`, ...state });
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -151,6 +164,10 @@ const describeDb = getDescribeDb();
 
 const RUN = randomBytes(4).toString('hex');
 const EMAIL_DOMAIN = 'provisioning-idempotency.invalid';
+const WEBHOOK_SECRET = 'whsec_test_provisioning_idempotency';
+const APP_URL = 'http://localhost:3000';
+const CHECKLIST_COUNT = getComplianceTemplate('condo_718').length;
+const CATEGORY_COUNT = getDefaultDocumentCategories('condo_718').length;
 let seq = 0;
 
 type Signup = {
@@ -164,14 +181,76 @@ const created = {
   signupRequestIds: [] as string[],
   eventIds: [] as string[],
   slugs: [] as string[],
-  emails: [] as string[],
 };
+
+// Mirrors provisioning-service.ts (RECOVERABLE_*_STATUSES, DEFAULT_STALE_AFTER_MS,
+// DEFAULT_MAX_RETRY_COUNT). If these drift from the service, the tick's
+// `attempted` assertion in watchdogTick goes red.
+const RECOVERABLE_JOB_STATUSES = [
+  'initiated', 'community_created', 'user_linked', 'checklist_generated',
+  'categories_created', 'preferences_set', 'email_sent', 'failed',
+];
+const RECOVERABLE_SIGNUP_STATUSES = ['payment_completed', 'provisioning'];
+const WATCHDOG_STALE_AFTER_MS = 5 * 60 * 1000;
+const WATCHDOG_MAX_RETRY_COUNT = 5;
 
 describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
   const db = createUnscopedClient();
+  let doubles: Doubles;
 
-  let CHECKLIST_COUNT = 0;
-  let CATEGORY_COUNT = 0;
+  beforeAll(async () => {
+    // A zero-length template would make every "no duplicate" assertion vacuous.
+    expect(CHECKLIST_COUNT).toBeGreaterThan(0);
+    expect(CATEGORY_COUNT).toBeGreaterThan(0);
+
+    doubles = await startDoubles();
+
+    // The Stripe client is a lazy singleton: the key must be in place before first use.
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_provisioning_idempotency');
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', WEBHOOK_SECRET);
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', APP_URL);
+    vi.stubEnv('RESEND_API_KEY', undefined); // sendEmail → testInbox, never Resend
+
+    // The real SDK client, re-targeted at the double (constructor-level config
+    // that production never overrides; set here on the one shared instance).
+    const { port } = new URL(doubles.url);
+    const stripe = getStripeClient() as unknown as {
+      _setApiField(key: string, value: unknown): void;
+    };
+    stripe._setApiField('host', '127.0.0.1');
+    stripe._setApiField('port', port);
+    stripe._setApiField('protocol', 'http');
+    stripe._setApiField('maxNetworkRetries', 0);
+  });
+
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', APP_URL);
+  });
+
+  afterAll(async () => {
+    const signupIds = created.signupRequestIds;
+    try {
+      if (signupIds.length > 0) {
+        await db.delete(provisioningJobs).where(inArray(provisioningJobs.signupRequestId, signupIds));
+      }
+      if (created.slugs.length > 0) {
+        // user_roles, categories, checklist items and preferences cascade.
+        await db.delete(communities).where(inArray(communities.slug, created.slugs));
+      }
+      if (created.eventIds.length > 0) {
+        await db.delete(stripeWebhookEvents).where(inArray(stripeWebhookEvents.eventId, created.eventIds));
+      }
+      if (signupIds.length > 0) {
+        await db.delete(pendingSignups).where(inArray(pendingSignups.signupRequestId, signupIds));
+      }
+      await db.delete(users).where(like(users.email, `%-${RUN}@${EMAIL_DOMAIN}`));
+    } finally {
+      await new Promise<void>((resolve) => doubles.server.close(() => resolve()));
+      vi.unstubAllEnvs();
+    }
+    // Anything the code under test asked the doubles for that they don't serve.
+    expect(doubles.unexpected).toEqual([]);
+  });
 
   async function newSignup(opts: { authUserId?: string | null } = {}): Promise<Signup> {
     seq += 1;
@@ -183,7 +262,6 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     };
     created.signupRequestIds.push(signup.signupRequestId);
     created.slugs.push(signup.slug);
-    created.emails.push(signup.email);
 
     await db.insert(pendingSignups).values({
       signupRequestId: signup.signupRequestId,
@@ -229,14 +307,60 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     };
   }
 
+  /** POST a genuinely signed event to the real webhook route. */
   async function deliver(event: unknown): Promise<Response> {
+    const payload = JSON.stringify(event);
+    const signature = getStripeClient().webhooks.generateTestHeaderString({
+      payload,
+      secret: WEBHOOK_SECRET,
+    });
     return stripeWebhookPOST(
       new NextRequest('http://localhost:3000/api/v1/webhooks/stripe', {
         method: 'POST',
-        body: JSON.stringify(event),
-        headers: { 'stripe-signature': 't=1,v1=test' },
+        body: payload,
+        headers: { 'stripe-signature': signature },
       }),
     );
+  }
+
+  /** Run `fn` with the welcome-email step unable to run (`NEXT_PUBLIC_APP_URL` unset). */
+  async function withEmailStepFailing<T>(fn: () => Promise<T>): Promise<T> {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', undefined);
+    try {
+      return await fn();
+    } finally {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', APP_URL);
+    }
+  }
+
+  /**
+   * Run `fn` with every INSERT into `table` for THIS signup's community raising.
+   * A temporary trigger keyed to the test's own slug; other rows are untouched.
+   */
+  async function withInsertFault<T>(
+    table: 'compliance_checklist_items' | 'document_categories',
+    signup: Signup,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (!/^[a-z0-9-]+$/.test(signup.slug)) throw new Error(`unsafe slug ${signup.slug}`);
+    const name = `pp_test_fault_${RUN}_${seq}_${table === 'document_categories' ? 'cat' : 'chk'}`;
+    await db.execute(
+      sql.raw(`
+        CREATE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM communities c WHERE c.id = NEW.community_id AND c.slug = '${signup.slug}') THEN
+            RAISE EXCEPTION 'injected fault: insert into ${table}';
+          END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER ${name} BEFORE INSERT ON ${table} FOR EACH ROW EXECUTE FUNCTION ${name}();
+      `),
+    );
+    try {
+      return await fn();
+    } finally {
+      await db.execute(sql.raw(`DROP TRIGGER IF EXISTS ${name} ON ${table}; DROP FUNCTION IF EXISTS ${name}();`));
+    }
   }
 
   /** What a webhook leaves behind when it dies after the fence, before runProvisioning. */
@@ -283,7 +407,12 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     communityId: number,
   ) => (await db.select().from(table).where(eq(table.communityId, communityId))).length;
 
-  const delivered = (signup: Signup) => h.emailsDelivered.filter((to) => to === signup.email).length;
+  /** Welcome emails actually handed to the mailer for this signup. */
+  const delivered = (signup: Signup) => testInbox.filter((m) => m.to === signup.email).length;
+  const sessionReads = (signup: Signup) =>
+    doubles.stripeSessionReads.filter((id) => id === signup.sessionId).length;
+  const createUserCalls = (signup: Signup) =>
+    getCapturedAuthCreateUsers().filter((call) => call.email === signup.email).length;
 
   /**
    * Leave the job exactly as a process that died right after committing the
@@ -305,71 +434,57 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       .where(eq(provisioningJobs.id, jobId));
   }
 
-  /** Run the watchdog and return what it did to THIS job (other suites' rows are ignored). */
-  async function watchdogTick(jobId: number, now = new Date()) {
-    const summary = await recoverStuckProvisioningJobs({ now, maxJobs: 50 });
+  /**
+   * Run one watchdog tick, but only if everything it would pick belongs to this
+   * run. Re-runs the service's selection predicate (provisioning-service.ts,
+   * `recoverStuckProvisioningJobs`) and refuses to tick on any foreign job.
+   */
+  async function watchdogTick(
+    jobId: number,
+    opts: { expectAttempt: boolean; now?: Date; maxRetryCount?: number },
+  ) {
+    const now = opts.now ?? new Date();
+    const maxRetryCount = opts.maxRetryCount ?? WATCHDOG_MAX_RETRY_COUNT;
+    const staleBefore = new Date(now.getTime() - WATCHDOG_STALE_AFTER_MS);
+    const wouldPick = await db
+      .select({ id: provisioningJobs.id, signupRequestId: provisioningJobs.signupRequestId })
+      .from(provisioningJobs)
+      .innerJoin(pendingSignups, eq(provisioningJobs.signupRequestId, pendingSignups.signupRequestId))
+      .where(
+        and(
+          inArray(provisioningJobs.status, RECOVERABLE_JOB_STATUSES),
+          inArray(pendingSignups.status, RECOVERABLE_SIGNUP_STATUSES),
+          sql`coalesce(${provisioningJobs.retryCount}, 0) < ${maxRetryCount}`,
+          or(
+            and(
+              eq(provisioningJobs.status, 'initiated'),
+              isNull(provisioningJobs.startedAt),
+              lt(pendingSignups.updatedAt, staleBefore),
+            ),
+            and(lt(provisioningJobs.startedAt, staleBefore), sql`${provisioningJobs.status} <> 'completed'`),
+            eq(provisioningJobs.status, 'failed'),
+          ),
+        ),
+      );
+    const foreign = wouldPick.filter((r) => !created.signupRequestIds.includes(r.signupRequestId ?? ''));
+    if (foreign.length > 0) {
+      throw new Error(
+        `refusing to run the watchdog: it would pick ${foreign.length} job(s) this run did not create `
+          + `(ids ${foreign.map((r) => r.id).join(', ')}). Is DATABASE_URL a shared database?`,
+      );
+    }
+    expect(wouldPick.some((r) => r.id === jobId)).toBe(opts.expectAttempt);
+
+    const summary = await recoverStuckProvisioningJobs({ now, maxRetryCount });
+    expect(summary.attempted).toBe(wouldPick.length);
     return { summary, failure: summary.failures.find((f) => f.jobId === jobId) };
   }
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    h.failNextEmailTo.clear();
-    h.failChecklistOnce = false;
-    h.failCategoriesOnce = false;
-    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_provisioning_idempotency';
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
-
-    h.retrieveCheckoutSession.mockImplementation(async (id: string) => ({
-      id,
-      object: 'checkout.session',
-      status: 'complete',
-      customer: `cus_${id}`,
-      subscription: {
-        id: `sub_${id}`,
-        object: 'subscription',
-        status: 'trialing',
-        trial_end: Math.floor(Date.now() / 1000) + 14 * 86_400,
-        items: { data: [] },
-      },
-    }));
-    h.createUser.mockImplementation(async () => ({
-      data: { user: { id: randomUUID() } },
-      error: null,
-    }));
-
-    if (CHECKLIST_COUNT === 0) {
-      const shared = await vi.importActual<typeof import('@propertypro/shared')>('@propertypro/shared');
-      CHECKLIST_COUNT = shared.getComplianceTemplate('condo_718').length;
-      CATEGORY_COUNT = shared.getDefaultDocumentCategories('condo_718').length;
-      // A zero template would make every "no duplicate" assertion below vacuous.
-      expect(CHECKLIST_COUNT).toBeGreaterThan(0);
-      expect(CATEGORY_COUNT).toBeGreaterThan(0);
-    }
-  });
-
-  afterAll(async () => {
-    const signupIds = created.signupRequestIds;
-    if (signupIds.length > 0) {
-      await db.delete(provisioningJobs).where(inArray(provisioningJobs.signupRequestId, signupIds));
-    }
-    if (created.slugs.length > 0) {
-      // user_roles, categories, checklist items and preferences cascade.
-      await db.delete(communities).where(inArray(communities.slug, created.slugs));
-    }
-    if (created.eventIds.length > 0) {
-      await db.delete(stripeWebhookEvents).where(inArray(stripeWebhookEvents.eventId, created.eventIds));
-    }
-    if (signupIds.length > 0) {
-      await db.delete(pendingSignups).where(inArray(pendingSignups.signupRequestId, signupIds));
-    }
-    await db.delete(users).where(like(users.email, `%-${RUN}@${EMAIL_DOMAIN}`));
-  });
 
   // -------------------------------------------------------------------------
   // Stripe webhook re-delivery (real route, real idempotency fence)
   // -------------------------------------------------------------------------
 
-  it('1. the same event delivered twice provisions once, and the duplicate does no work at all', async () => {
+  it('1. the same event delivered twice provisions once: no second Stripe call, job, role or email', async () => {
     const signup = await newSignup();
     const event = checkoutEvent(signup, `evt_providem_dup_${RUN}_${seq}`);
 
@@ -378,9 +493,13 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const second = await deliver(event);
     expect(second.status).toBe(200);
 
-    // The duplicate is skipped at the stripe_webhook_events precheck, BEFORE any
-    // Stripe call or DB write — not merely absorbed by downstream idempotency.
-    expect(h.retrieveCheckoutSession).toHaveBeenCalledTimes(1);
+    // The duplicate never reaches the handler, so Stripe is not asked again.
+    // Two route mechanisms each give this: the processed-event precheck
+    // (route.ts, `priorAttempt.processedAt !== null`) and, if that were deleted,
+    // the fence insert's unique violation whose race branch also returns 200
+    // for a processed event. What reddens it is treating a processed event as
+    // a retry.
+    expect(sessionReads(signup)).toBe(1);
 
     const communityId = await communityIdFor(signup);
     const job = await jobFor(signup);
@@ -399,8 +518,7 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const signup = await newSignup();
     const event = checkoutEvent(signup, `evt_providem_retry_${RUN}_${seq}`);
 
-    h.failNextEmailTo.add(signup.email);
-    const first = await deliver(event);
+    const first = await withEmailStepFailing(() => deliver(event));
     expect(first.status).toBe(500);
 
     const failedJob = await jobFor(signup);
@@ -414,6 +532,7 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       .from(stripeWebhookEvents)
       .where(eq(stripeWebhookEvents.eventId, event.id));
     expect(unprocessed?.processedAt).toBeNull();
+    expect(delivered(signup)).toBe(0);
 
     const retry = await deliver(event);
     expect(retry.status).toBe(200);
@@ -424,11 +543,10 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     expect(await countRows(documentCategories, communityId)).toBe(CATEGORY_COUNT);
     expect(await countRows(complianceChecklistItems, communityId)).toBe(CHECKLIST_COUNT);
     expect(await countRows(notificationPreferences, communityId)).toBe(1);
-    expect(h.emailAttempts.filter((to) => to === signup.email)).toHaveLength(2);
     expect(delivered(signup)).toBe(1);
   });
 
-  it('3. a second, different event for an already-provisioned signup reuses the one job and creates nothing', async () => {
+  it('3. a second, different event for an already-provisioned signup reuses the one job: no second job, community, role or email', async () => {
     const signup = await newSignup();
     const firstEvent = checkoutEvent(signup, `evt_providem_a_${RUN}_${seq}`);
     const secondEvent = checkoutEvent(signup, `evt_providem_b_${RUN}_${seq}`);
@@ -441,6 +559,9 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const jobs = await jobsFor(signup);
     expect(jobs).toHaveLength(1);
     // The job keeps the event that created it; the second event id is never recorded on a job.
+    // NOT pinned: the second event also re-runs markPendingSignupPaymentCompleted,
+    // which moves this `completed` signup back to `payment_completed` (a known
+    // non-idempotent path — see the 3.T3 roadmap row).
     expect(jobs[0]).toMatchObject({ stripeEventId: firstEvent.id, status: 'completed', communityId });
     expect(await communitiesFor(signup)).toHaveLength(1);
     expect(await countRows(userRoles, communityId)).toBe(1);
@@ -451,7 +572,7 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
   // Watchdog / manual re-entry (real state machine, real constraints)
   // -------------------------------------------------------------------------
 
-  it('4. a job whose webhook died after the fence is finished by the watchdog; later ticks and a manual re-run are no-ops', async () => {
+  it('4. a job whose webhook died after the fence is finished by the watchdog; a later tick and a direct runProvisioning re-run are no-ops', async () => {
     const signup = await newSignup();
     const jobId = await fenceOnly(signup);
     // The watchdog only takes an un-started `initiated` job once its signup is stale.
@@ -460,14 +581,18 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       .set({ updatedAt: new Date(Date.now() - 60 * 60 * 1000) })
       .where(eq(pendingSignups.signupRequestId, signup.signupRequestId));
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
     expect(tick.failure?.errorMessage).toBeUndefined();
     expect(await jobFor(signup)).toMatchObject({ status: 'completed' });
     const communityId = await communityIdFor(signup);
 
-    // A later tick (made stale on every time arm) and the manual retry endpoint's
-    // runProvisioning() both leave a completed job alone.
-    const later = await watchdogTick(jobId, new Date(Date.now() + 24 * 60 * 60 * 1000));
+    // A later tick (past the 5-minute stale window of every time arm) does not
+    // select the completed job, and calling runProvisioning() on it directly —
+    // what the /internal/provision retry endpoint does — leaves it alone.
+    const later = await watchdogTick(jobId, {
+      expectAttempt: false,
+      now: new Date(Date.now() + 10 * 60 * 1000),
+    });
     expect(later.failure?.errorMessage).toBeUndefined();
     await runProvisioning(jobId);
 
@@ -478,24 +603,24 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     expect(await jobFor(signup)).toMatchObject({ status: 'completed', retryCount: 0 });
   });
 
-  it('5. re-entry after the community_created checkpoint (user_linked failed) reuses the recorded community', async () => {
+  it('5. re-entry after the community_created checkpoint (user_linked failed) carries the recorded job.communityId into the resumed run', async () => {
     const signup = await newSignup({ authUserId: null });
     const jobId = await fenceOnly(signup);
 
-    h.createUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'injected: auth down' } });
-    await expect(runProvisioning(jobId)).rejects.toThrow('injected: auth down');
+    failNextAuthCreateUserFor(signup.email);
+    await expect(runProvisioning(jobId)).rejects.toThrow(INJECTED_AUTH_CREATE_USER_ERROR);
     const failed = await jobFor(signup);
     expect(failed).toMatchObject({ status: 'failed', lastSuccessfulStatus: 'community_created' });
     const communityId = await communityIdFor(signup);
     expect(failed.communityId).toBe(communityId);
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
     expect(tick.failure?.errorMessage).toBeUndefined();
 
     expect(await jobFor(signup)).toMatchObject({ status: 'completed', communityId });
     expect(await communitiesFor(signup)).toHaveLength(1);
     expect(await countRows(userRoles, communityId)).toBe(1);
-    expect(h.createUser).toHaveBeenCalledTimes(2);
+    expect(createUserCalls(signup)).toBe(2);
     expect(delivered(signup)).toBe(1);
   });
 
@@ -503,14 +628,14 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const signup = await newSignup({ authUserId: null });
     const jobId = await fenceOnly(signup);
 
-    h.createUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'injected: auth down' } });
-    await expect(runProvisioning(jobId)).rejects.toThrow('injected: auth down');
+    failNextAuthCreateUserFor(signup.email);
+    await expect(runProvisioning(jobId)).rejects.toThrow(INJECTED_AUTH_CREATE_USER_ERROR);
     const communityId = await communityIdFor(signup);
 
     // The community row exists, but the job never recorded it.
     await rewindCheckpoint(jobId, null, { clearCommunityId: true });
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
     expect(tick.failure?.errorMessage).toBeUndefined();
 
     expect(await communitiesFor(signup)).toHaveLength(1);
@@ -523,20 +648,21 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const signup = await newSignup({ authUserId: null });
     const jobId = await fenceOnly(signup);
 
-    h.failChecklistOnce = true;
-    await expect(runProvisioning(jobId)).rejects.toThrow('injected: checklist_generated failed');
+    await withInsertFault('compliance_checklist_items', signup, () =>
+      expect(runProvisioning(jobId)).rejects.toThrow(/compliance_checklist_items/),
+    );
     expect(await jobFor(signup)).toMatchObject({ status: 'failed', lastSuccessfulStatus: 'user_linked' });
-    expect(h.createUser).toHaveBeenCalledTimes(1);
+    expect(createUserCalls(signup)).toBe(1);
 
     await rewindCheckpoint(jobId, 'community_created');
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
     expect(tick.failure?.errorMessage).toBeUndefined();
 
     const communityId = await communityIdFor(signup);
     expect(await jobFor(signup)).toMatchObject({ status: 'completed' });
     // The auth id was stored on the signup, so the re-run takes the existing-user branch.
-    expect(h.createUser).toHaveBeenCalledTimes(1);
+    expect(createUserCalls(signup)).toBe(1);
     const [signupRow] = await db
       .select({ authUserId: pendingSignups.authUserId })
       .from(pendingSignups)
@@ -551,15 +677,16 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const signup = await newSignup();
     const jobId = await fenceOnly(signup);
 
-    h.failCategoriesOnce = true;
-    await expect(runProvisioning(jobId)).rejects.toThrow('injected: categories_created failed');
+    await withInsertFault('document_categories', signup, () =>
+      expect(runProvisioning(jobId)).rejects.toThrow(/document_categories/),
+    );
     expect(await jobFor(signup)).toMatchObject({ status: 'failed', lastSuccessfulStatus: 'checklist_generated' });
     const communityId = await communityIdFor(signup);
     expect(await countRows(complianceChecklistItems, communityId)).toBe(CHECKLIST_COUNT);
 
     await rewindCheckpoint(jobId, 'user_linked');
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
     expect(tick.failure?.errorMessage).toBeUndefined();
 
     expect(await jobFor(signup)).toMatchObject({ status: 'completed' });
@@ -571,15 +698,16 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const signup = await newSignup();
     const jobId = await fenceOnly(signup);
 
-    h.failNextEmailTo.add(signup.email);
-    await expect(runProvisioning(jobId)).rejects.toThrow('injected: email provider unavailable');
+    await withEmailStepFailing(() =>
+      expect(runProvisioning(jobId)).rejects.toThrow('NEXT_PUBLIC_APP_URL env var not set'),
+    );
     expect(await jobFor(signup)).toMatchObject({ status: 'failed', lastSuccessfulStatus: 'preferences_set' });
     const communityId = await communityIdFor(signup);
     expect(await countRows(notificationPreferences, communityId)).toBe(1);
 
     await rewindCheckpoint(jobId, 'categories_created');
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
     expect(tick.failure?.errorMessage).toBeUndefined();
 
     expect(await jobFor(signup)).toMatchObject({ status: 'completed' });
@@ -604,7 +732,7 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       .set({ status: 'provisioning' })
       .where(eq(pendingSignups.signupRequestId, signup.signupRequestId));
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
     expect(tick.failure?.errorMessage).toBeUndefined();
 
     expect(await jobFor(signup)).toMatchObject({ status: 'completed', lastSuccessfulStatus: 'completed' });
@@ -624,7 +752,7 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       .set({ status: 'failed', retryCount: 5, errorMessage: 'exhausted' })
       .where(eq(provisioningJobs.id, jobId));
 
-    const tick = await watchdogTick(jobId);
+    const tick = await watchdogTick(jobId, { expectAttempt: false });
     expect(tick.failure?.errorMessage).toBeUndefined();
 
     expect(await jobFor(signup)).toMatchObject({
@@ -635,12 +763,14 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       communityId: null,
     });
     expect(await communitiesFor(signup)).toHaveLength(0);
-    expect(h.emailAttempts.filter((to) => to === signup.email)).toHaveLength(0);
-    // Sanity: this signup is otherwise exactly what the watchdog recovers.
-    const [row] = await db
-      .select({ status: pendingSignups.status })
-      .from(pendingSignups)
-      .where(and(eq(pendingSignups.signupRequestId, signup.signupRequestId)));
-    expect(row?.status).toBe('payment_completed');
+    expect(delivered(signup)).toBe(0);
+
+    // Positive control: the retry ceiling is the ONLY thing holding it back —
+    // with the ceiling raised by one, the same tick picks it up and finishes it.
+    const control = await watchdogTick(jobId, { expectAttempt: true, maxRetryCount: 6 });
+    expect(control.failure?.errorMessage).toBeUndefined();
+    expect(await jobFor(signup)).toMatchObject({ status: 'completed', retryCount: 5 });
+    expect(await communitiesFor(signup)).toHaveLength(1);
+    expect(delivered(signup)).toBe(1);
   });
 });
