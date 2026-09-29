@@ -544,6 +544,9 @@ export function SiteEditorProvider({
     }
   }, [blocks, movableSections, moveTo, pendingPlacements]);
 
+  // ponytail: append-then-move is two requests and a deferred effect, because
+  // the blocks API cannot insert at a slot. Upgrade path: a server-side
+  // insert-at op, if placement races or a visible "jump" become a real problem.
   const placeAdded = useCallback(
     (slot: number, blockType: string, aboveBlockId: number | null) => {
       if (aboveBlockId === null) return;

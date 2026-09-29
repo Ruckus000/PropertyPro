@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, Eye, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
 
@@ -213,13 +214,10 @@ type PagePickerProps = Pick<
 /**
  * "Editing page ▾" — switch page without opening the Pages tool.
  *
- * A disclosure over a list of buttons, hand-rolled rather than Radix's
- * DropdownMenu: this route sits within a few KiB of its 700 KiB hard budget,
- * and the list needs nothing a menu widget adds. Escape closes it and returns
- * focus to the trigger; a click outside closes it without moving focus.
- *
- * Unpublished pages carry "Not published" — the one fact the PM needs before
- * choosing a page that visitors cannot see yet.
+ * The app's Popover (Radix) supplies Escape, outside-click dismissal, focus
+ * return to the trigger and the trigger's `aria-expanded`; this file supplies
+ * only the list. Unpublished pages carry "Not published" — the one fact the PM
+ * needs before choosing a page visitors cannot see yet.
  */
 function PagePicker({
   pageName,
@@ -229,102 +227,68 @@ function PagePicker({
   onManagePages,
 }: PagePickerProps) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const listId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [open]);
-
-  const close = (returnFocus: boolean) => {
-    setOpen(false);
-    if (returnFocus) triggerRef.current?.focus();
-  };
 
   return (
-    <div
-      ref={rootRef}
-      className="relative"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && open) {
-          event.stopPropagation();
-          close(true);
-        }
-      }}
-    >
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        onClick={() => setOpen((value) => !value)}
-        className="flex h-11 items-center gap-2.5 rounded-[var(--radius-md)] border border-edge bg-surface-card px-3 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
-        <span className="flex flex-col leading-tight">
-          <span className="text-xs text-content-tertiary">Editing page</span>
-          <span
-            className="max-w-[16rem] truncate text-sm font-semibold text-content"
-            data-testid="editing-page-name"
-          >
-            {pageName ?? 'Loading pages…'}
-          </span>
-        </span>
-        <ChevronDown className="h-4 w-4 text-content-tertiary" aria-hidden="true" />
-      </button>
-
-      {open ? (
-        <div
-          id={listId}
-          className="absolute left-0 top-[50px] z-50 w-[260px] rounded-[var(--radius-md)] border border-edge bg-surface-card p-1.5 shadow-md"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-11 items-center gap-2.5 rounded-[var(--radius-md)] border border-edge bg-surface-card px-3 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
-          <ul aria-label="Pages" className="flex flex-col">
-            {pages.map((page) => {
-              const isCurrent = page.id === selectedPageId;
-              return (
-                <li key={page.id}>
-                  <button
-                    type="button"
-                    aria-current={isCurrent ? 'page' : undefined}
-                    onClick={() => {
-                      if (!isCurrent) onSelectPage(page.id);
-                      close(true);
-                    }}
-                    className={cn(
-                      'flex min-h-11 w-full items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-left text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                      isCurrent && 'bg-surface-muted',
-                    )}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{page.name}</span>
-                    {page.isDraft ? (
-                      <span className="shrink-0 rounded-full bg-status-warning-bg px-2 py-0.5 text-xs font-semibold text-status-warning">
-                        Not published
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div aria-hidden="true" className="my-1.5 h-px bg-edge-subtle" />
-          <button
-            type="button"
-            onClick={() => {
-              close(false);
-              onManagePages();
-            }}
-            className="flex min-h-11 w-full items-center gap-2 rounded-[var(--radius-sm)] px-2.5 text-sm font-medium text-content-link hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add or manage pages
-          </button>
-        </div>
-      ) : null}
-    </div>
+          <span className="flex flex-col leading-tight">
+            <span className="text-xs text-content-tertiary">Editing page</span>
+            <span
+              className="max-w-[16rem] truncate text-sm font-semibold text-content"
+              data-testid="editing-page-name"
+            >
+              {pageName ?? 'Loading pages…'}
+            </span>
+          </span>
+          <ChevronDown className="h-4 w-4 text-content-tertiary" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" aria-label="Choose a page to edit" className="w-[260px] p-1.5">
+        <ul aria-label="Pages" className="flex flex-col">
+          {pages.map((page) => {
+            const isCurrent = page.id === selectedPageId;
+            return (
+              <li key={page.id}>
+                <button
+                  type="button"
+                  aria-current={isCurrent ? 'page' : undefined}
+                  onClick={() => {
+                    if (!isCurrent) onSelectPage(page.id);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'flex min-h-11 w-full items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-left text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    isCurrent && 'bg-surface-muted',
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{page.name}</span>
+                  {page.isDraft ? (
+                    <span className="shrink-0 rounded-full bg-status-warning-bg px-2 py-0.5 text-xs font-semibold text-status-warning">
+                      Not published
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div aria-hidden="true" className="my-1.5 h-px bg-edge-subtle" />
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            onManagePages();
+          }}
+          className="flex min-h-11 w-full items-center gap-2 rounded-[var(--radius-sm)] px-2.5 text-sm font-medium text-content-link hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Add or manage pages
+        </button>
+      </PopoverContent>
+    </Popover>
   );
 }

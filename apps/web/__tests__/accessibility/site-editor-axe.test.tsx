@@ -241,7 +241,10 @@ describe('Website editor v3 — axe', () => {
 
 describe('Website builder v4 chrome — axe', () => {
   function renderChrome() {
+    // Inside `<main>`, as `EditorFrame` renders it in the app — the picker case
+    // audits `baseElement`, where content outside a landmark is a violation.
     return render(
+      <main>
       <UndoableRemoveProvider communityId={7}>
         <SiteEditorProvider communityId={7} blocks={BLOCKS}>
           <EditorShell
@@ -274,7 +277,8 @@ describe('Website builder v4 chrome — axe', () => {
             </div>
           </EditorShell>
         </SiteEditorProvider>
-      </UndoableRemoveProvider>,
+      </UndoableRemoveProvider>
+      </main>,
     );
   }
 
@@ -296,10 +300,14 @@ describe('Website builder v4 chrome — axe', () => {
 
   it('has no violations with the Editing page picker open', async () => {
     const user = userEvent.setup();
-    const { container } = renderChrome();
+    const { baseElement, container } = renderChrome();
     await user.click(screen.getByRole('button', { name: /Editing page/ }));
-    expect(screen.getByRole('list', { name: 'Pages' })).toBeInTheDocument();
-    expect(await axe(container)).toHaveNoViolations();
+    // The list is PORTALLED out of `container`, so the audit must run on
+    // `baseElement` or it silently audits everything except the picker.
+    const list = screen.getByRole('list', { name: 'Pages' });
+    expect(container.contains(list)).toBe(false);
+    expect(baseElement.contains(list)).toBe(true);
+    expect(await axe(baseElement)).toHaveNoViolations();
   });
 
   it('has no violations on a hidden, selected section', async () => {
