@@ -126,6 +126,13 @@ const TENANT_OPTIONAL_PATHS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Paths served from `public/` by extension (see the matcher at the bottom).
+ * Matched against `nextUrl.pathname`; the fast path in middleware() strips
+ * forwarded auth headers and does no session work for these.
+ */
+const STATIC_ASSET_PATH = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs)$/i;
+
+/**
  * The non-id siblings of `[id]` directly under `app/api/v1/communities/`
  * (measured 2026-09-29). The support-session path check ignores exactly these
  * and fails closed on any other segment that is not a community id; pinned by
@@ -432,8 +439,39 @@ function stampForwardedUserHeaders(
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
+
   if (shouldHideDevSurfaceInProduction(pathname)) {
     return NextResponse.rewrite(new URL('/404', request.url));
+  }
+
+  // Static-asset fast path. The matcher below used to EXCLUDE every path ending
+  // in an image/.mjs extension, so middleware never ran for them — including
+  // page URLs such as `/help/<category>/<slug>.png`, which Next still routes to
+  // a dynamic page. Middleware is the only place inbound x-user-* /
+  // x-community-id / x-support-* headers are stripped, and the page helpers
+  // (lib/request/page-auth-context.ts) trust them, so a cookie-less request with
+  // a forged `x-user-id` rendered authenticated pages as that user. Now those
+  // paths reach middleware, and this exit strips the forwarded auth headers and
+  // passes through with no session work — real assets are served unchanged, and
+  // a page reached this way renders unauthenticated, still carrying the
+  // security headers (X-Frame-Options, CSP) that finaliseResponse applies on
+  // the main path. `/api/` is excluded — deliberately the whole prefix, not
+  // isApiPath()'s `/api/v1` — because no API route is a static asset and the
+  // fast path would skip rate limiting. Placement is load-bearing: below the
+  // custom-domain rewrite, `/marketing/*.webp` on a custom domain would be
+  // rewritten into `/public-site/...` and break. X-Frame-Options is always
+  // DENY here (no isPreview): no admin-preview URL ends in an image extension.
+  if (!pathname.startsWith('/api/') && STATIC_ASSET_PATH.test(pathname)) {
+    const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+    const response = NextResponse.next({
+      request: { headers: sanitizeForwardedHeaders(request, requestId) },
+    });
+    response.headers.set('X-Request-ID', requestId);
+    for (const [name, value] of Object.entries(buildSecurityHeaders())) {
+      response.headers.set(name, value);
+    }
+    response.headers.set('Content-Security-Policy', buildCspHeader());
+    return response;
   }
 
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com';
@@ -1310,9 +1348,24 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon)
-     * - Public assets (svg, png, jpg, jpeg, gif, webp, ico, mjs)
      * - PDF.js browser assets served from /public/pdfjs
+     *
+     * Paths ending in an image/.mjs extension are NOT excluded here: Next routes
+     * `/help/<category>/<slug>.png` to a dynamic PAGE, and a page must never
+     * skip the header sanitisation below. They take the STATIC_ASSET_PATH fast
+     * path at the top of middleware() instead (strip forwarded auth headers,
+     * pass through).
+     *
+     * The excluded prefixes are NOT page-free: the top-level dynamic segment
+     * `app/(public)/[subdomain]` makes `/pdfjs/transparency` or
+     * `/favicon.ico/x` resolve to a page with no middleware. That is safe only
+     * because every page under `[subdomain]` validates the slug and redirects
+     * to the canonical host without reading request headers. Pinned by
+     * __tests__/middleware/static-asset-bypass.test.ts: it fails on a second
+     * top-level dynamic segment (at any route-group depth), on a static
+     * segment sitting on an excluded prefix, and on a header read anywhere in
+     * the [subdomain] files, the ancestor layouts, or anything they import.
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|pdfjs/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs)$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|pdfjs/).*)',
   ],
 };
