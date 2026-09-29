@@ -456,3 +456,51 @@ describe('SiteEditorProvider — duplicate', () => {
     expect(api.duplicateError).toBeNull();
   });
 });
+
+describe('SiteEditorProvider — "Add section here" placement', () => {
+  function rerenderWith(rerender: (ui: React.ReactElement) => void, blocks: SiteBlockSummary[]) {
+    rerender(
+      <SiteEditorProvider communityId={7} blocks={blocks}>
+        <Probe />
+      </SiteEditorProvider>,
+    );
+  }
+
+  it('moves an added section above the insert target once the refetch delivers it', async () => {
+    const { rerender } = renderProvider();
+    act(() => api.setInsertBefore(3));
+    expect(api.insertBefore).toBe(3);
+
+    act(() => api.placeAdded(5, 'text'));
+    // Not yet in the list — nothing to move, exactly as for a duplicate.
+    expect(reorderMutate).not.toHaveBeenCalled();
+    // The target is consumed on use, so a later add from the rail appends.
+    expect(api.insertBefore).toBeNull();
+
+    await act(async () => {
+      rerenderWith(rerender, [...BLOCKS, block({ id: 60, blockType: 'text', blockOrder: 5 })]);
+    });
+    // toOrder 3 is the TARGET's own slot: an array move onto it lands the new
+    // section directly above the target.
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 60, toOrder: 3 });
+  });
+
+  it('leaves an added section at the end when there is no insert target', async () => {
+    const { rerender } = renderProvider();
+    act(() => api.placeAdded(5, 'text'));
+    await act(async () => {
+      rerenderWith(rerender, [...BLOCKS, block({ id: 60, blockType: 'text', blockOrder: 5 })]);
+    });
+    expect(reorderMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not move anything when the target has left the page', async () => {
+    const { rerender } = renderProvider();
+    act(() => api.setInsertBefore(999));
+    act(() => api.placeAdded(5, 'text'));
+    await act(async () => {
+      rerenderWith(rerender, [...BLOCKS, block({ id: 60, blockType: 'text', blockOrder: 5 })]);
+    });
+    expect(reorderMutate).not.toHaveBeenCalled();
+  });
+});

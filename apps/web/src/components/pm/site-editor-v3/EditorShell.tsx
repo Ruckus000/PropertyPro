@@ -2,17 +2,18 @@
 
 import { useState } from 'react';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { EditorTopBar } from './EditorTopBar';
+import { EditorTopBar, type EditorTopBarPageProps } from './EditorTopBar';
 import { PanelResizer } from './PanelResizer';
 import { PhoneGate } from './PhoneGate';
-import { ToolTabs } from './ToolTabs';
+import { ToolRail } from './ToolRail';
+import { X } from 'lucide-react';
 import { usePanelWidth } from './use-panel-width';
 import { TOOL_PANEL_TITLES, type EditorToolId, type ProToolAccess } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 const PANEL_ID = 'site-editor-tool-panel';
 
-export interface EditorShellProps {
+export interface EditorShellProps extends EditorTopBarPageProps {
   communityName: string;
   /** Forwarded to the top bar; see `EditorTopBarProps.pageName` (Phase 11b-3). */
   pageName?: string;
@@ -76,7 +77,10 @@ export interface EditorShellProps {
  * discouraged by a comment.
  */
 type ControlledToolProps =
-  | { activeTool: EditorToolId; onActiveToolChange: (tool: EditorToolId) => void }
+  | {
+      activeTool: EditorToolId | null;
+      onActiveToolChange: (tool: EditorToolId | null) => void;
+    }
   | { activeTool?: never; onActiveToolChange?: never };
 
 export type EditorShellPropsWithTool = EditorShellProps & ControlledToolProps;
@@ -109,12 +113,21 @@ export function EditorShell({
   onActiveToolChange,
   inspector,
   banner,
+  pages,
+  selectedPageId,
+  onSelectPage,
+  onManagePages,
+  changeCount,
 }: EditorShellPropsWithTool) {
-  const [uncontrolledTool, setUncontrolledTool] = useState<EditorToolId>('sections');
-  // Both `??`s are now decided by the SAME arm of `ControlledToolProps`, so
-  // they cannot disagree — which is the half-controlled inert tab strip the
-  // union exists to make unrepresentable.
-  const activeTool = controlledTool ?? uncontrolledTool;
+  // Closed by default: the v4 builder opens on the page itself, with the rail
+  // offering the tools rather than one already covering a third of the screen.
+  const [uncontrolledTool, setUncontrolledTool] = useState<EditorToolId | null>(null);
+  // Both are decided by the SAME arm of `ControlledToolProps`, so they cannot
+  // disagree — which is the half-controlled inert rail the union exists to make
+  // unrepresentable. `controlledTool` is checked for `undefined`, not with `??`,
+  // because `null` (panel closed) is a legitimate controlled value.
+  const isControlled = onActiveToolChange !== undefined;
+  const activeTool = isControlled ? (controlledTool ?? null) : uncontrolledTool;
   const setActiveTool = onActiveToolChange ?? setUncontrolledTool;
   const [panelWidth, setPanelWidth] = usePanelWidth();
   // Deliberately phrased as max-width, not min-width.
@@ -151,6 +164,11 @@ export function EditorShell({
         previewButtonRef={previewButtonRef}
         onPreview={onPreview}
         onPublish={onPublish}
+        pages={pages}
+        selectedPageId={selectedPageId}
+        onSelectPage={onSelectPage}
+        onManagePages={onManagePages}
+        changeCount={changeCount}
       />
 
       {banner ? (
@@ -158,35 +176,42 @@ export function EditorShell({
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        <div
-          className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
-          style={{ width: panelWidth }}
-        >
-          <ToolTabs
-            active={activeTool}
-            onSelect={setActiveTool}
-            proToolAccess={proToolAccess}
-            panelId={PANEL_ID}
-          />
+        <ToolRail
+          active={activeTool}
+          onSelect={setActiveTool}
+          proToolAccess={proToolAccess}
+          panelId={PANEL_ID}
+        />
 
-          <div
-            id={PANEL_ID}
-            role="tabpanel"
-            aria-labelledby={`site-editor-tab-${activeTool}`}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <div className="flex shrink-0 items-center gap-2 border-b border-edge px-4 py-3">
-              <h2 className="text-base font-semibold text-content">
-                {TOOL_PANEL_TITLES[activeTool]}
-              </h2>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {renderToolPanel(activeTool)}
-            </div>
-          </div>
-        </div>
+        {activeTool !== null ? (
+          <>
+            <aside
+              id={PANEL_ID}
+              aria-labelledby={`${PANEL_ID}-title`}
+              className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
+              style={{ width: panelWidth }}
+            >
+              <div className="flex shrink-0 items-center gap-2 px-4 pb-2.5 pt-3.5">
+                <h2 id={`${PANEL_ID}-title`} className="flex-1 text-base font-semibold text-content">
+                  {TOOL_PANEL_TITLES[activeTool]}
+                </h2>
+                <button
+                  type="button"
+                  aria-label="Close panel"
+                  onClick={() => setActiveTool(null)}
+                  className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <X className="h-[18px] w-[18px]" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
+                {renderToolPanel(activeTool)}
+              </div>
+            </aside>
 
-        <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
+            <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
+          </>
+        ) : null}
 
         <div className="min-w-0 flex-1 overflow-y-auto bg-surface-page">{children}</div>
 

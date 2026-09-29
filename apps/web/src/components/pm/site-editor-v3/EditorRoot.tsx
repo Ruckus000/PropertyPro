@@ -131,7 +131,7 @@ export interface EditorRootProps {
    * Amenities blocks the Add panel offers.
    *
    * Deliberately NOT folded into `proToolAccess`. That map is keyed by
-   * `TOOL_PLAN_FEATURE`, and `ToolTabs` renders any tool present in it as
+   * `TOOL_PLAN_FEATURE`, and `ToolRail` renders any tool present in it as
    * Pro-locked — so adding `add` there would lock the Add TAB, which is false:
    * seven of the ten types it offers are available on Essentials. This gates
    * three rows inside the panel, not the panel.
@@ -245,7 +245,8 @@ export function EditorRoot({
   // sheet calls the same hook, so the button's state and the sheet's "N changes
   // ready to publish" can never disagree.
   const { diff, isError: diffFailed } = useSiteDiff(communityId);
-  const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
+  // Closed by default — the v4 builder opens on the page, not on a panel.
+  const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
    * `previewOpen`, mirrored — read by the preview gate effect below.
@@ -658,9 +659,22 @@ export function EditorRoot({
    * affordance, not a correction, and belongs in its own change.
    */
 
-  // Selecting a section on the canvas pulls the Sections panel forward, so the
-  // controls for what you just clicked are visible without a second action.
-  const handleSelect = useCallback(() => setActiveTool('sections'), []);
+  /*
+   * A page picked from the top bar's "Editing page" menu.
+   *
+   * Not `handleSelectPage`: that one is the Pages panel's and sets
+   * `focusSelectedRow`, which would pull focus into the panel's list when the
+   * picker has already handed it back to its own trigger. Everything else it
+   * clears is cleared here too, for the same reasons given there.
+   */
+  const handlePickPage = useCallback((pageId: number) => {
+    setSelectedPageId(pageId);
+    setPendingSelectionId(null);
+    setPendingSelectSlot(null);
+    setSelfRemovedPageId(null);
+    setFocusSelectedRow(false);
+    setPageAnnouncement('');
+  }, []);
   const handlePreview = useCallback(() => setPreviewOpen(true), []);
   const handlePublish = useCallback(() => setPublishOpen(true), []);
   // "Fix this" hands back the PAGE and the block_order slot together. Surfacing
@@ -748,7 +762,9 @@ export function EditorRoot({
         key={effectivePageId ?? 'none'}
         communityId={communityId}
         blocks={pageBlocks}
-        onSelect={handleSelect}
+        // No `onSelect`: in v4 selecting a section opens its inspector and
+        // toolbar in place. Pulling the Sections panel forward as well would
+        // cover a third of the canvas the PM just clicked on.
         // Cross-page "Fix this": this instance is the one that can resolve it.
         selectSlotOnMount={pendingSelectSlot}
         onSlotSelected={handleSlotSelected}
@@ -759,6 +775,11 @@ export function EditorRoot({
         // The only thing on screen naming the page while the Sections tool is
         // open — see `EditorTopBarProps.pageName`.
         pageName={selectedPage?.name}
+        pages={pages ?? initialPages}
+        selectedPageId={effectivePageId}
+        onSelectPage={handlePickPage}
+        onManagePages={handleGoToPages}
+        changeCount={diff.changes.length}
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
         communityId={communityId}

@@ -118,12 +118,34 @@ export interface SiteEditorContextValue {
    * knows. Only slot ALLOCATION can collide, so only duplication gates on this.
    */
   isDuplicating: boolean;
+
+  /**
+   * Where the next added section should land: the id of the section it goes
+   * ABOVE, or null for the end of the page (v4 "Add section here").
+   *
+   * Set by the canvas inserters, read by the Add panel. It lives in this
+   * provider, which is keyed on the selected page, so a page switch discards a
+   * stale target along with the selection.
+   */
+  insertBefore: number | null;
+  setInsertBefore: (blockId: number | null) => void;
+  /**
+   * Move a section that has just been WRITTEN at `slot` into the insert target,
+   * once the refetch delivers it — the Add panel's half of "Add section here".
+   *
+   * Same mechanism as `duplicate`'s deferred move, for the same reason: the
+   * upsert resolves to `void`, so the new row's id only exists after the
+   * refetch. A no-op when there is no insert target (append is where the write
+   * already put it) or the target has left the page.
+   */
+  placeAdded: (slot: number, blockType: string) => void;
 }
 
 const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
 
 /**
- * A copy that has been WRITTEN but not yet moved below its source.
+ * A new section — a duplicate, or one added with "Add section here" — that has
+ * been WRITTEN at the end of the page but not yet moved to where it belongs.
  *
  * Anchored on `(blockOrder, blockType)` rather than an id, for the same reason
  * `selectSlot` is: `useUpsertContentBlock` resolves to `void`, so the new row's
@@ -131,7 +153,7 @@ const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
  * match here would MOVE a section rather than merely select one, so the block
  * type is part of the anchor and not decoration.
  */
-interface PendingCopy {
+interface PendingPlacement {
   slot: number;
   blockType: string;
   toOrder: number;
@@ -223,7 +245,8 @@ export function SiteEditorProvider({
   const upsert = useUpsertContentBlock(communityId);
   const [announcement, setAnnouncement] = useState('');
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
-  const [pendingCopy, setPendingCopy] = useState<PendingCopy | null>(null);
+  const [pendingCopy, setPendingCopy] = useState<PendingPlacement | null>(null);
+  const [insertBefore, setInsertBefore] = useState<number | null>(null);
   /*
    * The re-entrancy guard, kept in BOTH a ref and state on purpose.
    *
@@ -481,6 +504,20 @@ export function SiteEditorProvider({
     moveTo(copy.id, pendingCopy.toOrder);
   }, [blocks, moveTo, pendingCopy]);
 
+  const placeAdded = useCallback(
+    (slot: number, blockType: string) => {
+      const target =
+        insertBefore === null ? undefined : movableSections.find((b) => b.id === insertBefore);
+      setInsertBefore(null);
+      if (!target) return;
+      // Reuses the duplicate's deferred move: `moveTo(copy, target.blockOrder)`
+      // is an array move to the target's index, which puts the new section
+      // directly ABOVE the target — exactly "Add section here".
+      setPendingCopy({ slot, blockType, toOrder: target.blockOrder });
+    },
+    [insertBefore, movableSections],
+  );
+
   const value = useMemo<SiteEditorContextValue>(
     () => ({
       blocks,
@@ -498,6 +535,9 @@ export function SiteEditorProvider({
       duplicate,
       duplicateError,
       isDuplicating,
+      insertBefore,
+      setInsertBefore,
+      placeAdded,
     }),
     [
       blocks,
@@ -515,6 +555,8 @@ export function SiteEditorProvider({
       duplicate,
       duplicateError,
       isDuplicating,
+      insertBefore,
+      placeAdded,
     ],
   );
 

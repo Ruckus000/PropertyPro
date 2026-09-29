@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { PlanBadge } from '@propertypro/ui';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,7 @@ import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blo
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
+import { sectionLabel } from '../section-label';
 import { ADD_CATALOG, nextContentSlot, type AddCatalogEntry } from './add-catalog';
 
 // Only mounted once the PM picks Image or Gallery, which keeps the upload
@@ -92,7 +93,15 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
   const { data: blocks, isPending, isError } = useContentBlocks(communityId);
   const targetPageId = useSelectedSitePage();
   const upsert = useUpsertContentBlock(communityId);
-  const { selectSlot } = useSiteEditor();
+  const { selectSlot, placeAdded, insertBefore, setInsertBefore, movableSections } =
+    useSiteEditor();
+  // An "Add section here" target belongs to one visit to this panel. Without
+  // this, closing the panel and later opening Add from the rail would still
+  // insert above the section picked earlier, while the rail click said nothing
+  // about position.
+  useEffect(() => () => setInsertBefore(null), [setInsertBefore]);
+  const insertTarget =
+    insertBefore === null ? undefined : movableSections.find((b) => b.id === insertBefore);
 
   const [imageEntry, setImageEntry] = useState<AddCatalogEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,10 +122,11 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
   const handleAdded = useCallback(
     (blockOrder: number, entry: AddCatalogEntry) => {
       selectSlot(blockOrder, entry.blockType);
+      placeAdded(blockOrder, entry.blockType);
       setImageEntry(null);
       setAnnouncement(`${entry.label} section added. Its settings are open.`);
     },
-    [selectSlot],
+    [placeAdded, selectSlot],
   );
 
   const add = async (entry: AddCatalogEntry) => {
@@ -157,9 +167,10 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
 
   return (
     <div className="space-y-5" data-testid="tool-panel-add">
-      <p className="text-sm text-content-secondary">
-        Pick a section to add to the bottom of your page. You can reorder it afterwards
-        in Sections.
+      <p className="text-sm text-content-secondary" data-testid="add-position">
+        {insertTarget
+          ? `It goes above “${sectionLabel(insertTarget.blockType)}”. You can move it later.`
+          : 'It goes at the bottom of this page. You can move it later.'}
       </p>
 
       {isError && (

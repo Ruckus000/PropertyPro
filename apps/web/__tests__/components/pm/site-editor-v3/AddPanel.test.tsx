@@ -388,3 +388,58 @@ describe('AddPanel', () => {
     });
   });
 });
+
+describe('AddPanel — "Add section here" (v4)', () => {
+  beforeEach(() => {
+    state.blocks = [
+      block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+      block({ id: 2, blockType: 'text', blockOrder: 2 }),
+      block({ id: 3, blockType: 'faq', blockOrder: 3 }),
+    ];
+  });
+
+  it('says a new section goes at the bottom when no position was picked', () => {
+    renderPanel();
+    expect(screen.getByTestId('add-position')).toHaveTextContent(
+      'It goes at the bottom of this page.',
+    );
+  });
+
+  it('names the section a new one will go above', () => {
+    renderPanel();
+    act(() => api.setInsertBefore(3));
+    expect(screen.getByTestId('add-position')).toHaveTextContent(
+      'It goes above “FAQ”. You can move it later.',
+    );
+  });
+
+  it('hands the new slot to the placement step after the write succeeds', async () => {
+    renderPanel();
+    act(() => api.setInsertBefore(3));
+    await userEvent.click(screen.getByTestId('add-section-text'));
+    expect(upsertMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ blockOrder: 4 }));
+    // `placeAdded` consumes the target — proof it ran with it.
+    expect(api.insertBefore).toBeNull();
+  });
+
+  it('keeps the target when the write fails, so a retry still lands there', async () => {
+    upsertMutateAsync.mockRejectedValueOnce(new Error('nope'));
+    renderPanel();
+    act(() => api.setInsertBefore(3));
+    await userEvent.click(screen.getByTestId('add-section-text'));
+    expect(api.insertBefore).toBe(3);
+  });
+
+  it('drops the target when the panel closes', () => {
+    const { rerender } = renderPanel();
+    act(() => api.setInsertBefore(3));
+    rerender(
+      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+        <SiteEditorProvider communityId={7} blocks={state.blocks}>
+          <Probe />
+        </SiteEditorProvider>
+      </SelectedSitePageProvider>,
+    );
+    expect(api.insertBefore).toBeNull();
+  });
+});

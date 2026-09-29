@@ -26,6 +26,31 @@ vi.mock('@/hooks/use-media-query', () => ({
 // form mounted; under CI load the chunk won, the form threw "No QueryClient
 // set", and the whole tree unmounted (#1212's Unit Tests, 2026-09-29).
 // Providing a client, as the app does, removes the race.
+const PAGES = [
+  {
+    id: 1,
+    name: 'Home',
+    slug: '',
+    inNav: true,
+    sortOrder: 0,
+    isHome: true,
+    isDraft: false,
+    publishedAt: '2026-01-01T00:00:00Z',
+    deleteStagedAt: null,
+  },
+  {
+    id: 2,
+    name: 'Amenities',
+    slug: 'amenities',
+    inNav: true,
+    sortOrder: 1,
+    isHome: false,
+    isDraft: true,
+    publishedAt: null,
+    deleteStagedAt: null,
+  },
+];
+
 function renderShell(overrides: Partial<EditorShellProps> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -57,6 +82,12 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       // silently does nothing, which no assertion in this file would notice.
       onPreview={() => {}}
       onPublish={() => {}}
+      pages={PAGES}
+      selectedPageId={1}
+      onSelectPage={() => {}}
+      onManagePages={() => {}}
+      changeCount={0}
+      pageName="Home"
       {...overrides}
     >
       <p>canvas</p>
@@ -75,7 +106,7 @@ describe('EditorShell — phone gate', () => {
     isNarrowMock.value = true;
     renderShell();
     expect(screen.getByRole('heading', { name: /bigger screen/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
   });
 
   it('unmounts the editor entirely rather than hiding it', () => {
@@ -121,7 +152,7 @@ describe('EditorShell — phone gate', () => {
       await screen.findByRole('heading', { name: /post an urgent notice/i }),
     ).toBeInTheDocument();
     // Still no editor: the fast path is a sibling of the gate, not a way in.
-    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
     expect(screen.queryByText('canvas')).not.toBeInTheDocument();
   });
 
@@ -152,28 +183,94 @@ describe('EditorShell — composition', () => {
     expect(screen.getByText('canvas')).toBeInTheDocument();
   });
 
-  it('opens on the Sections tool', () => {
+  it('opens on the page, with no tool panel covering it', () => {
     renderShell();
-    expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName(/Sections/);
-    expect(screen.getByText('panel:sections')).toBeInTheDocument();
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    for (const tile of screen.getAllByTestId(/^site-editor-tool-/)) {
+      expect(tile).toHaveAttribute('aria-expanded', 'false');
+    }
   });
 
-  it('swaps the panel body and heading when a tool is chosen', async () => {
+  it('opens a tool, names its panel, and closes it again from the same tile', async () => {
     const user = userEvent.setup();
     renderShell();
-    await user.click(screen.getByRole('tab', { name: /Address/ }));
+    const address = screen.getByRole('button', { name: /Address/ });
+    await user.click(address);
     expect(screen.getByText('panel:domain')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Web address' })).toBeInTheDocument();
+    expect(address).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('complementary', { name: 'Web address' })).toHaveAttribute(
+      'id',
+      address.getAttribute('aria-controls'),
+    );
+
+    await user.click(address);
+    expect(screen.queryByText('panel:domain')).not.toBeInTheDocument();
+    expect(address).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('labels the panel by its active tab', async () => {
+  it('closes the panel from its own close button', async () => {
     const user = userEvent.setup();
     renderShell();
-    await user.click(screen.getByRole('tab', { name: /Help/ }));
-    expect(screen.getByRole('tabpanel')).toHaveAttribute(
-      'aria-labelledby',
-      'site-editor-tab-help',
-    );
+    await user.click(screen.getByRole('button', { name: /Help/ }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
+    expect(screen.queryByText('panel:help')).not.toBeInTheDocument();
+  });
+});
+
+describe('EditorShell — Editing page picker', () => {
+  it('names the page being edited', () => {
+    renderShell();
+    expect(screen.getByTestId('editing-page-name')).toHaveTextContent('Home');
+  });
+
+  it('lists every page and marks the ones visitors cannot see yet', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole('button', { name: /Editing page/ }));
+    const list = screen.getByRole('list', { name: 'Pages' });
+    expect(list).toHaveTextContent('Home');
+    expect(list).toHaveTextContent('AmenitiesNot published');
+    expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('switches page and hands focus back to the trigger', async () => {
+    const user = userEvent.setup();
+    const onSelectPage = vi.fn();
+    renderShell({ onSelectPage });
+    const trigger = screen.getByRole('button', { name: /Editing page/ });
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: /Amenities/ }));
+    expect(onSelectPage).toHaveBeenCalledWith(2);
+    expect(screen.queryByRole('list', { name: 'Pages' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('does not re-select the page already being edited', async () => {
+    const user = userEvent.setup();
+    const onSelectPage = vi.fn();
+    renderShell({ onSelectPage });
+    await user.click(screen.getByRole('button', { name: /Editing page/ }));
+    await user.click(screen.getByRole('button', { name: 'Home' }));
+    expect(onSelectPage).not.toHaveBeenCalled();
+  });
+
+  it('closes on Escape', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const trigger = screen.getByRole('button', { name: /Editing page/ });
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('list', { name: 'Pages' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('routes "Add or manage pages" to the Pages tool', async () => {
+    const user = userEvent.setup();
+    const onManagePages = vi.fn();
+    renderShell({ onManagePages });
+    await user.click(screen.getByRole('button', { name: /Editing page/ }));
+    await user.click(screen.getByRole('button', { name: 'Add or manage pages' }));
+    expect(onManagePages).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -188,5 +285,15 @@ describe('EditorShell — publish affordance', () => {
   it('enables Publish once changes exist', () => {
     renderShell({ canOpenPublish: true });
     expect(screen.getByRole('button', { name: /Publish/ })).toBeEnabled();
+  });
+
+  it('shows how many changes are waiting', () => {
+    renderShell({ canOpenPublish: true, changeCount: 3 });
+    expect(screen.getByRole('button', { name: 'Publish 3 changes' })).toBeEnabled();
+  });
+
+  it('shows no count when there is nothing waiting', () => {
+    renderShell({ canOpenPublish: true, changeCount: 0 });
+    expect(screen.queryByTestId('publish-change-count')).not.toBeInTheDocument();
   });
 });

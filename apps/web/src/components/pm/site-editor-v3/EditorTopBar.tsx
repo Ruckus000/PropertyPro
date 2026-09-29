@@ -1,9 +1,34 @@
 'use client';
 
-import { Eye } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ChevronDown, Eye, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import type { SitePageSummary } from '@/hooks/use-site-pages';
 
-export interface EditorTopBarProps {
+/**
+ * The v4 "Editing page" picker's inputs.
+ *
+ * Every field is required, for the reason `canOpenPublish` is below: an absent
+ * handler yields a picker that opens and whose rows do nothing. `pages` is `[]`
+ * while the pages read is in flight or has failed, and the picker then offers
+ * only "Add or manage pages".
+ */
+export interface EditorTopBarPageProps {
+  pages: readonly SitePageSummary[];
+  selectedPageId: number | null;
+  onSelectPage: (pageId: number) => void;
+  /** Opens the Pages tool. */
+  onManagePages: () => void;
+  /**
+   * Draft changes waiting to publish, shown as a count on the button. The count
+   * is display only — whether the sheet OPENS is still `canOpenPublish`, which
+   * also covers the diff-failed case where the count is 0.
+   */
+  changeCount: number;
+}
+
+export interface EditorTopBarProps extends EditorTopBarPageProps {
   communityName: string;
   /**
    * The site page currently being edited (Phase 11b-3).
@@ -114,34 +139,38 @@ export function EditorTopBar({
   canPreview,
   previewDisabledReason,
   previewButtonRef,
+  pages,
+  selectedPageId,
+  onSelectPage,
+  onManagePages,
+  changeCount,
 }: EditorTopBarProps) {
   return (
-    <div className="flex h-[52px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3.5">
+    <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3">
       <span className="flex min-w-0 flex-col leading-tight">
         <h1 className="font-display text-[0.9375rem] font-semibold text-content">Website</h1>
         <span className="truncate text-xs text-content-secondary">{communityName}</span>
       </span>
 
+      <span aria-hidden="true" className="h-7 w-px shrink-0 bg-edge" />
+
       {/*
-       * Outside the `<h1>`'s span rather than inside it: the heading is the
-       * route's identity and the breadcrumb trail's leaf, and it must not
-       * change every time the PM clicks a different page in the Pages panel.
+       * Outside the `<h1>` on purpose: the heading is the route's identity and
+       * must not change every time the PM switches page.
        */}
-      {pageName ? (
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-content-secondary">
-          <span aria-hidden="true">/</span>
-          <span className="truncate font-medium text-content" data-testid="editing-page-name">
-            {pageName}
-          </span>
-        </span>
-      ) : null}
+      <PagePicker
+        pageName={pageName}
+        pages={pages}
+        selectedPageId={selectedPageId}
+        onSelectPage={onSelectPage}
+        onManagePages={onManagePages}
+      />
 
       <div className="ml-auto flex min-w-0 items-center gap-2.5">
         {status}
         <Button
           ref={previewButtonRef}
           variant="outline"
-          size="sm"
           onClick={onPreview}
           disabled={!canPreview}
           title={canPreview ? undefined : previewDisabledReason}
@@ -153,10 +182,149 @@ export function EditorTopBar({
           onClick={onPublish}
           disabled={!canOpenPublish}
           title={canOpenPublish ? undefined : 'Nothing to publish yet'}
+          // The badge is a bare number; the name says what it counts.
+          aria-label={
+            changeCount > 0
+              ? `Publish ${changeCount} ${changeCount === 1 ? 'change' : 'changes'}`
+              : undefined
+          }
         >
-          Publish…
+          Publish
+          {changeCount > 0 ? (
+            <span
+              aria-hidden="true"
+              data-testid="publish-change-count"
+              className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/20 px-1.5 text-xs"
+            >
+              {changeCount}
+            </span>
+          ) : null}
         </Button>
       </div>
+    </div>
+  );
+}
+
+type PagePickerProps = Pick<
+  EditorTopBarProps,
+  'pageName' | 'pages' | 'selectedPageId' | 'onSelectPage' | 'onManagePages'
+>;
+
+/**
+ * "Editing page ▾" — switch page without opening the Pages tool.
+ *
+ * A disclosure over a list of buttons, hand-rolled rather than Radix's
+ * DropdownMenu: this route sits within a few KiB of its 700 KiB hard budget,
+ * and the list needs nothing a menu widget adds. Escape closes it and returns
+ * focus to the trigger; a click outside closes it without moving focus.
+ *
+ * Unpublished pages carry "Not published" — the one fact the PM needs before
+ * choosing a page that visitors cannot see yet.
+ */
+function PagePicker({
+  pageName,
+  pages,
+  selectedPageId,
+  onSelectPage,
+  onManagePages,
+}: PagePickerProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [open]);
+
+  const close = (returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && open) {
+          event.stopPropagation();
+          close(true);
+        }
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => setOpen((value) => !value)}
+        className="flex h-11 items-center gap-2.5 rounded-[var(--radius-md)] border border-edge bg-surface-card px-3 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        <span className="flex flex-col leading-tight">
+          <span className="text-xs text-content-tertiary">Editing page</span>
+          <span
+            className="max-w-[16rem] truncate text-sm font-semibold text-content"
+            data-testid="editing-page-name"
+          >
+            {pageName ?? 'Loading pages…'}
+          </span>
+        </span>
+        <ChevronDown className="h-4 w-4 text-content-tertiary" aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div
+          id={listId}
+          className="absolute left-0 top-[50px] z-50 w-[260px] rounded-[var(--radius-md)] border border-edge bg-surface-card p-1.5 shadow-md"
+        >
+          <ul aria-label="Pages" className="flex flex-col">
+            {pages.map((page) => {
+              const isCurrent = page.id === selectedPageId;
+              return (
+                <li key={page.id}>
+                  <button
+                    type="button"
+                    aria-current={isCurrent ? 'page' : undefined}
+                    onClick={() => {
+                      if (!isCurrent) onSelectPage(page.id);
+                      close(true);
+                    }}
+                    className={cn(
+                      'flex min-h-11 w-full items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-left text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                      isCurrent && 'bg-surface-muted',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{page.name}</span>
+                    {page.isDraft ? (
+                      <span className="shrink-0 rounded-full bg-status-warning-bg px-2 py-0.5 text-xs font-semibold text-status-warning">
+                        Not published
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div aria-hidden="true" className="my-1.5 h-px bg-edge-subtle" />
+          <button
+            type="button"
+            onClick={() => {
+              close(false);
+              onManagePages();
+            }}
+            className="flex min-h-11 w-full items-center gap-2 rounded-[var(--radius-sm)] px-2.5 text-sm font-medium text-content-link hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add or manage pages
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

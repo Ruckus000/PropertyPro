@@ -54,3 +54,35 @@ export function describeSectionRemoval(hasPublishedCounterpart: boolean): PageSe
         claimsPublic: false,
       };
 }
+
+/**
+ * What the canvas placeholder says about a section the PM has HIDDEN.
+ *
+ * Hiding is content (`hiddenSchema`): it drafts and publishes like any other
+ * edit. So the draft being hidden says nothing about what visitors see — the
+ * published row does. "Hidden from visitors" on a section still showing on the
+ * live site is the draft-state-as-live-state claim the page describer exists to
+ * stop, and it was the v4 design's own copy.
+ *
+ * `published` is the section's PUBLISHED row at the same `(page, slot)`:
+ *
+ *  - `'hidden'` — the live site already hides it; the claim is true now.
+ *  - `'shown'`  — the live site still shows it until the next publish.
+ *  - `'none'`   — never published, so no visitor has ever seen it.
+ */
+export function describeHiddenSection(published: 'hidden' | 'shown' | 'none'): PageSentence {
+  switch (published) {
+    case 'hidden':
+      return { text: 'is hidden from visitors.', claimsPublic: false };
+    case 'shown':
+      return {
+        text: 'is hidden in your draft. It stays on your live site until you publish.',
+        claimsPublic: true,
+      };
+    case 'none':
+      return {
+        text: "is hidden. It hasn't been published, so visitors have never seen it.",
+        claimsPublic: false,
+      };
+  }
+}
