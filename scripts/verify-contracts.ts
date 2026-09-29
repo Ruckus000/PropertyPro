@@ -21,9 +21,9 @@
  * permanent skips; the prose in `.claude/rules/api-patterns.md` and the
  * pre-seed in `.claude/skills/drain-loop.md` are derived from it, not parallel
  * registries. An entry without a reason fails this guard, and only the
- * remaining CON-05 CRUD routes (announcements / maintenance-requests; meetings
- * drained 2026-09-29) may carry `pending-drain` — anything else claimed as
- * pending-drain must actually be drained, not relabelled.
+ * remaining CON-05 CRUD route (announcements; maintenance-requests and
+ * meetings drained 2026-09-29) may carry `pending-drain` — anything else
+ * claimed as pending-drain must actually be drained, not relabelled.
  *
  * Detection: a route is "contracted" if its source contains a call to
  * `runRoute(...)`. This is the canonical adoption marker — the only way to
@@ -75,13 +75,14 @@ const SCAN_ROOT = 'apps/web/src/app/api';
  * (violations/[id]/notice, violations/[id]/hearing-notice) are KEPT and
  * WIRED, not deleted. So CON-05 takes the floor to ~43. Do not expect zero.
  *
- * 2026-09-29: 46 -> 45, CON-05 drain of meetings.
+ * 2026-09-29: 46 -> 45, CON-05's first drain (maintenance-requests).
+ * 2026-09-29: 45 -> 44, CON-05 drain of meetings.
  *
  * Growth history, for the record: it went 37 -> 46 in the seven weeks after
  * the 2026-07-18 audit measured it, one appended line at a time (same
  * dating as `scripts/lib/ceiling.ts`).
  */
-const ALLOWLIST_CEILING = 45;
+const ALLOWLIST_CEILING = 44;
 
 // ---------------------------------------------------------------------------
 // Adoption marker
@@ -158,7 +159,7 @@ export type AllowlistReason =
   /** Headless-Chromium render needing the Node runtime and an extended
    * function `maxDuration` — a batch job wearing a route's clothes. */
   | 'headless-long-running'
-  /** Genuinely drainable: the three CON-05 legacy action-dispatch CRUD
+  /** Genuinely drainable: the CON-05 legacy action-dispatch CRUD
    * routes, blocked only on the runner's envelope-sibling + audit-context
    * extension (CON-04/06, Phase 3.4). NOTHING else may carry this. */
   | 'pending-drain';
@@ -170,9 +171,9 @@ export type AllowlistReason =
  */
 const PENDING_DRAIN_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/announcements/route.ts',
-  'apps/web/src/app/api/v1/maintenance-requests/route.ts',
-  // meetings was the third: drained 2026-09-29 (CON-05) and removed here so it
-  // cannot be re-allowlisted as pending-drain.
+  // maintenance-requests and meetings were the other two: both drained
+  // 2026-09-29 (CON-05) and removed here so neither can be re-allowlisted as
+  // pending-drain.
 ]);
 
 export const ALLOWLIST_REASONS: ReadonlyMap<string, AllowlistReason> = new Map<string, AllowlistReason>([
@@ -264,9 +265,6 @@ export const ALLOWLIST_REASONS: ReadonlyMap<string, AllowlistReason> = new Map<s
   ['apps/web/src/app/api/v1/internal/revenue-snapshot/route.ts', 'internal-cron'],
   ['apps/web/src/app/api/v1/internal/scheduled-site-publish/route.ts', 'internal-cron'],
   ['apps/web/src/app/api/v1/internal/visitor-auto-checkout/route.ts', 'internal-cron'],
-  // CON-05 (Phase 3.5): legacy action-dispatch CRUD — the ONLY one of the
-  // three with no known runner blocker today.
-  ['apps/web/src/app/api/v1/maintenance-requests/route.ts', 'pending-drain'],
   // Twilio Verify send/confirm: the caller branches on 429 / 503 / 422 / 400
   // (rate-limit, provider-down, invalid-code). `runRoute` hardcodes 200.
   ['apps/web/src/app/api/v1/phone/verify/confirm/route.ts', 'status-codes'],
@@ -470,7 +468,7 @@ export function checkContracts(
   if (misusedPendingDrain.length > 0) {
     console.error(
       `\n❌ ${misusedPendingDrain.length} entries claim 'pending-drain' but are not CON-05 ` +
-        `routes. Only announcements / maintenance-requests may be pending; a ` +
+        `routes. Only announcements may be pending; a ` +
         `genuinely blocked route must name its constraint family instead:`,
     );
     for (const entry of misusedPendingDrain) {
