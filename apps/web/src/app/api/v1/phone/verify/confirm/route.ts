@@ -21,7 +21,11 @@ import {
 } from '@/lib/services/phone-verification-service';
 import { getUserProfileSnapshot } from '@/lib/services/user-profile-service';
 import { getSupportScope } from '@/lib/support/support-scope';
-import { maskPhoneToLast4, recordSupportAction } from '@/lib/support/support-audit';
+import {
+  isSupportAuditError,
+  maskPhoneToLast4,
+  recordSupportAction,
+} from '@/lib/support/support-audit';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60_000;
@@ -80,13 +84,15 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // closed. Recording it first (not after a wrong code) keeps the lockout
   // independent of the audit write: if this insert fails, no guess is checked;
   // once it succeeds, a wrong code always bumps the counter below. The code
-  // itself is never logged.
+  // itself is never logged; the number checked is the row's masked `target`.
+  // `after` omits otpFailedAttempts: the outcome decides it (bumped on a
+  // wrong code; reset by markPhoneVerified on a right one).
   await recordSupportAction(req.headers, {
     event: 'support_phone_verification_attempted',
     targetUserId: userId,
     changedFields: ['otpFailedAttempts'],
     before: { otpFailedAttempts: otpFailedAttempts ?? 0 },
-    after: { phone: maskPhoneToLast4(phone) },
+    target: { phone: maskPhoneToLast4(phone) },
   });
 
   try {
@@ -129,8 +135,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
 
     // Support session: record the verification BEFORE persisting it, fail
-    // closed — a throw lands in the catch below (500) and markPhoneVerified
-    // never runs. Phones masked to the last four digits; never the code.
+    // closed — a throw skips markPhoneVerified, and the catch below rethrows
+    // it so the client sees the audit refusal (SUPPORT_AUDIT_FAILED / 403),
+    // not the generic "Verification check failed". Phones masked to the last
+    // four digits; never the code.
     if (getSupportScope(req.headers) !== null) {
       const current = await getUserProfileSnapshot(userId);
       await recordSupportAction(req.headers, {
@@ -141,7 +149,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
           phone: maskPhoneToLast4(current.phone),
           phoneVerifiedAt: current.phoneVerifiedAt?.toISOString() ?? null,
         },
-        after: { phone: maskPhoneToLast4(phone), phoneVerified: true },
+        // phoneVerifiedAt is stamped by markPhoneVerified at write time.
+        after: { phone: maskPhoneToLast4(phone) },
       });
     }
 
@@ -149,7 +158,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     await markPhoneVerified(userId, phone);
 
     return NextResponse.json({ verified: true, phone: maskPhone(phone) });
-  } catch {
+  } catch (error) {
+    if (isSupportAuditError(error)) throw error;
     return NextResponse.json(
       { error: 'Verification check failed' },
       { status: 500 },

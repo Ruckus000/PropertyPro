@@ -75,13 +75,16 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   // Support session: record the send BEFORE the SMS goes out, fail closed —
   // a throw here propagates (outside the try below) and no code is sent.
-  // Only the destination's last four digits; the OTP never passes through
-  // this route at all. A no-op outside a support session.
+  // Only the destination's last four digits, as the row's `target` (it is
+  // not a changed field); the OTP never passes through this route at all.
+  // `after` omits otpLastSentAt: markOtpSent stamps it at send time. A no-op
+  // outside a support session.
   await recordSupportAction(req.headers, {
     event: 'support_phone_verification_sent',
     targetUserId: userId,
     changedFields: ['otpLastSentAt'],
-    after: { phone: maskPhoneToLast4(phone) },
+    before: { otpLastSentAt: otpLastSentAt?.toISOString() ?? null },
+    target: { phone: maskPhoneToLast4(phone) },
   });
 
   try {

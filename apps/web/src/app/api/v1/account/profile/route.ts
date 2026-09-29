@@ -80,20 +80,35 @@ export const PATCH = withErrorHandler(
     // Support session: record the change BEFORE making it, fail closed (see
     // lib/support/support-audit.ts). Names in full; phones masked to the last
     // four digits. Outside a support session nothing here runs.
+    //
+    // Only fields whose value actually changes are listed — the settings form
+    // resends the unchanged phone on a name-only edit, and a row claiming a
+    // phone change that never happened would mislead the managers reading it.
+    // Equality is the service's own: exact string match, the same comparison
+    // `updateUserProfile` uses to decide whether phoneVerifiedAt survives. A
+    // request that changes nothing is still let through and still recorded,
+    // with `changedFields: []`: the operator did submit the form, and the
+    // support log is the record of what support DID in the session.
     if (getSupportScope(req.headers) !== null) {
       const current = await getUserProfileSnapshot(userId);
       const changedFields: string[] = [];
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};
-      if (fullName !== undefined) {
+      if (fullName !== undefined && fullName !== current.fullName) {
         changedFields.push('fullName');
         before.fullName = current.fullName;
         after.fullName = fullName;
       }
-      if (phone !== undefined) {
+      if (phone !== undefined && phone !== current.phone) {
         changedFields.push('phone');
         before.phone = maskPhoneToLast4(current.phone);
         after.phone = maskPhoneToLast4(phone);
+        // A different number drops its verification (updateUserProfile).
+        if (current.phoneVerifiedAt !== null) {
+          changedFields.push('phoneVerifiedAt');
+          before.phoneVerifiedAt = current.phoneVerifiedAt.toISOString();
+          after.phoneVerifiedAt = null;
+        }
       }
       await recordSupportAction(req.headers, {
         event: 'support_profile_updated',

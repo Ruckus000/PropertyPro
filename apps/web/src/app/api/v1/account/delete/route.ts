@@ -94,8 +94,10 @@ export const DELETE = withErrorHandler(
       event: 'support_deletion_cancelled',
       targetUserId: userId,
       changedFields: ['status', 'cancelledAt', 'cancelledBy'],
-      before: { deletionRequestId: activeRequestId, status: 'cooling' },
-      after: { deletionRequestId: activeRequestId, status: 'cancelled' },
+      before: { status: 'cooling' },
+      // cancelledAt/cancelledBy are stamped by cancelUserDeletion at write time.
+      after: { status: 'cancelled' },
+      target: { deletionRequestId: activeRequestId },
     });
 
     await cancelUserDeletion(activeRequestId, userId);

@@ -214,6 +214,74 @@ describe('PATCH /api/v1/account/profile under a support session', () => {
     });
   });
 
+  it('lists only the fields that actually change (the form resends an unchanged name)', async () => {
+    await profilePATCH(
+      request('/api/v1/account/profile', 'PATCH', { fullName: 'Olivia Owner', phone: '+13055559876' }, true),
+    );
+    expect(auditRows()[0]!.metadata).toEqual({
+      changedFields: ['phone'],
+      before: { phone: '***0001' },
+      after: { phone: '***9876' },
+    });
+    // The request itself is unchanged: both fields still reach the service.
+    expect(h.updateUserProfileMock).toHaveBeenCalledWith(TARGET, {
+      fullName: 'Olivia Owner',
+      phone: '+13055559876',
+    });
+  });
+
+  it('a new number on a VERIFIED phone also records phoneVerifiedAt → null', async () => {
+    h.getUserProfileSnapshotMock.mockImplementationOnce(async () => {
+      h.callOrder.push('snapshot');
+      return {
+        fullName: 'Olivia Owner',
+        phone: '+13055550001',
+        phoneVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      };
+    });
+
+    await profilePATCH(request('/api/v1/account/profile', 'PATCH', { phone: '+13055559876' }, true));
+
+    expect(auditRows()[0]!.metadata).toEqual({
+      changedFields: ['phone', 'phoneVerifiedAt'],
+      before: { phone: '***0001', phoneVerifiedAt: '2026-01-01T00:00:00.000Z' },
+      after: { phone: '***9876', phoneVerifiedAt: null },
+    });
+  });
+
+  it('the same verified number resent: no phone change, verification untouched', async () => {
+    h.getUserProfileSnapshotMock.mockImplementationOnce(async () => {
+      h.callOrder.push('snapshot');
+      return {
+        fullName: 'Olivia Owner',
+        phone: '+13055550001',
+        phoneVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      };
+    });
+
+    await profilePATCH(
+      request('/api/v1/account/profile', 'PATCH', { fullName: 'Olivia Newname', phone: '+13055550001' }, true),
+    );
+
+    expect(auditRows()[0]!.metadata).toEqual({
+      changedFields: ['fullName'],
+      before: { fullName: 'Olivia Owner' },
+      after: { fullName: 'Olivia Newname' },
+    });
+  });
+
+  it('a request that changes nothing is still allowed AND still recorded, with changedFields []', async () => {
+    const res = await profilePATCH(
+      request('/api/v1/account/profile', 'PATCH', { fullName: 'Olivia Owner', phone: '+13055550001' }, true),
+    );
+
+    expect(res.status).toBe(200);
+    expect(h.callOrder).toEqual(['snapshot', 'audit', 'updateProfile', 'authSync']);
+    const [row] = auditRows();
+    expectAuditEnvelope(row!, 'support_profile_updated');
+    expect(row!.metadata).toEqual({ changedFields: [], before: {}, after: {} });
+  });
+
   it('FAILS CLOSED: an insert error → 500 SUPPORT_AUDIT_FAILED and no update, no auth sync', async () => {
     h.auditInsertMock.mockResolvedValueOnce({ error: { message: 'boom' } });
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -291,12 +359,28 @@ describe('POST /api/v1/phone/verify/send under a support session', () => {
     expect(h.callOrder).toEqual(['audit', 'twilioSend', 'markOtpSent']);
     const [row] = auditRows();
     expectAuditEnvelope(row!, 'support_phone_verification_sent');
+    // before/after carry only changed fields; the destination is the target.
     expect(row!.metadata).toEqual({
       changedFields: ['otpLastSentAt'],
-      before: {},
-      after: { phone: '***9876' },
+      before: { otpLastSentAt: null },
+      after: {},
+      target: { phone: '***9876' },
     });
     expect(JSON.stringify(row)).not.toContain('3055559876');
+  });
+
+  it('records the prior cooldown stamp as ISO in before', async () => {
+    h.getUserOtpStateMock.mockResolvedValueOnce({
+      otpLastSentAt: new Date('2026-09-01T08:00:00.000Z'),
+      otpFailedAttempts: 0,
+      otpLockedUntil: null,
+    });
+
+    await sendPOST(request('/api/v1/phone/verify/send', 'POST', { phone: '+13055559876' }, true));
+
+    expect((auditRows()[0]!.metadata as { before: unknown }).before).toEqual({
+      otpLastSentAt: '2026-09-01T08:00:00.000Z',
+    });
   });
 
   it('FAILS CLOSED: an insert error → 500, no SMS sent, cooldown not stamped', async () => {
@@ -350,7 +434,13 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     expect(row!.metadata).toEqual({
       changedFields: ['phone', 'phoneVerifiedAt'],
       before: { phone: '***0001', phoneVerifiedAt: '2026-01-01T00:00:00.000Z' },
-      after: { phone: '***9876', phoneVerified: true },
+      after: { phone: '***9876' },
+    });
+    expect(attempt!.metadata).toEqual({
+      changedFields: ['otpFailedAttempts'],
+      before: { otpFailedAttempts: 1 },
+      after: {},
+      target: { phone: '***9876' },
     });
     const serialised = JSON.stringify(row);
     expect(serialised).not.toContain(CODE);
@@ -386,6 +476,36 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     expect(h.markPhoneVerifiedMock).not.toHaveBeenCalled();
   });
 
+  it('the verified row fails → the response is SUPPORT_AUDIT_FAILED, not the generic "Verification check failed"', async () => {
+    h.auditInsertMock
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'boom' } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await confirmPOST(
+      request('/api/v1/phone/verify/confirm', 'POST', { phone: '+13055559876', code: CODE }, true),
+    );
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('SUPPORT_AUDIT_FAILED');
+    expect(body.error.message).toMatch(/could not be recorded in the support access log/);
+    expect(h.markPhoneVerifiedMock).not.toHaveBeenCalled();
+  });
+
+  it('a Twilio failure (not an audit one) still gets the generic 500', async () => {
+    fetchMock.mockImplementationOnce(async () => {
+      throw new Error('ECONNRESET');
+    });
+
+    const res = await confirmPOST(
+      request('/api/v1/phone/verify/confirm', 'POST', { phone: '+13055559876', code: CODE }, true),
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Verification check failed' });
+  });
+
   it('a rejected code: the attempt was recorded BEFORE the check, and the counter always bumps', async () => {
     fetchMock.mockImplementationOnce(async () => {
       h.callOrder.push('twilioCheck');
@@ -403,7 +523,8 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     expect(row!.metadata).toEqual({
       changedFields: ['otpFailedAttempts'],
       before: { otpFailedAttempts: 1 },
-      after: { phone: '***9876' },
+      after: {},
+      target: { phone: '***9876' },
     });
     expect(JSON.stringify(row)).not.toContain(CODE);
     expect(h.markPhoneVerifiedMock).not.toHaveBeenCalled();
@@ -435,8 +556,9 @@ describe('DELETE /api/v1/account/delete under a support session', () => {
     expectAuditEnvelope(row!, 'support_deletion_cancelled');
     expect(row!.metadata).toEqual({
       changedFields: ['status', 'cancelledAt', 'cancelledBy'],
-      before: { deletionRequestId: 91, status: 'cooling' },
-      after: { deletionRequestId: 91, status: 'cancelled' },
+      before: { status: 'cooling' },
+      after: { status: 'cancelled' },
+      target: { deletionRequestId: 91 },
     });
     expect(h.cancelUserDeletionMock).toHaveBeenCalledWith(91, TARGET);
   });

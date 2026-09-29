@@ -122,11 +122,13 @@ describe('SupportAccessSettings', () => {
     setToggle();
     render(<SupportAccessSettings communityId={42} />);
 
-    expect(screen.getByText('Profile updated by support')).toBeDefined();
-    expect(screen.getByText('Phone verification code sent by support')).toBeDefined();
-    expect(screen.getByText('Phone verified by support')).toBeDefined();
-    expect(screen.getByText('Phone verification code checked by support')).toBeDefined();
-    expect(screen.getByText('Account deletion cancelled by support')).toBeDefined();
+    // Rows are written BEFORE the change, so the labels say "requested" —
+    // true even when the change then fails.
+    expect(screen.getByText('Profile change requested by support')).toBeDefined();
+    expect(screen.getByText('Phone code send requested by support')).toBeDefined();
+    expect(screen.getByText('Phone verification requested by support')).toBeDefined();
+    expect(screen.getByText('Phone code check requested by support')).toBeDefined();
+    expect(screen.getByText('Deletion cancel requested by support')).toBeDefined();
     expect(screen.getByText('some_future_event')).toBeDefined();
   });
 

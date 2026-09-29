@@ -63,7 +63,15 @@ export const SUPPORT_WRITE_EVENTS = [
 ] as const satisfies readonly SupportAccessEvent[];
 export type SupportWriteEvent = (typeof SUPPORT_WRITE_EVENTS)[number];
 
-/** Human labels for the support access log views (admin console + community settings). */
+/**
+ * Human labels for the support access log views (admin console + community settings).
+ *
+ * The support-write labels say "requested", never "updated"/"verified"/
+ * "cancelled": each row is written BEFORE its change (fail closed), so it
+ * proves the operator asked for the change, not that it landed — the change
+ * can still fail afterwards (a wrong code, a Twilio error, a DB error). A label
+ * must stay true in that case.
+ */
 export const SUPPORT_ACCESS_EVENT_LABELS: Record<SupportAccessEvent, string> = {
   session_started: 'Session started',
   session_ended: 'Session ended',
@@ -71,11 +79,11 @@ export const SUPPORT_ACCESS_EVENT_LABELS: Record<SupportAccessEvent, string> = {
   consent_granted: 'Consent granted',
   consent_revoked: 'Consent revoked',
   admin_data_viewed: 'Data viewed',
-  support_profile_updated: 'Profile updated by support',
-  support_phone_verification_sent: 'Phone verification code sent by support',
-  support_phone_verified: 'Phone verified by support',
-  support_phone_verification_attempted: 'Phone verification code checked by support',
-  support_deletion_cancelled: 'Account deletion cancelled by support',
+  support_profile_updated: 'Profile change requested by support',
+  support_phone_verification_sent: 'Phone code send requested by support',
+  support_phone_verified: 'Phone verification requested by support',
+  support_phone_verification_attempted: 'Phone code check requested by support',
+  support_deletion_cancelled: 'Deletion cancel requested by support',
 };
 
 /** Label for a logged event; an event this build does not know renders as its raw name. */

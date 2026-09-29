@@ -479,3 +479,35 @@ describe('reorderSitePages', () => {
     ).rejects.toThrow(/out of date/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Support-session attribution on the inline audit insert
+// ---------------------------------------------------------------------------
+// insertAuditEventInTransaction writes on the transaction handle, bypassing
+// logAuditEvent, so it merges the request's audit actor itself
+// (packages/db/src/audit-actor.ts). withErrorHandler enters that actor in a
+// real request; here it is entered directly. Mirrors site-blocks-service.test.ts.
+
+describe('inline audit row — support-session attribution', () => {
+  it('merges metadata.support inside a support run, preserving existing keys', async () => {
+    const { runWithAuditActor } = await import('@propertypro/db/audit-actor');
+
+    await runWithAuditActor({ support: { sessionId: 42, adminUserId: 'admin-uuid' } }, () =>
+      createSitePage({ communityId: 42, actorUserId: 'u1', name: 'Rules', slug: 'rules' }),
+    );
+
+    const metadata = (txAuditValuesMock.mock.calls[0]![0] as { metadata: Record<string, unknown> })
+      .metadata;
+    expect(metadata).toMatchObject({ slug: 'about', inNav: true });
+    expect(metadata.support).toEqual({ sessionId: 42, adminUserId: 'admin-uuid' });
+  });
+
+  it('outside a support run the metadata carries no support key', async () => {
+    await createSitePage({ communityId: 42, actorUserId: 'u1', name: 'Rules', slug: 'rules' });
+
+    const metadata = (txAuditValuesMock.mock.calls[0]![0] as { metadata: Record<string, unknown> })
+      .metadata;
+    expect(metadata).toMatchObject({ slug: 'about', inNav: true });
+    expect(metadata).not.toHaveProperty('support');
+  });
+});
