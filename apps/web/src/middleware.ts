@@ -1195,6 +1195,35 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // the admin's phone never reaches an impersonated request.
     forwardedHeaders.delete(USER_PHONE_HEADER);
 
+    // Pin the request to the session's consented community when no tenant was
+    // resolved (apex / reserved hosts, community-less API paths). Without this,
+    // `expectedCommunityId` above was null, the community comparison was
+    // skipped, and the impersonated identity ran with NO community pin — so a
+    // session consented to by community A could read community B through any
+    // route that takes the community from somewhere other than this header.
+    // With it, `resolveEffectiveCommunityId` 404s a disagreeing query/body id.
+    //
+    // Fill-only, never overwrite: when a tenant WAS resolved it already equals
+    // `community_id` (the comparison above rejects anything else). The value is
+    // the verified token claim, which `matchesActiveSupportSession` has just
+    // checked against the `support_sessions` row, and inbound x-community-id was
+    // stripped by sanitisation, so a spoof cannot reach this line.
+    //
+    // x-tenant-slug is deliberately NOT stamped: deriving it needs a DB read,
+    // and its only consumer (public-transparency/page.tsx) reads x-community-id
+    // first and falls back to the slug only when the id is absent. The
+    // query-param branch above likewise forwards id + source with no slug.
+    //
+    // TENANT_OPTIONAL_PATHS are skipped for the reason that set exists: a
+    // stamped tenant there makes the authenticated layout redirect back to
+    // /select-community forever whenever the impersonated user has no live
+    // membership in the stamped community. Those pages read no x-community-id,
+    // so a pin there would constrain nothing; they are unchanged from before.
+    if (!forwardedHeaders.has(COMMUNITY_ID_HEADER) && !TENANT_OPTIONAL_PATHS.has(pathname)) {
+      forwardedHeaders.set(COMMUNITY_ID_HEADER, String(supportSession.community_id));
+      forwardedHeaders.set(TENANT_SOURCE_HEADER, 'support_session');
+    }
+
     forwardedHeaders.set(SUPPORT_SESSION_HEADER, '1');
     forwardedHeaders.set(SUPPORT_ADMIN_ID_HEADER, supportSession.act.sub);
     forwardedHeaders.set(SUPPORT_SESSION_ID_HEADER, String(supportSession.session_id));

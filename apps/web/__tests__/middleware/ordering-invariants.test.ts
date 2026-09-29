@@ -10,7 +10,8 @@
  *
  *   1. Protected-path tenant resolution runs BEFORE the support-impersonation
  *      branch, which reads the resolved `x-community-id` as the token's
- *      expected community.
+ *      expected community. When none resolves, an accepted session stamps its
+ *      own consented community (fill-only) so the request is never unpinned.
  *   2. The CORS preflight and the CSRF Origin/Referer reject short-circuit
  *      BEFORE the Supabase session refresh (`createMiddlewareClient`).
  *   3. Early responses (dev-surface 404, apex / signup-host redirects,
@@ -207,20 +208,100 @@ describe('invariant 1: tenant resolution runs before the support-impersonation b
     expect(maybeSingleMock).not.toHaveBeenCalled();
   });
 
-  it('SKIPS the community check entirely when no tenant resolves (pinned, not endorsed)', async () => {
-    // Surprising but current: with no tenant in scope, expectedCommunityId is
-    // null and resolveActiveSupportSession does not compare communities at all,
-    // so the token is accepted on a community-less API request.
+  it('STAMPS the session community when no tenant resolves (fill-only pin)', async () => {
+    // No tenant in scope, so expectedCommunityId is null and the comparison in
+    // resolveActiveSupportSession is skipped. The session is still accepted,
+    // but the forwarded request is now pinned to the token's consented
+    // community, so downstream resolveEffectiveCommunityId 404s any other one
+    // (apps/web/__tests__/tenant/resolve-effective-community-id.test.ts).
     const res = await middleware(
       req('http://localhost:3000/api/v1/documents', {
         supportToken: await signSupportToken(),
       }),
     );
 
-    expect(forwarded(res, 'x-community-id')).toBeNull();
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    expect(forwarded(res, 'x-tenant-source')).toBe('support_session');
     expect(forwarded(res, 'x-support-session')).toBe('1');
     expect(forwarded(res, 'x-user-id')).toBe('target-user-uuid');
     expect(maybeSingleMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. A support session pins its consented community on tenant-less requests
+// ---------------------------------------------------------------------------
+
+describe('support session stamps its consented community when no tenant resolves', () => {
+  it('(a) apex /api/v1/communities/<B>/... is pinned to the session community A, not the path', async () => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/2/cancel-preview`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(forwarded(res, 'x-support-session')).toBe('1');
+    expect(forwarded(res, 'x-user-id')).toBe('target-user-uuid');
+    // A (the token's community), never B (the API path's): the middleware
+    // must not derive a tenant from an /api/v1/communities/<id> path.
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    expect(forwarded(res, 'x-tenant-source')).toBe('support_session');
+  });
+
+  it('(b) a resolved tenant EQUAL to the session community is accepted and left unchanged', async () => {
+    const res = await middleware(
+      req(`http://localhost:3000/api/v1/documents?communityId=${TOKEN_COMMUNITY_ID}`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBe('1');
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    // Fill-only: tenant resolution's own source survives, not 'support_session'.
+    expect(forwarded(res, 'x-tenant-source')).toBe('community_id');
+  });
+
+  it('(c) a resolved tenant DIFFERENT from the session community is still rejected', async () => {
+    const res = await middleware(
+      req('http://localhost:3000/api/v1/documents?communityId=2', {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    expect(forwarded(res, 'x-community-id')).toBe('2');
+    expect(forwarded(res, 'x-tenant-source')).toBe('community_id');
+    expect(res.headers.get('set-cookie') ?? '').toMatch(
+      new RegExp(`${SUPPORT_SESSION_COOKIE}=;.*Max-Age=0`, 'i'),
+    );
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  });
+
+  it('(d) an inbound spoofed x-community-id is stripped; the stamped value is the session\'s', async () => {
+    const res = await middleware(
+      req('http://localhost:3000/api/v1/documents', {
+        headers: { 'x-community-id': '2', 'x-tenant-source': 'spoofed' },
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBe('1');
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    expect(forwarded(res, 'x-tenant-source')).toBe('support_session');
+  });
+
+  it('(e) does NOT stamp on TENANT_OPTIONAL_PATHS (/select-community redirect-loop guard)', async () => {
+    const res = await middleware(
+      req('http://localhost:3000/select-community', {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBe('1');
+    expect(forwarded(res, 'x-user-id')).toBe('target-user-uuid');
+    expect(forwarded(res, 'x-community-id')).toBeNull();
   });
 });
 
@@ -430,8 +511,8 @@ describe('invariant 4: header sanitisation precedes the support branch', () => {
   it('a spoofed x-community-id does not steer the support session\'s community check', async () => {
     // Token community 1, spoofed header 2, no real tenant. If the support
     // branch saw the spoof it would reject the session on a community
-    // mismatch. Sanitised first, it sees NO community and (per invariant 1's
-    // last case) accepts.
+    // mismatch. Sanitised first, it sees NO community, accepts (per invariant
+    // 1's last case), and stamps the TOKEN's community, never the spoof.
     const res = await middleware(
       req('http://localhost:3000/api/v1/documents', {
         headers: { 'x-community-id': '2' },
@@ -442,7 +523,7 @@ describe('invariant 4: header sanitisation precedes the support branch', () => {
     // Steering asserted first: under a reorder, THIS is the defect.
     expect(forwarded(res, 'x-support-session')).toBe('1');
     expect(forwarded(res, 'x-user-id')).toBe('target-user-uuid');
-    expect(forwarded(res, 'x-community-id')).toBeNull();
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
   });
 
   it('spoofed identity/support/tenant headers never survive a support session', async () => {
@@ -466,7 +547,8 @@ describe('invariant 4: header sanitisation precedes the support branch', () => {
     expect(forwarded(res, 'x-support-admin-id')).toBe(ADMIN.id);
     expect(forwarded(res, 'x-user-phone')).toBeNull();
     expect(forwarded(res, 'x-tenant-slug')).toBeNull();
-    expect(forwarded(res, 'x-tenant-source')).toBeNull();
+    // Stripped, then replaced by the support-session community stamp.
+    expect(forwarded(res, 'x-tenant-source')).toBe('support_session');
     expect(forwarded(res, 'x-preview')).toBeNull();
   });
 
