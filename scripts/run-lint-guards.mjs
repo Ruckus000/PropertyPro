@@ -59,10 +59,11 @@ const GUARDS = [
   'guard:admin-community-scope',
   'guard:service-dead-exports',
   'guard:route-gates',
+  'guard:call-ceilings',
 ];
 
 // Cap concurrency so the fleet of cold tsx processes (one per guard, a set
-// that grows — 33 as of guard:route-gates) doesn't thrash a small
+// that grows — 34 as of guard:call-ceilings) doesn't thrash a small
 // CI runner.
 const CONCURRENCY = Math.max(2, Math.min(8, (cpus().length || 4)));
 

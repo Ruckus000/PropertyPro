@@ -1,0 +1,287 @@
+{
+  "apps/web/src/app/(authenticated)/billing/portal/route.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/app/(authenticated)/communities/[id]/payments/page.tsx": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/app/(authenticated)/emergency/page.tsx": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/app/(authenticated)/help/manage/page.tsx": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/app/(authenticated)/help/search/page.tsx": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/app/(authenticated)/settings/account/page.tsx": {
+    "unscoped": 1
+  },
+  "apps/web/src/app/(authenticated)/settings/page.tsx": {
+    "unscoped": 1
+  },
+  "apps/web/src/app/(authenticated)/welcome/page.tsx": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/app/demo/[slug]/converted/page.tsx": {
+    "unscoped": 1
+  },
+  "apps/web/src/app/demo/[slug]/page.tsx": {
+    "unscoped": 1
+  },
+  "apps/web/src/app/demo/[slug]/upgrade/page.tsx": {
+    "unscoped": 1
+  },
+  "apps/web/src/app/dev/reset-onboarding/route.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/account-lifecycle/root-offboarding.ts": {
+    "unscoped": 2
+  },
+  "apps/web/src/lib/actions/checkout.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/announcements/read-visibility.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/api/branding.ts": {
+    "unscoped": 6
+  },
+  "apps/web/src/lib/api/require-platform-admin.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/auth/signup.ts": {
+    "unscoped": 4
+  },
+  "apps/web/src/lib/billing/billing-group-service.ts": {
+    "unscoped": 15
+  },
+  "apps/web/src/lib/billing/downgrade-notifications.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/db/public-community-reader.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/db/theme-preset-catalog.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/demo/detect-demo-info.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/join-requests/approve-request.ts": {
+    "unscoped": 5
+  },
+  "apps/web/src/lib/join-requests/eligibility.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/middleware/demo-grace-guard.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/middleware/plan-guard.ts": {
+    "unscoped": 2
+  },
+  "apps/web/src/lib/middleware/read-entitlement-guard.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/middleware/subscription-guard.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/onboarding/wizard-common.ts": {
+    "fullTableRead": 2
+  },
+  "apps/web/src/lib/pm/create-community.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/queries/apartment-metrics.ts": {
+    "fullTableRead": 4
+  },
+  "apps/web/src/lib/queries/wizard-state.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/access-request-service.ts": {
+    "fullTableRead": 7
+  },
+  "apps/web/src/lib/services/account-lifecycle-service.ts": {
+    "unscoped": 27
+  },
+  "apps/web/src/lib/services/announcement-delivery.ts": {
+    "fullTableRead": 2
+  },
+  "apps/web/src/lib/services/assessment-automation-service.ts": {
+    "unscoped": 3
+  },
+  "apps/web/src/lib/services/calendar-event-reminder-service.ts": {
+    "unscoped": 4
+  },
+  "apps/web/src/lib/services/claim-root-notify.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/community-email-unsubscribe-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/community-export.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/community-search-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/compliance-alert-service.ts": {
+    "unscoped": 1,
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/compliance-service.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/contract-service.ts": {
+    "fullTableRead": 2
+  },
+  "apps/web/src/lib/services/conversion-events.ts": {
+    "unscoped": 2
+  },
+  "apps/web/src/lib/services/cron-run-service.ts": {
+    "unscoped": 3
+  },
+  "apps/web/src/lib/services/custom-domain-service.ts": {
+    "unscoped": 4
+  },
+  "apps/web/src/lib/services/demo-conversion.ts": {
+    "unscoped": 11
+  },
+  "apps/web/src/lib/services/elections-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/esign-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/export/export-job-service.ts": {
+    "unscoped": 15
+  },
+  "apps/web/src/lib/services/export/export-notification.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/faq-service.ts": {
+    "fullTableRead": 4
+  },
+  "apps/web/src/lib/services/import-residents-service.ts": {
+    "fullTableRead": 2
+  },
+  "apps/web/src/lib/services/insurance-alert-processor.ts": {
+    "unscoped": 1,
+    "fullTableRead": 4
+  },
+  "apps/web/src/lib/services/insurance-alert-unsubscribe-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/insurance-service.ts": {
+    "fullTableRead": 2
+  },
+  "apps/web/src/lib/services/lease-service.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/marketing-leads-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/notification-digest-processor.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/notification-service.ts": {
+    "fullTableRead": 4
+  },
+  "apps/web/src/lib/services/onboarding-service.ts": {
+    "fullTableRead": 2
+  },
+  "apps/web/src/lib/services/payment-alert-scheduler.ts": {
+    "unscoped": 4
+  },
+  "apps/web/src/lib/services/phone-verification-service.ts": {
+    "unscoped": 4
+  },
+  "apps/web/src/lib/services/provisioning-service.ts": {
+    "unscoped": 21
+  },
+  "apps/web/src/lib/services/readiness-service.ts": {
+    "unscoped": 3
+  },
+  "apps/web/src/lib/services/resident-service.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/revenue-snapshot-data-service.ts": {
+    "unscoped": 4
+  },
+  "apps/web/src/lib/services/root-dispute-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/site-blocks-service.ts": {
+    "unscoped": 8
+  },
+  "apps/web/src/lib/services/site-pages-service.ts": {
+    "unscoped": 7
+  },
+  "apps/web/src/lib/services/site-portfolio-template-service.ts": {
+    "unscoped": 6
+  },
+  "apps/web/src/lib/services/site-publish-schedule-service.ts": {
+    "unscoped": 4
+  },
+  "apps/web/src/lib/services/site-settings-service.ts": {
+    "unscoped": 2
+  },
+  "apps/web/src/lib/services/sms/sms-consent-service.ts": {
+    "unscoped": 3
+  },
+  "apps/web/src/lib/services/snowbird-digest-processor.ts": {
+    "unscoped": 1,
+    "fullTableRead": 2
+  },
+  "apps/web/src/lib/services/snowbird-digest-service.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/snowbird-digest-unsubscribe-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/starter-pack-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/stripe-service.ts": {
+    "unscoped": 3
+  },
+  "apps/web/src/lib/services/stripe-webhook-service.ts": {
+    "unscoped": 16
+  },
+  "apps/web/src/lib/services/support-inbox/inbound-email-service.ts": {
+    "unscoped": 2
+  },
+  "apps/web/src/lib/services/support-inbox/spam-classifier-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/transparency-service.ts": {
+    "fullTableRead": 3
+  },
+  "apps/web/src/lib/services/twilio-webhook-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/unit-service.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/urgent-notice-service.ts": {
+    "unscoped": 3
+  },
+  "apps/web/src/lib/services/user-preferences-service.ts": {
+    "unscoped": 2
+  },
+  "apps/web/src/lib/services/user-profile-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/visitor-cron-service.ts": {
+    "unscoped": 1
+  },
+  "apps/web/src/lib/services/wind-mitigation-service.ts": {
+    "fullTableRead": 1
+  },
+  "apps/web/src/lib/services/work-orders-service.ts": {
+    "unscoped": 2
+  },
+  "apps/web/src/lib/site-assets/quota.ts": {
+    "unscoped": 2
+  }
+}
