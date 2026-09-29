@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * for unapproved `ALTER TABLE compliance_audit_log … TRIGGER
  * compliance_audit_log_append_only_guard` statements. It used to skip only
  * `node_modules` and `dist`, so a local `pnpm build` made `pnpm lint` fail:
- * bundlers inline approved source (`packages/db/src/seed/seed-community.ts`)
+ * bundlers inline approved source (`packages/db/src/seed/community/users.ts`)
  * into compiled chunks, and `apps/admin/.next/server/app/api/admin/demos/route.js`
  * got reported as an unauthorized override.
  *

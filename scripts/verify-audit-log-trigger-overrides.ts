@@ -12,7 +12,7 @@ const approvedFiles = [
   'apps/web/__tests__/integration/helpers/multi-tenant-test-kit.ts',
   'apps/web/__tests__/elections/vote-integration.test.ts',
   'packages/db/__tests__/reconcile-auth-user-id.integration.test.ts',
-  'packages/db/src/seed/seed-community.ts',
+  'packages/db/src/seed/community/users.ts',
 ].map((file) => resolve(repoRoot, file));
 
 const overridePattern = /ALTER\s+TABLE\s+compliance_audit_log\s+(?:DISABLE|ENABLE)\s+TRIGGER\s+compliance_audit_log_append_only_guard/i;
@@ -29,7 +29,7 @@ for (const file of approvedFiles) {
 
 /**
  * Build output must never be scanned. Bundlers inline approved source (e.g.
- * `packages/db/src/seed/seed-community.ts`) into compiled chunks, so a local
+ * `packages/db/src/seed/community/users.ts`) into compiled chunks, so a local
  * `pnpm build` would otherwise surface artifacts such as
  * `apps/admin/.next/server/app/api/admin/demos/route.js` as "unauthorized"
  * overrides and fail `pnpm lint` for anyone who has built.
