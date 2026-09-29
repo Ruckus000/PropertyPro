@@ -4,7 +4,8 @@
  *
  * Inventory of `(authenticated)/pm/**` pages (2026-09-29):
  *   aggregate (deny)  — dashboard/communities, reports, portfolio/templates
- *   per-community     — dashboard/[community_id] (narrowed: consented id only),
+ *   per-community     — dashboard/[community_id] (narrowed: consented id only;
+ *                       any other id → /dashboard under a support session),
  *                       onboarding/website (resolves membership for ?communityId,
  *                       which middleware pins to the session community)
  *   redirect-only     — dashboard/communities/new, settings/branding,
@@ -85,7 +86,7 @@ describe.each(AGGREGATE_PAGES)('%s (portfolio aggregate)', (_name, render) => {
   it('redirects a support session to /dashboard without reading the portfolio', async () => {
     requestHeaders.current = SUPPORT;
 
-    await expect(render()).rejects.toThrow('NEXT_REDIRECT:/dashboard');
+    await expect(render()).rejects.toThrow(/^NEXT_REDIRECT:\/dashboard$/);
     expect(isPmAdminInAnyCommunityMock).not.toHaveBeenCalled();
     expect(listManagedCommunitiesForPmMock).not.toHaveBeenCalled();
   });
@@ -102,13 +103,21 @@ describe('pm/dashboard/[community_id] (per-community switch)', () => {
     return PmCommunityPage({ params: Promise.resolve({ community_id: id }) });
   }
 
-  it('refuses a support session steering at a non-consented community', async () => {
+  it('sends a support session steering at a non-consented community straight to /dashboard', async () => {
     requestHeaders.current = SUPPORT;
 
-    await expect(render('6')).rejects.toThrow(
-      'NEXT_REDIRECT:/pm/dashboard/communities?reason=invalid-selection',
-    );
+    // Exact: not via ?reason=invalid-selection, whose landing page is a
+    // portfolio aggregate that would only redirect the session again.
+    await expect(render('6')).rejects.toThrow(/^NEXT_REDIRECT:\/dashboard$/);
     expect(resolvePmDashboardTargetMock).not.toHaveBeenCalled();
+  });
+
+  it('control: outside a support session an unresolvable community is still an invalid selection', async () => {
+    resolvePmDashboardTargetMock.mockResolvedValue(null);
+
+    await expect(render('6')).rejects.toThrow(
+      /^NEXT_REDIRECT:\/pm\/dashboard\/communities\?reason=invalid-selection$/,
+    );
   });
 
   it('lets a support session switch to its consented community', async () => {

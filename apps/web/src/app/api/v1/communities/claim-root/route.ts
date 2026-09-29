@@ -15,26 +15,19 @@ import {
   claimRoot,
   type ClaimResult,
 } from '@/lib/services/claim-root-service';
-import { ForbiddenError } from '@/lib/api/errors';
-import { getSupportScope, SUPPORT_SESSION_DENIED_MESSAGE } from '@/lib/support/support-scope';
+import { refuseUnderSupportSession } from '@/lib/support/support-scope';
 import { claimRootContract } from './contract';
 
-// route-gate: self-scoped — claim service admits only a property_manager of a rootless community, acting for themselves (ADR-006 spec 3.5)
+// route-gate: self-scoped — claim service admits only a property_manager of a rootless community, acting for themselves (ADR-006 spec 3.5); refused under a support session
 export const POST = withErrorHandler(
   runRoute(claimRootContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
 
-    // This route declares no tenantScope, so nothing reconciles the body's
-    // communityId with the support session's pinned community. Under a support
-    // session: claimAll (a write to every rootless community the user manages)
-    // is refused, and a single claim must target the consented community.
-    const supportScope = getSupportScope(req.headers);
-    if (
-      supportScope &&
-      (body.claimAll === true || supportScope.communityId !== body.communityId)
-    ) {
-      throw new ForbiddenError(SUPPORT_SESSION_DENIED_MESSAGE);
-    }
+    // Becoming root is role assignment, a root-exclusive power (ADR-006 §2).
+    // A support session must never change roles — not even in the consented
+    // community — so the whole route is refused, claimAll and single claims
+    // alike.
+    refuseUnderSupportSession(req.headers);
 
     let results: ClaimResult[];
     if (body.claimAll === true) {

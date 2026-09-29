@@ -22,8 +22,11 @@ import { refuseUnderSupportSession } from '@/lib/support/support-scope';
  * visible at every call site and unit-testable through the route's own request.
  *
  * `message` customizes the 403 text so each route keeps its existing,
- * possibly consumer-asserted wording. `isPmAdminInAnyCommunity` is imported
- * from the `pm-communities` re-export (not `@propertypro/db/unsafe` directly)
+ * possibly consumer-asserted wording. It applies to the not-a-PM refusal
+ * only: the support-session refusal always carries the fixed
+ * `SUPPORT_SESSION_DENIED_MESSAGE`, overriding `message`.
+ *
+ * `isPmAdminInAnyCommunity` is imported from the `pm-communities` re-export (not `@propertypro/db/unsafe` directly)
  * so this helper carries no service-role import and needs no unsafe allowlist
  * entry. Statutory/plan gates specific to a route (e.g. portfolio-templates
  * plan access) stay at the call site — apply them AFTER this helper.

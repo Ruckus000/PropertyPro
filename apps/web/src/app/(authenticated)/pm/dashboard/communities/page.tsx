@@ -8,7 +8,7 @@ import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { isPmAdminInAnyCommunity } from '@/lib/api/pm-communities';
 import { PmDashboardClient } from '@/components/pm/PmDashboardClient';
-import { getPageSupportScope } from '@/lib/support/support-scope';
+import { redirectIfSupportSession } from '@/lib/support/support-scope';
 
 export default async function PmCommunitiesPage() {
   const userId = await requireAuthenticatedUserId();
@@ -16,9 +16,7 @@ export default async function PmCommunitiesPage() {
   // Portfolio aggregate: spans every community the user manages, but a support
   // session is consented for ONE. Refused the same way as a non-PM (the
   // /api/v1/pm/* data behind it refuses too, in requirePmPortfolioAccess).
-  if (await getPageSupportScope()) {
-    redirect('/dashboard');
-  }
+  await redirectIfSupportSession();
 
   const isPm = await isPmAdminInAnyCommunity(userId);
   if (!isPm) {

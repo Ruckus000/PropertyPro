@@ -25,14 +25,14 @@ export const GET = withErrorHandler(
     if (supportScope) {
       // Count exactly what /api/v1/me/communities would list, so the profile
       // menu's "Switch Community" does not advertise communities outside the
-      // session's grant. `countCommunitiesForUser` cannot be filtered, so list;
-      // it counts DISTINCT communities, and the narrowed rows span at most one.
+      // session's grant. `countCommunitiesForUser` cannot be filtered, so list
+      // and count DISTINCT communities, as it does.
       const rows = narrowToSupportScope(
         await listCommunitiesForUser(userId),
         supportScope,
         (r) => r.communityId,
       );
-      return { count: rows.length > 0 ? 1 : 0 };
+      return { count: new Set(rows.map((r) => r.communityId)).size };
     }
     const count = await countCommunitiesForUser(userId);
     return { count };

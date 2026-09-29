@@ -13,7 +13,7 @@ import { userHasPortfolioTemplatesAccess } from '@/lib/services/site-portfolio-t
 import { PortfolioTemplatesManager } from '@/components/pm/portfolio/PortfolioTemplatesManager';
 import { PageBody } from '@/components/shared/page-body';
 import { PageHeader } from '@/components/shared/page-header';
-import { getPageSupportScope } from '@/lib/support/support-scope';
+import { redirectIfSupportSession } from '@/lib/support/support-scope';
 
 export default async function PortfolioTemplatesPage() {
   const userId = await requirePageAuthenticatedUserId();
@@ -21,9 +21,7 @@ export default async function PortfolioTemplatesPage() {
   // Portfolio aggregate: spans every community the user manages, but a support
   // session is consented for ONE. Refused the same way as a non-PM (the
   // /api/v1/pm/* data behind it refuses too, in requirePmPortfolioAccess).
-  if (await getPageSupportScope()) {
-    redirect('/dashboard');
-  }
+  await redirectIfSupportSession();
 
   if (!(await isPmAdminInAnyCommunity(userId))) {
     redirect('/dashboard');

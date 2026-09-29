@@ -21,6 +21,7 @@
  * presence is authoritative.
  */
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { ForbiddenError } from '@/lib/api/errors';
 import {
   COMMUNITY_ID_HEADER,
@@ -71,6 +72,17 @@ export function getSupportScope(requestHeaders: HeaderReader): SupportScope | nu
 /** Page / server-component variant: reads the current request's headers. */
 export async function getPageSupportScope(): Promise<SupportScope | null> {
   return getSupportScope(await headers());
+}
+
+/**
+ * Page variant of the DENY rule, for portfolio-aggregate pages: leave for
+ * `destination` (default `/dashboard`, where a non-PM is sent too) when the
+ * request is a support session. Returns normally otherwise.
+ */
+export async function redirectIfSupportSession(destination: string = '/dashboard'): Promise<void> {
+  if (await getPageSupportScope()) {
+    redirect(destination);
+  }
 }
 
 /**

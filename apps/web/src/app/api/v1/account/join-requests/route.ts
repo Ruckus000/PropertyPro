@@ -17,6 +17,11 @@ import {
 } from '@/lib/join-requests/approve-request';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
 import {
+  getSupportScope,
+  narrowToSupportScope,
+  refuseUnderSupportSession,
+} from '@/lib/support/support-scope';
+import {
   accountJoinRequestsCreateContract,
   accountJoinRequestsListContract,
 } from './contract';
@@ -24,10 +29,14 @@ import {
 const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// route-gate: self-scoped — the caller submits their own join request; an admin must approve it
+// route-gate: self-scoped — the caller submits their own join request; an admin must approve it (refused under a support session)
 export const POST = withErrorHandler(
-  runRoute(accountJoinRequestsCreateContract, async ({ body }) => {
+  runRoute(accountJoinRequestsCreateContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
+    // Joining a community is outside a support session's grant, which covers
+    // the ONE community it was consented for — whichever community the body
+    // names, including that one (the user is already a member of it).
+    refuseUnderSupportSession(req.headers);
 
     const rate = getRateLimiter().check(
       `join-request-submit:${userId}`,
@@ -61,10 +70,16 @@ export const POST = withErrorHandler(
   }),
 );
 
-// route-gate: self-scoped — lists only the caller's own join requests
+// route-gate: self-scoped — lists only the caller's own join requests (narrowed to the consented community under a support session)
 export const GET = withErrorHandler(
-  runRoute(accountJoinRequestsListContract, async () => {
+  runRoute(accountJoinRequestsListContract, async ({ req }) => {
     const userId = await requireAuthenticatedUserId();
-    return listJoinRequestsForUser(userId);
+    // User-keyed and cross-community: under a support session, show only the
+    // rows for the consented community.
+    return narrowToSupportScope(
+      await listJoinRequestsForUser(userId),
+      getSupportScope(req.headers),
+      (row) => row.communityId,
+    );
   }),
 );

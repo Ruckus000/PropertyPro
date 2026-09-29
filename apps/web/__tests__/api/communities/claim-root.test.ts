@@ -110,12 +110,15 @@ describe('POST /api/v1/communities/claim-root', () => {
       expect(claimRootMock).not.toHaveBeenCalled();
     });
 
-    it('a single claim on the consented community proceeds', async () => {
+    it('a single claim on the consented community → 403 too (role changes are never in a support grant)', async () => {
       claimRootMock.mockResolvedValue({ communityId: 42, claimed: true });
 
       const res = await POST(supportPost({ communityId: 42 }));
-      expect(res.status).toBe(200);
-      expect(claimRootMock).toHaveBeenCalledWith('pm-1', 42);
+      expect(res.status).toBe(403);
+      await expect(res.json()).resolves.toMatchObject({
+        error: { message: 'Not available during a support session' },
+      });
+      expect(claimRootMock).not.toHaveBeenCalled();
     });
   });
 });

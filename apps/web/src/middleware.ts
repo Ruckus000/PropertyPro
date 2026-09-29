@@ -149,6 +149,61 @@ export const COMMUNITIES_API_NON_ID_SEGMENTS: ReadonlySet<string> = new Set([
   'transfer-root',
 ]);
 
+/**
+ * Query parameters through which a page or route selects a community on its
+ * own, independently of `x-community-id` (measured 2026-09-29 by grepping
+ * `apps/web/src` for every `searchParams` key read):
+ *
+ *   - `communityId` — ~20 pages (`app/mobile/**`, `(site-editor)/pm/website-editor`,
+ *     `(site-preview)/pm/site-preview`, `pm/onboarding/website`, …) read
+ *     `Number(searchParams.communityId)` and call `requireCommunityMembership`
+ *     with it. On a tenant SUBDOMAIN `resolveCommunityContext` takes the host
+ *     and ignores this param, so the header says A while the page renders B.
+ *   - `communityIds` — comma-separated list read by `/api/v1/pm/reports/*`
+ *     (split on `,`, each `Number()`).
+ *
+ * Under a support session every value must be the session's community. The
+ * parse is STRICTER than any consumer (digits only, then a positive safe
+ * integer), so there is no spelling a consumer reads as another community that
+ * this reads as the session's; anything else fails closed. `tenant` (a slug) is
+ * deliberately absent: only `resolveCommunityContext` reads it, and whatever it
+ * resolves to is the resolved tenant, which is already compared.
+ */
+export const SUPPORT_PINNED_COMMUNITY_QUERY_PARAMS: ReadonlyArray<{
+  name: string;
+  list: boolean;
+}> = [
+  { name: 'communityId', list: false },
+  { name: 'communityIds', list: true },
+];
+
+function parseStrictCommunityId(raw: string): number | null {
+  if (!/^[0-9]+$/.test(raw)) return null;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * Every community id the request's query names, or `unreadable` when any
+ * occurrence of a pinned param (repeated keys included) does not parse.
+ */
+function readQueryCommunityIds(searchParams: URLSearchParams): {
+  ids: number[];
+  unreadable: boolean;
+} {
+  const ids: number[] = [];
+  for (const { name, list } of SUPPORT_PINNED_COMMUNITY_QUERY_PARAMS) {
+    for (const value of searchParams.getAll(name)) {
+      for (const piece of list ? value.split(',') : [value]) {
+        const parsed = parseStrictCommunityId(piece);
+        if (parsed === null) return { ids: [], unreadable: true };
+        ids.push(parsed);
+      }
+    }
+  }
+  return { ids, unreadable: false };
+}
+
 function shouldResolveTenant(pathname: string): boolean {
   if (TENANT_OPTIONAL_PATHS.has(pathname)) return false;
   return isProtectedPath(pathname);
@@ -1190,13 +1245,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         }
       }
     }
+    // The query is a third source, for pages that read `?communityId=`
+    // themselves (see SUPPORT_PINNED_COMMUNITY_QUERY_PARAMS): on a tenant
+    // subdomain the resolver ignores it, so without this `a.<root>/mobile/
+    // maintenance?communityId=B` rendered B under a session consented for A.
+    const queryCommunities = readQueryCommunityIds(request.nextUrl.searchParams);
+    const namedCommunityIds = new Set<number>(queryCommunities.ids);
+    if (resolvedTenantId !== null) namedCommunityIds.add(resolvedTenantId);
+    if (pathTenantId !== null) namedCommunityIds.add(pathTenantId);
     const conflictingCommunities =
-      pathCommunityUnreadable ||
-      (resolvedTenantId !== null && pathTenantId !== null && resolvedTenantId !== pathTenantId);
+      pathCommunityUnreadable || queryCommunities.unreadable || namedCommunityIds.size > 1;
     const supportSession = conflictingCommunities
       ? null
       : await resolveActiveSupportSession(supportCookieValue, {
-          expectedCommunityId: resolvedTenantId ?? pathTenantId,
+          // At most one id is named (size <= 1 above); when one is, the token
+          // must carry it.
+          expectedCommunityId: namedCommunityIds.values().next().value ?? null,
         });
 
     if (!supportSession) {
