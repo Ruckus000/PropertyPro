@@ -1,22 +1,24 @@
 /**
- * Announcements API — CRUD operations for community announcements.
+ * Announcements API — list (GET), action-dispatch mutations (POST) and
+ * soft-delete (DELETE) for community announcements.
  *
- * All mutations use:
- * - withErrorHandler for structured error responses
- * - withAuditLog for compliance audit trail
- * - announcement-service helpers for scoped DB access
- * - Zod validation for input
+ * CON-05 (Phase 3.5): every verb goes through `runRoute(contract, handler)`.
+ * GET declares `tenantScope: { in: 'query' }` (runner-resolved communityId);
+ * POST and DELETE keep coercing `communityId` out of the body themselves, and
+ * write their audit trail through `createAuditContext` (CON-06) — the body is
+ * parsed once, by the runner. See `./contract.ts` for the exact deltas.
  *
  * P1-17c: Publish flow queues non-blocking announcement email delivery.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import {
   logAuditEvent,
   type Announcement,
 } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { withAuditLog } from '@/lib/middleware/audit-middleware';
+import { runRoute } from '@/lib/api/run-route';
+import { createAuditContext, type AuditContext } from '@/lib/middleware/audit-middleware';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -45,6 +47,11 @@ import {
   updateAnnouncementForCommunity,
 } from '@/lib/services/announcement-service';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import {
+  announcementsActionContract,
+  announcementsDeleteContract,
+  announcementsListContract,
+} from './contract';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -110,126 +117,131 @@ const listAnnouncementsQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().optional(),
 });
 
-const parsedBodyCache = new WeakMap<NextRequest, Promise<Record<string, unknown>>>();
-
-async function getParsedBody(req: NextRequest): Promise<Record<string, unknown>> {
-  let parsed = parsedBodyCache.get(req);
-  if (!parsed) {
-    parsed = req.json().then((value) => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return {};
-      }
-      return value as Record<string, unknown>;
-    });
-    parsedBodyCache.set(req, parsed);
+/**
+ * The runner parsed the body once (`z.unknown()`); normalise it the way the
+ * legacy `getParsedBody` did. The runner swallows a JSON parse failure into
+ * `undefined` — valid JSON never produces it — so that case is re-thrown as
+ * the unhandled error the legacy `await req.json()` raised (→ 500
+ * INTERNAL_ERROR, before any gate). JSON `null`, arrays and scalars become `{}`
+ * as before, and then fail the communityId check.
+ */
+function normalizeBody(raw: unknown): Record<string, unknown> {
+  if (raw === undefined) {
+    throw new SyntaxError('Request body is not valid JSON');
   }
-
-  return parsed;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  return raw as Record<string, unknown>;
 }
 
+/**
+ * The pre-auth half of every mutation, unchanged from the legacy extractor:
+ * coerce the body `communityId` (a string "42" is accepted), refuse junk with
+ * the legacy message, and cross-check it against `x-community-id` (404 on a
+ * mismatch). Pure parsing plus a header comparison — no DB read.
+ */
+function resolveBodyCommunityId(req: NextRequest, body: Record<string, unknown>): number {
+  const rawCommunityId = body['communityId'];
+  const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
+  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
+    throw new ValidationError('communityId must be a positive integer');
+  }
+  return resolveEffectiveCommunityId(req, parsedCommunityId);
+}
 
 // ---------------------------------------------------------------------------
 // GET — List announcements (pinned first, chronological)
 // ---------------------------------------------------------------------------
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
-  const { searchParams } = new URL(req.url);
-  const communityIdParam = searchParams.get('communityId');
-  const includeArchived = searchParams.get('includeArchived') === 'true';
+export const GET = withErrorHandler(
+  runRoute(announcementsListContract, async ({ query, req, communityId }) => {
+    const userId = await requireAuthenticatedUserId();
+    // `communityId` was resolved by the runner (tenantScope: query), which has
+    // already refused a junk `?communityId=` (legacy message) and a header
+    // mismatch. It gets here without `?communityId=` only when x-community-id
+    // supplied the tenant; the param has always been required, so refuse that
+    // with the legacy message, after auth, as before.
+    if (query.communityId === undefined) {
+      throw new ValidationError('communityId query parameter is required');
+    }
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'announcements', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
-  if (!communityIdParam) {
-    throw new ValidationError('communityId query parameter is required');
-  }
-
-  const parsedCommunityId = Number(communityIdParam);
-  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
-  }
-  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requirePermission(membership, 'announcements', 'read');
-  // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
-  await requireEntitledForAdminRead(communityId, membership);
-  const parsedQuery = listAnnouncementsQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters', {
-      fields: formatZodErrors(parsedQuery.error),
+    // Re-read from `searchParams` (not `query`) so each value keeps its exact
+    // legacy semantics — e.g. an empty `?q=` is '' here, never undefined.
+    const { searchParams } = new URL(req.url);
+    const includeArchived = searchParams.get('includeArchived') === 'true';
+    const parsedQuery = listAnnouncementsQuerySchema.safeParse({
+      cursor: searchParams.get('cursor') || undefined,
+      pageSize: searchParams.get('pageSize') || undefined,
     });
-  }
-  const query = searchParams.get('q')?.trim() ?? '';
-  const { rows, pagination } = await listVisibleAnnouncements(communityId, membership, {
-    includeArchived,
-    query,
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-  });
+    if (!parsedQuery.success) {
+      throw new ValidationError('Invalid query parameters', {
+        fields: formatZodErrors(parsedQuery.error),
+      });
+    }
+    const q = searchParams.get('q')?.trim() ?? '';
+    const { rows, pagination } = await listVisibleAnnouncements(communityId, membership, {
+      includeArchived,
+      query: q,
+      cursor: parsedQuery.data.cursor,
+      pageSize: parsedQuery.data.pageSize,
+    });
 
-  // B2: board/owner/tenant checklists carry `review_announcement`. Fire on list
-  // load so those roles can reach 100% (fired unconditionally — residents can't
-  // create announcements; a no-op for roles without this key).
-  void tryAutoComplete(communityId, userId, 'review_announcement');
+    // B2: board/owner/tenant checklists carry `review_announcement`. Fire on list
+    // load so those roles can reach 100% (fired unconditionally — residents can't
+    // create announcements; a no-op for roles without this key).
+    void tryAutoComplete(communityId, userId, 'review_announcement');
 
-  return NextResponse.json({
-    data: {
-      data: rows,
-      pagination,
-    },
-  });
-});
+    // Runner wraps once → `{ data: { data, pagination } }`. `pagination` is
+    // absent when the community row is missing, and JSON drops it — the legacy
+    // `{"data":{"data":[]}}` bytes (see contract.ts: why not `paginated: true`).
+    return { data: rows, pagination };
+  }),
+);
 
 // ---------------------------------------------------------------------------
-// POST — Create, update, pin/unpin, or archive an announcement
+// POST — Create, update, pin/unpin, archive, or restore an announcement
 // ---------------------------------------------------------------------------
 
 export const POST = withErrorHandler(
-  withAuditLog(
-    async (req: NextRequest) => {
-      const body = await getParsedBody(req);
-      const rawCommunityId = body['communityId'];
-      const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
-      if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-        throw new ValidationError('communityId must be a positive integer');
-      }
-      const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-      await assertNotDemoGrace(communityId);
+  runRoute(announcementsActionContract, async ({ body: rawBody, req }) => {
+    const body = normalizeBody(rawBody);
+    const communityId = resolveBodyCommunityId(req, body);
 
-      const userId = await requireAuthenticatedUserId();
-      const membership = await requireCommunityMembership(communityId, userId);
-      requirePermission(membership, 'announcements', 'write');
-      await requireActiveSubscriptionForMutation(communityId);
+    // Demo-grace runs AFTER authentication (legacy ran it first — an unscoped
+    // read on a caller-chosen id, before anything was known about the caller).
+    // Delta pinned in route-contract.test.ts; see contract.ts.
+    const userId = await requireAuthenticatedUserId();
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'announcements', 'write');
+    await requireActiveSubscriptionForMutation(communityId);
 
-      return { userId, communityId };
-    },
-    async (req, _ctx, audit) => {
-      const body = await getParsedBody(req);
-      const normalizedBody: Record<string, unknown> = {
-        ...body,
-        communityId: audit.communityId,
-      };
-      const action = normalizedBody['action'] as string | undefined;
+    const audit = createAuditContext(req, { userId, communityId });
+    const normalizedBody: Record<string, unknown> = { ...body, communityId };
+    const action = normalizedBody['action'] as string | undefined;
 
-      // Route to the appropriate handler based on action
-      if (action === 'update') {
-        return handleUpdate(normalizedBody, audit);
-      }
-      if (action === 'pin') {
-        return handlePin(normalizedBody, audit);
-      }
-      if (action === 'archive') {
-        return handleArchive(normalizedBody, audit);
-      }
-      if (action === 'restore') {
-        return handleRestore(normalizedBody, audit);
-      }
+    // Route to the appropriate handler based on action
+    if (action === 'update') {
+      return handleUpdate(normalizedBody, audit);
+    }
+    if (action === 'pin') {
+      return handlePin(normalizedBody, audit);
+    }
+    if (action === 'archive') {
+      return handleArchive(normalizedBody, audit);
+    }
+    if (action === 'restore') {
+      return handleRestore(normalizedBody, audit);
+    }
 
-      // Default: create
-      return handleCreate(normalizedBody, audit);
-    },
-  ),
+    // Default: create
+    return handleCreate(normalizedBody, audit);
+  }),
 );
 
 // ---------------------------------------------------------------------------
@@ -237,88 +249,65 @@ export const POST = withErrorHandler(
 // ---------------------------------------------------------------------------
 
 export const DELETE = withErrorHandler(
-  withAuditLog(
-    async (req: NextRequest) => {
-      const body = await getParsedBody(req);
-      const rawCommunityId = body['communityId'];
-      const parsedCommunityId = typeof rawCommunityId === 'number' ? rawCommunityId : Number(rawCommunityId);
-      if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-        throw new ValidationError('communityId must be a positive integer');
-      }
-      const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-      await assertNotDemoGrace(communityId);
+  runRoute(announcementsDeleteContract, async ({ body: rawBody, req }) => {
+    const body = normalizeBody(rawBody);
+    const resolvedCommunityId = resolveBodyCommunityId(req, body);
 
-      const userId = await requireAuthenticatedUserId();
-      await requireCommunityMembership(communityId, userId);
-      await requireActiveSubscriptionForMutation(communityId);
+    const userId = await requireAuthenticatedUserId();
+    await assertNotDemoGrace(resolvedCommunityId);
+    await requireCommunityMembership(resolvedCommunityId, userId);
+    await requireActiveSubscriptionForMutation(resolvedCommunityId);
 
-      return { userId, communityId };
-    },
-    async (req, _ctx, audit) => {
-      const body = await getParsedBody(req);
-      const result = deleteAnnouncementSchema.safeParse({
-        ...body,
-        communityId: audit.communityId,
+    const audit = createAuditContext(req, { userId, communityId: resolvedCommunityId });
+    const result = deleteAnnouncementSchema.safeParse({
+      ...body,
+      communityId: resolvedCommunityId,
+    });
+    if (!result.success) {
+      throw new ValidationError('Invalid delete data', {
+        fields: formatZodErrors(result.error),
       });
-      if (!result.success) {
-        throw new ValidationError('Invalid delete data', {
-          fields: formatZodErrors(result.error),
-        });
-      }
+    }
 
-      const { id, communityId } = result.data;
-      const existing = await getAnnouncementById(communityId, id);
+    const { id, communityId } = result.data;
+    const existing = await getAnnouncementById(communityId, id);
 
-      if (!existing) {
-        throw new NotFoundError('Announcement not found');
-      }
+    if (!existing) {
+      throw new NotFoundError('Announcement not found');
+    }
 
-      const membership = await requireCommunityMembership(communityId, audit.userId);
-      const isAuthor = existing.publishedBy === audit.userId;
-      const canModerate =
-        membership.isAdmin &&
-        checkPermissionV2(membership.role, membership.communityType, 'announcements', 'write', {
-          isUnitOwner: membership.isUnitOwner,
-        });
-      if (!isAuthor && !canModerate) {
-        throw new ForbiddenError('You can only delete your own announcements');
-      }
-
-      await softDeleteAnnouncementForCommunity(communityId, id);
-
-      await audit.log({
-        action: 'delete',
-        resourceType: 'announcement',
-        resourceId: String(id),
-        oldValues: { title: existing.title, audience: existing.audience },
-        metadata: {
-          removalType: isAuthor ? 'author_self_delete' : 'admin_removal',
-        },
+    const membership = await requireCommunityMembership(communityId, audit.userId);
+    const isAuthor = existing.publishedBy === audit.userId;
+    const canModerate =
+      membership.isAdmin &&
+      checkPermissionV2(membership.role, membership.communityType, 'announcements', 'write', {
+        isUnitOwner: membership.isUnitOwner,
       });
+    if (!isAuthor && !canModerate) {
+      throw new ForbiddenError('You can only delete your own announcements');
+    }
 
-      return NextResponse.json({ data: { id, deleted: true } });
-    },
-  ),
+    await softDeleteAnnouncementForCommunity(communityId, id);
+
+    await audit.log({
+      action: 'delete',
+      resourceType: 'announcement',
+      resourceId: String(id),
+      oldValues: { title: existing.title, audience: existing.audience },
+      metadata: {
+        removalType: isAuthor ? 'author_self_delete' : 'admin_removal',
+      },
+    });
+
+    return { id, deleted: true };
+  }),
 );
 
 // ---------------------------------------------------------------------------
-// Handlers
+// Handlers — each returns the inner payload; the runner wraps `{ data }`.
 // ---------------------------------------------------------------------------
 
-interface AuditLog {
-  userId: string;
-  communityId: number;
-  log(params: {
-    action: 'create' | 'update' | 'delete';
-    resourceType: string;
-    resourceId: string;
-    oldValues?: Record<string, unknown>;
-    newValues?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-  }): Promise<void>;
-}
-
-async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+async function handleCreate(body: Record<string, unknown>, audit: AuditContext): Promise<unknown> {
   const result = createAnnouncementSchema.safeParse(body);
   if (!result.success) {
     throw new ValidationError('Invalid announcement data', {
@@ -409,10 +398,10 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
 
   void tryAutoComplete(communityId, audit.userId, 'post_announcement');
 
-  return NextResponse.json({ data: created });
+  return created;
 }
 
-async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+async function handleUpdate(body: Record<string, unknown>, audit: AuditContext): Promise<unknown> {
   const result = updateAnnouncementSchema.safeParse(body);
   if (!result.success) {
     throw new ValidationError('Invalid update data', {
@@ -452,10 +441,10 @@ async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Pro
     newValues,
   });
 
-  return NextResponse.json({ data: updated });
+  return updated;
 }
 
-async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+async function handlePin(body: Record<string, unknown>, audit: AuditContext): Promise<unknown> {
   const result = pinActionSchema.safeParse(body);
   if (!result.success) {
     throw new ValidationError('Invalid pin action data', {
@@ -481,10 +470,10 @@ async function handlePin(body: Record<string, unknown>, audit: AuditLog): Promis
     metadata: { subAction: 'pin' },
   });
 
-  return NextResponse.json({ data: updated });
+  return updated;
 }
 
-async function handleRestore(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+async function handleRestore(body: Record<string, unknown>, audit: AuditContext): Promise<unknown> {
   const result = restoreActionSchema.safeParse(body);
   if (!result.success) {
     throw new ValidationError('Invalid restore action data', {
@@ -510,10 +499,10 @@ async function handleRestore(body: Record<string, unknown>, audit: AuditLog): Pr
     metadata: { subAction: 'restore' },
   });
 
-  return NextResponse.json({ data: updated ?? existing });
+  return updated ?? existing;
 }
 
-async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {
+async function handleArchive(body: Record<string, unknown>, audit: AuditContext): Promise<unknown> {
   const result = archiveActionSchema.safeParse(body);
   if (!result.success) {
     throw new ValidationError('Invalid archive action data', {
@@ -540,5 +529,5 @@ async function handleArchive(body: Record<string, unknown>, audit: AuditLog): Pr
     metadata: { subAction: archive ? 'archive' : 'unarchive' },
   });
 
-  return NextResponse.json({ data: updated });
+  return updated;
 }
