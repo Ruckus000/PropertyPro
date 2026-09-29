@@ -111,3 +111,11 @@ A separate bug came out of the same read: `/welcome` found the caller's unit by 
 
 Trigger: the first real apartment community, or a demo-quality report that tenants "have no unit".
 
+**Update 2026-09-29 — the SEED side is fixed (branch `claude/demo-resident-units`); the `listActorUnitIds` option was not taken, so no authorization semantics changed.**
+- `seedRoles` (`packages/db/src/seed/seed-community.ts`) accepts an optional `unitId` and its upsert now does `unit_id = coalesce(excluded.unit_id, user_roles.unit_id)`, so a reseed or cross-community re-assignment no longer nulls an existing link. It used to write a literal NULL for every role and `unit_id = excluded.unit_id`, which wiped the link seed-demo wrote afterwards on every reseed.
+- `seedCommunity` now links every resident after units and leases exist: a tenant gets its ACTIVE lease's unit; an owner gets the unit it owns, or claims the lowest-numbered unowned unit (setting `units.owner_user_id` and `unit_id` together). This covers the admin console's "create demo" resident persona (`role: 'owner'`) and every apartment tenant.
+- `scripts/seed-demo.ts` links `tenant.one@sunset.local` to the second Sunset Condos unit by unit number (role `unit_id` only; tenants do not own), and links the cross-community owner (`owner.one` in Palm Shores) the same way `seedCommunity` does.
+- Pinned by `packages/db/__tests__/seed-resident-units.integration.test.ts` (local DB) and a SQL-shape unit test in `packages/db/__tests__/seed/seed-community.test.ts`.
+
+**Existing production demo rows are NOT repaired by this change.** They correct on the next reseed of each demo (the nightly reset / a fresh admin demo). Decision 2026-09-29: no production data repair.
+

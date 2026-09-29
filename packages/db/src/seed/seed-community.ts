@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, sql } from '../filters';
+import { and, asc, eq, inArray, isNull, sql } from '../filters';
 import {
   announcements,
   communities,
@@ -800,12 +800,23 @@ async function findExistingAuthUserByEmail(email: string): Promise<ExistingAuthU
   return null;
 }
 
+/**
+ * Upsert seeded role rows.
+ *
+ * `unitId` is optional. When it is omitted (or null) the conflict clause KEEPS
+ * whatever `unit_id` the row already has — `coalesce(excluded.unit_id,
+ * user_roles.unit_id)` — so a reseed or a cross-community re-assignment never
+ * wipes a resident's unit link. It used to be `unit_id = excluded.unit_id`
+ * with a literal NULL, which unlinked every demo resident on every reseed, and
+ * every unit-scoped feature (`listActorUnitIds`) then saw them as unit-less.
+ */
 export async function seedRoles(
   assignments: Array<{
     communityId: number;
     userId: string;
     role: SeedRole;
     designation?: BoardDesignation;
+    unitId?: number | null;
   }>,
 ): Promise<void> {
   if (assignments.length === 0) {
@@ -817,7 +828,7 @@ export async function seedRoles(
       const m = mapSeedRoleToStorage({ role: a.role, designation: a.designation });
       // v3 end-state: seeded managers resolve perms via checkPermissionV2's
       // matrix-fallback (spec §3.4). No permissions/preset_key/legacy_role columns.
-      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, ${m.designation}, ${m.displayTitle})`;
+      return sql`(${a.userId}, ${a.communityId}, ${m.role}, ${a.unitId ?? null}::bigint, ${m.isUnitOwner}, ${m.designation}, ${m.displayTitle})`;
     }),
     sql`, `,
   );
@@ -834,7 +845,7 @@ export async function seedRoles(
     values ${values}
     on conflict (user_id, community_id) do update
     set role = excluded.role,
-        unit_id = excluded.unit_id,
+        unit_id = coalesce(excluded.unit_id, user_roles.unit_id),
         is_unit_owner = excluded.is_unit_owner,
         designation = excluded.designation,
         display_title = excluded.display_title,
@@ -1646,6 +1657,106 @@ async function attachMeetingDocument(
   });
 }
 
+/**
+ * Give every seeded resident the unit the product requires of them
+ * (`UNIT_REQUIRED_ROLES` in apps/web role-validator). App paths always write
+ * `user_roles.unit_id`; the seed used to leave it NULL, so demo residents fell
+ * through every unit-scoped feature that resolves units via `listActorUnitIds`.
+ *
+ *  - tenant: the unit of their ACTIVE lease (lowest lease id wins). A tenant
+ *    with no lease is left as-is — a condo tenant has no lease here, and the
+ *    caller (scripts/seed-demo.ts) links that persona explicitly.
+ *  - owner: the unit they already own (`units.owner_user_id`), lowest unit
+ *    number first. If they own none, claim the lowest-numbered UNOWNED unit —
+ *    setting `units.owner_user_id` and the role's `unit_id` together, the
+ *    same shape seed-demo.ts uses for owner.one. Never takes another owner's
+ *    unit.
+ *
+ * Every write is scoped by `community_id` AND `user_id`. Idempotent: a reseed
+ * finds the same lease / owned unit and writes the same value.
+ */
+export async function linkSeededResidentUnits(
+  communityId: number,
+  residents: Array<{ userId: string; role: SeedRole }>,
+): Promise<void> {
+  for (const resident of residents) {
+    let unitId: number | null = null;
+
+    if (resident.role === 'tenant') {
+      const [lease] = await db
+        .select({ unitId: leases.unitId })
+        .from(leases)
+        .where(
+          and(
+            eq(leases.communityId, communityId),
+            eq(leases.residentId, resident.userId),
+            eq(leases.status, 'active'),
+            isNull(leases.deletedAt),
+          ),
+        )
+        .orderBy(asc(leases.id))
+        .limit(1);
+      unitId = lease?.unitId ?? null;
+    } else if (resident.role === 'owner') {
+      const [owned] = await db
+        .select({ id: units.id })
+        .from(units)
+        .where(
+          and(
+            eq(units.communityId, communityId),
+            eq(units.ownerUserId, resident.userId),
+            isNull(units.deletedAt),
+          ),
+        )
+        .orderBy(asc(units.unitNumber))
+        .limit(1);
+      if (owned) {
+        unitId = owned.id;
+      } else {
+        const [unowned] = await db
+          .select({ id: units.id })
+          .from(units)
+          .where(
+            and(
+              eq(units.communityId, communityId),
+              isNull(units.ownerUserId),
+              isNull(units.deletedAt),
+            ),
+          )
+          .orderBy(asc(units.unitNumber))
+          .limit(1);
+        if (unowned) {
+          await db.transaction(async (tx) => {
+            await tx
+              .update(units)
+              .set({ ownerUserId: resident.userId, updatedAt: new Date() })
+              .where(and(eq(units.id, unowned.id), eq(units.communityId, communityId)));
+            await tx.execute(sql`
+              update user_roles
+              set unit_id = ${unowned.id}, updated_at = now()
+              where community_id = ${communityId}
+                and user_id = ${resident.userId}
+            `);
+          });
+          debugSeed(`owner ${resident.userId} claimed unit ${unowned.id}`);
+          continue;
+        }
+      }
+    }
+
+    if (unitId == null) {
+      continue;
+    }
+
+    await db.execute(sql`
+      update user_roles
+      set unit_id = ${unitId}, updated_at = now()
+      where community_id = ${communityId}
+        and user_id = ${resident.userId}
+    `);
+  }
+}
+
 export async function seedCommunity(
   config: SeedCommunityConfig,
   usersToSeed: SeedUserConfig[],
@@ -2139,6 +2250,14 @@ export async function seedCommunity(
   } else {
     await seedCondoHoaUnits(communityId);
   }
+
+  // After units AND leases exist: link every resident role to its unit.
+  await linkSeededResidentUnits(
+    communityId,
+    seededUsers
+      .filter((entry) => entry.role === 'owner' || entry.role === 'tenant')
+      .map((entry) => ({ userId: entry.userId, role: entry.role as SeedRole })),
+  );
 
   return {
     communityId,

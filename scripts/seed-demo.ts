@@ -30,6 +30,7 @@ import {
   ensureNotificationPreference,
   seedCommunity,
   seedDocumentCategories,
+  linkSeededResidentUnits,
   reconcilePublicUserIdWithAuthId,
   seedRoles,
   type SeededDocumentCategoryIds,
@@ -1781,6 +1782,16 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
   for (const [, assignments] of crossBySlug) {
     await seedRoles(assignments);
+    // A cross-community owner (owner.one in Palm Shores) is a resident there
+    // too, so it needs a unit in THAT community. seedRoles keeps any existing
+    // link; this claims one on a fresh database.
+    for (const assignment of assignments) {
+      if (assignment.role === 'owner' || assignment.role === 'tenant') {
+        await linkSeededResidentUnits(assignment.communityId, [
+          { userId: assignment.userId, role: assignment.role },
+        ]);
+      }
+    }
   }
 
   // Mint the root_manager for EVERY seeded community, not just palm-shores.
@@ -1937,6 +1948,36 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     }
   }
 
+  // Link the condo tenant to the SECOND unit by unit number, never the owner's
+  // unit. A tenant does not own, so only `user_roles.unit_id` is written (no
+  // `units.owner_user_id`). seedCommunity cannot do this: a condo tenant has no
+  // lease to derive a unit from. Without it tenant.one reaches every
+  // unit-scoped feature (packages, visitors, work orders, /welcome) unit-less.
+  const tenantUserId = await ensureDemoUserRecord(
+    'tenant.one@sunset.local',
+    resolveUserId(userIdsByEmail, 'tenant.one@sunset.local'),
+  );
+  userIdsByEmail['tenant.one@sunset.local'] = tenantUserId;
+  {
+    const secondUnit = await db
+      .select({ id: units.id })
+      .from(units)
+      .where(and(eq(units.communityId, sunsetCommunityId), isNull(units.deletedAt)))
+      .orderBy(units.unitNumber)
+      .offset(1)
+      .limit(1);
+
+    if (secondUnit[0]) {
+      await db.execute(sql`
+        UPDATE user_roles
+        SET unit_id = ${secondUnit[0].id}, updated_at = now()
+        WHERE community_id = ${sunsetCommunityId}
+          AND user_id = ${tenantUserId}
+      `);
+      debugSeed(`linked tenant to unit ${secondUnit[0].id} in community ${sunsetCommunityId}`);
+    }
+  }
+
   // Seed violation data for condo and HOA communities (apartments don't have violations)
   await seedViolationsData(sunsetCommunityId, ownerUserId);
   // Palm Shores gets 2 violations (reported + resolved via the same function, we re-use first 2)
@@ -1949,11 +1990,6 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     resolveUserId(userIdsByEmail, 'cam.one@sunset.local'),
   );
   userIdsByEmail['cam.one@sunset.local'] = camUserId;
-  const tenantUserId = await ensureDemoUserRecord(
-    'tenant.one@sunset.local',
-    resolveUserId(userIdsByEmail, 'tenant.one@sunset.local'),
-  );
-  userIdsByEmail['tenant.one@sunset.local'] = tenantUserId;
   const emergencyRecipientIds = [ownerUserId, boardPresidentId, tenantUserId];
   await seedEmergencyBroadcastData(sunsetCommunityId, camUserId, emergencyRecipientIds);
   debugSeed('emergency broadcast seed complete');

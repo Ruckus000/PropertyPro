@@ -21,7 +21,10 @@ vi.mock('../../src/supabase/admin', () => ({
   createAdminClient: vi.fn(),
 }));
 
-const { seedCommunity, getDefaultPassword } = await import('../../src/seed/seed-community');
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
+
+const { seedCommunity, seedRoles, getDefaultPassword } = await import('../../src/seed/seed-community');
 
 describe('getDefaultPassword', () => {
   const originalPw = process.env.DEMO_DEFAULT_PASSWORD;
@@ -138,5 +141,39 @@ describe('seedCommunity config validation', () => {
       },
       [],
     )).rejects.toThrow('at least one user');
+  });
+});
+
+describe('seedRoles upsert', () => {
+  afterEach(() => {
+    mockDb.execute.mockReset();
+  });
+
+  async function renderSeedRolesSql(
+    assignments: Parameters<typeof seedRoles>[0],
+  ): Promise<{ text: string; params: unknown[] }> {
+    mockDb.execute.mockResolvedValue([]);
+    await seedRoles(assignments);
+    expect(mockDb.execute).toHaveBeenCalledTimes(1);
+    const query = new PgDialect().sqlToQuery(mockDb.execute.mock.calls[0]![0] as SQL);
+    return { text: query.sql.replace(/\s+/g, ' '), params: query.params };
+  }
+
+  it('keeps an existing unit link on conflict instead of overwriting it with NULL', async () => {
+    const { text } = await renderSeedRolesSql([
+      { communityId: 7, userId: '00000000-0000-4000-8000-000000000001', role: 'tenant' },
+    ]);
+    expect(text).toContain('unit_id = coalesce(excluded.unit_id, user_roles.unit_id)');
+    expect(text).not.toMatch(/unit_id = excluded\.unit_id/);
+  });
+
+  it('writes the supplied unitId, and NULL when none is given', async () => {
+    const { params } = await renderSeedRolesSql([
+      { communityId: 7, userId: '00000000-0000-4000-8000-000000000001', role: 'tenant', unitId: 42 },
+      { communityId: 7, userId: '00000000-0000-4000-8000-000000000002', role: 'property_manager' },
+    ]);
+    // (user_id, community_id, role, unit_id, is_unit_owner, designation, display_title) x2
+    expect(params[3]).toBe(42);
+    expect(params[10]).toBeNull();
   });
 });
