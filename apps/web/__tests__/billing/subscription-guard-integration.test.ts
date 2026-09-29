@@ -79,19 +79,12 @@ vi.mock('@/lib/api/community-membership', () => ({
 }));
 
 vi.mock('@/lib/middleware/audit-middleware', () => ({
-  withAuditLog: (extractContext: unknown, handler: unknown) => {
-    return async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-      const extracted = await (extractContext as (
-        r: NextRequest,
-        c?: { params: Promise<Record<string, string>> },
-      ) => Promise<{ userId: string; communityId: number }>)(req, context);
-      return (handler as (r: NextRequest, c: unknown, audit: unknown) => Promise<Response>)(
-        req,
-        context,
-        { ...extracted, log: auditLogMock },
-      );
-    };
-  },
+  // The route builds its audit trail with createAuditContext inside runRoute
+  // (CON-06); withAuditLog is no longer on its path.
+  createAuditContext: (_req: NextRequest, identity: { userId: string; communityId: number }) => ({
+    ...identity,
+    log: auditLogMock,
+  }),
 }));
 
 vi.mock('@/lib/services/announcement-delivery', () => ({

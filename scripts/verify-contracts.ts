@@ -20,10 +20,12 @@
  * cannot go through the runner today. This is the single source of truth for
  * permanent skips; the prose in `.claude/rules/api-patterns.md` and the
  * pre-seed in `.claude/skills/drain-loop.md` are derived from it, not parallel
- * registries. An entry without a reason fails this guard, and only the
- * remaining CON-05 CRUD route (announcements; maintenance-requests and
- * meetings drained 2026-09-29) may carry `pending-drain` — anything else
- * claimed as pending-drain must actually be drained, not relabelled.
+ * registries. An entry without a reason fails this guard, and only a route
+ * still named in PENDING_DRAIN_ROUTES may carry `pending-drain` — anything
+ * else claimed as pending-drain must actually be drained, not relabelled.
+ * CON-05 drained all three of its CRUD routes on 2026-09-29
+ * (maintenance-requests, meetings, announcements), so that set ends EMPTY and
+ * every `pending-drain` claim is then refused.
  *
  * Detection: a route is "contracted" if its source contains a call to
  * `runRoute(...)`. This is the canonical adoption marker — the only way to
@@ -57,32 +59,38 @@ const SCAN_ROOT = 'apps/web/src/app/api';
 /**
  * Shrink-only ceiling on the grandfather allowlist below.
  *
- * Pinned at 46 (2026-09-07). THE LANE IS CLOSED to new entries: every one of
- * the 46 now carries a machine-readable `AllowlistReason` (CON-07), and 43 of
- * them are structurally runner-blocked (internal cron token-auth, raw webhook
+ * Pinned at 46 on 2026-09-07; 43 since CON-05 completed (2026-09-29). THE
+ * LANE IS CLOSED to new entries: every entry carries a machine-readable
+ * `AllowlistReason` (CON-07), and all 43 remaining are structurally
+ * runner-blocked (internal cron token-auth, raw webhook
  * bodies, redirects, Set-Cookie, non-JSON content types, non-200 durability
- * codes, multipart, headless-Chromium publishes). The honest floor is 46
- * TODAY, not the eventual ~41, because pinning lower would fail the moment
- * CON-05 lands a partial drain and force a ceiling RAISE on a "closed" lane —
- * the exact anti-pattern this pin exists to prevent.
+ * codes, multipart, headless-Chromium publishes). The ceiling was stepped
+ * down one drain at a time rather than pinned early at the eventual floor,
+ * because pinning lower would have failed on a partial drain and forced a
+ * ceiling RAISE on a "closed" lane — the exact anti-pattern this pin exists
+ * to prevent.
  *
- * Named shrink paths (the only sanctioned ways this number goes down):
- *   - CON-05 (Phase 3.5): drain the 3 `pending-drain` CRUD routes
- *     (announcements / meetings / maintenance-requests) once the runner grows
- *     the envelope-sibling + audit-context channels (CON-04/06). −3.
- * DC-05 (Phase 2.12) was the second path and is CLOSED by decision
+ * Named shrink paths: NONE REMAIN. The last one was CON-05 (Phase 3.5),
+ * draining the 3 `pending-drain` CRUD routes (maintenance-requests / meetings
+ * / announcements) through the runner's envelope-sibling + audit-context
+ * channels (CON-04/06) — COMPLETE, all three drained 2026-09-29, −3.
+ * DC-05 (Phase 2.12) was the other path and is CLOSED by decision
  * (2026-09-26): the two statutory violation-notice PDF routes
  * (violations/[id]/notice, violations/[id]/hearing-notice) are KEPT and
- * WIRED, not deleted. So CON-05 takes the floor to ~43. Do not expect zero.
+ * WIRED, not deleted. So the floor ends at 43, every entry a permanent
+ * classification. Do not expect zero, and do not lower this again unless a
+ * new shrink path is named here first.
  *
  * 2026-09-29: 46 -> 45, CON-05's first drain (maintenance-requests).
  * 2026-09-29: 45 -> 44, CON-05 drain of meetings.
+ * 2026-09-29: 44 -> 43, CON-05 drain of announcements, the last
+ *   pending-drain route. CON-05 is COMPLETE.
  *
  * Growth history, for the record: it went 37 -> 46 in the seven weeks after
  * the 2026-07-18 audit measured it, one appended line at a time (same
  * dating as `scripts/lib/ceiling.ts`).
  */
-const ALLOWLIST_CEILING = 44;
+const ALLOWLIST_CEILING = 43;
 
 // ---------------------------------------------------------------------------
 // Adoption marker
@@ -159,9 +167,10 @@ export type AllowlistReason =
   /** Headless-Chromium render needing the Node runtime and an extended
    * function `maxDuration` — a batch job wearing a route's clothes. */
   | 'headless-long-running'
-  /** Genuinely drainable: the CON-05 legacy action-dispatch CRUD
-   * routes, blocked only on the runner's envelope-sibling + audit-context
-   * extension (CON-04/06, Phase 3.4). NOTHING else may carry this. */
+  /** Genuinely drainable: reserved for routes named in PENDING_DRAIN_ROUTES
+   * (CON-05's legacy action-dispatch CRUD routes, all drained 2026-09-29).
+   * Kept, with an empty set, so any future claim is refused — NOTHING
+   * else may carry this. */
   | 'pending-drain';
 
 /**
@@ -169,12 +178,19 @@ export type AllowlistReason =
  * Everything else that claims pending-drain is a real permanent skip being
  * laundered into "we'll get to it" — the guard refuses it.
  */
-const PENDING_DRAIN_ROUTES = new Set<string>([
-  'apps/web/src/app/api/v1/announcements/route.ts',
-  // maintenance-requests and meetings were the other two: both drained
-  // 2026-09-29 (CON-05) and removed here so neither can be re-allowlisted as
-  // pending-drain.
+export const PENDING_DRAIN_ROUTES: ReadonlySet<string> = new Set<string>([
+  // EMPTY. CON-05's three routes (maintenance-requests, meetings,
+  // announcements) were all drained 2026-09-29 and removed here so none can be
+  // re-allowlisted as pending-drain. With the set empty, the checks in
+  // `checkContracts` refuse EVERY `pending-drain` claim, which is the point.
+  // Do not delete the machinery: a future drainable route must be named here,
+  // in a reviewed diff, before it can be allowlisted as pending.
 ]);
+
+/** `apps/web/src/app/api/v1/<x>/route.ts` → `<x>`, for messages. */
+function routeLabel(path: string): string {
+  return path.replace(/^apps\/web\/src\/app\/api\/v1\//, '').replace(/\/route\.ts$/, '');
+}
 
 export const ALLOWLIST_REASONS: ReadonlyMap<string, AllowlistReason> = new Map<string, AllowlistReason>([
   // `runRoute`'s `buildResponse` always constructs a fresh
@@ -193,9 +209,6 @@ export const ALLOWLIST_REASONS: ReadonlyMap<string, AllowlistReason> = new Map<s
   // Classified `status-codes` because the binding constraint is the probe's
   // status/response contract, not its payload.
   ['apps/web/src/app/api/health/route.ts', 'status-codes'],
-  // CON-05 (Phase 3.5): legacy action-dispatch CRUD. Drainable once CON-04/06
-  // give the runner the envelope-sibling + audit-context channels.
-  ['apps/web/src/app/api/v1/announcements/route.ts', 'pending-drain'],
   // Serves BOTH paginated JSON and `?format=csv` → `text/csv` attachment with
   // custom X-CSV-* truncation headers, one handler, one route. The CSV branch
   // makes it non-JSON like the export family below.
@@ -340,11 +353,13 @@ function walkDir(dirAbs: string): string[] {
 /**
  * Run the guard over `baseDir/SCAN_ROOT`: 0 clean · 1 violations · 2 could not
  * check (missing root, walk error, or zero route.ts files). Tests pass a
- * fixture tree and their own allowlist.
+ * fixture tree, their own allowlist and, optionally, their own pending-drain
+ * set (to exercise the empty-set state CON-05 ends in).
  */
 export function checkContracts(
   baseDir: string = repoRoot,
   allowlist: ReadonlyMap<string, AllowlistReason> = ALLOWLIST_REASONS,
+  pendingDrainRoutes: ReadonlySet<string> = PENDING_DRAIN_ROUTES,
 ): 0 | 1 | 2 {
   console.log('🔍 Route Contract Adoption Guard (Plan A1)');
   console.log('='.repeat(60));
@@ -402,10 +417,12 @@ export function checkContracts(
   // tsx, and a future refactor could widen the value type — so the guard
   // asserts the invariants itself:
   //   1. every entry carries a non-empty, known AllowlistReason;
-  //   2. `pending-drain` is reserved for the remaining CON-05 CRUD routes —
-  //      anything else claiming it is a permanent skip being laundered into
-  //      "we'll get to it", or a drainable route being frozen permanently by
-  //      omission from PENDING_DRAIN_ROUTES (both fail loudly here).
+  //   2. `pending-drain` is reserved for the routes still named in
+  //      PENDING_DRAIN_ROUTES (CON-05; empty once it completes, when EVERY
+  //      claim is refused) — anything else claiming it is a permanent skip
+  //      being laundered into "we'll get to it", or a drainable route being
+  //      frozen permanently by omission from PENDING_DRAIN_ROUTES (both fail
+  //      loudly here).
   const VALID_REASONS = new Set<AllowlistReason>([
     'internal-cron',
     'raw-body',
@@ -424,14 +441,14 @@ export function checkContracts(
     if (!reason || !VALID_REASONS.has(reason)) {
       unclassifiedEntries.push(`${entry} (reason: ${JSON.stringify(reason)})`);
     }
-    if (reason === 'pending-drain' && !PENDING_DRAIN_ROUTES.has(entry)) {
+    if (reason === 'pending-drain' && !pendingDrainRoutes.has(entry)) {
       misusedPendingDrain.push(entry);
     }
   }
   // Conversely: a CON-05 route marked with any other reason freezes the
   // closed lane around routes the plan says must drain in Phase 3.5.
   const pendingDrainFrozen: string[] = [];
-  for (const drainable of PENDING_DRAIN_ROUTES) {
+  for (const drainable of pendingDrainRoutes) {
     if (allowlist.has(drainable) && allowlist.get(drainable) !== 'pending-drain') {
       pendingDrainFrozen.push(drainable);
     }
@@ -467,9 +484,13 @@ export function checkContracts(
 
   if (misusedPendingDrain.length > 0) {
     console.error(
-      `\n❌ ${misusedPendingDrain.length} entries claim 'pending-drain' but are not CON-05 ` +
-        `routes. Only announcements may be pending; a ` +
-        `genuinely blocked route must name its constraint family instead:`,
+      `\n❌ ${misusedPendingDrain.length} ${misusedPendingDrain.length === 1 ? 'entry claims' : 'entries claim'} ` +
+        `'pending-drain' but ${misusedPendingDrain.length === 1 ? 'is not a' : 'are not'} CON-05 ` +
+        `route${misusedPendingDrain.length === 1 ? '' : 's'}. ` +
+        (pendingDrainRoutes.size === 0
+          ? 'CON-05 is complete, so NO route may be pending'
+          : `Only ${[...pendingDrainRoutes].map(routeLabel).join(' / ')} may be pending`) +
+        `; a genuinely blocked route must name its constraint family instead:`,
     );
     for (const entry of misusedPendingDrain) {
       console.error(`  - ${entry}`);
@@ -523,10 +544,14 @@ export function checkContracts(
     misusedPendingDrain.length > 0 || pendingDrainFrozen.length > 0 || ceiling.failed;
   if (hasErrors) return 1;
 
+  const pendingCount = pendingDrainRoutes.size;
   console.log(
     `\n✅ No new uncontracted routes outside the allowlist. ` +
       `${allowlist.size} classified files remain (ceiling ${ALLOWLIST_CEILING}) — A1 lane CLOSED; ` +
-      `it shrinks only via CON-05 (${PENDING_DRAIN_ROUTES.size} pending-drain CRUD routes, Phase 3.5).`,
+      (pendingCount === 0
+        ? 'CON-05 is complete, so every entry is a permanent classification and no shrink path remains.'
+        : `it shrinks only via CON-05 (${pendingCount} pending-drain CRUD ` +
+          `route${pendingCount === 1 ? '' : 's'} left, Phase 3.5).`),
   );
   return 0;
 }

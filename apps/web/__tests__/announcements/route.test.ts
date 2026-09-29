@@ -65,6 +65,11 @@ vi.mock('@/lib/announcements/read-visibility', () => ({
 }));
 
 vi.mock('@/lib/middleware/audit-middleware', () => ({
+  // CON-05: the route now builds its audit context inside the runRoute handler.
+  createAuditContext: (_req: NextRequest, identity: { userId: string; communityId: number }) => ({
+    ...identity,
+    log: auditLogMock,
+  }),
   withAuditLog: (extractContext: unknown, handler: unknown) => {
     return async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
       const extracted = await (extractContext as (

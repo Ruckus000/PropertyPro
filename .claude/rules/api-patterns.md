@@ -41,21 +41,20 @@ canonical shape.
 
 ## Route Contracts (`runRoute()` from `@propertypro/api-contract`)
 
-Plan A1 lane — **CLOSED** (CON-07, 2026-09-23). **239 routes contracted; the
-allowlist holds exactly 46 classified files** (`Map<path, AllowlistReason>` in
-`scripts/verify-contracts.ts`, which is now the single source of truth for
-what can never be contracted; counts measured via `pnpm guard:contracts` at
-implementation, 2026-09-23 — re-run it rather than trusting these numbers).
-No NEW entries: the ceiling stays pinned at 46, and the lane shrinks only via
-its remaining named shrink path — **CON-05** (Phase 3.5: drain the three
-`pending-drain` CRUD routes — announcements / meetings / maintenance-requests
-— once CON-04/06 extend the runner). **DC-05 was the second path and is
-CLOSED by decision (2026-09-26): the two violation-notice PDF routes are KEPT
-and WIRED, not deleted** — the ceiling stays pinned at 46 (roadmap amendment
-2026-09-26). The other 43
-entries are permanent: internal-cron token-auth, raw-body webhooks, redirects,
+Plan A1 lane — **FULLY CLOSED.** Closed to new entries by CON-07
+(2026-09-23), and its last named shrink path, **CON-05** (Phase 3.5), is
+COMPLETE: all three legacy action-dispatch CRUD routes (maintenance-requests,
+meetings, announcements) were drained onto `runRoute` on 2026-09-29. **DC-05**,
+the other path, was CLOSED by decision (2026-09-26: the two violation-notice PDF
+routes are KEPT and WIRED, not deleted). So the allowlist (`Map<path,
+AllowlistReason>` in `scripts/verify-contracts.ts`, the single source of truth
+for what can never be contracted) holds **only permanent classifications**, and
+its ceiling is **43**: internal-cron token-auth, raw-body webhooks, redirects,
 set-cookie, non-JSON binary/HTML responses, non-200 status-code contracts,
-multipart uploads, and one headless-Chromium publisher.
+multipart uploads, and one headless-Chromium publisher. Re-run
+`pnpm guard:contracts` rather than trusting these numbers. No new entries, and
+no `pending-drain` claims: `PENDING_DRAIN_ROUTES` is empty, so the guard refuses
+every one until a new drainable route is named there in a reviewed diff.
 
 ### Canonical contract + route shape
 
@@ -162,7 +161,7 @@ Convention: `requireAuthenticatedUserId → resolveEffectiveCommunityId → asse
 
 ### Allowlist drain workflow
 
-1. Pick a route from `ALLOWLIST_REASONS` in `scripts/verify-contracts.ts` that carries reason `pending-drain` (today: only the three CON-05 CRUD routes — every other classification is a permanent skip by the map's own data).
+1. Pick a route from `ALLOWLIST_REASONS` in `scripts/verify-contracts.ts` that carries reason `pending-drain`. **Today there are none** — CON-05 drained the last three on 2026-09-29, and every remaining entry is a permanent skip by the map's own data. A future drain first names its route in `PENDING_DRAIN_ROUTES`, in a reviewed diff; the guard refuses a `pending-drain` claim on any route not named there.
 2. Create `./contract.ts` next to the route, rewrite the route through `runRoute(contract, handler)`.
 3. Write/extend a unit test.
 4. Delete the route's `[path, reason]` entry from `ALLOWLIST_REASONS`.
