@@ -44,8 +44,8 @@ import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { pmDashboardSummaryContract } from './contract';
 
 export const GET = withErrorHandler(
-  runRoute(pmDashboardSummaryContract, async ({ query }) => {
-    const userId = await requirePmPortfolioAccess();
+  runRoute(pmDashboardSummaryContract, async ({ query, req }) => {
+    const userId = await requirePmPortfolioAccess(req);
 
     return await getPortfolioDashboard(userId, query);
   }),

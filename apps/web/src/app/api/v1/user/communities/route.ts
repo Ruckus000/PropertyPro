@@ -13,13 +13,27 @@
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { countCommunitiesForUser } from '@/lib/api/user-communities';
+import { countCommunitiesForUser, listCommunitiesForUser } from '@/lib/api/user-communities';
+import { getSupportScope, narrowToSupportScope } from '@/lib/support/support-scope';
 import { userCommunitiesGetContract } from './contract';
 
-// route-gate: self-scoped — count/list of the caller's own memberships
+// route-gate: self-scoped — count/list of the caller's own memberships (narrowed to the consented community under a support session)
 export const GET = withErrorHandler(
-  runRoute(userCommunitiesGetContract, async () => {
+  runRoute(userCommunitiesGetContract, async ({ req }) => {
     const userId = await requireAuthenticatedUserId();
+    const supportScope = getSupportScope(req.headers);
+    if (supportScope) {
+      // Count exactly what /api/v1/me/communities would list, so the profile
+      // menu's "Switch Community" does not advertise communities outside the
+      // session's grant. `countCommunitiesForUser` cannot be filtered, so list;
+      // it counts DISTINCT communities, and the narrowed rows span at most one.
+      const rows = narrowToSupportScope(
+        await listCommunitiesForUser(userId),
+        supportScope,
+        (r) => r.communityId,
+      );
+      return { count: rows.length > 0 ? 1 : 0 };
+    }
     const count = await countCommunitiesForUser(userId);
     return { count };
   }),

@@ -22,16 +22,16 @@ import {
 } from './contract';
 
 export const GET = withErrorHandler(
-  runRoute(pmCommunitiesGetContract, async ({ query }) => {
-    const userId = await requirePmPortfolioAccess();
+  runRoute(pmCommunitiesGetContract, async ({ query, req }) => {
+    const userId = await requirePmPortfolioAccess(req);
 
     return listManagedCommunitiesForPm(userId, query);
   }),
 );
 
 export const POST = withErrorHandler(
-  runRoute(pmCommunitiesPostContract, async ({ body }) => {
-    const userId = await requirePmPortfolioAccess();
+  runRoute(pmCommunitiesPostContract, async ({ body, req }) => {
+    const userId = await requirePmPortfolioAccess(req);
 
     const slugCheck = await checkSignupSubdomainAvailability(body.subdomain);
     if (!slugCheck.available) {

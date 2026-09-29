@@ -65,9 +65,27 @@ describe('GET /api/v1/overview', () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ data: { cards, activity, events } });
-    expect(getCommunityCardsMock).toHaveBeenCalledWith('user-123');
-    expect(getActivityFeedMock).toHaveBeenCalledWith('user-123', 30);
-    expect(getUpcomingEventsMock).toHaveBeenCalledWith('user-123', 30);
+    // `null` = not a support session (the scope argument is required).
+    expect(getCommunityCardsMock).toHaveBeenCalledWith('user-123', null);
+    expect(getActivityFeedMock).toHaveBeenCalledWith('user-123', null, 30);
+    expect(getUpcomingEventsMock).toHaveBeenCalledWith('user-123', null, 30);
+  });
+
+  it('passes the support-session scope to every cross-community helper', async () => {
+    getCommunityCardsMock.mockResolvedValueOnce([]);
+    getActivityFeedMock.mockResolvedValueOnce([]);
+    getUpcomingEventsMock.mockResolvedValueOnce([]);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/overview', {
+      headers: { 'x-support-session-id': '7', 'x-support-community-id': '42' },
+    });
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const scope = { communityId: 42 };
+    expect(getCommunityCardsMock).toHaveBeenCalledWith('user-123', scope);
+    expect(getActivityFeedMock).toHaveBeenCalledWith('user-123', scope, 30);
+    expect(getUpcomingEventsMock).toHaveBeenCalledWith('user-123', scope, 30);
   });
 
   it('returns empty arrays when the user has no cross-community data', async () => {

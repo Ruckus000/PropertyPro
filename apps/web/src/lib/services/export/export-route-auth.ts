@@ -22,7 +22,7 @@ import type { CommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { hasBoardDesignation } from '@propertypro/shared';
-import { SUPPORT_SESSION_ID_HEADER } from '@/lib/request/forwarded-headers';
+import { getSupportScope } from '@/lib/support/support-scope';
 
 export interface ExportRouteContext {
   actorUserId: string;
@@ -42,7 +42,7 @@ export interface ExportRouteContext {
  * strips inbound copies of it, so its presence is authoritative.
  */
 function refuseUnderImpersonation(req: NextRequest): void {
-  if (req.headers.get(SUPPORT_SESSION_ID_HEADER)) {
+  if (getSupportScope(req.headers) !== null) {
     throw new ForbiddenError(
       'Data export is not available during a support session. Ask a board member or manager to run it from their own account.',
     );

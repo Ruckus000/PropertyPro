@@ -703,4 +703,51 @@ describe('invariant 4: header sanitisation precedes the support branch', () => {
     expect(forwarded(res, 'x-tenant-source')).toBeNull();
     expect(forwarded(res, 'x-preview')).toBeNull();
   });
+
+  it('a spoofed x-support-community-id is stripped, and replaced only by a verified session', async () => {
+    // No support session: the spoof must not survive to make getSupportScope
+    // narrow (it also needs x-support-session-id, which is stripped too).
+    const plain = await middleware(
+      req('http://localhost:3000/api/v1/documents', {
+        headers: { 'x-support-community-id': '2', 'x-support-session-id': '999' },
+      }),
+    );
+    expect(forwarded(plain, 'x-support-community-id')).toBeNull();
+    expect(forwarded(plain, 'x-support-session-id')).toBeNull();
+
+    // Support session: the token's community replaces the spoof.
+    const supported = await middleware(
+      req('http://localhost:3000/api/v1/documents', {
+        headers: { 'x-support-community-id': '2' },
+        supportToken: await signSupportToken(),
+      }),
+    );
+    expect(forwarded(supported, 'x-support-session')).toBe('1');
+    expect(forwarded(supported, 'x-support-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. x-support-community-id is stamped on every impersonated path
+// ---------------------------------------------------------------------------
+// The user-keyed listing surfaces narrow to it (lib/support/support-scope.ts).
+// Unlike x-community-id it must reach the TENANT_OPTIONAL_PATHS, because the
+// community picker at /select-community is one of those surfaces.
+describe('support session stamps x-support-community-id on every path', () => {
+  it.each(['/select-community', '/account/join-community', '/api/v1/documents', '/api/v1/me/communities'])(
+    '%s carries the consented community',
+    async (path) => {
+      const res = await middleware(
+        req(`http://localhost:3000${path}`, { supportToken: await signSupportToken() }),
+      );
+
+      expect(forwarded(res, 'x-support-session')).toBe('1');
+      expect(forwarded(res, 'x-support-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    },
+  );
+
+  it('is absent without a support session', async () => {
+    const res = await middleware(req('http://localhost:3000/select-community'));
+    expect(forwarded(res, 'x-support-community-id')).toBeNull();
+  });
 });

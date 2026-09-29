@@ -46,6 +46,7 @@ import {
   FORWARDED_AUTH_HEADERS,
   normalizeForwardedHeaderValue,
   SUPPORT_ADMIN_ID_HEADER,
+  SUPPORT_COMMUNITY_ID_HEADER,
   SUPPORT_SESSION_HEADER,
   SUPPORT_SESSION_ID_HEADER,
   TENANT_SLUG_HEADER,
@@ -1324,6 +1325,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     forwardedHeaders.set(SUPPORT_SESSION_HEADER, '1');
     forwardedHeaders.set(SUPPORT_ADMIN_ID_HEADER, supportSession.act.sub);
     forwardedHeaders.set(SUPPORT_SESSION_ID_HEADER, String(supportSession.session_id));
+    // Unlike x-community-id, stamped on EVERY path, TENANT_OPTIONAL_PATHS
+    // included: the user-keyed listing surfaces (/select-community above all)
+    // narrow to this community via `getSupportScope`, and on those paths there
+    // is no x-community-id to narrow to. It pins nothing by itself — no tenant
+    // resolution reads it — so it cannot reintroduce the redirect loop above.
+    forwardedHeaders.set(SUPPORT_COMMUNITY_ID_HEADER, String(supportSession.community_id));
   }
 
   const nextResponse = NextResponse.next({

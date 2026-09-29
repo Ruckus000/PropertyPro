@@ -124,4 +124,37 @@ describe('me/communities route', () => {
     expect(res.status).toBe(401);
     expect(listCommunitiesForUserMock).not.toHaveBeenCalled();
   });
+
+  describe('under a support session', () => {
+    const TWO_COMMUNITIES = [
+      FIXTURE_ROW,
+      { ...FIXTURE_ROW, communityId: 99, communityName: 'Palm Shores HOA', slug: 'palm-shores' },
+    ];
+
+    function supportReq(communityId: string | null): NextRequest {
+      const headers: Record<string, string> = { 'x-support-session-id': '7' };
+      if (communityId !== null) headers['x-support-community-id'] = communityId;
+      return new NextRequest('http://localhost:3000/api/v1/me/communities', { headers });
+    }
+
+    it('lists only the consented community', async () => {
+      listCommunitiesForUserMock.mockResolvedValueOnce(TWO_COMMUNITIES);
+
+      const res = await GET(supportReq('99'));
+      const json = (await res.json()) as EnvelopeJson;
+
+      expect(res.status).toBe(200);
+      expect(json.data.map((c) => c.id)).toEqual([99]);
+    });
+
+    it('lists nothing when the session community is unreadable (fail closed)', async () => {
+      listCommunitiesForUserMock.mockResolvedValueOnce(TWO_COMMUNITIES);
+
+      const res = await GET(supportReq(null));
+      const json = (await res.json()) as EnvelopeJson;
+
+      expect(res.status).toBe(200);
+      expect(json.data).toEqual([]);
+    });
+  });
 });

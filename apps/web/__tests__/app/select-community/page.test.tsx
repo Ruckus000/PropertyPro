@@ -17,7 +17,7 @@
  * Both halves are required; either alone leaves the user stranded.
  */
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const { requireAuthenticatedUserIdMock, listCommunitiesForUserMock, redirectMock } = vi.hoisted(
@@ -55,6 +55,11 @@ vi.mock('@/lib/request/page-auth-context', () => ({
 vi.mock('@/lib/api/user-communities', () => ({
   listCommunitiesForUser: listCommunitiesForUserMock,
 }));
+
+// Request headers as middleware forwards them. Empty = an ordinary request;
+// the support-session block below fills in the x-support-* stamps.
+const { requestHeaders } = vi.hoisted(() => ({ requestHeaders: { current: new Headers() } }));
+vi.mock('next/headers', () => ({ headers: async () => requestHeaders.current }));
 
 import SelectCommunityPage from '../../../src/app/(authenticated)/select-community/page';
 
@@ -145,5 +150,70 @@ describe('select-community page — zero-community empty state', () => {
 
     expect(html).not.toContain('href="/account/join-community"');
     expect(html).not.toContain('You are not a member of any community yet.');
+  });
+});
+
+describe('select-community page — support session', () => {
+  function membership(communityId: number, communityName: string) {
+    return {
+      communityId,
+      communityName,
+      slug: `c-${communityId}`,
+      communityType: 'condo_718' as const,
+      city: null,
+      state: null,
+      logoPath: null,
+      role: 'resident',
+      isUnitOwner: true,
+      displayTitle: null,
+      subscriptionStatus: 'active',
+      subscriptionPlan: 'professional',
+      freeAccessExpiresAt: null,
+      isDemo: false,
+      trialEndsAt: null,
+      demoExpiresAt: null,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('impersonated-user');
+    listCommunitiesForUserMock.mockResolvedValue([
+      membership(11, 'Consented Condos'),
+      membership(22, 'Other Towers'),
+    ]);
+  });
+
+  afterEach(() => {
+    requestHeaders.current = new Headers();
+  });
+
+  it('offers only the consented community, which auto-redirects', async () => {
+    // /select-community is a TENANT_OPTIONAL_PATH: no x-community-id is stamped.
+    requestHeaders.current = new Headers({
+      'x-support-session-id': '7',
+      'x-support-community-id': '22',
+    });
+
+    await expect(renderPage()).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirectMock).toHaveBeenCalledWith('/dashboard?communityId=22');
+  });
+
+  it('offers nothing when the session community is unreadable (fail closed)', async () => {
+    requestHeaders.current = new Headers({ 'x-support-session-id': '7' });
+
+    const html = await renderPage();
+
+    expect(redirectMock).not.toHaveBeenCalled();
+    expect(html).not.toContain('Consented Condos');
+    expect(html).not.toContain('Other Towers');
+  });
+
+  it('control: without a support session both communities are offered', async () => {
+    const html = await renderPage();
+
+    expect(redirectMock).not.toHaveBeenCalled();
+    expect(html).toContain('Consented Condos');
+    expect(html).toContain('Other Towers');
   });
 });

@@ -13,6 +13,7 @@ import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { getAuthorizedCommunityIds } from '@/lib/queries/cross-community';
+import { getSupportScope } from '@/lib/support/support-scope';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announcements';
@@ -53,7 +54,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   if (!context.communityId) {
     // Multi-community users see the unified overview; single-community
     // users use the community picker.
-    const communityIds = await getAuthorizedCommunityIds(userId);
+    const communityIds = await getAuthorizedCommunityIds(userId, getSupportScope(requestHeaders));
     if (communityIds.length >= 2) {
       redirect('/dashboard/overview');
     }

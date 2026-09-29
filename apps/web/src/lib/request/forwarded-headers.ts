@@ -12,6 +12,13 @@ export const USER_PHONE_HEADER = 'x-user-phone';
 export const SUPPORT_SESSION_HEADER = 'x-support-session';
 export const SUPPORT_ADMIN_ID_HEADER = 'x-support-admin-id';
 export const SUPPORT_SESSION_ID_HEADER = 'x-support-session-id';
+/**
+ * The support session's consented community, stamped on EVERY impersonated
+ * request — including the TENANT_OPTIONAL_PATHS, where `x-community-id` is
+ * deliberately left unset. Read through `getSupportScope`
+ * (`lib/support/support-scope.ts`), never directly.
+ */
+export const SUPPORT_COMMUNITY_ID_HEADER = 'x-support-community-id';
 
 /**
  * Headers middleware OWNS: deleted from every inbound request before it stamps
@@ -35,6 +42,7 @@ export const FORWARDED_AUTH_HEADERS = [
   SUPPORT_SESSION_HEADER,
   SUPPORT_ADMIN_ID_HEADER,
   SUPPORT_SESSION_ID_HEADER,
+  SUPPORT_COMMUNITY_ID_HEADER,
   'x-preview',
 ] as const;
 

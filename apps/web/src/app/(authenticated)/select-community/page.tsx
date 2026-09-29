@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { UNKNOWN_SUBDOMAIN_REASON } from '@/lib/middleware/unknown-subdomain-reason';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
+import { getPageSupportScope, narrowToSupportScope } from '@/lib/support/support-scope';
 import { CommunityPickerGrid } from '@/components/community-picker/community-picker-grid';
 import { resolveSafeReturnTo, applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
 
@@ -41,7 +42,14 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
       ? rawReason === UNKNOWN_SUBDOMAIN_REASON
       : Array.isArray(rawReason) && rawReason.includes(UNKNOWN_SUBDOMAIN_REASON);
 
-  const communities = await listCommunitiesForUser(userId);
+  // Under a support session only the consented community is offered (which
+  // then auto-redirects below). This path is in TENANT_OPTIONAL_PATHS, so the
+  // scope comes from x-support-community-id, not x-community-id.
+  const communities = narrowToSupportScope(
+    await listCommunitiesForUser(userId),
+    await getPageSupportScope(),
+    (c) => c.communityId,
+  );
 
   // Single community — auto-redirect regardless of role.
   if (communities.length === 1) {

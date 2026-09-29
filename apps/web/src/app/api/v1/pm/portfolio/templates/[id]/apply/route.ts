@@ -12,8 +12,9 @@ import * as svc from '@/lib/services/site-portfolio-template-service';
 import { templateApplyContract } from './contract';
 
 /** PM + plan-feature gate (mirrors the templates CRUD route). Returns the actor's userId. */
-async function gateUser(): Promise<string> {
+async function gateUser(req: { headers: Headers }): Promise<string> {
   const userId = await requirePmPortfolioAccess(
+    req,
     'Only property managers can manage portfolio templates',
   );
   if (!(await svc.userHasPortfolioTemplatesAccess(userId))) {
@@ -27,8 +28,8 @@ async function gateUser(): Promise<string> {
 }
 
 export const POST = withErrorHandler(
-  runRoute(templateApplyContract, async ({ params, body }) => {
-    const userId = await gateUser();
+  runRoute(templateApplyContract, async ({ params, body, req }) => {
+    const userId = await gateUser(req);
     return svc.applyTemplate(userId, params.id, body.communityIds);
   }),
 );

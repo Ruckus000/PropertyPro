@@ -186,4 +186,27 @@ describe('POST /api/v1/pm/bulk/documents', () => {
       },
     ]);
   });
+
+  it('returns 403 under a support session and writes to no community', async () => {
+    const response = await POST(
+      new NextRequest(URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          // As middleware stamps them for a session consented for community 10.
+          'x-support-session-id': '42',
+          'x-support-community-id': '10',
+          'x-community-id': '10',
+        },
+        body: JSON.stringify(validBody),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(json.error.message).toBe('Not available during a support session');
+    expect(findManagedCommunitiesPortfolioUnscopedMock).not.toHaveBeenCalled();
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(insertBulkDocumentsForCommunityMock).not.toHaveBeenCalled();
+  });
 });
