@@ -449,15 +449,28 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // a forged `x-user-id` rendered authenticated pages as that user. Now those
   // paths reach middleware, and this exit strips the forwarded auth headers and
   // passes through with no session work — real assets are served unchanged, and
-  // a page reached this way renders unauthenticated. `/api/` is excluded: no
-  // API route is a static asset, and the fast path would skip rate limiting.
-  if (!pathname.startsWith('/api/') && STATIC_ASSET_PATH.test(pathname)) {
-    const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
-    return NextResponse.next({ request: { headers: sanitizeForwardedHeaders(request, requestId) } });
-  }
-
+  // a page reached this way renders unauthenticated, still carrying the
+  // security headers (X-Frame-Options, CSP) that finaliseResponse applies on
+  // the main path. `/api/` is excluded — deliberately the whole prefix, not
+  // isApiPath()'s `/api/v1` — because no API route is a static asset and the
+  // fast path would skip rate limiting. Placement is load-bearing: below the
+  // custom-domain rewrite, `/marketing/*.webp` on a custom domain would be
+  // rewritten into `/public-site/...` and break.
   if (shouldHideDevSurfaceInProduction(pathname)) {
     return NextResponse.rewrite(new URL('/404', request.url));
+  }
+
+  if (!pathname.startsWith('/api/') && STATIC_ASSET_PATH.test(pathname)) {
+    const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+    const response = NextResponse.next({
+      request: { headers: sanitizeForwardedHeaders(request, requestId) },
+    });
+    response.headers.set('X-Request-ID', requestId);
+    for (const [name, value] of Object.entries(buildSecurityHeaders())) {
+      response.headers.set(name, value);
+    }
+    response.headers.set('Content-Security-Policy', buildCspHeader());
+    return response;
   }
 
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com';
@@ -1340,8 +1353,15 @@ export const config = {
      * `/help/<category>/<slug>.png` to a dynamic PAGE, and a page must never
      * skip the header sanitisation below. They take the STATIC_ASSET_PATH fast
      * path at the top of middleware() instead (strip forwarded auth headers,
-     * pass through). Every prefix excluded here must be one no page can live
-     * under — pinned by __tests__/middleware/static-asset-bypass.test.ts.
+     * pass through).
+     *
+     * The excluded prefixes are NOT page-free: the top-level dynamic segment
+     * `app/(public)/[subdomain]` makes `/pdfjs/transparency` or
+     * `/favicon.ico/x` resolve to a page with no middleware. That is safe only
+     * because every page under `[subdomain]` redirects to the canonical host
+     * without reading request headers — pinned by
+     * __tests__/middleware/static-asset-bypass.test.ts, which fails if one
+     * starts reading headers or the forwarded identity.
      */
     '/((?!_next/static|_next/image|favicon\\.ico|pdfjs/).*)',
   ],

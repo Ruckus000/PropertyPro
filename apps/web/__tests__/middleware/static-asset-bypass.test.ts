@@ -13,6 +13,8 @@
  * The matcher is checked with Next's OWN compiler (`getMiddlewareMatchers`),
  * not a hand-copied regex, so this fails if the literal regresses.
  */
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 import * as nextStaticInfo from 'next/dist/build/analysis/get-page-static-info';
@@ -47,6 +49,9 @@ const FORGED = {
   'x-user-full-name': 'Victim',
   'x-community-id': '2',
   'x-support-session': '1',
+  'x-preview': '1',
+  'x-tenant-slug': 'sunset-condos',
+  'x-tenant-source': 'subdomain',
 };
 
 beforeEach(() => {
@@ -64,10 +69,13 @@ describe('middleware matcher (compiled by Next)', () => {
     '/help/billing/fake.png',
     '/communities/2/board/forum/x.png',
     '/dashboard/x.svg',
-    '/marketing/v1/who-hoa-800.webp',
     '/api/v1/documents/1.png',
   ])('RUNS middleware for %s (a page or API path must never skip sanitisation)', (path) => {
     expect(middlewareRuns(path)).toBe(true);
+  });
+
+  it('RUNS middleware for a real public asset (it takes the fast path instead)', () => {
+    expect(middlewareRuns('/marketing/v1/who-hoa-800.webp')).toBe(true);
   });
 
   it.each([
@@ -90,8 +98,13 @@ describe('static-asset fast path', () => {
     for (const name of Object.keys(FORGED)) {
       expect(res.headers.get(`x-middleware-request-${name}`)).toBeNull();
     }
-    // Forwarded request headers are overridden (the stripped set is applied).
+    // Forwarded request headers are overridden (the stripped set is applied),
+    // and the encoding asserted null above is still the one Next emits.
     expect(res.headers.get('x-middleware-override-headers')).not.toBeNull();
+    expect(res.headers.get('x-middleware-request-x-request-id')).toBeTruthy();
+    // A page reached this way still gets the main path's security headers.
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+    expect(res.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
     expect(res.headers.get('location')).toBeNull();
     expect(createMiddlewareClientMock).not.toHaveBeenCalled();
   });
@@ -112,5 +125,59 @@ describe('static-asset fast path', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('location')).toBeNull();
     expect(createMiddlewareClientMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The matcher's excluded prefixes are not page-free: the top-level dynamic
+ * segment `(public)/[subdomain]` makes `/pdfjs/transparency` resolve to a page
+ * that middleware never sees. That is safe only while (a) `[subdomain]` is the
+ * ONLY top-level dynamic segment and (b) nothing under it reads request
+ * headers or the forwarded identity.
+ */
+describe('pages reachable under a matcher-excluded prefix', () => {
+  const appDir = join(__dirname, '../../src/app');
+
+  function topLevelDynamicSegments(): string[] {
+    const out: string[] = [];
+    for (const entry of readdirSync(appDir)) {
+      const full = join(appDir, entry);
+      if (!statSync(full).isDirectory()) continue;
+      if (entry.startsWith('[')) out.push(entry);
+      if (entry.startsWith('(')) {
+        for (const child of readdirSync(full)) {
+          if (child.startsWith('[') && statSync(join(full, child)).isDirectory()) {
+            out.push(`${entry}/${child}`);
+          }
+        }
+      }
+    }
+    return out.sort();
+  }
+
+  function filesUnder(dir: string): string[] {
+    return readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry);
+      return statSync(full).isDirectory() ? filesUnder(full) : [full];
+    });
+  }
+
+  it('has exactly one top-level dynamic segment', () => {
+    expect(topLevelDynamicSegments()).toEqual(['(public)/[subdomain]']);
+  });
+
+  it('no file under (public)/[subdomain] reads request headers or the forwarded identity', () => {
+    // Plus the one helper those pages share (all of them only redirect).
+    const files = [
+      ...filesUnder(join(appDir, '(public)/[subdomain]')),
+      join(appDir, '../lib/tenant/redirect-canonical-host.ts'),
+    ];
+    expect(files.length).toBeGreaterThan(1);
+    const offenders = files.filter((file) =>
+      /next\/headers|lib\/request\//.test(
+        readFileSync(file, 'utf8'),
+      ),
+    );
+    expect(offenders).toEqual([]);
   });
 });
