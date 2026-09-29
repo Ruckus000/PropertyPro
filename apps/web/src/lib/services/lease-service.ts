@@ -9,6 +9,7 @@ import {
   communities,
   createScopedClient,
   leaseDeposits,
+  leaseRenewalOffers,
   leaseResidents,
   leases,
   rentObligations,
@@ -16,7 +17,7 @@ import {
   units,
   userRoles,
 } from '@propertypro/db';
-import { and, eq, inArray, isNull } from '@propertypro/db/filters';
+import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 
 export interface LeaseRow {
   [key: string]: unknown;
@@ -332,6 +333,15 @@ export async function insertLeaseDeposit(
   return rows[0] as unknown as LeaseDepositRow;
 }
 
+export async function getLeaseDepositById(
+  communityId: number,
+  depositId: number,
+): Promise<LeaseDepositRow | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<LeaseDepositRow>(leaseDeposits, {}, eq(leaseDeposits.id, depositId));
+  return rows[0] ?? null;
+}
+
 export async function updateLeaseDeposit(
   communityId: number,
   depositId: number,
@@ -396,4 +406,100 @@ export async function findLeaseByIdempotencyKey(
   const scoped = createScopedClient(communityId);
   const rows = await scoped.selectFrom<LeaseRow>(leases, {}, eq(leases.idempotencyKey, key));
   return rows[0] ?? null;
+}
+
+// ── Renewal offers ─────────────────────────────────────────────────────────
+
+export interface RenewalOfferRow {
+  [key: string]: unknown;
+  id: number;
+  leaseId: number;
+  stage: 'offer_sent' | 'accepted' | 'declined' | 'expired' | 'signed' | 'withdrawn';
+  offerRent: string;
+  zeroRentReason: 'staff' | 'courtesy_officer' | 'rent_free_agreement' | 'other' | null;
+  termMonths: number | null;
+  customEndDate: string | null;
+  startDate: string;
+  depositAmount: string | null;
+  proposedResidents: Array<{ userId: string } | { contactId: number }> | null;
+  sentOn: string;
+  expiresOn: string;
+  respondedOn: string | null;
+  renewalLeaseId: number | null;
+}
+
+export async function listRenewalOffers(communityId: number, leaseIds: number[]): Promise<RenewalOfferRow[]> {
+  if (leaseIds.length === 0) return [];
+  const scoped = createScopedClient(communityId);
+  return (await scoped.selectFrom<RenewalOfferRow>(
+    leaseRenewalOffers,
+    {},
+    inArray(leaseRenewalOffers.leaseId, leaseIds),
+  )) as RenewalOfferRow[];
+}
+
+export async function getRenewalOffer(communityId: number, offerId: number): Promise<RenewalOfferRow | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<RenewalOfferRow>(leaseRenewalOffers, {}, eq(leaseRenewalOffers.id, offerId));
+  return rows[0] ?? null;
+}
+
+export async function insertRenewalOffer(
+  communityId: number,
+  values: Record<string, unknown>,
+): Promise<RenewalOfferRow> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.insert(leaseRenewalOffers, values);
+  return rows[0] as unknown as RenewalOfferRow;
+}
+
+/** Update an offer only while it is still in `fromStage` — a concurrent response loses cleanly. */
+export async function updateRenewalOfferFromStage(
+  communityId: number,
+  offerId: number,
+  fromStage: RenewalOfferRow['stage'][],
+  values: Record<string, unknown>,
+): Promise<RenewalOfferRow | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.update(
+    leaseRenewalOffers,
+    { ...values, updatedAt: new Date() },
+    and(eq(leaseRenewalOffers.id, offerId), inArray(leaseRenewalOffers.stage, fromStage)),
+  );
+  return (rows[0] as unknown as RenewalOfferRow | undefined) ?? null;
+}
+
+// ── Units offline (E7) ─────────────────────────────────────────────────────
+
+export async function setUnitOffline(
+  communityId: number,
+  unitId: number,
+  values: {
+    offlineReason: string | null;
+    offlineNote: string | null;
+    offlineSince: string | null;
+    offlineUntil: string | null;
+  },
+): Promise<{ id: number } | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.update(units, { ...values, updatedAt: new Date() }, eq(units.id, unitId));
+  return (rows[0] as unknown as { id: number } | undefined) ?? null;
+}
+
+// ── Community lease settings ───────────────────────────────────────────────
+
+/**
+ * Merge lease keys into `communities.community_settings` in ONE statement
+ * (`||` on jsonb), so a concurrent write to another settings key is never
+ * lost to a read-modify-write. COALESCE covers a NULL column.
+ */
+export async function mergeCommunityLeaseSettings(
+  communityId: number,
+  patch: { leaseAlertWindows?: number[]; leasesAllowResidentsWithoutEmail?: boolean },
+): Promise<void> {
+  if (Object.keys(patch).length === 0) return;
+  const scoped = createScopedClient(communityId);
+  await scoped.update(communities, {
+    communitySettings: sql`COALESCE(${communities.communitySettings}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+  });
 }

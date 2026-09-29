@@ -27,7 +27,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { communities } from './communities';
-import { renewalOfferStageEnum } from './enums';
+import { leaseZeroRentReasonEnum, renewalOfferStageEnum } from './enums';
 import { leases } from './leases';
 import { users } from './users';
 
@@ -46,6 +46,8 @@ export const leaseRenewalOffers = pgTable(
       .references(() => leases.id, { onDelete: 'cascade' }),
     stage: renewalOfferStageEnum('stage').notNull().default('offer_sent'),
     offerRent: numeric('offer_rent', { precision: 10, scale: 2 }).notNull(),
+    /** Required when offerRent is 0 (renewal_offers_zero_rent_needs_reason). Carried onto the renewal lease. */
+    zeroRentReason: leaseZeroRentReasonEnum('zero_rent_reason'),
     /**
      * Term in months. Null with customEndDate set = custom term (E6); both
      * null = a month-to-month renewal. Never both set.
@@ -89,6 +91,10 @@ export const leaseRenewalOffers = pgTable(
     check('renewal_offers_expires_before_start', sql`${table.expiresOn} < ${table.startDate}`),
     check('renewal_offers_expires_after_sent', sql`${table.expiresOn} >= ${table.sentOn}`),
     check('renewal_offers_rent_not_negative', sql`${table.offerRent} >= 0`),
+    check(
+      'renewal_offers_zero_rent_needs_reason',
+      sql`${table.offerRent} > 0 OR ${table.zeroRentReason} IS NOT NULL`,
+    ),
     check(
       'renewal_offers_term_or_end',
       sql`${table.termMonths} IS NULL OR ${table.customEndDate} IS NULL`,

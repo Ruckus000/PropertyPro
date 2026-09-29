@@ -47,7 +47,7 @@
  *   it, because both connections run as `service_role`. `units:write` is true
  *   on the `manager` row only (`rbac-matrix.ts`, inherited by `apartment` via
  *   `withPhase5Defaults` with no `excludedCommunityTypes`), which is exactly
- *   what the only UI entry point (`LeaseListPage`) already enforces
+ *   what the only UI entry point (the Leases page) already enforces
  *   server-side, so the gate costs no reachable workflow.
  *
  * Patterns preserved:
