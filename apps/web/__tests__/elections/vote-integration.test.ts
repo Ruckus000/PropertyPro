@@ -24,9 +24,10 @@ import { UnprocessableEntityError } from '@/lib/api/errors';
  * 2. A duplicate vote returns the existing receipt (idempotency)
  * 3. A vote after closesAt is rejected
  *
- * Run via: scripts/with-env-local.sh pnpm exec vitest run \
- *   --config apps/web/vitest.integration.config.ts \
- *   apps/web/__tests__/elections/vote-integration.test.ts
+ * Run against the LOCAL disposable DB (never production — `.env.local`'s
+ * DATABASE_URL is prod, which is how test communities leaked there):
+ *   pnpm test:integration:local apps/web/__tests__/elections/vote-integration.test.ts
+ * CI already runs it: the integration config includes `**\/*integration.test.ts`.
  */
 describe('vote submission integration', () => {
   const auditLogMaintenanceLockNamespace = 817;
