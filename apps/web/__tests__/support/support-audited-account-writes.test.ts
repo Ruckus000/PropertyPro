@@ -435,6 +435,7 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
       changedFields: ['phone', 'phoneVerifiedAt'],
       before: { phone: '***0001', phoneVerifiedAt: '2026-01-01T00:00:00.000Z' },
       after: { phone: '***9876' },
+      target: { phone: '***9876' },
     });
     expect(attempt!.metadata).toEqual({
       changedFields: ['otpFailedAttempts'],
@@ -446,6 +447,27 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     expect(serialised).not.toContain(CODE);
     expect(serialised).not.toContain('3055559876');
     expect(serialised).not.toContain('3055550001');
+  });
+
+  it('re-confirming the stored number: only phoneVerifiedAt is a changed field', async () => {
+    h.getUserProfileSnapshotMock.mockImplementationOnce(async () => ({
+      fullName: 'Olivia Owner',
+      phone: '+13055550001',
+      phoneVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+    }));
+    const res = await confirmPOST(
+      request('/api/v1/phone/verify/confirm', 'POST', { phone: '+13055550001', code: CODE }, true),
+    );
+
+    expect(res.status).toBe(200);
+    const [, row] = auditRows();
+    expectAuditEnvelope(row!, 'support_phone_verified');
+    expect(row!.metadata).toEqual({
+      changedFields: ['phoneVerifiedAt'],
+      before: { phoneVerifiedAt: '2026-01-01T00:00:00.000Z' },
+      after: {},
+      target: { phone: '***0001' },
+    });
   });
 
   it('FAILS CLOSED: the attempt row fails → no code is checked, nothing persisted', async () => {

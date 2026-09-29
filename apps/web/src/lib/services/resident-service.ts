@@ -259,7 +259,18 @@ export async function updateResidentUser(
   values: Record<string, unknown>,
 ): Promise<void> {
   const scoped = createScopedClient(communityId);
-  await scoped.update(users, values, eq(users.id, userId));
+  // A new number is unverified until it goes through phone/verify (same rule
+  // as updateUserProfile): keep phoneVerifiedAt only when the number is
+  // unchanged. `users` is platform-level, so without this a manager editing a
+  // resident here would re-point every community's "verified" emergency SMS.
+  const update =
+    'phone' in values
+      ? {
+          ...values,
+          phoneVerifiedAt: sql`case when ${users.phone} is not distinct from ${values['phone'] ?? null} then ${users.phoneVerifiedAt} else null end`,
+        }
+      : values;
+  await scoped.update(users, update, eq(users.id, userId));
 }
 
 /**

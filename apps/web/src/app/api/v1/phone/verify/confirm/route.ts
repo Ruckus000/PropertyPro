@@ -141,16 +141,21 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     // four digits; never the code.
     if (getSupportScope(req.headers) !== null) {
       const current = await getUserProfileSnapshot(userId);
+      // `phone` is a changed field only when the confirmed number differs from
+      // the stored one; phoneVerifiedAt always changes (stamped as now by
+      // markPhoneVerified, so omitted from `after`). The number confirmed is
+      // the masked `target` either way.
+      const phoneChanges = current.phone !== phone;
       await recordSupportAction(req.headers, {
         event: 'support_phone_verified',
         targetUserId: userId,
-        changedFields: ['phone', 'phoneVerifiedAt'],
+        changedFields: phoneChanges ? ['phone', 'phoneVerifiedAt'] : ['phoneVerifiedAt'],
         before: {
-          phone: maskPhoneToLast4(current.phone),
+          ...(phoneChanges ? { phone: maskPhoneToLast4(current.phone) } : {}),
           phoneVerifiedAt: current.phoneVerifiedAt?.toISOString() ?? null,
         },
-        // phoneVerifiedAt is stamped by markPhoneVerified at write time.
-        after: { phone: maskPhoneToLast4(phone) },
+        after: phoneChanges ? { phone: maskPhoneToLast4(phone) } : {},
+        target: { phone: maskPhoneToLast4(phone) },
       });
     }
 
