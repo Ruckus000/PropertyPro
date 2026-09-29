@@ -24,8 +24,8 @@ accessibility are never cut.
 | Page picker popover | `components/ui/popover.tsx` (Radix) | Done in PR #1231. The hand-rolled version was built on a stale 700 KiB budget (the real hard budget is 1,220 KiB, with 228 KiB headroom). |
 | Required-section checks | Publish `Issue` model with `'error' \| 'warning'` severity and a "Fix this" slot hand-off (`packages/shared/src/site-diff`). Statute references are in `compliance/templates.ts`. | One new `site-diff` check function, added to the existing issues array. The publish sheet's "Checks" and "Fix this" come for free. |
 | Colours and templates | `LayoutChooser` and `PresetChooser` in the onboarding wizard, plus `PATCH /pm/onboarding/website` | Pass the hook's values in as props so the wizard and a Design panel share one picker. Don't build a second one. |
-| Documents | `components/documents/` (~2,750 lines): statutory coverage, a public/owners toggle, the redaction (PII) attestation, and a 50 MB limit | **Don't build a second documents UI in the builder.** The top bar links to it. Real gaps go into the existing library, if wanted: multi-file upload, duplicate detection, and replacing a file. |
-| Help | `HelpPanel` shows every MDX article tagged `/pm/website-editor`, and none exists yet | Write articles. Don't build the design's second help system of hard-coded guides and screenshots, because screenshots go stale with every UI change. |
+| Documents | `components/documents/` (~2,750 lines): statutory coverage, a public/owners toggle, the redaction (PII) attestation, and a 50 MB limit | The builder's Documents view is built on these pieces (API, categories, attestation, validation). The missing capabilities (multi-file upload, duplicates, replacing a file, a draft state) go into the shared documents layer, so they exist once. |
+| Help | `HelpPanel` shows every MDX article tagged `/pm/website-editor`, and none exists yet | The design's Help drawer is built. Its guide content is also published as tagged MDX, so it exists once and both surfaces show it. |
 
 ## Legal-copy rule (every phase)
 
