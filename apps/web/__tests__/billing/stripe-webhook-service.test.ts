@@ -5,6 +5,7 @@ const {
   eqMock,
   andMock,
   isNullMock,
+  neMock,
   sqlMock,
   accessPlansTable,
   communitiesTable,
@@ -17,6 +18,7 @@ const {
   eqMock: vi.fn((col: unknown, value: unknown) => ({ op: 'eq', col, value })),
   andMock: vi.fn((...clauses: unknown[]) => ({ op: 'and', clauses })),
   isNullMock: vi.fn((col: unknown) => ({ op: 'isNull', col })),
+  neMock: vi.fn((col: unknown, value: unknown) => ({ op: 'ne', col, value })),
   sqlMock: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
     op: 'sql',
     strings: [...strings],
@@ -71,6 +73,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: andMock,
   isNull: isNullMock,
+  ne: neMock,
   or: (...args: unknown[]) => ({ _or: args }),
   inArray: (col: unknown, vals: unknown) => ({ _inArray: [col, vals] }),
   sql: sqlMock,
@@ -258,6 +261,10 @@ describe('stripe-webhook-service', () => {
       pendingSignupsTable.signupRequestId,
       'signup_abc',
     );
+    // Never moves a completed signup backwards (a second checkout event for a
+    // provisioned signup). The real-DB proof is case 3 of
+    // __tests__/integration/provisioning-idempotency.integration.test.ts.
+    expect(neMock).toHaveBeenCalledWith(pendingSignupsTable.status, 'completed');
   });
 
   it('merges trial status + period end into the payload when provided (A2)', async () => {

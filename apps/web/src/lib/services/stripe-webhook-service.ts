@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or, sql } from '@propertypro/db/filters';
+import { and, eq, inArray, isNull, ne, or, sql } from '@propertypro/db/filters';
 import { CHURNED_STATUSES, reactivationClears } from '@propertypro/shared';
 import {
   accessPlans,
@@ -203,7 +203,17 @@ export async function markPendingSignupPaymentCompleted(input: {
       })}::jsonb`,
       updatedAt: new Date(),
     })
-    .where(eq(pendingSignups.signupRequestId, input.signupRequestId));
+    .where(
+      and(
+        eq(pendingSignups.signupRequestId, input.signupRequestId),
+        // Never move a finished signup backwards. A second, different
+        // checkout.session.completed for an already-provisioned signup (or a
+        // reconcile racing a late webhook) would otherwise rewrite `completed`
+        // to `payment_completed`. Its payload has nothing left to feed either:
+        // provisioning read it when it created the community.
+        ne(pendingSignups.status, 'completed'),
+      ),
+    );
 }
 
 /**
