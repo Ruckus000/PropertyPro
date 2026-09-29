@@ -260,3 +260,51 @@ describe('createElectionProxyForCommunity duplicate-designation classification',
     await expect(designate()).rejects.toBe(boom);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Support-session attribution on the in-transaction audit insert
+// ---------------------------------------------------------------------------
+// insertAuditEventInTransaction writes on the transaction handle, bypassing
+// logAuditEvent, so it merges the request's audit actor itself
+// (packages/db/src/audit-actor.ts). withErrorHandler enters that actor in a
+// real request; here it is entered directly. Reuses this file's cast-vote
+// harness, whose happy path reaches exactly one audit insert.
+
+describe('castElectionVoteForCommunity audit row — support-session attribution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubHappyPathReads();
+    insertMock.mockResolvedValue([
+      {
+        id: 99,
+        submittedAt: new Date('2026-06-01T00:00:00Z'),
+        submissionFingerprint: 'fp',
+        isProxyVote: false,
+      },
+    ]);
+  });
+
+  function auditMetadata(): Record<string, unknown> {
+    expect(valuesMock).toHaveBeenCalledTimes(1);
+    const calls = valuesMock.mock.calls as unknown as [{ metadata: Record<string, unknown> }][];
+    return calls[0]![0].metadata;
+  }
+
+  it('merges metadata.support inside a support run, preserving the ballot metadata', async () => {
+    const { runWithAuditActor } = await import('@propertypro/db/audit-actor');
+
+    await runWithAuditActor({ support: { sessionId: 42, adminUserId: 'admin-uuid' } }, castVote);
+
+    const metadata = auditMetadata();
+    expect(metadata).toMatchObject({ isProxyVote: false });
+    expect(metadata.support).toEqual({ sessionId: 42, adminUserId: 'admin-uuid' });
+  });
+
+  it('outside a support run the metadata carries no support key', async () => {
+    await castVote();
+
+    const metadata = auditMetadata();
+    expect(metadata).toMatchObject({ isProxyVote: false });
+    expect(metadata).not.toHaveProperty('support');
+  });
+});

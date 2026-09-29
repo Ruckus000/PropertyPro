@@ -757,6 +757,7 @@ export async function purgeUserPII(requestId: number) {
       email: `deleted-${request.userId}@redacted`,
       fullName: 'Deleted User',
       phone: null,
+      phoneVerifiedAt: null,
       avatarUrl: null,
     })
     .where(eq(users.id, request.userId));

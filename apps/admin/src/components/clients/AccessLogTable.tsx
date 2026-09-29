@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
+import { getSupportAccessEventLabel } from '@propertypro/shared';
 
 interface AccessLogEntry {
   id: number;
@@ -88,7 +89,9 @@ export function AccessLogTable({ communityId }: AccessLogTableProps) {
         <tbody className="divide-y divide-edge-subtle">
           {entries.map((entry) => (
             <tr key={entry.id} className="hover:bg-surface-page">
-              <td className="px-4 py-3 font-mono text-xs text-content-secondary">{entry.event}</td>
+              <td className="px-4 py-3 text-xs text-content-secondary" title={entry.event}>
+                {getSupportAccessEventLabel(entry.event)}
+              </td>
               <td className="px-4 py-3 font-mono text-xs text-content-tertiary">
                 {entry.admin_user_id
                   ? `${entry.admin_user_id.slice(0, 8)}…`

@@ -19,6 +19,13 @@ import {
   markOtpFailed,
   markPhoneVerified,
 } from '@/lib/services/phone-verification-service';
+import { getUserProfileSnapshot } from '@/lib/services/user-profile-service';
+import { getSupportScope } from '@/lib/support/support-scope';
+import {
+  isSupportAuditError,
+  maskPhoneToLast4,
+  recordSupportAction,
+} from '@/lib/support/support-audit';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60_000;
@@ -73,6 +80,21 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
+  // Support session: record the check BEFORE the code is sent to Twilio, fail
+  // closed. Recording it first (not after a wrong code) keeps the lockout
+  // independent of the audit write: if this insert fails, no guess is checked;
+  // once it succeeds, a wrong code always bumps the counter below. The code
+  // itself is never logged; the number checked is the row's masked `target`.
+  // `after` omits otpFailedAttempts: the outcome decides it (bumped on a
+  // wrong code; reset by markPhoneVerified on a right one).
+  await recordSupportAction(req.headers, {
+    event: 'support_phone_verification_attempted',
+    targetUserId: userId,
+    changedFields: ['otpFailedAttempts'],
+    before: { otpFailedAttempts: otpFailedAttempts ?? 0 },
+    target: { phone: maskPhoneToLast4(phone) },
+  });
+
   try {
     const response = await fetch(
       `https://verify.twilio.com/v2/Services/${verifySid}/VerificationCheck`,
@@ -94,10 +116,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     if (!response.ok || data.status !== 'approved') {
       // Increment failed attempts in DB (durable across serverless instances)
       const currentCount = (otpFailedAttempts ?? 0) + 1;
-      if (currentCount >= MAX_ATTEMPTS) {
+      const lockoutUntil =
+        currentCount >= MAX_ATTEMPTS ? new Date(Date.now() + LOCKOUT_MS) : undefined;
+
+      if (lockoutUntil) {
         await markOtpFailed(userId, {
           newAttemptCount: currentCount,
-          lockoutUntil: new Date(Date.now() + LOCKOUT_MS),
+          lockoutUntil,
         });
       } else {
         await markOtpFailed(userId, { newAttemptCount: currentCount });
@@ -109,11 +134,37 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       );
     }
 
+    // Support session: record the verification BEFORE persisting it, fail
+    // closed — a throw skips markPhoneVerified, and the catch below rethrows
+    // it so the client sees the audit refusal (SUPPORT_AUDIT_FAILED / 403),
+    // not the generic "Verification check failed". Phones masked to the last
+    // four digits; never the code.
+    if (getSupportScope(req.headers) !== null) {
+      const current = await getUserProfileSnapshot(userId);
+      // `phone` is a changed field only when the confirmed number differs from
+      // the stored one; phoneVerifiedAt always changes (stamped as now by
+      // markPhoneVerified, so omitted from `after`). The number confirmed is
+      // the masked `target` either way.
+      const phoneChanges = current.phone !== phone;
+      await recordSupportAction(req.headers, {
+        event: 'support_phone_verified',
+        targetUserId: userId,
+        changedFields: phoneChanges ? ['phone', 'phoneVerifiedAt'] : ['phoneVerifiedAt'],
+        before: {
+          ...(phoneChanges ? { phone: maskPhoneToLast4(current.phone) } : {}),
+          phoneVerifiedAt: current.phoneVerifiedAt?.toISOString() ?? null,
+        },
+        after: phoneChanges ? { phone: maskPhoneToLast4(phone) } : {},
+        target: { phone: maskPhoneToLast4(phone) },
+      });
+    }
+
     // Update user's phone, phoneVerifiedAt, and reset OTP rate-limit state
     await markPhoneVerified(userId, phone);
 
     return NextResponse.json({ verified: true, phone: maskPhone(phone) });
-  } catch {
+  } catch (error) {
+    if (isSupportAuditError(error)) throw error;
     return NextResponse.json(
       { error: 'Verification check failed' },
       { status: 500 },

@@ -34,6 +34,8 @@ import {
   type SitePublishSnapshotPayloadV2,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from '@propertypro/db/filters';
+// Merges support-session attribution (metadata.support) into this direct audit insert — see packages/db/src/audit-actor.ts.
+import { stampAuditActorMetadata } from '@propertypro/db/audit-actor';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies management-tier (property_manager / root_manager) + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { cancelPendingScheduleInTx } from './site-publish-schedule-store';
@@ -140,7 +142,7 @@ async function insertAuditEventInTransaction(
     action: params.action,
     resourceType: params.resourceType,
     resourceId: params.resourceId,
-    metadata: params.metadata ?? null,
+    metadata: stampAuditActorMetadata(params.metadata ?? null) ?? null,
   });
 }
 

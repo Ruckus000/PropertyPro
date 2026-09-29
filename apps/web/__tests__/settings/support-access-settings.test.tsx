@@ -98,8 +98,38 @@ describe('SupportAccessSettings', () => {
     expect(screen.getByText('Support Access')).toBeDefined();
     expect(screen.getByText(/Enabled since/)).toBeDefined();
     expect(screen.getByText('Recent Support Activity')).toBeDefined();
-    expect(screen.getByText('consent_granted')).toBeDefined();
+    // Events render as labels (raw name kept in the title attribute).
+    expect(screen.getByText('Consent granted')).toBeDefined();
+    expect(screen.getByTitle('consent_granted')).toBeDefined();
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('labels the support-write events and falls back to the raw name for unknown ones', () => {
+    const base = SAMPLE.recentAccess[0]!;
+    setQuery({
+      data: {
+        ...SAMPLE,
+        recentAccess: [
+          { ...base, id: 6, event: 'support_profile_updated' },
+          { ...base, id: 7, event: 'support_phone_verification_sent' },
+          { ...base, id: 8, event: 'support_phone_verified' },
+          { ...base, id: 9, event: 'support_phone_verification_attempted' },
+          { ...base, id: 10, event: 'support_deletion_cancelled' },
+          { ...base, id: 11, event: 'some_future_event' },
+        ],
+      },
+    });
+    setToggle();
+    render(<SupportAccessSettings communityId={42} />);
+
+    // Rows are written BEFORE the change, so the labels say "requested" —
+    // true even when the change then fails.
+    expect(screen.getByText('Profile change requested by support')).toBeDefined();
+    expect(screen.getByText('Phone code send requested by support')).toBeDefined();
+    expect(screen.getByText('Phone verification requested by support')).toBeDefined();
+    expect(screen.getByText('Phone code check requested by support')).toBeDefined();
+    expect(screen.getByText('Deletion cancel requested by support')).toBeDefined();
+    expect(screen.getByText('some_future_event')).toBeDefined();
   });
 
   it('shows the no-activity copy when consent is active with empty log', () => {

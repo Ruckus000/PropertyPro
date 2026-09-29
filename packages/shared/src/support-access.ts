@@ -27,6 +27,10 @@ export const SUPPORT_SESSION_MAX_PER_ADMIN_PER_DAY = 10;
 // a hard-coded secret is a valid signing key everywhere it is compiled in.
 
 // --- Support Access Log Event Types ---
+//
+// `support_access_log.event` is plain `text NOT NULL` with no CHECK and no
+// pgEnum (0000_nappy_guardian.sql), so this tuple is the only vocabulary — it
+// can grow without a migration.
 export const SUPPORT_ACCESS_EVENTS = [
   'session_started',
   'session_ended',
@@ -34,8 +38,58 @@ export const SUPPORT_ACCESS_EVENTS = [
   'consent_granted',
   'consent_revoked',
   'admin_data_viewed',
+  // Writes an operator made to the impersonated user's own account during a
+  // support session — the only writes a read_only session may make (see
+  // SUPPORT_WRITABLE_API_ROUTES in apps/web/src/lib/support/impersonation.ts).
+  'support_profile_updated',
+  'support_phone_verification_sent',
+  'support_phone_verified',
+  'support_phone_verification_attempted',
+  'support_deletion_cancelled',
 ] as const;
 export type SupportAccessEvent = (typeof SUPPORT_ACCESS_EVENTS)[number];
+
+/**
+ * The events that record a WRITE made by an operator during a support session.
+ * Every one of them is written BEFORE the change it describes (fail closed), so
+ * a row means the change was attempted, not necessarily that it landed.
+ */
+export const SUPPORT_WRITE_EVENTS = [
+  'support_profile_updated',
+  'support_phone_verification_sent',
+  'support_phone_verified',
+  'support_phone_verification_attempted',
+  'support_deletion_cancelled',
+] as const satisfies readonly SupportAccessEvent[];
+export type SupportWriteEvent = (typeof SUPPORT_WRITE_EVENTS)[number];
+
+/**
+ * Human labels for the support access log views (admin console + community settings).
+ *
+ * The support-write labels say "requested", never "updated"/"verified"/
+ * "cancelled": each row is written BEFORE its change (fail closed), so it
+ * proves the operator asked for the change, not that it landed — the change
+ * can still fail afterwards (a wrong code, a Twilio error, a DB error). A label
+ * must stay true in that case.
+ */
+export const SUPPORT_ACCESS_EVENT_LABELS: Record<SupportAccessEvent, string> = {
+  session_started: 'Session started',
+  session_ended: 'Session ended',
+  page_viewed: 'Page viewed',
+  consent_granted: 'Consent granted',
+  consent_revoked: 'Consent revoked',
+  admin_data_viewed: 'Data viewed',
+  support_profile_updated: 'Profile change requested by support',
+  support_phone_verification_sent: 'Phone code send requested by support',
+  support_phone_verified: 'Phone verification requested by support',
+  support_phone_verification_attempted: 'Phone code check requested by support',
+  support_deletion_cancelled: 'Deletion cancel requested by support',
+};
+
+/** Label for a logged event; an event this build does not know renders as its raw name. */
+export function getSupportAccessEventLabel(event: string): string {
+  return (SUPPORT_ACCESS_EVENT_LABELS as Record<string, string>)[event] ?? event;
+}
 
 // --- Zod Schemas ---
 export const CreateSessionSchema = z.object({

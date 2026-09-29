@@ -14,7 +14,7 @@
  *   - apps/web/src/app/api/v1/account/profile/route.ts
  */
 import { users } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { eq, sql } from '@propertypro/db/filters';
 // AUTHZ: User profile — user-scoped update (no community_id on users table)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
@@ -30,6 +30,39 @@ export interface UpdatedUserProfile {
   updatedAt: Date;
   /** The fields actually updated (excludes `updatedAt`). */
   changedFields: Partial<{ fullName: string; phone: string | null }>;
+}
+
+export interface UserProfileSnapshot {
+  fullName: string | null;
+  phone: string | null;
+  phoneVerifiedAt: Date | null;
+}
+
+/**
+ * Read the user's current name/phone state. Used ONLY to record the "before"
+ * values of a change an operator makes during a support session (see
+ * lib/support/support-audit.ts) — outside a support session no route calls it,
+ * so the ordinary self-service paths gain no extra query.
+ *
+ * Same authorization contract as `updateUserProfile`: the caller passes the
+ * actor's own id (the impersonated user's, under a support session).
+ */
+export async function getUserProfileSnapshot(userId: string): Promise<UserProfileSnapshot> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      fullName: users.fullName,
+      phone: users.phone,
+      phoneVerifiedAt: users.phoneVerifiedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return {
+    fullName: row?.fullName ?? null,
+    phone: row?.phone ?? null,
+    phoneVerifiedAt: row?.phoneVerifiedAt ?? null,
+  };
 }
 
 /**
@@ -57,6 +90,11 @@ export async function updateUserProfile(
   }
   if (patch.phone !== undefined) {
     updateValues['phone'] = patch.phone;
+    // A new number is unverified until it goes through phone/verify: keep
+    // phoneVerifiedAt only when the number is unchanged (the form may resend
+    // the same phone on a name-only edit). Without this, a PATCH could point
+    // "verified" emergency SMS at a number nobody confirmed.
+    updateValues['phoneVerifiedAt'] = sql`case when ${users.phone} is not distinct from ${patch.phone} then ${users.phoneVerifiedAt} else null end`;
     changedFields.phone = patch.phone;
   }
 

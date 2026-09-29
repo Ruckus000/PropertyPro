@@ -28,6 +28,7 @@ import { UNKNOWN_SUBDOMAIN_REASON } from './lib/middleware/unknown-subdomain-rea
 import {
   resolveActiveSupportSession,
   isReadOnlyBlocked,
+  isSupportWritableApiRoute,
 } from './lib/support/impersonation';
 import {
   checkRateLimit,
@@ -1283,8 +1284,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return finalClear;
     }
 
-    // Block mutations for read_only sessions on API routes (except session
-    // management routes).
+    // Block mutations for read_only sessions on API routes, except session
+    // management routes (/api/v1/support/*) and the four audited account
+    // writes in SUPPORT_WRITABLE_API_ROUTES (exact method + path; each route
+    // records the change in support_access_log before making it).
     //
     // KNOWN GAP: gated on `isApi`, so it does not cover Server Actions, which
     // POST to the *page* path. Harmless today — the only two `'use server'`
@@ -1296,7 +1299,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       supportSession.scope === 'read_only' &&
       isApi &&
       isReadOnlyBlocked(request.method) &&
-      !pathname.startsWith('/api/v1/support/')
+      !pathname.startsWith('/api/v1/support/') &&
+      !isSupportWritableApiRoute(request.method, pathname)
     ) {
       return finaliseResponse(
         response as unknown as NextResponse,

@@ -44,6 +44,9 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/unsafe',
   '@propertypro/db/seed/seed-community',
   '@propertypro/db/supabase/cookie-config',
+  // Request-scoped audit actor (AsyncLocalStorage). No DB access of its own —
+  // it only merges support-session attribution into audit-row metadata.
+  '@propertypro/db/audit-actor',
 ]);
 
 const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
@@ -271,6 +274,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // access-log entry. `support_sessions` is not community-scoped (it spans the
   // admin and the impersonated tenant), so a scoped client cannot reach it.
   resolve(repoRoot, 'apps/web/src/app/api/v1/support/end-session/route.ts'),
+  // Support-session account writes — appends ONE support_access_log row per
+  // audited write (profile / phone re-verify / deletion cancel) for the session
+  // named by middleware-stamped x-support-* headers, before the write happens.
+  // support_access_log has no RLS insert path for the impersonated user.
+  resolve(repoRoot, 'apps/web/src/lib/support/support-audit.ts'),
   // Auth helper hydrates the effective support-session actor from the users table
   resolve(repoRoot, 'apps/web/src/lib/api/auth.ts'),
   // Billing groups are owner-scoped (PM-level), not community-scoped — no communityId available

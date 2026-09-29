@@ -16,6 +16,8 @@ import {
   type WorkOrderStatus,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from '@propertypro/db/filters';
+// Merges support-session attribution (metadata.support) into this direct audit insert — see packages/db/src/audit-actor.ts.
+import { stampAuditActorMetadata } from '@propertypro/db/audit-actor';
 // AUTHZ: Operations reservation cancel transition — atomic transaction uses the unsafe escape hatch after the caller has already verified tenant membership and reservation ownership scope.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
@@ -978,7 +980,7 @@ export async function cancelReservationForCommunity(
       resourceId: String(reservationId),
       oldValues: { status: existing.status },
       newValues: { status: 'cancelled' },
-      metadata: { requestId: requestId ?? null },
+      metadata: stampAuditActorMetadata({ requestId: requestId ?? null }),
     });
 
     return {

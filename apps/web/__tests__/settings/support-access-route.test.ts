@@ -43,6 +43,10 @@ vi.mock('@/lib/db/access-control', () => ({
   requirePermission: requirePermissionMock,
 }));
 
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
+  requireEntitledForAdminRead: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: () => ({ from: fromMock }),
 }));
@@ -57,7 +61,7 @@ describe('settings/support-access route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('admin-1');
-    requireCommunityMembershipMock.mockResolvedValue({ role: 'board_president' });
+    requireCommunityMembershipMock.mockResolvedValue({ role: 'root_manager', isAdmin: true });
   });
 
   it('GET returns consent status', async () => {
@@ -72,6 +76,17 @@ describe('settings/support-access route', () => {
     expect(res.status).toBe(200);
     expect(json.data.consentActive).toBe(false);
     expect(Array.isArray(json.data.recentAccess)).toBe(true);
+  });
+
+  it('GET refuses a non-admin member (settings:read admits unit owners; the log names other residents)', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({ role: 'resident', isUnitOwner: true, isAdmin: false });
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/settings/support-access?communityId=42',
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    expect(fromMock).not.toHaveBeenCalled();
   });
 
   it('GET requires communityId', async () => {
