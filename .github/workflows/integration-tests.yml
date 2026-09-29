@@ -9,7 +9,8 @@
 #   1. `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
 #      — the apps/web integration suite (the step the floor below governs).
 #   2. the packages/db RLS pair (rls-policies + pipeline-and-transactions) and
-#      seed-resident-units, scoped to named files on purpose — see the step comment.
+#      seed-resident-units + seed-community-counts, scoped to named files on
+#      purpose — see the step comment.
 #
 # EXECUTED-COUNT FLOOR (TST-06) — PRINT-ONLY, NOT ARMED (plan ledger D15–D17,
 # human-confirmed 2026-09-23). The "Run integration tests" step also emits a
@@ -306,9 +307,15 @@ jobs:
         # (Supabase auth/storage go to an in-process HTTP double) and pins that
         # every seeded demo resident — including each admin-console sales demo's
         # persona — gets a unit, and that a reseed never wipes it.
+        #
+        # seed-community-counts rides along on the same harness: a per-domain
+        # row-count snapshot of what seedCommunity writes for each community
+        # type and seedHints branch, plus a reseed-idempotency check (INF-03 —
+        # the safety net for splitting seed-community.ts at its seams).
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
           __tests__/rls-policies.integration.test.ts
           __tests__/pipeline-and-transactions.integration.test.ts
           __tests__/seed-resident-units.integration.test.ts
+          __tests__/seed-community-counts.integration.test.ts
