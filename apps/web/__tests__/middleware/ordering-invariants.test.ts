@@ -11,7 +11,9 @@
  *   1. Protected-path tenant resolution runs BEFORE the support-impersonation
  *      branch, which reads the resolved `x-community-id` as the token's
  *      expected community. When none resolves, an accepted session stamps its
- *      own consented community (fill-only) so the request is never unpinned.
+ *      own consented community (fill-only), so header-reconciling routes are
+ *      pinned to it; an /api/v1/communities/<id> path must also match. (Page-
+ *      level reads that ignore the header, e.g. /pm/reports, are not pinned.)
  *   2. The CORS preflight and the CSRF Origin/Referer reject short-circuit
  *      BEFORE the Supabase session refresh (`createMiddlewareClient`).
  *   3. Early responses (dev-surface 404, apex / signup-host redirects,
@@ -249,6 +251,25 @@ describe('support session stamps its consented community when no tenant resolves
       new RegExp(`${SUPPORT_SESSION_COOKIE}=;.*Max-Age=0`, 'i'),
     );
     // Rejected on the community comparison, BEFORE the DB read.
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  });
+
+  it('(a1) B\'s /api/v1/communities path with a RESOLVED tenant A is still rejected', async () => {
+    // Bypass the tenant-only comparison would allow: ?communityId=A resolves A
+    // (equal to the token), while the route reads B from params.id.
+    const res = await middleware(
+      req(
+        `http://localhost:3000/api/v1/communities/2/cancel-preview?communityId=${TOKEN_COMMUNITY_ID}`,
+        { supportToken: await signSupportToken() },
+      ),
+    );
+
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    expect(res.headers.get('set-cookie') ?? '').toMatch(
+      new RegExp(`${SUPPORT_SESSION_COOKIE}=;.*Max-Age=0`, 'i'),
+    );
     expect(maybeSingleMock).not.toHaveBeenCalled();
   });
 
