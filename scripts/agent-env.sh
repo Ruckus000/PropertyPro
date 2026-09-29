@@ -224,6 +224,33 @@ run_sandbox_command() {
     sandbox-runtime "$runtime_env" "$cwd" "$@"
 }
 
+# The fingerprint marker only says "this worktree's migrations and seed were
+# applied to SOME database". The database it vouches for can vanish under it:
+# `stop` discards the volumes (--no-backup), and so does a Docker reset or a
+# volume prune. Trusting the marker alone then printed "Agent sandbox ready"
+# over an empty database with no user_roles. So ask the database itself.
+# Exits 0 only when the migration ledger exists and user_roles has a row; any
+# failure to check, an unreachable database included, reads as "not prepared".
+sandbox_db_is_prepared() {
+  run_sandbox_command "$repo_root" node --input-type=module -e '
+    import postgres from "postgres";
+    const sql = postgres(process.env.DIRECT_URL, { max: 1, onnotice: () => {} });
+    try {
+      const [probe] = await sql`
+        select to_regclass(${"drizzle.__drizzle_migrations"}) is not null as ledger,
+               to_regclass(${"public.user_roles"}) is not null as roles`;
+      let ready = probe.ledger && probe.roles;
+      if (ready) {
+        const [row] = await sql`select exists (select 1 from public.user_roles) as seeded`;
+        ready = row.seeded;
+      }
+      process.exitCode = ready ? 0 : 1;
+    } finally {
+      await sql.end({ timeout: 1 });
+    }
+  ' >/dev/null 2>&1
+}
+
 fingerprint() {
   (cd "$repo_root" && { find packages/db/migrations -type f -print; printf '%s\n' scripts/seed-demo.ts scripts/config/demo-data.ts; } | sort | xargs shasum -a 256) | shasum -a 256 | awk '{print $1}'
 }
@@ -240,6 +267,12 @@ prepare() {
   write_runtime_env
   local current marker="$sandbox/prepared.fingerprint"
   current="$(fingerprint)"
+  if [[ -f "$marker" ]] && [[ "$(<"$marker")" == "$current" ]] && ! sandbox_db_is_prepared; then
+    # Said out loud so a check that is wrongly red shows up as re-seeding on
+    # every prepare, not as a silently slow one.
+    echo 'Sandbox database has no migration ledger or seeded user_roles; re-running migrate and seed.' >&2
+    rm -f "$marker"
+  fi
   if [[ ! -f "$marker" ]] || [[ "$(<"$marker")" != "$current" ]]; then
     run_sandbox_command "$repo_root" pnpm --dir "$repo_root" --filter @propertypro/shared --filter @propertypro/email --filter @propertypro/db --filter @propertypro/api-contract build
     run_sandbox_command "$repo_root" pnpm --dir "$repo_root" --filter @propertypro/db db:migrate
@@ -273,6 +306,8 @@ status() {
 
 stop() {
   [[ -d "$supabase_workdir" ]] || exit 0
+  # --no-backup deletes the database volumes, so the marker vouching for them goes too.
+  rm -f "$sandbox/prepared.fingerprint"
   pnpm --dir "$repo_root" exec supabase --workdir "$supabase_workdir" stop --no-backup || true
 }
 

@@ -31,16 +31,28 @@ vi.mock('@sparticuz/chromium', () => ({
   default: { args: LAMBDA_ARGS, executablePath: executablePathMock },
 }));
 
-import { desktopChromeArgs, hardenChromiumArgs, renderHtmlToPdf } from '@/lib/documents/render-pdf';
+import {
+  desktopChromeArgs,
+  desktopChromeEnv,
+  hardenChromiumArgs,
+  renderHtmlToPdf,
+} from '@/lib/documents/render-pdf';
 
-type LaunchOptions = { args: string[]; executablePath: string; headless: boolean | 'shell' };
+type LaunchOptions = {
+  args: string[];
+  env?: Record<string, string | undefined>;
+  executablePath: string;
+  headless: boolean | 'shell';
+};
 
 const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 const arch = Object.getOwnPropertyDescriptor(process, 'arch')!;
-let previousPath: string | undefined;
+// Every env key a test here writes, restored verbatim afterwards.
+const TOUCHED_ENV = ['PUPPETEER_EXECUTABLE_PATH', 'SUPABASE_SERVICE_ROLE_KEY', '__CFBundleIdentifier'] as const;
+let savedEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
-  previousPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  savedEnv = Object.fromEntries(TOUCHED_ENV.map((key) => [key, process.env[key]]));
   delete process.env.PUPPETEER_EXECUTABLE_PATH;
   launchMock.mockReset().mockResolvedValue({
     newPage: async () => ({
@@ -57,8 +69,10 @@ beforeEach(() => {
 afterEach(() => {
   Object.defineProperty(process, 'platform', platform);
   Object.defineProperty(process, 'arch', arch);
-  if (previousPath === undefined) delete process.env.PUPPETEER_EXECUTABLE_PATH;
-  else process.env.PUPPETEER_EXECUTABLE_PATH = previousPath;
+  for (const key of TOUCHED_ENV) {
+    if (savedEnv[key] === undefined) delete process.env[key];
+    else process.env[key] = savedEnv[key];
+  }
 });
 
 function onHost(p: NodeJS.Platform, a: string): void {
@@ -80,6 +94,9 @@ describe('renderHtmlToPdf launch options', () => {
     expect(opts.executablePath).toBe('/tmp/chromium');
     expect(opts.headless).toBe('shell');
     expect(opts.args).toEqual(hardenChromiumArgs(LAMBDA_ARGS));
+    // Inherits process.env: the package's import-time LD_LIBRARY_PATH for its
+    // AL2023 libraries must reach the browser, or Vercel fails on libnss3.
+    expect(opts.env).toBeUndefined();
   });
 
   it('a developer Chrome gets desktop args, not the Lambda set that forced single-process mode', async () => {
@@ -96,6 +113,21 @@ describe('renderHtmlToPdf launch options', () => {
     }
     // The bundled binary is never inflated when it is not going to run.
     expect(executablePathMock).not.toHaveBeenCalled();
+  });
+
+  it('a developer Chrome gets a scrubbed environment: no server secrets, no host-app identity', async () => {
+    onHost('darwin', 'arm64');
+    process.env.PUPPETEER_EXECUTABLE_PATH = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-secret';
+    process.env.__CFBundleIdentifier = 'com.example.host-app';
+    await renderHtmlToPdf({ html: '<p>x</p>' });
+
+    const { env } = launched();
+    expect(env, 'without `env`, puppeteer hands the browser all of process.env').toBeDefined();
+    expect(env).toEqual(desktopChromeEnv());
+    expect(Object.keys(env!).every((key) => ['PATH', 'HOME', 'TMPDIR'].includes(key))).toBe(true);
+    expect(Object.values(env!)).not.toContain('service-role-secret');
+    expect(env).not.toHaveProperty('__CFBundleIdentifier');
   });
 
   it('refuses before inflating or launching on a host the bundled Linux x64 binary cannot run on', async () => {
@@ -122,5 +154,20 @@ describe('desktopChromeArgs', () => {
 
   it('adds --no-sandbox only as root, where Chrome refuses to start without it', () => {
     expect(desktopChromeArgs(0)).toEqual(['--font-render-hinting=none', '--no-sandbox']);
+  });
+});
+
+describe('desktopChromeEnv', () => {
+  it('keeps only PATH, HOME and TMPDIR, and drops unset or empty ones', () => {
+    expect(
+      desktopChromeEnv({
+        PATH: '/usr/bin',
+        HOME: '/Users/dev',
+        TMPDIR: '',
+        SUPABASE_SERVICE_ROLE_KEY: 'secret',
+        DATABASE_URL: 'postgres://prod',
+        __CFBundleIdentifier: 'com.example.host-app',
+      }),
+    ).toEqual({ PATH: '/usr/bin', HOME: '/Users/dev' });
   });
 });
