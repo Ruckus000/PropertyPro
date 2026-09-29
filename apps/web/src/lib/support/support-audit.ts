@@ -19,6 +19,9 @@
  *     in front of the wrong managers);
  *   - the operator or session id is unreadable → 403 (an entry that cannot
  *     name who acted is not an audit entry);
+ *   - the account being changed is not a member of that community, or its
+ *     membership cannot be read → 403 (the change would be made under a
+ *     consent the account's own community never gave);
  *   - the insert fails → 500 SUPPORT_AUDIT_FAILED, "not made".
  * Outside a support session it returns `false` and writes nothing, so the
  * routes behave exactly as they did.
@@ -101,6 +104,9 @@ export interface SupportActionInput {
 export const SUPPORT_AUDIT_UNATTRIBUTABLE_MESSAGE =
   'This change cannot be made during this support session because it could not be attributed.';
 
+export const SUPPORT_AUDIT_NOT_MEMBER_MESSAGE =
+  'This change cannot be made during this support session because this account is not a member of the community that granted support access.';
+
 export const SUPPORT_AUDIT_FAILED_MESSAGE =
   'This change could not be recorded in the support access log, so it was not made. Please try again.';
 
@@ -169,9 +175,31 @@ export async function recordSupportAction(
     ...(input.target === undefined ? {} : { target: input.target }),
   };
 
+  // The account being changed must belong to the consented community — the
+  // community this row is filed under. Session creation checks this too; the
+  // re-check here covers a member removed mid-session and any session minted
+  // before that check existed. user_roles has no soft delete: a row is
+  // membership. Unreadable → refuse, like every other branch here.
+  const db = createAdminTypedClient();
+  let isMember = false;
+  try {
+    const { data, error } = await db
+      .from('user_roles')
+      .select('user_id')
+      .eq('user_id', input.targetUserId)
+      .eq('community_id', scope.communityId)
+      .maybeSingle();
+    isMember = !error && data !== null;
+  } catch {
+    isMember = false;
+  }
+  if (!isMember) {
+    throw supportAuditError(new ForbiddenError(SUPPORT_AUDIT_NOT_MEMBER_MESSAGE));
+  }
+
   let insertError: unknown = null;
   try {
-    const { error } = await createAdminTypedClient()
+    const { error } = await db
       .from('support_access_log')
       .insert({
         admin_user_id: actor.adminUserId,

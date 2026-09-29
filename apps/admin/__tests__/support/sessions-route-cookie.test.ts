@@ -11,6 +11,8 @@ const requirePlatformAdmin = vi.fn();
 const sessionInsert = vi.fn();
 const accessLogInsert = vi.fn();
 const signSupportToken = vi.fn();
+const membershipLookup = vi.fn();
+const membershipFilters: Array<[string, unknown]> = [];
 
 function makeFromMock(table: string) {
   switch (table) {
@@ -22,6 +24,20 @@ function makeFromMock(table: string) {
               limit: async () => ({ data: [{ id: 5, access_level: 'read_only' }], error: null }),
             }),
           }),
+        }),
+      };
+    case 'user_roles':
+      return {
+        select: () => ({
+          eq: (col: string, val: unknown) => {
+            membershipFilters.push([col, val]);
+            return {
+              eq: (col2: string, val2: unknown) => {
+                membershipFilters.push([col2, val2]);
+                return { maybeSingle: () => membershipLookup() };
+              },
+            };
+          },
         }),
       };
     case 'platform_admin_users':
@@ -91,7 +107,13 @@ describe('POST /api/admin/support/sessions — token handoff', () => {
     sessionInsert.mockReset();
     accessLogInsert.mockReset();
     signSupportToken.mockReset();
+    membershipLookup.mockReset();
+    membershipFilters.length = 0;
 
+    membershipLookup.mockResolvedValue({
+      data: { user_id: '11111111-2222-4333-8444-555555555555' },
+      error: null,
+    });
     requirePlatformAdmin.mockResolvedValue({ id: 'admin-1' });
     sessionInsert.mockResolvedValue({ data: { id: 77 }, error: null });
     accessLogInsert.mockResolvedValue({ error: null });
@@ -143,5 +165,60 @@ describe('POST /api/admin/support/sessions — token handoff', () => {
     expect(setCookie).toMatch(/HttpOnly/i);
     expect(setCookie).not.toMatch(/Secure/i);
     expect(setCookie).not.toMatch(/Domain=/i);
+  });
+});
+
+// Consent is granted per community, and the web app files every support write
+// under the session's community. A session pairing community 42's consent with
+// someone who is not 42's member would let support change that person's
+// account under a consent their own community never gave.
+describe('POST /api/admin/support/sessions — target must belong to the consenting community', () => {
+  beforeEach(() => {
+    requirePlatformAdmin.mockReset();
+    sessionInsert.mockReset();
+    accessLogInsert.mockReset();
+    signSupportToken.mockReset();
+    membershipLookup.mockReset();
+    membershipFilters.length = 0;
+
+    requirePlatformAdmin.mockResolvedValue({ id: 'admin-1' });
+    sessionInsert.mockResolvedValue({ data: { id: 77 }, error: null });
+    accessLogInsert.mockResolvedValue({ error: null });
+    signSupportToken.mockResolvedValue(TOKEN);
+  });
+
+  it('looks the target up in user_roles for exactly that community', async () => {
+    membershipLookup.mockResolvedValue({
+      data: { user_id: '11111111-2222-4333-8444-555555555555' },
+      error: null,
+    });
+    const res = await callCreate();
+
+    expect(res.status).toBe(201);
+    expect(membershipFilters).toEqual([
+      ['user_id', '11111111-2222-4333-8444-555555555555'],
+      ['community_id', 42],
+    ]);
+  });
+
+  it('refuses a non-member with 403: no session row, no token, no cookie', async () => {
+    membershipLookup.mockResolvedValue({ data: null, error: null });
+    const res = await callCreate();
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'That user is not a member of this community.' });
+    expect(sessionInsert).not.toHaveBeenCalled();
+    expect(signSupportToken).not.toHaveBeenCalled();
+    expect(accessLogInsert).not.toHaveBeenCalled();
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('refuses when membership cannot be read: no session row', async () => {
+    membershipLookup.mockResolvedValue({ data: null, error: { message: 'boom' } });
+    const res = await callCreate();
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(sessionInsert).not.toHaveBeenCalled();
+    expect(signSupportToken).not.toHaveBeenCalled();
   });
 });

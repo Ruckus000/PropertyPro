@@ -61,6 +61,28 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
 
   const consent = consentRows[0]!;
 
+  // 1b. The target must belong to the consenting community. Consent is given
+  // per community, and the web app files every support write under the
+  // session's community — so a session pairing community A's consent with a
+  // user who is not A's member would let support change that user's account
+  // under a consent their own community never gave, and record it where their
+  // managers never look. user_roles has no soft delete: a row is membership.
+  const { data: membershipRow, error: membershipError } = await (db
+    .from('user_roles'))
+    .select('user_id')
+    .eq('user_id', targetUserId)
+    .eq('community_id', communityId)
+    .maybeSingle();
+
+  assertNoDbError(membershipError, 'Failed to check the community membership of impersonation target');
+
+  if (!membershipRow) {
+    return NextResponse.json(
+      { error: 'That user is not a member of this community.' },
+      { status: 403 },
+    );
+  }
+
   // 2. Block impersonation of platform admins
   const { data: adminRow, error: adminLookupError } = await (db
     .from('platform_admin_users'))
