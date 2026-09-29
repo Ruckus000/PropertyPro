@@ -1,14 +1,22 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * `/api/v1/meetings` — list (GET) and action-dispatch mutations (POST).
+ *
+ * CON-05 (Phase 3.5): both verbs go through `runRoute(contract, handler)`.
+ * GET declares `tenantScope: { in: 'query' }` (runner-resolved communityId);
+ * POST keeps parsing `communityId` out of the body itself, and emits its
+ * notice-window `warnings` through the contract's declared envelope. See
+ * `./contract.ts` for why, and for the exact GET error-path deltas.
+ */
+import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { withEnvelope } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
+import { runRoute } from '@/lib/api/run-route';
 import { BadRequestError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import {
-  parseCommunityIdFromBody as sharedParseCommunityIdFromBody,
-  parseCommunityIdFromQuery,
-} from '@/lib/finance/request';
+import { parseCommunityIdFromBody as sharedParseCommunityIdFromBody } from '@/lib/finance/request';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseOptionalCalendarDateRange } from '@/lib/calendar/date-range';
 import { requirePermission, requireBoardDesignation } from '@/lib/db/access-control';
@@ -32,6 +40,7 @@ import {
 } from '@/lib/services/meeting-service';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { meetingsActionContract, meetingsListContract } from './contract';
 
 const meetingTypeSchema = z.enum([
   'board',
@@ -120,83 +129,109 @@ function assertMeetingWindow(startsAt: string, endsAt?: string | null): void {
   }
 }
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership, 'meetings', 'read');
-  // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
-  await requireEntitledForAdminRead(communityId, membership);
-
-  const { searchParams } = new URL(req.url);
-  const range = parseOptionalCalendarDateRange(searchParams, membership.timezone);
-  const rows = await listMeetingsForCommunity(communityId, range ?? undefined);
-
-  return NextResponse.json({
-    data: rows.map((meeting) => serializeMeetingResponse(meeting, membership.communityType)),
-  });
-});
-
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body = (await req.json()) as Record<string, unknown>;
-  const action = typeof body.action === 'string' ? body.action : 'create';
-  const communityId = parseCommunityIdFromBody(req, body);
-  const normalizedBody = { ...body, communityId, action };
-
-  // What moved: `assertNotDemoGrace` now runs AFTER authentication. The body
-  // parse and `parseCommunityIdFromBody` above still precede it, and that is
-  // fine — they are pure parsing plus a header cross-check, with no DB read and
-  // so no oracle. The documented chain
-  // (`requireAuthenticatedUserId -> resolve -> assertNotDemoGrace -> membership`,
-  // `.claude/rules/api-patterns.md`) is about where the GUARDS sit, not where
-  // the id is parsed; stating it as the literal statement order here would
-  // overclaim, which is the defect `guard:legacy-roles` pass 2 exists to catch.
-  //
-  // This route used to run assertNotDemoGrace FIRST, ahead of authentication.
-  // That guard does an UNSCOPED primary-key SELECT on `communities` for whatever
-  // id the caller put in the body, and `resolveEffectiveCommunityId` only
-  // cross-checks the body against `x-community-id` when middleware actually
-  // stamped that header — which it does from tenant context or a
-  // `/communities/[id]/` path, not for an apex-host POST. So the read ran, and
-  // its outcome was distinguishable (403 demo-grace vs. falling through),
-  // before the handler had established anything about the caller.
-  const actorUserId = await requireAuthenticatedUserId();
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership, 'meetings', 'write');
-  // Statutory board-meeting *calls* require a board designation (role-v3 §3.2):
-  // gate creating — or updating a meeting to — meetingType 'board'. Delete /
-  // attach / detach are general `meetings:write` powers (general permissions come
-  // from the role, never the designation) and are intentionally NOT gated here.
-  // No bypass: requirePermission(meetings,'write') above already limits ALL of
-  // these actions to management-tier callers, every one of whom is `isAdmin` (no
-  // resident role holds meetings:write — see RBAC matrix), so they pass this gate
-  // regardless. It is therefore behaviour-neutral today; the designation arm only
-  // becomes load-bearing once a resident can hold a board seat, which a later
-  // Phase-3 sub-project will enforce holistically across the meeting actions.
-  if (body.meetingType === 'board') {
-    requireBoardDesignation(membership);
+/**
+ * The `?communityId=` checks the legacy `parseCommunityIdFromQuery` made after
+ * auth, with its `BadRequestError` messages. The runner has already resolved
+ * `communityId` (tenantScope: query), and the contract maps a missing or junk
+ * query value to `undefined`, so a request reaches the handler with one only
+ * when `x-community-id` supplied the tenant — the query param has always been
+ * required, so keep refusing it exactly as before. When the param IS a positive
+ * integer the resolver has already matched it against the header, so the
+ * injected `communityId` equals it.
+ */
+function assertCommunityIdQueryParam(req: NextRequest): void {
+  const raw = new URL(req.url).searchParams.get('communityId');
+  if (!raw) {
+    throw new BadRequestError('communityId query parameter is required');
   }
-  await requireActiveSubscriptionForMutation(communityId);
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new BadRequestError('communityId must be a positive integer');
+  }
+}
 
-  if (action === 'update') {
-    return handleUpdate(normalizedBody, actorUserId, membership.communityType);
-  }
-  if (action === 'delete') {
-    return handleDelete(normalizedBody, actorUserId);
-  }
-  if (action === 'post-notice') {
-    return handlePostNotice(normalizedBody, actorUserId, membership.communityType);
-  }
-  if (action === 'attach') {
-    return handleAttach(normalizedBody, actorUserId);
-  }
-  if (action === 'detach') {
-    return handleDetach(normalizedBody, actorUserId);
-  }
+export const GET = withErrorHandler(
+  runRoute(meetingsListContract, async ({ req, communityId }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    assertCommunityIdQueryParam(req);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requirePermission(membership, 'meetings', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
-  return handleCreate(normalizedBody, actorUserId, membership.communityType);
-});
+    const { searchParams } = new URL(req.url);
+    const range = parseOptionalCalendarDateRange(searchParams, membership.timezone);
+    const rows = await listMeetingsForCommunity(communityId, range ?? undefined);
+
+    return rows.map((meeting) => serializeMeetingResponse(meeting, membership.communityType));
+  }),
+);
+
+export const POST = withErrorHandler(
+  runRoute(meetingsActionContract, async ({ body: rawBody, req }) => {
+    // A malformed JSON body arrives as `undefined` (the runner swallows the parse
+    // error), so reading `action` below throws → 500, exactly as the legacy
+    // `await req.json()` did. Pinned by route-contract.test.ts.
+    const body = rawBody as Record<string, unknown>;
+    const action = typeof body.action === 'string' ? body.action : 'create';
+    const communityId = parseCommunityIdFromBody(req, body);
+    const normalizedBody = { ...body, communityId, action };
+
+    // What moved: `assertNotDemoGrace` now runs AFTER authentication. The body
+    // parse and `parseCommunityIdFromBody` above still precede it, and that is
+    // fine — they are pure parsing plus a header cross-check, with no DB read and
+    // so no oracle. The documented chain
+    // (`requireAuthenticatedUserId -> resolve -> assertNotDemoGrace -> membership`,
+    // `.claude/rules/api-patterns.md`) is about where the GUARDS sit, not where
+    // the id is parsed; stating it as the literal statement order here would
+    // overclaim, which is the defect `guard:legacy-roles` pass 2 exists to catch.
+    //
+    // This route used to run assertNotDemoGrace FIRST, ahead of authentication.
+    // That guard does an UNSCOPED primary-key SELECT on `communities` for whatever
+    // id the caller put in the body, and `resolveEffectiveCommunityId` only
+    // cross-checks the body against `x-community-id` when middleware actually
+    // stamped that header — which it does from tenant context or a
+    // `/communities/[id]/` path, not for an apex-host POST. So the read ran, and
+    // its outcome was distinguishable (403 demo-grace vs. falling through),
+    // before the handler had established anything about the caller.
+    const actorUserId = await requireAuthenticatedUserId();
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requirePermission(membership, 'meetings', 'write');
+    // Statutory board-meeting *calls* require a board designation (role-v3 §3.2):
+    // gate creating — or updating a meeting to — meetingType 'board'. Delete /
+    // attach / detach are general `meetings:write` powers (general permissions come
+    // from the role, never the designation) and are intentionally NOT gated here.
+    // No bypass: requirePermission(meetings,'write') above already limits ALL of
+    // these actions to management-tier callers, every one of whom is `isAdmin` (no
+    // resident role holds meetings:write — see RBAC matrix), so they pass this gate
+    // regardless. It is therefore behaviour-neutral today; the designation arm only
+    // becomes load-bearing once a resident can hold a board seat, which a later
+    // Phase-3 sub-project will enforce holistically across the meeting actions.
+    if (body.meetingType === 'board') {
+      requireBoardDesignation(membership);
+    }
+    await requireActiveSubscriptionForMutation(communityId);
+
+    if (action === 'update') {
+      return handleUpdate(normalizedBody, actorUserId, membership.communityType);
+    }
+    if (action === 'delete') {
+      return handleDelete(normalizedBody, actorUserId);
+    }
+    if (action === 'post-notice') {
+      return handlePostNotice(normalizedBody, actorUserId, membership.communityType);
+    }
+    if (action === 'attach') {
+      return handleAttach(normalizedBody, actorUserId);
+    }
+    if (action === 'detach') {
+      return handleDetach(normalizedBody, actorUserId);
+    }
+
+    return handleCreate(normalizedBody, actorUserId, membership.communityType);
+  }),
+);
 
 /**
  * `{ data: <meeting> }`, plus a top-level `warnings` sibling when the schedule
@@ -204,9 +239,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
  *
  * The envelope matches the documents route (`{ data, warnings?: [...] }`),
  * which is the app's only existing warnings precedent — #932's issue text cites
- * announcements, but announcements has none. `warnings` is spliced in only when
- * non-empty, so the wire shape for a compliant meeting is byte-identical to
- * what it was before.
+ * announcements, but announcements has none. The sibling goes out through the
+ * contract's declared `envelope` (CON-04); `undefined` is omitted from the
+ * wire, so the shape for a compliant meeting is a bare `{ data }`, as it
+ * always was.
  *
  * Only mutations warn. A read does not, deliberately: every meeting whose
  * notice window has since closed would flag on every list request forever, and
@@ -216,7 +252,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 function meetingResponse(
   meeting: Parameters<typeof serializeMeetingResponse>[0],
   communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'],
-): NextResponse {
+) {
   const data = serializeMeetingResponse(meeting, communityType);
   const warning = buildMeetingNoticeWarning({
     startsAt: meeting.startsAt,
@@ -226,14 +262,14 @@ function meetingResponse(
   });
 
   const warnings: NoticeWarning[] = warning ? [warning] : [];
-  return NextResponse.json(warnings.length > 0 ? { data, warnings } : { data });
+  return withEnvelope(data, { warnings: warnings.length > 0 ? warnings : undefined });
 }
 
 async function handleCreate(
   body: Record<string, unknown>,
   actorUserId: string,
   communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'],
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parsed = createMeetingSchema.safeParse(body);
   if (!parsed.success) {
     throw new UnprocessableEntityError('Invalid meeting data', {
@@ -339,7 +375,7 @@ async function handleUpdate(
   body: Record<string, unknown>,
   actorUserId: string,
   communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'],
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parsed = updateMeetingSchema.safeParse(body);
   if (!parsed.success) {
     throw new UnprocessableEntityError('Invalid update data', {
@@ -428,7 +464,7 @@ async function handlePostNotice(
   body: Record<string, unknown>,
   actorUserId: string,
   communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'],
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parsed = postNoticeSchema.safeParse(body);
   if (!parsed.success) {
     throw new UnprocessableEntityError('Invalid notice data', {
@@ -460,13 +496,13 @@ async function handlePostNotice(
     throw new NotFoundError('Meeting not found');
   }
 
-  return NextResponse.json({ data: serializeMeetingResponse(meeting, communityType) });
+  return serializeMeetingResponse(meeting, communityType);
 }
 
 async function handleDelete(
   body: Record<string, unknown>,
   actorUserId: string,
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parsed = deleteMeetingSchema.safeParse(body);
   if (!parsed.success) {
     throw new UnprocessableEntityError('Invalid delete data', {
@@ -485,13 +521,13 @@ async function handleDelete(
     communityId,
   });
 
-  return NextResponse.json({ data: { success: true } });
+  return { success: true };
 }
 
 async function handleAttach(
   body: Record<string, unknown>,
   actorUserId: string,
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parsed = attachDocSchema.safeParse(body);
   if (!parsed.success) {
     throw new UnprocessableEntityError('Invalid attachment data', {
@@ -520,13 +556,13 @@ async function handleAttach(
     metadata: { subAction: 'attach' },
   });
 
-  return NextResponse.json({ data: attachment });
+  return attachment;
 }
 
 async function handleDetach(
   body: Record<string, unknown>,
   actorUserId: string,
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parsed = detachDocSchema.safeParse(body);
   if (!parsed.success) {
     throw new UnprocessableEntityError('Invalid detach data', {
@@ -554,5 +590,5 @@ async function handleDetach(
     metadata: { subAction: 'detach' },
   });
 
-  return NextResponse.json({ data: { success: true } });
+  return { success: true };
 }
