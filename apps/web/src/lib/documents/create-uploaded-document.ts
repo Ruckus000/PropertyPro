@@ -36,7 +36,8 @@ interface InvalidUploadContext {
   details?: Record<string, unknown>;
 }
 
-const DOCUMENT_NOTIFICATION_WARNING: DocumentMutationWarning = {
+/** Exported so the documents POST envelope schema can be pinned against it. */
+export const DOCUMENT_NOTIFICATION_WARNING: DocumentMutationWarning = {
   code: 'notification_dispatch_failed',
   message: 'The document was uploaded, but community notifications could not be sent.',
 };

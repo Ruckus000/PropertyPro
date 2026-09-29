@@ -45,6 +45,41 @@ export type ContextExtractor = (
 ) => { userId: string; communityId: number } | Promise<{ userId: string; communityId: number }>;
 
 /**
+ * Build the pre-bound `AuditContext` for one request: `log()` fills in
+ * `userId` / `communityId` and stamps `metadata.requestId` from the
+ * `x-request-id` header (generated when absent or blank). The request id is
+ * resolved ONCE here, so every entry a request writes carries the same id.
+ *
+ * This is the half of `withAuditLog` that does not depend on its
+ * `(req, ctx, audit)` handler shape (CON-06). A `runRoute` handler cannot be
+ * nested inside `withAuditLog` — the runner hands its handler a parsed-input
+ * object, not `(req, ctx, audit)` — so a contracted route calls this directly
+ * once it has authenticated and resolved its community:
+ *
+ *     const audit = createAuditContext(req, { userId, communityId });
+ *     await audit.log({ action: 'update', resourceType: 'announcement', ... });
+ */
+export function createAuditContext(
+  req: NextRequest,
+  identity: { userId: string; communityId: number },
+): AuditContext {
+  const { userId, communityId } = identity;
+  const requestId = req.headers.get('x-request-id')?.trim() || generateRequestId();
+  return {
+    userId,
+    communityId,
+    async log(params) {
+      await logAuditEvent({
+        ...params,
+        userId,
+        communityId,
+        metadata: { ...params.metadata, requestId },
+      });
+    },
+  };
+}
+
+/**
  * Wraps a Route Handler with audit logging context.
  *
  * @param extractContext - Async/sync function to extract userId and communityId
@@ -75,22 +110,7 @@ export function withAuditLog(
   handler: AuditRouteHandler,
 ): RouteHandler {
   return async (req, context) => {
-    const { userId, communityId } = await extractContext(req, context);
-    const requestId = req.headers.get('x-request-id')?.trim() || generateRequestId();
-
-    const audit: AuditContext = {
-      userId,
-      communityId,
-      async log(params) {
-        await logAuditEvent({
-          ...params,
-          userId,
-          communityId,
-          metadata: { ...params.metadata, requestId },
-        });
-      },
-    };
-
-    return handler(req, context, audit);
+    const identity = await extractContext(req, context);
+    return handler(req, context, createAuditContext(req, identity));
   };
 }

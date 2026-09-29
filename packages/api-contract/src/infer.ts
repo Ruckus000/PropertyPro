@@ -22,7 +22,8 @@ export type Infer<C> =
     z.ZodTypeAny | undefined,
     infer TResponse,
     infer TPaginated,
-    RouteTenantScope | undefined
+    RouteTenantScope | undefined,
+    z.ZodTypeAny | undefined
   >
     ? TPaginated extends true
       ? { data: z.infer<TResponse>[]; pagination: PaginationResult }
@@ -37,7 +38,8 @@ export type InferQuery<C> =
     z.ZodTypeAny | undefined,
     z.ZodTypeAny,
     boolean,
-    RouteTenantScope | undefined
+    RouteTenantScope | undefined,
+    z.ZodTypeAny | undefined
   >
     ? TQuery extends z.ZodTypeAny
       ? z.infer<TQuery>
@@ -52,7 +54,8 @@ export type InferBody<C> =
     infer TBody,
     z.ZodTypeAny,
     boolean,
-    RouteTenantScope | undefined
+    RouteTenantScope | undefined,
+    z.ZodTypeAny | undefined
   >
     ? TBody extends z.ZodTypeAny
       ? z.infer<TBody>
@@ -67,9 +70,33 @@ export type InferParams<C> =
     z.ZodTypeAny | undefined,
     z.ZodTypeAny,
     boolean,
-    RouteTenantScope | undefined
+    RouteTenantScope | undefined,
+    z.ZodTypeAny | undefined
   >
     ? TParams extends z.ZodTypeAny
       ? z.infer<TParams>
       : undefined
+    : never;
+
+/**
+ * Infer the top-level envelope siblings a contract may emit beside `data`
+ * (CON-04) — e.g. `{ warnings?: [...] }`. `requestJson` strips the outer
+ * envelope, so a consumer that reads a sibling reads the RAW response body;
+ * type that body as `{ data: Infer<C> } & InferEnvelope<C>`. Resolves to `{}`
+ * for a contract that declares no `envelope`.
+ */
+export type InferEnvelope<C> =
+  C extends RouteContract<
+    z.ZodTypeAny | undefined,
+    z.ZodTypeAny | undefined,
+    z.ZodTypeAny | undefined,
+    z.ZodTypeAny,
+    boolean,
+    RouteTenantScope | undefined,
+    infer TEnvelope
+  >
+    ? TEnvelope extends z.ZodTypeAny
+      ? z.infer<TEnvelope>
+      : // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intersection identity for the no-envelope case
+        {}
     : never;
