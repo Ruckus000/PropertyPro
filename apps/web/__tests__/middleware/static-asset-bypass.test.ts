@@ -136,7 +136,8 @@ describe('static-asset fast path', () => {
  * excluded prefix, and (c) nothing that renders for it — its files, the
  * ancestor layouts, and everything they import from apps/web/src — reads
  * request headers or the forwarded identity. Workspace packages are not
- * followed; none of them imports next/headers.
+ * followed, so a bare import of one that reads headers
+ * (`@propertypro/db/supabase/server`) is flagged by name instead.
  */
 describe('pages reachable under a matcher-excluded prefix', () => {
   const srcDir = join(__dirname, '../../src');
@@ -148,9 +149,11 @@ describe('pages reachable under a matcher-excluded prefix', () => {
   function topLevelSegments(dir = appDir, rel = ''): string[] {
     return readdirSync(dir).flatMap((entry) => {
       const full = join(dir, entry);
-      if (!isDir(full) || entry.startsWith('_') || entry.startsWith('@')) return [];
+      // `_private` folders are not routable. `(group)` and `@slot` folders add
+      // no URL segment, so look through them.
+      if (!isDir(full) || entry.startsWith('_')) return [];
       const path = rel ? `${rel}/${entry}` : entry;
-      return entry.startsWith('(') ? topLevelSegments(full, path) : [path];
+      return entry.startsWith('(') || entry.startsWith('@') ? topLevelSegments(full, path) : [path];
     });
   }
 
@@ -197,7 +200,8 @@ describe('pages reachable under a matcher-excluded prefix', () => {
   it('has no static top-level segment on a matcher-excluded prefix', () => {
     const excluded = topLevelSegments().filter((s) => {
       const leaf = s.split('/').pop()!;
-      return leaf === 'pdfjs' || leaf.startsWith('favicon.ico') || leaf.startsWith('_next');
+      // `_next*` needs no check: `_`-prefixed folders are private (skipped above).
+      return leaf === 'pdfjs' || leaf.startsWith('favicon.ico');
     });
     expect(excluded).toEqual([]);
   });
@@ -210,10 +214,14 @@ describe('pages reachable under a matcher-excluded prefix', () => {
         .filter(existsSync),
     ];
     const closure = transitiveClosure(entries);
-    // Denominator: the redirect helper and its URL builder must be reached.
+    // Denominator: both sides of the walk must be reached — the redirect
+    // helper (from [subdomain]) and a root-layout import (from the layouts).
     expect(closure.some((f) => f.endsWith('lib/tenant/redirect-canonical-host.ts'))).toBe(true);
+    expect(closure.some((f) => f.endsWith('components/navigation/navigation-progress.tsx'))).toBe(true);
     const offenders = closure
-      .filter((file) => /next\/headers|lib\/request\//.test(readFileSync(file, 'utf8')))
+      .filter((file) =>
+        /next\/headers|lib\/request\/|supabase\/server/.test(readFileSync(file, 'utf8')),
+      )
       .map((file) => relative(srcDir, file));
     expect(offenders).toEqual([]);
   });
