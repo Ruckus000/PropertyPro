@@ -956,6 +956,16 @@ export async function decideArcSubmissionForCommunity(
         'A denial must include written reasons citing the specific rule or covenant relied on.',
       );
     }
+    // Separate field, separate check — mirrors the contract's `ruleReference`
+    // refinement (same message). Prose in `reviewNotes` can satisfy a reader
+    // without naming the rule; the statute asks for the rule. Same fallback to
+    // the stored value as the update below.
+    const effectiveRule = input.ruleReference ?? existing.ruleReference;
+    if (!effectiveRule || effectiveRule.trim().length === 0) {
+      throw new UnprocessableEntityError(
+        'Cite the specific rule or covenant relied on to deny this application (Fla. Stat. §720.3035) — for example "Declaration Art. VII §3" or "Architectural Guidelines §2.4".',
+      );
+    }
   }
 
   const [updated] = await scoped.update(

@@ -15,10 +15,16 @@
  * reviewer writes a decision, clicks Deny, and gets a validation error for a
  * field the form never asked about. The requirement is surfaced here instead,
  * with the statute named, so the reviewer knows why before they type.
+ *
+ * The contract asks for TWO things on a denial, as separate fields: the written
+ * reason (`reviewNotes`) and the rule or covenant cited (`ruleReference`). Prose
+ * can satisfy a reader without naming the rule; the statute asks for the rule.
+ * Until this form collected `ruleReference`, every denial it sent was a 400.
  */
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   useDecideArcSubmission,
   useReviewArcSubmission,
@@ -39,6 +45,7 @@ export function ArcDecisionForm({
   onComplete,
 }: ArcDecisionFormProps) {
   const [reviewNotes, setReviewNotes] = useState(submission.reviewNotes ?? '');
+  const [ruleReference, setRuleReference] = useState(submission.ruleReference ?? '');
   const [error, setError] = useState('');
 
   const reviewMutation = useReviewArcSubmission(communityId);
@@ -66,10 +73,21 @@ export function ArcDecisionForm({
   const handleDeny = useCallback(() => {
     // Checked before the request, so the reviewer is told what is missing
     // rather than shown a 400 about a field they were never prompted for.
+    // Both problems are reported at once, not one per click.
+    const problems: string[] = [];
     if (!reviewNotes.trim()) {
-      setError(
+      problems.push(
         'A denial must include written reasons citing the specific rule or covenant relied on (HB 1203).',
       );
+    }
+    // Mirrors the contract's `ruleReference` refinement, message included.
+    if (!ruleReference.trim()) {
+      problems.push(
+        'Cite the specific rule or covenant relied on to deny this application (Fla. Stat. §720.3035) — for example "Declaration Art. VII §3" or "Architectural Guidelines §2.4".',
+      );
+    }
+    if (problems.length > 0) {
+      setError(problems.join(' '));
       return;
     }
     return run('Application denied. The resident has been notified.', () =>
@@ -77,15 +95,22 @@ export function ArcDecisionForm({
         id: submission.id,
         decision: 'denied',
         reviewNotes: reviewNotes.trim(),
+        ruleReference: ruleReference.trim(),
       }),
     );
-  }, [decideMutation, reviewNotes, run, submission.id]);
+  }, [decideMutation, reviewNotes, ruleReference, run, submission.id]);
 
   if (!canReview && !canDecide) {
     return null;
   }
 
-  const denialReasonMissing = !reviewNotes.trim();
+  // Point Deny at the HELP TEXT of each empty required field, not at the field
+  // itself: a form control contributes its (empty) value to a description, so
+  // referencing the control would describe the button as nothing at all.
+  const denialFieldsMissing = [
+    !reviewNotes.trim() ? 'arc-review-notes-help' : null,
+    !ruleReference.trim() ? 'arc-rule-reference-help' : null,
+  ].filter(Boolean);
 
   return (
     <div className="space-y-4 rounded-md border border-edge bg-surface-hover p-4">
@@ -106,15 +131,37 @@ export function ArcDecisionForm({
           rows={5}
           value={reviewNotes}
           onChange={(e) => setReviewNotes(e.target.value)}
+          aria-describedby="arc-review-notes-help"
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
           placeholder="Cite the rule or covenant this decision relies on."
         />
-        <p className="mt-1 text-xs text-content-disabled">
+        <p id="arc-review-notes-help" className="mt-1 text-xs text-content-disabled">
           Optional to approve. <strong>Required to deny</strong> — Florida HB 1203
           requires a denial to state the specific reason and identify the rule or
           covenant relied on. This text is sent to the resident.
         </p>
       </div>
+
+      {canDecide && (
+        <div>
+          <label htmlFor="arc-rule-reference" className="mb-1 block text-sm font-medium text-content-secondary">
+            Rule or covenant cited
+          </label>
+          <Input
+            id="arc-rule-reference"
+            type="text"
+            maxLength={500}
+            value={ruleReference}
+            onChange={(e) => setRuleReference(e.target.value)}
+            aria-describedby="arc-rule-reference-help"
+            placeholder="Declaration Art. VII §3"
+          />
+          <p id="arc-rule-reference-help" className="mt-1 text-xs text-content-disabled">
+            <strong>Required to deny</strong> — for example &ldquo;Declaration Art. VII
+            §3&rdquo; or &ldquo;Architectural Guidelines §2.4&rdquo;. Not sent with an approval.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {canDecide && (
@@ -141,7 +188,9 @@ export function ArcDecisionForm({
               disabled={isSubmitting}
               // Not `disabled` on a missing reason: a disabled button with no
               // explanation is a dead end. It stays clickable and explains.
-              aria-describedby={denialReasonMissing ? 'arc-review-notes' : undefined}
+              aria-describedby={
+                denialFieldsMissing.length > 0 ? denialFieldsMissing.join(' ') : undefined
+              }
             >
               Deny
             </Button>

@@ -81,11 +81,16 @@ describe('ArcDecisionForm', () => {
     expect(decideMock).not.toHaveBeenCalled();
   });
 
-  it('sends the written reason with a denial', async () => {
+  it('sends the written reason and the cited rule with a denial', async () => {
+    // Before the rule field existed this case asserted a body WITHOUT
+    // `ruleReference` — exactly the body the decide contract 400s.
     renderForm();
 
     fireEvent.change(screen.getByLabelText('Review notes'), {
       target: { value: 'Violates covenant 4.2 — no unfinished hardwood on street elevations.' },
+    });
+    fireEvent.change(screen.getByLabelText('Rule or covenant cited'), {
+      target: { value: '  Declaration Art. VII §3  ' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
 
@@ -94,8 +99,81 @@ describe('ArcDecisionForm', () => {
         id: 7,
         decision: 'denied',
         reviewNotes: 'Violates covenant 4.2 — no unfinished hardwood on street elevations.',
+        ruleReference: 'Declaration Art. VII §3',
       }),
     );
+  });
+
+  it('refuses a denial that has a reason but cites no rule, and never calls the API', async () => {
+    // HB 1203 / §720.3035 asks for the rule, not just prose. The contract
+    // rejects this body with a 400 on `ruleReference`; the form says so first,
+    // in the contract's own words.
+    renderForm();
+
+    fireEvent.change(screen.getByLabelText('Review notes'), {
+      target: { value: 'Street elevation must not show unfinished hardwood.' },
+    });
+    fireEvent.change(screen.getByLabelText('Rule or covenant cited'), {
+      target: { value: '   ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Cite the specific rule or covenant relied on to deny this application \(Fla\. Stat\. §720\.3035\)/,
+    );
+    expect(decideMock).not.toHaveBeenCalled();
+  });
+
+  it('never sends a rule reference with an approval, even if one was typed', async () => {
+    renderForm();
+
+    fireEvent.change(screen.getByLabelText('Rule or covenant cited'), {
+      target: { value: 'Declaration Art. VII §3' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => expect(decideMock).toHaveBeenCalledTimes(1));
+    expect(decideMock.mock.calls[0]![0]).not.toHaveProperty('ruleReference');
+  });
+
+  it('describes Deny with what a denial still needs, and stops once both are filled', () => {
+    renderForm();
+    const deny = screen.getByRole('button', { name: 'Deny' });
+
+    // Both empty: both help texts, so a screen-reader user hears why Deny will refuse.
+    expect(deny).toHaveAccessibleDescription(/Required to deny.*HB 1203/);
+    expect(deny).toHaveAccessibleDescription(/Declaration Art\. VII\s+§3/);
+
+    fireEvent.change(screen.getByLabelText('Review notes'), {
+      target: { value: 'Unfinished hardwood on a street elevation.' },
+    });
+    // Reason filled: only the rule's help text remains.
+    expect(deny).not.toHaveAccessibleDescription(/HB 1203/);
+    expect(deny).toHaveAccessibleDescription(/Declaration Art\. VII\s+§3/);
+
+    fireEvent.change(screen.getByLabelText('Rule or covenant cited'), {
+      target: { value: 'Declaration Art. VII §3' },
+    });
+    expect(deny).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('reports both missing denial fields in one go, not one per click', async () => {
+    renderForm();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/written reasons/);
+    expect(alert).toHaveTextContent(/Fla\. Stat\. §720\.3035/);
+    expect(decideMock).not.toHaveBeenCalled();
+  });
+
+  it("describes the rule field with the contract's citation examples", () => {
+    renderForm();
+
+    const field = screen.getByLabelText('Rule or covenant cited');
+    expect(field).toHaveAccessibleDescription(/Declaration Art\. VII\s+§3/);
+    expect(field).toHaveAccessibleDescription(/Architectural Guidelines §2\.4/);
   });
 
   it('does not require a reason to approve', async () => {
