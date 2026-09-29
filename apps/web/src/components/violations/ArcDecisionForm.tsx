@@ -73,17 +73,21 @@ export function ArcDecisionForm({
   const handleDeny = useCallback(() => {
     // Checked before the request, so the reviewer is told what is missing
     // rather than shown a 400 about a field they were never prompted for.
+    // Both problems are reported at once, not one per click.
+    const problems: string[] = [];
     if (!reviewNotes.trim()) {
-      setError(
+      problems.push(
         'A denial must include written reasons citing the specific rule or covenant relied on (HB 1203).',
       );
-      return;
     }
     // Mirrors the contract's `ruleReference` refinement, message included.
     if (!ruleReference.trim()) {
-      setError(
+      problems.push(
         'Cite the specific rule or covenant relied on to deny this application (Fla. Stat. §720.3035) — for example "Declaration Art. VII §3" or "Architectural Guidelines §2.4".',
       );
+    }
+    if (problems.length > 0) {
+      setError(problems.join(' '));
       return;
     }
     return run('Application denied. The resident has been notified.', () =>
@@ -100,9 +104,12 @@ export function ArcDecisionForm({
     return null;
   }
 
+  // Point Deny at the HELP TEXT of each empty required field, not at the field
+  // itself: a form control contributes its (empty) value to a description, so
+  // referencing the control would describe the button as nothing at all.
   const denialFieldsMissing = [
-    !reviewNotes.trim() ? 'arc-review-notes' : null,
-    !ruleReference.trim() ? 'arc-rule-reference' : null,
+    !reviewNotes.trim() ? 'arc-review-notes-help' : null,
+    !ruleReference.trim() ? 'arc-rule-reference-help' : null,
   ].filter(Boolean);
 
   return (
@@ -124,10 +131,11 @@ export function ArcDecisionForm({
           rows={5}
           value={reviewNotes}
           onChange={(e) => setReviewNotes(e.target.value)}
+          aria-describedby="arc-review-notes-help"
           className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
           placeholder="Cite the rule or covenant this decision relies on."
         />
-        <p className="mt-1 text-xs text-content-disabled">
+        <p id="arc-review-notes-help" className="mt-1 text-xs text-content-disabled">
           Optional to approve. <strong>Required to deny</strong> — Florida HB 1203
           requires a denial to state the specific reason and identify the rule or
           covenant relied on. This text is sent to the resident.

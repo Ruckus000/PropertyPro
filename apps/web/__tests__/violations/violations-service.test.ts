@@ -155,8 +155,13 @@ describe('violations-service', () => {
         decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
           decision: 'denied',
           reviewNotes: null,
+          // A rule IS cited, so the 422 can only come from the missing reason.
+          ruleReference: 'Declaration Art. VII §3',
         }),
-      ).rejects.toMatchObject({ statusCode: 422 });
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: expect.stringMatching(/written reasons/),
+      });
 
       expect(update).not.toHaveBeenCalled();
       expect(logAuditEventMock).not.toHaveBeenCalled();
@@ -170,8 +175,12 @@ describe('violations-service', () => {
         decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
           decision: 'denied',
           reviewNotes: '   \n\t ',
+          ruleReference: 'Declaration Art. VII §3',
         }),
-      ).rejects.toMatchObject({ statusCode: 422 });
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: expect.stringMatching(/written reasons/),
+      });
 
       expect(update).not.toHaveBeenCalled();
     });
@@ -190,6 +199,7 @@ describe('violations-service', () => {
         decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
           decision: 'denied',
           reviewNotes: null,
+          ruleReference: 'Declaration Art. VII §3',
         }),
       ).resolves.toMatchObject({ status: 'denied' });
 
@@ -198,6 +208,43 @@ describe('violations-service', () => {
         expect.objectContaining({ status: 'denied' }),
         { eq: [tables.arcSubmissions.id, 7] },
       );
+    });
+
+    it('rejects a denial that gives a reason but cites no rule', async () => {
+      // The contract refuses this at the route; this is the same refusal for
+      // any caller that reaches the service another way.
+      const update = mockSubmission(createArcSubmissionRow({ reviewNotes: null }));
+
+      await expect(
+        decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+          decision: 'denied',
+          reviewNotes: 'Street elevation must not show unfinished hardwood.',
+          ruleReference: null,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: expect.stringMatching(
+          /Cite the specific rule or covenant relied on to deny this application \(Fla\. Stat\. §720\.3035\)/,
+        ),
+      });
+
+      expect(update).not.toHaveBeenCalled();
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+      expect(sendNotificationMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a denial whose cited rule is only whitespace', async () => {
+      const update = mockSubmission(createArcSubmissionRow({ reviewNotes: null }));
+
+      await expect(
+        decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+          decision: 'denied',
+          reviewNotes: 'Street elevation must not show unfinished hardwood.',
+          ruleReference: '  \t ',
+        }),
+      ).rejects.toMatchObject({ statusCode: 422, message: expect.stringMatching(/§720\.3035/) });
+
+      expect(update).not.toHaveBeenCalled();
     });
 
     it('does not require a reason to APPROVE', async () => {

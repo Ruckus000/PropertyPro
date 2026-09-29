@@ -136,6 +136,38 @@ describe('ArcDecisionForm', () => {
     expect(decideMock.mock.calls[0]![0]).not.toHaveProperty('ruleReference');
   });
 
+  it('describes Deny with what a denial still needs, and stops once both are filled', () => {
+    renderForm();
+    const deny = screen.getByRole('button', { name: 'Deny' });
+
+    // Both empty: both help texts, so a screen-reader user hears why Deny will refuse.
+    expect(deny).toHaveAccessibleDescription(/Required to deny.*HB 1203/);
+    expect(deny).toHaveAccessibleDescription(/Declaration Art\. VII\s+§3/);
+
+    fireEvent.change(screen.getByLabelText('Review notes'), {
+      target: { value: 'Unfinished hardwood on a street elevation.' },
+    });
+    // Reason filled: only the rule's help text remains.
+    expect(deny).not.toHaveAccessibleDescription(/HB 1203/);
+    expect(deny).toHaveAccessibleDescription(/Declaration Art\. VII\s+§3/);
+
+    fireEvent.change(screen.getByLabelText('Rule or covenant cited'), {
+      target: { value: 'Declaration Art. VII §3' },
+    });
+    expect(deny).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('reports both missing denial fields in one go, not one per click', async () => {
+    renderForm();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/written reasons/);
+    expect(alert).toHaveTextContent(/Fla\. Stat\. §720\.3035/);
+    expect(decideMock).not.toHaveBeenCalled();
+  });
+
   it("describes the rule field with the contract's citation examples", () => {
     renderForm();
 
