@@ -61,16 +61,21 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 // AUTHZ: Cross-community notifications — aggregated feed across all communities the user belongs to.
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
 import { listCrossCommunityNotificationsForUser } from '@/lib/services/notification-service';
+import { getSupportScope, narrowToSupportScope } from '@/lib/support/support-scope';
 import { notificationsAllContract } from './contract';
 
-// route-gate: self-scoped — the caller's own notifications across their communities
+// route-gate: self-scoped — the caller's own notifications across their communities (narrowed to the consented community under a support session)
 export const GET = withErrorHandler(
-  runRoute(notificationsAllContract, async ({ query }) => {
+  runRoute(notificationsAllContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();
 
     // Resolve the user's authorized community set (via user_roles,
-    // scoped by user).
-    const userCommunities = await findUserCommunitiesUnscoped(userId);
+    // scoped by user). Under a support session, only the consented community.
+    const userCommunities = narrowToSupportScope(
+      await findUserCommunitiesUnscoped(userId),
+      getSupportScope(req.headers),
+      (r) => r.communityId,
+    );
     if (userCommunities.length === 0) {
       return { notifications: [], nextCursor: null, totalUnread: 0 };
     }

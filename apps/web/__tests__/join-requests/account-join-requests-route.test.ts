@@ -30,6 +30,15 @@ import { GET, POST } from '@/app/api/v1/account/join-requests/route';
 
 const USER_ID = 'user-abc';
 
+/** Headers middleware stamps on an impersonated request consented for `communityId`. */
+function supportHeaders(communityId: number): Record<string, string> {
+  return {
+    'x-support-session-id': '42',
+    'x-support-community-id': String(communityId),
+    'x-community-id': String(communityId),
+  };
+}
+
 function postRequest(body: unknown): NextRequest {
   return new NextRequest('https://app.test/api/v1/account/join-requests', {
     method: 'POST',
@@ -122,6 +131,25 @@ describe('account/join-requests route', () => {
       const json = await res.json();
       expect(json.error?.details?.reason).toBe('pending_request');
     });
+
+    it.each([
+      ['another community', 6],
+      ['the consented community itself', 5],
+    ])('returns 403 under a support session (%s)', async (_label, communityId) => {
+      const res = await POST(
+        new NextRequest('https://app.test/api/v1/account/join-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...supportHeaders(5) },
+          body: JSON.stringify({ communityId, unitIdentifier: '12A', residentType: 'owner' }),
+        }),
+      );
+      expect(res.status).toBe(403);
+      const json = await res.json();
+      expect(json.error?.message).toBe('Not available during a support session');
+      expect(rateLimiterCheckMock).not.toHaveBeenCalled();
+      expect(checkJoinRequestEligibilityMock).not.toHaveBeenCalled();
+      expect(createJoinRequestMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET', () => {
@@ -144,6 +172,37 @@ describe('account/join-requests route', () => {
         new NextRequest('https://app.test/api/v1/account/join-requests'),
       );
       expect(res.status).toBe(401);
+    });
+
+    it('narrows to the consented community under a support session', async () => {
+      listJoinRequestsForUserMock.mockResolvedValueOnce([
+        { id: 1, communityId: 5, status: 'pending' },
+        { id: 2, communityId: 6, status: 'denied' },
+        { id: 3, communityId: 5, status: 'approved' },
+      ]);
+      const res = await GET(
+        new NextRequest('https://app.test/api/v1/account/join-requests', {
+          headers: supportHeaders(5),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toEqual({
+        data: [
+          { id: 1, communityId: 5, status: 'pending' },
+          { id: 3, communityId: 5, status: 'approved' },
+        ],
+      });
+    });
+
+    it('control: without a support session every community is listed', async () => {
+      listJoinRequestsForUserMock.mockResolvedValueOnce([
+        { id: 1, communityId: 5, status: 'pending' },
+        { id: 2, communityId: 6, status: 'denied' },
+      ]);
+      const res = await GET(new NextRequest('https://app.test/api/v1/account/join-requests'));
+      const json = await res.json();
+      expect(json.data).toHaveLength(2);
     });
   });
 });

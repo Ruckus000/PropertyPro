@@ -103,6 +103,31 @@ describe('GET /api/v1/billing-groups/[id]/preview', () => {
     });
   });
 
+  it('returns 403 under a support session, before any billing-group read', async () => {
+    getBillingGroupByOwnerMock.mockResolvedValue({ id: 7, ownerUserId: 'user-1' });
+    listSiblingCommunityPlansMock.mockResolvedValue([]);
+
+    const res = await GET(
+      new NextRequest(
+        'http://localhost:3000/api/v1/billing-groups/7/preview?planId=essentials&communityType=condo_718',
+        {
+          headers: {
+            'x-support-session-id': '42',
+            'x-support-community-id': '3',
+            'x-community-id': '3',
+          },
+        },
+      ),
+      ctx(7),
+    );
+
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error?: { message?: string } };
+    expect(json.error?.message).toBe('Not available during a support session');
+    expect(getBillingGroupByOwnerMock).not.toHaveBeenCalled();
+    expect(calculatePricingImpactMock).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 

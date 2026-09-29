@@ -30,16 +30,18 @@ import {
   getActivityFeed,
   getUpcomingEvents,
 } from '@/lib/queries/cross-community';
+import { getSupportScope } from '@/lib/support/support-scope';
 import { overviewContract } from './contract';
 
-// route-gate: community-open — each card and feed item is filtered by the caller's per-community permissions (#1199)
+// route-gate: community-open — each card and feed item is filtered by the caller's per-community permissions (#1199); narrowed to the consented community under a support session
 export const GET = withErrorHandler(
-  runRoute(overviewContract, async () => {
+  runRoute(overviewContract, async ({ req }) => {
     const userId = await requireAuthenticatedUserId();
+    const supportScope = getSupportScope(req.headers);
     const [cards, activity, events] = await Promise.all([
-      getCommunityCards(userId),
-      getActivityFeed(userId, 30),
-      getUpcomingEvents(userId, 30),
+      getCommunityCards(userId, supportScope),
+      getActivityFeed(userId, supportScope, 30),
+      getUpcomingEvents(userId, supportScope, 30),
     ]);
     return { cards, activity, events };
   }),

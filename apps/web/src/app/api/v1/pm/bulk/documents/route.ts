@@ -33,8 +33,9 @@ interface DocumentResult {
 }
 
 export const POST = withErrorHandler(
-  runRoute(pmBulkDocumentsPostContract, async ({ body }) => {
+  runRoute(pmBulkDocumentsPostContract, async ({ body, req }) => {
     const userId = await requirePmPortfolioAccess(
+      req,
       'Only property managers can perform bulk document uploads',
     );
 

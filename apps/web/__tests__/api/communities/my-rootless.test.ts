@@ -66,4 +66,35 @@ describe('GET /api/v1/communities/my-rootless', () => {
     await GET(getReq());
     expect(findMyRootlessCommunitiesMock).toHaveBeenCalledWith('pm-99');
   });
+
+  describe('under a support session', () => {
+    const ROOTLESS = [
+      { id: 1, name: 'Sunset Condos', slug: 'sunset-condos' },
+      { id: 2, name: 'Palm Shores HOA', slug: 'palm-shores-hoa' },
+    ];
+
+    function supportReq(communityId: string | null): NextRequest {
+      const headers: Record<string, string> = { 'x-support-session-id': '7' };
+      if (communityId !== null) headers['x-support-community-id'] = communityId;
+      return new NextRequest('http://localhost:3000/api/v1/communities/my-rootless', {
+        method: 'GET',
+        headers,
+      });
+    }
+
+    it('lists only the consented community', async () => {
+      findMyRootlessCommunitiesMock.mockResolvedValue(ROOTLESS);
+
+      const res = await GET(supportReq('2'));
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ data: { communities: [ROOTLESS[1]] } });
+    });
+
+    it('lists nothing when the session community is unreadable (fail closed)', async () => {
+      findMyRootlessCommunitiesMock.mockResolvedValue(ROOTLESS);
+
+      const res = await GET(supportReq(null));
+      await expect(res.json()).resolves.toEqual({ data: { communities: [] } });
+    });
+  });
 });

@@ -16,8 +16,13 @@ vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
 
+const { listCommunitiesForUserMock } = vi.hoisted(() => ({
+  listCommunitiesForUserMock: vi.fn(),
+}));
+
 vi.mock('@/lib/api/user-communities', () => ({
   countCommunitiesForUser: countCommunitiesForUserMock,
+  listCommunitiesForUser: listCommunitiesForUserMock,
 }));
 
 import { GET } from '../../src/app/api/v1/user/communities/route';
@@ -61,5 +66,36 @@ describe('GET /api/v1/user/communities', () => {
 
     expect(res.status).toBe(401);
     expect(countCommunitiesForUserMock).not.toHaveBeenCalled();
+  });
+
+  describe('under a support session', () => {
+    // Two roles in community 5, one in community 8.
+    const ROWS = [{ communityId: 5 }, { communityId: 5 }, { communityId: 8 }];
+
+    function supportReq(communityId: string | null): NextRequest {
+      const headers: Record<string, string> = { 'x-support-session-id': '7' };
+      if (communityId !== null) headers['x-support-community-id'] = communityId;
+      return new NextRequest('http://localhost:3000/api/v1/user/communities', { headers });
+    }
+
+    it('counts only the consented community (distinct), not the whole membership', async () => {
+      countCommunitiesForUserMock.mockResolvedValue(2);
+      listCommunitiesForUserMock.mockResolvedValue(ROWS);
+
+      const res = await GET(supportReq('5'));
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ data: { count: 1 } });
+      expect(countCommunitiesForUserMock).not.toHaveBeenCalled();
+    });
+
+    it('counts zero when the session community is unreadable (fail closed)', async () => {
+      countCommunitiesForUserMock.mockResolvedValue(2);
+      listCommunitiesForUserMock.mockResolvedValue(ROWS);
+
+      const res = await GET(supportReq(null));
+
+      await expect(res.json()).resolves.toEqual({ data: { count: 0 } });
+    });
   });
 });

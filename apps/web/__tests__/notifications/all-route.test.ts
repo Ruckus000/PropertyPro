@@ -351,4 +351,44 @@ describe('GET /api/v1/notifications/all', () => {
     expect(findUserCommunitiesUnscopedMock).not.toHaveBeenCalled();
     expect(listCrossCommunityNotificationsForUserMock).not.toHaveBeenCalled();
   });
+
+  describe('under a support session', () => {
+    function supportReq(communityId: string | null): NextRequest {
+      const headers: Record<string, string> = { 'x-support-session-id': '7' };
+      if (communityId !== null) headers['x-support-community-id'] = communityId;
+      return new NextRequest('http://localhost:3000/api/v1/notifications/all', { headers });
+    }
+
+    it('reads only the consented community', async () => {
+      findUserCommunitiesUnscopedMock.mockResolvedValueOnce(COMMUNITIES);
+      listCrossCommunityNotificationsForUserMock.mockImplementation(
+        async ({ communityId }: { communityId: number }) => ({
+          list: [makeNotification(communityId + 1, communityId)],
+          unread: communityId,
+        }),
+      );
+
+      const res = await GET(supportReq('20'));
+      const json = (await res.json()) as EnvelopeJson;
+
+      expect(res.status).toBe(200);
+      expect(listCrossCommunityNotificationsForUserMock).toHaveBeenCalledTimes(1);
+      expect(listCrossCommunityNotificationsForUserMock).toHaveBeenCalledWith(
+        expect.objectContaining({ communityId: 20 }),
+      );
+      expect(json.data.notifications.map((n) => n.community.id)).toEqual([20]);
+      expect(json.data.totalUnread).toBe(20);
+    });
+
+    it('reads nothing when the session community is unreadable (fail closed)', async () => {
+      findUserCommunitiesUnscopedMock.mockResolvedValueOnce(COMMUNITIES);
+
+      const res = await GET(supportReq(null));
+      const json = (await res.json()) as EnvelopeJson;
+
+      expect(res.status).toBe(200);
+      expect(json.data).toEqual({ notifications: [], nextCursor: null, totalUnread: 0 });
+      expect(listCrossCommunityNotificationsForUserMock).not.toHaveBeenCalled();
+    });
+  });
 });

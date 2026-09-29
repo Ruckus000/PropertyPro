@@ -26,8 +26,9 @@ import {
 } from './contract';
 
 /** PM + plan-feature gate shared by all four methods. Returns the actor's userId. */
-async function gateUser(): Promise<string> {
+async function gateUser(req: { headers: Headers }): Promise<string> {
   const userId = await requirePmPortfolioAccess(
+    req,
     'Only property managers can manage portfolio templates',
   );
   if (!(await svc.userHasPortfolioTemplatesAccess(userId))) {
@@ -41,15 +42,15 @@ async function gateUser(): Promise<string> {
 }
 
 export const GET = withErrorHandler(
-  runRoute(templatesListContract, async () => {
-    const userId = await gateUser();
+  runRoute(templatesListContract, async ({ req }) => {
+    const userId = await gateUser(req);
     return { templates: await svc.listTemplates(userId) };
   }),
 );
 
 export const POST = withErrorHandler(
-  runRoute(templateCreateContract, async ({ body }) => {
-    const userId = await gateUser();
+  runRoute(templateCreateContract, async ({ body, req }) => {
+    const userId = await gateUser(req);
     // Authorize the caller manages the SOURCE community before capturing it.
     const membership = await requireCommunityMembership(body.communityId, userId);
     requireRole(membership, PM_MANAGER_ROLES, 'You do not manage that community');
@@ -58,15 +59,15 @@ export const POST = withErrorHandler(
 );
 
 export const PATCH = withErrorHandler(
-  runRoute(templateRenameContract, async ({ body }) => {
-    const userId = await gateUser();
+  runRoute(templateRenameContract, async ({ body, req }) => {
+    const userId = await gateUser(req);
     return svc.renameTemplate(userId, body.id, body.name);
   }),
 );
 
 export const DELETE = withErrorHandler(
-  runRoute(templateDeleteContract, async ({ body }) => {
-    const userId = await gateUser();
+  runRoute(templateDeleteContract, async ({ body, req }) => {
+    const userId = await gateUser(req);
     await svc.deleteTemplate(userId, body.id);
     return { ok: true as const };
   }),

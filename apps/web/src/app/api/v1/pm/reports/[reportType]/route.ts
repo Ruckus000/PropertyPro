@@ -20,8 +20,8 @@ import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { pmReportGetContract, type PmReportType } from './contract';
 
 export const GET = withErrorHandler(
-  runRoute(pmReportGetContract, async ({ params, query }) => {
-    const userId = await requirePmPortfolioAccess();
+  runRoute(pmReportGetContract, async ({ params, query, req }) => {
+    const userId = await requirePmPortfolioAccess(req);
 
     const { dateFrom, dateTo, communityIds } = query;
     const dateRange = dateFrom && dateTo ? { from: dateFrom, to: dateTo } : undefined;

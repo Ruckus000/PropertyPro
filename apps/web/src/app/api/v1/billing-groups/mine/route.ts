@@ -29,8 +29,8 @@ import { getOrCreateBillingGroupForPm } from '@/lib/billing/billing-group-servic
 import { billingGroupsMineContract } from './contract';
 
 export const GET = withErrorHandler(
-  runRoute(billingGroupsMineContract, async () => {
-    const userId = await requirePmPortfolioAccess();
+  runRoute(billingGroupsMineContract, async ({ req }) => {
+    const userId = await requirePmPortfolioAccess(req);
 
     const { billingGroupId } = await getOrCreateBillingGroupForPm(userId);
     return { billingGroupId };

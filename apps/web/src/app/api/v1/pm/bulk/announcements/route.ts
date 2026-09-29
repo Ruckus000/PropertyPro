@@ -30,8 +30,9 @@ interface BulkResult {
 }
 
 export const POST = withErrorHandler(
-  runRoute(pmBulkAnnouncementsPostContract, async ({ body }) => {
+  runRoute(pmBulkAnnouncementsPostContract, async ({ body, req }) => {
     const userId = await requirePmPortfolioAccess(
+      req,
       'Only property managers can send bulk announcements',
     );
 

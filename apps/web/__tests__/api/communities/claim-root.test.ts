@@ -73,4 +73,52 @@ describe('POST /api/v1/communities/claim-root', () => {
     const res = await POST(postReq({}));
     expect(res.status).toBe(400);
   });
+
+  describe('under a support session consented for community 42', () => {
+    function supportPost(body: unknown, communityId: string | null = '42'): NextRequest {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        'x-support-session-id': '7',
+      };
+      if (communityId !== null) headers['x-support-community-id'] = communityId;
+      return new NextRequest('http://localhost:3000/api/v1/communities/claim-root', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    }
+
+    it('claimAll → 403 and claims nothing', async () => {
+      const res = await POST(supportPost({ claimAll: true }));
+      expect(res.status).toBe(403);
+      await expect(res.json()).resolves.toMatchObject({
+        error: { message: 'Not available during a support session' },
+      });
+      expect(claimAllRootsMock).not.toHaveBeenCalled();
+      expect(claimRootMock).not.toHaveBeenCalled();
+    });
+
+    it('a single claim on ANOTHER community → 403', async () => {
+      const res = await POST(supportPost({ communityId: 99 }));
+      expect(res.status).toBe(403);
+      expect(claimRootMock).not.toHaveBeenCalled();
+    });
+
+    it('a single claim when the session community is unreadable → 403 (fail closed)', async () => {
+      const res = await POST(supportPost({ communityId: 42 }, null));
+      expect(res.status).toBe(403);
+      expect(claimRootMock).not.toHaveBeenCalled();
+    });
+
+    it('a single claim on the consented community → 403 too (role changes are never in a support grant)', async () => {
+      claimRootMock.mockResolvedValue({ communityId: 42, claimed: true });
+
+      const res = await POST(supportPost({ communityId: 42 }));
+      expect(res.status).toBe(403);
+      await expect(res.json()).resolves.toMatchObject({
+        error: { message: 'Not available during a support session' },
+      });
+      expect(claimRootMock).not.toHaveBeenCalled();
+    });
+  });
 });

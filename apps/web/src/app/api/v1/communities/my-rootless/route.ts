@@ -16,13 +16,18 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 // apply — the #718 two-guard lesson).
 // AUTHZ: self-scoped to the authenticated session user id (requireAuthenticatedUserId) passed below, never an attacker-supplied value.
 import { findMyRootlessCommunities } from '@propertypro/db/unsafe';
+import { getSupportScope, narrowToSupportScope } from '@/lib/support/support-scope';
 import { myRootlessContract } from './contract';
 
-// route-gate: self-scoped — lists rootless communities where the caller holds property_manager
+// route-gate: self-scoped — lists rootless communities where the caller holds property_manager (narrowed to the consented community under a support session)
 export const GET = withErrorHandler(
-  runRoute(myRootlessContract, async () => {
+  runRoute(myRootlessContract, async ({ req }) => {
     const userId = await requireAuthenticatedUserId();
-    const communities = await findMyRootlessCommunities(userId);
+    const communities = narrowToSupportScope(
+      await findMyRootlessCommunities(userId),
+      getSupportScope(req.headers),
+      (c) => c.id,
+    );
 
     // Return the plain payload; the runner wraps it in the canonical
     // `{ data: { communities } }` envelope (response schema is `z.unknown()`).

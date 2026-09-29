@@ -19,6 +19,7 @@ import type { RbacResource } from '@propertypro/shared';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { requireCommunityMembership, type CommunityMembership } from '@/lib/api/community-membership';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
+import { narrowToSupportScope, type SupportScope } from '@/lib/support/support-scope';
 import {
   communities,
   complianceChecklistItems,
@@ -34,10 +35,23 @@ import type {
 } from './cross-community.types';
 
 /**
- * Returns the ids of all non-deleted communities the user belongs to.
+ * Returns the ids of all non-deleted communities the user belongs to —
+ * narrowed to the consented community under a support session.
+ *
+ * `supportScope` is REQUIRED (pass `getSupportScope(req.headers)` from a route,
+ * `await getPageSupportScope()` from a page) so no caller can forget it: under
+ * impersonation the "user" is the target, whose memberships span communities
+ * the session was never granted. Every helper below funnels through here.
  */
-export async function getAuthorizedCommunityIds(userId: string): Promise<number[]> {
-  const rows = await findUserCommunitiesUnscoped(userId);
+export async function getAuthorizedCommunityIds(
+  userId: string,
+  supportScope: SupportScope | null,
+): Promise<number[]> {
+  const rows = narrowToSupportScope(
+    await findUserCommunitiesUnscoped(userId),
+    supportScope,
+    (r) => r.communityId,
+  );
   const ids = new Set<number>();
   for (const row of rows) {
     ids.add(row.communityId);
@@ -107,8 +121,11 @@ function classifyComplianceEscalation(
   return 'calm';
 }
 
-export async function getCommunityCards(userId: string): Promise<CommunityCard[]> {
-  const communityIds = await getAuthorizedCommunityIds(userId);
+export async function getCommunityCards(
+  userId: string,
+  supportScope: SupportScope | null,
+): Promise<CommunityCard[]> {
+  const communityIds = await getAuthorizedCommunityIds(userId, supportScope);
   if (communityIds.length === 0) return [];
   const now = new Date();
   const results = await Promise.all(
@@ -162,8 +179,12 @@ export async function getCommunityCards(userId: string): Promise<CommunityCard[]
   return results.filter((r): r is CommunityCard => r !== null);
 }
 
-export async function getActivityFeed(userId: string, days = 30): Promise<ActivityItem[]> {
-  const communityIds = await getAuthorizedCommunityIds(userId);
+export async function getActivityFeed(
+  userId: string,
+  supportScope: SupportScope | null,
+  days = 30,
+): Promise<ActivityItem[]> {
+  const communityIds = await getAuthorizedCommunityIds(userId, supportScope);
   if (communityIds.length === 0) return [];
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const results = await Promise.all(
@@ -238,8 +259,12 @@ export async function getActivityFeed(userId: string, days = 30): Promise<Activi
   return results.flat().sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, 50);
 }
 
-export async function getUpcomingEvents(userId: string, days = 30): Promise<UpcomingEvent[]> {
-  const communityIds = await getAuthorizedCommunityIds(userId);
+export async function getUpcomingEvents(
+  userId: string,
+  supportScope: SupportScope | null,
+  days = 30,
+): Promise<UpcomingEvent[]> {
+  const communityIds = await getAuthorizedCommunityIds(userId, supportScope);
   if (communityIds.length === 0) return [];
   const now = new Date();
   const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);

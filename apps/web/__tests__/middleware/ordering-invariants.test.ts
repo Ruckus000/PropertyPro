@@ -12,8 +12,8 @@
  *      branch, which reads the resolved `x-community-id` as the token's
  *      expected community. When none resolves, an accepted session stamps its
  *      own consented community (fill-only), so header-reconciling routes are
- *      pinned to it; an /api/v1/communities/<id> path must also match. (Page-
- *      level reads that ignore the header, e.g. /pm/reports, are not pinned.)
+ *      pinned to it; an /api/v1/communities/<id> path, and any `?communityId=` /
+ *      `?communityIds=` the page reads itself, must also match.
  *   2. The CORS preflight and the CSRF Origin/Referer reject short-circuit
  *      BEFORE the Supabase session refresh (`createMiddlewareClient`).
  *   3. Early responses (dev-surface 404, apex / signup-host redirects,
@@ -436,6 +436,121 @@ describe('support session stamps its consented community when no tenant resolves
 });
 
 // ---------------------------------------------------------------------------
+// 1c. A community named in the QUERY must be the session's too
+// ---------------------------------------------------------------------------
+// On a tenant subdomain `resolveCommunityContext` takes the host and ignores
+// ?communityId=, so x-community-id = A while pages such as /mobile/maintenance
+// read Number(searchParams.communityId) = B themselves. The query is compared
+// like the path id: any disagreement, or an unparseable value, rejects.
+describe('support session: ?communityId= must match the consented community', () => {
+  const TENANT_HOST = `sunset-condos.${ROOT_DOMAIN}`;
+
+  beforeEach(() => {
+    // The subdomain's slug resolves to the token community.
+    rpcMock.mockResolvedValue({ data: TOKEN_COMMUNITY_ID, error: null });
+  });
+
+  function expectRejected(res: NextResponse) {
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(forwarded(res, 'x-support-community-id')).toBeNull();
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    expect(res.headers.get('set-cookie') ?? '').toMatch(
+      new RegExp(`${SUPPORT_SESSION_COOKIE}=;.*Max-Age=0`, 'i'),
+    );
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  }
+
+  it.each(['/mobile/maintenance', '/api/v1/maintenance-requests'])(
+    'subdomain host (tenant = session community) + ?communityId=<other> on %s is rejected',
+    async (path) => {
+      const res = await middleware(
+        req(`https://${TENANT_HOST}${path}?communityId=2`, {
+          supportToken: await signSupportToken(),
+        }),
+      );
+
+      // The host really did resolve the session's community — only the query
+      // disagrees, which is exactly the bypass.
+      expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+      expectRejected(res);
+    },
+  );
+
+  it('subdomain host + matching ?communityId= is accepted', async () => {
+    const res = await middleware(
+      req(`https://${TENANT_HOST}/mobile/maintenance?communityId=${TOKEN_COMMUNITY_ID}`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBe('1');
+    expect(forwarded(res, 'x-user-id')).toBe('target-user-uuid');
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    expect(maybeSingleMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['garbage', '?communityId=abc'],
+    ['empty', '?communityId='],
+    ['Number()-only spelling', '?communityId=0x1'],
+    ['exponent spelling', '?communityId=1e0'],
+    ['signed spelling', '?communityId=%2B1'],
+    ['zero', '?communityId=0'],
+    ['a repeated key that disagrees', `?communityId=${TOKEN_COMMUNITY_ID}&communityId=2`],
+    ['a list with another community', `?communityIds=${TOKEN_COMMUNITY_ID},2`],
+    ['a list with an unparseable entry', `?communityIds=${TOKEN_COMMUNITY_ID},x`],
+  ])('subdomain host + %s query fails closed', async (_label, query) => {
+    const res = await middleware(
+      req(`https://${TENANT_HOST}/mobile/maintenance${query}`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expectRejected(res);
+  });
+
+  it.each([
+    // Apex + protected path: the resolver itself takes ?communityId= as the
+    // tenant, so this was already rejected; pinned so the new rule keeps it.
+    '/mobile/maintenance',
+    // Apex + TENANT_OPTIONAL_PATHS: tenant resolution is skipped, so the query
+    // is the ONLY community named — the new rule is what rejects it.
+    '/select-community',
+    '/account/join-community',
+  ])('apex host %s + ?communityId=<other> is rejected', async (path) => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}${path}?communityId=2`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expectRejected(res);
+  });
+
+  it('apex host + matching ?communityId= is accepted', async () => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}/mobile/maintenance?communityId=${TOKEN_COMMUNITY_ID}`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBe('1');
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+  });
+
+  it('control: without a support session a mismatching query is not rejected by this rule', async () => {
+    const res = await middleware(req(`https://${TENANT_HOST}/mobile/maintenance?communityId=2`));
+
+    // Unchanged: the host's tenant wins, the admin's own identity proceeds, and
+    // no support cookie is cleared (there was none).
+    expect(res.status).toBe(200);
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    expect(res.headers.get('set-cookie') ?? '').not.toMatch(SUPPORT_SESSION_COOKIE);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 2. Preflight + CSRF short-circuit before the Supabase session refresh
 // ---------------------------------------------------------------------------
 
@@ -702,5 +817,52 @@ describe('invariant 4: header sanitisation precedes the support branch', () => {
     expect(forwarded(res, 'x-tenant-slug')).toBeNull();
     expect(forwarded(res, 'x-tenant-source')).toBeNull();
     expect(forwarded(res, 'x-preview')).toBeNull();
+  });
+
+  it('a spoofed x-support-community-id is stripped, and replaced only by a verified session', async () => {
+    // No support session: the spoof must not survive to make getSupportScope
+    // narrow (it also needs x-support-session-id, which is stripped too).
+    const plain = await middleware(
+      req('http://localhost:3000/api/v1/documents', {
+        headers: { 'x-support-community-id': '2', 'x-support-session-id': '999' },
+      }),
+    );
+    expect(forwarded(plain, 'x-support-community-id')).toBeNull();
+    expect(forwarded(plain, 'x-support-session-id')).toBeNull();
+
+    // Support session: the token's community replaces the spoof.
+    const supported = await middleware(
+      req('http://localhost:3000/api/v1/documents', {
+        headers: { 'x-support-community-id': '2' },
+        supportToken: await signSupportToken(),
+      }),
+    );
+    expect(forwarded(supported, 'x-support-session')).toBe('1');
+    expect(forwarded(supported, 'x-support-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. x-support-community-id is stamped on every impersonated path
+// ---------------------------------------------------------------------------
+// The user-keyed listing surfaces narrow to it (lib/support/support-scope.ts).
+// Unlike x-community-id it must reach the TENANT_OPTIONAL_PATHS, because the
+// community picker at /select-community is one of those surfaces.
+describe('support session stamps x-support-community-id on every path', () => {
+  it.each(['/select-community', '/account/join-community', '/api/v1/documents', '/api/v1/me/communities'])(
+    '%s carries the consented community',
+    async (path) => {
+      const res = await middleware(
+        req(`http://localhost:3000${path}`, { supportToken: await signSupportToken() }),
+      );
+
+      expect(forwarded(res, 'x-support-session')).toBe('1');
+      expect(forwarded(res, 'x-support-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+    },
+  );
+
+  it('is absent without a support session', async () => {
+    const res = await middleware(req('http://localhost:3000/select-community'));
+    expect(forwarded(res, 'x-support-community-id')).toBeNull();
   });
 });

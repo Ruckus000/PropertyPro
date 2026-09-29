@@ -77,30 +77,30 @@ describeDb('overview visibility (integration)', () => {
   });
 
   it('shows a tenant the "all" announcement but not the board-only one', async () => {
-    const titles = (await getActivityFeed(requireUser(kit!, 'tenantA').id)).map((i) => i.title);
+    const titles = (await getActivityFeed(requireUser(kit!, 'tenantA').id, null)).map((i) => i.title);
 
     expect(titles).toContain(t('ALL'));
     expect(titles).not.toContain(t('BOARD'));
   });
 
   it('never lists violation-evidence documents in a tenant\'s feed', async () => {
-    const titles = (await getActivityFeed(requireUser(kit!, 'tenantA').id)).map((i) => i.title);
+    const titles = (await getActivityFeed(requireUser(kit!, 'tenantA').id, null)).map((i) => i.title);
 
     expect(titles).not.toContain(t('EVIDENCE'));
   });
 
   it('still shows a manager the board-only announcement (not vacuous)', async () => {
-    const titles = (await getActivityFeed(requireUser(kit!, 'actorA').id)).map((i) => i.title);
+    const titles = (await getActivityFeed(requireUser(kit!, 'actorA').id, null)).map((i) => i.title);
 
     expect(titles).toContain(t('BOARD'));
   });
 
   it('withholds the compliance score from a tenant but not from a manager', async () => {
     const communityId = requireCommunity(kit!, 'communityA').id;
-    const tenantCard = (await getCommunityCards(requireUser(kit!, 'tenantA').id)).find(
+    const tenantCard = (await getCommunityCards(requireUser(kit!, 'tenantA').id, null)).find(
       (c) => c.communityId === communityId,
     );
-    const managerCard = (await getCommunityCards(requireUser(kit!, 'actorA').id)).find(
+    const managerCard = (await getCommunityCards(requireUser(kit!, 'actorA').id, null)).find(
       (c) => c.communityId === communityId,
     );
 

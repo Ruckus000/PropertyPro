@@ -47,12 +47,17 @@ import {
   listSiblingCommunityPlans,
 } from '@/lib/billing/billing-group-service';
 import { PLAN_MONTHLY_PRICES_USD } from '@propertypro/shared';
+import { refuseUnderSupportSession } from '@/lib/support/support-scope';
 import { billingGroupPreviewContract } from './contract';
 
-// route-gate: self-scoped — getBillingGroupByOwner(userId) returns only the caller's own group; any other id is refused
+// route-gate: self-scoped — getBillingGroupByOwner(userId) returns only the caller's own group; any other id is refused (and the whole route under a support session)
 export const GET = withErrorHandler(
-  runRoute(billingGroupPreviewContract, async ({ params, query }) => {
+  runRoute(billingGroupPreviewContract, async ({ params, query, req }) => {
     const userId = await requireAuthenticatedUserId();
+    // A billing group spans the owner's portfolio, which a support session
+    // (consented for ONE community) does not cover — as its sibling
+    // `billing-groups/mine` is refused via requirePmPortfolioAccess.
+    refuseUnderSupportSession(req.headers);
     const billingGroupId = params.id;
 
     const group = await getBillingGroupByOwner(userId);

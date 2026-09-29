@@ -4,6 +4,7 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityFeatures } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
+import { getSupportScope, narrowToSupportScope } from '@/lib/support/support-scope';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
@@ -31,7 +32,13 @@ export async function requireHelpPageContext(
   });
 
   if (!context.communityId) {
-    const communities = await listCommunitiesForUser(userId);
+    // Narrowed under a support session: the redirect below must not steer the
+    // impersonated request into a community outside the session's grant.
+    const communities = narrowToSupportScope(
+      await listCommunitiesForUser(userId),
+      getSupportScope(requestHeaders),
+      (c) => c.communityId,
+    );
     if (communities.length === 1) {
       params.set('communityId', String(communities[0]!.communityId));
       redirect(`${pathname}?${params.toString()}`);
