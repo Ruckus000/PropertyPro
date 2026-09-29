@@ -258,15 +258,22 @@ type DbCall = { op: string; table?: unknown; values?: unknown; config?: unknown 
  * the provided sequence of row arrays.
  *
  * selectSequence: each call to .limit() pops the next array from the front.
+ *   The FIRST `.returning()` on an update of provisioning_jobs also pops from
+ *   it: that is runProvisioning's claim, which replaced the old "load job"
+ *   select and returns the claimed job row (or [] when the claim loses).
  * insertReturning: array returned from .returning() on insert.
  * insertError: if set, insert().values() throws this error.
- * updateReturning: array returned from .returning() on update.
+ * updateReturning: array returned from .returning() on any other update.
+ *   Later provisioning_jobs updates (the lease-fenced checkpoints) return
+ *   [{ id: 1 }] — the lease is still held.
  */
 function buildDb(opts: {
   selectSequence?: unknown[][];
   insertReturning?: unknown[];
   insertError?: Error;
   updateReturning?: unknown[];
+  /** Checkpoints find the lease taken over (fenced update matches no row). */
+  leaseLost?: boolean;
 } = {}): {
   db: ReturnType<typeof createUnscopedClientMock>;
   calls: DbCall[];
@@ -280,7 +287,13 @@ function buildDb(opts: {
   });
 
   const orderByMock = vi.fn(() => ({ limit: limitMock }));
-  const whereMock = vi.fn(() => ({ limit: limitMock, orderBy: orderByMock }));
+  // Awaited directly (no .limit()), a where() resolves to no rows WITHOUT
+  // consuming the queue — the categories step's existing-name read.
+  const whereMock = vi.fn(() => ({
+    limit: limitMock,
+    orderBy: orderByMock,
+    then: (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve),
+  }));
   const joinMock = vi.fn(() => ({ where: whereMock }));
   const fromMock = vi.fn(() => ({
     where: whereMock,
@@ -326,19 +339,27 @@ function buildDb(opts: {
     return { values: valuesMock };
   });
 
-  const updateWhereReturningMock = vi.fn(() =>
-    Promise.resolve(opts.updateReturning ?? []),
-  );
-  const updateWhereMock = vi.fn(() => {
-    const p = Promise.resolve(undefined) as Promise<unknown> & {
-      returning: typeof updateWhereReturningMock;
-    };
-    p.returning = updateWhereReturningMock;
-    return p;
-  });
+  let claimServed = false;
   const updateMock = vi.fn((table: unknown) => {
     const call: DbCall = { op: 'update', table: String(table) };
     calls.push(call);
+    const updateWhereReturningMock = vi.fn(() => {
+      if (table === provisioningJobsTable) {
+        if (!claimServed) {
+          claimServed = true;
+          return Promise.resolve(selectQueue.shift() ?? []);
+        }
+        return Promise.resolve(opts.leaseLost ? [] : [{ id: 1 }]);
+      }
+      return Promise.resolve(opts.updateReturning ?? []);
+    });
+    const updateWhereMock = vi.fn(() => {
+      const p = Promise.resolve(undefined) as Promise<unknown> & {
+        returning: typeof updateWhereReturningMock;
+      };
+      p.returning = updateWhereReturningMock;
+      return p;
+    });
     return {
       // Record the SET payload on the call we just pushed, so assertions can
       // check WHAT an update wrote and not merely that one happened.
@@ -461,7 +482,10 @@ describe('runProvisioning', () => {
   // predates the plan stamp can only be repaired here. This is the path that
   // fixes communities 2358/2359 in place on the next watchdog pass.
   it('backfills subscription_plan when the community row already exists', async () => {
-    const job = makeJob({});
+    // The job recorded this community before losing its community_created
+    // checkpoint, which is what lets the re-run adopt it (an unrelated
+    // community holding the slug is refused — see the slug-ownership test).
+    const job = makeJob({ communityId: 10 });
 
     const { calls } = buildDb({
       // Empty .returning() → insert was a no-op → existing-row lookup branch.
@@ -485,6 +509,55 @@ describe('runProvisioning', () => {
           'professional',
     );
     expect(planBackfill).toBeDefined();
+  });
+
+  // 1e. Slug-conflict ownership: the Stripe-id arms. The job did NOT record the
+  // community (lost community_created checkpoint AND lost job.communityId
+  // write), so only the Stripe ids stamped by the earlier run's INSERT can
+  // prove the community is this signup's.
+  it.each([
+    {
+      arm: 'stripe_subscription_id',
+      existing: { id: 10, stripeSubscriptionId: 'sub_mine', stripeCustomerId: 'cus_other' },
+    },
+    {
+      arm: 'stripe_customer_id',
+      existing: { id: 10, stripeSubscriptionId: 'sub_other', stripeCustomerId: 'cus_mine' },
+    },
+  ])('adopts a slug-conflicting community that carries this checkout\'s $arm', async ({ existing }) => {
+    const job = makeJob({ communityId: null });
+    const { calls } = buildDb({
+      insertReturning: [], // slug conflict
+      selectSequence: [
+        [job],
+        [{ ...CONDO_SIGNUP, payload: { stripeSubscriptionId: 'sub_mine', stripeCustomerId: 'cus_mine' } }],
+        [existing],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await expect(runProvisioning(1)).resolves.toBe('completed');
+
+    const adopted = calls.find(
+      (c) => c.op === 'update' && (c.values as { communityId?: number } | undefined)?.communityId === 10,
+    );
+    expect(adopted, 'job must record the adopted community').toBeDefined();
+  });
+
+  // Control for 1e: neither id matches → refused.
+  it('refuses a slug-conflicting community that carries neither of this checkout\'s Stripe ids', async () => {
+    const job = makeJob({ communityId: null });
+    buildDb({
+      insertReturning: [],
+      selectSequence: [
+        [job],
+        [{ ...CONDO_SIGNUP, payload: { stripeSubscriptionId: 'sub_mine', stripeCustomerId: 'cus_mine' } }],
+        [{ id: 10, stripeSubscriptionId: 'sub_other', stripeCustomerId: 'cus_other' }],
+      ],
+    });
+
+    await expect(runProvisioning(1)).rejects.toThrow(/refusing to adopt it/);
   });
 
   // 2. Full happy path — apartment (checklist is a no-op)
@@ -555,7 +628,6 @@ describe('runProvisioning', () => {
 
     // Build a db where insert into documentCategories throws
     const selectQueue = [
-      [job],
       [CONDO_SIGNUP],
     ];
 
@@ -565,10 +637,22 @@ describe('runProvisioning', () => {
       return Promise.resolve(rows);
     });
     const selectMock = vi.fn(() => ({
-      from: vi.fn(() => ({ where: vi.fn(() => ({ limit: limitMock })) })),
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: limitMock,
+          // categories step: existing-name read, awaited without .limit()
+          then: (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve),
+        })),
+      })),
     }));
 
-    const updateWhereMock = vi.fn(() => Promise.resolve(undefined));
+    // The first update is the claim; it returns the claimed job row.
+    const claimReturning = [[job]];
+    const updateWhereMock = vi.fn(() =>
+      Object.assign(Promise.resolve(undefined), {
+        returning: vi.fn(() => Promise.resolve(claimReturning.shift() ?? [{ id: 1 }])),
+      }),
+    );
     const updateSetMock = vi.fn((_values?: Record<string, unknown>) => ({ where: updateWhereMock }));
     const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
@@ -625,14 +709,16 @@ describe('runProvisioning', () => {
     const job = makeJob({ status: 'completed', lastSuccessfulStatus: 'completed' });
 
     const { calls } = buildDb({
-      selectSequence: [[job]],
+      // The claim matches nothing (its predicate excludes status='completed'),
+      // then the status read finds the job terminal.
+      selectSequence: [[], [job]],
     });
 
-    await runProvisioning(1);
+    await expect(runProvisioning(1)).resolves.toBe('already_completed');
 
-    // No inserts or updates should have happened
+    // No inserts; the only update is the claim attempt, which matched zero rows.
     expect(calls.filter((c) => c.op === 'insert')).toHaveLength(0);
-    expect(calls.filter((c) => c.op === 'update')).toHaveLength(0);
+    expect(calls.filter((c) => c.op === 'update')).toHaveLength(1);
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
@@ -707,7 +793,6 @@ describe('runProvisioning', () => {
 
     let selectCallCount = 0;
     const selectQueue = [
-      [job],
       [{ ...CONDO_SIGNUP, authUserId: null }],
     ];
 
@@ -716,7 +801,13 @@ describe('runProvisioning', () => {
       from: vi.fn(() => ({ where: vi.fn(() => ({ limit: limitMock })) })),
     }));
 
-    const updateWhereMock = vi.fn(() => Promise.resolve(undefined));
+    // The first update is the claim; it returns the claimed job row.
+    const claimReturning = [[job]];
+    const updateWhereMock = vi.fn(() =>
+      Object.assign(Promise.resolve(undefined), {
+        returning: vi.fn(() => Promise.resolve(claimReturning.shift() ?? [{ id: 1 }])),
+      }),
+    );
     const updateSetMock = vi.fn((_values?: Record<string, unknown>) => ({ where: updateWhereMock }));
     const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
@@ -731,6 +822,45 @@ describe('runProvisioning', () => {
     const setCall = updateSetMock.mock.calls[updateSetMock.mock.calls.length - 1]![0]!;
     expect(setCall.status).toBe('failed');
     expect(setCall.errorMessage).toContain('Email already registered');
+  });
+
+  // Mutual exclusion: a run that loses the claim does no work at all.
+  it('returns in_flight without running any step when another run holds the claim', async () => {
+    const job = makeJob({ status: 'user_linked', lastSuccessfulStatus: 'user_linked', communityId: 10 });
+
+    const { calls } = buildDb({
+      // The claim matches nothing; the status read finds the job non-terminal.
+      selectSequence: [[], [job]],
+    });
+
+    await expect(runProvisioning(1)).resolves.toBe('in_flight');
+
+    expect(calls.filter((c) => c.op === 'insert')).toHaveLength(0);
+    // Only the (zero-row) claim attempt.
+    expect(calls.filter((c) => c.op === 'update')).toHaveLength(1);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  // Fencing: a run whose claim expired and was taken over must stop, and must
+  // not record a failure over its successor.
+  it('stops with a lease-lost error and writes no failure when a checkpoint finds its claim taken over', async () => {
+    const job = makeJob({ status: 'failed', lastSuccessfulStatus: 'email_sent', communityId: 10 });
+
+    const { calls } = buildDb({
+      leaseLost: true,
+      selectSequence: [
+        [job],                         // claim
+        [CONDO_SIGNUP],
+        [{ userId: 'auth-uuid-001' }], // completed: admin role assertion
+      ],
+    });
+
+    await expect(runProvisioning(1)).rejects.toThrow(/lost its claim during completed/);
+
+    const failureWrites = calls.filter(
+      (c) => c.op === 'update' && (c.values as { status?: unknown } | undefined)?.status === 'failed',
+    );
+    expect(failureWrites).toHaveLength(0);
   });
 
   // 9. Email double-send guard — resume from email_sent skips re-send
@@ -981,6 +1111,25 @@ describe('reconcileLostCheckoutSignups', () => {
       expect.objectContaining({ status: 'payment_completed' }),
     );
     expect(eqMock).toHaveBeenCalledWith(pendingSignupsTable.status, 'checkout_started');
+  });
+
+  // A job another run holds is not "recovered" by this pass: runProvisioning
+  // returned `in_flight` having done nothing, and that run may still fail.
+  it('counts a paid session whose job is claimed elsewhere as inFlight, not recovered', async () => {
+    const lostRow = { signupRequestId: 'req_lost', payload: { stripeCheckoutSessionId: 'cs_lost' } };
+    // `claimed: []` is the claim UPDATE matching no row; the status read that
+    // follows finds a non-terminal job.
+    createUnscopedClientMock.mockReturnValue(buildReconcileDb([lostRow], { claimed: [] }));
+    retrieveCheckoutSessionMock.mockResolvedValue({
+      status: 'complete',
+      customer: 'cus_lost',
+      subscription: 'sub_lost',
+    });
+    getProvisioningJobIdBySignupRequestIdMock.mockResolvedValue(5);
+
+    const summary = await reconcileLostCheckoutSignups({ now: new Date('2026-08-01T00:00:00Z') });
+
+    expect(summary).toMatchObject({ scanned: 1, recovered: 0, inFlight: 1, failed: 0 });
   });
 
   it('provisions nothing when the CAS loses the race', async () => {
