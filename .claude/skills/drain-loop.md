@@ -94,9 +94,9 @@ and are off the allowlist, so they were dropped rather than re-derived.)
 ```javascript
 // Derived at run time from origin/main's ALLOWLIST_REASONS map:
 //   PERMANENT  = every entry whose reason !== 'pending-drain'
-//   (the only pending-drain routes are the three CON-05 CRUD routes:
-//    announcements, meetings, maintenance-requests — those are drain targets,
-//    never skips)
+//   (CON-05 is complete — announcements, meetings and maintenance-requests
+//    were all drained 2026-09-29 — so no route carries pending-drain and every
+//    entry is PERMANENT)
 // For each, ensure skipList[route] = { classification: 'PERMANENT', reason: <AllowlistReason>, lastAttemptedAt: null, attemptCount: 0 }
 ```
 

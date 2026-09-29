@@ -983,6 +983,7 @@ describe('DELETE /api/v1/announcements', () => {
     const res = await DELETE(del({ id: 9, communityId: 42 }));
     expect(res.status).toBe(403);
     expect(await res.text()).toBe('{"error":{"code":"DEMO_GRACE","message":"Demo has ended"}}');
+    expect(requireAuthenticatedUserIdMock).toHaveBeenCalled();
     expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
     expect(softDeleteMock).not.toHaveBeenCalled();
   });
