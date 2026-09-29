@@ -9,15 +9,12 @@ path and invariant in v3 stays.
 
 ## How this plan was cut
 
-The first draft of this plan treated the design as a spec for new UI in six phases.
-Rev 2 runs each phase through the ponytail ladder, and only after reading the code
-each phase would touch. The ladder asks, in order: does it need to exist, is it
-already in this codebase, is it stdlib, is it native to the platform, is it an
-installed dependency, and only then what is the least code that works.
-
-Validation, security and accessibility are never cut. Anything below marked **cut**
-is the recommended default, pending the user's call. The design asks for all of it,
-and "user insists on the full version → build it" applies.
+Rev 2 ran each phase through the ponytail ladder. That surfaced two things: parts of
+the design already exist in this repo (the table below), and some parts looked cuttable.
+**The user reviewed the proposed cuts on 2026-09-29 and declined them: the whole
+design is built.** The ladder still governs HOW each piece is built (reuse what exists,
+native before dependency, minimum code), never WHETHER. Validation, security and
+accessibility are never cut.
 
 ## What already exists (evidence, 2026-09-29)
 
@@ -47,7 +44,7 @@ Duplicate, and hidden sections get a placeholder whose copy comes from the publi
 state (`describeHiddenSection`). A `ponytail:` marker on `placeAdded` records the
 append-then-move ceiling.
 
-### Phase 1b: device preview (small)
+### Phase 1b: device preview
 Add a `pageId` param to `/pm/site-preview`. The reader is community-scoped, so a
 page from another community cannot resolve. Add a computer/tablet/phone toggle that
 shows that route in an iframe at 1120/820/390px, using `PhoneFrame` for the phone
@@ -55,52 +52,68 @@ size. Known ceiling: it shows the last **saved** draft, so a keystroke still ins
 the autosave debounce isn't visible yet.
 
 ### Phase 2: Florida-required sections
-- One pure function in `packages/shared`, `requiredSectionTypes(communityType)`.
-- One `site-diff` check that warns when no visible section of a required type
-  exists on any page. It is advisory, which matches the design's "you can still
-  publish", so the server publish gate is untouched.
-- A top-bar pill reads the same function.
+- One pure function in `packages/shared`, `requiredSectionTypes(communityType)`,
+  shared by the canvas, the toolbar, the pill and the publish checks.
+- One `site-diff` check that warns when no visible section of a required type exists
+  on any page. It plugs into the existing publish `Issue` model, which provides the
+  sheet's "Checks" and "Fix this".
+- A top-bar requirements pill and popover with one-click fixes.
 - Remove and Duplicate are locked for required types in the toolbar and in
   SectionList. Hiding a required section asks for confirmation first.
-- **Cut:** a server guard against deleting the last required section. The PM is
-  authorised to make that edit and publishing is allowed anyway, so the guard would
-  enforce a rule the UI deliberately does not.
+- A server guard refuses to delete the last required section of a type (defence in
+  depth).
 
-### Phase 3: guidance (cut down from "guided mode")
-- **Build:** a "Next steps" panel in the rail. It is a checklist computed from facts
-  that already exist: required sections, whether onboarding is finished, whether the
-  site has been published, and whether the phone preview has been viewed. It opens
-  by default until the first publish.
-- **Build:** MDX help articles tagged `/pm/website-editor`, shown by the existing
-  HelpPanel.
-- **Cut:** the Guided/Free mode system, the first-run chooser, the 4-step tour and
-  the help drawer. Two editor modes means every future panel is built and tested
-  twice, and there are no users yet to say which one they want.
+### Phase 3: guided mode, tour, help drawer
+- A first-run chooser (Guide me / Let me edit freely), plus a mode switch in the top
+  bar and in Help. The mode and the checklist progress are persisted per user.
+- Guided mode: a 380px panel with the tabs Next steps · Pages · Design · Help. The
+  Next-steps checklist puts required items first and has a progress bar and "Need to
+  warn residents now?".
+- A 4-step tour.
+- A right-side Help drawer with searchable guides and figures. Guide content is also
+  published as MDX tagged `/pm/website-editor`, so the existing HelpPanel and the help
+  center show it too.
 
 ### Phase 4: Design panel
-Colour and template pickers reuse the wizard's `LayoutChooser` and `PresetChooser`,
-with the hook's values passed in as props. Saving goes through the existing endpoint.
-The Essentials plan lock uses the existing plan feature. **Cut:** "Use the
-template's pages too". It would need a new destructive server operation that
-replaces the page set, and "Change the look only" covers the stated need.
+- Template cards and the colour and font preset grid reuse the wizard's
+  `LayoutChooser` and `PresetChooser`, with the hook's values passed in as props, and
+  save through the existing endpoint. The Essentials lock uses the plan feature.
+- The template-switch dialog offers "Change the look only" and "Use the template's
+  pages too". The second option needs a server operation that stages the template's
+  page set as drafts, reusing `site_starter_packs`. Nothing goes live until publish.
 
-### Phase 5: Settings view — **cut**
-Site settings and Address already live in the rail and work. The design's new
-Settings items would each be a new product feature with new schema:
-- changing the subdomain (this breaks URLs, and it interacts with cookie domains
-  and custom domains)
-- per-page SEO
-- a toggle for the Owner-login button
-- taking the site offline
+### Phase 5: Settings view (top-bar view switch: Website · Documents · Settings)
+- **General:** site name and favicon. These exist in SitePanel; move them here.
+- **Address & domain:**
+  - Subdomain change: **new**. It needs slug-change handling for cookie domains,
+    custom domains and redirects from the old address.
+  - The custom-domain flow: existing DomainPanel logic.
+- **Search & sharing:**
+  - Site SEO and the share image: existing.
+  - Per-page SEO: **new** — columns on `site_pages`, a migration, and wiring into
+    the public-site metadata.
+- **Access:**
+  - Owner-login button toggle: **new**. A branding field, read by all four layouts.
+  - Take the site offline: **new**. A community flag, plus a "temporarily
+    unavailable" gate in the public-site render path.
+- Site and Address then leave the rail.
 
-Build each one only when an association asks for it.
+### Phase 6: Documents view
+A Documents view inside the builder, built per the design:
+- category health tiers, search and the per-document sheet
+- a multi-file upload queue with draft or post
+- duplicate handling, replacing a file, and the PII attestation
 
-### Phase 6: Documents view — **replaced by a link**
-The top bar gets a "Documents" link to `/communities/[id]/documents`. Gaps in that
-library (multi-file upload, duplicate detection, replacing a file) are separate
-decisions for the library itself, not for the builder.
+It reuses the existing documents API, statutory categories, the redaction-attestation
+component and file validation. The capabilities that don't exist yet are built once,
+in the shared documents layer, so the app's documents library can use them too:
+- multi-file upload
+- duplicate detection
+- replacing an uploaded file
+- a draft state for uploaded documents
 
 ### Deferred
-- A full undo/redo stack. It needs a design for reversing changes on the server.
-- A server-side insert-at operation, replacing the client append-then-move (see the
+- A full undo/redo stack (the user's decision). It needs a design for reversing
+  changes on the server.
+- A server-side insert-at operation replacing the client append-then-move (see the
   `ponytail:` marker in `editor-context.tsx`).
