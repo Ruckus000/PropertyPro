@@ -128,12 +128,12 @@ interface CountSnapshot {
 /*
  * Measured 2026-09-29 on origin/main 4543362a, before seed-community.ts was split.
  *
- * `documents.backdated` is 0 even for the hinted cases. That is today's
- * behaviour, pinned as-is rather than endorsed: the complianceScore UPDATE
- * matches `file_name LIKE '<slug>-%-hints-%'`, but the hint documents' FILE
- * names carry no `hints` segment (only their seed keys / storage paths do), so
- * it updates nothing. Fixing that is a separate change, and it will move this
- * number on purpose.
+ * `documents.backdated` counts documents older than 2 days. The unhinted cases
+ * are 0; each hinted case is exactly its two documentBias documents, which the
+ * complianceScore UPDATE back-dates by 5 + (1 - score/100) * 40 days (score 100
+ * → 5 days, still past the 2-day threshold). Until that UPDATE matched on
+ * `file_path` it matched `file_name LIKE '<slug>-%-hints-%'`, which no hint
+ * document's file name satisfies, so all three read 0.
  */
 const CONDO_ROLES = {
   'resident|owner=true|-|unit=true': 1,
@@ -266,7 +266,7 @@ const EXPECTED: Record<string, CountSnapshot> = {
     },
     roles: CONDO_ROLES,
     registry: { announcement: 3, document: 4, meeting: 6 },
-    documents: { total: 4, uncategorized: 0, backdated: 0 },
+    documents: { total: 4, uncategorized: 0, backdated: 2 },
     meetingTypes: { board: 3, committee: 1, special: 1, annual: 1 },
     meetingDocuments: 1,
     announcements: { 'all|pinned=true': 2, 'all|pinned=false': 1 },
@@ -294,7 +294,7 @@ const EXPECTED: Record<string, CountSnapshot> = {
     },
     roles: HOA_ROLES,
     registry: { announcement: 2, document: 4, meeting: 2 },
-    documents: { total: 4, uncategorized: 0, backdated: 0 },
+    documents: { total: 4, uncategorized: 0, backdated: 2 },
     meetingTypes: { annual: 1, committee: 1 },
     meetingDocuments: 1,
     announcements: { 'all|pinned=false': 2 },
@@ -323,7 +323,7 @@ const EXPECTED: Record<string, CountSnapshot> = {
     },
     roles: APARTMENT_ROLES,
     registry: { announcement: 6, document: 5, maintenance_request: 9, meeting: 4 },
-    documents: { total: 5, uncategorized: 0, backdated: 0 },
+    documents: { total: 5, uncategorized: 0, backdated: 2 },
     meetingTypes: { committee: 2, board: 1, special: 1 },
     meetingDocuments: 1,
     announcements: { 'all|pinned=false': 5, 'tenants_only|pinned=false': 1 },
