@@ -14,7 +14,7 @@ vi.mock('../../src/lib/api/request-id', () => ({
   generateRequestId: generateRequestIdMock,
 }));
 
-import { withAuditLog } from '../../src/lib/middleware/audit-middleware';
+import { createAuditContext, withAuditLog } from '../../src/lib/middleware/audit-middleware';
 
 function createRequest(headers?: Record<string, string>): NextRequest {
   return new NextRequest('http://localhost:3000/api/test', { headers });
@@ -113,5 +113,54 @@ describe('withAuditLog', () => {
       communityId: 3,
       metadata: { requestId: 'generated-request-id' },
     });
+  });
+});
+
+// CON-06: the factory a `runRoute` handler calls directly, since it cannot be
+// nested inside `withAuditLog`. Same contract as the wrapped path above.
+describe('createAuditContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    generateRequestIdMock.mockReturnValue('generated-request-id');
+  });
+
+  it('pre-binds user/community and stamps the header requestId over caller metadata', async () => {
+    const audit = createAuditContext(createRequest({ 'x-request-id': 'req-42' }), {
+      userId: 'user-9',
+      communityId: 11,
+    });
+
+    expect(audit.userId).toBe('user-9');
+    expect(audit.communityId).toBe(11);
+    await audit.log({
+      action: 'update',
+      resourceType: 'announcement',
+      resourceId: '5',
+      metadata: { subAction: 'pin', requestId: 'should-not-win' },
+    });
+
+    expect(logAuditEventMock).toHaveBeenCalledWith({
+      action: 'update',
+      resourceType: 'announcement',
+      resourceId: '5',
+      userId: 'user-9',
+      communityId: 11,
+      metadata: { subAction: 'pin', requestId: 'req-42' },
+    });
+    expect(generateRequestIdMock).not.toHaveBeenCalled();
+  });
+
+  it('resolves a generated requestId once, shared by every entry the request writes', async () => {
+    const audit = createAuditContext(createRequest(), { userId: 'user-9', communityId: 11 });
+    await audit.log({ action: 'create', resourceType: 'announcement', resourceId: '1' });
+    await audit.log({ action: 'update', resourceType: 'announcement', resourceId: '1' });
+
+    expect(generateRequestIdMock).toHaveBeenCalledTimes(1);
+    for (const call of logAuditEventMock.mock.calls) {
+      expect((call[0] as { metadata: { requestId: string } }).metadata.requestId).toBe(
+        'generated-request-id',
+      );
+    }
+    expect(logAuditEventMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -59,6 +59,7 @@ export interface RouteContract<
   TResponse extends z.ZodTypeAny = z.ZodTypeAny,
   TPaginated extends boolean = false,
   TScope extends RouteTenantScope | undefined = undefined,
+  TEnvelope extends z.ZodTypeAny | undefined = undefined,
 > {
   method: HttpMethod;
   path: string;
@@ -77,6 +78,21 @@ export interface RouteContract<
    * input gains no `communityId` field.
    */
   tenantScope?: TScope;
+  /**
+   * Optional (CON-04). Schema for TOP-LEVEL keys the route emits beside
+   * `data` — e.g. `z.object({ warnings: z.array(...).optional() })` for the
+   * `{ data, warnings?: [...] }` wire shape. Declare every key `.optional()`:
+   * a handler only emits siblings by returning `withEnvelope(payload,
+   * siblings)`, and a plain return still produces the bare `{ data }`.
+   *
+   * The schema is the wire authority for siblings: the runner validates them
+   * against it (failure → 500 `contract_violation: response`) and emits the
+   * PARSED value, so a key the schema does not declare never reaches the wire.
+   * A contract without `envelope` cannot emit siblings at all — the runner
+   * refuses `withEnvelope` on it — so every existing contract is unchanged.
+   * The key `data` is reserved and rejected.
+   */
+  envelope?: TEnvelope;
 }
 
 /**
@@ -92,8 +108,9 @@ export function defineRoute<
   TResponse extends z.ZodTypeAny = z.ZodTypeAny,
   TPaginated extends boolean = false,
   TScope extends RouteTenantScope | undefined = undefined,
+  TEnvelope extends z.ZodTypeAny | undefined = undefined,
 >(
-  contract: RouteContract<TParams, TQuery, TBody, TResponse, TPaginated, TScope>,
-): RouteContract<TParams, TQuery, TBody, TResponse, TPaginated, TScope> {
+  contract: RouteContract<TParams, TQuery, TBody, TResponse, TPaginated, TScope, TEnvelope>,
+): RouteContract<TParams, TQuery, TBody, TResponse, TPaginated, TScope, TEnvelope> {
   return contract;
 }

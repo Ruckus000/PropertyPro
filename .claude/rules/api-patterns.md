@@ -105,7 +105,14 @@ The runner:
 
 The runner cannot handle these without changes — leave on allowlist or wait for runner extension:
 - **201/202/204 responses** — runner hardcodes 200 (POST handlers returning 201 are blocked).
-- **Non-canonical envelopes** — flat `{ ok: true }` or top-level `meta` field next to `data` (e.g. `{ data: [...], meta: {...} }`) won't round-trip through the runner's single-wrap.
+- **Flat envelopes** — `{ ok: true }` with no `data` won't round-trip through the runner's single-wrap.
+  A top-level sibling NEXT TO `data` (`{ data, warnings?: [...] }`, `{ data, meta }`) IS supported
+  since CON-04: declare it as `envelope: z.object({ warnings: ….optional() })` on the contract and
+  return `withEnvelope(payload, { warnings })` from the handler. Siblings are validated against
+  that schema (failure → 500 `contract_violation: response`), emitted after `data`, and an
+  `undefined` sibling is omitted, so the no-sibling wire shape stays a bare `{ data }`. A contract
+  without `envelope` cannot emit one. Precedent: `documents` POST. Never carry a sibling out of a
+  handler in a request-keyed `WeakMap` again.
 - **Non-JSON content-type** — CSV, binary, redirects.
 - **`/internal/*` routes** — token-authenticated bypass not yet integrated.
 - **Stripe webhook routes** — body signature verification needs raw body, not Zod-parsed.
