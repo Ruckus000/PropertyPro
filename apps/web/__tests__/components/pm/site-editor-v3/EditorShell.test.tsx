@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EditorShell, type EditorShellProps } from '@/components/pm/site-editor-v3/EditorShell';
 
 // The shell asks `(max-width: 767px)` — see the comment on EditorShell. This
@@ -19,8 +20,16 @@ vi.mock('@/hooks/use-media-query', () => ({
 // `activeTool`/`onActiveToolChange` union, and `Partial` over a union produces
 // the half-controlled shape the union exists to forbid. No case here drives the
 // tool from outside, so the overrides are the non-tool props.
+// The phone gate lazy-loads UrgentNoticeForm (next/dynamic), which reads
+// through React Query. Without a provider, whether the notice-form cases pass
+// depended on chunk timing: on a fast machine "Back" was clicked before the
+// form mounted; under CI load the chunk won, the form threw "No QueryClient
+// set", and the whole tree unmounted (#1212's Unit Tests, 2026-09-29).
+// Providing a client, as the app does, removes the race.
 function renderShell(overrides: Partial<EditorShellProps> = {}) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
+    <QueryClientProvider client={queryClient}>
     <EditorShell
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
@@ -51,7 +60,8 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       {...overrides}
     >
       <p>canvas</p>
-    </EditorShell>,
+    </EditorShell>
+    </QueryClientProvider>,
   );
 }
 
