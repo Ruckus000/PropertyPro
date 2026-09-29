@@ -57,6 +57,13 @@ describe('updateResidentUser phone verification', () => {
     expect(values).toHaveProperty('phoneVerifiedAt');
   });
 
+  it('leaves verification alone when phone is present but undefined (drizzle drops it)', async () => {
+    await updateResidentUser(7, 'user-1', { fullName: 'Pat', phone: undefined });
+
+    const values = updateMock.mock.calls[0]![1] as Record<string, unknown>;
+    expect(values).not.toHaveProperty('phoneVerifiedAt');
+  });
+
   it('leaves verification alone when the phone is not written', async () => {
     await updateResidentUser(7, 'user-1', { fullName: 'Pat' });
 

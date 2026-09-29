@@ -264,7 +264,9 @@ export async function updateResidentUser(
   // unchanged. `users` is platform-level, so without this a manager editing a
   // resident here would re-point every community's "verified" emergency SMS.
   const update =
-    'phone' in values
+    // `!== undefined`, not `in`: drizzle's .set() drops an undefined phone, so
+    // `{ phone: undefined }` must not erase verification of an unchanged number.
+    values['phone'] !== undefined
       ? {
           ...values,
           phoneVerifiedAt: sql`case when ${users.phone} is not distinct from ${values['phone'] ?? null} then ${users.phoneVerifiedAt} else null end`,
