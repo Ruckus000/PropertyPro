@@ -126,6 +126,13 @@ const TENANT_OPTIONAL_PATHS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Paths served from `public/` by extension (see the matcher at the bottom).
+ * Matched against `nextUrl.pathname`; the fast path in middleware() strips
+ * forwarded auth headers and does no session work for these.
+ */
+const STATIC_ASSET_PATH = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs)$/i;
+
+/**
  * The non-id siblings of `[id]` directly under `app/api/v1/communities/`
  * (measured 2026-09-29). The support-session path check ignores exactly these
  * and fails closed on any other segment that is not a community id; pinned by
@@ -432,6 +439,23 @@ function stampForwardedUserHeaders(
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
+
+  // Static-asset fast path. The matcher below used to EXCLUDE every path ending
+  // in an image/.mjs extension, so middleware never ran for them — including
+  // page URLs such as `/help/<category>/<slug>.png`, which Next still routes to
+  // a dynamic page. Middleware is the only place inbound x-user-* /
+  // x-community-id / x-support-* headers are stripped, and the page helpers
+  // (lib/request/page-auth-context.ts) trust them, so a cookie-less request with
+  // a forged `x-user-id` rendered authenticated pages as that user. Now those
+  // paths reach middleware, and this exit strips the forwarded auth headers and
+  // passes through with no session work — real assets are served unchanged, and
+  // a page reached this way renders unauthenticated. `/api/` is excluded: no
+  // API route is a static asset, and the fast path would skip rate limiting.
+  if (!pathname.startsWith('/api/') && STATIC_ASSET_PATH.test(pathname)) {
+    const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+    return NextResponse.next({ request: { headers: sanitizeForwardedHeaders(request, requestId) } });
+  }
+
   if (shouldHideDevSurfaceInProduction(pathname)) {
     return NextResponse.rewrite(new URL('/404', request.url));
   }
@@ -1310,9 +1334,15 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon)
-     * - Public assets (svg, png, jpg, jpeg, gif, webp, ico, mjs)
      * - PDF.js browser assets served from /public/pdfjs
+     *
+     * Paths ending in an image/.mjs extension are NOT excluded here: Next routes
+     * `/help/<category>/<slug>.png` to a dynamic PAGE, and a page must never
+     * skip the header sanitisation below. They take the STATIC_ASSET_PATH fast
+     * path at the top of middleware() instead (strip forwarded auth headers,
+     * pass through). Every prefix excluded here must be one no page can live
+     * under — pinned by __tests__/middleware/static-asset-bypass.test.ts.
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|pdfjs/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs)$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|pdfjs/).*)',
   ],
 };

@@ -47,11 +47,9 @@ describe('PDF.js public asset contract', () => {
         expect.stringContaining('pdfjs/'),
       ]),
     );
-    expect(config.matcher).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('mjs'),
-      ]),
-    );
+    // `.mjs` elsewhere is no longer excluded by extension: it takes the
+    // static-asset fast path instead (see static-asset-bypass.test.ts), so a
+    // page URL ending in `.mjs` cannot skip header sanitisation.
   });
 
   it('does not redirect or require auth when a PDF.js asset request reaches middleware', async () => {
