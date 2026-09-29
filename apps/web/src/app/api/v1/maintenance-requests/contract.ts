@@ -59,8 +59,12 @@
  *      `'communityId query parameter is required'` (same status and code, also
  *      pre-auth). With the header present, the handler still refuses a
  *      missing param with the legacy message, after auth, as before.
+ *   3. HEADER FIRST: a malformed `x-community-id` header together with an
+ *      invalid `?communityId=` now 404s ('Community not found') before auth,
+ *      where the legacy handler 400'd on the query value after auth. The
+ *      middleware sets that header, so a malformed one does not reach here.
  *   Every in-app consumer (`listMyRequests` / `listAllRequests` via
- *   `walkAndSlice`) always sends `?communityId=`, so neither delta is
+ *   `walkAndSlice`) always sends `?communityId=`, so none of these deltas is
  *   reachable from the UI.
  *
  * Response: `paginated: true` (runner emits `{ data: { data, pagination } }`,

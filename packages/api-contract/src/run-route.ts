@@ -309,7 +309,7 @@ function parseQuery<C extends AnyRouteContract>(contract: C, req: NextRequest): 
   // a follow-up PR rather than relying on last-wins iteration here.
   const raw: Record<string, string | undefined> = {};
   for (const [key, value] of searchParams.entries()) {
-    if (raw[key] !== undefined) continue; // first-wins
+    if (key in raw) continue; // first-wins, even when the first value is empty
     raw[key] = value || undefined;
   }
   const parsed = schema.safeParse(raw);

@@ -56,6 +56,21 @@ describe('runRoute — non-paginated', () => {
     expect(body).toEqual({ data: { id: 7, name: 'widget-7' } });
   });
 
+  it('keeps first-wins when the first occurrence is empty', async () => {
+    // `searchParams.get('verbose')` returns '' for `?verbose=&verbose=true`,
+    // so the empty first occurrence must win (and collapse to undefined) —
+    // a later duplicate must not smuggle in a value the legacy handler and
+    // the middleware never saw.
+    const handler = runRoute(contract, async ({ query }) => ({
+      id: query.id,
+      name: query.verbose === true ? 'verbose' : 'plain',
+    }));
+    const res = await handler(makeRequest('/api/v1/widget?id=7&verbose=&verbose=true'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ data: { id: 7, name: 'plain' } });
+  });
+
   it('collapses empty-string query params to undefined', async () => {
     const handler = runRoute(contract, async ({ query }) => ({
       id: query.id,
