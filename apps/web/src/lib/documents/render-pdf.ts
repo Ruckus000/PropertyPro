@@ -57,8 +57,8 @@
  * other OS, or arm64) it cannot run at all — the launch dies with `spawn ENOEXEC` —
  * so PUPPETEER_EXECUTABLE_PATH is mandatory there, not a preference. Without
  * it, renderHtmlToPdf refuses up front with a message that says so. That
- * override launches the developer's own Chrome with `desktopChromeArgs()`, not
- * the Lambda flags: those force `--single-process` and a second, conflicting
+ * override launches the developer's own Chrome with `desktopChromeArgs()` and
+ * the scrubbed `desktopChromeEnv()`, not the Lambda flags: those force `--single-process` and a second, conflicting
  * `--headless='shell'` onto a browser that was never built for them. The agent
  * sandbox (scripts/agent-env.sh) passes the variable through and detects
  * Chrome on macOS.
@@ -95,6 +95,7 @@ type ChromiumApi = {
 
 type PuppeteerLaunchOptions = {
   args?: string[];
+  env?: Record<string, string | undefined>;
   executablePath?: string;
   headless?: boolean | 'shell';
   defaultViewport?: { width: number; height: number; deviceScaleFactor?: number };
@@ -123,8 +124,11 @@ type PuppeteerApi = {
  * no user namespaces, so the sandbox flags cannot be removed — and site
  * isolation stays off regardless via `--single-process` and
  * `--disable-features=…IsolateOrigins,site-per-process`, which are load-bearing
- * in serverless Chromium. `launch()` also passes no `env`, so the browser
- * inherits this process's environment, SUPABASE_SERVICE_ROLE_KEY included.
+ * in serverless Chromium. The production launch also passes no `env`, so the
+ * browser inherits this process's environment, SUPABASE_SERVICE_ROLE_KEY
+ * included — and it must, because @sparticuz/chromium sets LD_LIBRARY_PATH for
+ * its AL2023 libraries at import (the libnss3 outage). Only the local-Chrome
+ * branch scrubs it; see desktopChromeEnv().
  *
  * So this is not containment. The renderer is not sandboxed and cannot be, which
  * is precisely why `lib/utils/sanitize-authored-html.ts` is load-bearing rather
@@ -160,6 +164,36 @@ export function desktopChromeArgs(uid: number | undefined = process.getuid?.()):
   const args = ['--font-render-hinting=none'];
   if (uid === 0) args.push('--no-sandbox');
   return args;
+}
+
+const DESKTOP_CHROME_ENV_KEYS = ['PATH', 'HOME', 'TMPDIR'] as const;
+
+/**
+ * The ENTIRE environment a developer's own Chrome gets. Puppeteer's `env`
+ * replaces process.env for the browser rather than merging into it.
+ *
+ * Two reasons, of different strength:
+ *
+ * 1. Certain. Unscrubbed, the browser inherits the dev server's environment.
+ *    Under `pnpm dev` that is .env.local, which in this repo holds PRODUCTION
+ *    credentials, SUPABASE_SERVICE_ROLE_KEY among them. And this browser is
+ *    rendering author HTML.
+ * 2. Observed, cause unproven. On macOS, launched from an agent's shell with
+ *    the inherited environment, Chrome aborted in TransformProcessType (the
+ *    LaunchServices call that registers a process as an app). The same test
+ *    passed under the agent sandbox's `env -i` — PATH, HOME, TMPDIR — and so
+ *    did the real publish. Suspect an inherited host-app variable such as
+ *    __CFBundleIdentifier. This set is that known-good environment.
+ */
+export function desktopChromeEnv(
+  source: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of DESKTOP_CHROME_ENV_KEYS) {
+    const value = source[key];
+    if (value) env[key] = value;
+  }
+  return env;
 }
 
 interface RenderHtmlToPdfOptions {
@@ -231,6 +265,7 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
       ? {
           args: desktopChromeArgs(),
           defaultViewport: { width: 1240, height: 1754 },
+          env: desktopChromeEnv(),
           executablePath: explicitExecutablePath,
           // Chrome 132 removed the old headless mode, so a desktop Chrome needs `true`.
           headless: true,
