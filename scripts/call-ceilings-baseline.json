@@ -150,7 +150,7 @@
   "apps/web/src/lib/services/elections-service.ts": {
     "unscoped": 1
   },
-  "apps/web/src/lib/services/esign-service.ts": {
+  "apps/web/src/lib/services/esign/signing.ts": {
     "unscoped": 1
   },
   "apps/web/src/lib/services/export/export-job-service.ts": {

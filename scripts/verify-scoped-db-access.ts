@@ -219,9 +219,16 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/middleware/demo-grace-guard.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-session.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-conversion.ts'),
-  // Public e-sign links are authorized by possession of submissionExternalId + signer slug
-  // and must resolve across tenants before any community context exists.
-  resolve(repoRoot, 'apps/web/src/lib/services/esign-service.ts'),
+  // E-sign (split out of esign-service.ts by SVC-08; the two unsafe imports it
+  // held moved with their banner sections, one file each):
+  // - signing.ts: public e-sign links are authorized by possession of
+  //   submissionExternalId + signer slug and must resolve across tenants before
+  //   any community context exists (@propertypro/db/unsafe).
+  // - helpers.ts: getAdmin() reads sender name and community name/timezone for
+  //   invitation and reminder emails; ids come from the gated caller
+  //   (@propertypro/db/supabase/admin).
+  resolve(repoRoot, 'apps/web/src/lib/services/esign/signing.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/services/esign/helpers.ts'),
   // Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
   resolve(repoRoot, 'apps/web/src/lib/services/account-lifecycle-service.ts'),
   // Root-offboarding: cross-community read of the caller's own root_manager memberships
