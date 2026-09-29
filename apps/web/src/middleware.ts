@@ -125,6 +125,22 @@ const TENANT_OPTIONAL_PATHS: ReadonlySet<string> = new Set([
   '/account/join-community',
 ]);
 
+/**
+ * The non-id siblings of `[id]` directly under `app/api/v1/communities/`
+ * (measured 2026-09-29). The support-session path check ignores exactly these
+ * and fails closed on any other segment that is not a community id; pinned by
+ * `ordering-invariants.test.ts`, which compares this set to the directory.
+ */
+export const COMMUNITIES_API_NON_ID_SEGMENTS: ReadonlySet<string> = new Set([
+  'claim-root',
+  'delete',
+  'designations',
+  'dispute-root-claim',
+  'my-rootless',
+  'role-assignments',
+  'transfer-root',
+]);
+
 function shouldResolveTenant(pathname: string): boolean {
   if (TENANT_OPTIONAL_PATHS.has(pathname)) return false;
   return isProtectedPath(pathname);
@@ -1094,12 +1110,55 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const supportCookieValue = request.cookies.get(SUPPORT_SESSION_COOKIE)?.value;
   if (supportCookieValue) {
     const currentCommunityId = Number(forwardedHeaders.get(COMMUNITY_ID_HEADER));
-    const supportSession = await resolveActiveSupportSession(supportCookieValue, {
-      expectedCommunityId:
-        Number.isInteger(currentCommunityId) && currentCommunityId > 0
-          ? currentCommunityId
-          : null,
-    });
+    // Routes and pages under /api/v1/communities/<id>/ and /communities/<id>/
+    // read the community from params.id without reconciling x-community-id,
+    // so neither the resolved tenant nor the stamp below can pin them. The
+    // path's id is the community the route will act on, so EVERY community in
+    // play must be the session's:
+    //   - resolved tenant and path id both present but different → reject
+    //     (B's path on A's subdomain, or with ?communityId=A);
+    //   - otherwise compare the token against whichever one is present.
+    // The segment is parsed EXACTLY as the routes parse `params.id`: Next
+    // decodes it once (`/communities/%32/…` reaches the route as id=2, while
+    // `nextUrl.pathname` stays encoded), and pages use `Number(id)` / routes
+    // `z.coerce.number()`, which both accept `+2`, ` 2`, `2.`, `2.0`, `2e0`,
+    // `0x2`. So: decode, then `Number()`. A safe positive integer is the
+    // community id; the named non-id siblings of `[id]` under
+    // /api/v1/communities/ are ignored; ANYTHING else fails closed (a
+    // support session is rejected rather than risk a parser disagreement).
+    // A new sibling route added later therefore fails closed for support
+    // sessions until listed here, which is the safe direction.
+    // A rejection takes the same path as a resolved-tenant mismatch.
+    const resolvedTenantId =
+      Number.isInteger(currentCommunityId) && currentCommunityId > 0 ? currentCommunityId : null;
+    const pathCommunityMatch = /^(\/api\/v1)?\/communities\/([^/]+)(?:\/|$)/.exec(pathname);
+    let pathTenantId: number | null = null;
+    let pathCommunityUnreadable = false;
+    if (pathCommunityMatch) {
+      const isApiPath = pathCommunityMatch[1] !== undefined;
+      let decodedSegment: string | null = null;
+      try {
+        decodedSegment = decodeURIComponent(pathCommunityMatch[2]!);
+      } catch {
+        pathCommunityUnreadable = true;
+      }
+      if (decodedSegment !== null) {
+        const parsed = Number(decodedSegment);
+        if (Number.isSafeInteger(parsed) && parsed > 0) {
+          pathTenantId = parsed;
+        } else if (!(isApiPath && COMMUNITIES_API_NON_ID_SEGMENTS.has(decodedSegment))) {
+          pathCommunityUnreadable = true;
+        }
+      }
+    }
+    const conflictingCommunities =
+      pathCommunityUnreadable ||
+      (resolvedTenantId !== null && pathTenantId !== null && resolvedTenantId !== pathTenantId);
+    const supportSession = conflictingCommunities
+      ? null
+      : await resolveActiveSupportSession(supportCookieValue, {
+          expectedCommunityId: resolvedTenantId ?? pathTenantId,
+        });
 
     if (!supportSession) {
       // Cookie is invalid or expired — clear it
@@ -1194,6 +1253,35 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // rides in a cookie is a worse trade than dropping it. Always cleared, so
     // the admin's phone never reaches an impersonated request.
     forwardedHeaders.delete(USER_PHONE_HEADER);
+
+    // Pin the request to the session's consented community when no tenant was
+    // resolved (apex / reserved hosts, community-less API paths). Without this,
+    // `expectedCommunityId` above was null, the community comparison was
+    // skipped, and the impersonated identity ran with NO community pin — so a
+    // session consented to by community A could read community B through any
+    // route that takes the community from somewhere other than this header.
+    // With it, `resolveEffectiveCommunityId` 404s a disagreeing query/body id.
+    //
+    // Fill-only, never overwrite: when a tenant WAS resolved it already equals
+    // `community_id` (the comparison above rejects anything else). The value is
+    // the verified token claim, which `matchesActiveSupportSession` has just
+    // checked against the `support_sessions` row, and inbound x-community-id was
+    // stripped by sanitisation, so a spoof cannot reach this line.
+    //
+    // x-tenant-slug is deliberately NOT stamped: deriving it needs a DB read,
+    // and its only consumer (public-transparency/page.tsx) reads x-community-id
+    // first and falls back to the slug only when the id is absent. The
+    // query-param branch above likewise forwards id + source with no slug.
+    //
+    // TENANT_OPTIONAL_PATHS are skipped for the reason that set exists: a
+    // stamped tenant there makes the authenticated layout redirect back to
+    // /select-community forever whenever the impersonated user has no live
+    // membership in the stamped community. Those pages read no x-community-id,
+    // so a pin there would constrain nothing; they are unchanged from before.
+    if (!forwardedHeaders.has(COMMUNITY_ID_HEADER) && !TENANT_OPTIONAL_PATHS.has(pathname)) {
+      forwardedHeaders.set(COMMUNITY_ID_HEADER, String(supportSession.community_id));
+      forwardedHeaders.set(TENANT_SOURCE_HEADER, 'support_session');
+    }
 
     forwardedHeaders.set(SUPPORT_SESSION_HEADER, '1');
     forwardedHeaders.set(SUPPORT_ADMIN_ID_HEADER, supportSession.act.sub);
