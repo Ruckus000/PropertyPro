@@ -22,6 +22,11 @@ const {
   leasesTableMock,
   unitsTableMock,
   userRolesTableMock,
+  leaseResidentsTableMock,
+  residentContactsTableMock,
+  leaseDepositsTableMock,
+  rentObligationsTableMock,
+  communitiesTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
@@ -39,6 +44,11 @@ const {
   },
   unitsTableMock: { id: Symbol('units.id') },
   userRolesTableMock: { id: Symbol('user_roles.id') },
+  leaseResidentsTableMock: { id: Symbol('lease_residents.id') },
+  residentContactsTableMock: { id: Symbol('resident_contacts.id') },
+  leaseDepositsTableMock: { id: Symbol('lease_deposits.id') },
+  rentObligationsTableMock: { id: Symbol('rent_obligations.id') },
+  communitiesTableMock: { id: Symbol('communities.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
 }));
@@ -55,6 +65,11 @@ vi.mock('@propertypro/db', () => ({
   leases: leasesTableMock,
   units: unitsTableMock,
   userRoles: userRolesTableMock,
+  leaseResidents: leaseResidentsTableMock,
+  residentContacts: residentContactsTableMock,
+  leaseDeposits: leaseDepositsTableMock,
+  rentObligations: rentObligationsTableMock,
+  communities: communitiesTableMock,
 }));
 
 // PAG-04: lease filters run in SQL, so the scoped-client mock must honour the
@@ -781,7 +796,7 @@ describe('p2-37 leases route', () => {
       );
     });
 
-    it('handles renewal: marks previous lease as renewed and links', async () => {
+    it('handles renewal: links to the previous lease and leaves it active until the renewal starts', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
         if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', communityId: 42 }];
@@ -820,18 +835,20 @@ describe('p2-37 leases route', () => {
       const res = await POST(req);
       expect(res.status).toBe(200);
 
-      // Previous lease should be marked as renewed
-      expect(update).toHaveBeenCalled();
+      // Leases v3 (audit P0-2): recording a renewal must NOT flip the current
+      // lease to 'renewed'. It stays active — and current — until the renewal
+      // starts; flipping it early also blanked units.rent_amount, whose trigger
+      // only reads active leases.
+      expect(update).not.toHaveBeenCalled();
+      expect(insert).toHaveBeenCalledWith(
+        leasesTableMock,
+        expect.objectContaining({ previousLeaseId: 50, startDate: '2027-01-01' }),
+      );
 
-      // Audit should log both: renewal of previous and creation of new
-      expect(logAuditEventMock).toHaveBeenCalledTimes(2);
-      expect(logAuditEventMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'update',
-          resourceType: 'lease',
-          resourceId: '50',
-          newValues: expect.objectContaining({ status: 'renewed' }),
-        }),
+      // One audit event: the creation. There is no status change to log.
+      expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+      expect(logAuditEventMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ resourceId: '50', newValues: expect.objectContaining({ status: 'renewed' }) }),
       );
       expect(logAuditEventMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1335,7 +1352,12 @@ describe('p2-37 leases route', () => {
     });
 
     it('keeps the non-manager read party-scoped to actorUserId', () => {
-      expect(routeSource).toMatch(/=> l\.residentId === actorUserId/);
+      // Leases v3: "party" = a current lease_residents row naming the ACTOR
+      // (co-tenants included), with the legacy residentId as a fallback. Both
+      // halves must key on actorUserId — the authenticated id — and nothing
+      // the caller sends.
+      expect(routeSource).toMatch(/await listLeaseIdsForParty\(communityId, actorUserId\)/);
+      expect(routeSource).toMatch(/=> partyLeaseIds\.has\(l\.id\) \|\| l\.residentId === actorUserId\)/);
       // And the widening is driven by the resolved role, not anything the
       // caller controls.
       expect(routeSource).toMatch(/const seesAllLeases = isAdminRole\(membership\.role\);/);

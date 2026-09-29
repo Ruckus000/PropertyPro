@@ -19,13 +19,26 @@ export interface LeaseRecord {
   id: number;
   communityId: number;
   unitId: number;
-  residentId: string;
+  /** Primary resident's user id; null when the primary is a contact (Leases v3). */
+  residentId: string | null;
   startDate: string;
   endDate: string | null;
   rentAmount: string | null;
   status: string;
   previousLeaseId: number | null;
   notes: string | null;
+  // Leases v3 — optional so pre-v3 callers and fixtures stay valid.
+  version?: number;
+  zeroRentReason?: string | null;
+  zeroRentNote?: string | null;
+  noticeDays?: number | null;
+  moveOutOn?: string | null;
+  endVia?: string | null;
+  endReason?: string | null;
+  noticeReceivedOn?: string | null;
+  cancelledReason?: string | null;
+  transferredFromLeaseId?: number | null;
+  signedDocumentId?: number | null;
 }
 
 export interface ExpiringLease extends LeaseRecord {
@@ -158,6 +171,9 @@ export function getExpiringLeases(
       // Only active leases with definite end dates can "expire"
       if (lease.status !== 'active') return false;
       if (lease.endDate === null) return false;
+      // Leases v3: a lease whose renewal is already signed is not expiring —
+      // the current lease stays `active` until the renewal starts.
+      if (allLeases.some((l) => l.previousLeaseId === lease.id && l.status === 'active')) return false;
       return isLeaseExpiringWithinDays(lease.endDate, now, daysWindow);
     })
     .map((lease) => ({

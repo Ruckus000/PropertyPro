@@ -75,9 +75,49 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
-/** The `lease_status` enum values. The GET handler also uses this to answer
- *  an unknown `?status=` with `[]` before it reaches SQL (PAG-04). */
-export const LEASE_STATUS_VALUES = ['active', 'expired', 'renewed', 'terminated'] as const;
+const leaseStatusValues = ['active', 'expired', 'renewed', 'terminated', 'cancelled'] as const;
+
+// --- Leases v3 shapes (all optional: the pre-v3 wire shape keeps working) ---
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format');
+const money = z.string().regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal number with up to 2 decimal places');
+
+export const zeroRentReasonValues = ['staff', 'courtesy_officer', 'rent_free_agreement', 'other'] as const;
+export const leaseEndViaValues = ['notice', 'declined', 'early', 'transfer', 'expiry'] as const;
+export const depositHeldMethodValues = ['separate_noninterest', 'separate_interest', 'surety_bond'] as const;
+
+/**
+ * One resident on a lease: an existing user, an existing contact, or a new
+ * contact-only person. Contacts are refused unless the community has turned on
+ * `leasesAllowResidentsWithoutEmail` (checked in the handler, not here).
+ */
+export const leaseResidentInputSchema = z.union([
+  z.object({ userId: z.string().uuid(), isPrimary: z.boolean().optional() }).strict(),
+  z.object({ contactId: z.number().int().positive(), isPrimary: z.boolean().optional() }).strict(),
+  z
+    .object({
+      newContact: z
+        .object({
+          fullName: z.string().trim().min(1).max(200),
+          phone: z.string().trim().max(40).nullable().optional(),
+          mailingAddress: z.string().trim().max(500).nullable().optional(),
+          noticeDelivery: z.enum(['mail', 'hand']).optional(),
+        })
+        .strict(),
+      isPrimary: z.boolean().optional(),
+    })
+    .strict(),
+]);
+
+export const leaseDepositInputSchema = z
+  .object({
+    amount: money,
+    heldMethod: z.enum(depositHeldMethodValues).nullable().optional(),
+    depository: z.string().trim().max(500).nullable().optional(),
+    receivedOn: isoDate.nullable().optional(),
+    noticeSentOn: isoDate.nullable().optional(),
+  })
+  .strict();
 
 const getQuerySchema = z.object({
   communityId: z.coerce.number().int().positive(),
@@ -86,7 +126,8 @@ const getQuerySchema = z.object({
 const createLeaseSchema = z.object({
   communityId: z.number().int().positive(),
   unitId: z.number().int().positive(),
-  residentId: z.string().uuid(),
+  /** Pre-v3 single resident. Either this or `residents` is required. */
+  residentId: z.string().uuid().optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format'),
   endDate: z
     .string()
@@ -98,17 +139,25 @@ const createLeaseSchema = z.object({
     .regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal number with up to 2 decimal places')
     .nullable()
     .optional(),
-  status: z.enum(LEASE_STATUS_VALUES).optional(),
+  status: z.enum(leaseStatusValues).optional(),
   previousLeaseId: z.number().int().positive().nullable().optional(),
   notes: z.string().nullable().optional(),
   /** When true, creating a renewal: sets previousLeaseId and marks old lease as 'renewed' */
   isRenewal: z.boolean().optional(),
+  // Leases v3
+  residents: z.array(leaseResidentInputSchema).min(1).max(10).optional(),
+  zeroRentReason: z.enum(zeroRentReasonValues).nullable().optional(),
+  zeroRentNote: z.string().trim().max(500).nullable().optional(),
+  noticeDays: z.number().int().min(0).max(60).nullable().optional(),
+  deposit: leaseDepositInputSchema.nullable().optional(),
+  signedDocumentId: z.number().int().positive().nullable().optional(),
+  idempotencyKey: z.string().trim().min(8).max(100).optional(),
 });
 
 const updateLeaseSchema = z.object({
   id: z.number().int().positive(),
   communityId: z.number().int().positive(),
-  status: z.enum(LEASE_STATUS_VALUES).optional(),
+  status: z.enum(leaseStatusValues).optional(),
   endDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format')
@@ -120,6 +169,18 @@ const updateLeaseSchema = z.object({
     .nullable()
     .optional(),
   notes: z.string().nullable().optional(),
+  // Leases v3
+  /** The version the client read. When sent, a stale version is a 409. */
+  version: z.number().int().positive().optional(),
+  zeroRentReason: z.enum(zeroRentReasonValues).nullable().optional(),
+  zeroRentNote: z.string().trim().max(500).nullable().optional(),
+  noticeDays: z.number().int().min(0).max(60).nullable().optional(),
+  moveOutOn: isoDate.nullable().optional(),
+  endVia: z.enum(leaseEndViaValues).nullable().optional(),
+  endReason: z.string().trim().max(500).nullable().optional(),
+  noticeReceivedOn: isoDate.nullable().optional(),
+  cancelledReason: z.string().trim().min(1).max(500).optional(),
+  signedDocumentId: z.number().int().positive().nullable().optional(),
 });
 
 const deleteQuerySchema = z.object({
