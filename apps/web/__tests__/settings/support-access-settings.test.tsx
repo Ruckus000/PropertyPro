@@ -113,7 +113,7 @@ describe('SupportAccessSettings', () => {
           { ...base, id: 6, event: 'support_profile_updated' },
           { ...base, id: 7, event: 'support_phone_verification_sent' },
           { ...base, id: 8, event: 'support_phone_verified' },
-          { ...base, id: 9, event: 'support_phone_verification_failed' },
+          { ...base, id: 9, event: 'support_phone_verification_attempted' },
           { ...base, id: 10, event: 'support_deletion_cancelled' },
           { ...base, id: 11, event: 'some_future_event' },
         ],
@@ -125,7 +125,7 @@ describe('SupportAccessSettings', () => {
     expect(screen.getByText('Profile updated by support')).toBeDefined();
     expect(screen.getByText('Phone verification code sent by support')).toBeDefined();
     expect(screen.getByText('Phone verified by support')).toBeDefined();
-    expect(screen.getByText('Phone verification failed (support)')).toBeDefined();
+    expect(screen.getByText('Phone verification code checked by support')).toBeDefined();
     expect(screen.getByText('Account deletion cancelled by support')).toBeDefined();
     expect(screen.getByText('some_future_event')).toBeDefined();
   });

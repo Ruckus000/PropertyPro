@@ -76,6 +76,19 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
+  // Support session: record the check BEFORE the code is sent to Twilio, fail
+  // closed. Recording it first (not after a wrong code) keeps the lockout
+  // independent of the audit write: if this insert fails, no guess is checked;
+  // once it succeeds, a wrong code always bumps the counter below. The code
+  // itself is never logged.
+  await recordSupportAction(req.headers, {
+    event: 'support_phone_verification_attempted',
+    targetUserId: userId,
+    changedFields: ['otpFailedAttempts'],
+    before: { otpFailedAttempts: otpFailedAttempts ?? 0 },
+    after: { phone: maskPhoneToLast4(phone) },
+  });
+
   try {
     const response = await fetch(
       `https://verify.twilio.com/v2/Services/${verifySid}/VerificationCheck`,
@@ -99,20 +112,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       const currentCount = (otpFailedAttempts ?? 0) + 1;
       const lockoutUntil =
         currentCount >= MAX_ATTEMPTS ? new Date(Date.now() + LOCKOUT_MS) : undefined;
-
-      // Support session: this is a write too (the attempt counter / lockout),
-      // so it is recorded before it is made. The code itself is never logged.
-      await recordSupportAction(req.headers, {
-        event: 'support_phone_verification_failed',
-        targetUserId: userId,
-        changedFields: lockoutUntil
-          ? ['otpFailedAttempts', 'otpLockedUntil']
-          : ['otpFailedAttempts'],
-        before: { otpFailedAttempts: otpFailedAttempts ?? 0 },
-        after: lockoutUntil
-          ? { otpFailedAttempts: 0, otpLockedUntil: lockoutUntil.toISOString() }
-          : { otpFailedAttempts: currentCount },
-      });
 
       if (lockoutUntil) {
         await markOtpFailed(userId, {

@@ -5,7 +5,7 @@
  *   PATCH  /api/v1/account/profile          → support_profile_updated
  *   POST   /api/v1/phone/verify/send        → support_phone_verification_sent
  *   POST   /api/v1/phone/verify/confirm     → support_phone_verified
- *                                             (support_phone_verification_failed on a bad code)
+ *                                             (support_phone_verification_attempted before every code check)
  *   DELETE /api/v1/account/delete           → support_deletion_cancelled
  *
  * The REAL `recordSupportAction` / `maskPhoneToLast4` / `getSupportScope` run
@@ -343,8 +343,9 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(h.callOrder).toEqual(['twilioCheck', 'snapshot', 'audit', 'markPhoneVerified']);
-    const [row] = auditRows();
+    expect(h.callOrder).toEqual(['audit', 'twilioCheck', 'snapshot', 'audit', 'markPhoneVerified']);
+    const [attempt, row] = auditRows();
+    expectAuditEnvelope(attempt!, 'support_phone_verification_attempted');
     expectAuditEnvelope(row!, 'support_phone_verified');
     expect(row!.metadata).toEqual({
       changedFields: ['phone', 'phoneVerifiedAt'],
@@ -357,8 +358,24 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     expect(serialised).not.toContain('3055550001');
   });
 
-  it('FAILS CLOSED: an insert error → error response, markPhoneVerified never runs', async () => {
+  it('FAILS CLOSED: the attempt row fails → no code is checked, nothing persisted', async () => {
     h.auditInsertMock.mockResolvedValueOnce({ error: { message: 'boom' } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await confirmPOST(
+      request('/api/v1/phone/verify/confirm', 'POST', { phone: '+13055559876', code: CODE }, true),
+    );
+
+    expect(res.status).toBe(500);
+    expect(h.callOrder).not.toContain('twilioCheck');
+    expect(h.markOtpFailedMock).not.toHaveBeenCalled();
+    expect(h.markPhoneVerifiedMock).not.toHaveBeenCalled();
+  });
+
+  it('FAILS CLOSED: the verified row fails → markPhoneVerified never runs', async () => {
+    h.auditInsertMock
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'boom' } });
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const res = await confirmPOST(
@@ -369,7 +386,7 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     expect(h.markPhoneVerifiedMock).not.toHaveBeenCalled();
   });
 
-  it('a rejected code writes support_phone_verification_failed BEFORE bumping the attempt counter', async () => {
+  it('a rejected code: the attempt was recorded BEFORE the check, and the counter always bumps', async () => {
     fetchMock.mockImplementationOnce(async () => {
       h.callOrder.push('twilioCheck');
       return new Response(JSON.stringify({ status: 'pending' }), { status: 200 });
@@ -380,13 +397,13 @@ describe('POST /api/v1/phone/verify/confirm under a support session', () => {
     );
 
     expect(res.status).toBe(400);
-    expect(h.callOrder).toEqual(['twilioCheck', 'audit', 'markOtpFailed']);
+    expect(h.callOrder).toEqual(['audit', 'twilioCheck', 'markOtpFailed']);
     const [row] = auditRows();
-    expectAuditEnvelope(row!, 'support_phone_verification_failed');
+    expectAuditEnvelope(row!, 'support_phone_verification_attempted');
     expect(row!.metadata).toEqual({
       changedFields: ['otpFailedAttempts'],
       before: { otpFailedAttempts: 1 },
-      after: { otpFailedAttempts: 2 },
+      after: { phone: '***9876' },
     });
     expect(JSON.stringify(row)).not.toContain(CODE);
     expect(h.markPhoneVerifiedMock).not.toHaveBeenCalled();

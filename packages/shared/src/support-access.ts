@@ -44,7 +44,7 @@ export const SUPPORT_ACCESS_EVENTS = [
   'support_profile_updated',
   'support_phone_verification_sent',
   'support_phone_verified',
-  'support_phone_verification_failed',
+  'support_phone_verification_attempted',
   'support_deletion_cancelled',
 ] as const;
 export type SupportAccessEvent = (typeof SUPPORT_ACCESS_EVENTS)[number];
@@ -58,7 +58,7 @@ export const SUPPORT_WRITE_EVENTS = [
   'support_profile_updated',
   'support_phone_verification_sent',
   'support_phone_verified',
-  'support_phone_verification_failed',
+  'support_phone_verification_attempted',
   'support_deletion_cancelled',
 ] as const satisfies readonly SupportAccessEvent[];
 export type SupportWriteEvent = (typeof SUPPORT_WRITE_EVENTS)[number];
@@ -74,7 +74,7 @@ export const SUPPORT_ACCESS_EVENT_LABELS: Record<SupportAccessEvent, string> = {
   support_profile_updated: 'Profile updated by support',
   support_phone_verification_sent: 'Phone verification code sent by support',
   support_phone_verified: 'Phone verified by support',
-  support_phone_verification_failed: 'Phone verification failed (support)',
+  support_phone_verification_attempted: 'Phone verification code checked by support',
   support_deletion_cancelled: 'Account deletion cancelled by support',
 };
 
