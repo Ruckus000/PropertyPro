@@ -41,6 +41,7 @@ vi.mock('next/dynamic', () => ({
 }));
 
 const upsertMutateAsync = vi.hoisted(() => vi.fn());
+const reorderMutate = vi.hoisted(() => vi.fn());
 const state = vi.hoisted(() => ({
   blocks: [] as SiteBlockSummary[],
   isPending: false,
@@ -68,7 +69,7 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
-  useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useReorderBlocks: () => ({ mutate: reorderMutate, mutateAsync: vi.fn(), isPending: false }),
 }));
 
 /** The two pages the page-scope cases use. */
@@ -418,8 +419,42 @@ describe('AddPanel — "Add section here" (v4)', () => {
     act(() => api.setInsertBefore(3));
     await userEvent.click(screen.getByTestId('add-section-text'));
     expect(upsertMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ blockOrder: 4 }));
-    // `placeAdded` consumes the target — proof it ran with it.
+    // Consumed, so the next add appends unless the PM picks a position again.
     expect(api.insertBefore).toBeNull();
+  });
+
+  it('still places the section when the panel closes before the write lands', async () => {
+    // The review finding: the target used to be read when the write RESOLVED,
+    // by which time closing the panel had already cleared it.
+    let resolveWrite: () => void = () => {};
+    upsertMutateAsync.mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        resolveWrite = resolve;
+      }),
+    );
+    const { rerender } = renderPanel();
+    act(() => api.setInsertBefore(3));
+    await userEvent.click(screen.getByTestId('add-section-text'));
+
+    // The PM closes the panel while the write is still in flight.
+    const withoutPanel = (blocks: SiteBlockSummary[]) => (
+      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+        <SiteEditorProvider communityId={7} blocks={blocks}>
+          <Probe />
+        </SiteEditorProvider>
+      </SelectedSitePageProvider>
+    );
+    rerender(withoutPanel(state.blocks));
+    expect(api.insertBefore).toBeNull();
+
+    await act(async () => {
+      resolveWrite();
+    });
+    await act(async () => {
+      rerender(withoutPanel([...state.blocks, block({ id: 70, blockType: 'text', blockOrder: 4 })]));
+    });
+
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 70, toOrder: 3 });
   });
 
   it('keeps the target when the write fails, so a retry still lands there', async () => {

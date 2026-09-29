@@ -104,6 +104,9 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
     insertBefore === null ? undefined : movableSections.find((b) => b.id === insertBefore);
 
   const [imageEntry, setImageEntry] = useState<AddCatalogEntry | null>(null);
+  // The insert target captured when the image flow OPENED — the flow's write
+  // resolves long after, and the live `insertBefore` may be gone by then.
+  const [imageTarget, setImageTarget] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
@@ -119,19 +122,30 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
     blocks === undefined ? null : nextContentSlot(blocksForPage(blocks, targetPageId));
   const isFull = blocks !== undefined && slot === null;
 
+  /**
+   * `aboveBlockId` is the insert target as it stood when the write STARTED.
+   * It is captured by the caller and passed through rather than read here:
+   * closing the panel mid-write unmounts this component and clears the live
+   * `insertBefore`, and reading that on resolution silently appended a section
+   * the PM had asked for above another.
+   */
   const handleAdded = useCallback(
-    (blockOrder: number, entry: AddCatalogEntry) => {
+    (blockOrder: number, entry: AddCatalogEntry, aboveBlockId: number | null) => {
       selectSlot(blockOrder, entry.blockType);
-      placeAdded(blockOrder, entry.blockType);
+      placeAdded(blockOrder, entry.blockType, aboveBlockId);
+      // Consumed: the next add from this panel appends unless the PM picks a
+      // position again.
+      setInsertBefore(null);
       setImageEntry(null);
       setAnnouncement(`${entry.label} section added. Its settings are open.`);
     },
-    [placeAdded, selectSlot],
+    [placeAdded, selectSlot, setInsertBefore],
   );
 
   const add = async (entry: AddCatalogEntry) => {
     if (slot === null || entry.seed === null) return;
     setError(null);
+    const aboveBlockId = insertTarget?.id ?? null;
     try {
       await upsert.mutateAsync({
         blockType: entry.blockType,
@@ -139,7 +153,7 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
         content: entry.seed,
         pageId: targetPageId,
       });
-      handleAdded(slot, entry);
+      handleAdded(slot, entry, aboveBlockId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'We could not add that section.');
     }
@@ -154,7 +168,7 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
           blockOrder={slot}
           pageId={targetPageId}
           onCancel={() => setImageEntry(null)}
-          onAdded={handleAdded}
+          onAdded={(blockOrder, added) => handleAdded(blockOrder, added, imageTarget)}
         />
       </div>
     );
@@ -213,9 +227,14 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
                     ? `Upgrade to Professional to add ${entry.label} sections`
                     : undefined
                 }
-                onClick={() =>
-                  entry.needsImage ? setImageEntry(entry) : void add(entry)
-                }
+                onClick={() => {
+                  if (entry.needsImage) {
+                    setImageTarget(insertTarget?.id ?? null);
+                    setImageEntry(entry);
+                  } else {
+                    void add(entry);
+                  }
+                }}
                 className={cn(
                   'flex w-full items-start gap-3 rounded-md border border-edge p-3 text-left',
                   'hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2',

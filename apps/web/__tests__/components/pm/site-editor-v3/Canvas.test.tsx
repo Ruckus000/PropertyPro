@@ -2,7 +2,7 @@
  * The editor canvas — render path, states, ordering, and page scope.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { Canvas, sortBlocks } from '@/components/pm/site-editor-v3/canvas/Canvas';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
@@ -267,6 +267,22 @@ describe('Canvas — v4 insert, hide', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Show again' }));
     expect(editorMocks.toggleHidden).toHaveBeenCalledWith(2, false);
+  });
+
+  it('puts a hidden section\'s controls in the placeholder row, not floating over it', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2, { hidden: true }), textRow(3, 3)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderCanvas();
+    const placeholder = screen.getByTestId('hidden-section-placeholder');
+    expect(
+      within(placeholder).getByRole('button', { name: 'Show Text section' }),
+    ).toBeInTheDocument();
+    // One cluster per text section — the hidden one's is inline, not doubled.
+    expect(screen.getAllByRole('button', { name: 'Duplicate Text section' })).toHaveLength(2);
   });
 
   // The draft's `hidden` flag is not what visitors see — the PUBLISHED row is.

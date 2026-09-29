@@ -90,7 +90,7 @@ export function SectionShell({ block, communityId, children }: SectionShellProps
         selected && 'ring-2 ring-interactive hover:ring-interactive',
       )}
     >
-      {selected ? (
+      {selected && !isHidden ? (
         <span
           data-testid="selected-section-label"
           className="pointer-events-none absolute left-2.5 top-2.5 z-10 rounded-[var(--radius-sm)] bg-interactive px-2.5 py-1 text-xs font-semibold text-content-inverse"
@@ -102,8 +102,14 @@ export function SectionShell({ block, communityId, children }: SectionShellProps
       {/*
        * A hidden section is not rendered at all on the canvas — an absent
        * section cannot be found again. It collapses instead to a placeholder
-       * whose sentence comes from `describeHiddenSection`. It collapses to a dashed placeholder that says so, with the undo
+       * whose sentence comes from `describeHiddenSection`, with the way back
        * right there. The block itself stays selectable for its inspector.
+       *
+       * Its controls sit INLINE in the placeholder row rather than floating at
+       * the top-right corner: the placeholder is only one row tall, so the
+       * floating cluster would cover "Show again" — the one control a PM looking
+       * at a hidden section most wants. The name chip is skipped for the same
+       * reason; the placeholder already names the section.
        */}
       {isHidden ? (
         <div
@@ -124,12 +130,13 @@ export function SectionShell({ block, communityId, children }: SectionShellProps
           >
             Show again
           </button>
+          {isHero ? null : <FloatControls block={block} communityId={communityId} />}
         </div>
       ) : (
         children
       )}
 
-      {!isHero && (
+      {!isHero && !isHidden && (
         <FloatControls
           block={block}
           communityId={communityId}

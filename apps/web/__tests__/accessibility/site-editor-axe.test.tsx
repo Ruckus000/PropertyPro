@@ -320,8 +320,9 @@ describe('Website builder v4 chrome — axe', () => {
       </UndoableRemoveProvider>,
     );
     await user.click(screen.getByRole('group', { name: 'Text section' }));
-    expect(screen.getByTestId('hidden-section-placeholder')).toBeInTheDocument();
-    expect(screen.getByTestId('selected-section-label')).toBeInTheDocument();
+    const placeholder = screen.getByTestId('hidden-section-placeholder');
+    // Anti-vacuity: the inline control cluster is what this case audits.
+    expect(within(placeholder).getByRole('button', { name: 'Show Text section' })).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 });
