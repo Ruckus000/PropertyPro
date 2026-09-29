@@ -13,8 +13,8 @@
  * The matcher is checked with Next's OWN compiler (`getMiddlewareMatchers`),
  * not a hand-copied regex, so this fails if the literal regresses.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 import * as nextStaticInfo from 'next/dist/build/analysis/get-page-static-info';
@@ -132,52 +132,89 @@ describe('static-asset fast path', () => {
  * The matcher's excluded prefixes are not page-free: the top-level dynamic
  * segment `(public)/[subdomain]` makes `/pdfjs/transparency` resolve to a page
  * that middleware never sees. That is safe only while (a) `[subdomain]` is the
- * ONLY top-level dynamic segment and (b) nothing under it reads request
- * headers or the forwarded identity.
+ * ONLY top-level dynamic segment, (b) no static top-level segment sits on an
+ * excluded prefix, and (c) nothing that renders for it — its files, the
+ * ancestor layouts, and everything they import from apps/web/src — reads
+ * request headers or the forwarded identity. Workspace packages are not
+ * followed; none of them imports next/headers.
  */
 describe('pages reachable under a matcher-excluded prefix', () => {
-  const appDir = join(__dirname, '../../src/app');
+  const srcDir = join(__dirname, '../../src');
+  const appDir = join(srcDir, 'app');
 
-  function topLevelDynamicSegments(): string[] {
-    const out: string[] = [];
-    for (const entry of readdirSync(appDir)) {
-      const full = join(appDir, entry);
-      if (!statSync(full).isDirectory()) continue;
-      if (entry.startsWith('[')) out.push(entry);
-      if (entry.startsWith('(')) {
-        for (const child of readdirSync(full)) {
-          if (child.startsWith('[') && statSync(join(full, child)).isDirectory()) {
-            out.push(`${entry}/${child}`);
-          }
-        }
-      }
-    }
-    return out.sort();
+  const isDir = (path: string) => statSync(path).isDirectory();
+
+  /** First URL segment of every route, looking through (group) folders at any depth. */
+  function topLevelSegments(dir = appDir, rel = ''): string[] {
+    return readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry);
+      if (!isDir(full) || entry.startsWith('_') || entry.startsWith('@')) return [];
+      const path = rel ? `${rel}/${entry}` : entry;
+      return entry.startsWith('(') ? topLevelSegments(full, path) : [path];
+    });
   }
 
   function filesUnder(dir: string): string[] {
     return readdirSync(dir).flatMap((entry) => {
       const full = join(dir, entry);
-      return statSync(full).isDirectory() ? filesUnder(full) : [full];
+      return isDir(full) ? filesUnder(full) : [full];
     });
   }
 
-  it('has exactly one top-level dynamic segment', () => {
-    expect(topLevelDynamicSegments()).toEqual(['(public)/[subdomain]']);
+  function resolveImport(fromFile: string, spec: string): string | null {
+    let base: string;
+    if (spec.startsWith('@/')) base = join(srcDir, spec.slice(2));
+    else if (spec.startsWith('.')) base = join(dirname(fromFile), spec);
+    else return null;
+    for (const candidate of [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]) {
+      if (existsSync(candidate) && !isDir(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  function transitiveClosure(entries: string[]): string[] {
+    const seen = new Set<string>();
+    const queue = [...entries];
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
+        const resolved = resolveImport(file, match[1]!);
+        if (resolved) queue.push(resolved);
+      }
+    }
+    return [...seen];
+  }
+
+  it('has exactly one top-level dynamic segment, including inside nested route groups', () => {
+    expect(topLevelSegments().filter((s) => s.split('/').pop()!.startsWith('['))).toEqual([
+      '(public)/[subdomain]',
+    ]);
   });
 
-  it('no file under (public)/[subdomain] reads request headers or the forwarded identity', () => {
-    // Plus the one helper those pages share (all of them only redirect).
-    const files = [
+  it('has no static top-level segment on a matcher-excluded prefix', () => {
+    const excluded = topLevelSegments().filter((s) => {
+      const leaf = s.split('/').pop()!;
+      return leaf === 'pdfjs' || leaf.startsWith('favicon.ico') || leaf.startsWith('_next');
+    });
+    expect(excluded).toEqual([]);
+  });
+
+  it('nothing that renders for (public)/[subdomain] reads request headers or the forwarded identity', () => {
+    const entries = [
       ...filesUnder(join(appDir, '(public)/[subdomain]')),
-      join(appDir, '../lib/tenant/redirect-canonical-host.ts'),
+      ...['layout.tsx', 'template.tsx', '(public)/layout.tsx', '(public)/template.tsx']
+        .map((f) => join(appDir, f))
+        .filter(existsSync),
     ];
-    expect(files.length).toBeGreaterThan(1);
-    const offenders = files.filter((file) =>
-      /next\/headers|lib\/request\//.test(
-        readFileSync(file, 'utf8'),
-      ),
-    );
+    const closure = transitiveClosure(entries);
+    // Denominator: the redirect helper and its URL builder must be reached.
+    expect(closure.some((f) => f.endsWith('lib/tenant/redirect-canonical-host.ts'))).toBe(true);
+    const offenders = closure
+      .filter((file) => /next\/headers|lib\/request\//.test(readFileSync(file, 'utf8')))
+      .map((file) => relative(srcDir, file));
     expect(offenders).toEqual([]);
   });
 });

@@ -440,6 +440,10 @@ function stampForwardedUserHeaders(
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
+  if (shouldHideDevSurfaceInProduction(pathname)) {
+    return NextResponse.rewrite(new URL('/404', request.url));
+  }
+
   // Static-asset fast path. The matcher below used to EXCLUDE every path ending
   // in an image/.mjs extension, so middleware never ran for them — including
   // page URLs such as `/help/<category>/<slug>.png`, which Next still routes to
@@ -455,11 +459,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // isApiPath()'s `/api/v1` — because no API route is a static asset and the
   // fast path would skip rate limiting. Placement is load-bearing: below the
   // custom-domain rewrite, `/marketing/*.webp` on a custom domain would be
-  // rewritten into `/public-site/...` and break.
-  if (shouldHideDevSurfaceInProduction(pathname)) {
-    return NextResponse.rewrite(new URL('/404', request.url));
-  }
-
+  // rewritten into `/public-site/...` and break. X-Frame-Options is always
+  // DENY here (no isPreview): no admin-preview URL ends in an image extension.
   if (!pathname.startsWith('/api/') && STATIC_ASSET_PATH.test(pathname)) {
     const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
     const response = NextResponse.next({
@@ -1358,10 +1359,12 @@ export const config = {
      * The excluded prefixes are NOT page-free: the top-level dynamic segment
      * `app/(public)/[subdomain]` makes `/pdfjs/transparency` or
      * `/favicon.ico/x` resolve to a page with no middleware. That is safe only
-     * because every page under `[subdomain]` redirects to the canonical host
-     * without reading request headers — pinned by
-     * __tests__/middleware/static-asset-bypass.test.ts, which fails if one
-     * starts reading headers or the forwarded identity.
+     * because every page under `[subdomain]` validates the slug and redirects
+     * to the canonical host without reading request headers. Pinned by
+     * __tests__/middleware/static-asset-bypass.test.ts: it fails on a second
+     * top-level dynamic segment (at any route-group depth), on a static
+     * segment sitting on an excluded prefix, and on a header read anywhere in
+     * the [subdomain] files, the ancestor layouts, or anything they import.
      */
     '/((?!_next/static|_next/image|favicon\\.ico|pdfjs/).*)',
   ],
