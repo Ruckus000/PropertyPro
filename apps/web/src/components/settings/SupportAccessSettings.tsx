@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { ShieldCheck, Eye } from 'lucide-react';
+import { getSupportAccessEventLabel } from '@propertypro/shared';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   useSupportAccess,
@@ -159,7 +160,9 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
           <div className="divide-y divide-edge-subtle rounded-md border border-edge">
             {data.recentAccess.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                <span className="font-mono text-content-secondary">{entry.event}</span>
+                <span className="text-content-secondary" title={entry.event}>
+                  {getSupportAccessEventLabel(entry.event)}
+                </span>
                 <span className="text-content-disabled">
                   {format(new Date(entry.created_at), 'MMM d, HH:mm')}
                 </span>

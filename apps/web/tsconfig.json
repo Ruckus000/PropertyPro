@@ -53,6 +53,9 @@
       "@propertypro/db/unsafe": [
         "../../packages/db/src/unsafe.ts"
       ],
+      "@propertypro/db/audit-actor": [
+        "../../packages/db/src/audit-actor.ts"
+      ],
       "@propertypro/shared": [
         "../../packages/shared/src"
       ],

@@ -18,6 +18,7 @@ import {
   getUserOtpState,
   markOtpSent,
 } from '@/lib/services/phone-verification-service';
+import { maskPhoneToLast4, recordSupportAction } from '@/lib/support/support-audit';
 
 const VERIFY_COOLDOWN_MS = 60_000;
 
@@ -71,6 +72,17 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       { status: 503 },
     );
   }
+
+  // Support session: record the send BEFORE the SMS goes out, fail closed —
+  // a throw here propagates (outside the try below) and no code is sent.
+  // Only the destination's last four digits; the OTP never passes through
+  // this route at all. A no-op outside a support session.
+  await recordSupportAction(req.headers, {
+    event: 'support_phone_verification_sent',
+    targetUserId: userId,
+    changedFields: ['otpLastSentAt'],
+    after: { phone: maskPhoneToLast4(phone) },
+  });
 
   try {
     const response = await fetch(

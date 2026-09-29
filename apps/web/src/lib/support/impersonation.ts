@@ -12,6 +12,43 @@ export function isReadOnlyBlocked(method: string): boolean {
   return MUTATION_METHODS.has(method.toUpperCase());
 }
 
+/**
+ * The ONLY mutating API calls a `read_only` support session may make — product
+ * decision 2026-09-29: support may edit the impersonated user's profile,
+ * re-verify their phone, and cancel their pending account deletion, and every
+ * such change is recorded in `support_access_log` BEFORE it is made, failing
+ * closed (lib/support/support-audit.ts). Nothing else becomes writable.
+ *
+ * Matched EXACTLY against `request.nextUrl.pathname` and the upper-cased
+ * method: no prefixes, no trailing slash, no percent-decoding. A variant
+ * spelling (`/api/v1/account/profile/`, `/api/v1/account/%70rofile`) is
+ * therefore still refused — the fail-closed direction; the client only ever
+ * sends the canonical form. `POST /api/v1/account/delete` (REQUESTING
+ * deletion) is deliberately absent: it needs the account holder's own password
+ * via requireFreshReauth, which an operator must not supply.
+ *
+ * Adding an entry makes a new write reachable from every support session. Pin
+ * it in apps/web/__tests__/middleware/support-writable-routes.test.ts and make
+ * the route call `recordSupportAction` before it mutates.
+ */
+export const SUPPORT_WRITABLE_API_ROUTES: ReadonlyArray<{
+  readonly method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  readonly path: string;
+}> = Object.freeze([
+  Object.freeze({ method: 'PATCH', path: '/api/v1/account/profile' } as const),
+  Object.freeze({ method: 'POST', path: '/api/v1/phone/verify/send' } as const),
+  Object.freeze({ method: 'POST', path: '/api/v1/phone/verify/confirm' } as const),
+  Object.freeze({ method: 'DELETE', path: '/api/v1/account/delete' } as const),
+]);
+
+/** True when (method, pathname) is exactly one of SUPPORT_WRITABLE_API_ROUTES. */
+export function isSupportWritableApiRoute(method: string, pathname: string): boolean {
+  const upper = method.toUpperCase();
+  return SUPPORT_WRITABLE_API_ROUTES.some(
+    (route) => route.method === upper && route.path === pathname,
+  );
+}
+
 interface ActiveSupportSessionRow {
   id: number;
   target_user_id: string;

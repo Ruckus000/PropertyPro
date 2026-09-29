@@ -76,6 +76,8 @@ export type SupportAccessLogRow = {
   admin_user_id: string;
   community_id: number;
   event: string;
+  resource_type: string | null;
+  resource_id: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
 };
@@ -188,11 +190,13 @@ type SupportSessionInsert = Omit<
 
 type SupportAccessLogInsert = Omit<
   SupportAccessLogRow,
-  'id' | 'created_at' | 'session_id' | 'metadata'
+  'id' | 'created_at' | 'session_id' | 'resource_type' | 'resource_id' | 'metadata'
 > & {
   id?: number;
   created_at?: string;
   session_id?: number | null;
+  resource_type?: string | null;
+  resource_id?: string | null;
   metadata?: Record<string, unknown> | null;
 };
 

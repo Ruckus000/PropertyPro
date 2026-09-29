@@ -7,6 +7,7 @@
 
 import { db } from '../drizzle';
 import { complianceAuditLog } from '../schema/compliance-audit-log';
+import { stampAuditActorMetadata } from '../audit-actor';
 
 /** Widened action union covering generic CRUD, user lifecycle, meeting, and domain events. */
 export type AuditAction =
@@ -144,6 +145,9 @@ export async function logAuditEvent(params: AuditEventParams): Promise<void> {
     resourceId: params.resourceId,
     oldValues: params.oldValues ?? null,
     newValues: params.newValues ?? null,
-    metadata: params.metadata ?? null,
+    // Support-session attribution (`metadata.support`) is merged from the
+    // request-scoped audit actor — see ../audit-actor.ts. A no-op outside a
+    // support session, so the row is unchanged there.
+    metadata: stampAuditActorMetadata(params.metadata ?? null) ?? null,
   });
 }

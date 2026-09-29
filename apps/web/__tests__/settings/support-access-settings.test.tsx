@@ -98,8 +98,36 @@ describe('SupportAccessSettings', () => {
     expect(screen.getByText('Support Access')).toBeDefined();
     expect(screen.getByText(/Enabled since/)).toBeDefined();
     expect(screen.getByText('Recent Support Activity')).toBeDefined();
-    expect(screen.getByText('consent_granted')).toBeDefined();
+    // Events render as labels (raw name kept in the title attribute).
+    expect(screen.getByText('Consent granted')).toBeDefined();
+    expect(screen.getByTitle('consent_granted')).toBeDefined();
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('labels the support-write events and falls back to the raw name for unknown ones', () => {
+    const base = SAMPLE.recentAccess[0]!;
+    setQuery({
+      data: {
+        ...SAMPLE,
+        recentAccess: [
+          { ...base, id: 6, event: 'support_profile_updated' },
+          { ...base, id: 7, event: 'support_phone_verification_sent' },
+          { ...base, id: 8, event: 'support_phone_verified' },
+          { ...base, id: 9, event: 'support_phone_verification_failed' },
+          { ...base, id: 10, event: 'support_deletion_cancelled' },
+          { ...base, id: 11, event: 'some_future_event' },
+        ],
+      },
+    });
+    setToggle();
+    render(<SupportAccessSettings communityId={42} />);
+
+    expect(screen.getByText('Profile updated by support')).toBeDefined();
+    expect(screen.getByText('Phone verification code sent by support')).toBeDefined();
+    expect(screen.getByText('Phone verified by support')).toBeDefined();
+    expect(screen.getByText('Phone verification failed (support)')).toBeDefined();
+    expect(screen.getByText('Account deletion cancelled by support')).toBeDefined();
+    expect(screen.getByText('some_future_event')).toBeDefined();
   });
 
   it('shows the no-activity copy when consent is active with empty log', () => {

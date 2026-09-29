@@ -19,6 +19,9 @@ import {
   markOtpFailed,
   markPhoneVerified,
 } from '@/lib/services/phone-verification-service';
+import { getUserProfileSnapshot } from '@/lib/services/user-profile-service';
+import { getSupportScope } from '@/lib/support/support-scope';
+import { maskPhoneToLast4, recordSupportAction } from '@/lib/support/support-audit';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60_000;
@@ -94,10 +97,27 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     if (!response.ok || data.status !== 'approved') {
       // Increment failed attempts in DB (durable across serverless instances)
       const currentCount = (otpFailedAttempts ?? 0) + 1;
-      if (currentCount >= MAX_ATTEMPTS) {
+      const lockoutUntil =
+        currentCount >= MAX_ATTEMPTS ? new Date(Date.now() + LOCKOUT_MS) : undefined;
+
+      // Support session: this is a write too (the attempt counter / lockout),
+      // so it is recorded before it is made. The code itself is never logged.
+      await recordSupportAction(req.headers, {
+        event: 'support_phone_verification_failed',
+        targetUserId: userId,
+        changedFields: lockoutUntil
+          ? ['otpFailedAttempts', 'otpLockedUntil']
+          : ['otpFailedAttempts'],
+        before: { otpFailedAttempts: otpFailedAttempts ?? 0 },
+        after: lockoutUntil
+          ? { otpFailedAttempts: 0, otpLockedUntil: lockoutUntil.toISOString() }
+          : { otpFailedAttempts: currentCount },
+      });
+
+      if (lockoutUntil) {
         await markOtpFailed(userId, {
           newAttemptCount: currentCount,
-          lockoutUntil: new Date(Date.now() + LOCKOUT_MS),
+          lockoutUntil,
         });
       } else {
         await markOtpFailed(userId, { newAttemptCount: currentCount });
@@ -107,6 +127,23 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         { error: 'Invalid verification code', verified: false },
         { status: 400 },
       );
+    }
+
+    // Support session: record the verification BEFORE persisting it, fail
+    // closed — a throw lands in the catch below (500) and markPhoneVerified
+    // never runs. Phones masked to the last four digits; never the code.
+    if (getSupportScope(req.headers) !== null) {
+      const current = await getUserProfileSnapshot(userId);
+      await recordSupportAction(req.headers, {
+        event: 'support_phone_verified',
+        targetUserId: userId,
+        changedFields: ['phone', 'phoneVerifiedAt'],
+        before: {
+          phone: maskPhoneToLast4(current.phone),
+          phoneVerifiedAt: current.phoneVerifiedAt?.toISOString() ?? null,
+        },
+        after: { phone: maskPhoneToLast4(phone), phoneVerified: true },
+      });
     }
 
     // Update user's phone, phoneVerifiedAt, and reset OTP rate-limit state

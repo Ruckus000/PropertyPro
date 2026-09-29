@@ -49,6 +49,11 @@
       "import": "./src/filters.ts",
       "default": "./src/filters.ts"
     },
+    "./audit-actor": {
+      "types": "./src/audit-actor.ts",
+      "import": "./src/audit-actor.ts",
+      "default": "./src/audit-actor.ts"
+    },
     "./unsafe": {
       "types": "./src/unsafe.ts",
       "import": "./src/unsafe.ts",

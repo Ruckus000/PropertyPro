@@ -32,6 +32,39 @@ export interface UpdatedUserProfile {
   changedFields: Partial<{ fullName: string; phone: string | null }>;
 }
 
+export interface UserProfileSnapshot {
+  fullName: string | null;
+  phone: string | null;
+  phoneVerifiedAt: Date | null;
+}
+
+/**
+ * Read the user's current name/phone state. Used ONLY to record the "before"
+ * values of a change an operator makes during a support session (see
+ * lib/support/support-audit.ts) — outside a support session no route calls it,
+ * so the ordinary self-service paths gain no extra query.
+ *
+ * Same authorization contract as `updateUserProfile`: the caller passes the
+ * actor's own id (the impersonated user's, under a support session).
+ */
+export async function getUserProfileSnapshot(userId: string): Promise<UserProfileSnapshot> {
+  const db = createUnscopedClient();
+  const [row] = await db
+    .select({
+      fullName: users.fullName,
+      phone: users.phone,
+      phoneVerifiedAt: users.phoneVerifiedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return {
+    fullName: row?.fullName ?? null,
+    phone: row?.phone ?? null,
+    phoneVerifiedAt: row?.phoneVerifiedAt ?? null,
+  };
+}
+
 /**
  * Apply a partial update to the user's profile row. Always bumps
  * `updatedAt`. The returned `changedFields` mirrors the per-field

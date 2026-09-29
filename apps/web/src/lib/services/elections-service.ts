@@ -15,6 +15,8 @@ import {
   units,
 } from '@propertypro/db';
 import { and, asc, desc, eq, inArray, isNotNull, sql } from '@propertypro/db/filters';
+// Merges support-session attribution (metadata.support) into this direct audit insert — see packages/db/src/audit-actor.ts.
+import { stampAuditActorMetadata } from '@propertypro/db/audit-actor';
 import { createSelectionDigest } from '@/lib/elections/selection-digest';
 // AUTHZ: Elections vote/proxy/state transitions require one transaction for domain rows and audit rows.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -398,7 +400,7 @@ async function insertAuditEventInTransaction(
     resourceId: params.resourceId,
     oldValues: params.oldValues ?? null,
     newValues: params.newValues ?? null,
-    metadata: params.metadata ?? null,
+    metadata: stampAuditActorMetadata(params.metadata ?? null) ?? null,
   });
 }
 

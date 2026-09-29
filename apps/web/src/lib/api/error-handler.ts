@@ -13,6 +13,8 @@ import * as Sentry from '@sentry/nextjs';
 import { isContractValidationError } from '@propertypro/api-contract';
 import { AppError } from './errors/AppError';
 import { extractSentryRequestContext } from '../sentry/request-context';
+import { runWithAuditActor } from '@propertypro/db/audit-actor';
+import { supportAuditActorFromHeaders } from '../support/audit-actor';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RouteHandler = (req: NextRequest, context?: any) => Promise<NextResponse>;
@@ -31,7 +33,15 @@ type RouteHandler = (req: NextRequest, context?: any) => Promise<NextResponse>;
 export function withErrorHandler(handler: RouteHandler): RouteHandler {
   return async (req, context) => {
     try {
-      const response = await handler(req, context);
+      // Enter the request's audit actor once, here, so every
+      // compliance_audit_log row written while this handler runs — through
+      // logAuditEvent or a service's in-transaction insert — carries
+      // `metadata.support` under a support (impersonation) session. Outside
+      // one the actor is null and the handler runs exactly as before.
+      const response = await runWithAuditActor(
+        typeof req?.headers?.get === 'function' ? supportAuditActorFromHeaders(req.headers) : null,
+        () => handler(req, context),
+      );
       return response;
     } catch (error) {
       const sentryContext = extractSentryRequestContext(req.headers);

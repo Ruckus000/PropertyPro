@@ -2204,3 +2204,56 @@ describe('paginateSitePublishHistory', () => {
     expect(result.pagination).toEqual(pagination);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Support-session attribution on the inline audit insert
+// ---------------------------------------------------------------------------
+// This service writes its compliance_audit_log row on the transaction handle,
+// bypassing logAuditEvent — so it must merge the request's audit actor itself
+// (packages/db/src/audit-actor.ts). withErrorHandler enters that actor in a
+// real request; here it is entered directly.
+
+describe('inline audit row — support-session attribution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('merges metadata.support inside a support run, preserving existing keys', async () => {
+    const { runWithAuditActor } = await import('@propertypro/db/audit-actor');
+    createScopedClientMock.mockReturnValue(buildScopedClient() as never);
+
+    await runWithAuditActor({ support: { sessionId: 42, adminUserId: 'admin-uuid' } }, () =>
+      upsertPublishedBlock({
+        communityId: 42,
+        actorUserId: 'user-1',
+        blockType: 'text',
+        blockOrder: 3,
+        content: {},
+        isDraft: true,
+      }),
+    );
+
+    const metadata = (txAuditValuesMock.mock.calls[0]![0] as { metadata: Record<string, unknown> })
+      .metadata;
+    expect(metadata).toMatchObject({ isDraft: true });
+    expect(metadata.support).toEqual({ sessionId: 42, adminUserId: 'admin-uuid' });
+  });
+
+  it('outside a support run the metadata carries no support key', async () => {
+    createScopedClientMock.mockReturnValue(buildScopedClient() as never);
+
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'text',
+      blockOrder: 3,
+      content: {},
+      isDraft: true,
+    });
+
+    const metadata = (txAuditValuesMock.mock.calls[0]![0] as { metadata: Record<string, unknown> })
+      .metadata;
+    expect(metadata).toMatchObject({ isDraft: true });
+    expect(metadata).not.toHaveProperty('support');
+  });
+});

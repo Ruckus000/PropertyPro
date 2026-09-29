@@ -270,7 +270,7 @@
     "unscoped": 2
   },
   "apps/web/src/lib/services/user-profile-service.ts": {
-    "unscoped": 1
+    "unscoped": 2
   },
   "apps/web/src/lib/services/visitor-cron-service.ts": {
     "unscoped": 1

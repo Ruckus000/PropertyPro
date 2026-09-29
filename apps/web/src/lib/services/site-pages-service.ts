@@ -43,6 +43,8 @@ import {
   type AuditAction,
 } from '@propertypro/db';
 import { and, asc, desc, eq, isNull, sql } from '@propertypro/db/filters';
+// Merges support-session attribution (metadata.support) into this direct audit insert — see packages/db/src/audit-actor.ts.
+import { stampAuditActorMetadata } from '@propertypro/db/audit-actor';
 // AUTHZ: Phase 11b multi-page — caller (route layer) verifies management-tier (property_manager / root_manager) + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -116,7 +118,7 @@ async function insertAuditEventInTransaction(
     action: params.action,
     resourceType: 'site_page',
     resourceId: params.resourceId,
-    metadata: params.metadata ?? null,
+    metadata: stampAuditActorMetadata(params.metadata ?? null) ?? null,
   });
 }
 
