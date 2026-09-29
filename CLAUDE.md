@@ -102,7 +102,7 @@ docs/                   # Specs, ADRs, audits, design system
 > the defect lives in the relationship between two sibling files. And
 > `verify-admin-semantic-css` was converted `.cjs` → `.ts` and registered as
 > `pnpm guard:admin-semantic-css`; it now scans `apps/admin/src` **and**
-> `packages/ui/src`. There are **33** guards in `scripts/run-lint-guards.mjs`;
+> `packages/ui/src`. There are **34** guards in `scripts/run-lint-guards.mjs`;
 > `guard:admin-semantic-css` is deliberately not one of them, because it reads
 > `apps/admin/.next/static/css` and so needs a build first.
 
@@ -322,6 +322,7 @@ pnpm guard:service-dead-exports # Unreferenced exported service functions (shrin
 pnpm guard:route-gates          # Every exported API route VERB (web + admin) is gated or carries a `// route-gate:` claim
 pnpm guard:route-table-imports  # ADR-003: no table imports anywhere in apps/web/src/app (routes AND pages); shrink-only per-symbol baseline
 pnpm guard:authz-comments       # `// AUTHZ:` above every /unsafe import, and every service-role (supabase/admin) import outside apps/admin
+pnpm guard:call-ceilings        # Shrink-only per-file counts of createUnscopedClient() calls and whole-table `.query(<table>)` reads
 ```
 
 > **Design tokens (`guard:design-tokens`):** bans raw hex, raw Tailwind palette
