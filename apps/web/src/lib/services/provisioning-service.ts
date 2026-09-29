@@ -93,6 +93,28 @@ const RECOVERABLE_JOB_STATUSES = [
 
 const RECOVERABLE_SIGNUP_STATUSES = ['payment_completed', 'provisioning'] as const;
 
+// The watchdog's staleness window AND the lifetime of a provisioning claim
+// (`claimProvisioningJob`): a claim not renewed for this long is presumed dead
+// and may be taken over.
+//
+// INVARIANT: no route that runs provisioning may be allowed to execute longer
+// than this window. The lease renews only at STEP BOUNDARIES, so a run that is
+// still alive but whose current step outlasts the window can be taken over; it
+// then stops at its next checkpoint (ProvisioningLeaseLostError), but the
+// successor re-runs that same step, so its side effect — the welcome email —
+// can happen twice. Capping the function duration at or below the window makes a
+// live takeover impossible: a run that outlasts it has been killed. The four
+// callers (webhook, manual retry, watchdog, reconciler) live in three routes,
+// as of 2026-09-29:
+//   - POST /api/v1/webhooks/stripe            (runProvisioning)
+//   - POST /api/v1/internal/provision         (runProvisioning)
+//   - GET/POST /api/v1/internal/provisioning-watchdog (the watchdog AND the reconciler)
+// None of them exports `maxDuration`, and apps/web/vercel.json has no
+// `functions` block, so each runs under the Vercel project's default function
+// duration (300s under Fluid compute — equal to this window, not above it; the
+// project setting itself is not in the repo, so re-check it there). Raising any
+// of them past 300s, or lowering this window, breaks the invariant: move the
+// lease renewal inside long steps first.
 const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_JOBS = 10;
 const DEFAULT_MAX_RETRY_COUNT = 5;
@@ -640,6 +662,83 @@ export async function runProvisioning(jobId: number): Promise<ProvisioningRunOut
   // The lease this run holds. Every write to the job row below is fenced on it.
   let lease: Date = job.startedAt as Date;
 
+  // Persist a failure — do NOT overwrite lastSuccessfulStatus. Writing `failed`
+  // is also what releases the claim (see claimProvisioningJob), so EVERY throw
+  // after a successful claim must come through here: one that skipped it would
+  // hold the claim for the whole stale window, answering every other caller
+  // (webhook, watchdog, manual retry) with `in_flight` meanwhile. Fenced on the
+  // lease, so a run that was taken over cannot record a failure over its
+  // successor.
+  const recordFailure = async (err: unknown): Promise<void> => {
+    await db
+      .update(provisioningJobs)
+      .set({
+        status: 'failed',
+        retryCount: sql`${provisioningJobs.retryCount} + 1`,
+        // Same reasoning as the export worker: persisted driver text can carry
+        // drizzle's bound `params:` (#1092). Values only; see that note.
+        errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
+      })
+      .where(and(eq(provisioningJobs.id, jobId), eq(provisioningJobs.startedAt, lease)));
+  };
+
+  let ctx: JobContext;
+  try {
+    ctx = await loadJobContext(db, job);
+  } catch (err) {
+    await recordFailure(err);
+    throw err;
+  }
+
+  // State machine loop.
+  let step = nextStep(job.lastSuccessfulStatus ?? null);
+
+  while (true) {
+    try {
+      await runStep(step, ctx);
+
+      // Persist step success, renewing the lease — only if we still hold it.
+      const isTerminal = step === 'completed';
+      const renewed = new Date();
+      const [kept] = await db
+        .update(provisioningJobs)
+        .set({
+          status: step,
+          lastSuccessfulStatus: step,
+          startedAt: renewed,
+          ...(isTerminal ? { completedAt: renewed } : {}),
+        })
+        .where(and(eq(provisioningJobs.id, jobId), eq(provisioningJobs.startedAt, lease)))
+        .returning({ id: provisioningJobs.id });
+      if (!kept) {
+        throw new ProvisioningLeaseLostError(jobId, step);
+      }
+      lease = renewed;
+
+      if (isTerminal) break;
+      step = nextStep(step);
+    } catch (err) {
+      // A run that lost its lease must not record a failure over its successor.
+      if (err instanceof ProvisioningLeaseLostError) throw err;
+      await recordFailure(err);
+      throw err; // re-throw so caller can capture to Sentry
+    }
+  }
+
+  return 'completed';
+}
+
+/**
+ * Everything `runProvisioning` needs before its first step: the pending signup,
+ * and the signup moved to `provisioning`. Runs under a held claim; any throw is
+ * recorded as a job failure by the caller.
+ */
+async function loadJobContext(
+  db: ReturnType<typeof createUnscopedClient>,
+  job: typeof provisioningJobs.$inferSelect,
+): Promise<JobContext> {
+  const jobId = job.id;
+
   // Load the pending signup.
   if (!job.signupRequestId) {
     throw new Error(`[provisioning] job ${jobId} has no signupRequestId`);
@@ -690,55 +789,7 @@ export async function runProvisioning(jobId: number): Promise<ProvisioningRunOut
       ),
     );
 
-  // State machine loop.
-  let step = nextStep(job.lastSuccessfulStatus ?? null);
-
-  while (true) {
-    try {
-      await runStep(step, ctx);
-
-      // Persist step success, renewing the lease — only if we still hold it.
-      const isTerminal = step === 'completed';
-      const renewed = new Date();
-      const [kept] = await db
-        .update(provisioningJobs)
-        .set({
-          status: step,
-          lastSuccessfulStatus: step,
-          startedAt: renewed,
-          ...(isTerminal ? { completedAt: renewed } : {}),
-        })
-        .where(and(eq(provisioningJobs.id, jobId), eq(provisioningJobs.startedAt, lease)))
-        .returning({ id: provisioningJobs.id });
-      if (!kept) {
-        throw new ProvisioningLeaseLostError(jobId, step);
-      }
-      lease = renewed;
-
-      if (isTerminal) break;
-      step = nextStep(step);
-    } catch (err) {
-      // A run that lost its lease must not record a failure over its successor.
-      if (err instanceof ProvisioningLeaseLostError) throw err;
-
-      // Persist failure — do NOT overwrite lastSuccessfulStatus. Writing
-      // `failed` is also what releases the claim (see claimProvisioningJob).
-      await db
-        .update(provisioningJobs)
-        .set({
-          status: 'failed',
-          retryCount: sql`${provisioningJobs.retryCount} + 1`,
-          // Same reasoning as the export worker: persisted driver text can carry
-          // drizzle's bound `params:` (#1092). Values only; see that note.
-          errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
-        })
-        .where(and(eq(provisioningJobs.id, jobId), eq(provisioningJobs.startedAt, lease)));
-
-      throw err; // re-throw so caller can capture to Sentry
-    }
-  }
-
-  return 'completed';
+  return ctx;
 }
 
 /**
@@ -891,6 +942,12 @@ export interface ReconcileLostCheckoutSummary {
   recovered: number;
   /** Sessions that were not yet complete (genuinely abandoned) — left alone. */
   skippedNotComplete: number;
+  /**
+   * Paid sessions whose job another run (a late webhook, the watchdog) was
+   * already working on — this pass did no provisioning. Not `recovered`: that
+   * run may still fail, and the watchdog owns the job from here.
+   */
+  inFlight: number;
   /** Recovery attempts that threw (Stripe/DB error) — row left for next run. */
   failed: number;
   failures: Array<{ signupRequestId: string; errorMessage: string }>;
@@ -951,6 +1008,7 @@ export async function reconcileLostCheckoutSignups(
     scanned: rows.length,
     recovered: 0,
     skippedNotComplete: 0,
+    inFlight: 0,
     failed: 0,
     failures: [],
   };
@@ -1070,8 +1128,9 @@ export async function reconcileLostCheckoutSignups(
         stripeEventId: `reconcile:${sessionId}`,
       });
       const jobId = await getProvisioningJobIdBySignupRequestId(row.signupRequestId);
-      if (jobId !== null) {
-        await runProvisioning(jobId);
+      if (jobId !== null && (await runProvisioning(jobId)) === 'in_flight') {
+        summary.inFlight += 1;
+        continue;
       }
       summary.recovered += 1;
     } catch (err) {

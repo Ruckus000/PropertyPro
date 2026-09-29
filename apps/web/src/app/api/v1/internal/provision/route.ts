@@ -43,10 +43,24 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
 
-  await runProvisioning(job.id);
+  const outcome = await runProvisioning(job.id);
 
   // Return the refreshed job status after run.
   const updated = await getProvisioningJobSummaryById(job.id);
+
+  if (outcome === 'in_flight') {
+    // Another run (webhook, watchdog) holds the job's claim and this call did
+    // nothing. A 200 here would read as "retried". Nothing in the admin console
+    // calls this route (its Health retry only reaches slugs seen in cron_runs,
+    // and `provision` is not a cron), so the operator sees this body directly.
+    return NextResponse.json(
+      {
+        error: 'Provisioning is already running for this job; retry after it finishes or its claim expires (5 min).',
+        data: updated,
+      },
+      { status: 409 },
+    );
+  }
 
   return NextResponse.json({ data: updated });
 });

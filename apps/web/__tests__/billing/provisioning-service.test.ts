@@ -511,6 +511,55 @@ describe('runProvisioning', () => {
     expect(planBackfill).toBeDefined();
   });
 
+  // 1e. Slug-conflict ownership: the Stripe-id arms. The job did NOT record the
+  // community (lost community_created checkpoint AND lost job.communityId
+  // write), so only the Stripe ids stamped by the earlier run's INSERT can
+  // prove the community is this signup's.
+  it.each([
+    {
+      arm: 'stripe_subscription_id',
+      existing: { id: 10, stripeSubscriptionId: 'sub_mine', stripeCustomerId: 'cus_other' },
+    },
+    {
+      arm: 'stripe_customer_id',
+      existing: { id: 10, stripeSubscriptionId: 'sub_other', stripeCustomerId: 'cus_mine' },
+    },
+  ])('adopts a slug-conflicting community that carries this checkout\'s $arm', async ({ existing }) => {
+    const job = makeJob({ communityId: null });
+    const { calls } = buildDb({
+      insertReturning: [], // slug conflict
+      selectSequence: [
+        [job],
+        [{ ...CONDO_SIGNUP, payload: { stripeSubscriptionId: 'sub_mine', stripeCustomerId: 'cus_mine' } }],
+        [existing],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await expect(runProvisioning(1)).resolves.toBe('completed');
+
+    const adopted = calls.find(
+      (c) => c.op === 'update' && (c.values as { communityId?: number } | undefined)?.communityId === 10,
+    );
+    expect(adopted, 'job must record the adopted community').toBeDefined();
+  });
+
+  // Control for 1e: neither id matches → refused.
+  it('refuses a slug-conflicting community that carries neither of this checkout\'s Stripe ids', async () => {
+    const job = makeJob({ communityId: null });
+    buildDb({
+      insertReturning: [],
+      selectSequence: [
+        [job],
+        [{ ...CONDO_SIGNUP, payload: { stripeSubscriptionId: 'sub_mine', stripeCustomerId: 'cus_mine' } }],
+        [{ id: 10, stripeSubscriptionId: 'sub_other', stripeCustomerId: 'cus_other' }],
+      ],
+    });
+
+    await expect(runProvisioning(1)).rejects.toThrow(/refusing to adopt it/);
+  });
+
   // 2. Full happy path — apartment (checklist is a no-op)
   it('runs all steps for apartment; checklist_generated inserts nothing', async () => {
     const job = makeJob({ signupRequestId: APT_SIGNUP.signupRequestId });
@@ -1062,6 +1111,25 @@ describe('reconcileLostCheckoutSignups', () => {
       expect.objectContaining({ status: 'payment_completed' }),
     );
     expect(eqMock).toHaveBeenCalledWith(pendingSignupsTable.status, 'checkout_started');
+  });
+
+  // A job another run holds is not "recovered" by this pass: runProvisioning
+  // returned `in_flight` having done nothing, and that run may still fail.
+  it('counts a paid session whose job is claimed elsewhere as inFlight, not recovered', async () => {
+    const lostRow = { signupRequestId: 'req_lost', payload: { stripeCheckoutSessionId: 'cs_lost' } };
+    // `claimed: []` is the claim UPDATE matching no row; the status read that
+    // follows finds a non-terminal job.
+    createUnscopedClientMock.mockReturnValue(buildReconcileDb([lostRow], { claimed: [] }));
+    retrieveCheckoutSessionMock.mockResolvedValue({
+      status: 'complete',
+      customer: 'cus_lost',
+      subscription: 'sub_lost',
+    });
+    getProvisioningJobIdBySignupRequestIdMock.mockResolvedValue(5);
+
+    const summary = await reconcileLostCheckoutSignups({ now: new Date('2026-08-01T00:00:00Z') });
+
+    expect(summary).toMatchObject({ scanned: 1, recovered: 0, inFlight: 1, failed: 0 });
   });
 
   it('provisions nothing when the CAS loses the race', async () => {

@@ -57,7 +57,8 @@
  * mutual exclusion between two concurrent runs of one job (13, 14); a slug
  * conflict adopting a community that is not this signup's (15); and a
  * re-delivered event moving a `completed` signup back to `payment_completed`
- * (3).
+ * (3). Cases 16-18 pin the claim's edges: a pre-step failure releases it, null
+ * Stripe ids never prove ownership, and a taken-over run stops cleanly.
  *
  * Safety: the file refuses to run unless DATABASE_URL points at a loopback host
  * (localhost / 127.0.0.1 / ::1, as scripts/local-test-db.sh requires) or CI is
@@ -1009,5 +1010,132 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     expect(await countRows(documentCategories, foreign!.id)).toBe(0);
     expect(await countRows(complianceChecklistItems, foreign!.id)).toBe(0);
     expect(delivered(signup)).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Claim lifecycle edges (review follow-up)
+  // -------------------------------------------------------------------------
+
+  it('16. a failure before the first step releases the claim at once instead of holding it for the stale window', async () => {
+    const signup = await newSignup();
+    const jobId = await fenceOnly(signup);
+    if (!/^[a-z0-9-]+$/.test(signup.signupRequestId)) throw new Error('unsafe signupRequestId');
+
+    // Fail runProvisioning's pre-loop write (pending_signups -> 'provisioning')
+    // for this signup only.
+    const name = `pp_test_fault_${RUN}_${seq}_sig`;
+    await db.execute(
+      sql.raw(`
+        CREATE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.signup_request_id = '${signup.signupRequestId}' AND NEW.status = 'provisioning' THEN
+            RAISE EXCEPTION 'injected fault: pending_signups provisioning update';
+          END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER ${name} BEFORE UPDATE ON pending_signups FOR EACH ROW EXECUTE FUNCTION ${name}();
+      `),
+    );
+    try {
+      await expect(runProvisioning(jobId)).rejects.toThrow(/update "pending_signups"/);
+    } finally {
+      await db.execute(sql.raw(`DROP TRIGGER IF EXISTS ${name} ON pending_signups; DROP FUNCTION IF EXISTS ${name}();`));
+    }
+
+    // Recorded as a failure — which is also the claim's release...
+    expect(await jobFor(signup)).toMatchObject({ status: 'failed', retryCount: 1, lastSuccessfulStatus: null });
+    // ...so the very next caller runs it, rather than being told `in_flight`
+    // for five minutes by a claim nobody holds.
+    await expect(runProvisioning(jobId)).resolves.toBe('completed');
+    expect(await jobFor(signup)).toMatchObject({ status: 'completed' });
+    expect(delivered(signup)).toBe(1);
+  });
+
+  it('17. with no Stripe ids on either side, a slug-holding community is refused (null never matches null)', async () => {
+    const signup = await newSignup();
+    // A foreign community with NULL Stripe ids holds the slug...
+    const [foreign] = await db
+      .insert(communities)
+      .values({ name: 'Someone Else, unbilled', slug: signup.slug, communityType: 'condo_718' })
+      .returning({ id: communities.id });
+    // ...and this signup's payload carries null ids too.
+    await markPendingSignupPaymentCompleted({
+      signupRequestId: signup.signupRequestId,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+    });
+    const eventId = `evt_providem_nullids_${RUN}_${seq}`;
+    created.eventIds.push(eventId);
+    await insertProvisioningJobFence({ signupRequestId: signup.signupRequestId, stripeEventId: eventId });
+    const jobId = (await jobFor(signup)).id;
+
+    await expect(runProvisioning(jobId)).rejects.toThrow(/refusing to adopt it/);
+
+    expect(await jobFor(signup)).toMatchObject({ status: 'failed', communityId: null });
+    expect(await countRows(userRoles, foreign!.id)).toBe(0);
+    expect(delivered(signup)).toBe(0);
+  });
+
+  it('18. a run whose claim was taken over stops at its next checkpoint and records no failure', async () => {
+    const signup = await newSignup();
+    const jobId = await fenceOnly(signup);
+    if (!/^[a-z0-9-]+$/.test(signup.slug)) throw new Error(`unsafe slug ${signup.slug}`);
+
+    // Hold every run inside the preferences_set step for a moment (a slow
+    // step), so a second run can take the claim over while the first is alive.
+    const name = `pp_test_fault_${RUN}_${seq}_slow`;
+    await db.execute(
+      sql.raw(`
+        CREATE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM communities c WHERE c.id = NEW.community_id AND c.slug = '${signup.slug}') THEN
+            PERFORM pg_sleep(1.5);
+          END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER ${name} BEFORE INSERT ON notification_preferences FOR EACH ROW EXECUTE FUNCTION ${name}();
+      `),
+    );
+    try {
+      const first = runProvisioning(jobId);
+      first.catch(() => {}); // settled below
+
+      // Wait until the first run has checkpointed categories_created: it is now
+      // inside preferences_set, sleeping on the insert.
+      for (let i = 0; ; i++) {
+        const job = await jobFor(signup);
+        if (job.lastSuccessfulStatus === 'categories_created') break;
+        if (i > 200) throw new Error('first run never reached preferences_set');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+
+      // Its lease goes stale (as if the step had outlasted the window), and a
+      // second run takes the claim over.
+      await db
+        .update(provisioningJobs)
+        .set({ startedAt: new Date(Date.now() - WATCHDOG_STALE_AFTER_MS - 60 * 1000) })
+        .where(eq(provisioningJobs.id, jobId));
+      const second = runProvisioning(jobId);
+
+      const [firstResult, secondResult] = await Promise.allSettled([first, second]);
+
+      // The defect a missing fence allows: the taken-over run carries on and
+      // sends a second welcome email.
+      expect(delivered(signup)).toBe(1);
+      expect(firstResult.status).toBe('rejected');
+      expect(String((firstResult as PromiseRejectedResult).reason)).toMatch(
+        /ProvisioningLeaseLostError: .*lost its claim during preferences_set/,
+      );
+      expect(secondResult).toEqual({ status: 'fulfilled', value: 'completed' });
+    } finally {
+      await db.execute(
+        sql.raw(`DROP TRIGGER IF EXISTS ${name} ON notification_preferences; DROP FUNCTION IF EXISTS ${name}();`),
+      );
+    }
+
+    // No `failed` write from the taken-over run.
+    expect(await jobFor(signup)).toMatchObject({ status: 'completed', retryCount: 0, errorMessage: null });
+    const communityId = await communityIdFor(signup);
+    expect(await countRows(notificationPreferences, communityId)).toBe(1);
   });
 });
