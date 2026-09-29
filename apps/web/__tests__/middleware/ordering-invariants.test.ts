@@ -319,6 +319,52 @@ describe('support session stamps its consented community when no tenant resolves
     expect(maybeSingleMock).not.toHaveBeenCalled();
   });
 
+  // The routes read params.id with Number()/z.coerce.number(), which accept all
+  // of these as community 2. Each must reject a session consented to by 1.
+  it.each([
+    ['/api/v1/communities/+2/cancel-preview', ''],
+    ['/api/v1/communities/%2B2/cancel-preview', ''],
+    ['/api/v1/communities/%202/cancel-preview', ''],
+    ['/api/v1/communities/2./cancel-preview', `?communityId=${TOKEN_COMMUNITY_ID}`],
+    ['/api/v1/communities/2.0/cancel-preview', ''],
+    ['/api/v1/communities/2e0/cancel-preview', ''],
+    ['/communities/0x2/documents', ''],
+    ['/communities/+2/documents', `?communityId=${TOKEN_COMMUNITY_ID}`],
+    ['/communities/%202/board', `?communityId=${TOKEN_COMMUNITY_ID}`],
+  ])('(a7) Number()-equivalent spelling %s%s is rejected', async (path, query) => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}${path}${query}`, { supportToken: await signSupportToken() }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  });
+
+  it('(a8) an unknown non-numeric segment fails closed', async () => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/two/cancel-preview`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+  });
+
+  it('(a9) COMMUNITIES_API_NON_ID_SEGMENTS matches the route directory exactly', async () => {
+    const { readdirSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { COMMUNITIES_API_NON_ID_SEGMENTS } = await import('@/middleware');
+    const dir = join(__dirname, '../../src/app/api/v1/communities');
+    const onDisk = readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith('['))
+      .map((d) => d.name)
+      .sort();
+
+    expect(onDisk.length).toBeGreaterThan(0);
+    expect([...COMMUNITIES_API_NON_ID_SEGMENTS].sort()).toEqual(onDisk);
+  });
+
   it('(a2) apex /api/v1/communities/<A>/... accepts the session and stamps A', async () => {
     const res = await middleware(
       req(`https://${ROOT_DOMAIN}/api/v1/communities/${TOKEN_COMMUNITY_ID}/cancel-preview`, {

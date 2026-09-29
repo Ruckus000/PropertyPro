@@ -125,6 +125,22 @@ const TENANT_OPTIONAL_PATHS: ReadonlySet<string> = new Set([
   '/account/join-community',
 ]);
 
+/**
+ * The non-id siblings of `[id]` directly under `app/api/v1/communities/`
+ * (measured 2026-09-29). The support-session path check ignores exactly these
+ * and fails closed on any other segment that is not a community id; pinned by
+ * `ordering-invariants.test.ts`, which compares this set to the directory.
+ */
+export const COMMUNITIES_API_NON_ID_SEGMENTS: ReadonlySet<string> = new Set([
+  'claim-root',
+  'delete',
+  'designations',
+  'dispute-root-claim',
+  'my-rootless',
+  'role-assignments',
+  'transfer-root',
+]);
+
 function shouldResolveTenant(pathname: string): boolean {
   if (TENANT_OPTIONAL_PATHS.has(pathname)) return false;
   return isProtectedPath(pathname);
@@ -1102,30 +1118,35 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     //   - resolved tenant and path id both present but different → reject
     //     (B's path on A's subdomain, or with ?communityId=A);
     //   - otherwise compare the token against whichever one is present.
-    // The segment is percent-decoded first, because Next decodes dynamic
-    // params (`/communities/%32/…` reaches the route as id=2) but
-    // `nextUrl.pathname` does not. A segment that fails to decode, or decodes
-    // to digits that are not a safe positive integer, fails closed. Non-numeric
-    // segments (`/api/v1/communities/delete`, `/communities/new`) are not
-    // community ids and are ignored. A rejection takes the same path as a
-    // resolved-tenant mismatch.
+    // The segment is parsed EXACTLY as the routes parse `params.id`: Next
+    // decodes it once (`/communities/%32/…` reaches the route as id=2, while
+    // `nextUrl.pathname` stays encoded), and pages use `Number(id)` / routes
+    // `z.coerce.number()`, which both accept `+2`, ` 2`, `2.`, `2.0`, `2e0`,
+    // `0x2`. So: decode, then `Number()`. A safe positive integer is the
+    // community id; the named non-id siblings of `[id]` under
+    // /api/v1/communities/ are ignored; ANYTHING else fails closed (a
+    // support session is rejected rather than risk a parser disagreement).
+    // A new sibling route added later therefore fails closed for support
+    // sessions until listed here, which is the safe direction.
+    // A rejection takes the same path as a resolved-tenant mismatch.
     const resolvedTenantId =
       Number.isInteger(currentCommunityId) && currentCommunityId > 0 ? currentCommunityId : null;
-    const pathCommunitySegment = /^(?:\/api\/v1)?\/communities\/([^/]+)(?:\/|$)/.exec(pathname)?.[1];
+    const pathCommunityMatch = /^(\/api\/v1)?\/communities\/([^/]+)(?:\/|$)/.exec(pathname);
     let pathTenantId: number | null = null;
     let pathCommunityUnreadable = false;
-    if (pathCommunitySegment !== undefined) {
+    if (pathCommunityMatch) {
+      const isApiPath = pathCommunityMatch[1] !== undefined;
       let decodedSegment: string | null = null;
       try {
-        decodedSegment = decodeURIComponent(pathCommunitySegment);
+        decodedSegment = decodeURIComponent(pathCommunityMatch[2]!);
       } catch {
         pathCommunityUnreadable = true;
       }
-      if (decodedSegment !== null && /^\d+$/.test(decodedSegment)) {
+      if (decodedSegment !== null) {
         const parsed = Number(decodedSegment);
         if (Number.isSafeInteger(parsed) && parsed > 0) {
           pathTenantId = parsed;
-        } else {
+        } else if (!(isApiPath && COMMUNITIES_API_NON_ID_SEGMENTS.has(decodedSegment))) {
           pathCommunityUnreadable = true;
         }
       }
