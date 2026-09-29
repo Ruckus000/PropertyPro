@@ -128,7 +128,7 @@ jobs:
       # copy this into a job that does have them.
       SMS_DISPATCH_ENABLED: 'true'
       # Also required by the seed: `getDefaultPassword()`
-      # (packages/db/src/seed/seed-community.ts) throws when it is unset, and it
+      # (packages/db/src/seed/community/users.ts) throws when it is unset, and it
       # is reached because `shouldSyncDemoAuthUsers()` defaults to TRUE.
       #
       # A literal, not a secret, deliberately: this stack is destroyed at the end
