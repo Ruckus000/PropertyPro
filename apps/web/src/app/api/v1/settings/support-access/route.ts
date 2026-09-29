@@ -11,6 +11,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
+import { ForbiddenError } from '@/lib/api/errors';
 // AUTHZ: support_* tables have no RLS path for residents; every read/write is filtered to the caller's community after settings:read/write
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { logAuditEvent } from '@propertypro/db';
@@ -26,6 +27,13 @@ export const GET = withErrorHandler(
 
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'settings', 'read');
+    // Admins only. `settings:read` also admits unit owners in condos/HOAs, but
+    // the access log carries other residents' support-session changes (names,
+    // masked phones, cancelled deletions). The only consumer is the admin-only
+    // settings panel.
+    if (!membership.isAdmin) {
+      throw new ForbiddenError('Only community administrators can view support access');
+    }
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 

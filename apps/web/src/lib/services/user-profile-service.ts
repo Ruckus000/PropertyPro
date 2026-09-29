@@ -14,7 +14,7 @@
  *   - apps/web/src/app/api/v1/account/profile/route.ts
  */
 import { users } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { eq, sql } from '@propertypro/db/filters';
 // AUTHZ: User profile — user-scoped update (no community_id on users table)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
@@ -90,6 +90,11 @@ export async function updateUserProfile(
   }
   if (patch.phone !== undefined) {
     updateValues['phone'] = patch.phone;
+    // A new number is unverified until it goes through phone/verify: keep
+    // phoneVerifiedAt only when the number is unchanged (the form may resend
+    // the same phone on a name-only edit). Without this, a PATCH could point
+    // "verified" emergency SMS at a number nobody confirmed.
+    updateValues['phoneVerifiedAt'] = sql`case when ${users.phone} is not distinct from ${patch.phone} then ${users.phoneVerifiedAt} else null end`;
     changedFields.phone = patch.phone;
   }
 
