@@ -125,6 +125,13 @@ export const documentsCreateContract = defineRoute({
   // CON-04: the top-level `warnings` sibling, emitted via `withEnvelope` only
   // when the service reports any. `looseObject` so a future extra field on a
   // warning still reaches the client rather than being stripped.
+  //
+  // KEEP THIS AT LEAST AS LOOSE AS `DocumentMutationWarning`
+  // (`@/lib/documents/types`). The runner validates siblings AFTER the handler
+  // returns — i.e. after `createUploadedDocument` has committed the row — so a
+  // warning this schema rejects turns a successful upload into a 500, and the
+  // client's retry creates a duplicate document. Pinned by
+  // `__tests__/documents/documents-create-envelope.test.ts`.
   envelope: z.object({
     warnings: z
       .array(z.looseObject({ code: z.string(), message: z.string() }))

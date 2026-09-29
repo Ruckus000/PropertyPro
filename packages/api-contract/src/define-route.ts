@@ -90,7 +90,11 @@ export interface RouteContract<
    * PARSED value, so a key the schema does not declare never reaches the wire.
    * A contract without `envelope` cannot emit siblings at all — the runner
    * refuses `withEnvelope` on it — so every existing contract is unchanged.
-   * The key `data` is reserved and rejected.
+   * The keys `data` and `error` are reserved and rejected. The compile-time
+   * refusal of `withEnvelope` on a contract WITHOUT `envelope` only holds for
+   * a typed `response` (a `z.unknown()` response makes the handler return
+   * `unknown`); the runtime refusal holds always. Siblings are validated after
+   * the handler ran, so keep this schema at least as loose as what it emits.
    */
   envelope?: TEnvelope;
 }

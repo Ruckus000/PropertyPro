@@ -82,8 +82,14 @@ export interface NextRouteContext {
 /**
  * What a handler may emit as envelope siblings (CON-04): the INPUT side of
  * the contract's `envelope` schema, or `never` when the contract declares
- * none — so `withEnvelope(...)` on such a contract is a type error, not just
- * a runtime refusal.
+ * none.
+ *
+ * That `never` is only a compile-time check when the contract's `response`
+ * is typed. With a loose `response: z.unknown()` (the posture of ~150
+ * contracts, documents POST included) the handler's return type collapses to
+ * `unknown`, which absorbs `Enveloped<…>`, so the compiler accepts
+ * `withEnvelope` on a contract with no `envelope`. The RUNTIME refusal in
+ * `parseEnvelope` is the real guarantee; the type is a convenience.
  */
 export type RouteEnvelopeOf<C extends AnyRouteContract> = [C['envelope']] extends [undefined]
   ? never
@@ -114,7 +120,11 @@ export interface Enveloped<TPayload, TSiblings> {
  *     // → { data: <row>, warnings: [...] } otherwise
  *
  * An `undefined` sibling is omitted from the wire, so conditional keys need
- * no spread gymnastics. This replaces carrying siblings out of the handler in
+ * no spread gymnastics. The contract MUST declare `envelope`; the runner
+ * refuses siblings otherwise (a compile error too, but only for a typed
+ * `response` — see `RouteEnvelopeOf`). Siblings are validated AFTER the
+ * handler ran, i.e. after any write it committed, so keep the `envelope`
+ * schema at least as loose as the values the handler can produce. This replaces carrying siblings out of the handler in
  * a request-keyed `WeakMap` and re-serialising the runner's response.
  */
 export function withEnvelope<TPayload, TSiblings extends Record<string, unknown>>(
@@ -395,11 +405,19 @@ function buildResponse<C extends AnyRouteContract>(
 }
 
 /**
+ * Top-level keys a sibling may never take: `data` would clobber the payload,
+ * and `error` is the key clients read the failure envelope from on a non-ok
+ * response — a 200 carrying one would be misread by any consumer that checks
+ * `body.error` before `res.ok`.
+ */
+const RESERVED_SIBLINGS = ['data', 'error'] as const;
+
+/**
  * Validate a handler's envelope siblings against the contract's `envelope`
  * schema and return the PARSED object (undeclared keys already stripped).
  * Refuses (as a response-contract violation → 500) when the contract declares
  * no envelope, when the parse fails or yields a non-object, or when a sibling
- * would clobber `data`.
+ * takes a reserved key (`data`, `error`).
  */
 function parseEnvelope<C extends AnyRouteContract>(
   contract: C,
@@ -423,11 +441,13 @@ function parseEnvelope<C extends AnyRouteContract>(
       makeStandaloneZodError('envelope schema must produce a plain object of sibling keys'),
     );
   }
-  if (Object.prototype.hasOwnProperty.call(value, 'data')) {
-    throw new ContractValidationError(
-      'response',
-      makeStandaloneZodError("envelope sibling 'data' is reserved for the payload"),
-    );
+  for (const reserved of RESERVED_SIBLINGS) {
+    if (Object.prototype.hasOwnProperty.call(value, reserved)) {
+      throw new ContractValidationError(
+        'response',
+        makeStandaloneZodError(`envelope sibling '${reserved}' is reserved`),
+      );
+    }
   }
   // An `undefined` member needs no stripping: `NextResponse.json` serialises
   // with `JSON.stringify`, which omits it — `{ data, warnings: undefined }`

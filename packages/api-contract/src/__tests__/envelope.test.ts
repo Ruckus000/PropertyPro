@@ -127,18 +127,51 @@ describe('runRoute — envelope siblings (CON-04)', () => {
     expect((err as Error).message).toMatch(/does not declare/);
   });
 
-  it("rejects a sibling named 'data' (it would clobber the payload)", async () => {
-    const clobber = defineRoute({
+  it.each(['data', 'error'])("rejects a reserved sibling name '%s'", async (key) => {
+    const reservedContract = defineRoute({
       method: 'POST',
       path: '/api/v1/widget',
       request: {},
       response: z.object({ id: z.number() }),
-      envelope: z.object({ data: z.string().optional() }),
+      envelope: z.object({ [key]: z.string().optional() }),
     });
-    const handler = runRoute(clobber, async () => withEnvelope({ id: 1 }, { data: 'x' }));
+    const handler = runRoute(reservedContract, async () =>
+      withEnvelope({ id: 1 }, { [key]: 'x' }),
+    );
     const err = await captureError(handler(post('/api/v1/widget', {})));
     expect(isContractValidationError(err)).toBe(true);
-    expect(JSON.stringify((err as { fields: unknown }).fields)).toMatch(/reserved/);
+    expect(JSON.stringify((err as { fields: unknown }).fields)).toContain(
+      `envelope sibling '${key}' is reserved`,
+    );
+  });
+
+  it('a non-reserved sibling beside a reserved-looking name still passes (control)', async () => {
+    const ok = defineRoute({
+      method: 'POST',
+      path: '/api/v1/widget',
+      request: {},
+      response: z.object({ id: z.number() }),
+      envelope: z.object({ errors: z.array(z.string()).optional() }),
+    });
+    const handler = runRoute(ok, async () => withEnvelope({ id: 1 }, { errors: ['e'] }));
+    const res = await handler(post('/api/v1/widget', {}));
+    expect(await res.text()).toBe('{"data":{"id":1},"errors":["e"]}');
+  });
+
+  it('refuses siblings at RUNTIME on a z.unknown()-response contract with no envelope (no compile error there)', async () => {
+    const loose = defineRoute({
+      method: 'POST',
+      path: '/api/v1/widget',
+      request: {},
+      response: z.unknown(),
+    });
+    // No @ts-expect-error: with `response: z.unknown()` the handler returns
+    // `unknown`, which absorbs `Enveloped<...>`, so this compiles. The runtime
+    // refusal is the only guarantee here.
+    const handler = runRoute(loose, async () => withEnvelope({ id: 1 }, { warnings: [WARNING] }));
+    const err = await captureError(handler(post('/api/v1/widget', {})));
+    expect(isContractValidationError(err)).toBe(true);
+    expect((err as Error).message).toMatch(/does not declare/);
   });
 
   it('paginated: sibling sits beside the OUTER data, inner envelope unchanged', async () => {
