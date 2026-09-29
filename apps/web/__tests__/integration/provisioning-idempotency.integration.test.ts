@@ -1102,10 +1102,13 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
 
       // Wait until the first run has checkpointed categories_created: it is now
       // inside preferences_set, sleeping on the insert.
-      for (let i = 0; ; i++) {
+      // Bounded by wall-clock time, not iterations: the steps before
+      // preferences_set can take well over 2s on a loaded CI runner.
+      const reachDeadline = Date.now() + 20_000; // under the 30s testTimeout
+      for (;;) {
         const job = await jobFor(signup);
         if (job.lastSuccessfulStatus === 'categories_created') break;
-        if (i > 200) throw new Error('first run never reached preferences_set');
+        if (Date.now() > reachDeadline) throw new Error('first run never reached preferences_set');
         await new Promise((r) => setTimeout(r, 10));
       }
 
