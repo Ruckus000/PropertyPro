@@ -307,7 +307,9 @@ function parseQuery<C extends AnyRouteContract>(contract: C, req: NextRequest): 
   // occurrence. If a future route needs array-valued params, declare it as
   // `z.array(...)` and read via `searchParams.getAll()`-aware preprocessing in
   // a follow-up PR rather than relying on last-wins iteration here.
-  const raw: Record<string, string | undefined> = {};
+  // Null prototype: `key in raw` must see only keys set below, never
+  // inherited ones (`?constructor=…`, `?toString=…`).
+  const raw: Record<string, string | undefined> = Object.create(null);
   for (const [key, value] of searchParams.entries()) {
     if (key in raw) continue; // first-wins, even when the first value is empty
     raw[key] = value || undefined;

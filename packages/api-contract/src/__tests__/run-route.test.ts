@@ -71,6 +71,21 @@ describe('runRoute — non-paginated', () => {
     expect(body).toEqual({ data: { id: 7, name: 'plain' } });
   });
 
+  it('does not treat inherited Object keys as already-seen query params', async () => {
+    const protoContract = defineRoute({
+      method: 'GET',
+      path: '/api/v1/widget',
+      request: { query: z.object({ constructor: z.string().optional() }) },
+      response: z.object({ got: z.string().nullable() }),
+    });
+    const handler = runRoute(protoContract, async ({ query }) => ({
+      got: typeof query.constructor === 'string' ? query.constructor : null,
+    }));
+    const res = await handler(makeRequest('/api/v1/widget?constructor=x'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { got: 'x' } });
+  });
+
   it('collapses empty-string query params to undefined', async () => {
     const handler = runRoute(contract, async ({ query }) => ({
       id: query.id,
