@@ -669,7 +669,18 @@ export async function runProvisioning(jobId: number): Promise<ProvisioningRunOut
   // (webhook, watchdog, manual retry) with `in_flight` meanwhile. Fenced on the
   // lease, so a run that was taken over cannot record a failure over its
   // successor.
+  // Never throws: if the failure write itself fails (DB unreachable), log that
+  // and let the caller re-throw the ORIGINAL error, so Sentry and the webhook
+  // see the step's cause rather than the bookkeeping error. The claim then
+  // falls back to expiring after the stale window.
   const recordFailure = async (err: unknown): Promise<void> => {
+    try {
+      await writeFailure(err);
+    } catch (writeErr) {
+      console.error('[provisioning] could not record failure for job', jobId, writeErr);
+    }
+  };
+  const writeFailure = async (err: unknown): Promise<void> => {
     await db
       .update(provisioningJobs)
       .set({

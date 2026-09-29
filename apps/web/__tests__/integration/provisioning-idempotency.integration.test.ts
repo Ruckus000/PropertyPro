@@ -1096,8 +1096,9 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
         CREATE TRIGGER ${name} BEFORE INSERT ON notification_preferences FOR EACH ROW EXECUTE FUNCTION ${name}();
       `),
     );
+    let first: Promise<unknown> | undefined;
     try {
-      const first = runProvisioning(jobId);
+      first = runProvisioning(jobId);
       first.catch(() => {}); // settled below
 
       // Wait until the first run has checkpointed categories_created: it is now
@@ -1131,6 +1132,8 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       );
       expect(secondResult).toEqual({ status: 'fulfilled', value: 'completed' });
     } finally {
+      // Let the first run settle before cleanup, even on the timeout path.
+      if (first) await Promise.allSettled([first]);
       await db.execute(
         sql.raw(`DROP TRIGGER IF EXISTS ${name} ON notification_preferences; DROP FUNCTION IF EXISTS ${name}();`),
       );
