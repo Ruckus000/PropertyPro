@@ -28,8 +28,14 @@
  * The expected literal below is the contract — edit it only for an intended
  * change to what the seed writes, never to make a refactor pass.
  *
+ * Row COUNTS only: `seedRoles`' conflict semantics (the #1212
+ * `coalesce(excluded.unit_id, user_roles.unit_id)` upsert) are pinned by
+ * seed-resident-units.integration.test.ts, not here — linkSeededResidentUnits
+ * re-links on every seed, so a count snapshot cannot see that revert.
+ *
  * Supabase storage/auth go to the in-process HTTP double
- * (helpers/supabase-http-double.ts); no module is mocked.
+ * (helpers/supabase-http-double.ts); no module is mocked. The file refuses a
+ * non-loopback DATABASE_URL unless CI is set: it seeds and deletes communities.
  *
  * Run against the local disposable DB (never prod):
  *   DATABASE_URL="$(scripts/local-test-db.sh url)" pnpm --filter @propertypro/db \
@@ -332,6 +338,22 @@ const EXPECTED: Record<string, CountSnapshot> = {
 
 const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
 
+/** Refuse any database not on this machine (CI's is an ephemeral container). */
+function assertLoopbackDatabaseOrCI(): void {
+  if (process.env.CI) return;
+  let host = '';
+  try {
+    host = new URL(process.env.DATABASE_URL ?? '').hostname;
+  } catch {
+    throw new Error('seed-community-counts: DATABASE_URL is not a parseable URL; refusing to run');
+  }
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
+    throw new Error(
+      `seed-community-counts: refusing to run against non-local database host '${host}'; use scripts/local-test-db.sh`,
+    );
+  }
+}
+
 describeDb('seedCommunity per-domain row counts (integration)', () => {
   const tag = randomUUID().slice(0, 8);
   const slugOf = (c: SeedCase) => `demo-seedcounts-${c.key}-${tag}`;
@@ -460,6 +482,7 @@ describeDb('seedCommunity per-domain row counts (integration)', () => {
   }
 
   beforeAll(async () => {
+    assertLoopbackDatabaseOrCI();
     double = await startSupabaseDouble();
     process.env.NEXT_PUBLIC_SUPABASE_URL = double.url;
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'seed-counts-test-service-role';
