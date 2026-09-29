@@ -17,7 +17,8 @@ export type AnyRouteContract = RouteContract<
   z.ZodTypeAny | undefined,
   z.ZodTypeAny,
   boolean,
-  RouteTenantScope | undefined
+  RouteTenantScope | undefined,
+  z.ZodTypeAny | undefined
 >;
 
 /**
@@ -65,7 +66,8 @@ export type RouteHandlerOutput<C extends AnyRouteContract> =
     z.ZodTypeAny | undefined,
     infer TResponse,
     infer TPaginated,
-    RouteTenantScope | undefined
+    RouteTenantScope | undefined,
+    z.ZodTypeAny | undefined
   >
     ? TPaginated extends true
       ? { data: z.infer<TResponse>[]; pagination: PaginationResult }
@@ -77,9 +79,72 @@ export interface NextRouteContext {
   params?: Promise<Record<string, string | string[]>> | Record<string, string | string[]>;
 }
 
+/**
+ * What a handler may emit as envelope siblings (CON-04): the INPUT side of
+ * the contract's `envelope` schema, or `never` when the contract declares
+ * none.
+ *
+ * That `never` is only a compile-time check when the contract's `response`
+ * is typed. With a loose `response: z.unknown()` (the posture of ~150
+ * contracts, documents POST included) the handler's return type collapses to
+ * `unknown`, which absorbs `Enveloped<…>`, so the compiler accepts
+ * `withEnvelope` on a contract with no `envelope`. The RUNTIME refusal in
+ * `parseEnvelope` is the real guarantee; the type is a convenience.
+ */
+export type RouteEnvelopeOf<C extends AnyRouteContract> = [C['envelope']] extends [undefined]
+  ? never
+  : z.input<NonNullable<C['envelope']>>;
+
+export const ENVELOPED: unique symbol = Symbol.for('@propertypro/api-contract/enveloped');
+
+/**
+ * A handler result carrying top-level envelope siblings. Built only by
+ * `withEnvelope`; the runner recognises it by a registered-symbol brand (so a
+ * second copy of this module — src vs dist — still agrees), which a route's
+ * own payload can never carry by accident.
+ */
+export interface Enveloped<TPayload, TSiblings> {
+  readonly [ENVELOPED]: true;
+  readonly payload: TPayload;
+  readonly siblings: TSiblings;
+}
+
+/**
+ * Return this from a `runRoute` handler to emit top-level keys beside `data`
+ * (CON-04). `payload` is exactly what the handler would otherwise return —
+ * validated against `response` and wrapped as before — and `siblings` is
+ * validated against the contract's `envelope` schema and spread after `data`:
+ *
+ *     return withEnvelope(row, { warnings: warnings.length > 0 ? warnings : undefined });
+ *     // → { data: <row> }                  when warnings is empty
+ *     // → { data: <row>, warnings: [...] } otherwise
+ *
+ * An `undefined` sibling is omitted from the wire, so conditional keys need
+ * no spread gymnastics. The contract MUST declare `envelope`; the runner
+ * refuses siblings otherwise (a compile error too, but only for a typed
+ * `response` — see `RouteEnvelopeOf`). Siblings are validated AFTER the
+ * handler ran, i.e. after any write it committed, so keep the `envelope`
+ * schema at least as loose as the values the handler can produce. This replaces carrying siblings out of the handler in
+ * a request-keyed `WeakMap` and re-serialising the runner's response.
+ */
+export function withEnvelope<TPayload, TSiblings extends Record<string, unknown>>(
+  payload: TPayload,
+  siblings: TSiblings,
+): Enveloped<TPayload, TSiblings> {
+  return { [ENVELOPED]: true, payload, siblings };
+}
+
+function isEnveloped(value: unknown): value is Enveloped<unknown, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<PropertyKey, unknown>)[ENVELOPED] === true
+  );
+}
+
 export type RouteHandlerFn<C extends AnyRouteContract> = (
   input: RouteHandlerInput<C>,
-) => Promise<RouteHandlerOutput<C>>;
+) => Promise<RouteHandlerOutput<C> | Enveloped<RouteHandlerOutput<C>, RouteEnvelopeOf<C>>>;
 
 export type WrappedRouteHandler = (
   req: NextRequest,
@@ -286,8 +351,17 @@ async function parseBody<C extends AnyRouteContract>(
 
 function buildResponse<C extends AnyRouteContract>(
   contract: C,
-  result: unknown,
+  handlerResult: unknown,
 ): NextResponse {
+  // Unwrap envelope siblings first; `result` is then exactly what a handler
+  // without siblings would have returned, so everything below is unchanged.
+  let result: unknown = handlerResult;
+  let siblings: Record<string, unknown> | undefined;
+  if (isEnveloped(handlerResult)) {
+    result = handlerResult.payload;
+    siblings = parseEnvelope(contract, handlerResult.siblings);
+  }
+
   if (contract.paginated) {
     // Handler is expected to have returned `{ data: items, pagination }`.
     const inner = result as { data?: unknown; pagination?: unknown };
@@ -318,6 +392,7 @@ function buildResponse<C extends AnyRouteContract>(
         data: validated,
         pagination: inner.pagination,
       },
+      ...siblings,
     });
   }
 
@@ -326,7 +401,58 @@ function buildResponse<C extends AnyRouteContract>(
   if (!parsed.success) {
     throw new ContractValidationError('response', parsed.error);
   }
-  return NextResponse.json({ data: parsed.data });
+  return NextResponse.json({ data: parsed.data, ...siblings });
+}
+
+/**
+ * Top-level keys a sibling may never take: `data` would clobber the payload,
+ * and `error` is the key clients read the failure envelope from on a non-ok
+ * response — a 200 carrying one would be misread by any consumer that checks
+ * `body.error` before `res.ok`.
+ */
+const RESERVED_SIBLINGS = ['data', 'error'] as const;
+
+/**
+ * Validate a handler's envelope siblings against the contract's `envelope`
+ * schema and return the PARSED object (undeclared keys already stripped).
+ * Refuses (as a response-contract violation → 500) when the contract declares
+ * no envelope, when the parse fails or yields a non-object, or when a sibling
+ * takes a reserved key (`data`, `error`).
+ */
+function parseEnvelope<C extends AnyRouteContract>(
+  contract: C,
+  siblings: unknown,
+): Record<string, unknown> {
+  if (!contract.envelope) {
+    throw new ContractValidationError(
+      'response',
+      makeStandaloneZodError('handler returned envelope siblings but the contract declares no envelope'),
+      'Handler emitted envelope siblings the contract does not declare',
+    );
+  }
+  const parsed = contract.envelope.safeParse(siblings);
+  if (!parsed.success) {
+    throw new ContractValidationError('response', parsed.error);
+  }
+  const value = parsed.data as unknown;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ContractValidationError(
+      'response',
+      makeStandaloneZodError('envelope schema must produce a plain object of sibling keys'),
+    );
+  }
+  for (const reserved of RESERVED_SIBLINGS) {
+    if (Object.prototype.hasOwnProperty.call(value, reserved)) {
+      throw new ContractValidationError(
+        'response',
+        makeStandaloneZodError(`envelope sibling '${reserved}' is reserved`),
+      );
+    }
+  }
+  // An `undefined` member needs no stripping: `NextResponse.json` serialises
+  // with `JSON.stringify`, which omits it — `{ data, warnings: undefined }`
+  // is byte-identical to `{ data }` on the wire.
+  return value as Record<string, unknown>;
 }
 
 function isPaginationResult(value: unknown): value is PaginationResult {

@@ -5,6 +5,9 @@
  *   - `defineRoute(contract)`   — identity helper that preserves literal types
  *   - `runRoute(contract, fn)`  — wraps a handler with request/response
  *                                  validation and canonical envelope wrapping
+ *   - `withEnvelope(payload, siblings)` — handler return that adds top-level
+ *                                  keys beside `data`, validated against the
+ *                                  contract's `envelope` schema (CON-04)
  *   - `Infer<typeof contract>`  — client-side response type, post `requestJson`
  *                                  unwrap (paginated vs non-paginated handled)
  *   - `ContractValidationError` + `isContractValidationError` — for the app's
@@ -35,6 +38,7 @@ export type { PaginationResult } from './pagination';
 export type {
   Infer,
   InferBody,
+  InferEnvelope,
   InferParams,
   InferQuery,
 } from './infer';
@@ -53,5 +57,7 @@ export type {
   WrappedRouteHandler,
   NextRouteContext,
   RunRouteOptions,
+  Enveloped,
+  RouteEnvelopeOf,
 } from './run-route';
-export { runRoute } from './run-route';
+export { runRoute, withEnvelope } from './run-route';

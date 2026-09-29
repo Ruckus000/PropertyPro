@@ -21,10 +21,8 @@
  * (warnings spread only when non-empty).
  * DELETE wire shape preserved: `{ data: { deleted: true, id } }`.
  */
-import { NextResponse } from 'next/server';
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute, withEnvelope } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
-import type { DocumentMutationWarning } from '@/lib/documents/types';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -106,74 +104,56 @@ export const GET = withErrorHandler(
 
 // The pre-migration POST returned the bespoke envelope
 // `{ data: <row>, warnings?: [...] }` — `warnings` is a TOP-LEVEL sibling of
-// `data` (read by `useDocumentUpload` at `createBody.warnings`). The runner
-// only ever produces the single-wrap `{ data: payload }`, so the handler
-// returns the row (→ `{ data: <row> }`) and the outer wrapper splices the
-// `warnings` sibling back in when non-empty, keeping the wire shape
-// byte-identical. Warnings are carried out of the runner handler per-request
-// via a `WeakMap` keyed by the request object (race-safe under concurrent
-// requests — no shared module-level mutable state).
-const warningsByRequest = new WeakMap<object, DocumentMutationWarning[]>();
+// `data` (read by `useDocumentUpload` at `createBody.warnings`). The contract
+// declares it as an `envelope` sibling and the handler returns it through
+// `withEnvelope` (CON-04); passing `undefined` when there are none keeps the
+// no-warnings wire shape byte-identical to a bare `{ data: <row> }`.
+export const POST = withErrorHandler(
+  runRoute(documentsCreateContract, async ({ body, req }) => {
+    const userId = await requireAuthenticatedUserId();
 
-const runCreateDocument = runRoute(documentsCreateContract, async ({ body, req }) => {
-  const userId = await requireAuthenticatedUserId();
+    const effectiveCommunityId = resolveEffectiveCommunityId(req, body.communityId);
+    // Pins the `documents/` subdirectory, not just `communities/{id}/`. The looser
+    // check this replaced accepted any sibling namespace in the same bucket, so a
+    // caller could hand in `communities/{id}/esign-signed/7/signed.pdf` and get a
+    // `documents` row pointing at an executed contract — which `publicAccess`
+    // could then put on the association's public website.
+    assertCommunityOwnedStoragePath(body.filePath, effectiveCommunityId, 'documents', 'filePath');
+    await assertNotDemoGrace(effectiveCommunityId);
+    const membership = await requireCommunityMembership(effectiveCommunityId, userId);
+    requirePermission(membership, 'documents', 'write');
+    await requireActiveSubscriptionForMutation(effectiveCommunityId);
 
-  const effectiveCommunityId = resolveEffectiveCommunityId(req, body.communityId);
-  // Pins the `documents/` subdirectory, not just `communities/{id}/`. The looser
-  // check this replaced accepted any sibling namespace in the same bucket, so a
-  // caller could hand in `communities/{id}/esign-signed/7/signed.pdf` and get a
-  // `documents` row pointing at an executed contract — which `publicAccess`
-  // could then put on the association's public website.
-  assertCommunityOwnedStoragePath(body.filePath, effectiveCommunityId, 'documents', 'filePath');
-  await assertNotDemoGrace(effectiveCommunityId);
-  const membership = await requireCommunityMembership(effectiveCommunityId, userId);
-  requirePermission(membership, 'documents', 'write');
-  await requireActiveSubscriptionForMutation(effectiveCommunityId);
+    // Before the row exists, not after: an unredacted record that reaches the
+    // portal and is then deleted was still published (F-02).
+    await enforceRedactionAttestation({
+      communityId: effectiveCommunityId,
+      categoryId: body.categoryId,
+      userId,
+      title: body.title,
+      attested: body.redactionAttested,
+    });
 
-  // Before the row exists, not after: an unredacted record that reaches the
-  // portal and is then deleted was still published (F-02).
-  await enforceRedactionAttestation({
-    communityId: effectiveCommunityId,
-    categoryId: body.categoryId,
-    userId,
-    title: body.title,
-    attested: body.redactionAttested,
-  });
+    const result = await createUploadedDocument({
+      userId,
+      communityId: effectiveCommunityId,
+      title: body.title,
+      description: body.description ?? null,
+      categoryId: body.categoryId,
+      filePath: body.filePath,
+      fileName: body.fileName,
+      fileSize: body.fileSize,
+      sourceType: 'library',
+    });
 
-  const result = await createUploadedDocument({
-    userId,
-    communityId: effectiveCommunityId,
-    title: body.title,
-    description: body.description ?? null,
-    categoryId: body.categoryId,
-    filePath: body.filePath,
-    fileName: body.fileName,
-    fileSize: body.fileSize,
-    sourceType: 'library',
-  });
+    void tryAutoComplete(effectiveCommunityId, userId, 'upload_first_document');
+    void tryAutoComplete(effectiveCommunityId, userId, 'upload_community_rules');
 
-  void tryAutoComplete(effectiveCommunityId, userId, 'upload_first_document');
-  void tryAutoComplete(effectiveCommunityId, userId, 'upload_community_rules');
-
-  if (result.warnings.length > 0) {
-    warningsByRequest.set(req, result.warnings);
-  }
-  return result.document;
-});
-
-export const POST = withErrorHandler(async (req, ctx) => {
-  const response = await runCreateDocument(req, ctx);
-  const warnings = warningsByRequest.get(req);
-  if (!warnings || warnings.length === 0) {
-    return response;
-  }
-  warningsByRequest.delete(req);
-  const payload = (await response.json()) as { data: unknown };
-  return NextResponse.json(
-    { data: payload.data, warnings },
-    { status: response.status, headers: response.headers },
-  );
-});
+    return withEnvelope(result.document, {
+      warnings: result.warnings.length > 0 ? result.warnings : undefined,
+    });
+  }),
+);
 
 export const DELETE = withErrorHandler(
   runRoute(documentsDeleteContract, async ({ query, req }) => {

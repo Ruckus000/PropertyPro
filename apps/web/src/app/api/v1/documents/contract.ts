@@ -37,8 +37,9 @@
  * POST `description` is `?? null`-coalesced (service signature wants
  * `string | null`). POST response is loose `z.unknown()` — `result.document`
  * is a raw Drizzle row (`Record<string, unknown>`) with Date fields, and the
- * handler additionally spreads an optional `warnings` array onto the envelope
- * when non-empty. Wire shape stays byte-identical:
+ * handler additionally emits an optional `warnings` array as a declared
+ * `envelope` sibling (CON-04, via `withEnvelope`) when non-empty. Wire shape
+ * stays byte-identical:
  *   `{ data: <row>, warnings?: [...] }`.
  *
  * DELETE auth surface (mutating, so demo-grace first):
@@ -121,6 +122,21 @@ export const documentsCreateContract = defineRoute({
     body: createDocumentBodySchema,
   },
   response: z.unknown(),
+  // CON-04: the top-level `warnings` sibling, emitted via `withEnvelope` only
+  // when the service reports any. `looseObject` so a future extra field on a
+  // warning still reaches the client rather than being stripped.
+  //
+  // KEEP THIS AT LEAST AS LOOSE AS `DocumentMutationWarning`
+  // (`@/lib/documents/types`). The runner validates siblings AFTER the handler
+  // returns — i.e. after `createUploadedDocument` has committed the row — so a
+  // warning this schema rejects turns a successful upload into a 500, and the
+  // client's retry creates a duplicate document. Pinned by
+  // `__tests__/documents/documents-create-envelope.test.ts`.
+  envelope: z.object({
+    warnings: z
+      .array(z.looseObject({ code: z.string(), message: z.string() }))
+      .optional(),
+  }),
   permission: { resource: 'documents', action: 'write' },
 });
 
