@@ -13,8 +13,10 @@
  * `signup_request_id`, the `stripe_webhook_events` primary key), so only a real
  * database can pin it.
  *
- * No module is mocked (the no-mock guard, scripts/verify-no-mocks-in-integration.ts,
- * applies to this file). Everything runs for real — the Stripe webhook route
+ * No module is mocked in this file (the no-mock guard,
+ * scripts/verify-no-mocks-in-integration.ts, applies to it); the suite-wide
+ * setup-integration.ts doubles Supabase Auth admin, as it does for every
+ * integration file. Everything else runs for real — the Stripe webhook route
  * with genuine signature verification, `stripe-webhook-service`, the whole
  * provisioning state machine and its watchdog, every table — and the three
  * things that leave the process are pointed at local stand-ins instead:
@@ -54,9 +56,20 @@
  * `completed` signup back to `payment_completed`) are deliberately NOT pinned
  * here — see the 3.T3 row in docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md.
  *
+ * Safety: the file refuses to run unless DATABASE_URL points at a loopback host
+ * (localhost / 127.0.0.1 / ::1, as scripts/local-test-db.sh requires) or CI is
+ * set — it creates triggers and runs a global watchdog, neither of which belongs
+ * near a shared database.
+ *
  * Every row is keyed by a run-unique slug / email / Stripe id and deleted in
- * afterAll. Slugs match the reaper's `^p2-43-.*-[0-9a-f]{8}$` pattern so a
- * crashed run's communities are swept by the next run's global setup.
+ * afterAll. A hard-killed run skips afterAll, and the global reaper sweeps only
+ * communities — not signups, jobs, webhook events, users or triggers — so its
+ * leftovers would look "foreign" to the next run's watchdog check. beforeAll
+ * therefore first deletes every row carrying this file's markers
+ * (`prov-idem-%` signups and their jobs, `p2-43-prov-idem-%` communities,
+ * `evt_providem_%` events, `@provisioning-idempotency.invalid` users) and drops
+ * any `pp_test_fault_%` trigger / function. Two concurrent runs of this file
+ * against one database would clobber each other; that is not supported.
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
@@ -162,6 +175,27 @@ function startDoubles(): Promise<Doubles> {
 // Fixtures
 // ---------------------------------------------------------------------------
 
+/**
+ * Refuse any database that is not on this machine, unless CI is set (CI's is an
+ * ephemeral service container). Mirrors scripts/local-test-db.sh's host check.
+ */
+function assertLoopbackDatabaseOrCI(): void {
+  if (process.env.CI) return;
+  const raw = process.env.DATABASE_URL ?? '';
+  let host: string;
+  try {
+    host = new URL(raw).hostname;
+  } catch {
+    throw new Error('provisioning-idempotency: DATABASE_URL is not a parseable URL; refusing to run');
+  }
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
+    throw new Error(
+      `provisioning-idempotency: refusing to run against non-local database host '${host}'. `
+        + 'It creates triggers and runs a global watchdog; use pnpm test:integration:local.',
+    );
+  }
+}
+
 const RUN = randomBytes(4).toString('hex');
 const EMAIL_DOMAIN = 'provisioning-idempotency.invalid';
 const WEBHOOK_SECRET = 'whsec_test_provisioning_idempotency';
@@ -195,14 +229,17 @@ const WATCHDOG_STALE_AFTER_MS = 5 * 60 * 1000;
 const WATCHDOG_MAX_RETRY_COUNT = 5;
 
 describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
+  assertLoopbackDatabaseOrCI();
   const db = createUnscopedClient();
   let doubles: Doubles;
+  let savedStripeApi: Record<string, unknown> | null = null;
 
   beforeAll(async () => {
     // A zero-length template would make every "no duplicate" assertion vacuous.
     expect(CHECKLIST_COUNT).toBeGreaterThan(0);
     expect(CATEGORY_COUNT).toBeGreaterThan(0);
 
+    await sweepLeftoversFromEarlierRuns();
     doubles = await startDoubles();
 
     // The Stripe client is a lazy singleton: the key must be in place before first use.
@@ -216,7 +253,11 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const { port } = new URL(doubles.url);
     const stripe = getStripeClient() as unknown as {
       _setApiField(key: string, value: unknown): void;
+      getApiField(key: string): unknown;
     };
+    savedStripeApi = Object.fromEntries(
+      ['host', 'port', 'protocol', 'maxNetworkRetries'].map((key) => [key, stripe.getApiField(key)]),
+    );
     stripe._setApiField('host', '127.0.0.1');
     stripe._setApiField('port', port);
     stripe._setApiField('protocol', 'http');
@@ -246,11 +287,50 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
       await db.delete(users).where(like(users.email, `%-${RUN}@${EMAIL_DOMAIN}`));
     } finally {
       await new Promise<void>((resolve) => doubles.server.close(() => resolve()));
+      if (savedStripeApi) {
+        const stripe = getStripeClient() as unknown as {
+          _setApiField(key: string, value: unknown): void;
+        };
+        for (const [key, value] of Object.entries(savedStripeApi)) stripe._setApiField(key, value);
+      }
       vi.unstubAllEnvs();
     }
     // Anything the code under test asked the doubles for that they don't serve.
     expect(doubles.unexpected).toEqual([]);
   });
+
+  /** Remove everything a hard-killed earlier run of this file may have left. */
+  async function sweepLeftoversFromEarlierRuns() {
+    const stale = await db
+      .select({ signupRequestId: pendingSignups.signupRequestId })
+      .from(pendingSignups)
+      .where(like(pendingSignups.signupRequestId, 'prov-idem-%'));
+    const staleIds = stale.map((r) => r.signupRequestId);
+    if (staleIds.length > 0) {
+      await db.delete(provisioningJobs).where(inArray(provisioningJobs.signupRequestId, staleIds));
+    }
+    await db.delete(communities).where(like(communities.slug, 'p2-43-prov-idem-%'));
+    await db.delete(stripeWebhookEvents).where(like(stripeWebhookEvents.eventId, 'evt_providem_%'));
+    if (staleIds.length > 0) {
+      await db.delete(pendingSignups).where(inArray(pendingSignups.signupRequestId, staleIds));
+    }
+    await db.delete(users).where(like(users.email, `%@${EMAIL_DOMAIN}`));
+
+    const triggers = (await db.execute(sql`
+      SELECT t.tgname AS name, c.relname AS "table"
+      FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+      WHERE NOT t.tgisinternal AND t.tgname LIKE 'pp\_test\_fault\_%'
+    `)) as unknown as Array<{ name: string; table: string }>;
+    for (const t of triggers) {
+      await db.execute(sql.raw(`DROP TRIGGER IF EXISTS "${t.name}" ON "${t.table}"`));
+    }
+    const fns = (await db.execute(sql`
+      SELECT proname AS name FROM pg_proc WHERE proname LIKE 'pp\_test\_fault\_%'
+    `)) as unknown as Array<{ name: string }>;
+    for (const f of fns) {
+      await db.execute(sql.raw(`DROP FUNCTION IF EXISTS "${f.name}"()`));
+    }
+  }
 
   async function newSignup(opts: { authUserId?: string | null } = {}): Promise<Signup> {
     seq += 1;
@@ -477,6 +557,8 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
 
     const summary = await recoverStuckProvisioningJobs({ now, maxRetryCount });
     expect(summary.attempted).toBe(wouldPick.length);
+    const pickedIds = new Set(wouldPick.map((r) => r.id));
+    expect(summary.failures.filter((f) => !pickedIds.has(f.jobId))).toEqual([]);
     return { summary, failure: summary.failures.find((f) => f.jobId === jobId) };
   }
 
