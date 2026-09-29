@@ -400,6 +400,28 @@ export const RLS_TENANT_TABLES = [
       'View counter for help articles. Only INSERT and SELECT policies exist (help_article_views_community_{insert,read}) plus a service bypass — no UPDATE or DELETE policy, so authenticated mutation fails closed. That is the append-only posture, reached by omission rather than by an explicit drop. Bespoke names, so an override entry rather than the family default pp_help_article_views_insert / pp_tenant_select. Carries a legacy-named write-scope trigger even though the family is trigger-exempt.',
   },
   {
+    tableName: 'lease_residents',
+    policyFamily: 'tenant_admin_write',
+    notes:
+      'Leases v3: everyone named on a lease (user OR resident contact). SELECT carries the admin-tier bar like site_publish_schedules: the rows map neighbours to units. Residents read their own lease through the API as service_role, where the leases route derives its party filter from this table.',
+  },
+  {
+    tableName: 'resident_contacts',
+    policyFamily: 'tenant_admin_write',
+    notes:
+      'Leases v3 (E11): residents with no login. Holds home mailing addresses and phone numbers, so SELECT is admin-tier. Gated per community by community_settings.leasesAllowResidentsWithoutEmail.',
+  },
+  {
+    tableName: 'lease_deposits',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Leases v3: §83.49 security deposit record (amount, how held, notice sent, disposition). Financial — admin-tier SELECT.',
+  },
+  {
+    tableName: 'lease_renewal_offers',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Leases v3: renewal offers (proposed rent, term, deposit, residents). Admin-tier SELECT; residents see their own offer through the API.',
+  },
+  {
     tableName: 'move_checklists',
     policyFamily: 'tenant_crud',
     notes:
@@ -589,7 +611,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // 80 on main + community_export_jobs + community_export_job_parts (0058) = 82,
 // + site_publish_schedules (0065) = 83, + unit_occupants (0085) = 84.
 // RE-DERIVE AT MERGE, same as every bump above.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 84;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 87;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

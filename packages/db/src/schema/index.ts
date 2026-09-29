@@ -53,6 +53,10 @@ export * from './invitations';
 export * from './meetings';
 export * from './meeting-documents';
 export * from './leases';
+export * from './lease-residents';
+export * from './resident-contacts';
+export * from './lease-deposits';
+export * from './lease-renewal-offers';
 export * from './move-checklists';
 export * from './maintenance-requests';
 export * from './maintenance-comments';
@@ -328,6 +332,18 @@ export type NewMeetingDocument = typeof meetingDocuments.$inferInsert;
 // Leases
 export type Lease = typeof leases.$inferSelect;
 export type NewLease = typeof leases.$inferInsert;
+import type { leaseResidents } from './lease-residents';
+export type LeaseResident = typeof leaseResidents.$inferSelect;
+export type NewLeaseResident = typeof leaseResidents.$inferInsert;
+import type { residentContacts } from './resident-contacts';
+export type ResidentContact = typeof residentContacts.$inferSelect;
+export type NewResidentContact = typeof residentContacts.$inferInsert;
+import type { leaseDeposits } from './lease-deposits';
+export type LeaseDeposit = typeof leaseDeposits.$inferSelect;
+export type NewLeaseDeposit = typeof leaseDeposits.$inferInsert;
+import type { leaseRenewalOffers } from './lease-renewal-offers';
+export type LeaseRenewalOffer = typeof leaseRenewalOffers.$inferSelect;
+export type NewLeaseRenewalOffer = typeof leaseRenewalOffers.$inferInsert;
 
 // Maintenance Requests
 export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
