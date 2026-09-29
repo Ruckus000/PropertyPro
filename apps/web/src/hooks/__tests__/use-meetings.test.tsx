@@ -18,7 +18,7 @@
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -48,9 +48,9 @@ function newClient() {
 }
 
 function wrap(qc: QueryClient) {
-  return ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
+  return function QueryWrapper({ children }: PropsWithChildren) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
 }
 
 const UNIVERSE: Record<string, QueryKey> = {
@@ -81,6 +81,10 @@ function lastRequest() {
 
 beforeEach(() => {
   fetchMock.mockReset();
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('useMeetings', () => {

@@ -17,7 +17,7 @@
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -49,9 +49,9 @@ function newClient() {
 }
 
 function wrap(qc: QueryClient) {
-  return ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
+  return function QueryWrapper({ children }: PropsWithChildren) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
 }
 
 const UNIVERSE: Record<string, QueryKey> = {
@@ -83,6 +83,10 @@ function lastRequest() {
 
 beforeEach(() => {
   fetchMock.mockReset();
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('useArcSubmissions', () => {
@@ -139,10 +143,13 @@ describe('ARC mutations', () => {
     {
       name: 'useDecideArcSubmission',
       useHook: () => useDecideArcSubmission(CID),
-      vars: { id: 40, decision: 'denied' as const, reviewNotes: 'Exceeds height limit' },
+      // Approval only. A denial must also carry `ruleReference` (§720.3035; the
+      // decide contract rejects a denial without one), which this hook does not
+      // yet send — denial is covered by the ruleReference fix PR, not pinned here.
+      vars: { id: 40, decision: 'approved' as const, reviewNotes: 'Meets guidelines' },
       url: '/api/v1/arc/40/decide',
       method: 'POST',
-      body: { communityId: CID, decision: 'denied', reviewNotes: 'Exceeds height limit' },
+      body: { communityId: CID, decision: 'approved', reviewNotes: 'Meets guidelines' },
     },
     {
       name: 'useWithdrawArcSubmission',
@@ -174,7 +181,7 @@ describe('ARC mutations', () => {
 
   it('a refused decision surfaces the server message and invalidates nothing', async () => {
     fetchMock.mockImplementation(async () =>
-      json({ error: { code: 'VALIDATION_ERROR', message: 'A denial must cite the rule violated' } }, 400),
+      json({ error: { code: 'CONFLICT', message: 'This application has already been decided' } }, 409),
     );
     const qc = newClient();
     seed(qc);
@@ -182,8 +189,8 @@ describe('ARC mutations', () => {
     const { result } = renderHook(() => useDecideArcSubmission(CID), { wrapper: wrap(qc) });
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ id: 40, decision: 'denied' }),
-      ).rejects.toThrow('A denial must cite the rule violated');
+        result.current.mutateAsync({ id: 40, decision: 'approved' }),
+      ).rejects.toThrow('This application has already been decided');
     });
     expect(invalidated(qc)).toEqual([]);
   });

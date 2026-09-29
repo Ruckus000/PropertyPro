@@ -2,7 +2,8 @@
  * Characterization tests for `use-documents.ts` (TST-04 / roadmap 3.T4).
  *
  * `use-documents-versions.test.tsx` already covers `useDocumentVersions`; this
- * file covers the other seven exports, none of which executed under any test
+ * file covers the other eight function exports (seven hooks plus
+ * `prefetchDocuments`), none of which executed under any test
  * (the three component tests that touch the module `vi.mock` it).
  *
  * What is pinned:
@@ -19,7 +20,7 @@
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -56,9 +57,9 @@ function newClient() {
 }
 
 function wrap(qc: QueryClient) {
-  return ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
+  return function QueryWrapper({ children }: PropsWithChildren) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
 }
 
 const UNIVERSE: Record<string, QueryKey> = {
@@ -90,6 +91,10 @@ function lastRequest() {
 
 beforeEach(() => {
   fetchMock.mockReset();
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('useDocuments / prefetchDocuments', () => {

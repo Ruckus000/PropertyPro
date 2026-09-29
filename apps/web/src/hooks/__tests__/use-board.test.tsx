@@ -19,7 +19,7 @@
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -52,6 +52,21 @@ import {
   useSnapshotEligibility,
   useUpdateForumThread,
 } from '../use-board';
+import * as boardModule from '../use-board';
+
+/** The module's read hooks; every other exported `use*` is a mutation. */
+const QUERY_HOOKS = [
+  'useBoardPolls',
+  'useBoardForumThreads',
+  'useBoardElections',
+  'useBoardElectionReceipt',
+  'useBoardElectionDetail',
+  'useBoardElectionResults',
+  'useBoardElectionProxies',
+  'useBoardPollResults',
+  'useBoardPollMyVote',
+  'useBoardForumThread',
+];
 
 const CID = 7;
 const OTHER_CID = 8;
@@ -75,9 +90,9 @@ function newClient() {
 }
 
 function wrap(qc: QueryClient) {
-  return ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
+  return function QueryWrapper({ children }: PropsWithChildren) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
 }
 
 /** Every board key a mutation could plausibly touch, plus cross-entity and cross-community controls. */
@@ -129,6 +144,10 @@ function lastRequest() {
 
 beforeEach(() => {
   fetchMock.mockReset();
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
 });
 
 // ---------------------------------------------------------------------------
@@ -299,11 +318,19 @@ const MUTATIONS: MutationCase[] = [
 ];
 
 describe('use-board mutations', () => {
-  it('has one row per mutation hook in use-board.ts (16)', () => {
-    // A guard on this table itself: a mutation added to use-board.ts without a
-    // row here would otherwise be silently untested.
-    expect(MUTATIONS).toHaveLength(16);
-    expect(new Set(MUTATIONS.map((m) => m.name)).size).toBe(16);
+  it('has exactly one row per mutation hook the module exports', () => {
+    // Derived from the module itself, not from this table: every exported
+    // `use*` function that is not a known query hook is treated as a mutation,
+    // so a mutation added to use-board.ts without a row here goes red.
+    const exportedMutations = Object.entries(boardModule)
+      .filter(([name, value]) => /^use[A-Z]/.test(name) && typeof value === 'function')
+      .map(([name]) => name)
+      .filter((name) => !QUERY_HOOKS.includes(name))
+      .sort();
+    const tableNames = MUTATIONS.map((m) => m.name).sort();
+
+    expect(tableNames).toEqual(exportedMutations);
+    expect(exportedMutations).toHaveLength(16);
   });
 
   it.each(MUTATIONS)('$name sends the expected request and invalidates exactly its views', async (c) => {
