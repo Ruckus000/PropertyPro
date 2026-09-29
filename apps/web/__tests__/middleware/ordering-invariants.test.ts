@@ -273,6 +273,52 @@ describe('support session stamps its consented community when no tenant resolves
     expect(maybeSingleMock).not.toHaveBeenCalled();
   });
 
+  it('(a3) a percent-encoded path id (%32 = 2) is decoded and rejected, not skipped', async () => {
+    // Next decodes dynamic params, so the route would see id=2.
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/%32/cancel-preview`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  });
+
+  it('(a4) an undecodable path segment fails closed', async () => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/%E0%A4%A/cancel-preview`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  });
+
+  it('(a5) a non-numeric sibling route (/api/v1/communities/delete) is not a community id', async () => {
+    const res = await middleware(
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/delete`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBe('1');
+    expect(forwarded(res, 'x-community-id')).toBe(String(TOKEN_COMMUNITY_ID));
+  });
+
+  it('(a6) a /communities/<B> PAGE with ?communityId=A is rejected too', async () => {
+    const res = await middleware(
+      req(`http://localhost:3000/communities/2/board?communityId=${TOKEN_COMMUNITY_ID}`, {
+        supportToken: await signSupportToken(),
+      }),
+    );
+
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(maybeSingleMock).not.toHaveBeenCalled();
+  });
+
   it('(a2) apex /api/v1/communities/<A>/... accepts the session and stamps A', async () => {
     const res = await middleware(
       req(`https://${ROOT_DOMAIN}/api/v1/communities/${TOKEN_COMMUNITY_ID}/cancel-preview`, {

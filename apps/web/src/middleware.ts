@@ -1094,22 +1094,50 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const supportCookieValue = request.cookies.get(SUPPORT_SESSION_COOKIE)?.value;
   if (supportCookieValue) {
     const currentCommunityId = Number(forwardedHeaders.get(COMMUNITY_ID_HEADER));
-    // Tenant resolution never stamps from an /api/v1/communities/<id>/... path,
-    // and routes under it (e.g. cancel-preview) read the community from
-    // params.id without reconciling x-community-id, so the stamp below cannot
-    // pin them. When no tenant resolved, the path's id is the community the
-    // session is about to act on: compare against it, so a session consented to
-    // by A is rejected (exactly like a resolved-tenant mismatch) on B's path.
-    const apiPathCommunityMatch = /^\/api\/v1\/communities\/(\d+)(?:\/|$)/.exec(pathname);
-    const apiPathCommunityId = apiPathCommunityMatch ? Number(apiPathCommunityMatch[1]) : NaN;
-    const supportSession = await resolveActiveSupportSession(supportCookieValue, {
-      expectedCommunityId:
-        Number.isInteger(currentCommunityId) && currentCommunityId > 0
-          ? currentCommunityId
-          : Number.isInteger(apiPathCommunityId) && apiPathCommunityId > 0
-            ? apiPathCommunityId
-            : null,
-    });
+    // Routes and pages under /api/v1/communities/<id>/ and /communities/<id>/
+    // read the community from params.id without reconciling x-community-id,
+    // so neither the resolved tenant nor the stamp below can pin them. The
+    // path's id is the community the route will act on, so EVERY community in
+    // play must be the session's:
+    //   - resolved tenant and path id both present but different → reject
+    //     (B's path on A's subdomain, or with ?communityId=A);
+    //   - otherwise compare the token against whichever one is present.
+    // The segment is percent-decoded first, because Next decodes dynamic
+    // params (`/communities/%32/…` reaches the route as id=2) but
+    // `nextUrl.pathname` does not. A segment that fails to decode, or decodes
+    // to digits that are not a safe positive integer, fails closed. Non-numeric
+    // segments (`/api/v1/communities/delete`, `/communities/new`) are not
+    // community ids and are ignored. A rejection takes the same path as a
+    // resolved-tenant mismatch.
+    const resolvedTenantId =
+      Number.isInteger(currentCommunityId) && currentCommunityId > 0 ? currentCommunityId : null;
+    const pathCommunitySegment = /^(?:\/api\/v1)?\/communities\/([^/]+)(?:\/|$)/.exec(pathname)?.[1];
+    let pathTenantId: number | null = null;
+    let pathCommunityUnreadable = false;
+    if (pathCommunitySegment !== undefined) {
+      let decodedSegment: string | null = null;
+      try {
+        decodedSegment = decodeURIComponent(pathCommunitySegment);
+      } catch {
+        pathCommunityUnreadable = true;
+      }
+      if (decodedSegment !== null && /^\d+$/.test(decodedSegment)) {
+        const parsed = Number(decodedSegment);
+        if (Number.isSafeInteger(parsed) && parsed > 0) {
+          pathTenantId = parsed;
+        } else {
+          pathCommunityUnreadable = true;
+        }
+      }
+    }
+    const conflictingCommunities =
+      pathCommunityUnreadable ||
+      (resolvedTenantId !== null && pathTenantId !== null && resolvedTenantId !== pathTenantId);
+    const supportSession = conflictingCommunities
+      ? null
+      : await resolveActiveSupportSession(supportCookieValue, {
+          expectedCommunityId: resolvedTenantId ?? pathTenantId,
+        });
 
     if (!supportSession) {
       // Cookie is invalid or expired — clear it
