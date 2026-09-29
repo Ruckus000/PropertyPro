@@ -50,11 +50,14 @@
  *
  * These are characterization tests: they pin what the code does today so the
  * provisioning decomposition (roadmap 3.11 / SVC-08) cannot change it silently.
- * Three retry paths that are NOT idempotent today (document categories
- * re-inserted on a lost `categories_created` checkpoint; no mutual exclusion
- * between two concurrent runs of one job; a re-delivered event moving a
- * `completed` signup back to `payment_completed`) are deliberately NOT pinned
- * here — see the 3.T3 row in docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md.
+ * Cases 12-15 (and the tail of case 3) pin the four retry paths this file
+ * originally found NOT idempotent, fixed together (see the 3.T3 row in
+ * docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md): document
+ * categories re-inserted on a lost `categories_created` checkpoint (12); no
+ * mutual exclusion between two concurrent runs of one job (13, 14); a slug
+ * conflict adopting a community that is not this signup's (15); and a
+ * re-delivered event moving a `completed` signup back to `payment_completed`
+ * (3).
  *
  * Safety: the file refuses to run unless DATABASE_URL points at a loopback host
  * (localhost / 127.0.0.1 / ::1, as scripts/local-test-db.sh requires) or CI is
@@ -487,6 +490,14 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     communityId: number,
   ) => (await db.select().from(table).where(eq(table.communityId, communityId))).length;
 
+  async function signupStatus(signup: Signup): Promise<string | undefined> {
+    const [row] = await db
+      .select({ status: pendingSignups.status })
+      .from(pendingSignups)
+      .where(eq(pendingSignups.signupRequestId, signup.signupRequestId));
+    return row?.status;
+  }
+
   /** Welcome emails actually handed to the mailer for this signup. */
   const delivered = (signup: Signup) => testInbox.filter((m) => m.to === signup.email).length;
   const sessionReads = (signup: Signup) =>
@@ -641,13 +652,14 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     const jobs = await jobsFor(signup);
     expect(jobs).toHaveLength(1);
     // The job keeps the event that created it; the second event id is never recorded on a job.
-    // NOT pinned: the second event also re-runs markPendingSignupPaymentCompleted,
-    // which moves this `completed` signup back to `payment_completed` (a known
-    // non-idempotent path — see the 3.T3 roadmap row).
     expect(jobs[0]).toMatchObject({ stripeEventId: firstEvent.id, status: 'completed', communityId });
     expect(await communitiesFor(signup)).toHaveLength(1);
     expect(await countRows(userRoles, communityId)).toBe(1);
     expect(delivered(signup)).toBe(1);
+
+    // The second event re-runs markPendingSignupPaymentCompleted; it must not
+    // move the finished signup back to `payment_completed`.
+    expect(await signupStatus(signup)).toBe('completed');
   });
 
   // -------------------------------------------------------------------------
@@ -854,5 +866,148 @@ describeDb('provisioning retry / idempotency (integration, 3.T3)', () => {
     expect(await jobFor(signup)).toMatchObject({ status: 'completed', retryCount: 5 });
     expect(await communitiesFor(signup)).toHaveLength(1);
     expect(delivered(signup)).toBe(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // The four paths that were not idempotent (3.T3 follow-up)
+  // -------------------------------------------------------------------------
+
+  it('12. re-running a committed categories_created step (checkpoint lost) inserts no duplicate categories', async () => {
+    const signup = await newSignup();
+    const jobId = await fenceOnly(signup);
+
+    await withEmailStepFailing(() =>
+      expect(runProvisioning(jobId)).rejects.toThrow('NEXT_PUBLIC_APP_URL env var not set'),
+    );
+    const communityId = await communityIdFor(signup);
+    expect(await countRows(documentCategories, communityId)).toBe(CATEGORY_COUNT);
+
+    // Categories are committed, but the job only remembers checklist_generated.
+    await rewindCheckpoint(jobId, 'checklist_generated');
+
+    const tick = await watchdogTick(jobId, { expectAttempt: true });
+    expect(tick.failure?.errorMessage).toBeUndefined();
+
+    expect(await jobFor(signup)).toMatchObject({ status: 'completed' });
+    // document_categories has no UNIQUE (community_id, name): only the step's
+    // own read-then-insert-missing keeps this at one set.
+    expect(await countRows(documentCategories, communityId)).toBe(CATEGORY_COUNT);
+    expect(delivered(signup)).toBe(1);
+  });
+
+  it('13. two concurrent runProvisioning calls on one freshly fenced job: exactly one runs', async () => {
+    const signup = await newSignup();
+    const jobId = await fenceOnly(signup);
+
+    const results = await Promise.allSettled([runProvisioning(jobId), runProvisioning(jobId)]);
+
+    // The defect this pins: without a claim, both runs sent the welcome email
+    // and both inserted a category set.
+    const communityId = await communityIdFor(signup);
+    expect(delivered(signup)).toBe(1);
+    expect(await countRows(documentCategories, communityId)).toBe(CATEGORY_COUNT);
+    expect(await countRows(complianceChecklistItems, communityId)).toBe(CHECKLIST_COUNT);
+    expect(await countRows(userRoles, communityId)).toBe(1);
+
+    // Neither call fails: the loser of the claim returns without doing work.
+    expect(results.map((r) => (r.status === 'rejected' ? String(r.reason) : r.status))).toEqual([
+      'fulfilled',
+      'fulfilled',
+    ]);
+    const outcomes = results
+      .map((r) => (r.status === 'fulfilled' ? r.value : null))
+      .sort();
+    expect(outcomes).toEqual(['completed', 'in_flight']);
+    expect(await jobFor(signup)).toMatchObject({ status: 'completed', retryCount: 0 });
+  });
+
+  it('14. a live claim makes other runs and the webhook stand aside; once it goes stale the watchdog takes over', async () => {
+    const signup = await newSignup();
+    const jobId = await fenceOnly(signup);
+
+    // Another run (say the watchdog) claimed the job a minute ago and has not
+    // checkpointed yet — exactly the row a claim leaves behind.
+    const claimedAt = new Date(Date.now() - 60 * 1000);
+    await db
+      .update(provisioningJobs)
+      .set({ startedAt: claimedAt })
+      .where(eq(provisioningJobs.id, jobId));
+
+    // A direct re-run stands aside without touching anything.
+    await expect(runProvisioning(jobId)).resolves.toBe('in_flight');
+    expect(await communitiesFor(signup)).toHaveLength(0);
+
+    // So does the webhook — and it answers non-2xx WITHOUT marking the event
+    // processed, because nothing guarantees the claim holder will.
+    const event = checkoutEvent(signup, `evt_providem_inflight_${RUN}_${seq}`);
+    const deferred = await deliver(event);
+    expect(deferred.status).toBe(409);
+    const [fence] = await db
+      .select()
+      .from(stripeWebhookEvents)
+      .where(eq(stripeWebhookEvents.eventId, event.id));
+    expect(fence?.processedAt).toBeNull();
+    expect(await communitiesFor(signup)).toHaveLength(0);
+    expect(delivered(signup)).toBe(0);
+    expect(await jobFor(signup)).toMatchObject({ status: 'initiated', startedAt: claimedAt });
+
+    // The watchdog does not select a job whose claim is live...
+    const live = await watchdogTick(jobId, { expectAttempt: false });
+    expect(live.failure?.errorMessage).toBeUndefined();
+
+    // ...but a claim holder that died stops renewing, and past the 5-minute
+    // window its claim expires: the watchdog selects the job AND wins the claim.
+    await db
+      .update(provisioningJobs)
+      .set({ startedAt: new Date(Date.now() - WATCHDOG_STALE_AFTER_MS - 60 * 1000) })
+      .where(eq(provisioningJobs.id, jobId));
+    const stale = await watchdogTick(jobId, { expectAttempt: true });
+    expect(stale.failure?.errorMessage).toBeUndefined();
+    expect(stale.summary.skippedInFlight).toBe(0);
+    expect(await jobFor(signup)).toMatchObject({ status: 'completed', retryCount: 0 });
+    expect(delivered(signup)).toBe(1);
+
+    // Stripe's redelivery of the deferred event now finds the job done and
+    // marks the event processed.
+    const redelivered = await deliver(event);
+    expect(redelivered.status).toBe(200);
+    const [processed] = await db
+      .select()
+      .from(stripeWebhookEvents)
+      .where(eq(stripeWebhookEvents.eventId, event.id));
+    expect(processed?.processedAt).not.toBeNull();
+    expect(delivered(signup)).toBe(1);
+  });
+
+  it("15. a slug held by a community that is not this signup's is refused, not adopted", async () => {
+    const signup = await newSignup();
+    // Somebody else's community already holds the slug (different Stripe ids,
+    // never recorded on this job).
+    const [foreign] = await db
+      .insert(communities)
+      .values({
+        name: 'Someone Else',
+        slug: signup.slug,
+        communityType: 'condo_718',
+        stripeCustomerId: `cus_foreign_${RUN}_${seq}`,
+        stripeSubscriptionId: `sub_foreign_${RUN}_${seq}`,
+      })
+      .returning({ id: communities.id });
+    const jobId = await fenceOnly(signup);
+
+    await expect(runProvisioning(jobId)).rejects.toThrow(/refusing to adopt it/);
+
+    // The job fails visibly (watchdog-retryable, surfaced after the ceiling)...
+    expect(await jobFor(signup)).toMatchObject({
+      status: 'failed',
+      lastSuccessfulStatus: null,
+      communityId: null,
+      retryCount: 1,
+    });
+    // ...and the foreign community gains no root_manager, categories or checklist.
+    expect(await countRows(userRoles, foreign!.id)).toBe(0);
+    expect(await countRows(documentCategories, foreign!.id)).toBe(0);
+    expect(await countRows(complianceChecklistItems, foreign!.id)).toBe(0);
+    expect(delivered(signup)).toBe(0);
   });
 });

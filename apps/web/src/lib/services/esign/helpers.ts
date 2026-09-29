@@ -1,9 +1,10 @@
 /**
  * E-sign service — Helpers shared by the other e-sign modules (module-private to the esign/ directory).
  *
- * Moved verbatim from `esign-service.ts` (SVC-08), which remains the public
- * entry point and re-exports this module's public names. Import from
- * `@/lib/services/esign-service`, not from here.
+ * Moved verbatim from `esign-service.ts` (SVC-08). Unlike the other esign/
+ * modules, the `esign-service` barrel does NOT re-export anything from this
+ * file: it is consumed only by sibling e-sign modules — `esign/templates.ts`, `esign/submissions.ts` and `esign/signing.ts` —
+ * via a relative import. Code outside `lib/services/esign/` should not import it.
  */
 import crypto from 'node:crypto';
 import { type EsignSigner } from '@propertypro/email';

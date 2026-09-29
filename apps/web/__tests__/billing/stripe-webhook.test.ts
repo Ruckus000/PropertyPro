@@ -133,6 +133,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: (...args: unknown[]) => ({ _and: args }),
   isNull: (col: unknown) => ({ _isNull: col }),
+  ne: (col: unknown, val: unknown) => ({ _ne: [col, val] }),
   or: (...args: unknown[]) => ({ _or: args }),
   inArray: (col: unknown, vals: unknown) => ({ _inArray: [col, vals] }),
   sql: Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => ({ _sql: { strings: [...strings], values } }), { raw: (s: string) => ({ _sqlRaw: s }) }),
@@ -745,6 +746,62 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(body.error).toBe('Webhook processing failed');
       expect(runProvisioningMock).toHaveBeenCalledWith(456);
       expect(captureExceptionMock).toHaveBeenCalled();
+      expect(setPayloads).not.toContainEqual(
+        expect.objectContaining({ processedAt: expect.any(Date) }),
+      );
+    });
+
+    it('returns a retryable 409 without marking the event processed when another run holds the job', async () => {
+      const session = {
+        id: 'cs_live_provisioning_in_flight',
+        status: 'complete',
+        metadata: { signupRequestId: 'req-in-flight' },
+      };
+      const event = makeEvent('checkout.session.completed', session, 'evt_cs_in_flight');
+      constructEventMock.mockReturnValue(event);
+      retrieveCheckoutSessionMock.mockResolvedValue({ ...session, status: 'complete' });
+      // The watchdog (or another delivery) holds the claim; this call did no work.
+      runProvisioningMock.mockResolvedValueOnce('in_flight');
+
+      let selectCallCount = 0;
+      const selectCallResults: unknown[][] = [
+        [], // idempotency check: no existing event
+        [{ signupRequestId: 'req-in-flight' }], // pending signup exists
+        [{ id: 789 }], // provisioning job lookup
+      ];
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve(selectCallResults[selectCallCount++] ?? [])),
+          })),
+        })),
+      }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+      const setPayloads: Array<Record<string, unknown>> = [];
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
+      const setMock = vi.fn((payload: Record<string, unknown>) => {
+        setPayloads.push(payload);
+        return { where: whereForUpdateMock };
+      });
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: vi.fn(() => ({ set: setMock })),
+      });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(409);
+      expect(runProvisioningMock).toHaveBeenCalledWith(789);
+      // Not a failure: nothing is paged.
+      expect(captureExceptionMock).not.toHaveBeenCalled();
+      // processedAt stays null so Stripe's redelivery is not skipped as a duplicate.
       expect(setPayloads).not.toContainEqual(
         expect.objectContaining({ processedAt: expect.any(Date) }),
       );

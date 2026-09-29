@@ -106,6 +106,17 @@ function logStripeWebhookEvent(
 // Event handlers
 // ---------------------------------------------------------------------------
 
+/**
+ * A checkout's provisioning job is being run by someone else right now. Not a
+ * failure — the route turns it into a retryable 409 without paging Sentry.
+ */
+class ProvisioningInFlightError extends Error {
+  constructor(jobId: number) {
+    super(`provisioning job ${jobId} is already running elsewhere`);
+    this.name = 'ProvisioningInFlightError';
+  }
+}
+
 async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session,
   eventId: string,
@@ -339,7 +350,17 @@ async function handleCheckoutSessionCompleted(
   if (jobId !== null) {
     // Await the resumable state machine so serverless cannot drop the work after
     // the webhook returns. On failure, the outer handler returns 500 and Stripe retries.
-    await runProvisioning(jobId);
+    const outcome = await runProvisioning(jobId);
+    if (outcome === 'in_flight') {
+      // Another run (the watchdog, the manual retry route, or a concurrent
+      // delivery of this same event) holds the job's claim, and this call did no
+      // work. Nothing guarantees that run marks THIS event processed — the
+      // watchdog never does — and it may yet fail, so this delivery must not
+      // report success: the route answers non-2xx and Stripe redelivers, by
+      // which time the job is completed (`already_completed` → processed) or
+      // failed and claimable again.
+      throw new ProvisioningInFlightError(jobId);
+    }
   }
 
   logStripeWebhookEvent('info', 'Provisioning completed from checkout.session.completed', {
@@ -777,6 +798,19 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
       outcome: 'success',
     });
   } catch (err) {
+    if (err instanceof ProvisioningInFlightError) {
+      // processedAt stays null; 409 is non-2xx, so Stripe redelivers later —
+      // the same contract as the fence-race branch above.
+      logStripeWebhookEvent('info', 'Stripe webhook deferring to an in-flight provisioning run', {
+        eventId: event.id,
+        eventType: event.type,
+        category: 'idempotency',
+        metricName: 'stripe_webhook_event',
+        outcome: 'duplicate',
+        errorMessage: err.message,
+      });
+      return NextResponse.json({ error: 'Provisioning already in progress' }, { status: 409 });
+    }
     logStripeWebhookEvent('error', 'Stripe webhook handler failed', {
       eventId: event.id,
       eventType: event.type,

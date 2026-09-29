@@ -210,12 +210,33 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
     communityId = inserted.id;
   } else {
     const [existing] = await db
-      .select({ id: communities.id })
+      .select({
+        id: communities.id,
+        stripeCustomerId: communities.stripeCustomerId,
+        stripeSubscriptionId: communities.stripeSubscriptionId,
+      })
       .from(communities)
       .where(eq(communities.slug, ctx.signup.candidateSlug))
       .limit(1);
     if (!existing) {
       throw new Error(`[provisioning] community_created: slug ${ctx.signup.candidateSlug} not found after conflict`);
+    }
+
+    // Adopt the conflicting community ONLY when it provably belongs to this
+    // signup: the job already recorded it, or it carries this checkout's Stripe
+    // subscription / customer (stamped by the INSERT above on an earlier run of
+    // this same job). Anything else is somebody else's community that happens to
+    // hold the slug — adopting it would link this payer as its root_manager.
+    // Failing the job instead leaves it visible to the watchdog and to ops.
+    const ownedByThisJob =
+      ctx.communityId === existing.id
+      || (stripeSubscriptionId !== null && existing.stripeSubscriptionId === stripeSubscriptionId)
+      || (stripeCustomerId !== null && existing.stripeCustomerId === stripeCustomerId);
+    if (!ownedByThisJob) {
+      throw new Error(
+        `[provisioning] community_created: slug ${ctx.signup.candidateSlug} is held by community ${existing.id}, `
+          + 'which does not belong to this signup (no matching job record or Stripe ids) — refusing to adopt it',
+      );
     }
     communityId = existing.id;
 
@@ -384,12 +405,28 @@ async function stepCategoriesCreated(ctx: JobContext): Promise<void> {
 
   const templates = getDefaultDocumentCategories(ctx.signup.communityType);
 
-  const rows = templates.map((t) => ({
-    communityId,
-    name: t.name,
-    description: t.description,
-    isSystem: true,
-  }));
+  // Read-then-insert-missing, NOT onConflictDoNothing alone: `document_categories`
+  // has no UNIQUE constraint on (community_id, name), so DoNothing never fires and
+  // a re-run of this step after a lost checkpoint inserted a second full set.
+  // Every existing row counts (soft-deleted too) — a retry must never resurrect a
+  // category. Two concurrent runs could still both read an empty set; that race
+  // is closed by the job claim in `runProvisioning`, not here.
+  const existing = await db
+    .select({ name: documentCategories.name })
+    .from(documentCategories)
+    .where(eq(documentCategories.communityId, communityId));
+  const existingNames = new Set(existing.map((r) => r.name));
+
+  const rows = templates
+    .filter((t) => !existingNames.has(t.name))
+    .map((t) => ({
+      communityId,
+      name: t.name,
+      description: t.description,
+      isSystem: true,
+    }));
+
+  if (rows.length === 0) return;
 
   await db
     .insert(documentCategories)
@@ -508,33 +545,100 @@ async function runStep(step: ProvisioningStepSuccess, ctx: JobContext): Promise<
 // ---------------------------------------------------------------------------
 
 /**
+ * What a `runProvisioning` call did.
+ *   - `completed`: this call ran the state machine to its terminal step.
+ *   - `already_completed`: the job was terminal before this call; nothing ran.
+ *   - `in_flight`: another run holds a live claim on this job; nothing ran.
+ *     The caller must NOT treat this as success (the other run may still fail).
+ */
+export type ProvisioningRunOutcome = 'completed' | 'already_completed' | 'in_flight';
+
+/**
+ * Claim a job for one run, atomically, using existing columns only.
+ *
+ * `started_at` is the claim's lease timestamp (and its fencing token). A job is
+ * claimable when no run is live on it:
+ *   - `status = 'failed'`: the last run wrote its failure and returned — that
+ *     write IS the release;
+ *   - `started_at IS NULL`: never run;
+ *   - `started_at < now - DEFAULT_STALE_AFTER_MS`: whoever claimed it has not
+ *     checkpointed within the watchdog's own staleness window, so it is presumed
+ *     dead (a crashed run's claim expires exactly when the watchdog's
+ *     "started but stale" arm starts selecting it).
+ * The claim moves a `failed` job back to its last checkpoint (or `initiated`), so
+ * a second claimer re-evaluating the row under Postgres' row lock (READ
+ * COMMITTED re-checks the WHERE against the committed version) sees a fresh
+ * lease and no `failed` status, and matches nothing. One UPDATE, no session
+ * state — safe on a pooled connection, unlike an advisory lock.
+ */
+async function claimProvisioningJob(db: ReturnType<typeof createUnscopedClient>, jobId: number) {
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - DEFAULT_STALE_AFTER_MS);
+  const [claimed] = await db
+    .update(provisioningJobs)
+    .set({
+      startedAt: now,
+      status: sql`CASE WHEN ${provisioningJobs.status} = 'failed'
+        THEN coalesce(${provisioningJobs.lastSuccessfulStatus}, 'initiated')
+        ELSE ${provisioningJobs.status} END`,
+    })
+    .where(
+      and(
+        eq(provisioningJobs.id, jobId),
+        sql`${provisioningJobs.status} <> 'completed'`,
+        or(
+          eq(provisioningJobs.status, 'failed'),
+          isNull(provisioningJobs.startedAt),
+          lt(provisioningJobs.startedAt, staleBefore),
+        ),
+      ),
+    )
+    .returning();
+  return claimed ?? null;
+}
+
+/**
  * Run (or resume) the provisioning state machine for the given job.
  *
  * Idempotent: safe to call multiple times for the same jobId.
  * If the job is already completed, returns immediately with no mutations.
  * If the job failed previously, resumes from lastSuccessfulStatus.
+ *
+ * Mutually exclusive: concurrent calls for one job (a Stripe retry of an
+ * in-flight event, the watchdog overlapping a webhook, the manual retry route)
+ * race for `claimProvisioningJob`; exactly one runs and the others return
+ * `in_flight` without touching anything. The winner renews its lease on every
+ * checkpoint, and every checkpoint is fenced on the lease it holds, so a run
+ * that stalled past the stale window and was taken over cannot write over its
+ * successor.
  */
-export async function runProvisioning(jobId: number): Promise<void> {
+export async function runProvisioning(jobId: number): Promise<ProvisioningRunOutcome> {
   const db = createUnscopedClient();
 
-  // Load the job.
-  const [job] = await db
-    .select()
-    .from(provisioningJobs)
-    .where(eq(provisioningJobs.id, jobId))
-    .limit(1);
+  const job = await claimProvisioningJob(db, jobId);
 
   if (!job) {
-    throw new Error(`[provisioning] job ${jobId} not found`);
+    // Lost the claim, or there was nothing to claim — find out which.
+    const [current] = await db
+      .select({ status: provisioningJobs.status })
+      .from(provisioningJobs)
+      .where(eq(provisioningJobs.id, jobId))
+      .limit(1);
+    if (!current) {
+      throw new Error(`[provisioning] job ${jobId} not found`);
+    }
+    // Already done — no-op.
+    if (current.status === 'completed') return 'already_completed';
+    return 'in_flight';
   }
-
-  // Already done — no-op.
-  if (job.status === 'completed') return;
 
   // Business idempotency is enforced by the UNIQUE INDEX on provisioning_jobs.signup_request_id.
   // Only one row per signupRequestId can ever exist, so there can never be a "different completed
-  // sibling" job for the same request. The job-level guard above (status === 'completed') is the
-  // only check needed here.
+  // sibling" job for the same request. The claim above (which never matches a completed job) is
+  // the only check needed here.
+
+  // The lease this run holds. Every write to the job row below is fenced on it.
+  let lease: Date = job.startedAt as Date;
 
   // Load the pending signup.
   if (!job.signupRequestId) {
@@ -575,14 +679,6 @@ export async function runProvisioning(jobId: number): Promise<void> {
     lastSuccessfulStatus: job.lastSuccessfulStatus ?? null,
   };
 
-  // Mark started_at on first run.
-  if (!job.startedAt) {
-    await db
-      .update(provisioningJobs)
-      .set({ startedAt: new Date() })
-      .where(eq(provisioningJobs.id, jobId));
-  }
-
   // Mark provisioning in-progress on pending_signups (no-op on resume).
   await db
     .update(pendingSignups)
@@ -601,21 +697,32 @@ export async function runProvisioning(jobId: number): Promise<void> {
     try {
       await runStep(step, ctx);
 
-      // Persist step success.
+      // Persist step success, renewing the lease — only if we still hold it.
       const isTerminal = step === 'completed';
-      await db
+      const renewed = new Date();
+      const [kept] = await db
         .update(provisioningJobs)
         .set({
           status: step,
           lastSuccessfulStatus: step,
-          ...(isTerminal ? { completedAt: new Date() } : {}),
+          startedAt: renewed,
+          ...(isTerminal ? { completedAt: renewed } : {}),
         })
-        .where(eq(provisioningJobs.id, jobId));
+        .where(and(eq(provisioningJobs.id, jobId), eq(provisioningJobs.startedAt, lease)))
+        .returning({ id: provisioningJobs.id });
+      if (!kept) {
+        throw new ProvisioningLeaseLostError(jobId, step);
+      }
+      lease = renewed;
 
       if (isTerminal) break;
       step = nextStep(step);
     } catch (err) {
-      // Persist failure — do NOT overwrite lastSuccessfulStatus.
+      // A run that lost its lease must not record a failure over its successor.
+      if (err instanceof ProvisioningLeaseLostError) throw err;
+
+      // Persist failure — do NOT overwrite lastSuccessfulStatus. Writing
+      // `failed` is also what releases the claim (see claimProvisioningJob).
       await db
         .update(provisioningJobs)
         .set({
@@ -625,10 +732,23 @@ export async function runProvisioning(jobId: number): Promise<void> {
           // drizzle's bound `params:` (#1092). Values only; see that note.
           errorMessage: redactParams(err instanceof Error ? err.message : String(err)),
         })
-        .where(eq(provisioningJobs.id, jobId));
+        .where(and(eq(provisioningJobs.id, jobId), eq(provisioningJobs.startedAt, lease)));
 
       throw err; // re-throw so caller can capture to Sentry
     }
+  }
+
+  return 'completed';
+}
+
+/**
+ * Thrown by a run whose claim expired (no checkpoint within the stale window)
+ * and was taken over by another run. It records nothing on the job row.
+ */
+export class ProvisioningLeaseLostError extends Error {
+  constructor(jobId: number, step: string) {
+    super(`[provisioning] job ${jobId} lost its claim during ${step} — another run took it over`);
+    this.name = 'ProvisioningLeaseLostError';
   }
 }
 
@@ -643,6 +763,8 @@ export interface ProvisioningWatchdogSummary {
   scanned: number;
   attempted: number;
   completed: number;
+  /** Selected jobs another run was already working on (live claim) — left to it. */
+  skippedInFlight: number;
   failed: number;
   failures: Array<{
     jobId: number;
@@ -724,6 +846,7 @@ export async function recoverStuckProvisioningJobs(
     scanned: rows.length,
     attempted: 0,
     completed: 0,
+    skippedInFlight: 0,
     failed: 0,
     failures: [],
     orphans: [],
@@ -732,8 +855,14 @@ export async function recoverStuckProvisioningJobs(
   for (const row of rows) {
     summary.attempted += 1;
     try {
-      await runProvisioning(row.id);
-      summary.completed += 1;
+      const outcome = await runProvisioning(row.id);
+      if (outcome === 'in_flight') {
+        // Another run (a Stripe retry, the manual retry route) holds a live
+        // claim. It is not stuck; the next tick re-selects it if it dies.
+        summary.skippedInFlight += 1;
+      } else {
+        summary.completed += 1;
+      }
     } catch (err) {
       summary.failed += 1;
       summary.failures.push({
