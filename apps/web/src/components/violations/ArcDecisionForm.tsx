@@ -15,10 +15,16 @@
  * reviewer writes a decision, clicks Deny, and gets a validation error for a
  * field the form never asked about. The requirement is surfaced here instead,
  * with the statute named, so the reviewer knows why before they type.
+ *
+ * The contract asks for TWO things on a denial, as separate fields: the written
+ * reason (`reviewNotes`) and the rule or covenant cited (`ruleReference`). Prose
+ * can satisfy a reader without naming the rule; the statute asks for the rule.
+ * Until this form collected `ruleReference`, every denial it sent was a 400.
  */
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   useDecideArcSubmission,
   useReviewArcSubmission,
@@ -39,6 +45,7 @@ export function ArcDecisionForm({
   onComplete,
 }: ArcDecisionFormProps) {
   const [reviewNotes, setReviewNotes] = useState(submission.reviewNotes ?? '');
+  const [ruleReference, setRuleReference] = useState(submission.ruleReference ?? '');
   const [error, setError] = useState('');
 
   const reviewMutation = useReviewArcSubmission(communityId);
@@ -72,20 +79,31 @@ export function ArcDecisionForm({
       );
       return;
     }
+    // Mirrors the contract's `ruleReference` refinement, message included.
+    if (!ruleReference.trim()) {
+      setError(
+        'Cite the specific rule or covenant relied on to deny this application (Fla. Stat. §720.3035) — for example "Declaration Art. VII §3" or "Architectural Guidelines §2.4".',
+      );
+      return;
+    }
     return run('Application denied. The resident has been notified.', () =>
       decideMutation.mutateAsync({
         id: submission.id,
         decision: 'denied',
         reviewNotes: reviewNotes.trim(),
+        ruleReference: ruleReference.trim(),
       }),
     );
-  }, [decideMutation, reviewNotes, run, submission.id]);
+  }, [decideMutation, reviewNotes, ruleReference, run, submission.id]);
 
   if (!canReview && !canDecide) {
     return null;
   }
 
-  const denialReasonMissing = !reviewNotes.trim();
+  const denialFieldsMissing = [
+    !reviewNotes.trim() ? 'arc-review-notes' : null,
+    !ruleReference.trim() ? 'arc-rule-reference' : null,
+  ].filter(Boolean);
 
   return (
     <div className="space-y-4 rounded-md border border-edge bg-surface-hover p-4">
@@ -116,6 +134,27 @@ export function ArcDecisionForm({
         </p>
       </div>
 
+      {canDecide && (
+        <div>
+          <label htmlFor="arc-rule-reference" className="mb-1 block text-sm font-medium text-content-secondary">
+            Rule or covenant cited
+          </label>
+          <Input
+            id="arc-rule-reference"
+            type="text"
+            maxLength={500}
+            value={ruleReference}
+            onChange={(e) => setRuleReference(e.target.value)}
+            aria-describedby="arc-rule-reference-help"
+            placeholder="Declaration Art. VII §3"
+          />
+          <p id="arc-rule-reference-help" className="mt-1 text-xs text-content-disabled">
+            <strong>Required to deny</strong> — for example &ldquo;Declaration Art. VII
+            §3&rdquo; or &ldquo;Architectural Guidelines §2.4&rdquo;. Not sent with an approval.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {canDecide && (
           <>
@@ -141,7 +180,9 @@ export function ArcDecisionForm({
               disabled={isSubmitting}
               // Not `disabled` on a missing reason: a disabled button with no
               // explanation is a dead end. It stays clickable and explains.
-              aria-describedby={denialReasonMissing ? 'arc-review-notes' : undefined}
+              aria-describedby={
+                denialFieldsMissing.length > 0 ? denialFieldsMissing.join(' ') : undefined
+              }
             >
               Deny
             </Button>

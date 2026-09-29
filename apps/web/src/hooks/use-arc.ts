@@ -132,11 +132,17 @@ export function useDecideArcSubmission(communityId: number) {
     id: number;
     decision: 'approved' | 'denied';
     reviewNotes?: string | null;
-  }>(communityId, ({ id, decision, reviewNotes }) =>
+    /**
+     * The rule or covenant a denial relies on (HB 1203 / §720.3035). The decide
+     * contract rejects a denial without it, so omitting it here turns every
+     * denial into a 400. Leave it out for approvals.
+     */
+    ruleReference?: string | null;
+  }>(communityId, ({ id, decision, reviewNotes, ruleReference }) =>
     requestJson<ArcSubmission>(`/api/v1/arc/${id}/decide`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ communityId, decision, reviewNotes }),
+      body: JSON.stringify({ communityId, decision, reviewNotes, ruleReference }),
     }),
   );
 }
