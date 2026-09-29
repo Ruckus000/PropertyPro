@@ -67,7 +67,8 @@
  *     services.
  *   - Two service files exporting the SAME name mask each other (a reference
  *     to either keeps both alive). This is LIVE, not hypothetical:
- *     `listTemplates` is exported by both `esign-service.ts` and
+ *     `listTemplates` is exported by both `esign/templates.ts` (re-exported
+ *     through the `esign-service.ts` barrel since SVC-08) and
  *     `site-portfolio-template-service.ts`, so neither death is reportable
  *     until references become file-qualified.
  *   - Short generic names are permanently unmeasurable: `score`
