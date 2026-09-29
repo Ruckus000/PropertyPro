@@ -480,22 +480,26 @@ export async function seedCommunity(
   // --- seedHints: complianceScore — adjust createdAt on hint-seeded documents ---
   // A high complianceScore means documents were posted within the 30-day window.
   // A low complianceScore means documents were posted late (>30 days ago).
-  // Only the hint-driven extra documents (file_name pattern *-hints-*) are affected;
-  // default documents retain their natural createdAt.
+  // Only the hint-driven extra documents are affected; default documents retain
+  // their natural createdAt. Match on file_path, not file_name: only the seed
+  // key (`<slug>-doc-hints-…`) carries the `hints` segment, and seedRegistryDocument
+  // stores it as `demo/<communityId>/<seedKey>/<fileName>`. The old
+  // `file_name LIKE '<slug>-%-hints-%'` matched nothing, so this was a no-op.
+  // assertValidConfig pins the slug to [a-z0-9-], so it carries no LIKE wildcard.
   if (config.seedHints) {
     const score = Math.max(0, Math.min(100, config.seedHints.complianceScore));
     // Linear interpolation: score=100 → 5 days ago (compliant); score=0 → 45 days ago (overdue).
     const postingOffsetDays = Math.round(5 + (1 - score / 100) * 40);
     // `.toISOString()`, not the Date: postgres-js has no serialiser for a bare
     // `Date` in an untyped bind parameter and throws ERR_INVALID_ARG_TYPE on the
-    // client. Nothing passes `seedHints` today, which is the only reason this
-    // has never fired — the same shape took the scheduled-publish cron down.
+    // client — the same shape took the scheduled-publish cron down. The admin
+    // demo route passes `seedHints`, and the counts integration test pins it.
     const createdAt = new Date(Date.now() - postingOffsetDays * DAY_MS).toISOString();
     await db.execute(sql`
       UPDATE documents
       SET created_at = ${createdAt}
       WHERE community_id = ${communityId}
-        AND file_name LIKE ${`${config.slug}-%-hints-%`}
+        AND file_path LIKE ${`demo/${communityId}/${config.slug}-doc-hints-%`}
     `);
   }
 
