@@ -114,15 +114,6 @@ export const POST = withErrorHandler(
     if (leaseEnd && body.startDate && body.startDate !== startDate) {
       throw new ValidationError('A renewal starts the day after the current lease ends');
     }
-    // Decisions D8: leases start on the 1st. Refuse here, not at signing — an
-    // offer that can never be signed is worse than no offer.
-    if (!startDate.endsWith('-01')) {
-      throw new ValidationError(
-        leaseEnd
-          ? 'This lease does not end on the last day of a month, so a renewal cannot start on the 1st. Edit the end date first.'
-          : 'A renewal must start on the 1st of a month',
-      );
-    }
     const sentOn = today(membership.timezone);
     if (body.expiresOn < sentOn) throw new ValidationError('expiresOn cannot be in the past');
     if (body.expiresOn >= startDate) {

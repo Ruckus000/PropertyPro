@@ -79,7 +79,9 @@ export function DepositDialog(props: RosterDialogProps) {
   const lease = leaseProp ?? model?.current ?? null;
   const deposits = lease?.deposits ?? [];
   const open = openDeposit(lease);
-  const lastDay = lease ? (lease.moveOutOn ?? lease.endDate) : null;
+  // A holdover is past its end date but still in the unit, so only a recorded
+  // move-out or a closed lease counts as "after move-out".
+  const lastDay = lease ? (lease.moveOutOn ?? (lease.status !== 'active' ? lease.endDate : null)) : null;
   const cancelled = lease?.status === 'cancelled';
   const afterMoveOut = !!open && (cancelled || (!!lastDay && lastDay <= today));
 

@@ -10,6 +10,7 @@ import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { LeaseActions } from '@/hooks/use-lease-roster';
+import { LEASE_HELP_SLUGS } from './help-slugs';
 
 const PRESETS: number[][] = [
   [30, 60, 90],
@@ -30,11 +32,13 @@ const PRESETS: number[][] = [
 
 export function AlertWindowsMenu({
   windows,
+  allowResidentsWithoutEmail,
   canEdit,
   actions,
   onHelp,
 }: {
   windows: number[];
+  allowResidentsWithoutEmail: boolean;
   canEdit: boolean;
   actions: LeaseActions;
   onHelp?: (slug: string) => void;
@@ -81,6 +85,26 @@ export function AlertWindowsMenu({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="font-normal text-content-secondary">Lease settings</DropdownMenuLabel>
+        {/* Decisions §2: off by default; a community turns it on when it has
+            residents with no email address. Notices to them go by mail or hand. */}
+        <DropdownMenuCheckboxItem
+          checked={allowResidentsWithoutEmail}
+          disabled={!canEdit}
+          onCheckedChange={async (checked) => {
+            try {
+              await actions.updateSettings.mutateAsync({ allowResidentsWithoutEmail: checked === true });
+              toast.success(
+                checked ? 'Residents without an email address can now be added to leases' : 'Residents without an email address are turned off',
+              );
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : 'Could not change this setting');
+            }
+          }}
+        >
+          Allow residents without email
+        </DropdownMenuCheckboxItem>
         {!canEdit && (
           <p className="px-2 py-1.5 text-xs text-content-secondary">Only the root manager can change this.</p>
         )}
@@ -89,7 +113,7 @@ export function AlertWindowsMenu({
             <DropdownMenuSeparator />
             <button
               type="button"
-              onClick={() => onHelp('expiry-alert-windows')}
+              onClick={() => onHelp(LEASE_HELP_SLUGS.expiryAlertWindows)}
               className="w-full rounded px-2 py-1.5 text-left text-sm text-interactive hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus"
             >
               How alert windows work

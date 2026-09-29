@@ -129,7 +129,7 @@ export function MoveOutDialog(props: MoveOutDialogProps) {
       const id = lease.id;
       onDone(
         mode === 'early'
-          ? `${unit} ends early on ${fmtDate(moveOutOn)}. You can undo this until then.`
+          ? `${unit} ends early on ${fmtDate(moveOutOn)}. To change your mind later, open the unit and choose Cancel early end.`
           : `${unit} moving out ${fmtDate(moveOutOn)}.`,
         () => actions.updateLease.mutateAsync({ id, moveOutOn: null }),
       );

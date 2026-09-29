@@ -50,7 +50,7 @@ describe('buildRoster: stage and next step per row', () => {
   it('maps each unit to a status and one next step', () => {
     expect([by(1).status, by(1).action]).toEqual(['Leased', null]);
     expect([by(2).status, by(2).stage, by(2).action]).toEqual(['Expiring', 'not_started', 'send_offer']);
-    expect([by(3).status, by(3).action]).toEqual(['Holdover', 'send_offer']);
+    expect([by(3).status, by(3).action]).toEqual(['Holdover', 'resolve_holdover']);
     expect([by(4).stage, by(4).action]).toEqual(['notice', 'pre_lease']);
     expect([by(5).status, by(5).action]).toEqual(['Vacant', 'new_lease']);
     expect([by(6).status, by(6).action]).toEqual(['Offline', null]);

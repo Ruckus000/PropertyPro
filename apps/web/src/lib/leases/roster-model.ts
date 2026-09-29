@@ -101,7 +101,9 @@ export type RowAction =
   | 'send_offer'
   | 'resend_offer'
   | 'record_response'
-  | 'record_renewal';
+  | 'record_renewal'
+  /** Holdover: an offer cannot fix it (the new term would start in the past) — open the unit to convert or record a move-out. */
+  | 'resolve_holdover';
 
 export type StatusLabel =
   | 'Leased'
@@ -224,6 +226,7 @@ function rowAction(m: Pick<UnitModel, 'state' | 'stage'>): RowAction | null {
   if (s.kind === 'offline') return null;
   if (!s.current && !s.next) return 'new_lease';
   if (s.current && s.movingOut) return s.next ? null : 'pre_lease';
+  if (s.kind === 'holdover') return 'resolve_holdover';
   switch (m.stage) {
     case 'not_started':
       return 'send_offer';
@@ -459,6 +462,7 @@ export const ACTION_LABEL: Record<RowAction, string> = {
   resend_offer: 'Resend offer',
   record_response: 'Record response',
   record_renewal: 'Record renewal',
+  resolve_holdover: 'Resolve holdover',
 };
 
 export function tierOf(m: UnitModel): UrgencyTier {

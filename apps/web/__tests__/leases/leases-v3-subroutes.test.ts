@@ -149,11 +149,20 @@ describe('offers', () => {
     expect(late.status).toBe(400);
   });
 
-  it('refuses to send an offer that could never be signed (renewal would not start on the 1st — D8)', async () => {
+  it('a lease ending mid-month can be renewed: the renewal starts the next day (D8 exempts renewals)', async () => {
     const client = seed({ leases: [{ ...currentLease, endDate: '2026-12-15' }] });
     const res = await offers.POST(req('POST', '/api/v1/leases/offers', { communityId: 42, leaseId: 1, offerRent: '1600.00', termMonths: 12, expiresOn: '2026-11-30' }));
-    expect(res.status).toBe(400);
-    expect(client.insert).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(client.insert).toHaveBeenCalledWith(t.leaseRenewalOffers, expect.objectContaining({ startDate: '2026-12-16' }));
+  });
+
+  it('signing a mid-month renewal creates the lease (the 1st-of-month rule is for new leases only)', async () => {
+    const lease = { ...currentLease, endDate: '2026-12-15' };
+    const offer = { id: 300, leaseId: 1, stage: 'accepted', offerRent: '1600.00', zeroRentReason: null, startDate: '2026-12-16', termMonths: 12, customEndDate: null, depositAmount: null, proposedResidents: null };
+    const client = seed({ leases: [lease], leaseRenewalOffers: [offer], leaseResidents: [residentRow] });
+    const res = await offers.PATCH(req('PATCH', '/api/v1/leases/offers', { communityId: 42, offerId: 300, action: 'sign' }));
+    expect(res.status).toBe(200);
+    expect(client.insert).toHaveBeenCalledWith(t.leases, expect.objectContaining({ startDate: '2026-12-16', endDate: '2027-12-15' }));
   });
 
   it('signing a month-to-month renewal ends the old lease the day before the new term', async () => {

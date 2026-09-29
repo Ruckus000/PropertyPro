@@ -390,7 +390,7 @@ export const PATCH = withErrorHandler(
     }
 
     if (fields.endDate !== undefined) {
-      validateLeaseDateWindow((existing['startDate'] as string) ?? '', fields.endDate);
+      validateLeaseDateWindow((existing['startDate'] as string) ?? '', fields.endDate, { requireFirstOfMonth: false });
     }
 
     // ── Cancelling a lease that never started (E1) ─────────────────────────
@@ -427,6 +427,16 @@ export const PATCH = withErrorHandler(
         if (blocking) {
           throw new ConflictError('Cancel the upcoming lease on this unit before cancelling the move-out.', {
             upcomingLeaseId: blocking.id,
+          });
+        }
+        // A transfer's new lease lives on ANOTHER unit; the resident would
+        // hold two leases at once if the move-out were cleared first.
+        const transferTarget = allLeases.find(
+          (l) => (l as { transferredFromLeaseId?: number | null }).transferredFromLeaseId === id && l.status === 'active',
+        );
+        if (transferTarget) {
+          throw new ConflictError('Cancel the new lease this resident is transferring to before cancelling the move-out.', {
+            upcomingLeaseId: transferTarget.id,
           });
         }
         for (const k of ['endVia', 'endReason', 'noticeReceivedOn'] as const) {
@@ -529,8 +539,15 @@ export const PATCH = withErrorHandler(
       newValues,
     });
 
-    // Best-effort: auto-create move-out checklist when lease is terminated
-    if (fields.status === 'terminated' && membership.communityType === 'apartment' && existing['residentId']) {
+    // Best-effort: auto-create the move-out checklist when the lease is
+    // terminated (pre-v3) or when a move-out is first scheduled (v3 never
+    // flips status early, so this is where the checklist has to start).
+    const moveOutNewlyScheduled = !!fields.moveOutOn && !existing['moveOutOn'];
+    if (
+      (fields.status === 'terminated' || moveOutNewlyScheduled) &&
+      membership.communityType === 'apartment' &&
+      existing['residentId']
+    ) {
       try {
         await createMoveChecklist(
           {

@@ -60,6 +60,7 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn(
 vi.mock('@/lib/services/move-checklist-service', () => ({ createMoveChecklist: vi.fn().mockResolvedValue(undefined) }));
 
 import { GET, POST, PATCH, DELETE } from '../../src/app/api/v1/leases/route';
+import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 
 const MANAGER = '00000000-0000-4000-8000-000000000001';
 const ACTOR = '11111111-1111-4111-8111-111111111111';
@@ -391,6 +392,16 @@ describe('PATCH — concurrency, cancel and move-out', () => {
     expect(data).not.toHaveProperty('status');
   });
 
+  it('scheduling a move-out starts the move-out checklist once (not again on later edits)', async () => {
+    seed({ leases: [lease({ id: 1 })] });
+    await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, moveOutOn: '2026-12-31', endVia: 'notice' }));
+    expect(createMoveChecklist).toHaveBeenCalledWith(expect.objectContaining({ leaseId: 1, type: 'move_out' }), MANAGER);
+    vi.mocked(createMoveChecklist).mockClear();
+    seed({ leases: [lease({ id: 1, moveOutOn: '2026-12-31', endVia: 'notice' })] });
+    await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, moveOutOn: '2026-12-15' }));
+    expect(createMoveChecklist).not.toHaveBeenCalled();
+  });
+
   it('requires endVia when scheduling a move-out, and an early end cannot be after the end date', async () => {
     seed({ leases: [lease({ id: 1 })] });
     expect((await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, moveOutOn: '2026-10-31' }))).status).toBe(400);
@@ -408,6 +419,25 @@ describe('PATCH — concurrency, cancel and move-out', () => {
     const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, moveOutOn: null }));
     expect(res.status).toBe(409);
     expect(client.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to clear a transfer move-out while the new lease on the other unit exists', async () => {
+    const client = seed({
+      leases: [
+        lease({ id: 1, moveOutOn: '2026-10-31', endVia: 'transfer' }),
+        lease({ id: 2, unitId: 20, startDate: '2026-11-01', endDate: '2027-10-31', transferredFromLeaseId: 1 }),
+      ],
+    });
+    const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, moveOutOn: null }));
+    expect(res.status).toBe(409);
+    expect(client.update).not.toHaveBeenCalled();
+  });
+
+  it('converting a holdover to month-to-month clears its end date', async () => {
+    const client = seed({ leases: [lease({ id: 1, endDate: '2026-09-15' })] });
+    const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, version: 3, endDate: null }));
+    expect(res.status).toBe(200);
+    expect(client.update).toHaveBeenCalledWith(leasesTableMock, expect.objectContaining({ endDate: null }), expect.anything());
   });
 
   it('clearing a move-out also clears how and why it was ending', async () => {

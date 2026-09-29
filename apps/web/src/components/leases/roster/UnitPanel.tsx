@@ -23,6 +23,8 @@ import {
 import { initials, inDays, peopleOn, type PersonDirectory, type RosterLease, type UnitModel } from '@/lib/leases/roster-model';
 import type { RosterDialog } from './types';
 import { LeaseStatus } from './LeaseStatus';
+import { HELD_OPTIONS } from './dialogs/form-kit';
+import { LEASE_HELP_SLUGS } from './help-slugs';
 
 const fmt = (d: string | null | undefined) =>
   d
@@ -31,11 +33,7 @@ const fmt = (d: string | null | undefined) =>
 const money = (v: string | null | undefined) =>
   v == null ? 'Not recorded' : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const HELD: Record<string, string> = {
-  separate_noninterest: 'Separate account, no interest',
-  separate_interest: 'Separate account, with interest',
-  surety_bond: 'Surety bond',
-};
+const HELD: Record<string, string> = Object.fromEntries(HELD_OPTIONS.map((o) => [o.value, o.label]));
 
 type Fact = { tone: 'info' | 'warning'; text: string };
 
@@ -73,6 +71,7 @@ export function UnitPanel({
   directory,
   onClose,
   onDialog,
+  onQuickAction,
   onHelp,
 }: {
   model: UnitModel | null;
@@ -81,6 +80,8 @@ export function UnitPanel({
   directory: PersonDirectory;
   onClose: () => void;
   onDialog: (d: RosterDialog) => void;
+  /** One-click changes the page performs (with a confirmation toast and undo). */
+  onQuickAction: (a: { kind: 'cancel-move-out' | 'convert-m2m'; lease: RosterLease }) => void;
   onHelp?: (slug: string) => void;
 }) {
   if (!model) return null;
@@ -91,12 +92,15 @@ export function UnitPanel({
   const facts: Fact[] = [];
   let citesStatute = false;
 
-  if (c && s.stopDate && c.endVia !== 'transfer') {
+  // Whether the deposit is travelling with a transfer is recorded on the
+  // deposit itself, not implied by how the lease ends.
+  const depositCarried = !!c?.deposits?.some((d) => d.disposition === 'carried_to_transfer');
+  if (c && s.stopDate && !depositCarried) {
     const { refundBy, claimBy } = depositDispositionDeadlines(s.stopDate);
     facts.push({ tone: 'info', text: `After move-out: return the deposit by ${fmt(refundBy)}, or send a claim notice by certified mail by ${fmt(claimBy)} (§83.49).` });
     citesStatute = true;
   }
-  if (c && c.endVia === 'transfer') {
+  if (c && depositCarried) {
     facts.push({ tone: 'info', text: 'The deposit moves to the new lease, so no §83.49 refund or claim is due for this unit.' });
     citesStatute = true;
   }
@@ -116,7 +120,18 @@ export function UnitPanel({
     facts.push({ tone: 'warning', text: 'Rent is not recorded for this lease. Edit the lease to add it.' });
   }
 
-  const deposit = c?.deposits?.filter((d) => !d.disposition).at(-1) ?? c?.deposits?.at(-1) ?? null;
+  // A renewal with an unchanged deposit keeps it on the lease it renews, so
+  // look back along the renewal chain before saying "not recorded".
+  const depositOf = (l: RosterLease | null | undefined) =>
+    l?.deposits?.filter((d) => !d.disposition).at(-1) ?? l?.deposits?.at(-1) ?? null;
+  let depositLease: RosterLease | null = c;
+  let deposit = depositOf(c);
+  for (let prevId = c?.previousLeaseId ?? null; !deposit && prevId != null; ) {
+    const prev = m.past.find((l) => l.id === prevId) ?? null;
+    deposit = depositOf(prev);
+    if (deposit) depositLease = prev;
+    prevId = prev?.previousLeaseId ?? null;
+  }
   const noticeDue = deposit ? depositNoticeDue(deposit.receivedOn) : null;
   if (deposit && !deposit.noticeSentOn && noticeDue) {
     facts.push({
@@ -134,19 +149,39 @@ export function UnitPanel({
     act.push({ label: 'New lease', primary: true, run: () => onDialog({ kind: 'lease', mode: 'new', unitId }) });
     act.push({ label: 'Take offline', run: () => onDialog({ kind: 'offline', unitId }) });
   } else if (c) {
-    if (m.stage === 'not_started' || m.stage === 'offer_expired')
+    if (s.kind === 'holdover' && !s.movingOut) {
+      // An offer cannot fix a holdover: the new term would start in the past.
+      // Either the resident stays month to month, or they are leaving.
+      act.push({ label: 'Convert to month-to-month', primary: true, run: () => onQuickAction({ kind: 'convert-m2m', lease: c }) });
+      act.push({ label: 'Record move-out', run: () => onDialog({ kind: 'move-out', unitId, mode: 'notice' }) });
+    } else if (s.kind === 'month_to_month' && !s.movingOut && !m.next && (m.stage === null || m.stage === 'offer_expired')) {
+      act.push({ label: 'Offer a fixed term', run: () => onDialog({ kind: 'offer', unitId }) });
+    } else if (m.stage === 'not_started' || m.stage === 'offer_expired') {
       act.push({ label: m.stage === 'offer_expired' ? 'Resend offer' : 'Send offer', primary: true, run: () => onDialog({ kind: 'offer', unitId }) });
+    }
     if (m.stage === 'offer_sent') act.push({ label: 'Record response', primary: true, run: () => onDialog({ kind: 'offer-response', unitId }) });
-    if (m.stage === 'accepted') act.push({ label: 'Record renewal', primary: true, run: () => onDialog({ kind: 'record-renewal', unitId }) });
+    if (m.stage === 'accepted') {
+      act.push({ label: 'Record renewal', primary: true, run: () => onDialog({ kind: 'record-renewal', unitId }) });
+      // The resident can still change their mind before signing.
+      act.push({ label: 'Change response', run: () => onDialog({ kind: 'offer-response', unitId }) });
+    }
     if (s.movingOut && !m.next) act.push({ label: 'Pre-lease this unit', primary: true, run: () => onDialog({ kind: 'lease', mode: 'new', unitId }) });
+    if (s.movingOut && !m.next) {
+      act.push({
+        label: c.endVia === 'early' ? 'Cancel early end' : 'Cancel move-out',
+        run: () => onQuickAction({ kind: 'cancel-move-out', lease: c }),
+      });
+    }
     if (!s.movingOut && !m.next && s.kind !== 'holdover' && m.stage !== 'signed') {
       act.push({ label: 'Resident gave notice', run: () => onDialog({ kind: 'move-out', unitId, mode: 'notice' }) });
       act.push({ label: 'End early', run: () => onDialog({ kind: 'move-out', unitId, mode: 'early' }) });
       act.push({ label: 'Transfer to another unit', run: () => onDialog({ kind: 'transfer', unitId }) });
     }
-    if (s.kind === 'holdover') act.push({ label: 'Record move-out', run: () => onDialog({ kind: 'move-out', unitId, mode: 'notice' }) });
     act.push({ label: 'Edit lease', run: () => onDialog({ kind: 'lease', mode: 'edit', unitId, leaseId: c.id }) });
-    act.push({ label: 'Deposit', run: () => onDialog({ kind: 'deposit', unitId, leaseId: c.id }) });
+    act.push({ label: 'Deposit', run: () => onDialog({ kind: 'deposit', unitId, leaseId: (depositLease ?? c).id }) });
+  }
+  if (c && s.movingOut && c.endVia === 'transfer') {
+    facts.push({ tone: 'info', text: 'To cancel this transfer, cancel the upcoming lease on the new unit first, then choose Cancel move-out here.' });
   }
 
   const nextPeople = peopleOn(m.next, directory);
@@ -224,7 +259,7 @@ export function UnitPanel({
             title="Renewal"
             action={
               onHelp ? (
-                <button type="button" onClick={() => onHelp(s.kind === 'holdover' ? 'move-out-and-holdovers' : 'renewing-a-lease')} className="rounded text-xs font-medium text-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus">
+                <button type="button" onClick={() => onHelp(s.kind === 'holdover' ? LEASE_HELP_SLUGS.moveOutAndHoldovers : LEASE_HELP_SLUGS.renewingALease)} className="rounded text-xs font-medium text-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus">
                   How renewals work
                 </button>
               ) : undefined
@@ -245,7 +280,7 @@ export function UnitPanel({
               <Row label="Term" value={`${fmt(c.startDate)} – ${c.endDate ? fmt(c.endDate) : 'no end date'} · ${termText(c)}`} />
               <Row label="Rent" value={c.zeroRentReason ? `$0 · ${c.zeroRentReason.replace(/_/g, ' ')}` : money(c.rentAmount)} />
               <Row label="Move-out notice required" value={c.endDate ? (c.noticeDays ? `${c.noticeDays} days` : 'Not recorded') : '30 days (§83.57)'} />
-              <Row label="Signed lease" value={c.signedDocumentId ? 'Attached' : 'Not attached'} />
+              {c.signedDocumentId ? <Row label="Signed lease" value="Attached" /> : null}
               {c.notes && <Row label="Notes" value={<span className="whitespace-pre-wrap">{c.notes}</span>} />}
             </dl>
           </Section>
@@ -264,6 +299,9 @@ export function UnitPanel({
               </Button>
               <Button size="sm" variant="outline" onClick={() => onDialog({ kind: 'cancel-lease', unitId, leaseId: m.next!.id })}>
                 Cancel before move-in
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => onDialog({ kind: 'deposit', unitId, leaseId: m.next!.id })}>
+                Deposit
               </Button>
             </div>
           </Section>
@@ -295,8 +333,18 @@ export function UnitPanel({
             <ul className="space-y-2">
               {m.past.map((l) => (
                 <li key={l.id} className="text-sm">
-                  <div className="text-content">
-                    {peopleOn(l, directory).map((p) => p.name).join(', ') || 'Unknown resident'}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-content">
+                      {peopleOn(l, directory).map((p) => p.name).join(', ') || 'Unknown resident'}
+                    </div>
+                    {/* Refunds and claims (§83.49(3)) are recorded AFTER the lease ends. */}
+                    <button
+                      type="button"
+                      onClick={() => onDialog({ kind: 'deposit', unitId, leaseId: l.id })}
+                      className="shrink-0 rounded text-xs font-medium text-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus"
+                    >
+                      Deposit
+                    </button>
                   </div>
                   <div className="text-xs text-content-secondary">
                     {l.status === 'cancelled'

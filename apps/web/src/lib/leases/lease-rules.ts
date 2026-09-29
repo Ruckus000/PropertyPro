@@ -48,8 +48,19 @@ export function dateRangesOverlap(
   return startA <= bEnd && startB <= aEnd;
 }
 
-export function validateLeaseDateWindow(startDate: string, endDate: string | null): void {
-  if (!isFirstDayOfMonth(startDate)) {
+/**
+ * `requireFirstOfMonth` (decisions D8): NEW leases start on the 1st. A renewal
+ * is exempt — it starts the day after the current term by definition, and
+ * nothing prorates rent today, so forcing the 1st would only block renewing a
+ * lease that ends mid-month. An existing lease's start is not re-checked when
+ * only its end date changes.
+ */
+export function validateLeaseDateWindow(
+  startDate: string,
+  endDate: string | null,
+  { requireFirstOfMonth = true }: { requireFirstOfMonth?: boolean } = {},
+): void {
+  if (requireFirstOfMonth && !isFirstDayOfMonth(startDate)) {
     throw new ValidationError('Lease startDate must be the first day of the month (YYYY-MM-01)');
   }
   const start = parseIsoDateOnly(startDate, 'startDate');

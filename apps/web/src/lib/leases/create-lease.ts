@@ -159,7 +159,9 @@ export async function createLease(
     }
   }
 
-  validateLeaseDateWindow(payload.startDate, payload.endDate ?? null);
+  validateLeaseDateWindow(payload.startDate, payload.endDate ?? null, {
+    requireFirstOfMonth: !(payload.isRenewal || payload.previousLeaseId),
+  });
 
   const effectiveRentAmount = payload.rentAmount ?? unitRentAmount;
   if (isZeroRent(effectiveRentAmount) && !payload.zeroRentReason) {

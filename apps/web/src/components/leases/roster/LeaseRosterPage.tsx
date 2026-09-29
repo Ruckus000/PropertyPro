@@ -28,6 +28,7 @@ import {
   pastLeases,
   type RosterFilter,
   type RosterSort,
+  type RosterLease,
   type RowAction,
   type UnitModel,
 } from '@/lib/leases/roster-model';
@@ -116,6 +117,8 @@ export function LeaseRosterPage({
         return setDialog({ kind: 'offer-response', unitId });
       case 'record_renewal':
         return setDialog({ kind: 'record-renewal', unitId });
+      case 'resolve_holdover':
+        return setPanelUnitId(unitId);
     }
   };
 
@@ -136,6 +139,24 @@ export function LeaseRosterPage({
           }
         : {}),
     });
+  };
+
+  // One-click panel actions. Each restores exactly what it changed on Undo.
+  const onQuickAction = async ({ kind, lease }: { kind: 'cancel-move-out' | 'convert-m2m'; lease: RosterLease }) => {
+    const unit = models.find((m) => m.unit.id === lease.unitId)?.unit.unitNumber ?? '';
+    try {
+      if (kind === 'cancel-move-out') {
+        const before = { moveOutOn: lease.moveOutOn, endVia: lease.endVia as 'notice' | 'declined' | 'early' | 'transfer' | 'expiry' | null, endReason: lease.endReason ?? null, noticeReceivedOn: lease.noticeReceivedOn ?? null };
+        await actions.updateLease.mutateAsync({ id: lease.id, version: lease.version, moveOutOn: null });
+        onDone(`Unit ${unit} stays on its current term.`, () => actions.updateLease.mutateAsync({ id: lease.id, ...before }));
+      } else {
+        const endDate = lease.endDate;
+        await actions.updateLease.mutateAsync({ id: lease.id, version: lease.version, endDate: null });
+        onDone(`Unit ${unit} is now month-to-month.`, () => actions.updateLease.mutateAsync({ id: lease.id, endDate }));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not make that change');
+    }
   };
 
   const total = filter === 'past' ? past.length : (list?.total ?? 0);
@@ -230,7 +251,7 @@ export function LeaseRosterPage({
               Past leases ({pastCount})
             </Button>
           )}
-          <AlertWindowsMenu windows={data.settings.alertWindows} canEdit={isRootManager} actions={actions} onHelp={onHelp} />
+          <AlertWindowsMenu windows={data.settings.alertWindows} allowResidentsWithoutEmail={data.settings.allowResidentsWithoutEmail} canEdit={isRootManager} actions={actions} onHelp={onHelp} />
           <Button onClick={() => setDialog({ kind: 'lease', mode: 'new', unitId: null })}>
             <Plus aria-hidden="true" className="mr-2 size-4" />
             New lease
@@ -315,6 +336,7 @@ export function LeaseRosterPage({
         directory={data.directory}
         onClose={() => setPanelUnitId(null)}
         onDialog={setDialog}
+        onQuickAction={(a) => void onQuickAction(a)}
         onHelp={onHelp}
       />
 
