@@ -5,9 +5,10 @@
  * prefix rule, and this guard is what keeps that safe in both.
  *
  * **apps/web** — `apps/web/src/middleware.ts` lets ANY `GET`/`HEAD`/`POST`
- * under `/api/v1/internal/` past the session gate. That rule replaced a
- * per-route allowlist whose upkeep is what broke every scheduled job in
- * production: Vercel Cron issues `GET`, nine routes had a `POST`-only entry, so
+ * under `/api/v1/internal/` past the session gate; the rule itself is in
+ * `isTokenAuthenticatedApiRoute`
+ * (`apps/web/src/lib/middleware/token-auth-routes.ts`). It replaced a per-route
+ * allowlist whose upkeep is what broke every scheduled job in production: Vercel Cron issues `GET`, nine routes had a `POST`-only entry, so
  * middleware 401'd before the route ran, and four routes had no entry at all.
  *
  * **apps/admin** — `apps/admin/src/middleware.ts` does the same for
@@ -85,7 +86,7 @@ export const INTERNAL_ROOTS: ReadonlyArray<InternalRoot> = [
   {
     dir: 'apps/web/src/app/api/v1/internal',
     urlPrefix: '/api/v1/internal/',
-    middleware: 'apps/web/src/middleware.ts',
+    middleware: 'apps/web/src/lib/middleware/token-auth-routes.ts',
     exemptions: [
       {
         file: 'apps/web/src/app/api/v1/internal/cron-health/route.ts',

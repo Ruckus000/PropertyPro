@@ -4,7 +4,8 @@
  * `apps/web/src/middleware.ts` 401s every request under `/api/v1` without a
  * session, because `/api/v1` is in `PROTECTED_PATH_PREFIXES`. A route that
  * authenticates with a SIGNED TOKEN instead of a session therefore has to be
- * listed in `TOKEN_AUTH_ROUTES` — per path AND per HTTP verb — or it is
+ * listed in `TOKEN_AUTH_ROUTES` (`apps/web/src/lib/middleware/token-auth-routes.ts`,
+ * which middleware imports) — per path AND per HTTP verb — or it is
  * unreachable by the callers it exists for.
  *
  * The invariant enforced here:
@@ -56,14 +57,14 @@ import { isMainModule } from './lib/is-main-module';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
 const API_ROOT = 'apps/web/src/app/api/v1';
-const MIDDLEWARE = 'apps/web/src/middleware.ts';
+const TOKEN_AUTH_ROUTES_FILE = 'apps/web/src/lib/middleware/token-auth-routes.ts';
 
 const HTTP_VERBS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 /**
- * Path prefixes `isTokenAuthenticatedApiRoute` waves through WITHOUT a
- * per-route entry. A route under one of these is already reachable, so it is
- * not a violation.
+ * Path prefixes `isTokenAuthenticatedApiRoute` (in `TOKEN_AUTH_ROUTES_FILE`)
+ * waves through WITHOUT a per-route entry. A route under one of these is
+ * already reachable, so it is not a violation.
  *
  * Keep in sync with that function. If it grows a new prefix rule and this list
  * does not, the guard reports a false violation — loudly, which is the right
@@ -156,25 +157,25 @@ function routePathFromFile(rel: string): string {
 }
 
 /**
- * Parse the `TOKEN_AUTH_ROUTES` array literal out of middleware.ts.
+ * Parse the `TOKEN_AUTH_ROUTES` array literal out of token-auth-routes.ts.
  *
  * Deliberately throws rather than returning an empty set: an empty parse and a
  * genuinely empty list are indistinguishable downstream, and the second is a
  * state this repo will never be in. A guard that cannot read its own reference
  * data must refuse to pass (exit 2), not report everything as clean.
  */
-export function parseDeclaredRoutes(middlewareSource: string): Set<string> {
-  const start = middlewareSource.indexOf('const TOKEN_AUTH_ROUTES');
+export function parseDeclaredRoutes(source: string): Set<string> {
+  const start = source.indexOf('const TOKEN_AUTH_ROUTES');
   if (start < 0) {
-    throw new Error(`Could not find "const TOKEN_AUTH_ROUTES" in ${MIDDLEWARE}`);
+    throw new Error(`Could not find "const TOKEN_AUTH_ROUTES" in ${TOKEN_AUTH_ROUTES_FILE}`);
   }
-  const open = middlewareSource.indexOf('[', start);
-  const close = middlewareSource.indexOf('];', open);
+  const open = source.indexOf('[', start);
+  const close = source.indexOf('];', open);
   if (open < 0 || close < 0) {
-    throw new Error(`Could not find the TOKEN_AUTH_ROUTES array literal in ${MIDDLEWARE}`);
+    throw new Error(`Could not find the TOKEN_AUTH_ROUTES array literal in ${TOKEN_AUTH_ROUTES_FILE}`);
   }
 
-  const body = stripComments(middlewareSource.slice(open, close));
+  const body = stripComments(source.slice(open, close));
   const declared = new Set<string>();
   const entry = /\{\s*path:\s*'([^']+)'\s*,\s*method:\s*'([A-Z]+)'\s*\}/g;
   let m: RegExpExecArray | null;
@@ -184,7 +185,7 @@ export function parseDeclaredRoutes(middlewareSource: string): Set<string> {
 
   if (declared.size === 0) {
     throw new Error(
-      `Parsed 0 entries from TOKEN_AUTH_ROUTES in ${MIDDLEWARE}. The literal's shape ` +
+      `Parsed 0 entries from TOKEN_AUTH_ROUTES in ${TOKEN_AUTH_ROUTES_FILE}. The literal's shape ` +
         'probably changed; fix this parser rather than letting it report a false clean.',
     );
   }
@@ -204,7 +205,7 @@ function main(): void {
 
   let declared: Set<string>;
   try {
-    declared = parseDeclaredRoutes(readFileSync(join(repoRoot, MIDDLEWARE), 'utf-8'));
+    declared = parseDeclaredRoutes(readFileSync(join(repoRoot, TOKEN_AUTH_ROUTES_FILE), 'utf-8'));
   } catch (error) {
     console.error(`❌ Cannot check: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(2);
@@ -261,7 +262,7 @@ function main(): void {
           `TOKEN_AUTH_ROUTES. Middleware 401s ${missing.length === 1 ? 'that verb' : 'those verbs'} ` +
           `before the handler runs, so the route is unreachable by its callers. Add ` +
           missing.map((verb) => `{ path: '${routePath}', method: '${verb}' }`).join(' and ') +
-          ` to TOKEN_AUTH_ROUTES in ${MIDDLEWARE}.`,
+          ` to TOKEN_AUTH_ROUTES in ${TOKEN_AUTH_ROUTES_FILE}.`,
       });
     }
   }

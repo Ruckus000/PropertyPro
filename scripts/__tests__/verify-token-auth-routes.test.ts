@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -46,6 +47,26 @@ describe('parseDeclaredRoutes', () => {
   it('REFUSES (throws, exit 2) on a missing or empty list rather than reporting clean', () => {
     expect(() => parseDeclaredRoutes('const OTHER = [];')).toThrow(/Could not find/);
     expect(() => parseDeclaredRoutes('const TOKEN_AUTH_ROUTES = [\n];')).toThrow(/Parsed 0 entries/);
+  });
+});
+
+describe('the table the guard reads', () => {
+  // The literal moved out of middleware.ts into its own module (roadmap 3.9).
+  // The guard must read THAT file, and middleware.ts must not grow a second
+  // copy the guard would never see.
+  const tableFile = join(repoRoot, 'apps/web/src/lib/middleware/token-auth-routes.ts');
+  const middlewareFile = join(repoRoot, 'apps/web/src/middleware.ts');
+
+  it('parses the real table out of lib/middleware/token-auth-routes.ts', () => {
+    const declared = parseDeclaredRoutes(readFileSync(tableFile, 'utf8'));
+    expect(declared.has('GET /api/v1/notifications/unsubscribe')).toBe(true);
+    expect(declared.has('POST /api/v1/notifications/unsubscribe')).toBe(true);
+  });
+
+  it('middleware.ts holds no TOKEN_AUTH_ROUTES literal of its own', () => {
+    const source = readFileSync(middlewareFile, 'utf8');
+    expect(source).not.toContain('const TOKEN_AUTH_ROUTES');
+    expect(source).toContain("from './lib/middleware/token-auth-routes'");
   });
 });
 

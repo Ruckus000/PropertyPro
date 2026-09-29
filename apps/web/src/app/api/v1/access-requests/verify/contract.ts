@@ -4,7 +4,7 @@
  * Plan A1 drain #41. **First NO-AUTH POST in the contract corpus.** The route
  * is a public endpoint — it carries no `requireAuthenticatedUserId`,
  * `requireCommunityMembership`, or RBAC permission gate. It is registered in
- * `TOKEN_AUTH_ROUTES` (see `apps/web/src/middleware.ts`), which lets
+ * `TOKEN_AUTH_ROUTES` (see `apps/web/src/lib/middleware/token-auth-routes.ts`), which lets
  * middleware allow the request through without a session cookie. The handler
  * body is the minimal possible shape: body-validate → service call → return.
  *
