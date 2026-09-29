@@ -7,6 +7,10 @@
  * - logAuditEvent on every mutation
  * - Zod validation on request bodies
  * - Action-dispatch POST pattern (mirrors contracts/route.ts)
+ * - CON-05 (Phase 3.5): both verbs go through `runRoute(contract, handler)`.
+ *   GET declares `tenantScope: { in: 'query' }` (runner-resolved communityId);
+ *   POST keeps hand-resolving per action. See `./contract.ts` for why, and for
+ *   the exact error-path deltas the GET tenantScope introduces.
  *
  * Security invariants:
  * - internalNotes and isInternal=true comments never returned to resident callers
@@ -14,8 +18,10 @@
  * - Photo count ≤ 5 checked before issuing a new upload URL (resident callers)
  * - Resident read scope = own requests only
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import type { PaginationResult } from '@propertypro/api-contract';
+import { runRoute } from '@/lib/api/run-route';
 import {
   createScopedClient,
   createPresignedDownloadUrl,
@@ -34,6 +40,10 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { getMaintenancePhotoUploadUrl, processAndStoreThumbnail } from '@/lib/services/photo-processor';
 import { formatRequest } from './_formatRequest';
+import {
+  maintenanceRequestsActionContract,
+  maintenanceRequestsListContract,
+} from './contract';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createMaintenanceCommentForRequest,
@@ -89,121 +99,128 @@ const requestUploadUrlSchema = z.object({
 // GET — List maintenance requests
 // ---------------------------------------------------------------------------
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const { searchParams } = new URL(req.url);
+export const GET = withErrorHandler(
+  runRoute(maintenanceRequestsListContract, async ({ query, req, communityId }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const { searchParams } = new URL(req.url);
 
-  const rawCommunityId = searchParams.get('communityId');
-  if (!rawCommunityId) {
-    throw new ValidationError('communityId query parameter is required');
-  }
-  const parsedCommunityId = Number(rawCommunityId);
-  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
-  }
+    // `communityId` was resolved by the runner (tenantScope: query) through
+    // `resolveEffectiveCommunityId`, which already rejected a non-positive-
+    // integer `?communityId=` and a header mismatch. It can only get here
+    // without `?communityId=` when the x-community-id header supplied it; the
+    // query param has always been required, so keep refusing that case.
+    if (query.communityId === undefined) {
+      throw new ValidationError('communityId query parameter is required');
+    }
 
-  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  const typeFeatures = getFeaturesForCommunity(membership.communityType);
-  if (!typeFeatures.hasMaintenanceRequests) {
-    throw new ForbiddenError('Maintenance requests are not enabled for this community type');
-  }
-  await requirePlanFeature(communityId, 'hasMaintenanceRequests');
-  requirePermission(membership, 'maintenance', 'read');
-  // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
-  await requireEntitledForAdminRead(communityId, membership);
-  const isResident = membership.role === 'resident';
-  const isStaff = membership.isAdmin;
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    const typeFeatures = getFeaturesForCommunity(membership.communityType);
+    if (!typeFeatures.hasMaintenanceRequests) {
+      throw new ForbiddenError('Maintenance requests are not enabled for this community type');
+    }
+    await requirePlanFeature(communityId, 'hasMaintenanceRequests');
+    requirePermission(membership, 'maintenance', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
+    const isResident = membership.role === 'resident';
+    const isStaff = membership.isAdmin;
 
-  // Plan B3: paginate() with cursor-based pagination + walkPaginated+JS-slice
-  // adapter in the client helpers. The previous offset+limit+total semantics
-  // are preserved via the helper layer (`listAllRequests` / `listMyRequests`)
-  // — same pattern as #228 violations and #236 work-orders.
-  const statusFilter = searchParams.get('status');
-  const categoryFilter = searchParams.get('category');
-  const priorityFilter = searchParams.get('priority');
-  const assignedToIdFilter = searchParams.get('assignedToId');
+    // Plan B3: paginate() with cursor-based pagination + walkPaginated+JS-slice
+    // adapter in the client helpers. The previous offset+limit+total semantics
+    // are preserved via the helper layer (`listAllRequests` / `listMyRequests`)
+    // — same pattern as #228 violations and #236 work-orders.
+    // Filters are read from `searchParams` (not `query`) on purpose: an empty
+    // `?status=` has always reached the service as `''`, not `undefined`.
+    const statusFilter = searchParams.get('status');
+    const categoryFilter = searchParams.get('category');
+    const priorityFilter = searchParams.get('priority');
+    const assignedToIdFilter = searchParams.get('assignedToId');
 
-  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
-  // are treated as missing rather than passed to Zod, which would 400 on the
-  // `min(1)` / `positive()` constraints.
-  const listQuerySchema = z.object({
-    cursor: z.string().min(1).max(256).optional(),
-    pageSize: z.coerce.number().int().positive().optional(),
-  });
-  const parsedQuery = listQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters');
-  }
-
-  const scoped = createScopedClient(communityId);
-
-  const result = await paginateMaintenanceRequestsForCommunity({
-    scoped,
-    actorUserId,
-    isResident,
-    isStaff,
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-    statusFilter,
-    categoryFilter,
-    priorityFilter,
-    assignedToIdFilter,
-  });
-
-  // Fetch comments only for this page's request IDs (not all community comments).
-  const pagedIds = result.data.map((r) => r['id'] as number);
-  const commentsByRequestId = new Map<number, Record<string, unknown>[]>();
-  const commentRows = await listMaintenanceCommentsForRequests(scoped, pagedIds);
-  for (const c of commentRows) {
-    const rid = c['requestId'] as number;
-    const bucket = commentsByRequestId.get(rid) ?? [];
-    bucket.push(c);
-    commentsByRequestId.set(rid, bucket);
-  }
-
-  const data = result.data.map((r) => {
-    const requestId = r['id'] as number;
-    const comments = (commentsByRequestId.get(requestId) ?? []).filter((c) => {
-      if (isResident) return !c['isInternal'];
-      return true;
+    // Empty-string `?cursor=` / `?pageSize=` are already `undefined` here (the
+    // runner's query parse collapses them, as the legacy `||` did), so Zod does
+    // not 400 them on the `min(1)` / `positive()` constraints.
+    const listQuerySchema = z.object({
+      cursor: z.string().min(1).max(256).optional(),
+      pageSize: z.coerce.number().int().positive().optional(),
     });
-    return formatRequest(r, comments, isResident);
-  });
+    const parsedQuery = listQuerySchema.safeParse({
+      cursor: query.cursor,
+      pageSize: query.pageSize,
+    });
+    if (!parsedQuery.success) {
+      throw new ValidationError('Invalid query parameters');
+    }
 
-  return NextResponse.json({
-    data: {
+    const scoped = createScopedClient(communityId);
+
+    const result = await paginateMaintenanceRequestsForCommunity({
+      scoped,
+      actorUserId,
+      isResident,
+      isStaff,
+      cursor: parsedQuery.data.cursor,
+      pageSize: parsedQuery.data.pageSize,
+      statusFilter,
+      categoryFilter,
+      priorityFilter,
+      assignedToIdFilter,
+    });
+
+    // Fetch comments only for this page's request IDs (not all community comments).
+    const pagedIds = result.data.map((r) => r['id'] as number);
+    const commentsByRequestId = new Map<number, Record<string, unknown>[]>();
+    const commentRows = await listMaintenanceCommentsForRequests(scoped, pagedIds);
+    for (const c of commentRows) {
+      const rid = c['requestId'] as number;
+      const bucket = commentsByRequestId.get(rid) ?? [];
+      bucket.push(c);
+      commentsByRequestId.set(rid, bucket);
+    }
+
+    const data = result.data.map((r) => {
+      const requestId = r['id'] as number;
+      const comments = (commentsByRequestId.get(requestId) ?? []).filter((c) => {
+        if (isResident) return !c['isInternal'];
+        return true;
+      });
+      return formatRequest(r, comments, isResident);
+    });
+
+    // Paginated contract: the runner emits the canonical double-wrap
+    // `{ data: { data, pagination } }` the handler used to build by hand.
+    return {
       data,
-      pagination: result.pagination,
-    },
-  });
-});
+      pagination: result.pagination as PaginationResult,
+    };
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // POST — Action dispatch
 // ---------------------------------------------------------------------------
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const bodyObj = body as Record<string, unknown>;
-  const action = bodyObj['action'] as string | undefined;
+export const POST = withErrorHandler(
+  runRoute(maintenanceRequestsActionContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    // A malformed JSON body arrives as `undefined` (the runner swallows the
+    // parse error), so reading `action` below throws → 500, exactly as the
+    // legacy `await req.json()` did. Pinned by route-contract.test.ts.
+    const bodyObj = body as Record<string, unknown>;
+    const action = bodyObj['action'] as string | undefined;
 
-  if (action === 'create') {
-    return handleCreateRequest(bodyObj, actorUserId, req);
-  }
-  if (action === 'add_comment') {
-    return handleAddComment(bodyObj, actorUserId, req);
-  }
-  if (action === 'request_upload_url') {
-    return handleRequestUploadUrl(bodyObj, actorUserId, req);
-  }
+    if (action === 'create') {
+      return handleCreateRequest(bodyObj, actorUserId, req);
+    }
+    if (action === 'add_comment') {
+      return handleAddComment(bodyObj, actorUserId, req);
+    }
+    if (action === 'request_upload_url') {
+      return handleRequestUploadUrl(bodyObj, actorUserId, req);
+    }
 
-  throw new ValidationError('Unknown action. Valid actions: create, add_comment, request_upload_url');
-});
+    throw new ValidationError('Unknown action. Valid actions: create, add_comment, request_upload_url');
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Action handlers
@@ -213,7 +230,7 @@ async function handleCreateRequest(
   body: Record<string, unknown>,
   actorUserId: string,
   req: NextRequest,
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parseResult = createRequestSchema.safeParse(body);
   if (!parseResult.success) {
     throw new ValidationError('Invalid request payload', {
@@ -302,14 +319,14 @@ async function handleCreateRequest(
     },
   });
 
-  return NextResponse.json({ data: created });
+  return created;
 }
 
 async function handleAddComment(
   body: Record<string, unknown>,
   actorUserId: string,
   req: NextRequest,
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parseResult = addCommentSchema.safeParse(body);
   if (!parseResult.success) {
     throw new ValidationError('Invalid comment payload', {
@@ -368,14 +385,14 @@ async function handleAddComment(
     },
   });
 
-  return NextResponse.json({ data: created });
+  return created;
 }
 
 async function handleRequestUploadUrl(
   body: Record<string, unknown>,
   actorUserId: string,
   req: NextRequest,
-): Promise<NextResponse> {
+): Promise<unknown> {
   const parseResult = requestUploadUrlSchema.safeParse(body);
   if (!parseResult.success) {
     throw new ValidationError('Invalid upload URL request', {
@@ -422,5 +439,5 @@ async function handleRequestUploadUrl(
     payload.filename,
   );
 
-  return NextResponse.json({ data: { uploadUrl, storagePath } });
+  return { uploadUrl, storagePath };
 }
