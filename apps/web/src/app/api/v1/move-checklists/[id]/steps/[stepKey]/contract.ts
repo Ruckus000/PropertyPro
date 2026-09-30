@@ -3,13 +3,18 @@
  *
  * Plan A1 drain #126. Admin-only step update on a move checklist.
  *
- * Auth surface (preserved verbatim from pre-migration):
- *   requireAuthenticatedUserId
- *     → params validated by runner (`id`, `stepKey`)
+ * Auth surface:
+ *   params validated by runner (`id`, `stepKey`)
  *     → body validated by contract
+ *     → tenantScope `{ in: 'body' }`: runner reconciles `body.communityId`
+ *       with the `x-community-id` header and injects `communityId`
+ *     → requireAuthenticatedUserId
  *     → assertNotDemoGrace
  *     → requireCommunityMembership
  *     → isAdminRole → ForbiddenError (was inline 403 `{ error: 'Forbidden' }`)
+ *
+ * Delta from the tenantScope declaration: a header/body mismatch is 404, and
+ * is returned before the 401 (runner resolves before the handler runs).
  *
  * Response: loose `z.unknown()` — checklist rows carry `Date` fields.
  *
@@ -38,4 +43,5 @@ export const updateMoveChecklistStepContract = defineRoute({
   },
   response: z.unknown(),
   permission: { resource: 'move_checklists', action: 'update' },
+  tenantScope: { in: 'body' },
 });
