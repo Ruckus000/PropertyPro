@@ -9,7 +9,7 @@
  * (payments/fee-policy) for the dual-contract shape; mirrors drain #11
  * (polls/[id]/my-vote) for the params+query plumbing.
  *
- * Authorization invariants (preserved verbatim from pre-migration):
+ * Authorization chain (current; see "Later change" below for what moved):
  *   GET  — param/query Zod + tenantScope resolution (runner)
  *          → `requireAuthenticatedUserId`
  *          → `requireCommunityMembership` → `isAdminRole` → `getMoveChecklist`

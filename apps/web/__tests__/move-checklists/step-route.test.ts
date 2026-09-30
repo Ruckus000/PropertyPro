@@ -113,4 +113,22 @@ describe('PATCH /api/v1/move-checklists/[id]/steps/[stepKey] — x-community-id 
     expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
     expect(updateChecklistStepMock).not.toHaveBeenCalled();
   });
+
+  // tenantScope is resolved by the runner BEFORE the handler, so a mismatched
+  // header answers 404 even when the caller is unauthenticated (the accepted
+  // delta shared with every runner-scoped route, e.g. meetings #1224).
+  it('answers a header mismatch with 404 before the 401 auth check', async () => {
+    const { UnauthorizedError } = await import('../../src/lib/api/errors');
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+    const res = await PATCH(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists/1/steps/upload_lease', {
+        method: 'PATCH',
+        headers: { 'x-community-id': '99' },
+        body: JSON.stringify({ communityId: 42, completed: true }),
+      }),
+      { params: Promise.resolve({ id: '1', stepKey: 'upload_lease' }) },
+    );
+    expect(res.status).toBe(404);
+    expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
+  });
 });

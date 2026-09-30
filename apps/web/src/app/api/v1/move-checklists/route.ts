@@ -44,6 +44,9 @@ export const GET = withErrorHandler(
     const { communityId: explicitCommunityId, ...filters } = parseResult.data;
     // Cross-check against the middleware `x-community-id` header AFTER auth, so
     // the contract keeps its auth-first ordering (see contract.ts docblock).
+    // NB: guard:tenant-scope counts per FILE, and this file's POST contract
+    // declares tenantScope, so this hand-resolved GET is invisible to that
+    // census — keep this call if the GET is ever reworked.
     const communityId = resolveEffectiveCommunityId(req, explicitCommunityId);
     const membership = await requireCommunityMembership(communityId, userId);
     if (!isAdminRole(membership.role)) {
