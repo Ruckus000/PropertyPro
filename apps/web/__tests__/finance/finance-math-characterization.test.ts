@@ -1175,6 +1175,19 @@ describe('6. statements', () => {
       expect(statement.truncated).toBe(true);
     });
 
+    it('a cut across sources is a stable merge: a same-date rent row behind 200 assessments drops out', async () => {
+      // ids come from two tables, so no id tiebreak is meaningful across them;
+      // same-date ties keep assessments before rent, then the list is cut.
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
+        lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, [rent({ id: 9999, dueDate: '2026-03-01' })]);
+      const statement = await buildUnitStatement(11, 88);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.lineItems.some((row) => row.id === 9999)).toBe(false);
+      expect(statement.truncated).toBe(true);
+      expect(statement.summary.outstandingCount).toBe(201); // still counted
+    });
+
     it('EXACTLY 200 outstanding items is complete: not truncated, not reported', async () => {
       seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
         lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));

@@ -383,6 +383,35 @@ describeDb('Payments statement — staff community mode', () => {
       status: 'paid', // history outside the window: neither listed nor owed
       lateFeeCents: 0,
     });
+    // Soft-deleted: must count nowhere (the scoped client adds deleted_at IS NULL).
+    const [deletedItem] = await scopedA.insert(kit.dbModule.assessmentLineItems, {
+      assessmentId: null,
+      unitId: communityAUnitAId,
+      amountCents: 777700,
+      dueDate: '2025-01-01',
+      status: 'overdue',
+      lateFeeCents: 0,
+    });
+    await kit.db
+      .update(kit.dbModule.assessmentLineItems)
+      .set({ deletedAt: new Date() })
+      .where(eq(kit.dbModule.assessmentLineItems.id, readNumberField(deletedItem!, 'id')));
+    // Rent: partially_paid is outstanding and counts its amount (no late fee).
+    const [lease] = await scopedA.insert(kit.dbModule.leases, {
+      unitId: communityAUnitAId,
+      residentId: singleUnitOwnerId,
+      startDate: '2019-01-01',
+      status: 'active',
+    });
+    await scopedA.insert(kit.dbModule.rentObligations, {
+      leaseId: readNumberField(lease!, 'id'),
+      unitId: communityAUnitAId,
+      periodStart: '2020-01-01',
+      periodEnd: '2020-01-31',
+      dueDate: '2020-01-01',
+      amountCents: 20000,
+      status: 'partially_paid',
+    });
     setActor(kit, 'actorA');
 
     const unitResponse = await route.GET(
@@ -403,11 +432,12 @@ describeDb('Payments statement — staff community mode', () => {
       };
     }>(unitResponse);
     expect(unitBody.data.statement.summary).toEqual({
-      totalDueCents: 10000 + 10700 + 10000,
+      totalDueCents: 10000 + 10700 + 10000 + 20000,
       overdueCount: 1,
-      outstandingCount: 3,
+      outstandingCount: 4,
     });
     expect(unitBody.data.statement.lineItems.map((i) => i.dueDate)).toEqual([
+      '2020-01-01',
       '2024-01-01',
       '2026-03-01',
       '2099-01-01',
@@ -423,9 +453,9 @@ describeDb('Payments statement — staff community mode', () => {
       data: { statement: { summary: { totalDueCents: number; outstandingCount: number } } };
     }>(communityResponse);
     expect(communityBody.data.statement.summary).toEqual({
-      totalDueCents: 10000 + 10700 + 10000 + 10000,
+      totalDueCents: 10000 + 10700 + 10000 + 10000 + 20000,
       overdueCount: 1,
-      outstandingCount: 4,
+      outstandingCount: 5,
     });
   });
 });
