@@ -195,6 +195,22 @@ export function useDocumentsInvalidator(communityId: number) {
 }
 
 /**
+ * After a document's FILE is replaced. The id did not change, so the cached
+ * signed URL for it (keyed by id, outside the `documents` prefix) still points
+ * at the old object and would keep previewing it; both caches go.
+ */
+export function useDocumentFileInvalidator(communityId: number) {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (documentId: number) => {
+      void queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
+      void queryClient.invalidateQueries({ queryKey: documentDownloadKey(communityId, documentId) });
+    },
+    [queryClient, communityId],
+  );
+}
+
+/**
  * Put a document on the association's public site, or take it off.
  *
  * `redactionAttested` is required by the server when the document's category

@@ -105,9 +105,21 @@ async function rejectInvalidUpload(context: InvalidUploadContext): Promise<never
   });
 }
 
-export async function createUploadedDocument(
-  input: CreateUploadedDocumentInput,
-): Promise<DocumentMutationResult> {
+/**
+ * What storage actually holds at a client-supplied path, checked.
+ *
+ * Shared by the create path and the replace-file path so both refuse the same
+ * things for the same reasons: a size that disagrees with what the client
+ * declared, and bytes whose magic number is not a supported type. The client's
+ * `fileSize` and `mimeType` are claims; the returned values are measurements.
+ */
+export async function readValidatedUpload(input: {
+  userId: string;
+  communityId: number;
+  filePath: string;
+  fileName: string;
+  fileSize: number;
+}): Promise<{ byteLength: number; mime: string }> {
   const storageBytes = await downloadStorageBytes(input.filePath);
   if (storageBytes.byteLength !== input.fileSize) {
     await rejectInvalidUpload({
@@ -147,17 +159,23 @@ export async function createUploadedDocument(
   if (!detectedType) {
     throw new ValidationError('Failed to detect uploaded file type');
   }
+  return { byteLength: storageBytes.byteLength, mime: detectedType.mime };
+}
 
+export async function createUploadedDocument(
+  input: CreateUploadedDocumentInput,
+): Promise<DocumentMutationResult> {
+  const upload = await readValidatedUpload(input);
   const scoped = createScopedClient(input.communityId);
-  const isPdf = detectedType.mime.toLowerCase().includes('pdf');
+  const isPdf = upload.mime.toLowerCase().includes('pdf');
   const insertedRows = await scoped.insert(documents, {
     title: input.title,
     description: input.description ?? null,
     categoryId: input.categoryId ?? null,
     filePath: input.filePath,
     fileName: input.fileName,
-    fileSize: storageBytes.byteLength,
-    mimeType: detectedType.mime,
+    fileSize: upload.byteLength,
+    mimeType: upload.mime,
     sourceType: input.sourceType,
     uploadedBy: input.userId,
     extractionStatus: isPdf ? 'pending' : 'not_applicable',
@@ -179,8 +197,8 @@ export async function createUploadedDocument(
       categoryId: input.categoryId ?? null,
       filePath: input.filePath,
       fileName: input.fileName,
-      fileSize: storageBytes.byteLength,
-      mimeType: detectedType.mime,
+      fileSize: upload.byteLength,
+      mimeType: upload.mime,
       sourceType: input.sourceType,
     },
   });
@@ -194,7 +212,7 @@ export async function createUploadedDocument(
           communityId,
           documentId: docId,
           path: input.filePath,
-          mimeType: detectedType.mime,
+          mimeType: upload.mime,
           bucket: 'documents',
         });
       }

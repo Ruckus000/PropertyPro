@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type DragEvent, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent, type ChangeEvent } from 'react';
 import { toast } from 'sonner';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -18,19 +18,37 @@ import {
 } from '@/components/documents/redaction-attestation-field';
 import {
   useDocumentUpload,
+  type ReplaceFileResult,
   type UploadDocumentResult,
 } from '@/hooks/use-document-upload';
+import {
+  findDuplicate,
+  indexLibraryByFileName,
+  type LibraryDocumentRef,
+} from '@/lib/documents/duplicate-uploads';
 
 interface DocumentUploadAreaProps {
   communityId: number;
   initialCategoryId?: number | null;
   onUploaded?: (result: UploadDocumentResult) => void;
+  /**
+   * The library as the screen already holds it. When given, a file whose name
+   * matches an uploaded document asks whether to replace that document's file
+   * or keep both.
+   */
+  existingDocuments?: readonly LibraryDocumentRef[];
+  /** Called after a replace, with the document whose file changed. */
+  onReplaced?: (result: ReplaceFileResult) => void;
 }
+
+type DuplicateChoice = 'replace' | 'both';
 
 export function DocumentUploadArea({
   communityId,
   initialCategoryId,
   onUploaded,
+  existingDocuments,
+  onReplaced,
 }: DocumentUploadAreaProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -40,16 +58,30 @@ export function DocumentUploadArea({
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [redactionAttested, setRedactionAttested] = useState(false);
   const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
+  const [duplicateChoice, setDuplicateChoice] = useState<DuplicateChoice>('replace');
 
-  const { uploadDocument, isUploading, progress, error } = useDocumentUpload();
+  const { uploadDocument, replaceFile, isUploading, progress, error } = useDocumentUpload();
   const { categories, isLoading, error: categoriesError } = useDocumentCategories(communityId);
 
-  const selectedCategoryName =
-    categories.find((category) => category.id === selectedCategoryId)?.name ?? null;
-  // Only ask once a category is chosen — the submit button is already blocked
-  // until then, and prompting against no category would read as a bug.
-  const requiresAttestation =
-    selectedCategoryId != null && categoryRequiresRedactionAttestation(selectedCategoryName);
+  const duplicateIndex = useMemo(
+    () => indexLibraryByFileName(existingDocuments ?? []),
+    [existingDocuments],
+  );
+  const duplicate = selectedFile ? findDuplicate(selectedFile.name, duplicateIndex) : null;
+  const replacing = duplicate != null && duplicateChoice === 'replace';
+
+  const categoryName = (id: number | null) =>
+    categories.find((category) => category.id === id)?.name ?? null;
+  // A replacement keeps the existing document's category, so the question is
+  // asked about THAT category, not the picker's. The server applies the same
+  // category rule whichever attestation it records (public-site or upload) —
+  // see `PUT /api/v1/documents/[id]/file` and `publish-document-dialog.tsx`.
+  const requiresAttestation = replacing
+    ? categoryRequiresRedactionAttestation(categoryName(duplicate.categoryId))
+    : // Only ask once a category is chosen — the submit button is already
+      // blocked until then, and prompting against no category would read as a bug.
+      selectedCategoryId != null
+      && categoryRequiresRedactionAttestation(categoryName(selectedCategoryId));
 
   useEffect(() => {
     if (initialCategoryId != null && categories.some((category) => category.id === initialCategoryId)) {
@@ -79,6 +111,7 @@ export function DocumentUploadArea({
     (file: File) => {
       setSelectedFile(file);
       setRedactionAttested(false);
+      setDuplicateChoice('replace');
       if (!title) {
         setTitle(file.name.replace(/\.[^/.]+$/, ''));
       }
@@ -110,7 +143,29 @@ export function DocumentUploadArea({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!selectedFile || !title.trim()) {
+    if (!selectedFile) {
+      return;
+    }
+
+    if (replacing) {
+      try {
+        const result = await replaceFile({
+          communityId,
+          documentId: duplicate.id,
+          file: selectedFile,
+          redactionAttested,
+        });
+        setSelectedFile(null);
+        setRedactionAttested(false);
+        toast.success(`File replaced. “${duplicate.title}” keeps its link.`);
+        onReplaced?.(result);
+      } catch {
+        // Error is handled by the hook
+      }
+      return;
+    }
+
+    if (!title.trim()) {
       return;
     }
     if (selectedCategoryId == null) {
@@ -178,38 +233,41 @@ export function DocumentUploadArea({
         />
       )}
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-content-secondary">
-          Category
-        </label>
-        <Select
-          value={selectedCategoryId != null ? String(selectedCategoryId) : undefined}
-          onValueChange={(value) => {
-            setSelectedCategoryId(Number(value));
-            setCategoryError(null);
-            // An attestation is made about a specific category; changing the
-            // category revokes it.
-            setRedactionAttested(false);
-          }}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Choose a category" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories.map((category) => (
-              <SelectItem key={category.id} value={String(category.id)}>
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="mt-2 text-xs text-content-tertiary">
-          Residents will only see documents that match their allowed category access.
-        </p>
-        {categoryError && (
-          <p className="mt-1 text-xs text-status-danger">{categoryError}</p>
-        )}
-      </div>
+      {/* A replacement keeps the existing document's category. */}
+      {!replacing && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-content-secondary">
+            Category
+          </label>
+          <Select
+            value={selectedCategoryId != null ? String(selectedCategoryId) : undefined}
+            onValueChange={(value) => {
+              setSelectedCategoryId(Number(value));
+              setCategoryError(null);
+              // An attestation is made about a specific category; changing the
+              // category revokes it.
+              setRedactionAttested(false);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Choose a category" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={String(category.id)}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-2 text-xs text-content-tertiary">
+            Residents will only see documents that match their allowed category access.
+          </p>
+          {categoryError && (
+            <p className="mt-1 text-xs text-status-danger">{categoryError}</p>
+          )}
+        </div>
+      )}
 
       <div
         onDragOver={handleDragOver}
@@ -272,7 +330,44 @@ export function DocumentUploadArea({
         )}
       </div>
 
-      {selectedFile && (
+      {selectedFile && duplicate && (
+        <fieldset className="space-y-2 rounded-md border border-status-warning-border bg-status-warning-bg p-3">
+          <legend className="sr-only">A document with this name already exists</legend>
+          <p className="text-sm text-content">
+            A document named {selectedFile.name} is already in your library: “{duplicate.title}”.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {([
+              ['replace', 'Replace the old one', 'Its title, category and link stay the same.'],
+              ['both', 'Keep both', 'Upload this as a separate document.'],
+            ] as const).map(([value, label, hint]) => (
+              <label
+                key={value}
+                className="flex flex-1 cursor-pointer items-start gap-2 rounded-md border border-edge bg-surface-card p-2 text-sm has-[:checked]:border-interactive has-[:checked]:bg-interactive-subtle"
+              >
+                <input
+                  type="radio"
+                  name="document-upload-duplicate"
+                  value={value}
+                  checked={duplicateChoice === value}
+                  onChange={() => {
+                    setDuplicateChoice(value);
+                    // The two choices ask different redaction questions.
+                    setRedactionAttested(false);
+                  }}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block font-medium text-content">{label}</span>
+                  <span className="block text-xs text-content-secondary">{hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      {selectedFile && !replacing && (
         <>
           <div>
             <label htmlFor="document-upload-title" className="mb-1 block text-sm font-medium text-content-secondary">
@@ -336,13 +431,12 @@ export function DocumentUploadArea({
         disabled={
           isUploading
           || !selectedFile
-          || !title.trim()
-          || selectedCategoryId == null
+          || (!replacing && (!title.trim() || selectedCategoryId == null))
           || (requiresAttestation && !redactionAttested)
         }
         className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isUploading ? 'Uploading...' : 'Upload Document'}
+        {isUploading ? 'Uploading...' : replacing ? 'Replace File' : 'Upload Document'}
       </button>
     </form>
   );

@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import { createScopedClient } from '../scoped-client';
 import { documents } from '../schema/documents';
 
@@ -9,12 +9,26 @@ export interface DocumentExtractionSuccessParams {
   documentId: number;
   text: string;
   status: DocumentExtractionCompletionStatus;
+  /**
+   * The storage path the text was extracted from. When given, the row is only
+   * updated while it still points at that file: replacing a document's file
+   * keeps its id, so an extraction of the OLD file that finishes after the
+   * replace would otherwise overwrite the new file's search text.
+   */
+  filePath?: string;
 }
 
 export interface DocumentExtractionFailureParams {
   communityId: number;
   documentId: number;
   errorMessage: string;
+  /** See {@link DocumentExtractionSuccessParams.filePath}. */
+  filePath?: string;
+}
+
+function extractionTarget(documentId: number, filePath: string | undefined): SQL {
+  const byId = eq(documents.id, documentId);
+  return filePath === undefined ? byId : (and(byId, eq(documents.filePath, filePath)) as SQL);
 }
 
 export async function updateDocumentExtractionSuccess(
@@ -30,7 +44,7 @@ export async function updateDocumentExtractionSuccess(
       extractionError: null,
       extractedAt: new Date(),
     },
-    eq(documents.id, params.documentId),
+    extractionTarget(params.documentId, params.filePath),
   );
 }
 
@@ -44,6 +58,6 @@ export async function updateDocumentExtractionFailure(
       extractionStatus: 'failed',
       extractionError: params.errorMessage,
     },
-    eq(documents.id, params.documentId),
+    extractionTarget(params.documentId, params.filePath),
   );
 }

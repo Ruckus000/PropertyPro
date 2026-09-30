@@ -15,8 +15,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useDeleteDocument } from '@/hooks/use-documents';
+import type { ReplaceFileResult } from '@/hooks/use-document-upload';
 import type { ChecklistRow, DocumentRow, DocumentState } from '@/lib/documents/document-state';
 import dynamic from 'next/dynamic';
+import { DocumentReplaceFile } from './document-replace-file';
 import { DocumentViewer } from './document-viewer';
 
 /**
@@ -49,6 +51,8 @@ interface DocumentInspectorProps {
   onRequestPublish: (document: DocumentRow, publishing: boolean) => void;
   onRestore: (document: DocumentRow) => void;
   onDeleted: (document: DocumentRow) => void;
+  /** The file behind this document changed; the list must refetch. */
+  onFileReplaced?: (result: ReplaceFileResult) => void;
   onClose: () => void;
 }
 
@@ -63,6 +67,7 @@ export function DocumentInspector({
   onRequestPublish,
   onRestore,
   onDeleted,
+  onFileReplaced,
   onClose,
 }: DocumentInspectorProps) {
   const [mode, setMode] = useState<InspectorMode>('viewer');
@@ -160,6 +165,15 @@ export function DocumentInspector({
             )}
             {isPublic ? 'Remove from public site' : 'Put on public site'}
           </Button>
+        )}
+        {/* Uploaded files only: an authored document's PDF is rendered from its
+            source, which has its own edit path. */}
+        {canManage && !isDeleted && onFileReplaced && document.sourceType === 'library' && (
+          <DocumentReplaceFile
+            communityId={communityId}
+            document={document}
+            onReplaced={onFileReplaced}
+          />
         )}
         {canManage && !isDeleted && (
           <Button

@@ -6,10 +6,12 @@ const {
   useDocumentCategoriesMock,
   useDocumentUploadMock,
   uploadDocumentMock,
+  replaceFileMock,
 } = vi.hoisted(() => ({
   useDocumentCategoriesMock: vi.fn(),
   useDocumentUploadMock: vi.fn(),
   uploadDocumentMock: vi.fn(),
+  replaceFileMock: vi.fn(),
 }));
 
 vi.mock('@/hooks/use-document-categories', () => ({
@@ -25,6 +27,7 @@ describe('DocumentUploadArea', () => {
     vi.clearAllMocks();
     useDocumentUploadMock.mockReturnValue({
       uploadDocument: uploadDocumentMock,
+      replaceFile: replaceFileMock,
       isUploading: false,
       progress: 0,
       error: null,
@@ -256,5 +259,105 @@ describe('DocumentUploadArea', () => {
     });
 
     expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Same-name files. A board re-uploading "2026 Annual Budget.pdf" almost
+  // always means a revised copy of the record it already posted; the default
+  // replaces that document's file so its link and compliance item survive.
+  // -------------------------------------------------------------------------
+
+  describe('a file whose name is already in the library', () => {
+    const EXISTING = [
+      { id: 71, title: '2026 Annual Budget', fileName: '2026 Annual Budget.pdf', categoryId: 1, sourceType: 'library' },
+    ];
+
+    beforeEach(() => {
+      useDocumentCategoriesMock.mockReturnValue({
+        // "Rules" is not redaction-sensitive, so no attestation is asked.
+        categories: [{ id: 1, name: 'Rules', slug: 'rules', description: null }],
+        isLoading: false,
+        error: null,
+      });
+    });
+
+    function pick(container: HTMLElement, name: string) {
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(fileInput, {
+        target: { files: [new File(['v2'], name, { type: 'application/pdf' })] },
+      });
+    }
+
+    it('defaults to replacing the existing document’s file, keeping its id', async () => {
+      replaceFileMock.mockResolvedValue({ id: 71, fileName: '2026 Annual Budget.pdf', fileSize: 2, mimeType: 'application/pdf' });
+      const onReplaced = vi.fn();
+      const { container } = render(
+        <DocumentUploadArea communityId={8} existingDocuments={EXISTING} onReplaced={onReplaced} />,
+      );
+
+      pick(container, '2026 annual budget.pdf');
+
+      expect(screen.getByText(/already in your library/)).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /Replace the old one/ })).toBeChecked();
+      // A replacement keeps the title and category, so neither is asked.
+      expect(screen.queryByPlaceholderText('Document title')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Replace File' }));
+
+      await vi.waitFor(() => expect(onReplaced).toHaveBeenCalled());
+      expect(replaceFileMock).toHaveBeenCalledWith(
+        expect.objectContaining({ communityId: 8, documentId: 71 }),
+      );
+      expect(uploadDocumentMock).not.toHaveBeenCalled();
+    });
+
+    it('uploads a separate document when the uploader chooses to keep both', async () => {
+      uploadDocumentMock.mockResolvedValue({ document: { id: 99 }, warnings: [] });
+      const { container } = render(
+        <DocumentUploadArea communityId={8} initialCategoryId={1} existingDocuments={EXISTING} />,
+      );
+
+      pick(container, '2026 Annual Budget.pdf');
+      fireEvent.click(screen.getByRole('radio', { name: /Keep both/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Upload Document' }));
+
+      await vi.waitFor(() => expect(uploadDocumentMock).toHaveBeenCalled());
+      expect(replaceFileMock).not.toHaveBeenCalled();
+    });
+
+    it('asks the redaction question by the REPLACED document’s category, not the picker’s', () => {
+      useDocumentCategoriesMock.mockReturnValue({
+        categories: [
+          { id: 1, name: 'Rules', slug: 'rules', description: null },
+          // normalizes to `lease_docs`, which is redaction-sensitive
+          { id: 4, name: 'Lease Agreements', slug: 'lease-agreements', description: null },
+        ],
+        isLoading: false,
+        error: null,
+      });
+      const { container } = render(
+        <DocumentUploadArea
+          communityId={8}
+          initialCategoryId={1}
+          existingDocuments={[{ ...EXISTING[0]!, categoryId: 4 }]}
+        />,
+      );
+
+      pick(container, '2026 Annual Budget.pdf');
+
+      expect(screen.getByRole('checkbox', { name: /Confirm redaction/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Replace File' })).toBeDisabled();
+    });
+
+    it('says nothing about duplicates for a new name', () => {
+      const { container } = render(
+        <DocumentUploadArea communityId={8} existingDocuments={EXISTING} />,
+      );
+
+      pick(container, 'Rules 2026.pdf');
+
+      expect(screen.queryByText(/already in your library/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Upload Document' })).toBeInTheDocument();
+    });
   });
 });
