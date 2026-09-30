@@ -992,32 +992,21 @@ export async function cancelReservationForCommunity(
   return result.reservation;
 }
 
-export async function listReservationsForActor(
-  communityId: number,
-  actorUserId: string,
-): Promise<AmenityReservationRecord[]> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped
-    .selectFrom<AmenityReservationRecord>(
-      amenityReservations,
-      {},
-      eq(amenityReservations.userId, actorUserId),
-    )
-    .orderBy(desc(amenityReservations.startTime));
-
-  return rows.map(mapReservationRow);
-}
-
 export interface PaginatedReservations {
   data: AmenityReservationRecord[];
   total: number;
 }
 
 /**
- * Admin-scoped community-wide reservations list. Accepts `allowedUnitIds` as
- * an explicit hook for future per-building or per-unit scoping (not used by
- * the current /api/v1/reservations admin path; residents are handled by
- * listReservationsForActor instead).
+ * Community reservations list, windowed in SQL (LIMIT/OFFSET + COUNT). Serves
+ * both branches of GET /api/v1/reservations: admins call it unfiltered;
+ * residents pass `userId` so only their own reservations are counted and
+ * paged. Order is `startTime desc, id desc` — the hard-tier doc's calendar
+ * chronology (b3-hard-tier-pagination-design-2026-05-11.md: "Keep native
+ * offset/count" for reservations) plus `id` as the deterministic tiebreaker,
+ * without which two reservations at the same start time could swap between
+ * pages. Accepts `allowedUnitIds` as an explicit hook for future per-building
+ * or per-unit scoping (not used by the route today).
  */
 export async function listReservationsForCommunity(
   communityId: number,
@@ -1027,6 +1016,8 @@ export async function listReservationsForCommunity(
     status?: AmenityReservationStatus;
     unitId?: number;
     allowedUnitIds?: number[];
+    /** Restrict to one user's reservations (the resident branch). */
+    userId?: string;
   },
 ): Promise<PaginatedReservations> {
   const scoped = createScopedClient(communityId);
@@ -1038,6 +1029,7 @@ export async function listReservationsForCommunity(
   const whereFilters = [];
   if (filters?.status) whereFilters.push(eq(amenityReservations.status, filters.status));
   if (filters?.unitId !== undefined) whereFilters.push(eq(amenityReservations.unitId, filters.unitId));
+  if (filters?.userId !== undefined) whereFilters.push(eq(amenityReservations.userId, filters.userId));
   if (filters?.allowedUnitIds) {
     if (filters.allowedUnitIds.length === 0) return { data: [], total: 0 };
     whereFilters.push(inArray(amenityReservations.unitId, filters.allowedUnitIds));
@@ -1047,7 +1039,7 @@ export async function listReservationsForCommunity(
 
   const rows = await scoped
     .selectFrom<AmenityReservationRecord>(amenityReservations, {}, additionalWhere as never)
-    .orderBy(desc(amenityReservations.startTime))
+    .orderBy(desc(amenityReservations.startTime), desc(amenityReservations.id))
     .limit(limit)
     .offset(offset);
 

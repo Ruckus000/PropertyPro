@@ -172,9 +172,6 @@
   "apps/web/src/lib/services/insurance-alert-unsubscribe-service.ts": {
     "unscoped": 1
   },
-  "apps/web/src/lib/services/lease-service.ts": {
-    "fullTableRead": 1
-  },
   "apps/web/src/lib/services/marketing-leads-service.ts": {
     "unscoped": 1
   },

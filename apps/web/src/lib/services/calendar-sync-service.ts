@@ -27,6 +27,36 @@ interface CalendarSyncTokenRow {
   lastSyncAt: Date | null;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How far back a Google sync reaches (PAG-05). Recently-held meetings stay in
+ * the pushed set so a late edit (location, end time) still propagates.
+ *
+ * The pushed set is a WINDOW, not every meeting. Today's adapter is a stub
+ * that never deletes or reconciles remote events, so nothing is lost; a real
+ * adapter must never treat this set as authoritative and delete events that
+ * fall outside it (that would erase users' older meetings).
+ */
+export const GOOGLE_SYNC_LOOKBACK_DAYS = 30;
+
+/**
+ * How far forward a Google sync reaches (PAG-05) — the same 366-day span the
+ * calendar-events route caps a single query at (`lib/calendar/date-range.ts`).
+ */
+export const GOOGLE_SYNC_LOOKAHEAD_DAYS = 366;
+
+/**
+ * The meeting window one sync pushes: `[now - 30d, now + 366d)`. This used to
+ * be every meeting the community ever held, read with no bound at all.
+ */
+export function googleSyncMeetingWindow(now: Date): { startUtc: Date; endUtcExclusive: Date } {
+  return {
+    startUtc: new Date(now.getTime() - GOOGLE_SYNC_LOOKBACK_DAYS * DAY_MS),
+    endUtcExclusive: new Date(now.getTime() + GOOGLE_SYNC_LOOKAHEAD_DAYS * DAY_MS),
+  };
+}
+
 function getCalendarCallbackUrl(): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (appUrl) {
@@ -217,7 +247,10 @@ export async function syncGoogleCalendar(
     throw new NotFoundError('Google calendar is not connected for this user');
   }
 
-  const meetingsForCalendar = await listCommunityCalendarMeetings(communityId);
+  const meetingsForCalendar = await listCommunityCalendarMeetings(
+    communityId,
+    googleSyncMeetingWindow(new Date()),
+  );
 
   const syncResult = await deterministicGoogleCalendarAdapter.syncMeetings({
     accessToken: decryptToken(existing.accessToken),

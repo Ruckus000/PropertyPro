@@ -75,7 +75,9 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
-const leaseStatusValues = ['active', 'expired', 'renewed', 'terminated'] as const;
+/** The `lease_status` enum values. The GET handler also uses this to answer
+ *  an unknown `?status=` with `[]` before it reaches SQL (PAG-04). */
+export const LEASE_STATUS_VALUES = ['active', 'expired', 'renewed', 'terminated'] as const;
 
 const getQuerySchema = z.object({
   communityId: z.coerce.number().int().positive(),
@@ -96,7 +98,7 @@ const createLeaseSchema = z.object({
     .regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal number with up to 2 decimal places')
     .nullable()
     .optional(),
-  status: z.enum(leaseStatusValues).optional(),
+  status: z.enum(LEASE_STATUS_VALUES).optional(),
   previousLeaseId: z.number().int().positive().nullable().optional(),
   notes: z.string().nullable().optional(),
   /** When true, creating a renewal: sets previousLeaseId and marks old lease as 'renewed' */
@@ -106,7 +108,7 @@ const createLeaseSchema = z.object({
 const updateLeaseSchema = z.object({
   id: z.number().int().positive(),
   communityId: z.number().int().positive(),
-  status: z.enum(leaseStatusValues).optional(),
+  status: z.enum(LEASE_STATUS_VALUES).optional(),
   endDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format')
