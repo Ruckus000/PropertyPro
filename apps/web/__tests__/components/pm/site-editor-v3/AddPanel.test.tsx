@@ -98,15 +98,24 @@ function renderPanel({
   hasPolishBlocks = true,
   onSelect,
   pageId = HOME_PAGE_ID,
+  insertBefore = null,
+  onInsertConsumed = () => {},
 }: {
   hasPolishBlocks?: boolean;
   onSelect?: (id: number) => void;
   pageId?: number | null;
+  insertBefore?: number | null;
+  onInsertConsumed?: () => void;
 } = {}) {
   return render(
     <SelectedSitePageProvider pageId={pageId}>
       <SiteEditorProvider communityId={7} blocks={state.blocks} onSelect={onSelect}>
-        <AddPanel communityId={7} hasPolishBlocks={hasPolishBlocks} />
+        <AddPanel
+          communityId={7}
+          hasPolishBlocks={hasPolishBlocks}
+          insertBefore={insertBefore}
+          onInsertConsumed={onInsertConsumed}
+        />
         <Probe />
       </SiteEditorProvider>
     </SelectedSitePageProvider>,
@@ -257,7 +266,7 @@ describe('AddPanel', () => {
       rerender(
         <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
           <SiteEditorProvider communityId={7} blocks={withNew} onSelect={onSelect}>
-            <AddPanel communityId={7} hasPolishBlocks />
+            <AddPanel communityId={7} hasPolishBlocks insertBefore={null} onInsertConsumed={() => {}} />
             <Probe />
           </SiteEditorProvider>
         </SelectedSitePageProvider>,
@@ -407,33 +416,42 @@ describe('AddPanel — "Add section here" (v4)', () => {
   });
 
   it('names the section a new one will go above', () => {
-    renderPanel();
-    act(() => api.setInsertBefore(3));
+    renderPanel({ insertBefore: 3 });
     expect(screen.getByTestId('add-position')).toHaveTextContent(
       'It goes above “FAQ”. You can move it later.',
     );
   });
 
-  it('hands the new slot to the placement step after the write succeeds', async () => {
-    renderPanel();
-    act(() => api.setInsertBefore(3));
+  it('places the new section above the target once it arrives, then consumes the target', async () => {
+    const onInsertConsumed = vi.fn();
+    const { rerender } = renderPanel({ insertBefore: 3, onInsertConsumed });
     await userEvent.click(screen.getByTestId('add-section-text'));
     expect(upsertMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ blockOrder: 4 }));
-    // Consumed, so the next add appends unless the PM picks a position again.
-    expect(api.insertBefore).toBeNull();
+    expect(onInsertConsumed).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rerender(
+        <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+          <SiteEditorProvider
+            communityId={7}
+            blocks={[...state.blocks, block({ id: 70, blockType: 'text', blockOrder: 4 })]}
+          >
+            <Probe />
+          </SiteEditorProvider>
+        </SelectedSitePageProvider>,
+      );
+    });
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 70, toOrder: 3 });
   });
 
   it('still places the section when the panel closes before the write lands', async () => {
-    // The review finding: the target used to be read when the write RESOLVED,
-    // by which time closing the panel had already cleared it.
     let resolveWrite: () => void = () => {};
     upsertMutateAsync.mockImplementationOnce(
       () => new Promise<void>((resolve) => {
         resolveWrite = resolve;
       }),
     );
-    const { rerender } = renderPanel();
-    act(() => api.setInsertBefore(3));
+    const { rerender } = renderPanel({ insertBefore: 3 });
     await userEvent.click(screen.getByTestId('add-section-text'));
 
     // The PM closes the panel while the write is still in flight.
@@ -445,36 +463,27 @@ describe('AddPanel — "Add section here" (v4)', () => {
       </SelectedSitePageProvider>
     );
     rerender(withoutPanel(state.blocks));
-    expect(api.insertBefore).toBeNull();
-
     await act(async () => {
       resolveWrite();
     });
     await act(async () => {
       rerender(withoutPanel([...state.blocks, block({ id: 70, blockType: 'text', blockOrder: 4 })]));
     });
-
     expect(reorderMutate).toHaveBeenCalledWith({ blockId: 70, toOrder: 3 });
   });
 
   it('keeps the target when the write fails, so a retry still lands there', async () => {
     upsertMutateAsync.mockRejectedValueOnce(new Error('nope'));
-    renderPanel();
-    act(() => api.setInsertBefore(3));
+    const onInsertConsumed = vi.fn();
+    renderPanel({ insertBefore: 3, onInsertConsumed });
     await userEvent.click(screen.getByTestId('add-section-text'));
-    expect(api.insertBefore).toBe(3);
+    expect(onInsertConsumed).not.toHaveBeenCalled();
   });
 
-  it('drops the target when the panel closes', () => {
-    const { rerender } = renderPanel();
-    act(() => api.setInsertBefore(3));
-    rerender(
-      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
-        <SiteEditorProvider communityId={7} blocks={state.blocks}>
-          <Probe />
-        </SiteEditorProvider>
-      </SelectedSitePageProvider>,
-    );
-    expect(api.insertBefore).toBeNull();
+  it('does not consume the target on unmount — StrictMode remounts would lose it', () => {
+    const onInsertConsumed = vi.fn();
+    const { unmount } = renderPanel({ insertBefore: 3, onInsertConsumed });
+    unmount();
+    expect(onInsertConsumed).not.toHaveBeenCalled();
   });
 });

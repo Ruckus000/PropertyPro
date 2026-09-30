@@ -721,6 +721,39 @@ export function EditorRoot({
   // than read from context because `setActiveTool` lives HERE — the provider's
   // parent — and only `useSiteEditor` is out of reach from this component.
   const handleGoToAdd = useCallback(() => setActiveTool('add'), []);
+
+  /*
+   * v4 "Add section here": which section the next add goes above.
+   *
+   * Owned HERE, not by the Add panel or the editor context. The first version
+   * lived in the context and the panel cleared it in an unmount cleanup, which
+   * React StrictMode's mount → cleanup → mount fired the moment the panel
+   * opened — so in the dev editor every "Add section here" appended. Found in
+   * the browser; the jsdom tests do not run StrictMode.
+   *
+   * Keyed on the page it was picked on, so a page switch drops it without an
+   * effect. Cleared when the PM picks ANY tool from the rail (including Add
+   * itself), because a rail click says nothing about position.
+   */
+  const [addTarget, setAddTarget] = useState<{ pageId: number | null; blockId: number } | null>(
+    null,
+  );
+  const insertBefore =
+    addTarget !== null && addTarget.pageId === effectivePageId ? addTarget.blockId : null;
+  const handleInsertAt = useCallback(
+    (beforeBlockId: number | null) => {
+      setAddTarget(
+        beforeBlockId === null ? null : { pageId: effectivePageId, blockId: beforeBlockId },
+      );
+      setActiveTool('add');
+    },
+    [effectivePageId],
+  );
+  const handleToolChange = useCallback((tool: EditorToolId | null) => {
+    setAddTarget(null);
+    setActiveTool(tool);
+  }, []);
+  const handleInsertConsumed = useCallback(() => setAddTarget(null), []);
   // The publish sheet's route out of a page-set problem — a duplicate address
   // or a missing home page has no section slot, so "Fix this" cannot reach it.
   const handleGoToPages = useCallback(() => setActiveTool('pages'), []);
@@ -786,7 +819,7 @@ export function EditorRoot({
         hasPublishedSite={hasPublishedSite}
         initialNotice={initialNotice}
         activeTool={activeTool}
-        onActiveToolChange={setActiveTool}
+        onActiveToolChange={handleToolChange}
         onPreview={handlePreview}
         onPublish={handlePublish}
         // Openable when there is something to publish — and also when the diff
@@ -872,7 +905,14 @@ export function EditorRoot({
           }
           if (tool === 'sections') return <SectionList onAddSection={handleGoToAdd} />;
           if (tool === 'add') {
-            return <AddPanel communityId={communityId} hasPolishBlocks={hasPolishBlocks} />;
+            return (
+              <AddPanel
+                communityId={communityId}
+                hasPolishBlocks={hasPolishBlocks}
+                insertBefore={insertBefore}
+                onInsertConsumed={handleInsertConsumed}
+              />
+            );
           }
           if (tool === 'site') {
             return (
@@ -951,7 +991,7 @@ export function EditorRoot({
           <Canvas
             communityId={communityId}
             context={canvasContext}
-            onAddSection={handleGoToAdd}
+            onAddSection={handleInsertAt}
           />
         ) : (
           <div className="mx-auto max-w-[1000px] px-5 py-4">

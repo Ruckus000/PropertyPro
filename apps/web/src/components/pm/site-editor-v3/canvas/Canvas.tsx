@@ -21,11 +21,12 @@ export interface CanvasProps {
   communityId: number;
   context: CanvasContext;
   /**
-   * Switches the shell to the Add tab. Optional so the canvas still renders
-   * standalone, but without it the empty state tells the PM to add a section
-   * and offers no way to do so.
+   * Opens the Add tool, with the section a new one should go above — or null
+   * to append (the end button and the empty state). Optional so the canvas
+   * still renders standalone, but without it the empty state tells the PM to
+   * add a section and offers no way to do so.
    */
-  onAddSection?: () => void;
+  onAddSection?: (beforeBlockId: number | null) => void;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
 }
@@ -67,15 +68,14 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
   // One timestamp for the whole render pass — otherwise two blocks with the
   // same window could disagree about where the cutoff falls.
   const renderedAt = useMemo(() => now ?? Date.now(), [now, blocks]);
-  const { setInsertBefore, duplicateError } = useSiteEditor();
+  const { duplicateError } = useSiteEditor();
   // Stable across renders so the memoised section list below survives
   // selection changes. `onAddSection` is the shell's tool switch.
   const insertAt = useCallback(
     (beforeBlockId: number | null) => {
-      setInsertBefore(beforeBlockId);
-      onAddSection?.();
+      onAddSection?.(beforeBlockId);
     },
-    [onAddSection, setInsertBefore],
+    [onAddSection],
   );
 
   // Filter BEFORE the empty check. The PM blocks endpoint returns tombstone
@@ -105,11 +105,13 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
   // inspector and defeat that memo.
   const sections = useMemo(
     () =>
-      ordered.map((block) => (
+      ordered.map((block, index) => (
         <Fragment key={block.id}>
-          {/* Above every section except the hero, which is pinned to the top —
-              nothing can go above it. Only offered when adding is wired up. */}
-          {onAddSection && block.blockType !== 'hero' ? (
+          {/* BETWEEN sections only, as the design has it. Not above the first
+              section: there the pill straddles the frame's top edge and the
+              frame's overflow-hidden clips it in half (seen in the browser on a
+              page with no hero). Not above the hero either, which is pinned. */}
+          {onAddSection && index > 0 && block.blockType !== 'hero' ? (
             <SectionInserter
               beforeLabel={sectionLabel(block.blockType)}
               onInsert={() => insertAt(block.id)}

@@ -204,7 +204,19 @@ export function EditorShell({
                   <X className="h-[18px] w-[18px]" aria-hidden="true" />
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
+              {/*
+               * `relative` is load-bearing. Panels announce through `sr-only`
+               * live regions, which are `position: absolute`; with no positioned
+               * ancestor they anchor to the PAGE at their static position — the
+               * bottom of a long panel list — and stretch the document past the
+               * viewport. The page then scrolls on the next announcement or focus
+               * move and carries the top bar out of view. Seen in the browser:
+               * document 1270px in a 768px window after an Add.
+               */}
+              <div
+                data-testid="tool-panel-scroller"
+                className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-5"
+              >
                 {renderToolPanel(activeTool)}
               </div>
             </aside>
@@ -213,7 +225,13 @@ export function EditorShell({
           </>
         ) : null}
 
-        <div className="min-w-0 flex-1 overflow-y-auto bg-surface-page">{children}</div>
+        {/* `relative` for the same reason as the tool panel's scroller. */}
+        <div
+          data-testid="canvas-scroller"
+          className="relative min-w-0 flex-1 overflow-y-auto bg-surface-page"
+        >
+          {children}
+        </div>
 
         {inspector}
       </div>

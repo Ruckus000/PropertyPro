@@ -120,16 +120,6 @@ export interface SiteEditorContextValue {
   isDuplicating: boolean;
 
   /**
-   * Where the next added section should land: the id of the section it goes
-   * ABOVE, or null for the end of the page (v4 "Add section here").
-   *
-   * Set by the canvas inserters, read by the Add panel. It lives in this
-   * provider, which is keyed on the selected page, so a page switch discards a
-   * stale target along with the selection.
-   */
-  insertBefore: number | null;
-  setInsertBefore: (blockId: number | null) => void;
-  /**
    * Move a section that has just been WRITTEN at `slot` into the insert target,
    * once the refetch delivers it — the Add panel's half of "Add section here".
    *
@@ -138,10 +128,9 @@ export interface SiteEditorContextValue {
    * refetch. A no-op when there is no insert target (append is where the write
    * already put it) or the target has left the page.
    *
-   * `aboveBlockId` is passed IN rather than read from `insertBefore` here: the
-   * caller must capture it when the write STARTS. Reading it on resolution lost
-   * the target whenever the PM closed the Add panel mid-write, because closing
-   * the panel clears `insertBefore`.
+   * `aboveBlockId` is passed IN, captured by the caller when the write STARTS.
+   * Reading a live target on resolution lost it whenever the PM closed the Add
+   * panel mid-write.
    */
   placeAdded: (slot: number, blockType: string, aboveBlockId: number | null) => void;
 }
@@ -268,7 +257,6 @@ export function SiteEditorProvider({
     (placement: PendingPlacement) => setPendingPlacements((queue) => [...queue, placement]),
     [],
   );
-  const [insertBefore, setInsertBefore] = useState<number | null>(null);
   /*
    * The re-entrancy guard, kept in BOTH a ref and state on purpose.
    *
@@ -572,8 +560,6 @@ export function SiteEditorProvider({
       duplicate,
       duplicateError,
       isDuplicating,
-      insertBefore,
-      setInsertBefore,
       placeAdded,
     }),
     [
@@ -592,7 +578,6 @@ export function SiteEditorProvider({
       duplicate,
       duplicateError,
       isDuplicating,
-      insertBefore,
       placeAdded,
     ],
   );

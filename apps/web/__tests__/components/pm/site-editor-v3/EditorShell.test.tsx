@@ -297,3 +297,16 @@ describe('EditorShell — publish affordance', () => {
     expect(screen.queryByTestId('publish-change-count')).not.toBeInTheDocument();
   });
 });
+
+describe('EditorShell — scroll containers contain their sr-only regions', () => {
+  // jsdom has no layout, so this pins the class that does the work. Without
+  // `relative`, an `sr-only` (position: absolute) live region inside a panel
+  // anchors to the page and stretches the document past the viewport.
+  it('positions the tool panel and canvas scrollers', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByTestId('tool-panel-scroller')).toHaveClass('relative', 'overflow-y-auto');
+    expect(screen.getByTestId('canvas-scroller')).toHaveClass('relative', 'overflow-y-auto');
+  });
+});

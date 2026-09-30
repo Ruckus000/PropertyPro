@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { PlanBadge } from '@propertypro/ui';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,15 @@ export interface AddPanelProps {
    * the point. The server gate is unconditional either way.
    */
   hasPolishBlocks: boolean;
+  /**
+   * v4 "Add section here": the id of the section a new one goes ABOVE, or null
+   * to append. Owned by `EditorRoot`, not by this panel or the editor context —
+   * a panel that cleared it in an unmount cleanup lost it on StrictMode's
+   * mount → cleanup → mount, so the dev editor always appended.
+   */
+  insertBefore: number | null;
+  /** Called once an add has used `insertBefore`, so the next add appends. */
+  onInsertConsumed: () => void;
 }
 
 /**
@@ -89,17 +98,16 @@ export interface AddPanelProps {
  * selected" are the same value by coincidence, not by contract — and the cost of
  * that coincidence breaking is a section written onto the live home page.
  */
-export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
+export function AddPanel({
+  communityId,
+  hasPolishBlocks,
+  insertBefore,
+  onInsertConsumed,
+}: AddPanelProps) {
   const { data: blocks, isPending, isError } = useContentBlocks(communityId);
   const targetPageId = useSelectedSitePage();
   const upsert = useUpsertContentBlock(communityId);
-  const { selectSlot, placeAdded, insertBefore, setInsertBefore, movableSections } =
-    useSiteEditor();
-  // An "Add section here" target belongs to one visit to this panel. Without
-  // this, closing the panel and later opening Add from the rail would still
-  // insert above the section picked earlier, while the rail click said nothing
-  // about position.
-  useEffect(() => () => setInsertBefore(null), [setInsertBefore]);
+  const { selectSlot, placeAdded, movableSections } = useSiteEditor();
   const insertTarget =
     insertBefore === null ? undefined : movableSections.find((b) => b.id === insertBefore);
 
@@ -135,11 +143,11 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
       placeAdded(blockOrder, entry.blockType, aboveBlockId);
       // Consumed: the next add from this panel appends unless the PM picks a
       // position again.
-      setInsertBefore(null);
+      onInsertConsumed();
       setImageEntry(null);
       setAnnouncement(`${entry.label} section added. Its settings are open.`);
     },
-    [placeAdded, selectSlot, setInsertBefore],
+    [onInsertConsumed, placeAdded, selectSlot],
   );
 
   const add = async (entry: AddCatalogEntry) => {

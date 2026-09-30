@@ -28,7 +28,6 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 // Stubbed here so these tests stay about the render path, not selection.
 const publishedState = vi.hoisted(() => ({ value: [] as unknown[] }));
 const editorMocks = vi.hoisted(() => ({
-  setInsertBefore: vi.fn(),
   toggleHidden: vi.fn(),
   duplicate: vi.fn(),
 }));
@@ -39,7 +38,6 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
     move: vi.fn(),
     canMove: () => true,
     isMoving: false,
-    setInsertBefore: editorMocks.setInsertBefore,
     toggleHidden: editorMocks.toggleHidden,
     duplicate: editorMocks.duplicate,
     isDuplicating: false,
@@ -163,9 +161,8 @@ describe('Canvas — states', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Add a section' }));
-    expect(onAddSection).toHaveBeenCalled();
-    // The empty page's button appends: it must not inherit a stale target.
-    expect(editorMocks.setInsertBefore).toHaveBeenCalledWith(null);
+    // The empty page's button appends: no target.
+    expect(onAddSection).toHaveBeenCalledWith(null);
   });
 });
 
@@ -198,7 +195,7 @@ describe('Canvas — v4 insert, hide', () => {
     return onAddSection;
   }
 
-  it('offers "Add section here" above every section except the hero', () => {
+  it('offers "Add section here" only between sections, never above the hero', () => {
     blocksState.value = {
       data: [heroRow, textRow(2, 2), textRow(3, 3)],
       isPending: false,
@@ -206,7 +203,8 @@ describe('Canvas — v4 insert, hide', () => {
       error: null,
     };
     renderWithAdd();
-    // Two text sections → two inserters. None above the hero, which is pinned.
+    // hero, text 2, text 3 → two seams (hero|2, 2|3). None above the hero,
+    // which is pinned, and none above the first section of a page.
     expect(screen.getAllByRole('button', { name: /^Add a section above/ })).toHaveLength(2);
   });
 
@@ -219,7 +217,8 @@ describe('Canvas — v4 insert, hide', () => {
     };
     const onAddSection = renderWithAdd();
     fireEvent.click(screen.getAllByRole('button', { name: /^Add a section above/ })[1]!);
-    expect(editorMocks.setInsertBefore).toHaveBeenCalledWith(3);
+    // Seams: hero|2 and 2|3. The second targets 3.
+    expect(onAddSection).toHaveBeenCalledWith(3);
     expect(onAddSection).toHaveBeenCalledTimes(1);
   });
 
@@ -232,8 +231,21 @@ describe('Canvas — v4 insert, hide', () => {
     };
     const onAddSection = renderWithAdd();
     fireEvent.click(screen.getByRole('button', { name: 'Add a section to the end of this page' }));
-    expect(editorMocks.setInsertBefore).toHaveBeenCalledWith(null);
+    expect(onAddSection).toHaveBeenCalledWith(null);
     expect(onAddSection).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no inserter above the first section on a page with no hero', () => {
+    // Found in the browser: the pill sat on the frame's top edge and was clipped.
+    blocksState.value = {
+      data: [textRow(2, 2), textRow(3, 3)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderWithAdd();
+    const inserters = screen.getAllByRole('button', { name: /^Add a section above/ });
+    expect(inserters).toHaveLength(1);
   });
 
   it('offers no inserters when adding is not wired up', () => {
