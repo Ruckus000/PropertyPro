@@ -8,6 +8,7 @@ import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blo
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
+import { sectionLabel } from '../section-label';
 import { ADD_CATALOG, nextContentSlot, type AddCatalogEntry } from './add-catalog';
 
 // Only mounted once the PM picks Image or Gallery, which keeps the upload
@@ -26,6 +27,15 @@ export interface AddPanelProps {
    * the point. The server gate is unconditional either way.
    */
   hasPolishBlocks: boolean;
+  /**
+   * v4 "Add section here": the id of the section a new one goes ABOVE, or null
+   * to append. Owned by `EditorRoot`, not by this panel or the editor context —
+   * a panel that cleared it in an unmount cleanup lost it on StrictMode's
+   * mount → cleanup → mount, so the dev editor always appended.
+   */
+  insertBefore: number | null;
+  /** Called once an add has used `insertBefore`, so the next add appends. */
+  onInsertConsumed: () => void;
 }
 
 /**
@@ -88,13 +98,23 @@ export interface AddPanelProps {
  * selected" are the same value by coincidence, not by contract — and the cost of
  * that coincidence breaking is a section written onto the live home page.
  */
-export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
+export function AddPanel({
+  communityId,
+  hasPolishBlocks,
+  insertBefore,
+  onInsertConsumed,
+}: AddPanelProps) {
   const { data: blocks, isPending, isError } = useContentBlocks(communityId);
   const targetPageId = useSelectedSitePage();
   const upsert = useUpsertContentBlock(communityId);
-  const { selectSlot } = useSiteEditor();
+  const { selectSlot, placeAdded, movableSections } = useSiteEditor();
+  const insertTarget =
+    insertBefore === null ? undefined : movableSections.find((b) => b.id === insertBefore);
 
   const [imageEntry, setImageEntry] = useState<AddCatalogEntry | null>(null);
+  // The insert target captured when the image flow OPENED — the flow's write
+  // resolves long after, and the live `insertBefore` may be gone by then.
+  const [imageTarget, setImageTarget] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
@@ -110,18 +130,30 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
     blocks === undefined ? null : nextContentSlot(blocksForPage(blocks, targetPageId));
   const isFull = blocks !== undefined && slot === null;
 
+  /**
+   * `aboveBlockId` is the insert target as it stood when the write STARTED.
+   * It is captured by the caller and passed through rather than read here:
+   * closing the panel mid-write unmounts this component and clears the live
+   * `insertBefore`, and reading that on resolution silently appended a section
+   * the PM had asked for above another.
+   */
   const handleAdded = useCallback(
-    (blockOrder: number, entry: AddCatalogEntry) => {
+    (blockOrder: number, entry: AddCatalogEntry, aboveBlockId: number | null) => {
       selectSlot(blockOrder, entry.blockType);
+      placeAdded(blockOrder, entry.blockType, aboveBlockId);
+      // Consumed: the next add from this panel appends unless the PM picks a
+      // position again.
+      onInsertConsumed();
       setImageEntry(null);
       setAnnouncement(`${entry.label} section added. Its settings are open.`);
     },
-    [selectSlot],
+    [onInsertConsumed, placeAdded, selectSlot],
   );
 
   const add = async (entry: AddCatalogEntry) => {
     if (slot === null || entry.seed === null) return;
     setError(null);
+    const aboveBlockId = insertTarget?.id ?? null;
     try {
       await upsert.mutateAsync({
         blockType: entry.blockType,
@@ -129,7 +161,7 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
         content: entry.seed,
         pageId: targetPageId,
       });
-      handleAdded(slot, entry);
+      handleAdded(slot, entry, aboveBlockId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'We could not add that section.');
     }
@@ -144,7 +176,7 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
           blockOrder={slot}
           pageId={targetPageId}
           onCancel={() => setImageEntry(null)}
-          onAdded={handleAdded}
+          onAdded={(blockOrder, added) => handleAdded(blockOrder, added, imageTarget)}
         />
       </div>
     );
@@ -157,9 +189,10 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
 
   return (
     <div className="space-y-5" data-testid="tool-panel-add">
-      <p className="text-sm text-content-secondary">
-        Pick a section to add to the bottom of your page. You can reorder it afterwards
-        in Sections.
+      <p className="text-sm text-content-secondary" data-testid="add-position">
+        {insertTarget
+          ? `It goes above “${sectionLabel(insertTarget.blockType)}”. You can move it later.`
+          : 'It goes at the bottom of this page. You can move it later.'}
       </p>
 
       {isError && (
@@ -202,9 +235,14 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
                     ? `Upgrade to Professional to add ${entry.label} sections`
                     : undefined
                 }
-                onClick={() =>
-                  entry.needsImage ? setImageEntry(entry) : void add(entry)
-                }
+                onClick={() => {
+                  if (entry.needsImage) {
+                    setImageTarget(insertTarget?.id ?? null);
+                    setImageEntry(entry);
+                  } else {
+                    void add(entry);
+                  }
+                }}
                 className={cn(
                   'flex w-full items-start gap-3 rounded-md border border-edge p-3 text-left',
                   'hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2',

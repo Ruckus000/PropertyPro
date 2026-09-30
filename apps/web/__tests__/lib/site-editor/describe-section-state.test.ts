@@ -6,7 +6,10 @@
  * its slot, not whether its page is published.
  */
 import { describe, it, expect } from 'vitest';
-import { describeSectionRemoval } from '@/lib/site-editor/describe-section-state';
+import {
+  describeHiddenSection,
+  describeSectionRemoval,
+} from '@/lib/site-editor/describe-section-state';
 
 describe('describeSectionRemoval', () => {
   it('says the live site changes at the next publish, when the section IS published', () => {
@@ -53,5 +56,23 @@ describe('describeSectionRemoval', () => {
         expect(hasPublished).toBe(true);
       }
     }
+  });
+});
+
+describe('describeHiddenSection', () => {
+  it('claims the section is hidden from visitors only when the LIVE row is hidden', () => {
+    expect(describeHiddenSection('hidden').text).toBe('is hidden from visitors.');
+    expect(describeHiddenSection('shown').text).not.toMatch(/hidden from visitors/);
+    expect(describeHiddenSection('none').text).not.toMatch(/hidden from visitors/);
+  });
+
+  it('flags the one state in which the section is still on the public site', () => {
+    expect(describeHiddenSection('shown').claimsPublic).toBe(true);
+    expect(describeHiddenSection('hidden').claimsPublic).toBe(false);
+    expect(describeHiddenSection('none').claimsPublic).toBe(false);
+  });
+
+  it('tells the PM a live section stays up until they publish', () => {
+    expect(describeHiddenSection('shown').text).toMatch(/until you publish/);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { Fragment, useCallback, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -12,16 +12,21 @@ import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { CanvasBlock } from './CanvasBlock';
 import { SectionShell } from './SectionShell';
+import { SectionInserter } from './SectionInserter';
+import { useSiteEditor } from '../editor-context';
+import { sectionLabel } from '../section-label';
+import { Plus } from 'lucide-react';
 
 export interface CanvasProps {
   communityId: number;
   context: CanvasContext;
   /**
-   * Switches the shell to the Add tab. Optional so the canvas still renders
-   * standalone, but without it the empty state tells the PM to add a section
-   * and offers no way to do so.
+   * Opens the Add tool, with the section a new one should go above — or null
+   * to append (the end button and the empty state). Optional so the canvas
+   * still renders standalone, but without it the empty state tells the PM to
+   * add a section and offers no way to do so.
    */
-  onAddSection?: () => void;
+  onAddSection?: (beforeBlockId: number | null) => void;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
 }
@@ -63,6 +68,15 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
   // One timestamp for the whole render pass — otherwise two blocks with the
   // same window could disagree about where the cutoff falls.
   const renderedAt = useMemo(() => now ?? Date.now(), [now, blocks]);
+  const { duplicateError } = useSiteEditor();
+  // Stable across renders so the memoised section list below survives
+  // selection changes. `onAddSection` is the shell's tool switch.
+  const insertAt = useCallback(
+    (beforeBlockId: number | null) => {
+      onAddSection?.(beforeBlockId);
+    },
+    [onAddSection],
+  );
 
   // Filter BEFORE the empty check. The PM blocks endpoint returns tombstone
   // rows (staged deletions) and could return a type this build has no view for;
@@ -91,19 +105,31 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
   // inspector and defeat that memo.
   const sections = useMemo(
     () =>
-      ordered.map((block) => (
-        <SectionShell key={block.id} block={block} communityId={communityId}>
-          <CanvasBlock
-            block={block}
-            community={context.community}
-            theme={context.theme}
-            layout={context.layout}
-            preview={context.preview}
-            now={renderedAt}
-          />
-        </SectionShell>
+      ordered.map((block, index) => (
+        <Fragment key={block.id}>
+          {/* BETWEEN sections only, as the design has it. Not above the first
+              section: there the pill straddles the frame's top edge and the
+              frame's overflow-hidden clips it in half (seen in the browser on a
+              page with no hero). Not above the hero either, which is pinned. */}
+          {onAddSection && index > 0 && block.blockType !== 'hero' ? (
+            <SectionInserter
+              beforeLabel={sectionLabel(block.blockType)}
+              onInsert={() => insertAt(block.id)}
+            />
+          ) : null}
+          <SectionShell block={block} communityId={communityId}>
+            <CanvasBlock
+              block={block}
+              community={context.community}
+              theme={context.theme}
+              layout={context.layout}
+              preview={context.preview}
+              now={renderedAt}
+            />
+          </SectionShell>
+        </Fragment>
       )),
-    [ordered, communityId, context, renderedAt],
+    [ordered, communityId, context, renderedAt, onAddSection, insertAt],
   );
 
   if (isPending) {
@@ -136,6 +162,13 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
 
   return (
     <div className="mx-auto max-w-[1000px] px-5 py-4">
+      {/* The toolbar's Duplicate can fail with the list looking unchanged, so it
+          needs a visible channel here as well as the Sections panel's. */}
+      {duplicateError ? (
+        <p role="alert" className="mb-3 text-sm text-status-danger">
+          {duplicateError}
+        </p>
+      ) : null}
       <div className="overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
         {ordered.length === 0 ? (
           <EmptyState
@@ -143,14 +176,28 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
             description="Add a section to give visitors something to read."
             action={
               onAddSection && (
-                <Button type="button" onClick={onAddSection}>
+                <Button type="button" onClick={() => insertAt(null)}>
                   Add a section
                 </Button>
               )
             }
           />
         ) : (
-          sections
+          <>
+            {sections}
+            {onAddSection ? (
+              <div className="px-6 py-5">
+                <button
+                  type="button"
+                  onClick={() => insertAt(null)}
+                  className="flex min-h-16 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed border-edge-strong text-sm font-semibold text-content-secondary transition-colors duration-quick hover:border-interactive hover:bg-interactive-subtle hover:text-content-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
+                  Add a section to the end of this page
+                </button>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </div>

@@ -456,3 +456,68 @@ describe('SiteEditorProvider — duplicate', () => {
     expect(api.duplicateError).toBeNull();
   });
 });
+
+describe('SiteEditorProvider — "Add section here" placement', () => {
+  function rerenderWith(rerender: (ui: React.ReactElement) => void, blocks: SiteBlockSummary[]) {
+    rerender(
+      <SiteEditorProvider communityId={7} blocks={blocks}>
+        <Probe />
+      </SiteEditorProvider>,
+    );
+  }
+
+  it('moves an added section above its target once the refetch delivers it', async () => {
+    const { rerender } = renderProvider();
+    act(() => api.placeAdded(5, 'text', 3));
+    // Not yet in the list — nothing to move, exactly as for a duplicate.
+    expect(reorderMutate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rerenderWith(rerender, [...BLOCKS, block({ id: 60, blockType: 'text', blockOrder: 5 })]);
+    });
+    // toOrder 3 is the TARGET's own slot: an array move onto it lands the new
+    // section directly above the target.
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 60, toOrder: 3 });
+  });
+
+  it('leaves an added section at the end when there is no target', async () => {
+    const { rerender } = renderProvider();
+    act(() => api.placeAdded(5, 'text', null));
+    await act(async () => {
+      rerenderWith(rerender, [...BLOCKS, block({ id: 60, blockType: 'text', blockOrder: 5 })]);
+    });
+    expect(reorderMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not move anything when the target has left the page', async () => {
+    const { rerender } = renderProvider();
+    act(() => api.placeAdded(5, 'text', 999));
+    await act(async () => {
+      rerenderWith(rerender, [...BLOCKS, block({ id: 60, blockType: 'text', blockOrder: 5 })]);
+    });
+    expect(reorderMutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps both placements when a duplicate and an add are in flight together', async () => {
+    // The two writes go through DIFFERENT upsert instances with different
+    // pending guards, so both can be outstanding. A single pending slot let
+    // the second to resolve overwrite the first.
+    const { rerender } = renderProvider();
+    await act(async () => {
+      api.duplicate(2); // copy lands at slot 5, belongs below the text (toOrder 3)
+    });
+    act(() => api.placeAdded(6, 'faq', 2)); // add lands at 6, belongs above the text
+
+    await act(async () => {
+      rerenderWith(rerender, [
+        ...BLOCKS,
+        block({ id: 50, blockType: 'text', blockOrder: 5 }),
+        block({ id: 61, blockType: 'faq', blockOrder: 6 }),
+      ]);
+    });
+
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 50, toOrder: 3 });
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 61, toOrder: 2 });
+    expect(reorderMutate).toHaveBeenCalledTimes(2);
+  });
+});

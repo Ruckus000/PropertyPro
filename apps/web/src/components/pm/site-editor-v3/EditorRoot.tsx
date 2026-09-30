@@ -131,7 +131,7 @@ export interface EditorRootProps {
    * Amenities blocks the Add panel offers.
    *
    * Deliberately NOT folded into `proToolAccess`. That map is keyed by
-   * `TOOL_PLAN_FEATURE`, and `ToolTabs` renders any tool present in it as
+   * `TOOL_PLAN_FEATURE`, and `ToolRail` renders any tool present in it as
    * Pro-locked — so adding `add` there would lock the Add TAB, which is false:
    * seven of the ten types it offers are available on Essentials. This gates
    * three rows inside the panel, not the panel.
@@ -245,7 +245,8 @@ export function EditorRoot({
   // sheet calls the same hook, so the button's state and the sheet's "N changes
   // ready to publish" can never disagree.
   const { diff, isError: diffFailed } = useSiteDiff(communityId);
-  const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
+  // Closed by default — the v4 builder opens on the page, not on a panel.
+  const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
    * `previewOpen`, mirrored — read by the preview gate effect below.
@@ -658,9 +659,22 @@ export function EditorRoot({
    * affordance, not a correction, and belongs in its own change.
    */
 
-  // Selecting a section on the canvas pulls the Sections panel forward, so the
-  // controls for what you just clicked are visible without a second action.
-  const handleSelect = useCallback(() => setActiveTool('sections'), []);
+  /*
+   * A page picked from the top bar's "Editing page" menu.
+   *
+   * Not `handleSelectPage`: that one is the Pages panel's and sets
+   * `focusSelectedRow`, which would pull focus into the panel's list when the
+   * picker has already handed it back to its own trigger. Everything else it
+   * clears is cleared here too, for the same reasons given there.
+   */
+  const handlePickPage = useCallback((pageId: number) => {
+    setSelectedPageId(pageId);
+    setPendingSelectionId(null);
+    setPendingSelectSlot(null);
+    setSelfRemovedPageId(null);
+    setFocusSelectedRow(false);
+    setPageAnnouncement('');
+  }, []);
   const handlePreview = useCallback(() => setPreviewOpen(true), []);
   const handlePublish = useCallback(() => setPublishOpen(true), []);
   // "Fix this" hands back the PAGE and the block_order slot together. Surfacing
@@ -707,6 +721,39 @@ export function EditorRoot({
   // than read from context because `setActiveTool` lives HERE — the provider's
   // parent — and only `useSiteEditor` is out of reach from this component.
   const handleGoToAdd = useCallback(() => setActiveTool('add'), []);
+
+  /*
+   * v4 "Add section here": which section the next add goes above.
+   *
+   * Owned HERE, not by the Add panel or the editor context. The first version
+   * lived in the context and the panel cleared it in an unmount cleanup, which
+   * React StrictMode's mount → cleanup → mount fired the moment the panel
+   * opened — so in the dev editor every "Add section here" appended. Found in
+   * the browser; the jsdom tests do not run StrictMode.
+   *
+   * Keyed on the page it was picked on, so a page switch drops it without an
+   * effect. Cleared when the PM picks ANY tool from the rail (including Add
+   * itself), because a rail click says nothing about position.
+   */
+  const [addTarget, setAddTarget] = useState<{ pageId: number | null; blockId: number } | null>(
+    null,
+  );
+  const insertBefore =
+    addTarget !== null && addTarget.pageId === effectivePageId ? addTarget.blockId : null;
+  const handleInsertAt = useCallback(
+    (beforeBlockId: number | null) => {
+      setAddTarget(
+        beforeBlockId === null ? null : { pageId: effectivePageId, blockId: beforeBlockId },
+      );
+      setActiveTool('add');
+    },
+    [effectivePageId],
+  );
+  const handleToolChange = useCallback((tool: EditorToolId | null) => {
+    setAddTarget(null);
+    setActiveTool(tool);
+  }, []);
+  const handleInsertConsumed = useCallback(() => setAddTarget(null), []);
   // The publish sheet's route out of a page-set problem — a duplicate address
   // or a missing home page has no section slot, so "Fix this" cannot reach it.
   const handleGoToPages = useCallback(() => setActiveTool('pages'), []);
@@ -748,7 +795,9 @@ export function EditorRoot({
         key={effectivePageId ?? 'none'}
         communityId={communityId}
         blocks={pageBlocks}
-        onSelect={handleSelect}
+        // No `onSelect`: in v4 selecting a section opens its inspector and
+        // toolbar in place. Pulling the Sections panel forward as well would
+        // cover a third of the canvas the PM just clicked on.
         // Cross-page "Fix this": this instance is the one that can resolve it.
         selectSlotOnMount={pendingSelectSlot}
         onSlotSelected={handleSlotSelected}
@@ -759,13 +808,18 @@ export function EditorRoot({
         // The only thing on screen naming the page while the Sections tool is
         // open — see `EditorTopBarProps.pageName`.
         pageName={selectedPage?.name}
+        pages={pages ?? initialPages}
+        selectedPageId={effectivePageId}
+        onSelectPage={handlePickPage}
+        onManagePages={handleGoToPages}
+        changeCount={diff.changes.length}
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
         communityId={communityId}
         hasPublishedSite={hasPublishedSite}
         initialNotice={initialNotice}
         activeTool={activeTool}
-        onActiveToolChange={setActiveTool}
+        onActiveToolChange={handleToolChange}
         onPreview={handlePreview}
         onPublish={handlePublish}
         // Openable when there is something to publish — and also when the diff
@@ -851,7 +905,14 @@ export function EditorRoot({
           }
           if (tool === 'sections') return <SectionList onAddSection={handleGoToAdd} />;
           if (tool === 'add') {
-            return <AddPanel communityId={communityId} hasPolishBlocks={hasPolishBlocks} />;
+            return (
+              <AddPanel
+                communityId={communityId}
+                hasPolishBlocks={hasPolishBlocks}
+                insertBefore={insertBefore}
+                onInsertConsumed={handleInsertConsumed}
+              />
+            );
           }
           if (tool === 'site') {
             return (
@@ -930,7 +991,7 @@ export function EditorRoot({
           <Canvas
             communityId={communityId}
             context={canvasContext}
-            onAddSection={handleGoToAdd}
+            onAddSection={handleInsertAt}
           />
         ) : (
           <div className="mx-auto max-w-[1000px] px-5 py-4">

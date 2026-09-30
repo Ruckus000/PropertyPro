@@ -118,12 +118,28 @@ export interface SiteEditorContextValue {
    * knows. Only slot ALLOCATION can collide, so only duplication gates on this.
    */
   isDuplicating: boolean;
+
+  /**
+   * Move a section that has just been WRITTEN at `slot` into the insert target,
+   * once the refetch delivers it — the Add panel's half of "Add section here".
+   *
+   * Same mechanism as `duplicate`'s deferred move, for the same reason: the
+   * upsert resolves to `void`, so the new row's id only exists after the
+   * refetch. A no-op when there is no insert target (append is where the write
+   * already put it) or the target has left the page.
+   *
+   * `aboveBlockId` is passed IN, captured by the caller when the write STARTS.
+   * Reading a live target on resolution lost it whenever the PM closed the Add
+   * panel mid-write.
+   */
+  placeAdded: (slot: number, blockType: string, aboveBlockId: number | null) => void;
 }
 
 const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
 
 /**
- * A copy that has been WRITTEN but not yet moved below its source.
+ * A new section — a duplicate, or one added with "Add section here" — that has
+ * been WRITTEN at the end of the page but not yet moved to where it belongs.
  *
  * Anchored on `(blockOrder, blockType)` rather than an id, for the same reason
  * `selectSlot` is: `useUpsertContentBlock` resolves to `void`, so the new row's
@@ -131,10 +147,16 @@ const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
  * match here would MOVE a section rather than merely select one, so the block
  * type is part of the anchor and not decoration.
  */
-interface PendingCopy {
+interface PendingPlacement {
   slot: number;
   blockType: string;
-  toOrder: number;
+  /**
+   * Where it goes. A duplicate knows its target SLOT up front
+   * (`reorderTargetForCopy`); an "Add section here" knows only the SECTION it
+   * goes above, whose slot is resolved when the new row arrives — it may have
+   * moved in the meantime.
+   */
+  to: { order: number } | { aboveBlockId: number };
 }
 
 const PAGE_FULL_MESSAGE =
@@ -223,7 +245,18 @@ export function SiteEditorProvider({
   const upsert = useUpsertContentBlock(communityId);
   const [announcement, setAnnouncement] = useState('');
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
-  const [pendingCopy, setPendingCopy] = useState<PendingCopy | null>(null);
+  /*
+   * A QUEUE, not one slot. A duplicate (this provider's upsert) and an add (the
+   * Add panel's own upsert instance) are guarded by different pending flags, so
+   * both can be in flight at once — and a single value let whichever resolved
+   * second overwrite the other's placement, leaving that section appended at
+   * the bottom with no error.
+   */
+  const [pendingPlacements, setPendingPlacements] = useState<readonly PendingPlacement[]>([]);
+  const queuePlacement = useCallback(
+    (placement: PendingPlacement) => setPendingPlacements((queue) => [...queue, placement]),
+    [],
+  );
   /*
    * The re-entrancy guard, kept in BOTH a ref and state on purpose.
    *
@@ -427,7 +460,7 @@ export function SiteEditorProvider({
           // Armed only AFTER the write succeeded, so the effect below can never
           // be waiting for a row the server was never asked to create.
           if (toOrder !== null) {
-            setPendingCopy({ slot, blockType: plan.blockType, toOrder });
+            queuePlacement({ slot, blockType: plan.blockType, to: { order: toOrder } });
           }
         })
         .catch((cause: unknown) => {
@@ -436,7 +469,7 @@ export function SiteEditorProvider({
           );
         })
         .finally(() => {
-          // Released here and NOT held until `pendingCopy` clears, which was the
+          // Released here and NOT held until its placement drains, which was the
           // other candidate. Two reasons, and the second is decisive:
           //
           //  1. It buys almost nothing. `onSuccess` awaits its own
@@ -444,7 +477,7 @@ export function SiteEditorProvider({
           //     active blocks query has REFETCHED — so the cache already holds
           //     the copy when this runs. What remains is the single React render
           //     that delivers it to `blocks`, which no human click can land in.
-          //  2. It could wedge the button. `pendingCopy` clears only when a row
+          //  2. It could wedge the button. A placement drains only when a row
           //     matching (slot, blockType) appears; if a concurrent write took
           //     that slot it never does, and Duplicate would stay dead for the
           //     life of this provider instance. Trading a sub-frame race for a
@@ -453,7 +486,7 @@ export function SiteEditorProvider({
           setIsDuplicating(false);
         });
     },
-    [blocks, movableSections, upsert],
+    [blocks, movableSections, queuePlacement, upsert],
   );
 
   /*
@@ -471,15 +504,44 @@ export function SiteEditorProvider({
    * Cleared BEFORE the move fires, so a later refetch of the same list (the
    * reorder's own `onSettled` invalidation, for one) cannot re-fire it.
    */
+  //
+  // ONE placement per run. `moveTo` reads `movableSections`, which only
+  // reflects a move after its refetch; two moves computed against the same
+  // stale list could collide. The reorder's own invalidation re-runs this
+  // effect, so the rest of the queue drains in turn.
   useEffect(() => {
-    if (pendingCopy === null) return;
-    const copy = blocks.find(
-      (b) => b.blockOrder === pendingCopy.slot && b.blockType === pendingCopy.blockType,
-    );
-    if (!copy) return;
-    setPendingCopy(null);
-    moveTo(copy.id, pendingCopy.toOrder);
-  }, [blocks, moveTo, pendingCopy]);
+    if (pendingPlacements.length === 0) return;
+    for (const placement of pendingPlacements) {
+      const arrived = blocks.find(
+        (b) => b.blockOrder === placement.slot && b.blockType === placement.blockType,
+      );
+      if (!arrived) continue;
+      setPendingPlacements((queue) => queue.filter((entry) => entry !== placement));
+      if ('order' in placement.to) {
+        moveTo(arrived.id, placement.to.order);
+        return;
+      }
+      // `moveTo(new, target.blockOrder)` is an array move to the target's
+      // index, which lands the new section directly ABOVE the target. A target
+      // that has left the page since is dropped: the section stays appended,
+      // the same legible outcome as a duplicate whose neighbour went away.
+      const { aboveBlockId } = placement.to;
+      const target = movableSections.find((b) => b.id === aboveBlockId);
+      if (target) moveTo(arrived.id, target.blockOrder);
+      return;
+    }
+  }, [blocks, movableSections, moveTo, pendingPlacements]);
+
+  // ponytail: append-then-move is two requests and a deferred effect, because
+  // the blocks API cannot insert at a slot. Upgrade path: a server-side
+  // insert-at op, if placement races or a visible "jump" become a real problem.
+  const placeAdded = useCallback(
+    (slot: number, blockType: string, aboveBlockId: number | null) => {
+      if (aboveBlockId === null) return;
+      queuePlacement({ slot, blockType, to: { aboveBlockId } });
+    },
+    [queuePlacement],
+  );
 
   const value = useMemo<SiteEditorContextValue>(
     () => ({
@@ -498,6 +560,7 @@ export function SiteEditorProvider({
       duplicate,
       duplicateError,
       isDuplicating,
+      placeAdded,
     }),
     [
       blocks,
@@ -515,6 +578,7 @@ export function SiteEditorProvider({
       duplicate,
       duplicateError,
       isDuplicating,
+      placeAdded,
     ],
   );
 

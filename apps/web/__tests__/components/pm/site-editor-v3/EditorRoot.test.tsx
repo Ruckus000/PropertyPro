@@ -392,6 +392,19 @@ function renderRoot(options: RootOptions = {}) {
   return render(rootElement(options));
 }
 
+/**
+ * Open a tool from the v4 rail. The rail's tiles are DISCLOSURES — clicking the
+ * open one closes it — so this clicks only when the tool is not already open,
+ * which is what every "go to X" step in these tests means.
+ */
+async function openTool(name: string | RegExp) {
+  const tile = screen
+    .getAllByRole('button', { name })
+    .find((el) => el.hasAttribute('data-testid') && el.dataset.testid!.startsWith('site-editor-tool-'));
+  if (!tile) throw new Error(`No rail tool named ${String(name)}`);
+  if (tile.getAttribute('aria-expanded') !== 'true') await userEvent.click(tile);
+}
+
 function publishButton() {
   return screen.getByRole('button', { name: /Publish/ });
 }
@@ -480,7 +493,7 @@ describe('EditorRoot — tool panels', () => {
   ])('renders a real panel, not a placeholder, on the %s tab', async (_name, accessibleName) => {
     renderRoot();
 
-    await userEvent.click(screen.getByRole('tab', { name: accessibleName }));
+    await openTool(accessibleName);
 
     expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
   });
@@ -493,19 +506,22 @@ describe('EditorRoot — tool panels', () => {
     queries.draft = [hero(), block({ id: 1 })];
     renderRoot();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
 
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 
-  it('has a panel for every tool the tab strip offers', async () => {
+  it('has a panel for every tool the rail offers', async () => {
     // The placeholder is gone and `renderToolPanel` is exhaustive at the type
-    // level, so this walks the real tab strip rather than a hand-kept list —
-    // a new tool added to EDITOR_TOOLS shows up here automatically.
+    // level, so this walks the real rail rather than a hand-kept list — a new
+    // tool added to EDITOR_TOOLS shows up here automatically.
     renderRoot();
 
-    for (const tab of screen.getAllByRole('tab')) {
-      await userEvent.click(tab);
+    const tiles = screen.getAllByTestId(/^site-editor-tool-/);
+    expect(tiles).toHaveLength(8);
+    for (const tile of tiles) {
+      await userEvent.click(tile);
+      expect(tile).toHaveAttribute('aria-expanded', 'true');
       expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
     }
   });
@@ -518,6 +534,7 @@ describe('EditorRoot — selected page (D-SEL)', () => {
   }
 
   async function selectTheTextSection() {
+    await openTool(/Sections/);
     await userEvent.click(sectionRow());
     // Precondition, asserted rather than assumed: a test that "clears" a
     // selection that was never made passes for the wrong reason.
@@ -542,10 +559,10 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     await selectTheTextSection();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool(/Sections/);
 
     expect(sectionRow()).not.toHaveAttribute('aria-current');
   });
@@ -574,7 +591,7 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     expect(inspectorLifecycle).toEqual(['mount']);
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     // Torn down and rebuilt, not merely re-rendered.
@@ -587,8 +604,8 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     expect(inspectorLifecycle).toEqual(['mount']);
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool('Pages');
+    await openTool(/Sections/);
 
     expect(inspectorLifecycle).toEqual(['mount']);
   });
@@ -600,9 +617,9 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     await selectTheTextSection();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool(/Sections/);
 
     expect(screen.queryByRole('button', { name: 'Text' })).not.toBeInTheDocument();
   });
@@ -613,8 +630,8 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     await selectTheTextSection();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool('Pages');
+    await openTool(/Sections/);
 
     expect(sectionRow()).toHaveAttribute('aria-current', 'true');
   });
@@ -622,7 +639,7 @@ describe('EditorRoot — selected page (D-SEL)', () => {
   it('tells the Pages panel which page is now selected', async () => {
     renderRoot();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
@@ -661,8 +678,9 @@ describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2
     ];
   });
 
-  it('lists only the selected page, not every page in the community', () => {
+  it('lists only the selected page, not every page in the community', async () => {
     renderRoot();
+    await openTool(/Sections/);
 
     expect(homeSection()).toBeInTheDocument();
     expect(otherPageSection()).not.toBeInTheDocument();
@@ -671,9 +689,9 @@ describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2
   it('swaps the list when the page changes', async () => {
     renderRoot();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool(/Sections/);
 
     expect(otherPageSection()).toBeInTheDocument();
     expect(homeSection()).not.toBeInTheDocument();
@@ -685,9 +703,9 @@ describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2
     queries.draft = [hero(), block({ id: 1, pageId: HOME_PAGE_ID })];
 
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool(/Sections/);
 
     expect(homeSection()).not.toBeInTheDocument();
   });
@@ -709,14 +727,14 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     const { rerender } = renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
 
     // Leave the Pages tab, so the panel is unmounted exactly as it would be
     // during a header-initiated publish. If the repair still lived in the
     // panel, nothing below could fire.
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool(/Sections/);
 
     // The publish landed: the staged page is gone from the server's list, and
     // the invalidation re-renders the tree with it.
@@ -725,7 +743,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
       rerender(rootElement({ initialPages: [seededHome] }));
     });
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 
@@ -739,7 +757,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome];
 
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
 
     // Captured BEFORE the switch. Text content alone cannot tell the two
     // placements apart: put the region back inside the keyed provider and React
@@ -764,7 +782,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
@@ -783,7 +801,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     const { rerender } = renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     queries.pages = [seededHome];
@@ -819,7 +837,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     const { rerender } = renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     // The panel reports the hard delete, then the invalidated list comes back
@@ -831,7 +849,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     });
 
     // Repaired…
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
     // …silently.
     expect(toastInfo).not.toHaveBeenCalled();
@@ -867,7 +885,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome, stagedSecond];
 
     const { rerender } = renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     // The publish lands: `usePublishSite` invalidates `['pm','site']` and the
@@ -889,7 +907,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome];
 
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
 
     expect(screen.getByText(`Editing page ${CREATED_PAGE_ID}`)).toBeInTheDocument();
@@ -902,7 +920,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome];
 
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
@@ -932,7 +950,7 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.pages = [seededHome, stagedSecondPage];
 
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     const banner = screen.getByTestId('staged-page-banner');
@@ -952,7 +970,7 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.pages = [seededHome, { ...stagedSecondPage, deleteStagedAt: null }];
 
     const { rerender } = renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     expect(screen.queryByTestId('staged-page-banner')).not.toBeInTheDocument();
 
@@ -976,7 +994,7 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.error = new Error('Pages unavailable');
 
     renderRoot({ initialPages: [seededHome, stagedSecondPage] });
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByTestId('staged-page-banner')).toBeInTheDocument();
@@ -997,7 +1015,7 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.pages = [seededHome, stagedSecondPage];
 
     renderRoot({ showWizardBanner: true });
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByTestId('staged-page-banner')).toBeInTheDocument();
@@ -1017,9 +1035,9 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.pages = [seededHome, stagedSecondPage];
 
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool(/Sections/);
 
     await userEvent.click(screen.getByRole('button', { name: 'Go to Pages' }));
 
@@ -1066,7 +1084,7 @@ describe('EditorRoot — the top bar names the page being edited', () => {
   it('follows the selection to another page', async () => {
     renderRoot();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByTestId('editing-page-name')).toHaveTextContent('Amenities');
@@ -1099,7 +1117,7 @@ describe('EditorRoot — the preview is titled after the page it renders', () =>
     // Non-null so the dialog branch is reachable at all; the stub ignores it.
     renderRoot({ canvasContext: {} });
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
@@ -1145,13 +1163,13 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
   it('switches to the page the offending section is on', async () => {
     renderRoot();
     // Precondition: on home, and the offending section is not reachable here.
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
   });
 
@@ -1208,10 +1226,10 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     );
 
     // Away and back again.
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await openTool(/Sections/);
 
     expect(screen.getByRole('button', { name: /^Gallery/ })).not.toHaveAttribute('aria-current');
   });
@@ -1240,7 +1258,7 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 });
@@ -1279,8 +1297,9 @@ describe('EditorRoot — BOTH page reads fail', () => {
     expect(screen.getByTestId('pages-unavailable-banner')).toBeInTheDocument();
   });
 
-  it('withholds the sections list instead of offering another page\'s rows', () => {
+  it('withholds the sections list instead of offering another page\'s rows', async () => {
     renderRoot({ initialPages: [] });
+    await openTool(/Sections/);
 
     // Neither page's sections are listed — an unscoped list would show BOTH.
     expect(screen.queryByRole('button', { name: /^Text/ })).not.toBeInTheDocument();
@@ -1291,7 +1310,7 @@ describe('EditorRoot — BOTH page reads fail', () => {
   it('offers no Add panel, because a block written now would land on the home page', async () => {
     renderRoot({ initialPages: [] });
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Add' }));
+    await openTool('Add');
     expect(screen.getByText(/Sections are unavailable until/i)).toBeInTheDocument();
   });
 
@@ -1342,13 +1361,14 @@ describe('EditorRoot — the server page seed can fail', () => {
     ];
 
     renderRoot({ initialPages: [] });
+    await openTool(/Sections/);
 
     // Scoped to home, not showing every page: proof the fallback resolved a
     // real page id rather than leaving it null.
     expect(screen.queryByRole('button', { name: 'Text' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Gallery' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 });
@@ -1379,7 +1399,7 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
     // Revert check (production line): `restoreFocusToSelectedRow={focusSelectedRow}`
     // on `<PagesPanel>` in `EditorRoot.tsx`.
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('true');
@@ -1401,15 +1421,15 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
      * rather than running it.
      */
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     // The real panel does this from its mount effect; the stub exposes it so
     // the parent's half can be driven without a DOM focus race.
     await userEvent.click(screen.getByRole('button', { name: 'Panel took the focus' }));
 
     // Off to Sections — which UNMOUNTS the panel — and back.
-    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool(/Sections/);
+    await openTool('Pages');
 
     expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('false');
   });
@@ -1435,7 +1455,7 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
      * version of this fix passed its EditorRoot tests while still latching.
      */
     renderRoot();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
 
     expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('true');
@@ -1465,7 +1485,7 @@ describe('EditorRoot — the publish sheet can reach the Pages panel', () => {
     await userEvent.click(publishButton());
     await userEvent.click(screen.getByRole('button', { name: 'Go to Pages' }));
 
-    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('site-editor-tool-pages')).toHaveAttribute('aria-expanded', 'true');
   });
 });
 

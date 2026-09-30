@@ -41,6 +41,7 @@ vi.mock('next/dynamic', () => ({
 }));
 
 const upsertMutateAsync = vi.hoisted(() => vi.fn());
+const reorderMutate = vi.hoisted(() => vi.fn());
 const state = vi.hoisted(() => ({
   blocks: [] as SiteBlockSummary[],
   isPending: false,
@@ -68,7 +69,7 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
-  useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useReorderBlocks: () => ({ mutate: reorderMutate, mutateAsync: vi.fn(), isPending: false }),
 }));
 
 /** The two pages the page-scope cases use. */
@@ -97,15 +98,24 @@ function renderPanel({
   hasPolishBlocks = true,
   onSelect,
   pageId = HOME_PAGE_ID,
+  insertBefore = null,
+  onInsertConsumed = () => {},
 }: {
   hasPolishBlocks?: boolean;
   onSelect?: (id: number) => void;
   pageId?: number | null;
+  insertBefore?: number | null;
+  onInsertConsumed?: () => void;
 } = {}) {
   return render(
     <SelectedSitePageProvider pageId={pageId}>
       <SiteEditorProvider communityId={7} blocks={state.blocks} onSelect={onSelect}>
-        <AddPanel communityId={7} hasPolishBlocks={hasPolishBlocks} />
+        <AddPanel
+          communityId={7}
+          hasPolishBlocks={hasPolishBlocks}
+          insertBefore={insertBefore}
+          onInsertConsumed={onInsertConsumed}
+        />
         <Probe />
       </SiteEditorProvider>
     </SelectedSitePageProvider>,
@@ -256,7 +266,7 @@ describe('AddPanel', () => {
       rerender(
         <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
           <SiteEditorProvider communityId={7} blocks={withNew} onSelect={onSelect}>
-            <AddPanel communityId={7} hasPolishBlocks />
+            <AddPanel communityId={7} hasPolishBlocks insertBefore={null} onInsertConsumed={() => {}} />
             <Probe />
           </SiteEditorProvider>
         </SelectedSitePageProvider>,
@@ -386,5 +396,94 @@ describe('AddPanel', () => {
         expect.objectContaining({ pageId: null }),
       );
     });
+  });
+});
+
+describe('AddPanel — "Add section here" (v4)', () => {
+  beforeEach(() => {
+    state.blocks = [
+      block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+      block({ id: 2, blockType: 'text', blockOrder: 2 }),
+      block({ id: 3, blockType: 'faq', blockOrder: 3 }),
+    ];
+  });
+
+  it('says a new section goes at the bottom when no position was picked', () => {
+    renderPanel();
+    expect(screen.getByTestId('add-position')).toHaveTextContent(
+      'It goes at the bottom of this page.',
+    );
+  });
+
+  it('names the section a new one will go above', () => {
+    renderPanel({ insertBefore: 3 });
+    expect(screen.getByTestId('add-position')).toHaveTextContent(
+      'It goes above “FAQ”. You can move it later.',
+    );
+  });
+
+  it('places the new section above the target once it arrives, then consumes the target', async () => {
+    const onInsertConsumed = vi.fn();
+    const { rerender } = renderPanel({ insertBefore: 3, onInsertConsumed });
+    await userEvent.click(screen.getByTestId('add-section-text'));
+    expect(upsertMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ blockOrder: 4 }));
+    expect(onInsertConsumed).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rerender(
+        <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+          <SiteEditorProvider
+            communityId={7}
+            blocks={[...state.blocks, block({ id: 70, blockType: 'text', blockOrder: 4 })]}
+          >
+            <Probe />
+          </SiteEditorProvider>
+        </SelectedSitePageProvider>,
+      );
+    });
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 70, toOrder: 3 });
+  });
+
+  it('still places the section when the panel closes before the write lands', async () => {
+    let resolveWrite: () => void = () => {};
+    upsertMutateAsync.mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        resolveWrite = resolve;
+      }),
+    );
+    const { rerender } = renderPanel({ insertBefore: 3 });
+    await userEvent.click(screen.getByTestId('add-section-text'));
+
+    // The PM closes the panel while the write is still in flight.
+    const withoutPanel = (blocks: SiteBlockSummary[]) => (
+      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+        <SiteEditorProvider communityId={7} blocks={blocks}>
+          <Probe />
+        </SiteEditorProvider>
+      </SelectedSitePageProvider>
+    );
+    rerender(withoutPanel(state.blocks));
+    await act(async () => {
+      resolveWrite();
+    });
+    await act(async () => {
+      rerender(withoutPanel([...state.blocks, block({ id: 70, blockType: 'text', blockOrder: 4 })]));
+    });
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 70, toOrder: 3 });
+  });
+
+  it('keeps the target when the write fails, so a retry still lands there', async () => {
+    upsertMutateAsync.mockRejectedValueOnce(new Error('nope'));
+    const onInsertConsumed = vi.fn();
+    renderPanel({ insertBefore: 3, onInsertConsumed });
+    await userEvent.click(screen.getByTestId('add-section-text'));
+    expect(onInsertConsumed).not.toHaveBeenCalled();
+  });
+
+  it('does not consume the target on unmount — StrictMode remounts would lose it', () => {
+    const onInsertConsumed = vi.fn();
+    const { unmount } = renderPanel({ insertBefore: 3, onInsertConsumed });
+    unmount();
+    expect(onInsertConsumed).not.toHaveBeenCalled();
   });
 });

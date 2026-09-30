@@ -11,29 +11,27 @@ import {
 } from 'lucide-react';
 
 /**
- * The eight editor tools, in tab order.
+ * The eight editor tools, in rail order (v4 builder, 2026-09-29).
  *
  * Labels are the design's, deliberately plain: "Colours" not "Theme",
  * "Address" not "Domain". The audience is a property manager, not a designer.
  *
- * "Notice" sits directly after "Site" rather than at the end: it is the tool a
- * manager reaches for under time pressure, and it is also the only one whose
- * writes skip the draft layer, so burying it behind Help would be the wrong
- * trade in both directions.
+ * v4 puts the tools a manager reaches for while BUILDING first — Add, Pages,
+ * Sections, Colours — and the site-wide ones after. "Notice" stays high: it is
+ * the tool used under time pressure, and the only one whose writes skip the
+ * draft layer. "Site" and "Address" are here only until the Settings view
+ * (plan Phase 5) gives them a home; removing them first would drop features.
  *
- * "Pages" (Phase 11b-3) sits immediately BEFORE "Sections" because that is the
- * order the work happens in: a manager picks the page, then edits the sections
- * on it. It is also why it is not appended at the end — "Sections" and "Add"
- * both operate on whichever page Pages selected, and a tool that changes what
- * the two tabs beside it are showing belongs next to them, not past Help.
+ * "Pages" stays next to "Sections" because Pages decides what Sections and the
+ * canvas are showing — see the Phase 11b-3 note in git history.
  */
 export const EDITOR_TOOLS = [
-  { id: 'site', label: 'Site', icon: Building2 },
-  { id: 'notice', label: 'Notice', icon: TriangleAlert },
+  { id: 'add', label: 'Add', icon: Plus },
   { id: 'pages', label: 'Pages', icon: Files },
   { id: 'sections', label: 'Sections', icon: Layers },
-  { id: 'add', label: 'Add', icon: Plus },
   { id: 'styling', label: 'Colours', icon: Palette },
+  { id: 'notice', label: 'Notice', icon: TriangleAlert },
+  { id: 'site', label: 'Site', icon: Building2 },
   { id: 'domain', label: 'Address', icon: Globe },
   { id: 'help', label: 'Help', icon: CircleHelp },
 ] as const satisfies readonly { id: string; label: string; icon: LucideIcon }[];
@@ -60,7 +58,7 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
  * per-community overrides in `packages/shared/src/features`. Collapsing them
  * mislabels one tab or the other. The legacy editor keeps them distinct too.
  *
- * **This map does NOT gate anything.** `ToolTabs` is its only consumer and it
+ * **This map does NOT gate anything.** `ToolRail` is its only consumer and it
  * uses membership here for exactly one thing: rendering
  * `<span className="sr-only">Professional feature</span>` on the tab. There is
  * no `disabled`, no changed `onClick`, no guard. A tool listed here is

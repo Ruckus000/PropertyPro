@@ -2,7 +2,7 @@
  * The editor canvas — render path, states, ordering, and page scope.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { Canvas, sortBlocks } from '@/components/pm/site-editor-v3/canvas/Canvas';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
@@ -16,7 +16,7 @@ const refetch = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
   // FloatControls reads the published side to decide whether a removal is
   // staged or immediate; a factory missing it yields `undefined` at call time.
-  usePublishedBlocks: () => ({ data: [] }),
+  usePublishedBlocks: () => ({ data: publishedState.value }),
   useContentBlocks: () => ({ ...blocksState.value, refetch }),
   // Reached through SectionShell → FloatControls, which wraps every block.
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
@@ -26,6 +26,11 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 
 // The canvas now renders inside the editor context (mounted by EditorRoot).
 // Stubbed here so these tests stay about the render path, not selection.
+const publishedState = vi.hoisted(() => ({ value: [] as unknown[] }));
+const editorMocks = vi.hoisted(() => ({
+  toggleHidden: vi.fn(),
+  duplicate: vi.fn(),
+}));
 vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
   useSiteEditor: () => ({
     isSelected: () => false,
@@ -33,6 +38,10 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
     move: vi.fn(),
     canMove: () => true,
     isMoving: false,
+    toggleHidden: editorMocks.toggleHidden,
+    duplicate: editorMocks.duplicate,
+    isDuplicating: false,
+    duplicateError: null,
   }),
 }));
 
@@ -112,6 +121,7 @@ function renderCanvasOnPage(pageId: number | null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  publishedState.value = [];
   blocksState.value = { data: [], isPending: false, isError: false, error: null };
 });
 
@@ -151,7 +161,156 @@ describe('Canvas — states', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Add a section' }));
-    expect(onAddSection).toHaveBeenCalled();
+    // The empty page's button appends: no target.
+    expect(onAddSection).toHaveBeenCalledWith(null);
+  });
+});
+
+describe('Canvas — v4 insert, hide', () => {
+  const heroRow = {
+    id: 1,
+    pageId: HOME_PAGE_ID,
+    blockType: 'hero',
+    blockOrder: 1,
+    content: { headline: 'Welcome', subheadline: '' },
+    isDraft: false,
+    publishedAt: '2026-01-01T00:00:00Z',
+  };
+  const textRow = (id: number, order: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    pageId: HOME_PAGE_ID,
+    blockType: 'text',
+    blockOrder: order,
+    content: { heading: `Heading ${id}`, body: 'Body.', ...extra },
+    isDraft: false,
+    publishedAt: '2026-01-01T00:00:00Z',
+  });
+
+  function renderWithAdd(onAddSection = vi.fn()) {
+    render(
+      <UndoableRemoveProvider communityId={7}>
+        <Canvas communityId={7} context={CONTEXT} now={NOW} onAddSection={onAddSection} />
+      </UndoableRemoveProvider>,
+    );
+    return onAddSection;
+  }
+
+  it('offers "Add section here" only between sections, never above the hero', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2), textRow(3, 3)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderWithAdd();
+    // hero, text 2, text 3 → two seams (hero|2, 2|3). None above the hero,
+    // which is pinned, and none above the first section of a page.
+    expect(screen.getAllByRole('button', { name: /^Add a section above/ })).toHaveLength(2);
+  });
+
+  it('targets the section the inserter sits above, then opens Add', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2), textRow(3, 3)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    const onAddSection = renderWithAdd();
+    fireEvent.click(screen.getAllByRole('button', { name: /^Add a section above/ })[1]!);
+    // Seams: hero|2 and 2|3. The second targets 3.
+    expect(onAddSection).toHaveBeenCalledWith(3);
+    expect(onAddSection).toHaveBeenCalledTimes(1);
+  });
+
+  it('appends from the button at the end of the page', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    const onAddSection = renderWithAdd();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a section to the end of this page' }));
+    expect(onAddSection).toHaveBeenCalledWith(null);
+    expect(onAddSection).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no inserter above the first section on a page with no hero', () => {
+    // Found in the browser: the pill sat on the frame's top edge and was clipped.
+    blocksState.value = {
+      data: [textRow(2, 2), textRow(3, 3)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderWithAdd();
+    const inserters = screen.getAllByRole('button', { name: /^Add a section above/ });
+    expect(inserters).toHaveLength(1);
+  });
+
+  it('offers no inserters when adding is not wired up', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderCanvas();
+    expect(screen.queryByRole('button', { name: /^Add a section above/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Add a section to the end of this page' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('collapses a hidden section to a placeholder with a way back', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2, { hidden: true }), textRow(3, 3)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderCanvas();
+    // The hidden section's content is not rendered as if it were live…
+    expect(screen.queryByText('Heading 2')).not.toBeInTheDocument();
+    // …its sibling is.
+    expect(screen.getByText('Heading 3')).toBeInTheDocument();
+    expect(screen.getByTestId('hidden-section-placeholder')).toHaveTextContent(
+      "Text is hidden. It hasn't been published, so visitors have never seen it.",
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Show again' }));
+    expect(editorMocks.toggleHidden).toHaveBeenCalledWith(2, false);
+  });
+
+  it('puts a hidden section\'s controls in the placeholder row, not floating over it', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2, { hidden: true }), textRow(3, 3)],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderCanvas();
+    const placeholder = screen.getByTestId('hidden-section-placeholder');
+    expect(
+      within(placeholder).getByRole('button', { name: 'Show Text section' }),
+    ).toBeInTheDocument();
+    // One cluster per text section — the hidden one's is inline, not doubled.
+    expect(screen.getAllByRole('button', { name: 'Duplicate Text section' })).toHaveLength(2);
+  });
+
+  // The draft's `hidden` flag is not what visitors see — the PUBLISHED row is.
+  it.each([
+    ['still showing on the live site', {}, 'Text is hidden in your draft. It stays on your live site until you publish.'],
+    ['already hidden on the live site', { hidden: true }, 'Text is hidden from visitors.'],
+  ])('says so when the section is %s', (_case, publishedExtra, sentence) => {
+    publishedState.value = [textRow(2, 2, publishedExtra)];
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2, { hidden: true })],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderCanvas();
+    expect(screen.getByTestId('hidden-section-placeholder')).toHaveTextContent(sentence);
   });
 });
 

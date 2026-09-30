@@ -2,7 +2,7 @@
 
 import { useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { usePublishedBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
@@ -25,7 +25,7 @@ export interface FloatControlsProps {
 }
 
 /**
- * The per-section control cluster: move up, move down, remove.
+ * The per-section control cluster: move up, move down, hide, duplicate, remove.
  *
  * The cluster is **always mounted and always focusable** — it is revealed
  * visually on hover or `focus-within` (see `SectionShell`), never mounted on
@@ -42,7 +42,11 @@ export interface FloatControlsProps {
  * (see its doc comment for why undo has to replay an upsert).
  */
 export function FloatControls({ block, communityId, className }: FloatControlsProps) {
-  const { canMove, move, isMoving } = useSiteEditor();
+  const { canMove, move, isMoving, toggleHidden, duplicate, isDuplicating } = useSiteEditor();
+  const isHidden =
+    block.content !== null &&
+    typeof block.content === 'object' &&
+    (block.content as { hidden?: unknown }).hidden === true;
   const { isConfirmOpen, setConfirmOpen, requestRemove, confirmRemove, isPending } =
     useUndoableRemove(communityId, block);
 
@@ -108,6 +112,40 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
       >
         <ChevronDown aria-hidden="true" />
       </Button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        // Same names as the Sections panel's toggle. Whether visitors are
+        // affected yet depends on the next publish, so the control names the
+        // action, not an outcome.
+        aria-label={`${isHidden ? 'Show' : 'Hide'} ${label} section`}
+        title={isHidden ? 'Show' : 'Hide'}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleHidden(block.id, !isHidden);
+        }}
+      >
+        {isHidden ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+      </Button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`Duplicate ${label} section`}
+        title="Duplicate"
+        disabled={isDuplicating}
+        onClick={(event) => {
+          event.stopPropagation();
+          duplicate(block.id);
+        }}
+      >
+        <Copy aria-hidden="true" />
+      </Button>
+
+      <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-edge" />
 
       {/* The `display: contents` wrapper adds no box of its own — it exists to
           stop clicks and keys inside the dialog from bubbling to the section

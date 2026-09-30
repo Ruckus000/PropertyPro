@@ -24,6 +24,7 @@ import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
 import { SitePanel } from '@/components/pm/site-editor-v3/panels/SitePanel';
 import { PagesPanel } from '@/components/pm/site-editor-v3/panels/PagesPanel';
+import { EditorShell } from '@/components/pm/site-editor-v3/EditorShell';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
@@ -235,6 +236,102 @@ describe('Website editor v3 — axe', () => {
 
     // Radix portals the sheet outside the container, so audit baseElement.
     expect(await axe(baseElement)).toHaveNoViolations();
+  });
+});
+
+describe('Website builder v4 chrome — axe', () => {
+  function renderChrome() {
+    // Inside `<main>`, as `EditorFrame` renders it in the app — the picker case
+    // audits `baseElement`, where content outside a landmark is a violation.
+    return render(
+      <main>
+      <UndoableRemoveProvider communityId={7}>
+        <SiteEditorProvider communityId={7} blocks={BLOCKS}>
+          <EditorShell
+            communityName="Sunset Condos"
+            pageName="Home"
+            pages={SITE_PAGES}
+            selectedPageId={1}
+            onSelectPage={() => {}}
+            onManagePages={() => {}}
+            changeCount={2}
+            publicSiteUrl={null}
+            proToolAccess={{ styling: false, domain: true }}
+            communityId={7}
+            hasPublishedSite
+            initialNotice={null}
+            renderToolPanel={(tool) => <p>{tool} panel body</p>}
+            canOpenPublish
+            canPreview
+            previewDisabledReason=""
+            previewButtonRef={null}
+            onPreview={() => {}}
+            onPublish={() => {}}
+          >
+            <div>
+              {BLOCKS.map((b) => (
+                <SectionShell key={b.id} block={b} communityId={7}>
+                  <p>{b.blockType} section body</p>
+                </SectionShell>
+              ))}
+            </div>
+          </EditorShell>
+        </SiteEditorProvider>
+      </UndoableRemoveProvider>
+      </main>,
+    );
+  }
+
+  it('has no violations with the rail closed', async () => {
+    const { container } = renderChrome();
+    // Anti-vacuity: the surfaces under audit actually rendered.
+    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish 2 changes' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations with a tool panel open', async () => {
+    const user = userEvent.setup();
+    const { container } = renderChrome();
+    await user.click(screen.getByRole('button', { name: 'Pages' }));
+    expect(screen.getByRole('complementary', { name: 'Pages' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations with the Editing page picker open', async () => {
+    const user = userEvent.setup();
+    const { baseElement, container } = renderChrome();
+    await user.click(screen.getByRole('button', { name: /Editing page/ }));
+    // The list is PORTALLED out of `container`, so the audit must run on
+    // `baseElement` or it silently audits everything except the picker.
+    const list = screen.getByRole('list', { name: 'Pages' });
+    expect(container.contains(list)).toBe(false);
+    expect(baseElement.contains(list)).toBe(true);
+    expect(await axe(baseElement)).toHaveNoViolations();
+  });
+
+  it('has no violations on a hidden, selected section', async () => {
+    const user = userEvent.setup();
+    const hiddenBlocks = [
+      block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+      block({ id: 2, blockType: 'text', blockOrder: 2, content: { hidden: true } }),
+    ];
+    const { container } = render(
+      <UndoableRemoveProvider communityId={7}>
+        <SiteEditorProvider communityId={7} blocks={hiddenBlocks}>
+          {hiddenBlocks.map((b) => (
+            <SectionShell key={b.id} block={b} communityId={7}>
+              <p>{b.blockType} section body</p>
+            </SectionShell>
+          ))}
+        </SiteEditorProvider>
+      </UndoableRemoveProvider>,
+    );
+    await user.click(screen.getByRole('group', { name: 'Text section' }));
+    const placeholder = screen.getByTestId('hidden-section-placeholder');
+    // Anti-vacuity: the inline control cluster is what this case audits.
+    expect(within(placeholder).getByRole('button', { name: 'Show Text section' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
   });
 });
 
