@@ -13,7 +13,9 @@ const ConfirmDialog = dynamic(
   { loading: () => null },
 );
 import { useSiteEditor } from '../editor-context';
+import { useRequiredSections } from '../required-sections-context';
 import { sectionLabel } from '../section-label';
+import { useHideToggle } from '../use-hide-toggle';
 import { useUndoableRemove } from '../use-undoable-remove';
 
 export interface FloatControlsProps {
@@ -42,11 +44,19 @@ export interface FloatControlsProps {
  * (see its doc comment for why undo has to replay an upsert).
  */
 export function FloatControls({ block, communityId, className }: FloatControlsProps) {
-  const { canMove, move, isMoving, toggleHidden, duplicate, isDuplicating } = useSiteEditor();
-  const isHidden =
-    block.content !== null &&
-    typeof block.content === 'object' &&
-    (block.content as { hidden?: unknown }).hidden === true;
+  const { canMove, move, isMoving, duplicate, isDuplicating } = useSiteEditor();
+  const { isRequired, canRemove } = useRequiredSections();
+  const hideRef = useRef<HTMLButtonElement>(null);
+  const { isHidden, requestToggle, confirm: hideConfirm } = useHideToggle(block, hideRef);
+  /*
+   * Florida-required sections (v4 Phase 2). Duplicate is locked outright — the
+   * law asks for one, and a second copy is only a second thing to keep current.
+   * Remove is locked only on the site's LAST copy, which is also what the server
+   * refuses; a PM who already has two can still tidy one away. Disabled with a
+   * title rather than hidden, so the reason is findable.
+   */
+  const required = isRequired(block.blockType);
+  const removable = canRemove(block.blockType);
   const { isConfirmOpen, setConfirmOpen, requestRemove, confirmRemove, isPending } =
     useUndoableRemove(communityId, block);
 
@@ -120,11 +130,12 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
         // Same names as the Sections panel's toggle. Whether visitors are
         // affected yet depends on the next publish, so the control names the
         // action, not an outcome.
+        ref={hideRef}
         aria-label={`${isHidden ? 'Show' : 'Hide'} ${label} section`}
         title={isHidden ? 'Show' : 'Hide'}
         onClick={(event) => {
           event.stopPropagation();
-          toggleHidden(block.id, !isHidden);
+          requestToggle();
         }}
       >
         {isHidden ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
@@ -135,8 +146,8 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
         variant="ghost"
         size="icon"
         aria-label={`Duplicate ${label} section`}
-        title="Duplicate"
-        disabled={isDuplicating}
+        title={required ? 'Your site only needs one of these' : 'Duplicate'}
+        disabled={isDuplicating || required}
         onClick={(event) => {
           event.stopPropagation();
           duplicate(block.id);
@@ -162,7 +173,12 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
           variant="ghost"
           size="icon"
           aria-label={`Remove ${label} section`}
-          disabled={isPending}
+          title={
+            removable
+              ? undefined
+              : 'Required by Florida law. You can move or hide it, but not remove your only one.'
+          }
+          disabled={isPending || !removable}
           onClick={requestRemove}
         >
           <Trash2 aria-hidden="true" className="text-status-danger" />
@@ -188,6 +204,7 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
             onConfirm={confirmRemove}
           />
         ) : null}
+        {hideConfirm}
       </div>
     </div>
   );

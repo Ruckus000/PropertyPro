@@ -108,6 +108,8 @@ import type { SitePanelProps } from './panels/SitePanel';
 import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
 import { useSiteDiff } from './use-site-diff';
+import { RequiredSectionsProvider } from './required-sections-context';
+import { RequirementsPill } from './RequirementsPill';
 
 /** Bridges the active inspector form's save state into the top bar. */
 function AutosaveStatusLine() {
@@ -245,7 +247,12 @@ export function EditorRoot({
   // Shares the blocks query key, so this adds no request — and the publish
   // sheet calls the same hook, so the button's state and the sheet's "N changes
   // ready to publish" can never disagree.
-  const { diff, isError: diffFailed } = useSiteDiff(communityId);
+  const {
+    diff,
+    validated,
+    isPending: diffPending,
+    isError: diffFailed,
+  } = useSiteDiff(communityId);
   // Closed by default — the v4 builder opens on the page, not on a panel.
   const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -770,6 +777,16 @@ export function EditorRoot({
        * remounted by the very update it is reporting announces nothing.
        */}
       <UndoableRemoveProvider communityId={communityId}>
+      {/*
+       * Florida-required sections (v4 Phase 2). Whole-site, so it sits OUTSIDE
+       * the page-keyed provider and survives page switches. `undefined` while
+       * the diff is loading or failed keeps the controls locked and the pill
+       * silent — see `RequiredSectionsProviderProps.pages`.
+       */}
+      <RequiredSectionsProvider
+        communityType={siteIdentity.communityType}
+        pages={diffPending || diffFailed ? undefined : validated}
+      >
       <p
         data-testid="site-page-announcement"
         role="status"
@@ -819,6 +836,9 @@ export function EditorRoot({
         changeCount={diff.changes.length}
         device={device}
         onDeviceChange={setDevice}
+        requirements={
+          <RequirementsPill onGoToSection={handleSelectSlot} onAddSection={handleGoToAdd} />
+        }
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
         communityId={communityId}
@@ -1046,10 +1066,12 @@ export function EditorRoot({
           onOpenChange={setPublishOpen}
           onFixIssue={handleSelectSlot}
           onGoToPages={handleGoToPages}
+          communityType={siteIdentity.communityType}
         />
       ) : null}
       </AutosaveStatusProvider>
       </SiteEditorProvider>
+      </RequiredSectionsProvider>
       </UndoableRemoveProvider>
     </SelectedSitePageProvider>
   );
@@ -1068,12 +1090,14 @@ function PublishSheetMount({
   onOpenChange,
   onFixIssue,
   onGoToPages,
+  communityType,
 }: {
   communityId: number;
   theme: CanvasContext['theme'] | null;
   onOpenChange: (open: boolean) => void;
   onFixIssue: (target: SlotTarget) => void;
   onGoToPages: () => void;
+  communityType: string;
 }) {
   const { movableSections, select } = useSiteEditor();
 
@@ -1117,6 +1141,7 @@ function PublishSheetMount({
       onFixIssue={handleFixIssue}
       // Page-set problems are fixed in the Pages panel and nowhere else.
       onGoToPages={onGoToPages}
+      communityType={communityType}
     />
   );
 }

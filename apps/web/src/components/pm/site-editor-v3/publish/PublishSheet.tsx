@@ -59,6 +59,7 @@ import { AlertTriangle, ArrowRight, Info, Undo2 } from 'lucide-react';
 import {
   contrastIssues,
   publishBlocked,
+  requiredSectionIssues,
   siteIssues,
   type Change,
   type Issue,
@@ -150,6 +151,12 @@ export interface PublishSheetProps {
    * (`PublishSheetMount`), so requiring it costs nothing.
    */
   onGoToPages: () => void;
+  /**
+   * `communities.community_type`, which decides which sections Florida law
+   * requires (v4 Phase 2). Required for the reason `onGoToPages` is: omitted,
+   * the "Required by Florida law" warnings would silently never appear.
+   */
+  communityType: string;
 }
 
 /**
@@ -315,6 +322,7 @@ export function PublishSheet({
   brandColors,
   onFixIssue,
   onGoToPages,
+  communityType,
 }: PublishSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -338,6 +346,7 @@ export function PublishSheet({
             onFixIssue={onFixIssue}
             onGoToPages={onGoToPages}
             onOpenChange={onOpenChange}
+            communityType={communityType}
           />
         ) : null}
       </SheetContent>
@@ -356,9 +365,17 @@ interface BodyProps {
   // nothing beyond a typecheck that passes.
   onGoToPages: () => void;
   onOpenChange: (open: boolean) => void;
+  communityType: string;
 }
 
-function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, onOpenChange }: BodyProps) {
+function PublishSheetBody({
+  communityId,
+  brandColors,
+  onFixIssue,
+  onGoToPages,
+  onOpenChange,
+  communityType,
+}: BodyProps) {
   // The same hook the top bar's Publish button reads, so the button's enabled
   // state and this sheet's change count are one computation, not two.
   const {
@@ -451,8 +468,16 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
      * table is server-only), which is the only safe direction: it can miss a
      * refusal, never invent one.
      */
-    return [...structural, ...pageSetIssues, ...contrast];
-  }, [validated, brandColors, pageSetIssues]);
+    /*
+     * Florida-required sections (v4 Phase 2): a warning per Documents or
+     * Meetings section visitors will not see. Warnings, never errors — the PM
+     * may publish anyway, and the server does not refuse. Over `validated` for
+     * the reason above: a page this publish deletes takes its sections with it,
+     * so they must not count as present.
+     */
+    const required = requiredSectionIssues(communityType, validated);
+    return [...structural, ...pageSetIssues, ...required, ...contrast];
+  }, [validated, brandColors, pageSetIssues, communityType]);
 
   const blocking = useMemo(() => issues.filter((i) => i.severity === 'error'), [issues]);
   const warnings = useMemo(() => issues.filter((i) => i.severity === 'warning'), [issues]);

@@ -58,6 +58,8 @@ export interface EditorTopBarProps extends EditorTopBarPageProps {
   pageName?: string;
   /** Rendered on the right, before the actions — the save status line (Phase 3). */
   status?: React.ReactNode;
+  /** The Florida requirements pill (v4 Phase 2), rendered before `status`. */
+  requirements?: React.ReactNode;
   /**
    * Required, for the same reason `canOpenPublish` and `canPreview` below are.
    *
@@ -145,6 +147,7 @@ export function EditorTopBar({
   communityName,
   pageName,
   status,
+  requirements,
   onPreview,
   onPublish,
   canOpenPublish,
@@ -214,6 +217,7 @@ export function EditorTopBar({
       </div>
 
       <div className="ml-auto flex min-w-0 items-center gap-2.5">
+        {requirements}
         {status}
         <Button
           ref={previewButtonRef}
