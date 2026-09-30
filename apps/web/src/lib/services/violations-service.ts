@@ -28,6 +28,7 @@ import {
 } from '@propertypro/shared';
 import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { parseDateOnly } from '@/lib/finance/common';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
 
 export interface ViolationRecord {
@@ -447,6 +448,8 @@ export interface ViolationNoticeCommunityHeader {
   address: string;
   /** True when the community row was found; false when not. */
   found: boolean;
+  /** The community's IANA time zone, via `resolveTimezone` (Eastern when unset). */
+  timeZone: string;
 }
 
 /**
@@ -471,7 +474,7 @@ export async function getViolationNoticeCommunityHeader(
   )) as unknown as Record<string, unknown>[];
   const community = rows[0];
   if (!community) {
-    return { name: 'Community Association', address: '', found: false };
+    return { name: 'Community Association', address: '', found: false, timeZone: resolveTimezone(null) };
   }
   const name = (community['name'] as string | null | undefined) ?? 'Community Association';
   const addressParts = [
@@ -481,7 +484,12 @@ export async function getViolationNoticeCommunityHeader(
     community['zipCode'] as string | null | undefined,
   ].filter(Boolean) as string[];
   const address = addressParts.length > 0 ? addressParts.join(', ') : '';
-  return { name, address, found: true };
+  return {
+    name,
+    address,
+    found: true,
+    timeZone: resolveTimezone(community['timezone'] as string | null | undefined),
+  };
 }
 
 export async function createViolationForCommunity(

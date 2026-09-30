@@ -45,6 +45,19 @@ adversarially verified; counts re-run at HEAD.
 >   `ponytail:` convention, not enforcement — upgrade trigger: a phase-run ever
 >   merges a change to `violation-notice-pdf.ts`, `access-control.ts`,
 >   `rbac-matrix.ts` or `role-transition.ts` → add a CI path-check.
+>   *2026-09-30, human-cleared:* `violation-notice-pdf.ts` rendering fixes (the
+>   notice TEXT is unchanged; the flag stays off). Read with pdfjs, both notices
+>   showed only the DRAFT banner (relative `Td`, the finance-pdf bug of #1247);
+>   UTF-8 text in a Type1 font garbled `—`/`’`/accents and put `/Length`+xref
+>   out; hearing time was dropped and computed in UTC (8:30pm Eastern printed as
+>   the next day, and a 13-day notice counted as 14, suppressing the short-notice
+>   warning); both routes printed the unit's database id as "Unit:". Deferred:
+>   owner name and hearing location (trigger: counsel requires them before
+>   enabling); finance-pdf's same encoding issue — its `…` label cut and user
+>   ledger descriptions (trigger: a garbled statement is reported, or finance-pdf
+>   is next edited); the heading lines (community name/address) are not wrapped,
+>   so a name over ~60 characters reaches the page edge — pre-existing (trigger:
+>   counsel enables notices for a community whose name or address is that long).
 > - **No authz drains in Phase 2.** Every admin idiom (`membership.isAdmin`,
 >   `isAdminRole`, `requireRole(PM_MANAGER_ROLES)`, `isManagementTier`) already
 >   means `role ∈ ADMIN_TIER_DB_ROLES`; the audit cites no bug caused by the forks.

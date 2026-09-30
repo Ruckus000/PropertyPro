@@ -18,6 +18,7 @@ const BASE_NOTICE: ViolationNoticePayload = {
   reportedDate: '2026-03-10',
   noticeDate: '2026-03-12',
   curePeriodDays: 14,
+  timeZone: 'America/New_York',
 };
 
 const BASE_HEARING: HearingNoticePayload = {
@@ -32,6 +33,7 @@ const BASE_HEARING: HearingNoticePayload = {
   hearingLocation: 'Community Room A',
   noticeDate: '2026-03-14',
   fineCaps: { perFineCents: 100_00, aggregateCents: 1_000_00 },
+  timeZone: 'America/New_York',
 };
 
 describe('generateViolationNoticePdf', () => {
@@ -79,7 +81,10 @@ describe('generateViolationNoticePdf', () => {
   it('includes hearing date when provided', () => {
     const result = generateViolationNoticePdf({
       ...BASE_NOTICE,
-      hearingDate: new Date(2026, 3, 1), // April 1, 2026 (month is 0-indexed)
+      // 10am Eastern. This used `new Date(2026, 3, 1)` (midnight in the TEST
+      // runner's zone), which only read as April 1 while dates were formatted
+      // in the server's zone; they now format in the community's.
+      hearingDate: new Date('2026-04-01T14:00:00Z'),
     });
     const text = new TextDecoder().decode(result);
     expect(text).toContain('April 1, 2026');
@@ -240,5 +245,138 @@ describe('hearing notice — the fining committee, not the board (F-04)', () => 
     expect(text).toContain('$500.00 in aggregate');
     expect(text).not.toContain('$100');
     expect(text).not.toContain('$1,000');
+  });
+});
+
+// ===========================================================================
+// What the reader SEES. Every case above decodes the raw bytes, which is how
+// both notices shipped rendering only their first line (relative `Td` used
+// with absolute coordinates). These read the rendered page with pdfjs.
+// ===========================================================================
+
+interface RenderedItem {
+  str: string;
+  x: number;
+  y: number;
+  right: number;
+}
+
+async function render(bytes: Uint8Array): Promise<{ items: RenderedItem[]; text: string }> {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({
+    data: bytes.slice(),
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    verbosity: 0,
+  }).promise;
+  const items: RenderedItem[] = [];
+  const lines: string[] = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const content = await (await doc.getPage(n)).getTextContent();
+    let line = '';
+    for (const entry of content.items) {
+      if (!('transform' in entry)) continue;
+      items.push({
+        str: entry.str,
+        x: entry.transform[4]!,
+        y: entry.transform[5]!,
+        right: entry.transform[4]! + entry.width,
+      });
+      line += entry.str;
+      if (entry.hasEOL) {
+        lines.push(line);
+        line = '';
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return { items, text: lines.join('\n') };
+}
+
+describe('generated notices — rendered page', () => {
+  it.each([
+    ['violation notice', () => generateViolationNoticePdf(BASE_NOTICE), 'NOTICE OF VIOLATION'],
+    ['hearing notice', () => generateHearingNoticePdf(BASE_HEARING), 'NOTICE OF HEARING'],
+  ])('%s: every line lands on the page', async (_label, generate, title) => {
+    const { items, text } = await render(generate());
+    expect(text).toContain('DRAFT \u2014 FOR REVIEW BY THE ASSOCIATION AND ITS COUNSEL');
+    expect(text).toContain('has not been reviewed by an attorney');
+    expect(text).toContain(title);
+    expect(text).toContain('Authorized representative');
+    expect(text).toContain('Unit: 204');
+    for (const item of items) {
+      expect(item.x).toBeGreaterThanOrEqual(0);
+      expect(item.right).toBeLessThanOrEqual(612);
+      expect(item.y).toBeGreaterThanOrEqual(0);
+      expect(item.y).toBeLessThanOrEqual(792);
+    }
+  });
+
+  it('prints the cure date', async () => {
+    const { text } = await render(generateViolationNoticePdf(BASE_NOTICE));
+    expect(text).toContain('(by March 26, 2026)');
+  });
+
+  it('renders accents and smart quotes as typed', async () => {
+    const description = '\u201cN\u00fa\u00f1ez\u2019s\u201d dog \u2013 again\u2026';
+    const { text } = await render(generateViolationNoticePdf({ ...BASE_NOTICE, description }));
+    expect(text).toContain(description);
+  });
+
+  it('breaks a word longer than the line instead of running off the page', async () => {
+    // W is Helvetica's widest glyph, so a split sized by character count must
+    // be sized for it (x is half as wide and would pass a wrong limit).
+    const { items, text } = await render(
+      generateViolationNoticePdf({ ...BASE_NOTICE, description: 'W'.repeat(200) }),
+    );
+    expect(text.replace(/\s/g, '')).toContain('W'.repeat(200));
+    for (const item of items) expect(item.right).toBeLessThanOrEqual(612 - 54);
+  });
+
+  it('prints every WinAnsi glyph, and a C1 control as ?', async () => {
+    const { text } = await render(
+      generateViolationNoticePdf({ ...BASE_NOTICE, description: 'Fine 50\u20ac \u2122 \u0152uvre \u0080x' }),
+    );
+    expect(text).toContain('Fine 50\u20ac \u2122 \u0152uvre ?x');
+  });
+
+  it('never splits an emoji across lines', async () => {
+    const { text } = await render(
+      generateViolationNoticePdf({ ...BASE_NOTICE, description: `${'a'.repeat(49)}\u{1F600}b` }),
+    );
+    // The emoji is one code point: one `?`, not a `?` for each surrogate half.
+    expect(text).toContain(`${'a'.repeat(49)}? b`);
+  });
+
+  it('declares byte-exact /Length and startxref', () => {
+    const bytes = generateViolationNoticePdf({ ...BASE_NOTICE, description: 'Caf\u00e9 \u2014 \u2019' });
+    const raw = new TextDecoder('latin1').decode(bytes);
+    const stream = /<< \/Length (\d+) >>\nstream\n/.exec(raw)!;
+    const start = stream.index + stream[0].length;
+    expect(raw.indexOf('\nendstream', start) - start).toBe(Number(stream[1]));
+    const startxref = Number(/startxref\n(\d+)/.exec(raw)![1]);
+    expect(raw.slice(startxref, startxref + 4)).toBe('xref');
+  });
+});
+
+describe('hearing notice — time in the community, not UTC', () => {
+  // 8:30pm Eastern on March 31 is 00:30 UTC on April 1.
+  const EVENING = { ...BASE_HEARING, hearingDate: new Date('2026-04-01T00:30:00Z') };
+
+  it('prints the local date and time', async () => {
+    const { text } = await render(generateHearingNoticePdf({ ...EVENING, noticeDate: '2026-03-10' }));
+    expect(text).toContain('Date and Time: March 31, 2026 at 8:30 PM');
+  });
+
+  it('counts calendar days in the community, so a 13-day notice is flagged', async () => {
+    const { text } = await render(generateHearingNoticePdf({ ...EVENING, noticeDate: '2026-03-18' }));
+    expect(text).toContain('dated 13 days before the scheduled hearing');
+    expect(text).toContain('fewer than 14 days');
+  });
+
+  it('a 14-day notice is not flagged', async () => {
+    const { text } = await render(generateHearingNoticePdf({ ...EVENING, noticeDate: '2026-03-17' }));
+    expect(text).toContain('dated 14 days before the scheduled hearing');
+    expect(text).not.toContain('fewer than 14 days');
   });
 });

@@ -4,6 +4,7 @@
  */
 
 import { formatCents } from '@propertypro/shared';
+import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -17,18 +18,69 @@ function escapePdfText(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
-function formatDate(date: Date | string | null | undefined): string {
-  if (!date) return 'N/A';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+/**
+ * The fonts declare `/WinAnsiEncoding` and the file is emitted one byte per
+ * character, so text must be reduced to that code page. Until 2026-09-30 it was
+ * written as UTF-8: the template's own em dash and apostrophes, and any accent
+ * or smart quote an association typed, rendered as junk, and every such
+ * character put `/Length` and the xref offsets 2 bytes out.
+ */
+// cp1252 0x80-0x9F: the WinAnsi glyphs that are not at their Unicode code point.
+const WIN_ANSI_EXTRAS: Record<string, string> = Object.fromEntries(
+  [...'\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u017e\u0178']
+    .map((ch, i) => [ch, String.fromCharCode([0x80, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8e, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9e, 0x9f][i]!)]),
+);
+
+function toWinAnsi(value: string): string {
+  let out = '';
+  for (const ch of value.normalize('NFC')) {
+    const code = ch.codePointAt(0)!;
+    // U+0080-U+009F are C1 controls, not glyphs; passed through they would
+    // print as the WinAnsi glyph at that byte (U+0080 as a euro sign).
+    const latin1 = code <= 0xff && (code < 0x80 || code > 0x9f);
+    out += latin1 ? ch : WIN_ANSI_EXTRAS[ch] ?? '?';
+  }
+  return out;
 }
 
-function toUsd(amountCents: number): string {
-  return `$${(amountCents / 100).toFixed(2)}`;
+function isDateOnly(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
+
+/**
+ * Date-only strings (`YYYY-MM-DD`) are calendar dates and format in UTC, where
+ * they parse. Timestamps format in the community's time zone: in UTC, a hearing
+ * at 8:30pm Eastern printed as the next day.
+ */
+function formatDate(
+  date: Date | string | null | undefined,
+  timeZone: string,
+  withTime = false,
+): string {
+  if (!date) return 'N/A';
+  const dateOnly = typeof date === 'string' && isDateOnly(date);
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    ...(withTime && !dateOnly ? { hour: 'numeric', minute: '2-digit' } : {}),
+    timeZone: dateOnly ? 'UTC' : timeZone,
+  });
+}
+
+/**
+ * A word longer than this is split. Measured in characters, not width, so it
+ * is sized for the WIDEST Helvetica glyph (W, 0.944 em): 50 at 10pt is 472pt,
+ * inside the 504pt text column. Ordinary prose wraps at 80 on spaces.
+ */
+const MAX_WORD_CHARS = 50;
 
 function wrapText(text: string, maxCharsPerLine: number): string[] {
-  const words = text.split(/\s+/);
+  // `u`: count code points, so a split never lands inside a surrogate pair.
+  const words = text
+    .split(/\s+/)
+    .flatMap((word) => word.match(new RegExp(`.{1,${MAX_WORD_CHARS}}`, 'gu')) ?? []);
   const lines: string[] = [];
   let current = '';
   for (const word of words) {
@@ -81,7 +133,10 @@ function buildPageContent(lines: PdfLine[]): string {
     const fontKey = line.bold ? '/F2' : '/F1';
     const lh = line.lineHeight ?? LINE_HEIGHT;
     ops.push(`${fontKey} ${fontSize} Tf`);
-    ops.push(`${MARGIN_X} ${y} Td (${escapePdfText(line.text)}) Tj`);
+    // `Tm` sets an ABSOLUTE position. `Td` is relative to the previous line,
+    // so `x y Td` with absolute coordinates put every line after the first
+    // off the page: until 2026-09-30 both notices showed only the DRAFT banner.
+    ops.push(`1 0 0 1 ${MARGIN_X} ${y} Tm (${escapePdfText(toWinAnsi(line.text))}) Tj`);
     y -= lh;
   }
   ops.push('ET');
@@ -105,10 +160,10 @@ function buildPdf(lines: PdfLine[]): Uint8Array {
     `${catalogId} 0 obj\n<< /Type /Catalog /Pages ${pagesId} 0 R >>\nendobj\n`,
   );
   objectBodies.push(
-    `${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
+    `${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n`,
   );
   objectBodies.push(
-    `${boldFontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n`,
+    `${boldFontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n`,
   );
 
   const pageObjects: string[] = [];
@@ -146,7 +201,9 @@ function buildPdf(lines: PdfLine[]): Uint8Array {
   }
   pdf += `trailer\n<< /Size ${xref.length} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
 
-  return new TextEncoder().encode(pdf);
+  // One byte per character (every char is <= 0xFF after toWinAnsi), so the
+  // string lengths used for `/Length` and the xref ARE byte offsets.
+  return Uint8Array.from(pdf, (ch) => ch.charCodeAt(0));
 }
 
 // ------------------------------------------------------------------
@@ -167,6 +224,8 @@ export interface ViolationNoticePayload {
   curePeriodDays?: number;
   hearingDate?: Date | string | null;
   fineSchedule?: string | null;
+  /** The community's IANA time zone (`resolveTimezone(communities.timezone)`). */
+  timeZone: string;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -256,7 +315,7 @@ export function generateViolationNoticePdf(payload: ViolationNoticePayload): Uin
   lines.push({ text: `Violation ID: #${payload.violationId}` });
   lines.push({ text: `Category: ${CATEGORY_LABELS[payload.category] ?? payload.category}` });
   lines.push({ text: `Severity: ${payload.severity.charAt(0).toUpperCase() + payload.severity.slice(1)}` });
-  lines.push({ text: `Date Reported: ${formatDate(payload.reportedDate)}` });
+  lines.push({ text: `Date Reported: ${formatDate(payload.reportedDate, payload.timeZone)}` });
   lines.push({ text: '' });
 
   // Description
@@ -273,7 +332,7 @@ export function generateViolationNoticePdf(payload: ViolationNoticePayload): Uin
     text: `You are hereby notified that the above violation must be corrected within ${cureDays} days`,
   });
   lines.push({
-    text: `of the date of this notice (by ${formatDate(addDays(payload.noticeDate, cureDays))}).`,
+    text: `of the date of this notice (by ${formatDate(addDays(payload.noticeDate, cureDays), payload.timeZone)}).`,
   });
   lines.push({ text: '' });
 
@@ -281,7 +340,7 @@ export function generateViolationNoticePdf(payload: ViolationNoticePayload): Uin
   if (payload.hearingDate) {
     lines.push({ text: 'Hearing Information:', bold: true });
     lines.push({
-      text: `A hearing has been scheduled for ${formatDate(payload.hearingDate)}.`,
+      text: `A hearing has been scheduled for ${formatDate(payload.hearingDate, payload.timeZone, true)}.`,
     });
     lines.push({
       text: 'You have the right to attend the hearing and present evidence in your defense.',
@@ -364,6 +423,8 @@ export interface HearingNoticePayload {
    * so the notice can never state a cap the association does not apply.
    */
   fineCaps: { perFineCents: number; aggregateCents: number };
+  /** The community's IANA time zone (`resolveTimezone(communities.timezone)`). */
+  timeZone: string;
 }
 
 export function generateHearingNoticePdf(payload: HearingNoticePayload): Uint8Array {
@@ -393,7 +454,7 @@ export function generateHearingNoticePdf(payload: HearingNoticePayload): Uint8Ar
 
   // Hearing details
   lines.push({ text: 'Hearing Details:', bold: true });
-  lines.push({ text: `Date and Time: ${formatDate(payload.hearingDate)}` });
+  lines.push({ text: `Date and Time: ${formatDate(payload.hearingDate, payload.timeZone, true)}` });
   if (payload.hearingLocation) {
     lines.push({ text: `Location: ${payload.hearingLocation}` });
   }
@@ -407,13 +468,18 @@ export function generateHearingNoticePdf(payload: HearingNoticePayload): Uint8Ar
   }
   lines.push({ text: '' });
 
-  // 14-day advance notice validation
+  // 14-day advance notice: calendar days from the notice date to the hearing's
+  // date IN THE COMMUNITY. Measured in UTC, a hearing at 8:30pm Eastern on
+  // day 13 counted as 14 and suppressed the short-notice warning below.
   const hearingDateObj = typeof payload.hearingDate === 'string'
     ? new Date(payload.hearingDate)
     : payload.hearingDate;
-  const noticeDateObj = new Date(payload.noticeDate);
-  const daysBetween = Math.floor(
-    (hearingDateObj.getTime() - noticeDateObj.getTime()) / (1000 * 60 * 60 * 24),
+  const hearingLocalDate = typeof payload.hearingDate === 'string' && isDateOnly(payload.hearingDate)
+    ? payload.hearingDate
+    : utcDateToWallClockValue(hearingDateObj, payload.timeZone).slice(0, 10);
+  const daysBetween = Math.round(
+    (Date.parse(`${hearingLocalDate}T00:00:00Z`) - Date.parse(`${payload.noticeDate}T00:00:00Z`))
+      / (1000 * 60 * 60 * 24),
   );
 
   // A MEASUREMENT, not a compliance conclusion.
@@ -505,8 +571,9 @@ export function generateHearingNoticePdf(payload: HearingNoticePayload): Uint8Ar
 // Helpers
 // ------------------------------------------------------------------
 
-function addDays(dateStr: string, days: number): Date {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d;
+/** Date-only arithmetic in UTC; the result is formatted as a calendar date. */
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }

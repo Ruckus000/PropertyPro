@@ -16,6 +16,8 @@ import {
   getViolationForCommunity,
   getViolationNoticeCommunityHeader,
 } from '@/lib/services/violations-service';
+import { getUnitLabelMap } from '@/lib/services/units-lookup';
+import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 import { generateViolationNoticePdf } from '@/lib/utils/violation-notice-pdf';
 
 /**
@@ -49,20 +51,29 @@ export const GET = withErrorHandler(
     // that behavior by ignoring `header.found` here.
     const header = await getViolationNoticeCommunityHeader(communityId);
 
+    // Today in the community, not in UTC: after 8pm Eastern the UTC date is
+    // tomorrow's.
     const noticeDate = violation.noticeDate
-      ?? new Date().toISOString().slice(0, 10);
+      ?? utcDateToWallClockValue(new Date(), header.timeZone).slice(0, 10);
+    // The unit NUMBER an owner recognises; notices printed the database id until
+    // 2026-09-30 ("Unit: 17" for unit 204). A unit since removed (the lookup is
+    // scoped, so soft-deleted rows are excluded) says so rather than print an id
+    // that reads as a unit number.
+    const unitLabels = await getUnitLabelMap(communityId, [violation.unitId]);
+    const unitNumber = unitLabels.get(violation.unitId) ?? `#${violation.unitId} (unit removed)`;
 
     const pdfBytes = generateViolationNoticePdf({
       violationId: violation.id,
       communityName: header.name,
       communityAddress: header.address,
-      unitNumber: String(violation.unitId),
+      unitNumber,
       ownerName: null, // Owner name resolution deferred — would require user join
       category: violation.category,
       description: violation.description,
       severity: violation.severity,
       reportedDate: violation.createdAt,
       noticeDate,
+      timeZone: header.timeZone,
       hearingDate: violation.hearingDate,
     });
 
@@ -76,3 +87,4 @@ export const GET = withErrorHandler(
     });
   },
 );
+
