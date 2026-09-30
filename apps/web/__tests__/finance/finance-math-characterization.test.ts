@@ -789,15 +789,30 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
     expect(summary.assessmentsProcessed).toBe(0);
   });
 
-  it('endDate is compared as UTC midnight: the cron run ON the end date is skipped', async () => {
-    // CHARACTERIZATION: suspected defect — `now > new Date(endDate + 'T00:00Z')`
-    // makes the end date exclusive from its first millisecond. The cron fires at
-    // 05:00 UTC on the 1st, so an assessment ending on the 1st (the natural "last
-    // installment due on the 1st") never generates that final installment.
-    const onEnd = await runInMonth(4, { frequency: 'monthly', endDate: '2026-04-01' });
-    expect(onEnd.assessmentsProcessed).toBe(0);
-    const before = await runInMonth(4, { frequency: 'monthly', endDate: '2026-04-02' });
-    expect(before.assessmentsProcessed).toBe(1);
+  it.each([
+    ['2026-04-01', true],
+    ['2026-04-30', true],
+    ['2026-05-15', true],
+    ['2026-03-31', false],
+    ['2026-03-01', false],
+  ])('endDate %s: the April period is billed=%s (end month inclusive)', async (endDate, expected) => {
+    // Fixed 2026-09-30 (was a suspected defect: `now > new Date(endDate + 'T00:00Z')`
+    // made the end date exclusive from its first millisecond, so the 05:00 UTC run on
+    // the 1st skipped an assessment ending that day — its last installment). Now
+    // guaranteed: endDate is a calendar date compared at MONTH granularity, inclusive —
+    // a period (month) is billed iff its first day is on or before endDate. So "ends
+    // 2026-04-01" bills April. Mirrors the startDate rule (months before the start
+    // month are skipped), and does not depend on dueDay, so editing dueDay cannot
+    // move the final installment in or out of range.
+    const summary = await runInMonth(4, { frequency: 'monthly', endDate });
+    expect(summary.assessmentsProcessed).toBe(expected ? 1 : 0);
+    expect(generatedDueDates()).toEqual(expected ? ['2026-04-01'] : []);
+  });
+
+  it('endDate is month-granular, not due-date-granular: dueDay 15 with an end of the 1st still bills that month', async () => {
+    const summary = await runInMonth(4, { frequency: 'monthly', dueDay: 15, endDate: '2026-04-01' });
+    expect(summary.assessmentsProcessed).toBe(1);
+    expect(generatedDueDates()).toEqual(['2026-04-15']);
   });
 
   it('startDate is not checked: a monthly assessment starting in the future generates now', async () => {

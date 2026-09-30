@@ -305,6 +305,9 @@ export async function processRecurringAssessments(
 ): Promise<RecurringAssessmentSummary> {
   const db = createUnscopedClient();
   const currentMonth = now.getMonth() + 1; // 1-12
+  // The billing period this run generates, as 'yyyy-MM' — same clock as
+  // currentMonth, so the month gate and the start/end bounds agree.
+  const periodMonth = format(now, 'yyyy-MM');
 
   const activeCommunities = await db
     .select({ id: communities.id })
@@ -351,10 +354,13 @@ export async function processRecurringAssessments(
           continue;
         }
 
-        // Check end date
-        if (assessment.endDate) {
-          const endDate = new Date(`${assessment.endDate}T00:00:00.000Z`);
-          if (now > endDate) continue;
+        // Check end date. endDate is a calendar date, compared at MONTH
+        // granularity and inclusive: a period is billed iff its first day is on
+        // or before endDate, so "ends 2026-04-01" bills April. (Comparing `now`
+        // against endDate's UTC midnight made the 05:00 UTC run on the 1st skip
+        // an assessment ending that day — its final installment.)
+        if (assessment.endDate && periodMonth > assessment.endDate.slice(0, 7)) {
+          continue;
         }
 
         try {
