@@ -48,16 +48,32 @@ export interface OverdueTransitionSummary {
  * Finds all pending line items with due_date < today and transitions them
  * to 'overdue' status. Scans across all non-deleted communities.
  */
+/**
+ * Restricts a cron run to these communities. The crons are global by design;
+ * this exists so an integration test can drive the real cron path for its own
+ * community without mutating other test files' rows on the shared test DB.
+ */
+export interface CronScope {
+  onlyCommunityIds?: readonly number[];
+}
+
+function inCronScope(communityId: number, scope: CronScope): boolean {
+  return scope.onlyCommunityIds === undefined || scope.onlyCommunityIds.includes(communityId);
+}
+
 export async function processOverdueTransitions(
   now: Date = new Date(),
+  scope: CronScope = {},
 ): Promise<OverdueTransitionSummary> {
   const db = createUnscopedClient();
   const today = format(now, 'yyyy-MM-dd');
 
-  const activeCommunities = await db
-    .select({ id: communities.id })
-    .from(communities)
-    .where(isNull(communities.deletedAt));
+  const activeCommunities = (
+    await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(isNull(communities.deletedAt))
+  ).filter((community) => inCronScope(community.id, scope));
 
   const summary: OverdueTransitionSummary = {
     communitiesScanned: activeCommunities.length,
@@ -135,14 +151,17 @@ export interface LateFeeSummary {
  */
 export async function processLateFees(
   now: Date = new Date(),
+  scope: CronScope = {},
 ): Promise<LateFeeSummary> {
   const db = createUnscopedClient();
   const today = format(now, 'yyyy-MM-dd');
 
-  const activeCommunities = await db
-    .select({ id: communities.id, communitySettings: communities.communitySettings })
-    .from(communities)
-    .where(isNull(communities.deletedAt));
+  const activeCommunities = (
+    await db
+      .select({ id: communities.id, communitySettings: communities.communitySettings })
+      .from(communities)
+      .where(isNull(communities.deletedAt))
+  ).filter((community) => inCronScope(community.id, scope));
 
   const summary: LateFeeSummary = {
     communitiesScanned: activeCommunities.length,

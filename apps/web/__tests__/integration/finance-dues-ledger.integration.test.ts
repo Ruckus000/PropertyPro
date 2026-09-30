@@ -73,6 +73,38 @@ function requireRoutes(): RouteModules {
   return routes;
 }
 
+/** Statement summary (Total due) and ledger balance for one unit, as the owner-facing routes serve them. */
+async function moneyFor(communityId: number, unitId: number): Promise<{
+  totalDueCents: number;
+  overdueCount: number;
+  balanceCents: number;
+  lineItems: Array<{ id: number; dueDate: string; status: string; amountCents: number; lateFeeCents: number }>;
+}> {
+  const r = requireRoutes();
+  const statementResponse = await r.paymentStatement.GET(
+    new NextRequest(apiUrl(`/api/v1/payments/statement?communityId=${communityId}&unitId=${unitId}`)),
+  );
+  expect(statementResponse.status).toBe(200);
+  const statementJson = await parseJson<{
+    data: { statement: {
+      summary: { totalDueCents: number; overdueCount: number };
+      lineItems: Array<{ id: number; dueDate: string; status: string; amountCents: number; lateFeeCents: number }>;
+    } };
+  }>(statementResponse);
+  const balanceResponse = await r.ledgerBalance.GET(
+    new NextRequest(apiUrl(`/api/v1/ledger/balance/${unitId}?communityId=${communityId}`)),
+    { params: Promise.resolve({ unitId: String(unitId) }) },
+  );
+  expect(balanceResponse.status).toBe(200);
+  const balanceJson = await parseJson<{ data: { balanceCents: number } }>(balanceResponse);
+  return {
+    totalDueCents: statementJson.data.statement.summary.totalDueCents,
+    overdueCount: statementJson.data.statement.summary.overdueCount,
+    balanceCents: balanceJson.data.balanceCents,
+    lineItems: statementJson.data.statement.lineItems,
+  };
+}
+
 describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) return;
@@ -221,14 +253,38 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       ledgerJson.data.some((row) => row['sourceId'] === String(lineItemId)),
     ).toBe(true);
 
-    const scopedA = kit.dbModule.createScopedClient(communityA.id);
-    await scopedA.update(
-      kit.dbModule.assessmentLineItems,
-      {
-        lateFeeCents: 500,
-      },
-      eq(kit.dbModule.assessmentLineItems.id, lineItemId),
+    // Money must agree across surfaces at every step: statement Total due
+    // (summary) == ledger balance. Nothing compared them before 2026-09-30,
+    // which is how a 90-day window silently hid old debt from Total due.
+    const afterGenerate = await moneyFor(communityA.id, unitAId);
+    expect(afterGenerate.totalDueCents).toBe(25000);
+    expect(afterGenerate.balanceCents).toBe(afterGenerate.totalDueCents);
+    // Due 2026-01-15: more than 90 days before any run of this test, so this
+    // also pins the fixed default-window bug end to end.
+    expect(afterGenerate.lineItems.map((item) => item.dueDate)).toContain('2026-01-15');
+
+    // The REAL crons, with a clock past due (2026-01-15) + grace (5 days).
+    await kit.db
+      .update(kit.dbModule.communities)
+      .set({ communitySettings: { assessmentPaymentsEnabled: true } })
+      .where(eq(kit.dbModule.communities.id, communityA.id));
+    const cronNow = new Date('2026-01-25T12:00:00.000Z');
+    const { processOverdueTransitions, processLateFees } = await import(
+      '../../src/lib/services/assessment-automation-service'
     );
+    // Scoped to this file's community: the shared test DB runs files in parallel.
+    const cronScope = { onlyCommunityIds: [communityA.id] };
+    expect((await processOverdueTransitions(cronNow, cronScope)).communitiesScanned).toBe(1);
+    // Both of community A's units were billed on 2026-01-15, so both get the fee.
+    expect((await processLateFees(cronNow, cronScope)).feesApplied).toBe(2);
+    const afterCrons = await moneyFor(communityA.id, unitAId);
+    expect(afterCrons.overdueCount).toBe(1);
+    expect(afterCrons.lineItems.find((item) => item.id === lineItemId)).toMatchObject({
+      status: 'overdue',
+      lateFeeCents: 500,
+    });
+    expect(afterCrons.totalDueCents).toBe(25500);
+    expect(afterCrons.balanceCents).toBe(afterCrons.totalDueCents);
 
     const delinquencyResponse = await routeModules.delinquency.GET(
       new NextRequest(apiUrl(`/api/v1/delinquency?communityId=${communityA.id}`)),
@@ -249,6 +305,30 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     const waiveJson = await parseJson<{ data: Record<string, unknown> }>(waiveResponse);
     expect(waiveJson.data['waivedCount']).toBeGreaterThan(0);
     expect(waiveJson.data['waivedAmountCents']).toBeGreaterThan(0);
+
+    const afterWaive = await moneyFor(communityA.id, unitAId);
+    expect(afterWaive.totalDueCents).toBe(25000);
+    expect(afterWaive.balanceCents).toBe(afterWaive.totalDueCents);
+
+    // The exported PDF must show what the screen shows (it rendered only its
+    // title line until 2026-09-30).
+    const pdfResponse = await routeModules.financeExportStatement.GET(
+      new NextRequest(apiUrl(`/api/v1/finance/export/statement?communityId=${communityA.id}&unitId=${unitAId}`)),
+    );
+    expect(pdfResponse.status).toBe(200);
+    expect(pdfResponse.headers.get('content-type')).toContain('application/pdf');
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfDoc = await pdfjs.getDocument({
+      data: new Uint8Array(await pdfResponse.arrayBuffer()),
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    }).promise;
+    const pdfPage = await pdfDoc.getPage(1);
+    const pdfText = (await pdfPage.getTextContent()).items
+      .map((entry) => ('str' in entry ? entry.str : ''))
+      .join(' ');
+    expect(pdfText).toContain('Current Balance: $250.00');
+    expect(pdfText).toContain('2026-01-15');
 
     const balanceResponse = await routeModules.ledgerBalance.GET(
       new NextRequest(apiUrl(`/api/v1/ledger/balance/${unitAId}?communityId=${communityA.id}`)),
