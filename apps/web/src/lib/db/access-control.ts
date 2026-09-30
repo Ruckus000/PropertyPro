@@ -12,7 +12,7 @@
  * authorization layer. The path apps/web/src/lib/db/ is the spec-required
  * location; the file itself has no database access.
  */
-import type { CommunityRole, CommunityType } from '@propertypro/shared';
+import { hasBoardDesignation, type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { RBAC_RESOURCES, type RbacResource, type RbacAction } from '@propertypro/shared';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityMembership } from '@/lib/api/community-membership';
@@ -101,9 +101,18 @@ export function requirePermission(
  * resident board members only.
  */
 export function requireBoardDesignation(membership: CommunityMembership): void {
-  if (!(membership.isAdmin || membership.designation != null)) {
+  if (!canActAsBoard(membership)) {
     throw new ForbiddenError('This action is restricted to the board.');
   }
+}
+
+/**
+ * The predicate behind requireBoardDesignation, for pages that show the
+ * matching controls (ADR-006 §2a) — one rule, so the UI never offers an action
+ * the API refuses, or hides one it allows.
+ */
+export function canActAsBoard(membership: Pick<CommunityMembership, 'isAdmin' | 'designation'>): boolean {
+  return membership.isAdmin || hasBoardDesignation(membership.designation);
 }
 
 export type ResourceAccessMap = Record<RbacResource, Record<RbacAction, boolean>>;

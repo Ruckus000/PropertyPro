@@ -22,6 +22,7 @@ interface ElectionDetailDialogProps {
   communityId: number;
   electionId: number | null;
   isAdmin: boolean;
+  canAdminister: boolean;
   userId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -31,6 +32,7 @@ export function ElectionDetailDialog({
   communityId,
   electionId,
   isAdmin,
+  canAdminister,
   userId,
   open,
   onOpenChange,
@@ -138,17 +140,17 @@ export function ElectionDetailDialog({
               communityId={communityId}
               electionId={data.election.id}
               isAdmin={isAdmin}
+              canAdminister={canAdminister}
               userId={userId}
             />
 
-            {isAdmin ? (
+            {canAdminister ? (
               <>
                 <Separator />
                 <ElectionAdminActions
                   communityId={communityId}
                   electionId={data.election.id}
                   status={data.election.status}
-                  isAdmin={isAdmin}
                 />
               </>
             ) : null}

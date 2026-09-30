@@ -21,7 +21,8 @@ const {
   redirectMock: vi.fn(),
 }));
 
-vi.mock('@propertypro/shared', () => ({
+vi.mock('@propertypro/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@propertypro/shared')>()),
   getFeaturesForCommunity: getFeaturesForCommunityMock,
 }));
 
@@ -33,7 +34,9 @@ vi.mock('@/lib/request/page-community-context', () => ({
   requirePageCommunityMembership: requirePageCommunityMembershipMock,
 }));
 
-vi.mock('@/lib/db/access-control', () => ({
+// Real canActAsBoard: the page must pass exactly the API's board predicate.
+vi.mock('@/lib/db/access-control', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/db/access-control')>()),
   requirePermission: requirePermissionMock,
 }));
 
@@ -131,6 +134,22 @@ describe('BoardElectionsPage', () => {
       'read',
     );
     expect(page.type).toBe(boardElectionsPanelMock);
-    expect(page.props).toMatchObject({ communityId: 42, isAdmin: true, userId: 'user-1' });
+    expect(page.props).toMatchObject({ communityId: 42, isAdmin: true, canAdminister: true, userId: 'user-1' });
+  });
+
+  it('lets a resident with a board seat run elections, but not revoke others’ proxies', async () => {
+    // ADR-006 §2a: requireElectionsAdminRole admits board seats, so the page
+    // offers the admin controls (canAdminister); proxy revoke stays on isAdmin.
+    requirePageCommunityMembershipMock.mockResolvedValue({
+      ...membership,
+      role: 'resident',
+      isAdmin: false,
+      designation: 'board_member',
+      electionsAttorneyReviewed: true,
+    });
+
+    const page = await BoardElectionsPage({ params: Promise.resolve({ id: '42' }) });
+
+    expect(page.props).toMatchObject({ isAdmin: false, canAdminister: true });
   });
 });

@@ -97,7 +97,9 @@ enters a decision in one of two syntactic shapes, and they are opposite:
   shipped sites that uses this shape is a read, an egress, an audience
   selection, or a UI affordance. **None reaches a community business record.**
 - **`requireBoardDesignation(membership)`** — `apps/web/src/lib/db/access-control.ts:103-107`
-  (docblock `:85-102`), written `membership.isAdmin || membership.designation != null`
+  (docblock `:85-102`), written `canActAsBoard(membership)` —
+  `membership.isAdmin || hasBoardDesignation(membership.designation)`, exported so
+  pages showing the matching controls use the identical predicate
   and applied as a **second gate after** `requirePermission(resource, 'write')`.
   Whether it restricts or grants depends on what the role gate before it
   already admitted:
@@ -166,7 +168,8 @@ predicate also gates the legacy synchronous `POST /api/v1/export`
 drift is how one of them ends up wrong again.
 
 **Census (measured 2026-09-23, `grep -rn
-"hasBoardDesignation\|requireBoardDesignation" apps/web/src packages/shared/src`).**
+"hasBoardDesignation\|requireBoardDesignation\|canActAsBoard" apps/web/src packages/shared/src`;
+rows 13–14 added 2026-09-30).**
 The audit that raised R3-05 named two sites (export eligibility, insurance
 recipients). The growth is **wider** than that — twelve sites — and they are not
 all the same kind of thing:
@@ -185,8 +188,10 @@ all the same kind of thing:
 | 10 | `apps/web/src/components/onboarding/welcome-screen.tsx:65,77,94` | grant | **UI gating** | welcome-screen persona and panel selection |
 | 11 | `apps/web/src/app/api/v1/meetings/route.ts:178` | **restrict** | statutory mutation, narrowing-only | `requireBoardDesignation` gates creating / updating a `meetingType: 'board'`; residents hold no `meetings:write`, so the ROLE authorizes the write |
 | 12 | `apps/web/src/lib/elections/common.ts:23` (`requireElectionsAdminRole`) and `apps/web/src/lib/violations/common.ts:34` (`requireViolationAdminWrite`), on the routes enumerated above | **grant** | **sanctioned statutory write** | residents hold `elections`/`violations` write, so the designation arm is what admits a board-designated resident (incl. an acknowledged non-owner) to the admin actions |
+| 13 | `apps/web/src/app/(authenticated)/communities/[id]/board/elections/page.tsx` (`canActAsBoard`) | grant | **UI mirror of #12 (elections only)** | shows the election admin controls (open/close/certify/cancel, eligibility snapshot, proxy approve/reject) with the same predicate as the API gate; proxy **revoke** stays on `isAdmin` or the grantor (`elections-service.ts` revokeProxy). The violations admin UI stays manager-only: its reads are still unit-scoped for residents |
+| 14 | `apps/web/src/lib/announcements/read-visibility.ts` (`canReadAnnouncementAudience`) | grant | **read breadth, mirror of #4** | a board designee can read the `board_only` announcements #4 delivers to them |
 
-Items 1–10 grant, and none of them mutates a business record. Item 11
+Items 1–10, 13 and 14 grant, and none of them mutates a business record. Item 11
 restricts. Item 12 grants a business-record write — the sanctioned statutory set
 enumerated above, and the only one. (Row 12 was classified "restrict,
 narrowing-only" until 2026-09-28; see the correction note at the top of §2a.)

@@ -27,14 +27,12 @@ interface ElectionAdminActionsProps {
   communityId: number;
   electionId: number;
   status: string;
-  isAdmin: boolean;
 }
 
 export function ElectionAdminActions({
   communityId,
   electionId,
   status,
-  isAdmin,
 }: ElectionAdminActionsProps) {
   const openElection = useOpenElection(communityId, electionId);
   const closeElection = useCloseElection(communityId, electionId);
@@ -48,10 +46,6 @@ export function ElectionAdminActions({
   const [resultsDocumentId, setResultsDocumentId] = useState('');
   const [canceledReason, setCanceledReason] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  if (!isAdmin) {
-    return null;
-  }
 
   const cancelable = status === 'open' || status === 'closed';
   const sharedError =
