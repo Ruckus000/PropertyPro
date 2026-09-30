@@ -70,7 +70,13 @@ export async function createMoveChecklist(
     and(eq(leases.id, input.leaseId), isNull(leases.deletedAt)),
   );
   const lease = leaseRows[0];
-  if (!lease || lease.unitId !== input.unitId || lease.residentId !== input.residentId) {
+  // UUIDs compare case-insensitively: Postgres returns lowercase, while the
+  // contracts' z.string().uuid() also accepts uppercase from an API client.
+  if (
+    !lease ||
+    lease.unitId !== input.unitId ||
+    lease.residentId.toLowerCase() !== input.residentId.toLowerCase()
+  ) {
     throw new ValidationError('The lease, unit and resident must belong together in this community.');
   }
 

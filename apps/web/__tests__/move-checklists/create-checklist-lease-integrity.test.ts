@@ -44,7 +44,7 @@ const INPUT = {
   communityId: 7,
   leaseId: 11,
   unitId: 22,
-  residentId: '33333333-3333-4333-8333-333333333333',
+  residentId: 'abcdef12-3333-4333-8333-3333abcdef33',
   type: 'move_in' as const,
 };
 
@@ -89,5 +89,10 @@ describe('createMoveChecklist lease integrity', () => {
       createMoveChecklist({ ...INPUT, residentId: '44444444-4444-4444-8444-444444444444' }, 'admin-1'),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(h.insertMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts the lease’s resident sent as an uppercase UUID (Postgres returns lowercase)', async () => {
+    await createMoveChecklist({ ...INPUT, residentId: INPUT.residentId.toUpperCase() }, 'admin-1');
+    expect(h.insertMock).toHaveBeenCalledTimes(1);
   });
 });
