@@ -47,6 +47,14 @@ function requireApartmentCommunityForRent(communityType: string): void {
   }
 }
 
+function assertOccupancyAllowed(occupancy: string | null | undefined, communityType: string): void {
+  // Apartments have no owners on file (residents POST rejects them), so an
+  // owner-occupied apartment unit is a contradiction, not a preference.
+  if (occupancy === 'owner_occupied' && communityType === 'apartment') {
+    throw new ValidationError('Apartment units cannot be owner-occupied');
+  }
+}
+
 /**
  * `rentAmount` is derived from the unit's active lease by a DB trigger (0040),
  * and `ownerUserId` identifies the owning user — both are per-unit records of
@@ -54,6 +62,8 @@ function requireApartmentCommunityForRent(communityType: string): void {
  * other resident features need the list), so the list must not carry them to a
  * non-manager: a tenant would otherwise read every neighbour's rent. Leases are
  * manager-only (AZ-01); this is the same data through a different door.
+ * `occupancy` follows the same rule: which units stand vacant is not a
+ * neighbour's business (it is a burglary map).
  */
 function mapUnitRow(row: Record<string, unknown>, includeManagerFields: boolean) {
   return {
@@ -67,6 +77,8 @@ function mapUnitRow(row: Record<string, unknown>, includeManagerFields: boolean)
     sqft: (row['sqft'] as number | null) ?? null,
     rentAmount: includeManagerFields ? ((row['rentAmount'] as string | null) ?? null) : null,
     ownerUserId: includeManagerFields ? ((row['ownerUserId'] as string | null) ?? null) : null,
+    occupancy: includeManagerFields ? ((row['occupancy'] as string | null) ?? null) : null,
+    occupancyConfirmed: includeManagerFields ? row['occupancyConfirmedAt'] != null : false,
     createdAt: row['createdAt'] as string,
     updatedAt: row['updatedAt'] as string,
   };
@@ -100,11 +112,12 @@ export const POST = withErrorHandler(
     await requireActiveSubscriptionForMutation(communityId);
     const scoped = createScopedClient(communityId);
 
-    const { unitNumber, building, floor, bedrooms, bathrooms, sqft } = body;
+    const { unitNumber, building, floor, bedrooms, bathrooms, sqft, occupancy } = body;
     const rentAmount = normalizeRentAmount(body.rentAmount);
     if (rentAmount !== undefined) {
       requireApartmentCommunityForRent(membership.communityType);
     }
+    assertOccupancyAllowed(occupancy, membership.communityType);
 
     const duplicate = await getUnitByNumber(scoped, unitNumber);
     if (duplicate) {
@@ -119,6 +132,9 @@ export const POST = withErrorHandler(
       bathrooms: bathrooms ?? null,
       sqft: sqft ?? null,
       rentAmount: rentAmount ?? null,
+      // A value chosen by the manager on create is confirmed by definition.
+      occupancy: occupancy ?? null,
+      occupancyConfirmedAt: occupancy ? new Date() : null,
     });
     if (!newUnit) {
       throw new Error('Failed to create unit');
@@ -130,7 +146,7 @@ export const POST = withErrorHandler(
       resourceType: 'unit',
       resourceId: String(newUnit['id']),
       communityId,
-      newValues: { unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount },
+      newValues: { unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount, occupancy },
     });
 
     void tryAutoComplete(communityId, actorUserId, 'add_units');
@@ -146,6 +162,8 @@ export const POST = withErrorHandler(
       sqft: sqft ?? null,
       rentAmount: rentAmount ?? null,
       ownerUserId: null,
+      occupancy: occupancy ?? null,
+      occupancyConfirmed: Boolean(occupancy),
       createdAt: newUnit['createdAt'] as string,
       updatedAt: newUnit['updatedAt'] as string,
     };
@@ -156,7 +174,7 @@ export const PATCH = withErrorHandler(
   runRoute(unitsUpdateContract, async ({ body, req }) => {
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
-    const { unitId, unitNumber, building, floor, bedrooms, bathrooms, sqft } = body;
+    const { unitId, unitNumber, building, floor, bedrooms, bathrooms, sqft, occupancy } = body;
     const actorUserId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'units', 'write');
@@ -169,6 +187,8 @@ export const PATCH = withErrorHandler(
         'Update lease rentAmount via /api/v1/leases. Unit rentAmount is derived to prevent rent drift.',
       );
     }
+
+    assertOccupancyAllowed(occupancy, membership.communityType);
 
     const existing = await getUnitById(scoped, unitId);
 
@@ -195,6 +215,7 @@ export const PATCH = withErrorHandler(
       ['bathrooms', bathrooms],
       ['sqft', sqft],
       ['rentAmount', rentAmount],
+      ['occupancy', occupancy],
     ] as const;
 
     for (const [key, value] of fields) {
@@ -207,6 +228,12 @@ export const PATCH = withErrorHandler(
 
     if (Object.keys(updateData).length === 0) {
       throw new ValidationError('No fields to update');
+    }
+
+    // Any explicit occupancy write — including re-saving the backfilled guess
+    // unchanged — is the manager confirming it. Clearing it un-confirms.
+    if (occupancy !== undefined) {
+      updateData['occupancyConfirmedAt'] = occupancy === null ? null : new Date();
     }
 
     updateData['updatedAt'] = new Date();
@@ -233,6 +260,9 @@ export const PATCH = withErrorHandler(
       bathrooms: bathrooms !== undefined ? (bathrooms ?? null) : (existing['bathrooms'] as number | null),
       sqft: sqft !== undefined ? (sqft ?? null) : (existing['sqft'] as number | null),
       rentAmount: rentAmount !== undefined ? (rentAmount ?? null) : (existing['rentAmount'] as string | null),
+      occupancy: occupancy !== undefined ? (occupancy ?? null) : ((existing['occupancy'] as string | null) ?? null),
+      occupancyConfirmed:
+        occupancy !== undefined ? occupancy !== null : existing['occupancyConfirmedAt'] != null,
     };
   }),
 );
@@ -247,6 +277,8 @@ export const DELETE = withErrorHandler(
     requirePermission(membership, 'units', 'write');
     await requireActiveSubscriptionForMutation(communityId);
     const scoped = createScopedClient(communityId);
+
+    assertOccupancyAllowed(occupancy, membership.communityType);
 
     const existing = await getUnitById(scoped, unitId);
 

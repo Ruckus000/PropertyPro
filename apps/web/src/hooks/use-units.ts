@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 
+export type UnitOccupancy = 'owner_occupied' | 'rented' | 'vacant';
+
 export interface Unit {
   id: number;
   communityId: number;
@@ -12,6 +14,10 @@ export interface Unit {
   sqft: number | null;
   rentAmount: string | null;
   ownerUserId: string | null;
+  /** Manager-only (null for everyone else). See migration 0080. */
+  occupancy: UnitOccupancy | null;
+  /** False while `occupancy` is a backfilled guess no manager has confirmed. */
+  occupancyConfirmed: boolean;
   createdAt: string;
   updatedAt: string;
 }

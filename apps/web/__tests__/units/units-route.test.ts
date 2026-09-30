@@ -18,6 +18,8 @@ const {
   listUnitsForCommunityMock,
   getUnitByNumberMock,
   createUnitForCommunityMock,
+  getUnitByIdMock,
+  updateUnitByIdMock,
   tryAutoCompleteMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -31,6 +33,8 @@ const {
   listUnitsForCommunityMock: vi.fn(),
   getUnitByNumberMock: vi.fn(),
   createUnitForCommunityMock: vi.fn(),
+  getUnitByIdMock: vi.fn(),
+  updateUnitByIdMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
 }));
 
@@ -67,17 +71,17 @@ vi.mock('@/lib/services/unit-service', () => ({
   listUnitsForCommunity: listUnitsForCommunityMock,
   getUnitByNumber: getUnitByNumberMock,
   createUnitForCommunity: createUnitForCommunityMock,
-  getUnitById: vi.fn(),
+  getUnitById: getUnitByIdMock,
   listResidentRolesForUnit: vi.fn(),
   softDeleteUnitById: vi.fn(),
-  updateUnitById: vi.fn(),
+  updateUnitById: updateUnitByIdMock,
 }));
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
 }));
 
-import { GET, POST } from '../../src/app/api/v1/units/route';
+import { GET, PATCH, POST } from '../../src/app/api/v1/units/route';
 
 const MEMBERSHIP = {
   userId: 'actor-1',
@@ -155,6 +159,8 @@ describe('/api/v1/units', () => {
         sqft: 900,
         rentAmount: '1850.00',
         ownerUserId: 'owner-101',
+        occupancy: 'vacant',
+        occupancyConfirmedAt: null,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
@@ -169,6 +175,8 @@ describe('/api/v1/units', () => {
         sqft: 650,
         rentAmount: '1400.00',
         ownerUserId: 'owner-102',
+        occupancy: 'rented',
+        occupancyConfirmedAt: '2026-09-01T00:00:00.000Z',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
@@ -197,6 +205,8 @@ describe('/api/v1/units', () => {
       for (const unit of units) {
         expect(unit['rentAmount']).toBeNull();
         expect(unit['ownerUserId']).toBeNull();
+        expect(unit['occupancy']).toBeNull();
+        expect(unit['occupancyConfirmed']).toBe(false);
       }
       // Non-sensitive fields still flow — the unit picker keeps working.
       expect(units.map((u) => u['unitNumber'])).toEqual(['101', '102']);
@@ -209,6 +219,9 @@ describe('/api/v1/units', () => {
         const units = await listAs(role, false);
         expect(units.map((u) => u['rentAmount'])).toEqual(['1850.00', '1400.00']);
         expect(units.map((u) => u['ownerUserId'])).toEqual(['owner-101', 'owner-102']);
+        expect(units.map((u) => u['occupancy'])).toEqual(['vacant', 'rented']);
+        // Backfilled guess (confirmedAt null) vs. a manager-confirmed value.
+        expect(units.map((u) => u['occupancyConfirmed'])).toEqual([false, true]);
       },
     );
   });
@@ -256,5 +269,106 @@ describe('/api/v1/units', () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  describe('occupancy (migration 0080)', () => {
+    function postUnit(body: Record<string, unknown>) {
+      return POST(
+        new NextRequest('http://localhost:3000/api/v1/units', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 42, unitNumber: '303', ...body }),
+        }),
+      );
+    }
+
+    function patchUnit(body: Record<string, unknown>) {
+      return PATCH(
+        new NextRequest('http://localhost:3000/api/v1/units', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 42, unitId: 7, ...body }),
+        }),
+      );
+    }
+
+    beforeEach(() => {
+      getUnitByNumberMock.mockResolvedValue(null);
+      createUnitForCommunityMock.mockResolvedValue({
+        id: 9,
+        createdAt: '2026-01-02T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      });
+      getUnitByIdMock.mockResolvedValue({
+        id: 7,
+        unitNumber: '7',
+        occupancy: 'vacant',
+        occupancyConfirmedAt: null,
+      });
+      updateUnitByIdMock.mockResolvedValue(undefined);
+    });
+
+    it('POST with occupancy stores it as confirmed', async () => {
+      const res = await postUnit({ occupancy: 'rented' });
+      expect(res.status).toBe(200);
+      const values = createUnitForCommunityMock.mock.calls[0]![1] as Record<string, unknown>;
+      expect(values['occupancy']).toBe('rented');
+      expect(values['occupancyConfirmedAt']).toBeInstanceOf(Date);
+      const json = await res.json();
+      expect(json.data.occupancyConfirmed).toBe(true);
+    });
+
+    it('POST without occupancy leaves it unknown and unconfirmed', async () => {
+      await postUnit({});
+      const values = createUnitForCommunityMock.mock.calls[0]![1] as Record<string, unknown>;
+      expect(values['occupancy']).toBeNull();
+      expect(values['occupancyConfirmedAt']).toBeNull();
+    });
+
+    it('POST rejects an unknown occupancy value', async () => {
+      const res = await postUnit({ occupancy: 'snowbird' });
+      expect(res.status).toBe(400);
+      expect(createUnitForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['POST', () => postUnit({ occupancy: 'owner_occupied' })],
+      ['PATCH', () => patchUnit({ occupancy: 'owner_occupied' })],
+    ] as const)('%s rejects owner_occupied in an apartment community', async (_verb, send) => {
+      requireCommunityMembershipMock.mockResolvedValue({ ...MEMBERSHIP, communityType: 'apartment' });
+      const res = await send();
+      expect(res.status).toBe(400);
+      expect(createUnitForCommunityMock).not.toHaveBeenCalled();
+      expect(updateUnitByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('PATCH re-saving the backfilled value confirms it and audits the write', async () => {
+      const res = await patchUnit({ occupancy: 'vacant' });
+      expect(res.status).toBe(200);
+      const update = updateUnitByIdMock.mock.calls[0]![2] as Record<string, unknown>;
+      expect(update['occupancy']).toBe('vacant');
+      expect(update['occupancyConfirmedAt']).toBeInstanceOf(Date);
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oldValues: { occupancy: 'vacant' },
+          newValues: { occupancy: 'vacant' },
+        }),
+      );
+      const json = await res.json();
+      expect(json.data.occupancyConfirmed).toBe(true);
+    });
+
+    it('PATCH clearing occupancy un-confirms it', async () => {
+      await patchUnit({ occupancy: null });
+      const update = updateUnitByIdMock.mock.calls[0]![2] as Record<string, unknown>;
+      expect(update['occupancy']).toBeNull();
+      expect(update['occupancyConfirmedAt']).toBeNull();
+    });
+
+    it('PATCH without occupancy does not touch confirmation', async () => {
+      await patchUnit({ floor: 3 });
+      const update = updateUnitByIdMock.mock.calls[0]![2] as Record<string, unknown>;
+      expect(update).not.toHaveProperty('occupancyConfirmedAt');
+    });
   });
 });
