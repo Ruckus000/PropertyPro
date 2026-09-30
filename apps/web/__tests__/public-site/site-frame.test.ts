@@ -86,8 +86,15 @@ describe('site-frame variants', () => {
 });
 
 describe('public-site components respond to the frame, not the window', () => {
-  it('uses no bare viewport variant anywhere in components/public-site', () => {
-    const files = walk(PUBLIC_SITE);
+  it('uses no bare viewport variant in public-site components or the routes that render them', () => {
+    // The routes too: their fallback branches render public-site-shaped markup
+    // inside the same frame, and a bare `md:` there would disagree with it.
+    const files = [
+      ...walk(PUBLIC_SITE),
+      ...walk(join(WEB_SRC, 'app', 'public-site')),
+      ...walk(join(WEB_SRC, 'app', '(site-preview)')),
+      ...walk(join(WEB_SRC, 'app', 'dev', 'site-preview')),
+    ];
     expect(files.length).toBeGreaterThan(10); // anti-vacuity: the scan saw the tree
     const offenders = files.flatMap((file) =>
       [...readFileSync(file, 'utf8').matchAll(/(?<![\w-])(sm|md|lg|xl|2xl):[a-z[!-]/g)].map(

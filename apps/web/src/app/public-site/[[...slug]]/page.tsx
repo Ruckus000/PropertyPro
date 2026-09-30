@@ -416,9 +416,9 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
 
         <main id="main-content" className="flex-1">
           {/* Hero section */}
-          <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
+          <section className="bg-primary px-4 py-20 text-center site-sm:px-6 site-lg:px-8">
             <div className="mx-auto max-w-3xl">
-              <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
+              <h1 className="font-heading text-4xl font-bold text-content-inverse site-sm:text-5xl">
                 {/* D18 — a sub-page headlines with its own name, not the
                     community's; it cannot own a hero block until 11c. */}
                 {page && !page.isHome ? page.name : community.name}
@@ -438,12 +438,12 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
           </section>
 
           {/* Features / Quick Links */}
-          <section className="bg-surface-card px-4 py-16 sm:px-6 lg:px-8">
+          <section className="bg-surface-card px-4 py-16 site-sm:px-6 site-lg:px-8">
             <div className="mx-auto max-w-5xl">
               <h2 className="font-heading text-2xl font-semibold text-content text-center mb-10">
                 Community Resources
               </h2>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-6 site-sm:grid-cols-2 site-lg:grid-cols-3">
                 <FeatureCard
                   title="Documents"
                   description="Access community documents, budgets, and meeting minutes."
@@ -464,7 +464,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
           </section>
 
           {/* CTA section */}
-          <section className="bg-accent px-4 py-12 sm:px-6 lg:px-8">
+          <section className="bg-accent px-4 py-12 site-sm:px-6 site-lg:px-8">
             <div className="mx-auto max-w-3xl text-center">
               <h2 className="font-heading text-xl font-semibold text-content">
                 Have questions?
