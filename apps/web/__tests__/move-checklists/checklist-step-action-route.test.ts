@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { AppError } from '../../src/lib/api/errors/AppError';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -11,6 +12,7 @@ const {
   getMoveChecklistMock,
   updateChecklistStepMock,
   createOnboardingInvitationMock,
+  assertNotDemoGraceMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -18,6 +20,7 @@ const {
   getMoveChecklistMock: vi.fn(),
   updateChecklistStepMock: vi.fn(),
   createOnboardingInvitationMock: vi.fn(),
+  assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -31,6 +34,10 @@ vi.mock('@/lib/api/community-membership', () => ({
 vi.mock('@propertypro/shared', async (orig) => ({
   ...((await orig()) as Record<string, unknown>),
   isAdminRole: isAdminRoleMock,
+}));
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
 vi.mock('@/lib/services/move-checklist-service', () => ({
@@ -85,12 +92,13 @@ function buildRequest(
   checklistId: number,
   stepKey: string,
   body: Record<string, unknown>,
+  headers?: Record<string, string>,
 ): NextRequest {
   return new NextRequest(
     `http://localhost:3000/api/v1/move-checklists/${checklistId}/steps/${stepKey}/action`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(headers ?? {}) },
       body: JSON.stringify(body),
     },
   );
@@ -173,5 +181,61 @@ describe('POST /api/v1/move-checklists/[id]/steps/[stepKey]/action', () => {
     const json = (await res.json()) as { error: { code: string } };
     expect(json.error.code).toBe('VALIDATION_ERROR');
     expect(getMoveChecklistMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/move-checklists/[id]/steps/[stepKey]/action — tenant + demo grace', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('admin-1');
+    requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
+    isAdminRoleMock.mockReturnValue(true);
+    getMoveChecklistMock.mockResolvedValue(CHECKLIST);
+    updateChecklistStepMock.mockResolvedValue(UPDATED_STEP);
+    createOnboardingInvitationMock.mockResolvedValue({ id: 99 });
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
+  });
+
+  it('returns 404 when the header disagrees with body.communityId, with no membership or service call', async () => {
+    const res = await POST(
+      buildRequest(7, 'portal_account', { communityId: 42, action: 'send_invite' }, {
+        'x-community-id': '99',
+      }),
+      { params: Promise.resolve({ id: '7', stepKey: 'portal_account' }) },
+    );
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error: { message: string } };
+    expect(json.error.message).toBe('Community not found');
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(getMoveChecklistMock).not.toHaveBeenCalled();
+    expect(createOnboardingInvitationMock).not.toHaveBeenCalled();
+    expect(updateChecklistStepMock).not.toHaveBeenCalled();
+  });
+
+  it('checks demo grace for the resolved community', async () => {
+    const res = await POST(
+      buildRequest(7, 'portal_account', { communityId: 42, action: 'send_invite' }),
+      { params: Promise.resolve({ id: '7', stepKey: 'portal_account' }) },
+    );
+    expect(res.status).toBe(200);
+    expect(assertNotDemoGraceMock).toHaveBeenCalledWith(42);
+  });
+
+  it('returns 403 DEMO_GRACE_READ_ONLY and skips membership + services during demo grace', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(
+      new AppError('Your trial has ended. Subscribe to regain full access.', 403, 'DEMO_GRACE_READ_ONLY'),
+    );
+    const res = await POST(
+      buildRequest(7, 'portal_account', { communityId: 42, action: 'send_invite' }),
+      { params: Promise.resolve({ id: '7', stepKey: 'portal_account' }) },
+    );
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('DEMO_GRACE_READ_ONLY');
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(getMoveChecklistMock).not.toHaveBeenCalled();
+    expect(createOnboardingInvitationMock).not.toHaveBeenCalled();
+    expect(updateChecklistStepMock).not.toHaveBeenCalled();
   });
 });

@@ -95,3 +95,22 @@ describe('PATCH /api/v1/move-checklists/[id]/steps/[stepKey]', () => {
     expect(updateChecklistStepMock).not.toHaveBeenCalled();
   });
 });
+
+describe('PATCH /api/v1/move-checklists/[id]/steps/[stepKey] — x-community-id cross-check', () => {
+  it('returns 404 when the header disagrees with body.communityId, with no membership or service call', async () => {
+    const res = await PATCH(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists/1/steps/upload_lease', {
+        method: 'PATCH',
+        headers: { 'x-community-id': '99' },
+        body: JSON.stringify({ communityId: 42, completed: true }),
+      }),
+      { params: Promise.resolve({ id: '1', stepKey: 'upload_lease' }) },
+    );
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error: { message: string } };
+    expect(json.error.message).toBe('Community not found');
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(updateChecklistStepMock).not.toHaveBeenCalled();
+  });
+});

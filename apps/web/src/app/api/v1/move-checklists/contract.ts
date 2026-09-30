@@ -6,8 +6,17 @@
  * GET auth-first: contract query omits `communityId` so invalid/missing
  * `communityId` does not 400 before `requireAuthenticatedUserId` (forum/threads
  * #97 precedent). Filters parsed in-handler after membership + admin gate.
+ * Because the scope is not in the contract, GET declares NO `tenantScope`;
+ * instead the handler cross-checks the parsed `communityId` against the
+ * middleware `x-community-id` header with `resolveEffectiveCommunityId` right
+ * after auth (onboarding/checklist #123 precedent). A header/query mismatch is
+ * 404 — after the 401, so the auth-first ordering is unchanged.
  *
- * POST: body validated by runner before handler auth (standard runRoute order).
+ * POST: `tenantScope: { in: 'body' }` — the runner (app-bound, from
+ * `@/lib/api/run-route`) validates the body, then reconciles `body.communityId`
+ * with the header and injects `communityId`, all before handler auth. Delta vs.
+ * the pre-tenantScope route: a header/body mismatch is now a 404, returned
+ * before the 401 (body 400s were already pre-auth).
  *
  * Response: loose `z.unknown()` — `MoveChecklist` rows carry `Date` fields.
  *
@@ -38,4 +47,5 @@ export const createMoveChecklistContract = defineRoute({
   },
   response: z.unknown(),
   permission: { resource: 'move_checklists', action: 'write' },
+  tenantScope: { in: 'body' },
 });
