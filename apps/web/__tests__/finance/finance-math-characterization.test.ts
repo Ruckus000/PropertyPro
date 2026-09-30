@@ -139,6 +139,12 @@ vi.mock('@propertypro/db', () => ({
   postLedgerEntry: postLedgerEntryMock,
 }));
 
+const { captureMessageMock } = vi.hoisted(() => ({ captureMessageMock: vi.fn() }));
+vi.mock('@sentry/nextjs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@sentry/nextjs')>()),
+  captureMessage: captureMessageMock,
+}));
+
 vi.mock('@propertypro/email', () => ({
   AssessmentPaymentReceivedEmail: (props: unknown) => ({ type: 'AssessmentPaymentReceivedEmail', props }),
   sendEmail: vi.fn(),
@@ -167,6 +173,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 import {
   buildCommunityStatement,
+  exportCommunityStatementPdf,
   createAssessmentForCommunity,
   updateAssessmentForCommunity,
   buildUnitStatement,
@@ -1054,9 +1061,10 @@ describe('6. statements', () => {
           { dir: 'desc', column: rentObligationsTable.id },
         ] },
       ]);
+      // 201, not 200: one extra row per source makes `truncated` exact (3.8).
       expect(limitCalls).toEqual([
-        { table: assessmentLineItemsTable, n: 200 },
-        { table: rentObligationsTable, n: 200 },
+        { table: assessmentLineItemsTable, n: 201 },
+        { table: rentObligationsTable, n: 201 },
       ]);
     });
 
@@ -1091,24 +1099,51 @@ describe('6. statements', () => {
       expect(statement.lineItems).toHaveLength(200);
       expect(statement.lineItems[0]?.dueDate).toBe(day(249));
       expect(statement.lineItems[199]?.dueDate).toBe(day(50));
+      // One source over 200 with the other empty: only the +1 row makes this visible.
+      expect(statement.truncated).toBe(true);
     });
 
-    it('the merged list is cut to 200 silently: a same-date rent row behind 200 assessment rows vanishes', async () => {
-      // CHARACTERIZATION: suspected defect — silent truncation at 200. The merge is a
-      // stable sort on dueDate (ids come from two different tables, so no id
-      // tiebreak would be meaningful; same-date ties keep concatenation order,
-      // assessments first) and is then cut to 200 with no signal to the caller — no
-      // `truncated` flag, no count, no cursor. A statement for a unit with more than
-      // 200 items in the window just omits the rest: here the one same-date rent
-      // obligation disappears behind 200 assessment rows, and the statement still
-      // looks complete.
+    it('the merged list is cut to 200 and REPORTED: a same-date rent row behind 200 assessment rows drops out', async () => {
+      // Defect (10), partly fixed 2026-09-30 (roadmap 3.8): the merge is a stable
+      // sort on dueDate (ids come from two different tables, so no id tiebreak
+      // would be meaningful; same-date ties keep concatenation order, assessments
+      // first) and is then cut to 200. The response still carries no `truncated`
+      // flag or cursor — that UI waits on its trigger — but the cut is no longer
+      // silent: it reports `unit_statement_truncated` to Sentry.
       seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
         lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));
       seed(rentObligationsTable, [rent({ id: 9999, dueDate: '2026-03-01' })]);
 
+      captureMessageMock.mockClear();
       const statement = await buildUnitStatement(11, 88);
       expect(statement.lineItems).toHaveLength(200);
       expect(statement.lineItems.some((row) => row.id === 9999)).toBe(false);
+      expect(statement.truncated).toBe(true);
+      expect(captureMessageMock).toHaveBeenCalledTimes(1);
+      expect(captureMessageMock).toHaveBeenCalledWith('unit_statement_truncated', {
+        level: 'warning',
+        extra: { communityId: 11, unitId: 88, rows: 201, limit: 200 },
+      });
+    });
+
+    it('a statement under every limit is not truncated or reported', async () => {
+      seed(assessmentLineItemsTable, [lineItem({ id: 1, unitId: 88, dueDate: '2026-03-01' })]);
+      seed(rentObligationsTable, [rent({ id: 2, unitId: 88, dueDate: '2026-02-01' })]);
+      captureMessageMock.mockClear();
+      const statement = await buildUnitStatement(11, 88);
+      expect(statement.truncated).toBe(false);
+      expect(captureMessageMock).not.toHaveBeenCalled();
+    });
+
+    it('EXACTLY 200 items in one source is complete: not truncated, not reported', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
+        lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, []);
+      captureMessageMock.mockClear();
+      const statement = await buildUnitStatement(11, 88);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.truncated).toBe(false);
+      expect(captureMessageMock).not.toHaveBeenCalled();
     });
 
     it('a missing rent_obligations relation (42P01, direct or as cause) is swallowed', async () => {
@@ -1175,6 +1210,41 @@ describe('6. statements', () => {
       expect(statement.lineItems[0]?.dueDate).toBe(day(499));
       expect(statement.lineItems[199]?.dueDate).toBe(day(300));
       expect(orderByCalls.map((c) => c.keys.map((k) => k.dir))).toEqual([['desc', 'desc'], ['desc', 'desc']]);
+    });
+
+    it('more than 200 items is flagged truncated and reported once (roadmap 3.8)', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 150 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, shuffled(Array.from({ length: 60 }, (_, i) =>
+        rent({ id: 1 + i, unitId: 2, dueDate: '2026-03-02' }))));
+      captureMessageMock.mockClear();
+      const statement = await buildCommunityStatement(11);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.truncated).toBe(true);
+      expect(captureMessageMock).toHaveBeenCalledTimes(1);
+      expect(captureMessageMock).toHaveBeenCalledWith('community_statement_truncated', {
+        level: 'warning',
+        extra: { communityId: 11, rows: 210, limit: 200 },
+      });
+    });
+
+    it('the community PDF export carries the truncation note through (roadmap 3.8)', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 201 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, []);
+      const pdf = new TextDecoder().decode(await exportCommunityStatementPdf(11));
+      expect(pdf).toContain('NOTE: Payables lists only the 200 most recent items');
+    });
+
+    it('EXACTLY 200 items is complete: not truncated, not reported', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, []);
+      captureMessageMock.mockClear();
+      const statement = await buildCommunityStatement(11);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.truncated).toBe(false);
+      expect(captureMessageMock).not.toHaveBeenCalled();
     });
 
     it('a missing rent_obligations relation is swallowed', async () => {

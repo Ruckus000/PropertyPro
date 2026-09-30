@@ -55,6 +55,7 @@
  * - logAuditEvent on every mutation
  * - Apartment-only feature gate (AGENTS #34)
  */
+import { captureMessage } from '@sentry/nextjs';
 import { runRoute } from '@/lib/api/run-route';
 import { logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, isAdminRole, type CommunityType } from '@propertypro/shared';
@@ -286,6 +287,10 @@ export const GET = withErrorHandler(
             communityId,
             leaseId,
           });
+          captureMessage('lease_list_truncated', {
+            level: 'warning',
+            extra: { communityId, leaseId, path: 'renewal_chain' },
+          });
         }
         return getRenewalChain(leaseId, visibleToActor(chainRows.map(coerceLeaseRecord)));
       }
@@ -331,6 +336,10 @@ export const GET = withErrorHandler(
     if (truncated) {
       console.warn('[leases] GET list hit LEASE_LIST_MAX_ROWS; oldest rows dropped', {
         communityId,
+      });
+      captureMessage('lease_list_truncated', {
+        level: 'warning',
+        extra: { communityId, path: 'list' },
       });
     }
 

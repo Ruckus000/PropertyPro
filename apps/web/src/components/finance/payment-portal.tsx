@@ -330,6 +330,14 @@ export function PaymentPortal({
         />
       )}
 
+      {data.truncated && (
+        <AlertBanner
+          status="warning"
+          title={`Showing the ${lineItems.length} most recent items`}
+          description="Total due and the overdue count cover only these items. The balance includes everything."
+        />
+      )}
+
       {/* Balance Summary */}
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard

@@ -1329,8 +1329,16 @@ export interface UnitStatement {
   balanceCents: number;
   ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
   lineItems: StatementLineItem[];
+  /** True when more than 200 line items matched; only the newest 200 are listed. */
+  truncated: boolean;
 }
 
+/**
+ * Statements show the newest 200 line items. Each source is read with ONE
+ * extra row, so `merged.length > STATEMENT_LINE_ITEM_LIMIT` is an exact
+ * "something was dropped" signal: the union can only exceed 200 when rows
+ * really are cut, and 201 per source is enough to know that.
+ */
 const STATEMENT_LINE_ITEM_LIMIT = 200;
 
 export async function buildUnitStatement(
@@ -1353,7 +1361,7 @@ export async function buildUnitStatement(
   const assessmentRows = await scoped
     .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, lineItemsWhere)
     .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
-    .limit(STATEMENT_LINE_ITEM_LIMIT);
+    .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
 
   const rentFilters = [eq(rentObligations.unitId, unitId)];
   if (startDate !== undefined) {
@@ -1368,7 +1376,7 @@ export async function buildUnitStatement(
     rentRows = await scoped
       .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
       .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
-      .limit(STATEMENT_LINE_ITEM_LIMIT);
+      .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
   } catch (err) {
     if (!isMissingRelationError(err)) {
       throw err;
@@ -1383,7 +1391,7 @@ export async function buildUnitStatement(
   });
   const balanceCents = await getUnitLedgerBalance(scoped, unitId);
 
-  const combined: StatementLineItem[] = [
+  const merged: StatementLineItem[] = [
     ...assessmentRows.map<StatementLineItem>((row) => ({
       id: row.id,
       assessmentId: row.assessmentId,
@@ -1406,15 +1414,25 @@ export async function buildUnitStatement(
       paidAt: null,
       paymentIntentId: null,
     })),
-  ]
-    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
-    .slice(0, STATEMENT_LINE_ITEM_LIMIT);
+  ].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+
+  // A capped statement still looks complete to its reader, so never cap it
+  // silently: flag it for the page and report it. The first such event is the
+  // trigger for giving statements a cursor (roadmap 3.8).
+  const truncated = merged.length > STATEMENT_LINE_ITEM_LIMIT;
+  if (truncated) {
+    captureMessage('unit_statement_truncated', {
+      level: 'warning',
+      extra: { communityId, unitId, rows: merged.length, limit: STATEMENT_LINE_ITEM_LIMIT },
+    });
+  }
 
   return {
     unitId,
     balanceCents,
     ledgerEntries: ledgerEntriesForUnit,
-    lineItems: combined,
+    lineItems: merged.slice(0, STATEMENT_LINE_ITEM_LIMIT),
+    truncated,
   };
 }
 
@@ -1426,6 +1444,8 @@ export interface CommunityStatement {
   balanceCents: number;
   ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
   lineItems: CommunityStatementLineItem[];
+  /** True when more than 200 line items matched; only the newest 200 are listed. */
+  truncated: boolean;
 }
 
 /**
@@ -1483,7 +1503,7 @@ export async function buildCommunityStatement(
   const assessmentRows = await scoped
     .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, assessmentWhere)
     .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
-    .limit(STATEMENT_LINE_ITEM_LIMIT);
+    .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
 
   const rentFilters: Array<ReturnType<typeof eq>> = [];
   if (startDate !== undefined) {
@@ -1503,7 +1523,7 @@ export async function buildCommunityStatement(
     rentRows = await scoped
       .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
       .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
-      .limit(STATEMENT_LINE_ITEM_LIMIT);
+      .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
   } catch (err) {
     if (!isMissingRelationError(err)) {
       throw err;
@@ -1547,14 +1567,24 @@ export async function buildCommunityStatement(
       paymentIntentId: null,
       unitNumber: unitNumberById.get(row.unitId) ?? '',
     })),
-  ]
-    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
-    .slice(0, STATEMENT_LINE_ITEM_LIMIT);
+  ].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+
+  // Same rule as buildUnitStatement. This one is the likelier to fire: a
+  // ~70-unit community on monthly assessments passes 200 items in the default
+  // 90-day window.
+  const truncated = combinedLineItems.length > STATEMENT_LINE_ITEM_LIMIT;
+  if (truncated) {
+    captureMessage('community_statement_truncated', {
+      level: 'warning',
+      extra: { communityId, rows: combinedLineItems.length, limit: STATEMENT_LINE_ITEM_LIMIT },
+    });
+  }
 
   return {
     balanceCents,
     ledgerEntries: ledgerEntriesForCommunity,
-    lineItems: combinedLineItems,
+    lineItems: combinedLineItems.slice(0, STATEMENT_LINE_ITEM_LIMIT),
+    truncated,
   };
 }
 
@@ -1724,6 +1754,7 @@ export async function exportCommunityStatementPdf(
       amountCents: item.amountCents,
       lateFeeCents: item.lateFeeCents,
     })),
+    truncated: statement.truncated,
   });
 }
 

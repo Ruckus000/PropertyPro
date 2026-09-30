@@ -36,12 +36,16 @@ export interface UnitStatementData {
   balanceCents: number;
   ledgerEntries: LedgerEntry[];
   lineItems: UnitLineItem[];
+  /** Server read more than 200 items; only the newest 200 are in `lineItems`. */
+  truncated?: boolean;
 }
 
 export interface CommunityStatementData {
   balanceCents: number;
   ledgerEntries: LedgerEntry[];
   lineItems: CommunityLineItem[];
+  /** Server read more than 200 items; only the newest 200 are in `lineItems`. */
+  truncated?: boolean;
 }
 
 export interface StatementInner {

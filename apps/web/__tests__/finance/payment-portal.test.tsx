@@ -465,6 +465,35 @@ describe('PaymentPortal', () => {
       expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
     });
 
+    it.each([
+      [true, 'shows'],
+      [false, 'does not show'],
+    ])('truncated=%s %s the "200 most recent items" notice (roadmap 3.8)', async (truncated) => {
+      mockBothFetches(
+        { balanceCents: 0, ledgerEntries: [], lineItems: [], truncated },
+        { mode: 'community' },
+      );
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" paymentsEnabled={false} />
+        </Wrapper>,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/all caught up/i)).toBeInTheDocument();
+      });
+      const notice = screen.queryByText(/most recent items/);
+      if (truncated) {
+        expect(notice).toBeInTheDocument();
+      } else {
+        expect(notice).not.toBeInTheDocument();
+      }
+    });
+
     it('renders empty-state card when the community has no activity', async () => {
       mockBothFetches(
         {
