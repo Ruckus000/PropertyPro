@@ -74,7 +74,7 @@ const itemsWithChildren: NavRailSection[] = [
 
 function renderNavRail(overrides: Partial<React.ComponentProps<typeof NavRail>> = {}) {
   const props = {
-    items: defaultItems,
+    sections: [{ label: null, items: defaultItems }],
     activeView: "dashboard",
     onViewChange: vi.fn(),
     expanded: true,
@@ -113,11 +113,16 @@ describe("NavRail", () => {
 
     it("keeps the overflow rail on the browser's native scrollbar", () => {
       const { container } = renderNavRail({
-        items: Array.from({ length: 24 }, (_, index) => ({
-          id: `item-${index}`,
-          label: `Item ${index}`,
-          icon: TestIcon,
-        })),
+        sections: [
+          {
+            label: null,
+            items: Array.from({ length: 24 }, (_, index) => ({
+              id: `item-${index}`,
+              label: `Item ${index}`,
+              icon: TestIcon,
+            })),
+          },
+        ],
       });
 
       const scrollRail = container.querySelector('.overflow-y-auto');
@@ -200,7 +205,12 @@ describe("NavRail", () => {
 
     it("uses explicit popup semantics for non-link actions", () => {
       renderNavRail({
-        items: [{ id: "upgrade", label: "Requires a higher plan", icon: TestIcon, ariaHasPopup: "dialog" }],
+        sections: [
+          {
+            label: null,
+            items: [{ id: "upgrade", label: "Requires a higher plan", icon: TestIcon, ariaHasPopup: "dialog" }],
+          },
+        ],
         activeView: "upgrade",
       });
 
@@ -239,7 +249,6 @@ describe("NavRail", () => {
   describe("Section-based rendering", () => {
     it("renders section labels for labeled sections when expanded", () => {
       renderNavRail({
-        items: undefined,
         sections: sectionItems,
       });
 
@@ -249,7 +258,6 @@ describe("NavRail", () => {
 
     it("does not render a label for null-label sections", () => {
       renderNavRail({
-        items: undefined,
         sections: sectionItems,
       });
 
@@ -259,7 +267,6 @@ describe("NavRail", () => {
 
     it("renders dividers between sections", () => {
       renderNavRail({
-        items: undefined,
         sections: sectionItems,
       });
 
@@ -269,7 +276,6 @@ describe("NavRail", () => {
 
     it("hides section labels when collapsed", () => {
       renderNavRail({
-        items: undefined,
         sections: sectionItems,
         expanded: false,
       });
@@ -301,7 +307,6 @@ describe("NavRail", () => {
     // too, distinct from a neutral/unset badge.
     it("gives a warning badge its own solid tone when expanded, distinct from neutral", () => {
       renderNavRail({
-        items: undefined,
         sections: [
           {
             label: null,
@@ -324,7 +329,6 @@ describe("NavRail", () => {
   describe("Children and disclosure", () => {
     it("renders a chevron button for items with children", () => {
       renderNavRail({
-        items: undefined,
         sections: itemsWithChildren,
         activeView: "meetings",
       });
@@ -337,7 +341,6 @@ describe("NavRail", () => {
 
     it("expands children when chevron is clicked", () => {
       renderNavRail({
-        items: undefined,
         sections: itemsWithChildren,
         activeView: "meetings",
       });
@@ -352,7 +355,6 @@ describe("NavRail", () => {
 
     it("renders the parent row as a link, not a button", () => {
       renderNavRail({
-        items: undefined,
         sections: itemsWithChildren,
         activeView: "meetings",
       });
@@ -364,7 +366,6 @@ describe("NavRail", () => {
 
     it("gives the parent a lighter treatment when a child is active", () => {
       renderNavRail({
-        items: undefined,
         sections: itemsWithChildren,
         activeView: "announcements-drafts",
       });
@@ -376,7 +377,6 @@ describe("NavRail", () => {
 
     it("auto-expands the parent when a child is active", () => {
       renderNavRail({
-        items: undefined,
         sections: itemsWithChildren,
         activeView: "announcements-drafts",
       });
@@ -388,7 +388,6 @@ describe("NavRail", () => {
 
     it("hides children when the sidebar is collapsed", () => {
       renderNavRail({
-        items: undefined,
         sections: itemsWithChildren,
         activeView: "announcements-drafts",
         expanded: false,
@@ -400,7 +399,6 @@ describe("NavRail", () => {
 
     it("does not render a chevron for items without children", () => {
       renderNavRail({
-        items: undefined,
         sections: itemsWithChildren,
         activeView: "meetings",
       });
@@ -541,14 +539,6 @@ describe("NavRail", () => {
       renderSectionNavRail({ expanded: true });
 
       expect(screen.getByText("2")).toBeTruthy();
-    });
-
-    it("backward compat: items prop still works without sections", () => {
-      renderNavRail({ items: defaultItems });
-
-      for (const item of defaultItems) {
-        expect(screen.getByLabelText(item.label)).toBeTruthy();
-      }
     });
   });
 

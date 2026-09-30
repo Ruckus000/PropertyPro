@@ -42,10 +42,8 @@ export type NavRailSection = {
 };
 
 export interface NavRailProps {
-  /** @deprecated Prefer sections for explicit grouping. */
-  items?: NavRailItem[];
-  /** Section-based nav structure. Takes precedence over items. */
-  sections?: NavRailSection[];
+  /** Section-based nav structure. */
+  sections: NavRailSection[];
   activeView: string;
   onViewChange: (viewId: string) => void;
   expanded: boolean;
@@ -84,14 +82,6 @@ export interface NavRailProps {
   sectionOpen?: Record<string, boolean>;
   /** Called with the section label when a collapsible section header is toggled. */
   onSectionToggle?: (label: string) => void;
-  /**
-   * @deprecated Use `sections` instead. Optional separator with label rendered between item groups.
-   */
-  groupSeparator?: React.ReactNode;
-  /**
-   * @deprecated Use `sections` instead. Index at which to insert the group separator.
-   */
-  groupSeparatorAfterIndex?: number;
 }
 
 function cn(...values: Array<string | null | undefined | false>): string {
@@ -164,7 +154,6 @@ function PanelLeftCloseIcon({ size = 16 }: { size?: number }) {
 }
 
 export function NavRail({
-  items,
   sections,
   activeView,
   onViewChange,
@@ -176,13 +165,10 @@ export function NavRail({
   collapsibleSections = false,
   sectionOpen,
   onSectionToggle,
-  groupSeparator,
-  groupSeparatorAfterIndex,
 }: NavRailProps) {
-  const resolvedSections: NavRailSection[] = sections ?? (items ? [{ label: null, items }] : []);
   const navRef = useRef<HTMLElement | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(() =>
-    resolvedSections.reduce<Record<string, boolean>>((state, section) => {
+    sections.reduce<Record<string, boolean>>((state, section) => {
       for (const item of section.items) {
         if (item.children?.some((child) => child.id === activeView)) {
           state[item.id] = true;
@@ -197,7 +183,7 @@ export function NavRail({
       let changed = false;
       const next = { ...current };
 
-      for (const section of resolvedSections) {
+      for (const section of sections) {
         for (const item of section.items) {
           if (item.children?.some((child) => child.id === activeView) && !next[item.id]) {
             next[item.id] = true;
@@ -208,7 +194,7 @@ export function NavRail({
 
       return changed ? next : current;
     });
-  }, [activeView, resolvedSections]);
+  }, [activeView, sections]);
 
   const focusByIndex = useCallback((index: number) => {
     const focusableItems = navRef.current?.querySelectorAll<HTMLElement>(
@@ -363,11 +349,6 @@ export function NavRail({
         : "text-[var(--nav-text-muted)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)]",
     );
 
-  const legacySeparator = (index: number) =>
-    sections == null && groupSeparator != null && groupSeparatorAfterIndex === index
-      ? groupSeparator
-      : null;
-
   const renderSubItem = (
     navItem: NavRailItem,
     child: NavRailSubItem,
@@ -444,11 +425,7 @@ export function NavRail({
           {(() => {
             let focusIndex = 0;
 
-            return resolvedSections.map((section, sectionIndex) => {
-              const itemsBeforeSection = resolvedSections
-                .slice(0, sectionIndex)
-                .reduce((count, currentSection) => count + currentSection.items.length, 0);
-
+            return sections.map((section, sectionIndex) => {
               const isCollapsibleSection = collapsibleSections && section.label != null;
               // Purely controlled: a section is open unless the user has explicitly
               // collapsed it (sectionOpen[label] === false). Sections default to open,
@@ -495,8 +472,7 @@ export function NavRail({
                   )}
                   {isSectionOpen && (
                     <div id={sectionContentId} className="contents">
-                  {section.items.map((navItem, itemIndex) => {
-                    const flatIndex = itemsBeforeSection + itemIndex;
+                  {section.items.map((navItem) => {
                     const hasChildren = Boolean(navItem.children?.length);
                     const mainFocusIndex = focusIndex++;
                     const isActive = activeView === navItem.id;
@@ -556,7 +532,6 @@ export function NavRail({
 
                     return (
                       <React.Fragment key={navItem.id}>
-                        {legacySeparator(flatIndex)}
                         <div role="listitem" className="space-y-1">
                           {hasChildren && expanded ? (
                             <div className="flex items-center gap-1">
