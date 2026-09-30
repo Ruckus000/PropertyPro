@@ -61,6 +61,28 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
 
   const consent = consentRows[0]!;
 
+  // 1b. The target must belong to the consenting community. Consent is given
+  // per community, and the web app files every support write under the
+  // session's community — so a session pairing community A's consent with a
+  // user who is not A's member would let support change that user's account
+  // under a consent their own community never gave, and record it where their
+  // managers never look. user_roles has no soft delete: a row is membership.
+  const { data: membershipRow, error: membershipError } = await (db
+    .from('user_roles'))
+    .select('user_id')
+    .eq('user_id', targetUserId)
+    .eq('community_id', communityId)
+    .maybeSingle();
+
+  assertNoDbError(membershipError, 'Failed to check the community membership of impersonation target');
+
+  if (!membershipRow) {
+    return NextResponse.json(
+      { error: 'That user is not a member of this community.' },
+      { status: 403 },
+    );
+  }
+
   // 2. Block impersonation of platform admins
   const { data: adminRow, error: adminLookupError } = await (db
     .from('platform_admin_users'))
@@ -150,14 +172,28 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     throw err;
   }
 
-  // 6. Log to support_access_log
-  await (db.from('support_access_log')).insert({
+  // 6. Log to support_access_log. Checked: a session that cannot be put on
+  // the record is not handed out (no cookie below). The row just inserted is
+  // unusable without its token; it is also ended, best effort, so it neither
+  // shows as active in the Support Access tab nor counts as a live session.
+  const { error: accessLogError } = await (db.from('support_access_log')).insert({
     admin_user_id: admin.id,
     community_id: communityId,
     session_id: session.id,
     event: 'session_started',
     metadata: { reason, target_user_id: targetUserId, ticket_id: ticketId },
   });
+
+  if (accessLogError) {
+    try {
+      await (db.from('support_sessions'))
+        .update({ ended_at: new Date().toISOString() })
+        .eq('id', session.id);
+    } catch {
+      // Best effort: the response is already a refusal either way.
+    }
+  }
+  assertNoDbError(accessLogError, 'Failed to record session_started in support_access_log');
 
   // 7. Hand the token to the browser as an HttpOnly cookie — never in the body.
   //
