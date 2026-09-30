@@ -1542,6 +1542,23 @@ describe('p2-37 leases route', () => {
       }
     });
 
+    it('reports lease_list_truncated when the renewal-chain read hits the cap', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureMessageMock.mockClear();
+      try {
+        seed(Array.from({ length: 5002 }, (_, i) => lease(5002 - i)));
+        await GET(
+          new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=5002'),
+        );
+        expect(captureMessageMock).toHaveBeenCalledWith('lease_list_truncated', {
+          level: 'warning',
+          extra: { communityId: 42, leaseId: 5002, path: 'renewal_chain' },
+        });
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it('walks renewal_chain_for over ONE read, in memory (reuses getRenewalChain)', async () => {
       const client = seed([
         lease(1),

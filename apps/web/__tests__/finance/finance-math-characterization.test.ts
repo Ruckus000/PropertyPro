@@ -1060,9 +1060,10 @@ describe('6. statements', () => {
           { dir: 'desc', column: rentObligationsTable.id },
         ] },
       ]);
+      // 201, not 200: one extra row per source makes `truncated` exact (3.8).
       expect(limitCalls).toEqual([
-        { table: assessmentLineItemsTable, n: 200 },
-        { table: rentObligationsTable, n: 200 },
+        { table: assessmentLineItemsTable, n: 201 },
+        { table: rentObligationsTable, n: 201 },
       ]);
     });
 
@@ -1097,6 +1098,8 @@ describe('6. statements', () => {
       expect(statement.lineItems).toHaveLength(200);
       expect(statement.lineItems[0]?.dueDate).toBe(day(249));
       expect(statement.lineItems[199]?.dueDate).toBe(day(50));
+      // One source over 200 with the other empty: only the +1 row makes this visible.
+      expect(statement.truncated).toBe(true);
     });
 
     it('the merged list is cut to 200 and REPORTED: a same-date rent row behind 200 assessment rows drops out', async () => {
@@ -1114,18 +1117,31 @@ describe('6. statements', () => {
       const statement = await buildUnitStatement(11, 88);
       expect(statement.lineItems).toHaveLength(200);
       expect(statement.lineItems.some((row) => row.id === 9999)).toBe(false);
+      expect(statement.truncated).toBe(true);
       expect(captureMessageMock).toHaveBeenCalledTimes(1);
       expect(captureMessageMock).toHaveBeenCalledWith('unit_statement_truncated', {
         level: 'warning',
-        extra: { communityId: 11, unitId: 88, assessmentRows: 200, rentRows: 1, limit: 200 },
+        extra: { communityId: 11, unitId: 88, rows: 201, limit: 200 },
       });
     });
 
-    it('a statement under every limit is not reported', async () => {
+    it('a statement under every limit is not truncated or reported', async () => {
       seed(assessmentLineItemsTable, [lineItem({ id: 1, unitId: 88, dueDate: '2026-03-01' })]);
       seed(rentObligationsTable, [rent({ id: 2, unitId: 88, dueDate: '2026-02-01' })]);
       captureMessageMock.mockClear();
-      await buildUnitStatement(11, 88);
+      const statement = await buildUnitStatement(11, 88);
+      expect(statement.truncated).toBe(false);
+      expect(captureMessageMock).not.toHaveBeenCalled();
+    });
+
+    it('EXACTLY 200 items in one source is complete: not truncated, not reported', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
+        lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, []);
+      captureMessageMock.mockClear();
+      const statement = await buildUnitStatement(11, 88);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.truncated).toBe(false);
       expect(captureMessageMock).not.toHaveBeenCalled();
     });
 
@@ -1193,6 +1209,33 @@ describe('6. statements', () => {
       expect(statement.lineItems[0]?.dueDate).toBe(day(499));
       expect(statement.lineItems[199]?.dueDate).toBe(day(300));
       expect(orderByCalls.map((c) => c.keys.map((k) => k.dir))).toEqual([['desc', 'desc'], ['desc', 'desc']]);
+    });
+
+    it('more than 200 items is flagged truncated and reported once (roadmap 3.8)', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 150 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, shuffled(Array.from({ length: 60 }, (_, i) =>
+        rent({ id: 1 + i, unitId: 2, dueDate: '2026-03-02' }))));
+      captureMessageMock.mockClear();
+      const statement = await buildCommunityStatement(11);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.truncated).toBe(true);
+      expect(captureMessageMock).toHaveBeenCalledTimes(1);
+      expect(captureMessageMock).toHaveBeenCalledWith('community_statement_truncated', {
+        level: 'warning',
+        extra: { communityId: 11, rows: 210, limit: 200 },
+      });
+    });
+
+    it('EXACTLY 200 items is complete: not truncated, not reported', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, []);
+      captureMessageMock.mockClear();
+      const statement = await buildCommunityStatement(11);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.truncated).toBe(false);
+      expect(captureMessageMock).not.toHaveBeenCalled();
     });
 
     it('a missing rent_obligations relation is swallowed', async () => {
