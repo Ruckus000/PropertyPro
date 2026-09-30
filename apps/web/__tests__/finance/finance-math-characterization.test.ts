@@ -59,6 +59,8 @@ const {
   lteMock,
   gteMock,
   inArrayMock,
+  notInArrayMock,
+  sqlMock,
   andMock,
   ascMock,
   descMock,
@@ -100,6 +102,7 @@ const {
       unitId: col('rent_obligations', 'unitId'),
       dueDate: col('rent_obligations', 'dueDate'),
       status: col('rent_obligations', 'status'),
+      amountCents: col('rent_obligations', 'amountCents'),
     },
     rentPaymentsTable: { id: col('rent_payments', 'id') },
     unitsTable: { id: col('units', 'id'), unitNumber: col('units', 'unitNumber') },
@@ -116,6 +119,14 @@ const {
     lteMock: vi.fn((column: symbol, value: unknown) => ({ op: 'lte', column, value })),
     gteMock: vi.fn((column: symbol, value: unknown) => ({ op: 'gte', column, value })),
     inArrayMock: vi.fn((column: symbol, value: unknown[]) => ({ op: 'inArray', column, value })),
+    notInArrayMock: vi.fn((column: symbol, value: unknown[]) => ({ op: 'notInArray', column, value })),
+    // Aggregates: record the text and the columns interpolated, so the store can
+    // sum exactly the columns the service names (see makeQuery).
+    sqlMock: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+      op: 'sql',
+      text: strings.join('?'),
+      columns: values,
+    })),
     andMock: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
     ascMock: vi.fn((column: symbol) => ({ dir: 'asc', column })),
     descMock: vi.fn((column: symbol) => ({ dir: 'desc', column })),
@@ -158,6 +169,8 @@ vi.mock('@propertypro/db/filters', () => ({
   gte: gteMock,
   inArray: inArrayMock,
   isNull: isNullMock,
+  notInArray: notInArrayMock,
+  sql: sqlMock,
   lt: ltMock,
   lte: lteMock,
   ne: neMock,
@@ -174,6 +187,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 import {
   buildCommunityStatement,
   exportCommunityStatementPdf,
+  exportStatementPdf,
   createAssessmentForCommunity,
   updateAssessmentForCommunity,
   buildUnitStatement,
@@ -231,6 +245,8 @@ function matches(row: Row, where: Predicate | undefined): boolean {
       return actual >= (where.value as string | number);
     case 'inArray':
       return (where.value as unknown[]).includes(actual);
+    case 'notInArray':
+      return !(where.value as unknown[]).includes(actual);
     default:
       throw new Error(`predicate evaluator: unsupported op ${where.op}`);
   }
@@ -269,7 +285,42 @@ function shuffled<T>(items: T[], seedValue = 7): T[] {
 /** Every `orderBy(...)` a query was given, by table. */
 const orderByCalls: Array<{ table: object; keys: SortKey[] }> = [];
 
-function makeQuery(table: object, where: Predicate | undefined) {
+interface SqlFragment {
+  op: 'sql';
+  text: string;
+  columns: unknown[];
+}
+
+function isSqlFragment(value: unknown): value is SqlFragment {
+  return typeof value === 'object' && value !== null && (value as SqlFragment).op === 'sql';
+}
+
+/**
+ * Evaluates the statement-summary aggregate shapes in JS, reading exactly the
+ * columns the service interpolated: `sum(a + b)` sums those columns, a `count`
+ * with `= 'overdue'` counts overdue rows, a bare `count(*)` counts rows. The
+ * real SQL is proven against Postgres in payments-statement.integration.test.ts.
+ */
+function aggregate(rows: Row[], projection: Record<string, unknown>): Row {
+  const out: Row = {};
+  for (const [key, expr] of Object.entries(projection)) {
+    if (!isSqlFragment(expr)) throw new Error(`aggregate: ${key} is not a sql fragment`);
+    const fields = expr.columns.filter((c): c is symbol => typeof c === 'symbol').map(field);
+    if (expr.text.includes('sum(')) {
+      out[key] = String(rows.reduce((acc, row) =>
+        acc + fields.reduce((inner, f) => inner + Number(row[f] ?? 0), 0), 0));
+    } else if (expr.text.includes("= 'overdue'")) {
+      out[key] = rows.filter((row) => row.status === 'overdue').length;
+    } else if (expr.text.includes('count(*)')) {
+      out[key] = rows.length;
+    } else {
+      throw new Error(`aggregate: unsupported expression for ${key}: ${expr.text}`);
+    }
+  }
+  return out;
+}
+
+function makeQuery(table: object, where: Predicate | undefined, projection?: Record<string, unknown>) {
   let limit: number | null = null;
   let order: SortKey[] = [];
   const query = {
@@ -290,6 +341,9 @@ function makeQuery(table: object, where: Predicate | undefined) {
       const run = async (): Promise<Row[]> => {
         if (selectErrors.has(table)) throw selectErrors.get(table);
         const rows = (store.get(table) ?? []).filter((row) => matches(row, where));
+        if (projection && Object.values(projection).some(isSqlFragment)) {
+          return [aggregate(rows, projection)];
+        }
         if (order.length > 0) rows.sort(compareBy(order));
         return (limit === null ? rows : rows.slice(0, limit)).map((row) => ({ ...row }));
       };
@@ -368,8 +422,9 @@ beforeEach(() => {
   createUnscopedClientMock.mockImplementation(() => ({
     select: () => ({ from: () => ({ where: () => Promise.resolve(communityRows) }) }),
   }));
-  selectFromMock.mockImplementation((table: object, _projection: unknown, where?: Predicate) =>
-    makeQuery(table, where),
+  selectFromMock.mockImplementation(
+    (table: object, projection: Record<string, unknown> | undefined, where?: Predicate) =>
+      makeQuery(table, where, projection),
   );
   insertMock.mockImplementation(async (table: object, values: Row[]) => {
     const inserted = values.map((value) => ({ id: nextId++, ...value }));
@@ -1014,23 +1069,34 @@ describe('6. statements', () => {
 
   const PAID_AT = new Date('2026-02-03T10:00:00.000Z');
 
+  // Statements, reshaped 2026-09-30 ("fix the money, not the paging"):
+  //  - OUTSTANDING items (assessment pending|overdue; rent also partially_paid)
+  //    ignore the date window and are listed OLDEST-due first, so a cap drops
+  //    the newest owed items, never the most overdue.
+  //  - HISTORY (every other status) keeps the window, newest first.
+  //  - `summary` is an SQL aggregate over ALL outstanding items, so Total due
+  //    never depends on which rows are listed.
+  // Before this, one window-bound newest-first list fed a client-side sum: an
+  // item overdue > 90 days or due after today silently left "Total due".
   describe('buildUnitStatement', () => {
     beforeEach(() => {
       // Seeded shuffled: the order below is NOT the order a statement shows.
       seed(assessmentLineItemsTable, shuffled([
-        lineItem({ id: 13, unitId: 88, dueDate: '2026-04-01' }), // outside the window
+        lineItem({ id: 13, unitId: 88, dueDate: '2026-04-01' }), // outstanding, after the window
         lineItem({ id: 12, unitId: 88, dueDate: '2026-03-01', status: 'overdue', lateFeeCents: 2500 }),
         lineItem({ id: 99, unitId: 77, dueDate: '2026-03-01' }), // another unit
         lineItem({ id: 11, unitId: 88, dueDate: '2026-02-01', status: 'paid', paidAt: PAID_AT, paymentIntentId: 'pi_1' }),
+        lineItem({ id: 10, unitId: 88, dueDate: '2025-06-01', status: 'paid', paidAt: PAID_AT }), // paid, before the window
+        lineItem({ id: 9, unitId: 88, dueDate: '2025-05-01', status: 'overdue' }), // overdue ~10 months
       ]));
       seed(rentObligationsTable, shuffled([
         rent({ id: 500, dueDate: '2026-03-01', lateFeeCents: 999 }), // stray fee must not reach the statement
-        rent({ id: 400, dueDate: '2026-03-15' }),
+        rent({ id: 400, dueDate: '2026-03-15', status: 'partially_paid' }),
       ]));
       getUnitLedgerBalanceMock.mockResolvedValue(32500);
     });
 
-    it('merges assessment and rent rows, newest first, rent late fee forced to 0', async () => {
+    it('lists outstanding items oldest-due first (window ignored), then windowed history newest first', async () => {
       const statement = await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
       expect(statement.unitId).toBe(88);
       expect(statement.balanceCents).toBe(32500);
@@ -1042,52 +1108,58 @@ describe('6. statements', () => {
         limit: 500,
       });
       expect(statement.lineItems).toEqual([
-        { id: 400, assessmentId: null, unitId: 88, dueDate: '2026-03-15', status: 'pending', amountCents: 160000, lateFeeCents: 0, paidAt: null, paymentIntentId: null },
+        { id: 9, assessmentId: 7, unitId: 88, dueDate: '2025-05-01', status: 'overdue', amountCents: 30000, lateFeeCents: 0, paidAt: null, paymentIntentId: null },
         { id: 12, assessmentId: 7, unitId: 88, dueDate: '2026-03-01', status: 'overdue', amountCents: 30000, lateFeeCents: 2500, paidAt: null, paymentIntentId: null },
         { id: 500, assessmentId: null, unitId: 88, dueDate: '2026-03-01', status: 'pending', amountCents: 160000, lateFeeCents: 0, paidAt: null, paymentIntentId: null },
+        { id: 400, assessmentId: null, unitId: 88, dueDate: '2026-03-15', status: 'partially_paid', amountCents: 160000, lateFeeCents: 0, paidAt: null, paymentIntentId: null },
+        { id: 13, assessmentId: 7, unitId: 88, dueDate: '2026-04-01', status: 'pending', amountCents: 30000, lateFeeCents: 0, paidAt: null, paymentIntentId: null },
         { id: 11, assessmentId: 7, unitId: 88, dueDate: '2026-02-01', status: 'paid', amountCents: 30000, lateFeeCents: 0, paidAt: PAID_AT, paymentIntentId: 'pi_1' },
       ]);
     });
 
-    it('each source is ordered dueDate desc, id desc and capped at 200 before the merge', async () => {
-      await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
-      expect(orderByCalls).toEqual([
-        { table: assessmentLineItemsTable, keys: [
-          { dir: 'desc', column: assessmentLineItemsTable.dueDate },
-          { dir: 'desc', column: assessmentLineItemsTable.id },
-        ] },
-        { table: rentObligationsTable, keys: [
-          { dir: 'desc', column: rentObligationsTable.dueDate },
-          { dir: 'desc', column: rentObligationsTable.id },
-        ] },
-      ]);
-      // 201, not 200: one extra row per source makes `truncated` exact (3.8).
-      expect(limitCalls).toEqual([
-        { table: assessmentLineItemsTable, n: 201 },
-        { table: rentObligationsTable, n: 201 },
-      ]);
+    it('summary covers every outstanding item: overdue >90 days and future-due included, rent fee excluded', async () => {
+      const statement = await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
+      // Assessments: 9 (30000) + 12 (30000 + 2500) + 13 (30000); rent: 500 + 400 (160000 each, fee ignored).
+      expect(statement.summary).toEqual({
+        totalDueCents: 30000 + 32500 + 30000 + 160000 + 160000,
+        overdueCount: 2,
+        outstandingCount: 5,
+      });
     });
 
-    it('the merged list is sliced back to 200, oldest dropped', async () => {
-      const day = (i: number) => new Date(Date.UTC(2026, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
-      // 150 of each; rent on even days, assessments on odd days, newest first.
-      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 150 }, (_, i) =>
-        lineItem({ id: 10_000 - i, unitId: 88, dueDate: day(299 - 2 * i) }))));
-      seed(rentObligationsTable, shuffled(Array.from({ length: 150 }, (_, i) =>
-        rent({ id: 20_000 - i, unitId: 88, dueDate: day(298 - 2 * i) }))));
+    it('queries: outstanding asc, history desc, each capped at limit + 1', async () => {
+      await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
+      const dirs = (table: object) =>
+        orderByCalls.filter((c) => c.table === table).map((c) => c.keys.map((k) => k.dir));
+      expect(dirs(assessmentLineItemsTable)).toEqual([['asc', 'asc'], ['desc', 'desc']]);
+      expect(dirs(rentObligationsTable)).toEqual([['asc', 'asc'], ['desc', 'desc']]);
+      expect(limitCalls.map((c) => c.n)).toEqual([201, 201, 201, 201]);
+    });
 
+    it('a cap keeps the OLDEST outstanding items and summary still covers all of them', async () => {
+      const day = (i: number) => new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 250 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 88, dueDate: day(i), status: 'overdue' }))));
+      seed(rentObligationsTable, []);
+      captureMessageMock.mockClear();
       const statement = await buildUnitStatement(11, 88);
       expect(statement.lineItems).toHaveLength(200);
-      expect(statement.lineItems[0]?.dueDate).toBe(day(299));
-      expect(statement.lineItems[199]?.dueDate).toBe(day(100));
+      expect(statement.lineItems[0]?.dueDate).toBe(day(0));
+      expect(statement.lineItems[199]?.dueDate).toBe(day(199));
+      expect(statement.summary).toEqual({ totalDueCents: 250 * 30000, overdueCount: 250, outstandingCount: 250 });
+      expect(statement.truncated).toBe(true);
+      expect(captureMessageMock).toHaveBeenCalledWith('unit_statement_truncated', {
+        level: 'warning',
+        extra: { communityId: 11, unitId: 88, outstandingRows: 201, historyRows: 0, limit: 200 },
+      });
     });
 
     it.each([
       ['an assessment', 'assessment'],
       ['a rent', 'rent'],
-    ])('%s source with more than 200 rows contributes its NEWEST 200', async (_label, which) => {
+    ])('%s history source over 200 keeps its NEWEST 200 and is flagged', async (_label, which) => {
       const day = (i: number) => new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
-      const rows = Array.from({ length: 250 }, (_, i) => ({ id: 1 + i, unitId: 88, dueDate: day(i) }));
+      const rows = Array.from({ length: 250 }, (_, i) => ({ id: 1 + i, unitId: 88, dueDate: day(i), status: 'paid' }));
       if (which === 'assessment') {
         seed(assessmentLineItemsTable, shuffled(rows.map((r) => lineItem(r))));
         seed(rentObligationsTable, []);
@@ -1103,39 +1175,20 @@ describe('6. statements', () => {
       expect(statement.truncated).toBe(true);
     });
 
-    it('the merged list is cut to 200 and REPORTED: a same-date rent row behind 200 assessment rows drops out', async () => {
-      // Defect (10), partly fixed 2026-09-30 (roadmap 3.8): the merge is a stable
-      // sort on dueDate (ids come from two different tables, so no id tiebreak
-      // would be meaningful; same-date ties keep concatenation order, assessments
-      // first) and is then cut to 200. The response still carries no `truncated`
-      // flag or cursor — that UI waits on its trigger — but the cut is no longer
-      // silent: it reports `unit_statement_truncated` to Sentry.
+    it('a cut across sources is a stable merge: a same-date rent row behind 200 assessments drops out', async () => {
+      // ids come from two tables, so no id tiebreak is meaningful across them;
+      // same-date ties keep assessments before rent, then the list is cut.
       seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
         lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));
       seed(rentObligationsTable, [rent({ id: 9999, dueDate: '2026-03-01' })]);
-
-      captureMessageMock.mockClear();
       const statement = await buildUnitStatement(11, 88);
       expect(statement.lineItems).toHaveLength(200);
       expect(statement.lineItems.some((row) => row.id === 9999)).toBe(false);
       expect(statement.truncated).toBe(true);
-      expect(captureMessageMock).toHaveBeenCalledTimes(1);
-      expect(captureMessageMock).toHaveBeenCalledWith('unit_statement_truncated', {
-        level: 'warning',
-        extra: { communityId: 11, unitId: 88, rows: 201, limit: 200 },
-      });
+      expect(statement.summary.outstandingCount).toBe(201); // still counted
     });
 
-    it('a statement under every limit is not truncated or reported', async () => {
-      seed(assessmentLineItemsTable, [lineItem({ id: 1, unitId: 88, dueDate: '2026-03-01' })]);
-      seed(rentObligationsTable, [rent({ id: 2, unitId: 88, dueDate: '2026-02-01' })]);
-      captureMessageMock.mockClear();
-      const statement = await buildUnitStatement(11, 88);
-      expect(statement.truncated).toBe(false);
-      expect(captureMessageMock).not.toHaveBeenCalled();
-    });
-
-    it('EXACTLY 200 items in one source is complete: not truncated, not reported', async () => {
+    it('EXACTLY 200 outstanding items is complete: not truncated, not reported', async () => {
       seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
         lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));
       seed(rentObligationsTable, []);
@@ -1146,14 +1199,27 @@ describe('6. statements', () => {
       expect(captureMessageMock).not.toHaveBeenCalled();
     });
 
+    it('a statement under every limit is not truncated or reported', async () => {
+      captureMessageMock.mockClear();
+      const statement = await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
+      expect(statement.truncated).toBe(false);
+      expect(captureMessageMock).not.toHaveBeenCalled();
+    });
+
+    it('the PDF export reads up to STATEMENT_EXPORT_LIMIT (5000), not 200', async () => {
+      await exportStatementPdf(11, 88);
+      expect(new Set(limitCalls.map((c) => c.n))).toEqual(new Set([5001]));
+    });
+
     it('a missing rent_obligations relation (42P01, direct or as cause) is swallowed', async () => {
       selectErrors.set(rentObligationsTable, Object.assign(new Error('relation does not exist'), { code: '42P01' }));
       const direct = await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
-      expect(direct.lineItems.map((row) => row.id)).toEqual([12, 11]);
+      expect(direct.lineItems.map((row) => row.id)).toEqual([9, 12, 13, 11]);
+      expect(direct.summary).toEqual({ totalDueCents: 92500, overdueCount: 2, outstandingCount: 3 });
 
       selectErrors.set(rentObligationsTable, Object.assign(new Error('wrapped'), { cause: { code: '42P01' } }));
       const wrapped = await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
-      expect(wrapped.lineItems.map((row) => row.id)).toEqual([12, 11]);
+      expect(wrapped.lineItems.map((row) => row.id)).toEqual([9, 12, 13, 11]);
     });
 
     it('any other rent query error propagates', async () => {
@@ -1172,6 +1238,7 @@ describe('6. statements', () => {
       seed(assessmentLineItemsTable, shuffled([
         lineItem({ id: 20, unitId: 404, dueDate: '2026-02-01' }), // unit not in the lookup
         lineItem({ id: 21, unitId: 1, dueDate: '2026-03-01', lateFeeCents: 2500 }),
+        lineItem({ id: 22, unitId: 3, dueDate: '2026-03-10', status: 'paid', paidAt: PAID_AT }),
       ]));
       seed(rentObligationsTable, [rent({ id: 600, unitId: 2, dueDate: '2026-03-05', lateFeeCents: 999 })]);
       const balances: Record<number, number> = { 1: 1000, 2: -250, 3: 0 };
@@ -1189,30 +1256,18 @@ describe('6. statements', () => {
       });
     });
 
-    it('hydrates unitNumber (\'\' when unknown), forces rent late fee to 0, sorts newest first', async () => {
+    it('hydrates unitNumber (\'\' when unknown), forces rent late fee to 0, outstanding oldest first then history', async () => {
       const statement = await buildCommunityStatement(11, '2026-01-01', '2026-03-31');
       expect(statement.lineItems.map((row) => [row.id, row.unitNumber, row.lateFeeCents])).toEqual([
-        [600, '102', 0],
-        [21, '101', 2500],
         [20, '', 0],
+        [21, '101', 2500],
+        [600, '102', 0],
+        [22, '103', 0],
       ]);
+      expect(statement.summary).toEqual({ totalDueCents: 30000 + 32500 + 160000, overdueCount: 0, outstandingCount: 3 });
     });
 
-    it('each source contributes its NEWEST 200 (dueDate desc, id desc before the LIMIT)', async () => {
-      const day = (i: number) => new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
-      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 250 }, (_, i) =>
-        lineItem({ id: 1 + i, unitId: 1, dueDate: day(2 * i + 1) }))));
-      seed(rentObligationsTable, shuffled(Array.from({ length: 250 }, (_, i) =>
-        rent({ id: 1 + i, unitId: 2, dueDate: day(2 * i) }))));
-      const statement = await buildCommunityStatement(11);
-      expect(statement.lineItems).toHaveLength(200);
-      // Newest 200 of the 500 combined days (0..499) are days 300..499.
-      expect(statement.lineItems[0]?.dueDate).toBe(day(499));
-      expect(statement.lineItems[199]?.dueDate).toBe(day(300));
-      expect(orderByCalls.map((c) => c.keys.map((k) => k.dir))).toEqual([['desc', 'desc'], ['desc', 'desc']]);
-    });
-
-    it('more than 200 items is flagged truncated and reported once (roadmap 3.8)', async () => {
+    it('more than 200 outstanding items is flagged and reported once; summary stays exact', async () => {
       seed(assessmentLineItemsTable, shuffled(Array.from({ length: 150 }, (_, i) =>
         lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
       seed(rentObligationsTable, shuffled(Array.from({ length: 60 }, (_, i) =>
@@ -1221,22 +1276,16 @@ describe('6. statements', () => {
       const statement = await buildCommunityStatement(11);
       expect(statement.lineItems).toHaveLength(200);
       expect(statement.truncated).toBe(true);
+      expect(statement.summary.outstandingCount).toBe(210);
+      expect(statement.summary.totalDueCents).toBe(150 * 30000 + 60 * 160000);
       expect(captureMessageMock).toHaveBeenCalledTimes(1);
       expect(captureMessageMock).toHaveBeenCalledWith('community_statement_truncated', {
         level: 'warning',
-        extra: { communityId: 11, rows: 210, limit: 200 },
+        extra: { communityId: 11, outstandingRows: 210, historyRows: 0, limit: 200 },
       });
     });
 
-    it('the community PDF export carries the truncation note through (roadmap 3.8)', async () => {
-      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 201 }, (_, i) =>
-        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
-      seed(rentObligationsTable, []);
-      const pdf = new TextDecoder().decode(await exportCommunityStatementPdf(11));
-      expect(pdf).toContain('NOTE: Payables lists only the 200 most recent items');
-    });
-
-    it('EXACTLY 200 items is complete: not truncated, not reported', async () => {
+    it('EXACTLY 200 outstanding items is complete: not truncated, not reported', async () => {
       seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
         lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
       seed(rentObligationsTable, []);
@@ -1247,10 +1296,23 @@ describe('6. statements', () => {
       expect(captureMessageMock).not.toHaveBeenCalled();
     });
 
+    it('the community PDF export lists past 200 and notes only a >5000 cut', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 250 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, []);
+      const complete = new TextDecoder().decode(await exportCommunityStatementPdf(11));
+      expect(complete).not.toContain('NOTE: Some items are omitted');
+
+      seed(assessmentLineItemsTable, Array.from({ length: 5001 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' })));
+      const cut = new TextDecoder().decode(await exportCommunityStatementPdf(11));
+      expect(cut).toContain('NOTE: Some items are omitted from Payables');
+    });
+
     it('a missing rent_obligations relation is swallowed', async () => {
       selectErrors.set(rentObligationsTable, Object.assign(new Error('relation does not exist'), { code: '42P01' }));
       const statement = await buildCommunityStatement(11);
-      expect(statement.lineItems.map((row) => row.id)).toEqual([21, 20]);
+      expect(statement.lineItems.map((row) => row.id)).toEqual([20, 21, 22]);
     });
   });
 });

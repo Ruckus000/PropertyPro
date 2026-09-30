@@ -20,7 +20,7 @@ import {
   type PaginatedResult,
   type PaginationInput,
 } from '@propertypro/db';
-import { and, asc, desc, eq, gte, inArray, lt, lte, or } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, inArray, lt, lte, notInArray, or, sql, type SQL } from '@propertypro/db/filters';
 import type { LedgerEntryType, StripePayableMetadata, PayableType } from '@propertypro/shared';
 import {
   type PaymentFeePolicy,
@@ -1324,64 +1324,217 @@ export interface StatementLineItem {
   paymentIntentId: string | null;
 }
 
+/**
+ * Exact money totals for a statement, computed in SQL over EVERY outstanding
+ * item (no date window, no row cap), so they never depend on which rows the
+ * list shows. `partially_paid` counts in full, as the portal always did.
+ */
+export interface StatementSummary {
+  totalDueCents: number;
+  overdueCount: number;
+  outstandingCount: number;
+}
+
 export interface UnitStatement {
   unitId: number;
   balanceCents: number;
   ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
+  /** Outstanding items (oldest due first), then history in the window (newest first). */
   lineItems: StatementLineItem[];
-  /** True when more than 200 line items matched; only the newest 200 are listed. */
+  summary: StatementSummary;
+  /** True when either list had more than `limit` items; `summary` is still exact. */
   truncated: boolean;
 }
 
 /**
- * Statements show the newest 200 line items. Each source is read with ONE
- * extra row, so `merged.length > STATEMENT_LINE_ITEM_LIMIT` is an exact
- * "something was dropped" signal: the union can only exceed 200 when rows
- * really are cut, and 201 per source is enough to know that.
+ * Rows listed per group. Each source is read with ONE extra row, so
+ * `merged.length > limit` is an exact "something was dropped" signal.
  */
 const STATEMENT_LINE_ITEM_LIMIT = 200;
+/** PDF exports list (practically) everything; the PDF prints a note past this. */
+export const STATEMENT_EXPORT_LIMIT = 5000;
+
+// Outstanding = owed. Assessment line items have no partial state; rent does.
+const ASSESSMENT_OUTSTANDING_STATUSES: AssessmentLineItemStatus[] = ['pending', 'overdue'];
+const RENT_OUTSTANDING_STATUSES: RentObligationRecord['status'][] = ['pending', 'partially_paid', 'overdue'];
+
+interface StatementReadOptions {
+  unitId?: number;
+  startDate?: string;
+  endDate?: string;
+  limit: number;
+}
+
+interface StatementRead {
+  outstanding: StatementLineItem[];
+  history: StatementLineItem[];
+  summary: StatementSummary;
+  truncated: boolean;
+  outstandingRows: number;
+  historyRows: number;
+}
+
+interface StatementSummaryRow {
+  [key: string]: unknown;
+  totalDueCents: number | string | null;
+  overdueCount: number;
+  outstandingCount: number;
+}
+
+function andAll(clauses: SQL[]): SQL | undefined {
+  if (clauses.length === 0) return undefined;
+  return clauses.length === 1 ? clauses[0] : and(...clauses);
+}
+
+/**
+ * The one statement reader, shared by the unit and community statements.
+ *
+ * OUTSTANDING (pending | partially_paid | overdue) ignores the date window: an
+ * item overdue for 120 days, or due next month, is still money owed. Before
+ * 2026-09-30 the default 90-day window dropped both from "Total due" while the
+ * ledger balance kept them. It is ordered oldest-due first, so a cap drops the
+ * newest items, never the most overdue.
+ *
+ * HISTORY (every other status) keeps the window and is ordered newest first.
+ */
+async function readStatementLineItems(
+  scoped: ReturnType<typeof createScopedClient>,
+  options: StatementReadOptions,
+): Promise<StatementRead> {
+  const { unitId, startDate, endDate, limit } = options;
+
+  const assessmentBase: SQL[] = unitId === undefined ? [] : [eq(assessmentLineItems.unitId, unitId)];
+  const assessmentWindow: SQL[] = [
+    ...(startDate !== undefined ? [gte(assessmentLineItems.dueDate, startDate)] : []),
+    ...(endDate !== undefined ? [lte(assessmentLineItems.dueDate, endDate)] : []),
+  ];
+  const assessmentOutstanding = andAll([
+    ...assessmentBase,
+    inArray(assessmentLineItems.status, ASSESSMENT_OUTSTANDING_STATUSES),
+  ]);
+  const assessmentHistory = andAll([
+    ...assessmentBase,
+    notInArray(assessmentLineItems.status, ASSESSMENT_OUTSTANDING_STATUSES),
+    ...assessmentWindow,
+  ]);
+
+  const rentBase: SQL[] = unitId === undefined ? [] : [eq(rentObligations.unitId, unitId)];
+  const rentWindow: SQL[] = [
+    ...(startDate !== undefined ? [gte(rentObligations.dueDate, startDate)] : []),
+    ...(endDate !== undefined ? [lte(rentObligations.dueDate, endDate)] : []),
+  ];
+  const rentOutstanding = andAll([...rentBase, inArray(rentObligations.status, RENT_OUTSTANDING_STATUSES)]);
+  const rentHistory = andAll([
+    ...rentBase,
+    notInArray(rentObligations.status, RENT_OUTSTANDING_STATUSES),
+    ...rentWindow,
+  ]);
+
+  const [assessmentOutstandingRows, assessmentHistoryRows, [assessmentSummary]] = await Promise.all([
+    scoped
+      .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, assessmentOutstanding)
+      .orderBy(asc(assessmentLineItems.dueDate), asc(assessmentLineItems.id))
+      .limit(limit + 1),
+    scoped
+      .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, assessmentHistory)
+      .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
+      .limit(limit + 1),
+    scoped.selectFrom<StatementSummaryRow>(
+      assessmentLineItems,
+      {
+        totalDueCents: sql<string>`coalesce(sum(${assessmentLineItems.amountCents} + ${assessmentLineItems.lateFeeCents}), 0)::bigint`,
+        overdueCount: sql<number>`(count(*) filter (where ${assessmentLineItems.status} = 'overdue'))::int`,
+        outstandingCount: sql<number>`count(*)::int`,
+      },
+      assessmentOutstanding,
+    ),
+  ]);
+
+  // rent_obligations may not exist in older environments (42P01): no rent.
+  let rentOutstandingRows: RentObligationRecord[] = [];
+  let rentHistoryRows: RentObligationRecord[] = [];
+  let rentSummary: StatementSummaryRow | undefined;
+  try {
+    [rentOutstandingRows, rentHistoryRows, [rentSummary]] = await Promise.all([
+      scoped
+        .selectFrom<RentObligationRecord>(rentObligations, {}, rentOutstanding)
+        .orderBy(asc(rentObligations.dueDate), asc(rentObligations.id))
+        .limit(limit + 1),
+      scoped
+        .selectFrom<RentObligationRecord>(rentObligations, {}, rentHistory)
+        .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
+        .limit(limit + 1),
+      scoped.selectFrom<StatementSummaryRow>(
+        rentObligations,
+        {
+          // Rent carries no late fee on a statement (forced to 0 below).
+          totalDueCents: sql<string>`coalesce(sum(${rentObligations.amountCents}), 0)::bigint`,
+          overdueCount: sql<number>`(count(*) filter (where ${rentObligations.status} = 'overdue'))::int`,
+          outstandingCount: sql<number>`count(*)::int`,
+        },
+        rentOutstanding,
+      ),
+    ]);
+  } catch (err) {
+    if (!isMissingRelationError(err)) {
+      throw err;
+    }
+  }
+
+  const fromAssessment = (row: AssessmentLineItemRecord): StatementLineItem => ({
+    id: row.id,
+    assessmentId: row.assessmentId,
+    unitId: row.unitId,
+    dueDate: row.dueDate,
+    status: assertLineItemStatus(row.status),
+    amountCents: row.amountCents,
+    lateFeeCents: row.lateFeeCents,
+    paidAt: row.paidAt,
+    paymentIntentId: row.paymentIntentId,
+  });
+  const fromRent = (row: RentObligationRecord): StatementLineItem => ({
+    id: row.id,
+    assessmentId: null,
+    unitId: row.unitId,
+    dueDate: row.dueDate,
+    status: row.status,
+    amountCents: row.amountCents,
+    lateFeeCents: 0,
+    paidAt: null,
+    paymentIntentId: null,
+  });
+
+  // Stable sorts: same-date ties keep assessments before rent.
+  const outstanding = [...assessmentOutstandingRows.map(fromAssessment), ...rentOutstandingRows.map(fromRent)]
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const history = [...assessmentHistoryRows.map(fromAssessment), ...rentHistoryRows.map(fromRent)]
+    .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+
+  const count = (value: number | string | null | undefined): number => Number(value ?? 0);
+  return {
+    outstanding: outstanding.slice(0, limit),
+    history: history.slice(0, limit),
+    summary: {
+      totalDueCents: count(assessmentSummary?.totalDueCents) + count(rentSummary?.totalDueCents),
+      overdueCount: count(assessmentSummary?.overdueCount) + count(rentSummary?.overdueCount),
+      outstandingCount: count(assessmentSummary?.outstandingCount) + count(rentSummary?.outstandingCount),
+    },
+    truncated: outstanding.length > limit || history.length > limit,
+    outstandingRows: outstanding.length,
+    historyRows: history.length,
+  };
+}
 
 export async function buildUnitStatement(
   communityId: number,
   unitId: number,
   startDate?: string,
   endDate?: string,
+  options: { limit?: number } = {},
 ): Promise<UnitStatement> {
   const scoped = createScopedClient(communityId);
-  const lineItemFilters = [eq(assessmentLineItems.unitId, unitId)];
-
-  if (startDate !== undefined) {
-    lineItemFilters.push(gte(assessmentLineItems.dueDate, startDate));
-  }
-  if (endDate !== undefined) {
-    lineItemFilters.push(lte(assessmentLineItems.dueDate, endDate));
-  }
-
-  const lineItemsWhere = lineItemFilters.length === 1 ? lineItemFilters[0] : and(...lineItemFilters);
-  const assessmentRows = await scoped
-    .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, lineItemsWhere)
-    .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
-    .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
-
-  const rentFilters = [eq(rentObligations.unitId, unitId)];
-  if (startDate !== undefined) {
-    rentFilters.push(gte(rentObligations.dueDate, startDate));
-  }
-  if (endDate !== undefined) {
-    rentFilters.push(lte(rentObligations.dueDate, endDate));
-  }
-  const rentWhere = rentFilters.length === 1 ? rentFilters[0] : and(...rentFilters);
-  let rentRows: RentObligationRecord[] = [];
-  try {
-    rentRows = await scoped
-      .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
-      .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
-      .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
-  } catch (err) {
-    if (!isMissingRelationError(err)) {
-      throw err;
-    }
-  }
+  const limit = options.limit ?? STATEMENT_LINE_ITEM_LIMIT;
+  const read = await readStatementLineItems(scoped, { unitId, startDate, endDate, limit });
 
   const ledgerEntriesForUnit = await listLedgerEntries(scoped, {
     unitId,
@@ -1391,39 +1544,18 @@ export async function buildUnitStatement(
   });
   const balanceCents = await getUnitLedgerBalance(scoped, unitId);
 
-  const merged: StatementLineItem[] = [
-    ...assessmentRows.map<StatementLineItem>((row) => ({
-      id: row.id,
-      assessmentId: row.assessmentId,
-      unitId: row.unitId,
-      dueDate: row.dueDate,
-      status: assertLineItemStatus(row.status),
-      amountCents: row.amountCents,
-      lateFeeCents: row.lateFeeCents,
-      paidAt: row.paidAt,
-      paymentIntentId: row.paymentIntentId,
-    })),
-    ...rentRows.map<StatementLineItem>((row) => ({
-      id: row.id,
-      assessmentId: null,
-      unitId: row.unitId,
-      dueDate: row.dueDate,
-      status: row.status,
-      amountCents: row.amountCents,
-      lateFeeCents: 0,
-      paidAt: null,
-      paymentIntentId: null,
-    })),
-  ].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-
-  // A capped statement still looks complete to its reader, so never cap it
-  // silently: flag it for the page and report it. The first such event is the
-  // trigger for giving statements a cursor (roadmap 3.8).
-  const truncated = merged.length > STATEMENT_LINE_ITEM_LIMIT;
-  if (truncated) {
+  // A capped list still looks complete to its reader, so never cap it
+  // silently: flag it for the page and report it (roadmap 3.8).
+  if (read.truncated) {
     captureMessage('unit_statement_truncated', {
       level: 'warning',
-      extra: { communityId, unitId, rows: merged.length, limit: STATEMENT_LINE_ITEM_LIMIT },
+      extra: {
+        communityId,
+        unitId,
+        outstandingRows: read.outstandingRows,
+        historyRows: read.historyRows,
+        limit,
+      },
     });
   }
 
@@ -1431,8 +1563,9 @@ export async function buildUnitStatement(
     unitId,
     balanceCents,
     ledgerEntries: ledgerEntriesForUnit,
-    lineItems: merged.slice(0, STATEMENT_LINE_ITEM_LIMIT),
-    truncated,
+    lineItems: [...read.outstanding, ...read.history],
+    summary: read.summary,
+    truncated: read.truncated,
   };
 }
 
@@ -1443,8 +1576,10 @@ export interface CommunityStatementLineItem extends StatementLineItem {
 export interface CommunityStatement {
   balanceCents: number;
   ledgerEntries: Awaited<ReturnType<typeof listLedgerEntries>>;
+  /** Outstanding items (oldest due first), then history in the window (newest first). */
   lineItems: CommunityStatementLineItem[];
-  /** True when more than 200 line items matched; only the newest 200 are listed. */
+  summary: StatementSummary;
+  /** True when either list had more than `limit` items; `summary` is still exact. */
   truncated: boolean;
 }
 
@@ -1457,20 +1592,19 @@ export interface CommunityStatement {
  * board-designated user is still `resident` and is routed to
  * `buildUnitStatement` (owner) or refused (tenant).
  *
- * Aggregates ledger entries and payable line items across every unit in the
- * community within the given date window. Each line item includes both
- * `unitId` and `unitNumber` so staff can identify which unit each entry
- * belongs to.
- *
- * Line items are sorted newest first and capped at {@link STATEMENT_LINE_ITEM_LIMIT}
- * (200) to keep query cost in line with the unit-scoped mode.
+ * Lists every unit's outstanding items (any due date) and payment history in
+ * the window, via the same reader as the unit statement. Each line item
+ * includes both `unitId` and `unitNumber` so staff can identify which unit
+ * each entry belongs to.
  */
 export async function buildCommunityStatement(
   communityId: number,
   startDate?: string,
   endDate?: string,
+  options: { limit?: number } = {},
 ): Promise<CommunityStatement> {
   const scoped = createScopedClient(communityId);
+  const limit = options.limit ?? STATEMENT_LINE_ITEM_LIMIT;
 
   // Unit lookup — used to hydrate unitNumber on every line item.
   interface UnitLookupRow {
@@ -1487,48 +1621,7 @@ export async function buildCommunityStatement(
     unitNumberById.set(row.id, row.unitNumber);
   }
 
-  const assessmentFilters: Array<ReturnType<typeof eq>> = [];
-  if (startDate !== undefined) {
-    assessmentFilters.push(gte(assessmentLineItems.dueDate, startDate));
-  }
-  if (endDate !== undefined) {
-    assessmentFilters.push(lte(assessmentLineItems.dueDate, endDate));
-  }
-  const assessmentWhere = assessmentFilters.length === 0
-    ? undefined
-    : assessmentFilters.length === 1
-      ? assessmentFilters[0]
-      : and(...assessmentFilters);
-
-  const assessmentRows = await scoped
-    .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, assessmentWhere)
-    .orderBy(desc(assessmentLineItems.dueDate), desc(assessmentLineItems.id))
-    .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
-
-  const rentFilters: Array<ReturnType<typeof eq>> = [];
-  if (startDate !== undefined) {
-    rentFilters.push(gte(rentObligations.dueDate, startDate));
-  }
-  if (endDate !== undefined) {
-    rentFilters.push(lte(rentObligations.dueDate, endDate));
-  }
-  const rentWhere = rentFilters.length === 0
-    ? undefined
-    : rentFilters.length === 1
-      ? rentFilters[0]
-      : and(...rentFilters);
-
-  let rentRows: RentObligationRecord[] = [];
-  try {
-    rentRows = await scoped
-      .selectFrom<RentObligationRecord>(rentObligations, {}, rentWhere)
-      .orderBy(desc(rentObligations.dueDate), desc(rentObligations.id))
-      .limit(STATEMENT_LINE_ITEM_LIMIT + 1);
-  } catch (err) {
-    if (!isMissingRelationError(err)) {
-      throw err;
-    }
-  }
+  const read = await readStatementLineItems(scoped, { startDate, endDate, limit });
 
   const ledgerEntriesForCommunity = await listLedgerEntries(scoped, {
     startDate,
@@ -1542,49 +1635,29 @@ export async function buildCommunityStatement(
     balanceCents += await getUnitLedgerBalance(scoped, row.id);
   }
 
-  const combinedLineItems: CommunityStatementLineItem[] = [
-    ...assessmentRows.map<CommunityStatementLineItem>((row) => ({
-      id: row.id,
-      assessmentId: row.assessmentId,
-      unitId: row.unitId,
-      dueDate: row.dueDate,
-      status: assertLineItemStatus(row.status),
-      amountCents: row.amountCents,
-      lateFeeCents: row.lateFeeCents,
-      paidAt: row.paidAt,
-      paymentIntentId: row.paymentIntentId,
-      unitNumber: unitNumberById.get(row.unitId) ?? '',
-    })),
-    ...rentRows.map<CommunityStatementLineItem>((row) => ({
-      id: row.id,
-      assessmentId: null,
-      unitId: row.unitId,
-      dueDate: row.dueDate,
-      status: row.status,
-      amountCents: row.amountCents,
-      lateFeeCents: 0,
-      paidAt: null,
-      paymentIntentId: null,
-      unitNumber: unitNumberById.get(row.unitId) ?? '',
-    })),
-  ].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-
-  // Same rule as buildUnitStatement. This one is the likelier to fire: a
-  // ~70-unit community on monthly assessments passes 200 items in the default
-  // 90-day window.
-  const truncated = combinedLineItems.length > STATEMENT_LINE_ITEM_LIMIT;
-  if (truncated) {
+  // The likelier of the two to fire: a ~70-unit community on monthly
+  // assessments passes 200 history items in the default 90-day window.
+  if (read.truncated) {
     captureMessage('community_statement_truncated', {
       level: 'warning',
-      extra: { communityId, rows: combinedLineItems.length, limit: STATEMENT_LINE_ITEM_LIMIT },
+      extra: {
+        communityId,
+        outstandingRows: read.outstandingRows,
+        historyRows: read.historyRows,
+        limit,
+      },
     });
   }
 
   return {
     balanceCents,
     ledgerEntries: ledgerEntriesForCommunity,
-    lineItems: combinedLineItems.slice(0, STATEMENT_LINE_ITEM_LIMIT),
-    truncated,
+    lineItems: [...read.outstanding, ...read.history].map((item) => ({
+      ...item,
+      unitNumber: unitNumberById.get(item.unitId) ?? '',
+    })),
+    summary: read.summary,
+    truncated: read.truncated,
   };
 }
 
@@ -1733,7 +1806,9 @@ export async function exportStatementPdf(
   startDate?: string,
   endDate?: string,
 ): Promise<Uint8Array> {
-  const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
+  const statement = await buildUnitStatement(communityId, unitId, startDate, endDate, {
+    limit: STATEMENT_EXPORT_LIMIT,
+  });
   return generateFinanceStatementPdf(statement);
 }
 
@@ -1742,7 +1817,9 @@ export async function exportCommunityStatementPdf(
   startDate?: string,
   endDate?: string,
 ): Promise<Uint8Array> {
-  const statement = await buildCommunityStatement(communityId, startDate, endDate);
+  const statement = await buildCommunityStatement(communityId, startDate, endDate, {
+    limit: STATEMENT_EXPORT_LIMIT,
+  });
   return generateCommunityFinanceStatementPdf({
     communityId,
     balanceCents: statement.balanceCents,
