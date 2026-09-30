@@ -104,9 +104,11 @@ describe.each([
     );
   });
 
-  it('falls back to the id only when the unit row is gone', async () => {
+  it('says the unit was removed rather than print an id that reads as a unit number', async () => {
     getUnitLabelMapMock.mockResolvedValue(new Map());
     await GET(request(path), ctx);
-    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ unitNumber: '17' }));
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ unitNumber: '#17 (unit removed)' }),
+    );
   });
 });

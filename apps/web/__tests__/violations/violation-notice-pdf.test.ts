@@ -324,11 +324,28 @@ describe('generated notices — rendered page', () => {
   });
 
   it('breaks a word longer than the line instead of running off the page', async () => {
+    // W is Helvetica's widest glyph, so a split sized by character count must
+    // be sized for it (x is half as wide and would pass a wrong limit).
     const { items, text } = await render(
-      generateViolationNoticePdf({ ...BASE_NOTICE, description: 'x'.repeat(200) }),
+      generateViolationNoticePdf({ ...BASE_NOTICE, description: 'W'.repeat(200) }),
     );
-    expect(text.replace(/\s/g, '')).toContain('x'.repeat(200));
-    for (const item of items) expect(item.right).toBeLessThanOrEqual(612);
+    expect(text.replace(/\s/g, '')).toContain('W'.repeat(200));
+    for (const item of items) expect(item.right).toBeLessThanOrEqual(612 - 54);
+  });
+
+  it('prints every WinAnsi glyph, and a C1 control as ?', async () => {
+    const { text } = await render(
+      generateViolationNoticePdf({ ...BASE_NOTICE, description: 'Fine 50\u20ac \u2122 \u0152uvre \u0080x' }),
+    );
+    expect(text).toContain('Fine 50\u20ac \u2122 \u0152uvre ?x');
+  });
+
+  it('never splits an emoji across lines', async () => {
+    const { text } = await render(
+      generateViolationNoticePdf({ ...BASE_NOTICE, description: `${'a'.repeat(49)}\u{1F600}b` }),
+    );
+    // The emoji is one code point: one `?`, not a `?` for each surrogate half.
+    expect(text).toContain(`${'a'.repeat(49)}? b`);
   });
 
   it('declares byte-exact /Length and startxref', () => {

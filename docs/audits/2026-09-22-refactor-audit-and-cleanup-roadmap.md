@@ -55,7 +55,9 @@ adversarially verified; counts re-run at HEAD.
 >   owner name and hearing location (trigger: counsel requires them before
 >   enabling); finance-pdf's same encoding issue — its `…` label cut and user
 >   ledger descriptions (trigger: a garbled statement is reported, or finance-pdf
->   is next edited).
+>   is next edited); the heading lines (community name/address) are not wrapped,
+>   so a name over ~60 characters reaches the page edge — pre-existing (trigger:
+>   counsel enables notices for a community whose name or address is that long).
 > - **No authz drains in Phase 2.** Every admin idiom (`membership.isAdmin`,
 >   `isAdminRole`, `requireRole(PM_MANAGER_ROLES)`, `isManagementTier`) already
 >   means `role ∈ ADMIN_TIER_DB_ROLES`; the audit cites no bug caused by the forks.

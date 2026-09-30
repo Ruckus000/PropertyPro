@@ -56,9 +56,11 @@ export const GET = withErrorHandler(
     const noticeDate = violation.noticeDate
       ?? utcDateToWallClockValue(new Date(), header.timeZone).slice(0, 10);
     // The unit NUMBER an owner recognises; notices printed the database id until
-    // 2026-09-30 ("Unit: 17" for unit 204). The id only if the unit row is gone.
+    // 2026-09-30 ("Unit: 17" for unit 204). A unit since removed (the lookup is
+    // scoped, so soft-deleted rows are excluded) says so rather than print an id
+    // that reads as a unit number.
     const unitLabels = await getUnitLabelMap(communityId, [violation.unitId]);
-    const unitNumber = unitLabels.get(violation.unitId) ?? String(violation.unitId);
+    const unitNumber = unitLabels.get(violation.unitId) ?? `#${violation.unitId} (unit removed)`;
 
     const pdfBytes = generateViolationNoticePdf({
       violationId: violation.id,

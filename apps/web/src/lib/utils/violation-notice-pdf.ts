@@ -25,15 +25,20 @@ function escapePdfText(value: string): string {
  * or smart quote an association typed, rendered as junk, and every such
  * character put `/Length` and the xref offsets 2 bytes out.
  */
-const WIN_ANSI_EXTRAS: Record<string, string> = {
-  '\u2018': '\x91', '\u2019': '\x92', '\u201c': '\x93', '\u201d': '\x94',
-  '\u2022': '\x95', '\u2013': '\x96', '\u2014': '\x97', '\u2026': '\x85',
-};
+// cp1252 0x80-0x9F: the WinAnsi glyphs that are not at their Unicode code point.
+const WIN_ANSI_EXTRAS: Record<string, string> = Object.fromEntries(
+  [...'\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u017e\u0178']
+    .map((ch, i) => [ch, String.fromCharCode([0x80, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8e, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9e, 0x9f][i]!)]),
+);
 
 function toWinAnsi(value: string): string {
   let out = '';
   for (const ch of value.normalize('NFC')) {
-    out += ch.charCodeAt(0) <= 0xff && ch.length === 1 ? ch : WIN_ANSI_EXTRAS[ch] ?? '?';
+    const code = ch.codePointAt(0)!;
+    // U+0080-U+009F are C1 controls, not glyphs; passed through they would
+    // print as the WinAnsi glyph at that byte (U+0080 as a euro sign).
+    const latin1 = code <= 0xff && (code < 0x80 || code > 0x9f);
+    out += latin1 ? ch : WIN_ANSI_EXTRAS[ch] ?? '?';
   }
   return out;
 }
@@ -64,11 +69,18 @@ function formatDate(
   });
 }
 
+/**
+ * A word longer than this is split. Measured in characters, not width, so it
+ * is sized for the WIDEST Helvetica glyph (W, 0.944 em): 50 at 10pt is 472pt,
+ * inside the 504pt text column. Ordinary prose wraps at 80 on spaces.
+ */
+const MAX_WORD_CHARS = 50;
+
 function wrapText(text: string, maxCharsPerLine: number): string[] {
-  // A word longer than the line is split, or it runs off the right edge.
+  // `u`: count code points, so a split never lands inside a surrogate pair.
   const words = text
     .split(/\s+/)
-    .flatMap((word) => word.match(new RegExp(`.{1,${maxCharsPerLine}}`, 'g')) ?? []);
+    .flatMap((word) => word.match(new RegExp(`.{1,${MAX_WORD_CHARS}}`, 'gu')) ?? []);
   const lines: string[] = [];
   let current = '';
   for (const word of words) {
