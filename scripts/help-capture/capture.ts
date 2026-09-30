@@ -16,6 +16,7 @@
  *          (H.264, faststart, scaled to viewport width, capped fps 24)
  *          + <name>-poster.webp from the first frame.
  * Output:  apps/web/public/help/<section>/<category>/<slug>/
+ * Browser: Playwright's Chromium, or HELP_CAPTURE_CHROMIUM=<path to a binary>.
  * Community ids: `{cid}` in a route resolves by seeded slug through
  *          DATABASE_URL, or HELP_CAPTURE_COMMUNITY_IDS="condo=2,hoa=4,apartment=3".
  * Budgets: enforced by guard:help-content; this script warns when exceeded.
@@ -54,6 +55,10 @@ const mediaIndexPath = join(repoRoot, 'apps', 'web', 'src', 'content', 'help', '
 const HIGHLIGHT_FALLBACK = '#E8604C'; // design-tokens:exempt — capture overlay fallback
 
 type CommunityKey = keyof typeof CAPTURE_COMMUNITIES;
+/** HELP_CAPTURE_CHROMIUM: a Chromium binary to use instead of Playwright's download. */
+const LAUNCH_OPTIONS = process.env.HELP_CAPTURE_CHROMIUM
+  ? { executablePath: process.env.HELP_CAPTURE_CHROMIUM }
+  : {};
 const BASE_URL = process.env.HELP_CAPTURE_BASE_URL ?? 'http://localhost:3000';
 
 function manifestId(m: CaptureManifest): string {
@@ -280,7 +285,7 @@ async function captureClip(
   outDir: string,
   viewport: { width: number; height: number },
 ): Promise<void> {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(LAUNCH_OPTIONS);
   const videoDir = join(outDir, '.video-tmp');
   mkdirSync(videoDir, { recursive: true });
   const context = await browser.newContext({
@@ -354,7 +359,7 @@ async function main(): Promise<void> {
     const outDir = join(outputRoot, manifest.section, manifest.category, manifest.slug);
     mkdirSync(outDir, { recursive: true });
     console.log(`Capturing ${id} (${manifest.shots.length} shots)…`);
-    const browser = await chromium.launch();
+    const browser = await chromium.launch(LAUNCH_OPTIONS);
     const context = await browser.newContext({
       viewport: manifest.viewport,
       deviceScaleFactor: 2,

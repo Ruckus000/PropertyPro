@@ -1,6 +1,6 @@
 # First capture run — known prerequisites
 
-The 101 manifests here (300 shots) were written against the code, not against a
+The manifests here were written against the code, not against a
 running app: none has been captured yet. Until a shot is captured, its article
 renders that step without an image (`guard:help-content` reports how many are
 pending). This list is what the authors could not confirm without a seeded app.
@@ -22,10 +22,9 @@ captured cleanly.
 
 ## Personas
 
-- **Board-section shots use `owner`.** The seeded `board.member` /
-  `board.president` are property managers with a designation, so they see
-  manager screens and read the manager section of help. No seeded resident
-  holds a board seat; a board member's screens are an owner's.
+- **`boardOnly` resident articles use `board_member`** — seeded as an owner
+  with a board seat at Sunset Condos (unit 2 by number). `board_president` is a
+  manager with a designation and sees manager screens.
 - Resident packages/visitors use `tenant` at the condo (no apartment resident
   persona exists).
 
