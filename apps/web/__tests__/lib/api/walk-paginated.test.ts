@@ -10,8 +10,12 @@
  *   misbehaving server)
  * - AbortSignal — pre-aborted signal short-circuits without fetching
  * - Error propagation from requestJson on non-OK responses
+ * - Truncation at the page cap is reported to Sentry, never silent (3.8)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { captureMessageMock } = vi.hoisted(() => ({ captureMessageMock: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock }));
 import { walkPaginated } from '../../../src/lib/api/walk-paginated';
 
 interface Item {
@@ -40,6 +44,8 @@ global.fetch = fetchMock as unknown as typeof fetch;
 describe('walkPaginated', () => {
   beforeEach(() => {
     fetchMock.mockReset();
+    captureMessageMock.mockReset();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -134,6 +140,59 @@ describe('walkPaginated', () => {
 
     expect(result).toHaveLength(3); // 3 pages × 1 row each
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports truncation to Sentry when the page cap stops the walk', async () => {
+    fetchMock.mockResolvedValue(
+      jsonOk({
+        data: {
+          data: [{ id: 1, name: 'A' }],
+          pagination: { nextCursor: 'next', hasMore: true, pageSize: 100 },
+        },
+      }),
+    );
+
+    const result = await walkPaginated<Item>(
+      '/api/v1/things',
+      { communityId: '42' },
+      { maxPages: 2 },
+    );
+
+    expect(result).toHaveLength(2); // partial list is still returned
+    expect(captureMessageMock).toHaveBeenCalledTimes(1);
+    expect(captureMessageMock).toHaveBeenCalledWith('walk_paginated_truncated', {
+      level: 'warning',
+      extra: { baseUrl: '/api/v1/things', rows: 2, maxPages: 2 },
+    });
+  });
+
+  it('does not report when the last allowed page ends the list', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonOk({
+          data: {
+            data: [{ id: 1, name: 'A' }],
+            pagination: { nextCursor: 'c1', hasMore: true, pageSize: 100 },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonOk({
+          data: {
+            data: [{ id: 2, name: 'B' }],
+            pagination: { nextCursor: null, hasMore: false, pageSize: 100 },
+          },
+        }),
+      );
+
+    const result = await walkPaginated<Item>(
+      '/api/v1/things',
+      { communityId: '42' },
+      { maxPages: 2 },
+    );
+
+    expect(result).toHaveLength(2);
+    expect(captureMessageMock).not.toHaveBeenCalled();
   });
 
   it('terminates if pagination.nextCursor is null even when hasMore is true', async () => {

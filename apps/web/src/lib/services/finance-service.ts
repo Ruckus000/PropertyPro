@@ -1383,7 +1383,7 @@ export async function buildUnitStatement(
   });
   const balanceCents = await getUnitLedgerBalance(scoped, unitId);
 
-  const combined: StatementLineItem[] = [
+  const merged: StatementLineItem[] = [
     ...assessmentRows.map<StatementLineItem>((row) => ({
       id: row.id,
       assessmentId: row.assessmentId,
@@ -1406,9 +1406,28 @@ export async function buildUnitStatement(
       paidAt: null,
       paymentIntentId: null,
     })),
-  ]
-    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
-    .slice(0, STATEMENT_LINE_ITEM_LIMIT);
+  ].sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+
+  // A capped statement still looks complete to its reader, so never cap it
+  // silently. A source that filled its LIMIT may have had more rows; the first
+  // such event is the trigger for giving statements a cursor (roadmap 3.8).
+  if (
+    assessmentRows.length >= STATEMENT_LINE_ITEM_LIMIT ||
+    rentRows.length >= STATEMENT_LINE_ITEM_LIMIT ||
+    merged.length > STATEMENT_LINE_ITEM_LIMIT
+  ) {
+    captureMessage('unit_statement_truncated', {
+      level: 'warning',
+      extra: {
+        communityId,
+        unitId,
+        assessmentRows: assessmentRows.length,
+        rentRows: rentRows.length,
+        limit: STATEMENT_LINE_ITEM_LIMIT,
+      },
+    });
+  }
+  const combined = merged.slice(0, STATEMENT_LINE_ITEM_LIMIT);
 
   return {
     unitId,

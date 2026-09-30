@@ -14,10 +14,16 @@
  * runaway-pagination safety net (cap of 2000 rows, well above any realistic
  * tenant-scoped list).
  *
+ * Hitting that cap is never silent: the walk still returns the rows it has
+ * (a partial list beats a blank page), but reports a
+ * `walk_paginated_truncated` warning to Sentry naming the endpoint. That event
+ * is the trigger for giving the endpoint a real cursor UI (roadmap 3.8).
+ *
  * Cancellation is via the standard `AbortSignal`. In a `useEffect`, pair with
  * an `AbortController`. In a TanStack Query `queryFn`, forward the signal
  * the framework provides.
  */
+import { captureMessage } from '@sentry/nextjs';
 import { requestJson } from './request-json';
 
 /**
@@ -73,6 +79,7 @@ export async function walkPaginated<T>(
   const pageSize = options.pageSize ?? '100';
   const collected: T[] = [];
   let cursor: string | null = null;
+  let exhausted = false;
 
   for (let i = 0; i < maxPages; i++) {
     // Throw rather than returning partial data on abort: TanStack Query
@@ -88,8 +95,23 @@ export async function walkPaginated<T>(
     const page = await requestJson<PaginatedPage<T>>(`${baseUrl}?${params.toString()}`, init);
 
     collected.push(...page.data);
-    if (!page.pagination.hasMore || !page.pagination.nextCursor) break;
+    if (!page.pagination.hasMore || !page.pagination.nextCursor) {
+      exhausted = true;
+      break;
+    }
     cursor = page.pagination.nextCursor;
+  }
+
+  if (!exhausted) {
+    console.warn('[walkPaginated] page cap reached; list is truncated', {
+      baseUrl,
+      rows: collected.length,
+      maxPages,
+    });
+    captureMessage('walk_paginated_truncated', {
+      level: 'warning',
+      extra: { baseUrl, rows: collected.length, maxPages },
+    });
   }
 
   return collected;
