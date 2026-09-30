@@ -8,12 +8,20 @@ import {
 } from '@tanstack/react-query';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
 
+export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
+
 export interface ResidentRecord {
   userId: string;
   fullName: string | null;
   email: string | null;
   role: string;
   unitId: number | null;
+  phone: string | null;
+  isUnitOwner: boolean;
+  designation: 'board_president' | 'board_member' | null;
+  portalStatus: ResidentPortalStatus;
+  lastSignInAt: string | null;
+  lastInvitedAt: string | null;
 }
 
 export interface CreateResidentResult {

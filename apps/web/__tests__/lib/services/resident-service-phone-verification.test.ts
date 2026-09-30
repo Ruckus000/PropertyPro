@@ -28,6 +28,10 @@ vi.mock('@propertypro/db/filters', () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: strings.join('?'), values }),
 }));
 
+vi.mock('@propertypro/db/unsafe', () => ({
+  findCommunityResidentPortalActivity: vi.fn(),
+}));
+
 import { updateResidentUser } from '../../../src/lib/services/resident-service';
 
 describe('updateResidentUser phone verification', () => {

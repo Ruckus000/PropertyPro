@@ -15,6 +15,18 @@ export { findCommunityBySlugUnscoped } from './queries/community-lookup';
  * community before using the resolved names.
  */
 export { findCommunityUserDisplayNames, type CommunityUserDisplayNameRow } from './queries/user-display-names';
+/**
+ * Portal status inputs (auth sign-in, invitations, approved access requests)
+ * for one community's members — reads `auth.users`, which no scoped client can.
+ *
+ * **Authorization contract:** callers MUST have verified
+ * `requirePermission(membership, 'residents', 'read')` for this communityId,
+ * resolved from the active request context.
+ */
+export {
+  findCommunityResidentPortalActivity,
+  type ResidentPortalActivityRow,
+} from './queries/resident-portal-activity';
 export {
   claimDigestQueueRows,
   findCandidateDigestCommunityIds,
