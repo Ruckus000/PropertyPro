@@ -16,6 +16,8 @@ import {
   getViolationForCommunity,
   getViolationNoticeCommunityHeader,
 } from '@/lib/services/violations-service';
+import { getUnitLabelMap } from '@/lib/services/units-lookup';
+import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 import { generateHearingNoticePdf } from '@/lib/utils/violation-notice-pdf';
 
 /**
@@ -53,19 +55,25 @@ export const GET = withErrorHandler(
       throw new NotFoundError('Community not found');
     }
 
-    const noticeDate = new Date().toISOString().slice(0, 10);
+    // Today in the community, not in UTC (see the sibling notice route).
+    const noticeDate = utcDateToWallClockValue(new Date(), header.timeZone).slice(0, 10);
+    // The unit NUMBER an owner recognises; notices printed the database id until
+    // 2026-09-30 ("Unit: 17" for unit 204). The id only if the unit row is gone.
+    const unitLabels = await getUnitLabelMap(communityId, [violation.unitId]);
+    const unitNumber = unitLabels.get(violation.unitId) ?? String(violation.unitId);
 
     const pdfBytes = generateHearingNoticePdf({
       violationId: violation.id,
       communityName: header.name,
       communityAddress: header.address,
-      unitNumber: String(violation.unitId),
+      unitNumber,
       ownerName: null,
       category: violation.category,
       description: violation.description,
       hearingDate: violation.hearingDate,
       hearingLocation: null, // Location not stored on violation record currently
       noticeDate,
+      timeZone: header.timeZone,
       // The caps the fine service enforces for this community (resolveFineCaps).
       fineCaps: membership.fineCaps,
     });
