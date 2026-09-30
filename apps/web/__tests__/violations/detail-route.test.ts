@@ -256,6 +256,32 @@ describe('PATCH /api/v1/violations/[id]', () => {
       expect(json.data.status).toBe('noticed');
     });
 
+    it('saves the hearing location and rejects one over 200 characters', async () => {
+      const saved = await PATCH(
+        jsonPatch(12, {
+          communityId: 42,
+          status: 'hearing_scheduled',
+          hearingDate: '2026-05-01T00:00:00.000Z',
+          hearingLocation: 'Clubhouse, Room 101',
+        }),
+        routeCtx('12'),
+      );
+      expect(saved.status).toBe(200);
+      expect(updateViolationForCommunityMock).toHaveBeenCalledWith(
+        42,
+        12,
+        'user-admin-1',
+        expect.objectContaining({ hearingLocation: 'Clubhouse, Room 101' }),
+        null,
+      );
+
+      const tooLong = await PATCH(
+        jsonPatch(12, { communityId: 42, hearingLocation: 'x'.repeat(201) }),
+        routeCtx('12'),
+      );
+      expect(tooLong.status).toBe(400);
+    });
+
     it('adds no warning for a hearing scheduled with full notice', async () => {
       const res = await PATCH(
         jsonPatch(12, {

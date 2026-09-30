@@ -121,6 +121,12 @@ export function ViolationDetailPanel({
             <p className="text-content-secondary">{new Date(violation.hearingDate).toLocaleDateString()}</p>
           </div>
         )}
+        {violation.hearingLocation && (
+          <div>
+            <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Hearing Location</span>
+            <p className="text-content-secondary">{violation.hearingLocation}</p>
+          </div>
+        )}
         {violation.resolutionNotes && (
           <div className="col-span-2 sm:col-span-4">
             <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Resolution Notes</span>

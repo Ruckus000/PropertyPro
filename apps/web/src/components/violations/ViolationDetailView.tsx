@@ -133,6 +133,7 @@ export function ViolationDetailView({
     evidenceDocumentIds: violation.evidenceDocumentIds,
     noticeDate: violation.noticeDate,
     hearingDate: violation.hearingDate ? new Date(violation.hearingDate).toISOString() : null,
+    hearingLocation: violation.hearingLocation ?? null,
     resolutionDate: violation.resolutionDate ? new Date(violation.resolutionDate).toISOString() : null,
     resolutionNotes: violation.resolutionNotes,
     createdAt: new Date(violation.createdAt).toISOString(),
@@ -180,6 +181,12 @@ export function ViolationDetailView({
             <div>
               <span className="text-content-tertiary">Hearing Date:</span>{' '}
               <span className="text-content-secondary">{new Date(violation.hearingDate).toLocaleString()}</span>
+            </div>
+          )}
+          {violation.hearingLocation && (
+            <div>
+              <span className="text-content-tertiary">Hearing Location:</span>{' '}
+              <span className="text-content-secondary">{violation.hearingLocation}</span>
             </div>
           )}
           {violation.resolutionDate && (

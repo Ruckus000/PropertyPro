@@ -29,6 +29,7 @@ export const violations = pgTable('violations', {
   evidenceDocumentIds: jsonb('evidence_document_ids').$type<number[]>().notNull().default([]),
   noticeDate: date('notice_date'),
   hearingDate: timestamp('hearing_date', { withTimezone: true }),
+  hearingLocation: text('hearing_location'),
   resolutionDate: timestamp('resolution_date', { withTimezone: true }),
   resolutionNotes: text('resolution_notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

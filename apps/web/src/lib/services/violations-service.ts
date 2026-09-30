@@ -44,6 +44,7 @@ export interface ViolationRecord {
   evidenceDocumentIds: number[];
   noticeDate: string | null;
   hearingDate: Date | null;
+  hearingLocation: string | null;
   resolutionDate: Date | null;
   resolutionNotes: string | null;
   createdAt: Date;
@@ -103,6 +104,7 @@ export interface UpdateViolationInput {
   evidenceDocumentIds?: number[];
   noticeDate?: string | null;
   hearingDate?: string | null;
+  hearingLocation?: string | null;
   resolutionNotes?: string | null;
 }
 
@@ -565,6 +567,9 @@ export async function updateViolationForCommunity(
   }
   if (input.hearingDate !== undefined) {
     updates['hearingDate'] = input.hearingDate === null ? null : new Date(input.hearingDate);
+  }
+  if (input.hearingLocation !== undefined) {
+    updates['hearingLocation'] = input.hearingLocation?.trim() || null;
   }
   if (input.resolutionNotes !== undefined) {
     updates['resolutionNotes'] = input.resolutionNotes;

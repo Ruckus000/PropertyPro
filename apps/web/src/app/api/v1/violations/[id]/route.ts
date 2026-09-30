@@ -72,6 +72,7 @@ export const PATCH = withErrorHandler(
         evidenceDocumentIds: body.evidenceDocumentIds,
         noticeDate: body.noticeDate,
         hearingDate: body.hearingDate,
+        hearingLocation: body.hearingLocation,
         resolutionNotes:
           body.resolutionNotes != null
             ? sanitizeHtml(body.resolutionNotes)

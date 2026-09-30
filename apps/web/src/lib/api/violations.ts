@@ -25,6 +25,7 @@ export interface ViolationItem {
   evidenceDocumentIds: number[];
   noticeDate: string | null;
   hearingDate: string | null;
+  hearingLocation: string | null;
   resolutionDate: string | null;
   resolutionNotes: string | null;
   createdAt: string;
@@ -73,6 +74,7 @@ export interface UpdateViolationPayload {
   evidenceDocumentIds?: number[];
   noticeDate?: string | null;
   hearingDate?: string | null;
+  hearingLocation?: string | null;
   resolutionNotes?: string | null;
 }
 
