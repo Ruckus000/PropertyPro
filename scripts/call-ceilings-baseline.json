@@ -99,7 +99,7 @@
     "fullTableRead": 1
   },
   "apps/web/src/lib/services/access-request-service.ts": {
-    "fullTableRead": 7
+    "fullTableRead": 2
   },
   "apps/web/src/lib/services/account-lifecycle-service.ts": {
     "unscoped": 27
@@ -171,9 +171,6 @@
   },
   "apps/web/src/lib/services/insurance-alert-unsubscribe-service.ts": {
     "unscoped": 1
-  },
-  "apps/web/src/lib/services/insurance-service.ts": {
-    "fullTableRead": 2
   },
   "apps/web/src/lib/services/lease-service.ts": {
     "fullTableRead": 1

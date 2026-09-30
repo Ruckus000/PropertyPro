@@ -50,9 +50,14 @@ export const GET = withErrorHandler(
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 
-    // RLS scopes non-admins to their own rows; admin-tier sees all.
+    // Admin-tier sees every request; an owner sees only their own. Enforced
+    // here, not by RLS: the table's own-rows policy keys on auth.uid(), which
+    // the scoped client's connection never carries.
     const scoped = createScopedClient(communityId);
-    const requests = await listCertificateRequests(scoped);
+    const requests = await listCertificateRequests(
+      scoped,
+      membership.isAdmin ? {} : { requestedBy: actorUserId },
+    );
     return { requests };
   }),
 );

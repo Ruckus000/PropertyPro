@@ -32,7 +32,6 @@ vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   forumThreads: forumThreadsTable,
   forumReplies: {},
-  listDeletedForumRepliesForThread: vi.fn(),
   logAuditEvent: vi.fn(),
   paginate: vi.fn(),
   polls: {},
