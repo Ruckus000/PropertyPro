@@ -29,6 +29,7 @@ import {
 import { and, eq, inArray, isNull, lt, lte, ne } from '@propertypro/db/filters';
 // AUTHZ: Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
 import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
 import type { AssessmentFrequency } from '@/lib/services/finance-service';
 import { getBaseUrl } from '@/lib/utils/url';
@@ -224,13 +225,29 @@ export async function processLateFees(
         );
         if (daysOverdue <= assessment.lateFeeDaysGrace) continue;
 
-        // Apply late fee
+        // Apply late fee — conditionally. The SELECT above is not a lock: two
+        // overlapping runs (a cron retry, a manual re-trigger) can both read this
+        // row at lateFeeCents 0. The `late_fee_cents = 0` predicate makes the
+        // UPDATE the arbiter, and only the run whose UPDATE matched a row posts
+        // the ledger entry, so the fee is charged once. `status = 'overdue'` is
+        // re-checked for the same reason: an item paid after the SELECT gets no fee.
+        //
+        // Not one transaction: the scoped client exposes no transaction API and
+        // postLedgerEntry writes through the scoped client. The residual window
+        // (process dies between UPDATE and post) under-posts rather than
+        // double-posts, and leaves a line item carrying a fee with no ledger row,
+        // which is visible and repairable; a double charge is neither.
         const feeCents = assessment.lateFeeAmountCents;
-        await scoped.update(
+        const updatedRows = await scoped.update(
           assessmentLineItems,
           { lateFeeCents: feeCents },
-          eq(assessmentLineItems.id, item.id),
+          and(
+            eq(assessmentLineItems.id, item.id),
+            eq(assessmentLineItems.status, 'overdue'),
+            eq(assessmentLineItems.lateFeeCents, 0),
+          ),
         );
+        if (updatedRows.length === 0) continue;
 
         // Post ledger entry for the late fee
         await postLedgerEntry(scoped, {
@@ -291,6 +308,9 @@ export async function processRecurringAssessments(
 ): Promise<RecurringAssessmentSummary> {
   const db = createUnscopedClient();
   const currentMonth = now.getMonth() + 1; // 1-12
+  // The billing period this run generates, as 'yyyy-MM' — same clock as
+  // currentMonth, so the month gate and the start/end bounds agree.
+  const periodMonth = format(now, 'yyyy-MM');
 
   const activeCommunities = await db
     .select({ id: communities.id })
@@ -337,11 +357,10 @@ export async function processRecurringAssessments(
           continue;
         }
 
-        // Check end date
-        if (assessment.endDate) {
-          const endDate = new Date(`${assessment.endDate}T00:00:00.000Z`);
-          if (now > endDate) continue;
-        }
+        // Start/end bounds: the same month-inclusive rule the generator enforces
+        // (assessmentMonthOutOfRange), checked here first so an out-of-range
+        // assessment is skipped quietly rather than counted as a failed 422.
+        if (assessmentMonthOutOfRange(assessment, `${periodMonth}-01`)) continue;
 
         try {
           const result = await generateAssessmentLineItemsForCommunity(
@@ -381,12 +400,14 @@ function shouldGenerateThisMonth(
     case 'monthly':
       return true;
     case 'quarterly': {
-      // Generate in months that align with the start month's quarter cycle
-      const startMonth = new Date(`${startDate}T00:00:00.000Z`).getMonth() + 1;
+      // Generate in months that align with the start month's quarter cycle.
+      // The month is read from the string, as billingPeriodFor reads it: a
+      // UTC-parsed date read with local getMonth() is the previous month west of UTC.
+      const startMonth = Number(startDate.slice(5, 7));
       return (currentMonth - startMonth) % 3 === 0;
     }
     case 'annual': {
-      const startMonth = new Date(`${startDate}T00:00:00.000Z`).getMonth() + 1;
+      const startMonth = Number(startDate.slice(5, 7));
       return currentMonth === startMonth;
     }
     case 'one_time':

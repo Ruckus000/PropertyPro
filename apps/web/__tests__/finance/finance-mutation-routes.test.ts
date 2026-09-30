@@ -257,6 +257,58 @@ describe('WS66 finance mutation routes', () => {
     );
   });
 
+  describe('assessment start/end dates', () => {
+    const createBody = { communityId, title: 'Dues', amountCents: 25000, frequency: 'monthly' };
+    const post = (dates: Record<string, unknown>) =>
+      assessmentsPost(jsonRequest('http://localhost:3000/api/v1/assessments', { ...createBody, ...dates }));
+    const patch = (dates: Record<string, unknown>) =>
+      assessmentPatch(
+        jsonRequest('http://localhost:3000/api/v1/assessments/11', { communityId, ...dates }),
+        { params: Promise.resolve({ id: '11' }) },
+      );
+
+    async function expectValidationError(response: Response): Promise<void> {
+      expect(response.status).toBe(400);
+      const json = (await response.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('VALIDATION_ERROR');
+    }
+
+    it.each([
+      ['startDate', '2026-02-31'],
+      ['startDate', '2026-13-01'],
+      ['endDate', '2026-04-31'],
+      ['endDate', '2027-02-29'],
+    ])('create rejects %s %s (not a calendar date) with a 400, before the INSERT', async (field, value) => {
+      // Was regex-only: '2026-02-31' reached the INSERT and Postgres' out-of-range
+      // error surfaced as a 500.
+      await expectValidationError(await post({ [field]: value }));
+      expect(createAssessmentForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['startDate', '2026-02-31'],
+      ['endDate', '2026-04-31'],
+    ])('update rejects %s %s (not a calendar date) with a 400', async (field, value) => {
+      await expectValidationError(await patch({ [field]: value }));
+      expect(updateAssessmentForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('create and update reject an endDate before the startDate', async () => {
+      await expectValidationError(await post({ startDate: '2026-05-01', endDate: '2026-04-30' }));
+      await expectValidationError(await patch({ startDate: '2026-05-01', endDate: '2026-04-30' }));
+      expect(createAssessmentForCommunityMock).not.toHaveBeenCalled();
+      expect(updateAssessmentForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts a real leap day, endDate == startDate, and a lone date on update', async () => {
+      expect((await post({ startDate: '2028-02-29', endDate: '2028-02-29' })).status).toBe(200);
+      expect((await patch({ endDate: '2026-04-30' })).status).toBe(200);
+      expect((await patch({ startDate: '2026-05-01', endDate: null })).status).toBe(200);
+      expect(createAssessmentForCommunityMock).toHaveBeenCalledTimes(1);
+      expect(updateAssessmentForCommunityMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('guards line-item generation with active subscription check', async () => {
     const response = await assessmentGeneratePost(
       jsonRequest('http://localhost:3000/api/v1/assessments/11/generate', {

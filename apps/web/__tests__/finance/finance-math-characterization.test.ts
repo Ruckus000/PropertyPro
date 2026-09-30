@@ -167,6 +167,8 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 import {
   buildCommunityStatement,
+  createAssessmentForCommunity,
+  updateAssessmentForCommunity,
   buildUnitStatement,
   generateAssessmentLineItemsForCommunity,
   listDelinquentUnits,
@@ -570,20 +572,59 @@ describe('2. flat, non-compounding late fee (processLateFees)', () => {
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
   });
 
-  it('writes the fee with a where-clause of the row id alone', async () => {
-    // CHARACTERIZATION: suspected defect — the UPDATE is keyed on `id` only, not
-    // `id AND late_fee_cents = 0`, and the ledger post is unconditional. Idempotency
-    // rests entirely on the SELECT predicate, so two overlapping runs (a cron retry
-    // while the first is still going, or a manual re-trigger) that both read the row
-    // at lateFeeCents 0 each post a `fee` ledger entry: the line item says 2500, the
-    // ledger says 5000.
+  it('writes the fee only where lateFeeCents is still 0, and posts the ledger entry only for a row it updated', async () => {
+    // Fixed 2026-09-30 (was a suspected defect: the UPDATE was keyed on `id` alone
+    // and the ledger post was unconditional, so two overlapping runs that both read
+    // the row at lateFeeCents 0 each posted a `fee` entry). Now guaranteed: the
+    // UPDATE is `id = ? AND late_fee_cents = 0`, and a run whose UPDATE matched no
+    // row (another run got there first) posts nothing and counts nothing.
     seed(assessmentLineItemsTable, [lineItem({ id: 10, status: 'overdue', dueDate: '2026-01-01' })]);
     await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
     expect(updateMock).toHaveBeenCalledWith(
       assessmentLineItemsTable,
       { lateFeeCents: 2500 },
-      { op: 'eq', column: assessmentLineItemsTable.id, value: 10 },
+      {
+        op: 'and',
+        args: [
+          { op: 'eq', column: assessmentLineItemsTable.id, value: 10 },
+          { op: 'eq', column: assessmentLineItemsTable.status, value: 'overdue' },
+          { op: 'eq', column: assessmentLineItemsTable.lateFeeCents, value: 0 },
+        ],
+      },
     );
+    expect(postLedgerEntryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('an overlapping run that loses the race to the UPDATE posts no second fee', async () => {
+    seed(assessmentLineItemsTable, [lineItem({ id: 10, status: 'overdue', dueDate: '2026-01-01' })]);
+    // Both runs SELECT the row at lateFeeCents 0; the other run's UPDATE lands
+    // between this run's SELECT and its own UPDATE.
+    const realUpdate = updateMock.getMockImplementation()!;
+    updateMock.mockImplementationOnce(async (table: object, patch: Row, where: Predicate) => {
+      const row = rowsOf(assessmentLineItemsTable).find((r) => r.id === 10)!;
+      row.lateFeeCents = 2500;
+      return realUpdate(table, patch, where);
+    });
+    const summary = await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
+    expect(summary).toMatchObject({ feesApplied: 0, totalFeeCents: 0 });
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    expect(rowsOf(assessmentLineItemsTable)[0]?.lateFeeCents).toBe(2500);
+  });
+
+  it('an item paid between the overdue SELECT and the fee UPDATE gets no fee and no ledger post', async () => {
+    // The UPDATE re-checks `status = 'overdue'`: the SELECT is not a lock, so a
+    // payment landing in between must not be followed by a late fee on a paid item.
+    seed(assessmentLineItemsTable, [lineItem({ id: 10, status: 'overdue', dueDate: '2026-01-01' })]);
+    const realUpdate = updateMock.getMockImplementation()!;
+    updateMock.mockImplementationOnce(async (table: object, patch: Row, where: Predicate) => {
+      const row = rowsOf(assessmentLineItemsTable).find((r) => r.id === 10)!;
+      row.status = 'paid';
+      return realUpdate(table, patch, where);
+    });
+    const summary = await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
+    expect(summary).toMatchObject({ feesApplied: 0, totalFeeCents: 0 });
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    expect(rowsOf(assessmentLineItemsTable)[0]).toMatchObject({ status: 'paid', lateFeeCents: 0 });
   });
 
   it.each([0, -100])('an assessment fee of %i cents is skipped', async (feeCents) => {
@@ -672,12 +713,21 @@ describe('3. due date computation (via generateAssessmentLineItemsForCommunity)'
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it('an override is shape-checked only: an impossible calendar date passes through', async () => {
-    // CHARACTERIZATION: suspected defect — `parseDateOnly` is a regex, so
-    // '2026-02-31' is accepted and handed to the INSERT. Postgres then rejects it
-    // (`date/time field value out of range`), which surfaces as a 500 instead of the
-    // 400 the malformed-shape case gets.
-    expect(await dueDateFor({ frequency: 'monthly' }, '2026-04-15T12:00:00.000Z', '2026-02-31')).toBe('2026-02-31');
+  it.each(['2026-02-31', '2026-02-29', '2026-04-31', '2026-13-01', '2026-00-10', '2026-01-00'])(
+    'an override that is not a real calendar date (%s) is a 400, not a 500 from the INSERT',
+    async (override) => {
+      // Fixed 2026-09-30 (was a suspected defect: `parseDateOnly` was a regex only,
+      // so '2026-02-31' reached the INSERT and Postgres' out-of-range error surfaced
+      // as a 500). Now guaranteed: the value must round-trip as a calendar date.
+      await expect(
+        dueDateFor({ frequency: 'monthly' }, '2026-04-15T12:00:00.000Z', override),
+      ).rejects.toMatchObject({ statusCode: 400, message: 'dueDate must be a valid calendar date' });
+      expect(insertMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('a real leap day is accepted as an override', async () => {
+    expect(await dueDateFor({ frequency: 'monthly' }, '2026-04-15T12:00:00.000Z', '2028-02-29')).toBe('2028-02-29');
   });
 
   describe('in America/Los_Angeles', () => {
@@ -718,12 +768,14 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
 
   // (m - 5) % 3 === 0 → {2, 5, 8, 11}. For m < 5 the difference is negative, and
   // JS `%` keeps the sign: (2-5)%3 is -0, which `=== 0` accepts, while (1-5)%3 is
-  // -1. So months before the start month still land on the right cycle.
+  // -1. So months before the start month still land on the right cycle. The start
+  // is in the PREVIOUS year so the startDate bound (no period before the start
+  // month) does not mask the cadence in months 1-4.
   it.each([
     [1, false], [2, true], [3, false], [4, false], [5, true], [6, false],
     [7, false], [8, true], [9, false], [10, false], [11, true], [12, false],
   ])('quarterly anchored on a May start: month %i generates=%s', async (month, expected) => {
-    const summary = await runInMonth(month, { frequency: 'quarterly', startDate: '2026-05-01' });
+    const summary = await runInMonth(month, { frequency: 'quarterly', startDate: '2025-05-01' });
     expect(summary.assessmentsProcessed).toBe(expected ? 1 : 0);
   });
 
@@ -758,25 +810,58 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
     expect(summary.assessmentsProcessed).toBe(0);
   });
 
-  it('endDate is compared as UTC midnight: the cron run ON the end date is skipped', async () => {
-    // CHARACTERIZATION: suspected defect — `now > new Date(endDate + 'T00:00Z')`
-    // makes the end date exclusive from its first millisecond. The cron fires at
-    // 05:00 UTC on the 1st, so an assessment ending on the 1st (the natural "last
-    // installment due on the 1st") never generates that final installment.
-    const onEnd = await runInMonth(4, { frequency: 'monthly', endDate: '2026-04-01' });
-    expect(onEnd.assessmentsProcessed).toBe(0);
-    const before = await runInMonth(4, { frequency: 'monthly', endDate: '2026-04-02' });
-    expect(before.assessmentsProcessed).toBe(1);
+  it.each([
+    ['2026-04-01', true],
+    ['2026-04-30', true],
+    ['2026-05-15', true],
+    ['2026-03-31', false],
+    ['2026-03-01', false],
+  ])('endDate %s: the April period is billed=%s (end month inclusive)', async (endDate, expected) => {
+    // Fixed 2026-09-30 (was a suspected defect: `now > new Date(endDate + 'T00:00Z')`
+    // made the end date exclusive from its first millisecond, so the 05:00 UTC run on
+    // the 1st skipped an assessment ending that day — its last installment). Now
+    // guaranteed: endDate is a calendar date compared at MONTH granularity, inclusive —
+    // a period (month) is billed iff its first day is on or before endDate. So "ends
+    // 2026-04-01" bills April. Mirrors the startDate rule (months before the start
+    // month are skipped), and does not depend on dueDay, so editing dueDay cannot
+    // move the final installment in or out of range.
+    const summary = await runInMonth(4, { frequency: 'monthly', endDate });
+    expect(summary.assessmentsProcessed).toBe(expected ? 1 : 0);
+    expect(generatedDueDates()).toEqual(expected ? ['2026-04-01'] : []);
   });
 
-  it('startDate is not checked: a monthly assessment starting in the future generates now', async () => {
-    // CHARACTERIZATION: suspected defect — nothing compares `now` with startDate for
-    // recurring frequencies, so a monthly assessment created today with a September
-    // start posts an April charge (line item + ledger `assessment` entry) at the
-    // next cron run.
-    const summary = await runInMonth(4, { frequency: 'monthly', startDate: '2026-09-01' });
+  it('endDate is month-granular, not due-date-granular: dueDay 15 with an end of the 1st still bills that month', async () => {
+    const summary = await runInMonth(4, { frequency: 'monthly', dueDay: 15, endDate: '2026-04-01' });
     expect(summary.assessmentsProcessed).toBe(1);
-    expect(generatedDueDates()).toEqual(['2026-04-01']);
+    expect(generatedDueDates()).toEqual(['2026-04-15']);
+  });
+
+  it.each([
+    ['monthly', '2026-09-01', 4, false],
+    ['monthly', '2026-04-20', 4, true],
+    ['monthly', '2026-03-31', 4, true],
+    ['quarterly', '2026-07-01', 4, false],
+    ['annual', '2027-04-01', 4, false],
+  ])('%s starting %s: the month-%i period is billed=%s (months before the start month are skipped)', async (frequency, startDate, month, expected) => {
+    // Fixed 2026-09-30 (was a suspected defect: nothing compared the period with
+    // startDate, so a monthly assessment created today with a September start posted
+    // an April charge — line item + ledger `assessment` entry — at the next cron
+    // run). Now guaranteed for every recurring frequency: a period is billed only
+    // from the start date's month on. Month-granular, like endDate: a start mid-month
+    // bills that month.
+    const summary = await runInMonth(month, { frequency, startDate });
+    expect(summary.assessmentsProcessed).toBe(expected ? 1 : 0);
+    expect(generatedDueDates()).toEqual(expected ? ['2026-04-01'] : []);
+  });
+
+  it.each([
+    ['before its start month', { startDate: '2026-09-01' }],
+    ['after its end month', { endDate: '2026-03-31' }],
+  ])('an assessment %s is skipped quietly: not processed, not counted as an error', async (_label, overrides) => {
+    // The generator would refuse it with a 422; the cron checks the same rule
+    // (assessmentMonthOutOfRange) first, so a normal skip is not reported as a failure.
+    const summary = await runInMonth(4, { frequency: 'monthly', ...overrides });
+    expect(summary).toMatchObject({ assessmentsProcessed: 0, errors: 0 });
   });
 
   it('the `now` argument gates the month, but the due date comes from the wall clock', async () => {
@@ -797,16 +882,15 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
   describe('in America/New_York', () => {
     inTimeZone('America/New_York', 19);
 
-    it('a start date on the 1st reads as the PREVIOUS month, so quarterly/annual miss their own start month', async () => {
-      // CHARACTERIZATION: suspected defect — shouldGenerateThisMonth parses startDate
-      // as UTC midnight and then reads it with LOCAL getMonth(); `now.getMonth()` is
-      // local too. In New York, '2026-04-01T00:00Z' is 20:00 on March 31, so the start
-      // month is 3. The 05:00 UTC run on April 1 (01:00 EDT, local month 4) then
-      // computes (4 - 3) % 3 = 1 and skips; the annual one waits for March. On UTC
-      // (Vercel) both generate in April.
+    it('a start date on the 1st is its own month, so quarterly/annual generate in their start month', async () => {
+      // Fixed 2026-09-30 (was a suspected defect: shouldGenerateThisMonth parsed
+      // startDate as UTC midnight and read it with LOCAL getMonth(), so in New York
+      // '2026-04-01T00:00Z' — 20:00 on March 31 — gave start month 3, and the 05:00
+      // UTC run on April 1 skipped both). Now guaranteed: the start month is read
+      // from the string, the same way billingPeriodFor reads it.
       const quarterly = await runInMonth(4, { frequency: 'quarterly', startDate: '2026-04-01' });
       const annual = await runInMonth(4, { frequency: 'annual', startDate: '2026-04-01' });
-      expect([quarterly.assessmentsProcessed, annual.assessmentsProcessed]).toEqual([0, 0]);
+      expect([quarterly.assessmentsProcessed, annual.assessmentsProcessed]).toEqual([1, 1]);
     });
   });
 
@@ -834,16 +918,18 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     setNow('2026-03-10T12:00:00.000Z');
   });
 
-  it('queries pending|overdue items due on or before local today', async () => {
+  it('queries pending|overdue items due strictly before local today (same predicate as the overdue cron)', async () => {
     await listDelinquentUnits(11, 30);
     expect(inArrayMock).toHaveBeenCalledWith(assessmentLineItemsTable.status, ['pending', 'overdue']);
-    expect(lteMock).toHaveBeenCalledWith(assessmentLineItemsTable.dueDate, '2026-03-10');
+    expect(ltMock).toHaveBeenCalledWith(assessmentLineItemsTable.dueDate, '2026-03-10');
+    expect(lteMock).not.toHaveBeenCalledWith(assessmentLineItemsTable.dueDate, expect.anything());
   });
 
   it('sums amount + lateFee per unit, takes the per-unit max days, sorts by amount desc', async () => {
+    // Unit 1's pending item due today (id 2) is not late yet, so it is not summed.
     const result = await listDelinquentUnits(11, 30);
     expect(result).toEqual([
-      { unitId: 1, overdueAmountCents: 62500, daysOverdue: 30, lineItemCount: 2, lienEligible: true },
+      { unitId: 1, overdueAmountCents: 32500, daysOverdue: 30, lineItemCount: 1, lienEligible: true },
       { unitId: 2, overdueAmountCents: 10000, daysOverdue: 29, lineItemCount: 1, lienEligible: false },
     ]);
   });
@@ -857,19 +943,18 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     expect(result.map((row) => row.lienEligible)).toEqual(expected);
   });
 
-  it('a PENDING item due today counts as delinquent, at 0 days', async () => {
-    // CHARACTERIZATION: suspected defect — `lte(dueDate, today)` includes items due
-    // today, and `pending` is included alongside `overdue`. processOverdueTransitions
-    // uses `lt(dueDate, today)`, so the two disagree on whether today's installment is
-    // late: a unit whose only item is due today (not yet late by any rule) is listed
-    // as delinquent, with its amount in the delinquency totals. (It cannot reach
-    // lienEligible: the route parses the threshold with parsePositiveInt, so the
-    // minimum is 1 and 0 days never qualifies.)
+  it('an item due today is not delinquent; one due yesterday is, at 1 day', async () => {
+    // Fixed 2026-09-30 (was a suspected defect: `lte(dueDate, today)` listed a unit
+    // whose only item was due today — not late by any rule — as delinquent, while
+    // processOverdueTransitions uses `lt`). Now guaranteed: delinquency and the
+    // overdue cron agree that an installment is late only from the day after it is
+    // due. lienEligible is unchanged (`daysOverdue >= threshold`).
     seed(assessmentLineItemsTable, [
       lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-10', amountCents: 30000 }),
+      lineItem({ id: 10, unitId: 6, status: 'pending', dueDate: '2026-03-09', amountCents: 20000 }),
     ]);
     expect(await listDelinquentUnits(11, 1)).toEqual([
-      { unitId: 5, overdueAmountCents: 30000, daysOverdue: 0, lineItemCount: 1, lienEligible: false },
+      { unitId: 6, overdueAmountCents: 20000, daysOverdue: 1, lineItemCount: 1, lienEligible: true },
     ]);
   });
 
@@ -886,17 +971,18 @@ describe('5. delinquency (listDelinquentUnits)', () => {
   describe('in America/New_York', () => {
     inTimeZone('America/New_York', 19);
 
-    it('an item due today reports 1 day overdue', async () => {
+    it('an item due yesterday reports 2 days overdue', async () => {
       // CHARACTERIZATION: suspected defect — daysOverdue is differenceInCalendarDays
       // (LOCAL calendar days) between now and the due date parsed as UTC midnight.
-      // West of UTC, '2026-03-10T00:00Z' is the evening of March 9 locally, so every
-      // item is one day older than on a UTC host — enough to flip lienEligible at the
-      // threshold boundary.
+      // West of UTC, '2026-03-09T00:00Z' is the evening of March 8 locally, so every
+      // item is one day older than on a UTC host (1 day, above) — enough to flip
+      // lienEligible at the threshold boundary. (Moved from an item due today when
+      // delinquency became strictly-before-today: that item is no longer listed.)
       seed(assessmentLineItemsTable, [
-        lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-10', amountCents: 30000 }),
+        lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-09', amountCents: 30000 }),
       ]);
-      const [row] = await listDelinquentUnits(11, 1);
-      expect(row).toMatchObject({ daysOverdue: 1, lienEligible: true });
+      const [row] = await listDelinquentUnits(11, 2);
+      expect(row).toMatchObject({ daysOverdue: 2, lienEligible: true });
     });
   });
 });
@@ -1238,21 +1324,102 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
-  it('idempotency is keyed on dueDate: changing dueDay mid-period generates a second charge', async () => {
-    // CHARACTERIZATION: suspected defect — the "already generated" set is looked up by
-    // (assessmentId, dueDate), not by period. Edit an assessment's dueDay from 1 to 15
-    // after April's run and the next run (manual or cron) charges every unit a second
-    // April installment, due 04-15, with its own ledger `assessment` entry. Nor is
-    // there a database backstop: assessment_line_items has no unique index on
-    // (assessment_id, unit_id, due_date), so two concurrent generations for the same
-    // period (cron + manual button) can each read an empty existing set and both
-    // insert — the check-then-insert is not atomic.
+  it('idempotency is keyed on the billing period: changing dueDay mid-period does not charge the period twice', async () => {
+    // Fixed 2026-09-30 (was a suspected defect: the "already generated" set was
+    // looked up by (assessmentId, dueDate), so editing dueDay from 1 to 15 after
+    // April's run made the next run charge every unit a second April installment).
+    // Now guaranteed: the lookup is by the assessment's PERIOD — the calendar month
+    // for monthly — so any April item for this assessment counts as April billed.
+    // App-level only: assessment_line_items still has no unique index, so two
+    // concurrent generations can each read an empty set (deferred — roadmap 3.T2).
     seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
       lineItem({ id: unitId, assessmentId: 7, unitId, dueDate: '2026-04-01' })));
     seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 15, amountCents: 30000 })]);
 
     const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
-    expect(result).toEqual({ insertedCount: 3, skippedCount: 0, dueDate: '2026-04-15' });
+    expect(result).toEqual({ insertedCount: 0, skippedCount: 3, dueDate: '2026-04-15' });
+    expect(insertMock).not.toHaveBeenCalled();
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+  });
+
+  it('monthly period bounds: the last day of the previous month and the first of the next do not count', async () => {
+    seed(assessmentLineItemsTable, [
+      lineItem({ id: 1, assessmentId: 7, unitId: 1, dueDate: '2026-03-31' }),
+      lineItem({ id: 2, assessmentId: 7, unitId: 2, dueDate: '2026-05-01' }),
+      lineItem({ id: 3, assessmentId: 7, unitId: 3, dueDate: '2026-04-30' }),
+    ]);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(result).toEqual({ insertedCount: 2, skippedCount: 1, dueDate: '2026-04-01' });
+  });
+
+  it('an override date inside an already-billed month is skipped; one in another month is billed', async () => {
+    seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
+      lineItem({ id: unitId, assessmentId: 7, unitId, dueDate: '2026-04-01' })));
+    const sameMonth = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-04-20');
+    expect(sameMonth).toEqual({ insertedCount: 0, skippedCount: 3, dueDate: '2026-04-20' });
+    const nextMonth = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-05-20');
+    expect(nextMonth).toEqual({ insertedCount: 3, skippedCount: 0, dueDate: '2026-05-20' });
+  });
+
+  it.each([
+    // [label, frequency, startDate, existing dueDate, now, expected inserted]
+    ['quarterly: an item in the quarter\'s first month blocks a mid-quarter run', 'quarterly', '2025-05-01', '2026-02-01', '2026-03-10T12:00:00.000Z', 0],
+    ['quarterly: the quarter window is anchored on the start month (Feb-Apr), so a Jan item does not block March', 'quarterly', '2025-05-01', '2026-01-01', '2026-03-10T12:00:00.000Z', 3],
+    ['quarterly: the next quarter is a new period', 'quarterly', '2025-05-01', '2026-02-01', '2026-05-10T12:00:00.000Z', 3],
+    ['annual: an item earlier in the assessment year blocks a later run', 'annual', '2025-09-10', '2025-09-01', '2026-08-10T12:00:00.000Z', 0],
+    ['annual: the next assessment year is a new period', 'annual', '2025-09-10', '2025-09-01', '2026-09-10T12:00:00.000Z', 3],
+    // Dec → Jan wrap: the period window crosses the calendar year.
+    ['quarterly Nov-anchored: a November item blocks the January run (Nov–Jan quarter)', 'quarterly', '2025-11-01', '2026-11-01', '2027-01-10T12:00:00.000Z', 0],
+    ['quarterly Nov-anchored: a January item blocks a December run (same quarter)', 'quarterly', '2025-11-01', '2027-01-01', '2026-12-10T12:00:00.000Z', 0],
+    ['quarterly Nov-anchored: February is the next quarter', 'quarterly', '2025-11-01', '2027-01-01', '2027-02-10T12:00:00.000Z', 3],
+    ['monthly: a December item does not block the January run of the next year', 'monthly', '2025-01-01', '2026-12-01', '2027-01-10T12:00:00.000Z', 3],
+    ['monthly: a December item blocks a later December run', 'monthly', '2025-01-01', '2026-12-01', '2026-12-20T12:00:00.000Z', 0],
+  ])('%s', async (_label, frequency, startDate, existingDueDate, nowIso, expectedInserted) => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency, startDate, dueDay: 1, amountCents: 30000 })]);
+    seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
+      lineItem({ id: unitId, assessmentId: 7, unitId, dueDate: existingDueDate })));
+    setNow(nowIso);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(result.insertedCount).toBe(expectedInserted);
+  });
+
+  it.each([
+    // [label, startDate, endDate, override (null = computed from the clock, April 2026)]
+    ['an override before the start month', '2026-05-01', null, '2026-04-20'],
+    ['the computed due date of a future-start assessment', '2026-09-01', null, null],
+    ['an override after the end month', '2025-01-01', '2026-03-31', '2026-04-01'],
+  ])('manual generate refuses %s with a 422 and writes nothing', async (_label, startDate, endDate, override) => {
+    // The start/end month bounds used to live only in the recurring cron, so the
+    // manual `POST /assessments/[id]/generate` billed outside them. The rule now
+    // lives in generateAssessmentLineItemsForCommunity, shared by both paths.
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 1, startDate, endDate })]);
+    seed(assessmentLineItemsTable, []);
+    await expect(generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', override)).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringMatching(/^Cannot generate line items: 2026-04-\d\d is (before|after) the assessment's (start|end) month \(\d{4}-\d\d-\d\d\)$/),
+    });
+    expect(insertMock).not.toHaveBeenCalled();
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['start mid-month bills its own month', '2026-04-20', null, '2026-04-01'],
+    ['end on the 1st bills that whole month', '2025-01-01', '2026-04-01', '2026-04-30'],
+  ])('manual generate bounds are month-inclusive: %s', async (_label, startDate, endDate, override) => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 1, startDate, endDate })]);
+    seed(assessmentLineItemsTable, []);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', override);
+    expect(result).toEqual({ insertedCount: 3, skippedCount: 0, dueDate: override });
+  });
+
+  it('one_time keeps exact-dueDate idempotency', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'one_time', startDate: '2026-04-20', amountCents: 30000 })]);
+    seed(assessmentLineItemsTable, [
+      lineItem({ id: 1, assessmentId: 7, unitId: 1, dueDate: '2026-04-20' }),
+      lineItem({ id: 2, assessmentId: 7, unitId: 2, dueDate: '2026-04-01' }),
+    ]);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(result).toEqual({ insertedCount: 2, skippedCount: 1, dueDate: '2026-04-20' });
   });
 
   it('a community with no units is a 422', async () => {
@@ -1270,3 +1437,41 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     });
   });
 });
+
+describe('10. assessment date order is checked against the dates the row will hold', () => {
+  it('create: an endDate before the defaulted startDate (today) is a 400, nothing inserted', async () => {
+    setNow('2026-04-15T12:00:00.000Z');
+    await expect(
+      createAssessmentForCommunity(11, 'u-1', {
+        title: 'Dues',
+        amountCents: 100,
+        frequency: 'monthly',
+        endDate: '2026-01-31',
+      } as never),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('update: a lone endDate before the STORED startDate is a 400, nothing written', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, startDate: '2026-05-01', endDate: null })]);
+    await expect(
+      updateAssessmentForCommunity(11, 7, 'u-1', { endDate: '2026-04-01' } as never),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('update: a lone startDate after the STORED endDate is a 400', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, startDate: '2026-01-01', endDate: '2026-06-30' })]);
+    await expect(
+      updateAssessmentForCommunity(11, 7, 'u-1', { startDate: '2026-07-01' } as never),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('update: clearing endDate (null) or a valid lone endDate still saves (control)', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, startDate: '2026-05-01', endDate: '2026-12-31' })]);
+    await updateAssessmentForCommunity(11, 7, 'u-1', { endDate: null } as never);
+    await updateAssessmentForCommunity(11, 7, 'u-1', { endDate: '2026-05-01' } as never);
+    expect(updateMock).toHaveBeenCalledTimes(2);
+  });
+});
+

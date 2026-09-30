@@ -37,6 +37,7 @@ import { markMatchingViolationFinePaid } from '@/lib/services/violations-service
 import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
+import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import {
   generateCommunityFinanceStatementPdf,
@@ -366,6 +367,45 @@ function computeDueDate(
   return format(candidate, 'yyyy-MM-dd');
 }
 
+/** 'yyyy-MM-dd' → months since year 0 (0-based month), read from the string. */
+function monthIndexOf(dateOnly: string): number {
+  return Number(dateOnly.slice(0, 4)) * 12 + (Number(dateOnly.slice(5, 7)) - 1);
+}
+
+function firstOfMonthIndex(index: number): string {
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+}
+
+/**
+ * The billing period a recurring assessment's due date falls in, as a
+ * half-open `[start, endExclusive)` range of 'yyyy-MM-dd' strings — the
+ * "already generated" check is keyed on this, not on the exact due date, so a
+ * dueDay edit (or an override elsewhere in the same period) cannot bill the
+ * period twice.
+ *
+ * monthly → the calendar month. quarterly / annual → the 3- / 12-month window
+ * anchored on the start date's month, the same anchor shouldGenerateThisMonth
+ * uses for cadence. one_time → null (keyed on the exact due date, as before).
+ * Pure string arithmetic: no Date parsing, so no time-zone dependence.
+ */
+function billingPeriodFor(
+  assessment: Pick<AssessmentRecord, 'frequency' | 'startDate'>,
+  dueDate: string,
+): { start: string; endExclusive: string } | null {
+  const months =
+    assessment.frequency === 'monthly' ? 1
+      : assessment.frequency === 'quarterly' ? 3
+        : assessment.frequency === 'annual' ? 12
+          : null;
+  if (months === null) return null;
+  const dueIndex = monthIndexOf(dueDate);
+  const offset = (((dueIndex - monthIndexOf(assessment.startDate)) % months) + months) % months;
+  const startIndex = dueIndex - offset;
+  return { start: firstOfMonthIndex(startIndex), endExclusive: firstOfMonthIndex(startIndex + months) };
+}
+
 function toLineItemDescription(assessment: AssessmentRecord, dueDate: string): string {
   return `${assessment.title} (${dueDate})`;
 }
@@ -484,12 +524,25 @@ export async function paginateAssessmentsForCommunity(
   };
 }
 
+/**
+ * The contracts can only compare dates sent in the same request; this compares
+ * the dates the row will actually hold (defaults and stored values applied),
+ * so an assessment cannot be saved ending before it starts.
+ */
+function assertAssessmentDateOrder(startDate: string, endDate: string | null): void {
+  if (endDate !== null && endDate < startDate) {
+    throw new BadRequestError('endDate must be on or after startDate');
+  }
+}
+
 export async function createAssessmentForCommunity(
   communityId: number,
   actorUserId: string,
   input: CreateAssessmentInput,
   requestId?: string | null,
 ): Promise<AssessmentRecord> {
+  const startDate = input.startDate ?? format(new Date(), 'yyyy-MM-dd');
+  assertAssessmentDateOrder(startDate, input.endDate ?? null);
   const scoped = createScopedClient(communityId);
   const [inserted] = await scoped.insert(assessments, {
     title: input.title.trim(),
@@ -499,7 +552,7 @@ export async function createAssessmentForCommunity(
     dueDay: input.dueDay ?? null,
     lateFeeAmountCents: input.lateFeeAmountCents ?? 0,
     lateFeeDaysGrace: input.lateFeeDaysGrace ?? 0,
-    startDate: input.startDate ?? format(new Date(), 'yyyy-MM-dd'),
+    startDate,
     endDate: input.endDate ?? null,
     isActive: input.isActive ?? true,
     createdByUserId: actorUserId,
@@ -540,6 +593,10 @@ export async function updateAssessmentForCommunity(
   if (!existing) {
     throw new NotFoundError('Assessment not found');
   }
+  assertAssessmentDateOrder(
+    input.startDate ?? existing.startDate,
+    input.endDate !== undefined ? input.endDate : existing.endDate,
+  );
 
   const [updated] = await scoped.update(assessments, {
     ...(input.title !== undefined ? { title: input.title.trim() } : {}),
@@ -642,18 +699,37 @@ export async function generateAssessmentLineItemsForCommunity(
   }
 
   const dueDate = computeDueDate(assessment, dueDateOverride);
+  const outOfRange = assessmentMonthOutOfRange(assessment, dueDate);
+  if (outOfRange) {
+    throw new UnprocessableEntityError(
+      outOfRange === 'before_start'
+        ? `Cannot generate line items: ${dueDate} is before the assessment's start month (${assessment.startDate})`
+        : `Cannot generate line items: ${dueDate} is after the assessment's end month (${assessment.endDate})`,
+    );
+  }
   const unitRows = await scoped.selectFrom<{ id: number }>(units, { id: units.id });
   if (unitRows.length === 0) {
     throw new UnprocessableEntityError('Cannot generate line items: no units found for this community');
   }
 
+  // "Already generated" = any item for this assessment in the same billing
+  // period (see billingPeriodFor). App-level only: assessment_line_items has
+  // no unique index, so two concurrent generations can still both read an
+  // empty set — a DB backstop is a separate migration decision (roadmap 3.T2).
+  const period = billingPeriodFor(assessment, dueDate);
   const existingRows = await scoped.selectFrom<AssessmentLineItemRecord>(
     assessmentLineItems,
     {},
-    and(
-      eq(assessmentLineItems.assessmentId, assessmentId),
-      eq(assessmentLineItems.dueDate, dueDate),
-    ),
+    period
+      ? and(
+        eq(assessmentLineItems.assessmentId, assessmentId),
+        gte(assessmentLineItems.dueDate, period.start),
+        lt(assessmentLineItems.dueDate, period.endExclusive),
+      )
+      : and(
+        eq(assessmentLineItems.assessmentId, assessmentId),
+        eq(assessmentLineItems.dueDate, dueDate),
+      ),
   );
   const existingUnitIds = new Set(existingRows.map((row) => row.unitId));
 
@@ -1494,12 +1570,16 @@ export async function listDelinquentUnits(
 }>> {
   const scoped = createScopedClient(communityId);
   const today = format(new Date(), 'yyyy-MM-dd');
+  // Strictly before today — the same predicate processOverdueTransitions uses.
+  // An installment due today is not late yet, so it is not delinquent.
+  // `pending` stays in the set so an item the daily cron has not yet flipped to
+  // `overdue` still counts once it is past due.
   const overdueItems = await scoped.selectFrom<AssessmentLineItemRecord>(
     assessmentLineItems,
     {},
     and(
       inArray(assessmentLineItems.status, ['pending', 'overdue']),
-      lte(assessmentLineItems.dueDate, today),
+      lt(assessmentLineItems.dueDate, today),
     ),
   );
 

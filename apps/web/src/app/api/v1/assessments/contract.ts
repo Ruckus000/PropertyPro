@@ -11,6 +11,13 @@
  * Response: loose `z.unknown()` — assessment rows carry `Date` fields.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
+import { isCalendarDate } from '@/lib/finance/date-only';
+
+// A real calendar date: the regex alone let '2026-02-31' reach the INSERT (500).
+const dateOnlySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => isCalendarDate(value), 'must be a valid calendar date');
 
 const createAssessmentBodySchema = z.object({
   communityId: z.number().int().positive(),
@@ -21,10 +28,13 @@ const createAssessmentBodySchema = z.object({
   dueDay: z.number().int().min(1).max(31).nullable().optional(),
   lateFeeAmountCents: z.number().int().min(0).optional(),
   lateFeeDaysGrace: z.number().int().min(0).optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  startDate: dateOnlySchema.optional(),
+  endDate: dateOnlySchema.nullable().optional(),
   isActive: z.boolean().optional(),
-});
+}).refine(
+  (body) => !body.startDate || !body.endDate || body.endDate >= body.startDate,
+  { message: 'endDate must be on or after startDate', path: ['endDate'] },
+);
 
 export const assessmentsListContract = defineRoute({
   method: 'GET',

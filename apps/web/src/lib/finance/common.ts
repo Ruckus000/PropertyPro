@@ -3,6 +3,7 @@ import type { CommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { isCalendarDate } from '@/lib/finance/date-only';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
@@ -63,9 +64,14 @@ export function parsePositiveInt(value: string, label: string): number {
   return parsed;
 }
 
+
+/** `isCalendarDate` as a 400, in the same error class as the shape failure. */
 export function parseDateOnly(value: string, label: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new BadRequestError(`${label} must be in YYYY-MM-DD format`);
+  }
+  if (!isCalendarDate(value)) {
+    throw new BadRequestError(`${label} must be a valid calendar date`);
   }
   return value;
 }
