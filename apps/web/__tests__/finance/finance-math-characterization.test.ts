@@ -1366,6 +1366,12 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     ['quarterly: the next quarter is a new period', 'quarterly', '2025-05-01', '2026-02-01', '2026-05-10T12:00:00.000Z', 3],
     ['annual: an item earlier in the assessment year blocks a later run', 'annual', '2025-09-10', '2025-09-01', '2026-08-10T12:00:00.000Z', 0],
     ['annual: the next assessment year is a new period', 'annual', '2025-09-10', '2025-09-01', '2026-09-10T12:00:00.000Z', 3],
+    // Dec → Jan wrap: the period window crosses the calendar year.
+    ['quarterly Nov-anchored: a November item blocks the January run (Nov–Jan quarter)', 'quarterly', '2025-11-01', '2026-11-01', '2027-01-10T12:00:00.000Z', 0],
+    ['quarterly Nov-anchored: a January item blocks a December run (same quarter)', 'quarterly', '2025-11-01', '2027-01-01', '2026-12-10T12:00:00.000Z', 0],
+    ['quarterly Nov-anchored: February is the next quarter', 'quarterly', '2025-11-01', '2027-01-01', '2027-02-10T12:00:00.000Z', 3],
+    ['monthly: a December item does not block the January run of the next year', 'monthly', '2025-01-01', '2026-12-01', '2027-01-10T12:00:00.000Z', 3],
+    ['monthly: a December item blocks a later December run', 'monthly', '2025-01-01', '2026-12-01', '2026-12-20T12:00:00.000Z', 0],
   ])('%s', async (_label, frequency, startDate, existingDueDate, nowIso, expectedInserted) => {
     seed(assessmentsTable, [assessment({ id: 7, frequency, startDate, dueDay: 1, amountCents: 30000 })]);
     seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
