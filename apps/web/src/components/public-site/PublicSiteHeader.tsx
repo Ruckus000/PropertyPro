@@ -67,7 +67,7 @@ function PageNav({ nav }: { nav: SiteNav }) {
 export function PublicSiteHeader({ theme, nav }: PublicSiteHeaderProps) {
   return (
     <header
-      className="w-full px-4 py-4 sm:px-6 lg:px-8"
+      className="w-full px-4 py-4 site-sm:px-6 site-lg:px-8"
       style={{ backgroundColor: theme.primaryColor }}
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between">

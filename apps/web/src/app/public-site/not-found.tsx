@@ -72,7 +72,7 @@ export default async function PublicSiteNotFound() {
         <PublicSiteHeader theme={theme} />
         <main id="main-content" className="flex flex-1 items-center justify-center px-4 py-20">
           <div className="mx-auto max-w-xl text-center">
-            <h1 className="font-heading text-3xl font-bold text-content sm:text-4xl">
+            <h1 className="font-heading text-3xl font-bold text-content site-sm:text-4xl">
               Page not found
             </h1>
             <p className="mt-3 text-base text-content-secondary">

@@ -44,9 +44,9 @@ function hasHeroBlock(blocks: SiteBlock[]): boolean {
 
 function EmptyStateHero({ heading }: { heading: string }) {
   return (
-    <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
+    <section className="bg-primary px-4 py-20 text-center site-sm:px-6 site-lg:px-8">
       <div className="mx-auto max-w-3xl">
-        <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
+        <h1 className="font-heading text-4xl font-bold text-content-inverse site-sm:text-5xl">
           {heading}
         </h1>
         <p className="mt-4 text-lg text-content-inverse">

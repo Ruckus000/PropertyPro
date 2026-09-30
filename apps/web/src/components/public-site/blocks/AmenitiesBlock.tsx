@@ -22,14 +22,14 @@ export function AmenitiesBlock(props: BlockRendererProps) {
   const headingId = content.heading ? `amenities-${props.block.id}` : undefined;
 
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={headingId}>
+    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={headingId}>
       <div className={`mx-auto ${variantWidth('grid', content.variant)}`}>
         {content.heading && (
           <h2 id={headingId} className="mb-6 font-heading text-2xl font-semibold text-content">
             {content.heading}
           </h2>
         )}
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <ul className="grid gap-4 site-sm:grid-cols-2">
           {content.items.map((item, i) => (
             <li key={i} className="rounded-md border border-edge bg-surface-card p-5">
               <p className="font-medium text-content">{item.name}</p>

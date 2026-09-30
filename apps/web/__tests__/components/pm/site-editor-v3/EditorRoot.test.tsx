@@ -1506,7 +1506,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.pages = [];
     renderRoot({ initialPages: [], canvasContext: {} });
 
-    const preview = screen.getByRole('button', { name: /Preview/ });
+    const preview = screen.getByRole('button', { name: 'Preview' });
     expect(preview).toBeDisabled();
     expect(preview).toHaveAttribute('title', expect.stringMatching(/couldn't load/i));
   });
@@ -1525,7 +1525,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.pages = [seededHome];
     const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
     // Open it while a page IS known…
-    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByText(/previewing/)).toBeInTheDocument();
 
     // …then lose the pages underneath it, which is what a failed refetch does.
@@ -1557,7 +1557,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.pages = [seededHome];
     renderRoot({ initialPages: [seededHome], canvasContext: null });
 
-    expect(screen.getByRole('button', { name: /Preview/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
   });
 
   it('does not spring the dialog back open when the pages read recovers', async () => {
@@ -1574,7 +1574,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      */
     queries.pages = [seededHome];
     const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
-    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByText(/previewing/)).toBeInTheDocument();
 
     // The read fails…
@@ -1627,7 +1627,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      */
     queries.pages = [seededHome];
     const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
-    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
     queries.isError = true;
     queries.pages = [];
@@ -1643,7 +1643,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
       rerender(rootElement({ initialPages: [seededHome], canvasContext: {} }));
     });
 
-    expect(await screen.findByRole('button', { name: /Preview/ })).toHaveFocus();
+    expect(await screen.findByRole('button', { name: 'Preview' })).toHaveFocus();
   });
 
   it('blames the failure that actually happened', async () => {
@@ -1660,7 +1660,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.pages = [seededHome];
     renderRoot({ initialPages: [seededHome], canvasContext: null });
 
-    expect(screen.getByRole('button', { name: /Preview/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Preview' })).toHaveAttribute(
       'title',
       expect.stringMatching(/site settings/i),
     );
@@ -1684,7 +1684,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      */
     queries.pages = [seededHome];
     const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
-    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByText(/previewing/)).toBeInTheDocument();
 
     queries.isError = true;

@@ -26,20 +26,20 @@ function hasHeroBlock(blocks: SiteBlock[]): boolean {
 
 function EmptyStateHero({ heading }: { heading: string }) {
   return (
-    <section className="border-y border-edge bg-secondary px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-end">
+    <section className="border-y border-edge bg-secondary px-4 py-16 site-sm:px-6 site-lg:px-8">
+      <div className="mx-auto grid max-w-6xl gap-8 site-md:grid-cols-[1.2fr_0.8fr] site-md:items-end">
         <div>
           <p className="mb-4 text-sm font-semibold uppercase tracking-wide text-primary">
             Community Portal
           </p>
-          <h1 className="font-heading text-4xl font-semibold text-content sm:text-5xl">
+          <h1 className="font-heading text-4xl font-semibold text-content site-sm:text-5xl">
             {heading}
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-content-secondary">
             Documents, meetings, announcements, and resident resources in one place.
           </p>
         </div>
-        <div className="md:text-right">
+        <div className="site-md:text-right">
           <a
             href="/auth/login"
             className="inline-flex items-center rounded-md bg-primary px-6 py-3 text-base font-medium text-content-inverse shadow-e2 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"

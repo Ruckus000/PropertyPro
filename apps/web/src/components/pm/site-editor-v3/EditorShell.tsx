@@ -118,6 +118,8 @@ export function EditorShell({
   onSelectPage,
   onManagePages,
   changeCount,
+  device,
+  onDeviceChange,
 }: EditorShellPropsWithTool) {
   // Closed by default: the v4 builder opens on the page itself, with the rail
   // offering the tools rather than one already covering a third of the screen.
@@ -169,6 +171,8 @@ export function EditorShell({
         onSelectPage={onSelectPage}
         onManagePages={onManagePages}
         changeCount={changeCount}
+        device={device}
+        onDeviceChange={onDeviceChange}
       />
 
       {banner ? (
