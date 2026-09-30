@@ -78,11 +78,11 @@ export interface PreviewDialogProps {
  * moves focus to the failure banner's "Try again" itself. That is the only path
  * on which focus does not return to the trigger.
  *
- * No width/device toggle. `PhoneFrame` frames an **iframe `src`**, and the only
- * URL available renders the *published* site, not the draft; and clamping this
- * in-tree render to a phone width would squeeze a desktop layout rather than
- * re-trigger the views' own responsive breakpoints — a mobile preview that
- * lies. Left out until there is a draft-preview URL to frame.
+ * No width toggle of its own: the device toggle lives on the canvas (v4). That
+ * works in-tree because the public-site views respond to their `.site-frame`
+ * container rather than the window (`site-md:` etc, `tailwind.config.ts`), so
+ * a narrow frame shows the real phone layout. This dialog's block wrapper is a
+ * `site-frame` too — without one those variants never match.
  *
  * ## Page scope (Phase 11b-3, D-C2)
  *
@@ -197,7 +197,7 @@ function PreviewBody({ communityId, context, now }: PreviewBodyProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
+    <div className="site-frame overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
       {ordered.map((block) => (
         <CanvasBlock
           key={block.id}

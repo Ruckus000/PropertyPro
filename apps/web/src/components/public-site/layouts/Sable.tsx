@@ -26,12 +26,12 @@ function hasHeroBlock(blocks: SiteBlock[]): boolean {
 
 function EmptyStateHero({ heading }: { heading: string }) {
   return (
-    <section className="bg-surface-card px-4 py-20 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl border-l-4 border-accent pl-6 sm:pl-8">
+    <section className="bg-surface-card px-4 py-20 site-sm:px-6 site-lg:px-8">
+      <div className="mx-auto max-w-4xl border-l-4 border-accent pl-6 site-sm:pl-8">
         <p className="mb-4 text-sm font-semibold uppercase tracking-wide text-accent">
           Resident Access
         </p>
-        <h1 className="font-heading text-4xl font-semibold text-content sm:text-5xl">
+        <h1 className="font-heading text-4xl font-semibold text-content site-sm:text-5xl">
           {heading}
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-content-secondary">

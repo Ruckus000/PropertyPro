@@ -22,7 +22,7 @@ export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
   const hasBoard = data.board.length > 0;
 
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={`contact-${blockId}`}>
+    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={`contact-${blockId}`}>
       <div className="mx-auto max-w-3xl">
         <h2
           id={`contact-${blockId}`}
@@ -35,7 +35,7 @@ export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
             Contact information will be posted here soon.
           </p>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 site-md:grid-cols-2">
             {hasManagement && data.management && (
               <section
                 className="rounded-md border border-edge bg-surface-card p-5"

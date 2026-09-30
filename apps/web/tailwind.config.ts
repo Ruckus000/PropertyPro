@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   darkMode: "class",
@@ -258,7 +259,33 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    /*
+     * Site-frame breakpoints. The public-site components respond to the width
+     * of their `.site-frame` container, not the window, so the editor canvas
+     * can render a true phone or tablet layout inside a desktop browser (v4
+     * device preview). `site-md:` is `md:` with the same 768px threshold,
+     * measured against the frame.
+     *
+     * On the public site the frame spans the viewport, so behaviour there is
+     * unchanged — with one hairline difference: a container's width excludes
+     * the vertical scrollbar and a media query's does not.
+     *
+     * Every render root of public-site components must carry `site-frame`,
+     * because a variant with no container to query never matches, and the
+     * page would collapse to its phone layout on every screen.
+     * `__tests__/public-site/site-frame.test.ts` enforces both halves.
+     */
+    plugin(({ addUtilities, addVariant, theme }) => {
+      addUtilities({
+        ".site-frame": { "container-type": "inline-size", "container-name": "site" },
+      });
+      const screens = theme("screens") as Record<string, string>;
+      for (const [name, width] of Object.entries(screens)) {
+        addVariant(`site-${name}`, `@container site (min-width: ${width})`);
+      }
+    }),
+  ],
 };
 
 export default config;

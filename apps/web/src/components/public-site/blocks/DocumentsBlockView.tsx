@@ -20,7 +20,7 @@ export type DocumentsBlockViewProps = BlockViewProps<DocumentsBlockContent, Publ
 
 export function DocumentsBlockView({ content, blockId, data, community }: DocumentsBlockViewProps) {
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={`documents-${blockId}`}>
+    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={`documents-${blockId}`}>
       <div className="mx-auto max-w-3xl">
         <h2
           id={`documents-${blockId}`}

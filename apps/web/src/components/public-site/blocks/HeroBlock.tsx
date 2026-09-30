@@ -41,9 +41,9 @@ export function HeroBlock(props: BlockRendererProps) {
   const photos = resolveHeroPhotos(content);
 
   return (
-    <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
+    <section className="bg-primary px-4 py-20 text-center site-sm:px-6 site-lg:px-8">
       <div className="mx-auto max-w-3xl">
-        <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
+        <h1 className="font-heading text-4xl font-bold text-content-inverse site-sm:text-5xl">
           {content.headline}
         </h1>
         {content.subtitle && (

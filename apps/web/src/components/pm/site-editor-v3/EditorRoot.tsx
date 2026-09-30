@@ -9,6 +9,7 @@ import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
 import { StatusLine } from './StatusLine';
+import type { PreviewDevice } from './EditorTopBar';
 
 // Code-split, and mounted only once opened.
 //
@@ -262,6 +263,9 @@ export function EditorRoot({
   const previewOpenRef = useRef(false);
   previewOpenRef.current = previewOpen;
   const [publishOpen, setPublishOpen] = useState(false);
+  // v4 device preview. Session-only: a PM who checks the phone layout and
+  // reloads should come back to the full-width canvas they edit on.
+  const [device, setDevice] = useState<PreviewDevice>('desktop');
 
   // Which page the editor is editing. `null` until the PM picks one, at which
   // point the server seed's home page stands in — `initialPages` is home-first,
@@ -813,6 +817,8 @@ export function EditorRoot({
         onSelectPage={handlePickPage}
         onManagePages={handleGoToPages}
         changeCount={diff.changes.length}
+        device={device}
+        onDeviceChange={setDevice}
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
         communityId={communityId}
@@ -992,6 +998,7 @@ export function EditorRoot({
             communityId={communityId}
             context={canvasContext}
             onAddSection={handleInsertAt}
+            device={device}
           />
         ) : (
           <div className="mx-auto max-w-[1000px] px-5 py-4">

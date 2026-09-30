@@ -50,7 +50,7 @@ export function AnnouncementsBlockView({
   community,
 }: AnnouncementsBlockViewProps) {
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={`announcements-${blockId}`}>
+    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={`announcements-${blockId}`}>
       <div className="mx-auto max-w-3xl">
         <h2
           id={`announcements-${blockId}`}

@@ -87,6 +87,8 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       onSelectPage={() => {}}
       onManagePages={() => {}}
       changeCount={0}
+      device="desktop"
+      onDeviceChange={() => {}}
       pageName="Home"
       {...overrides}
     >
@@ -295,6 +297,30 @@ describe('EditorShell — publish affordance', () => {
   it('shows no count when there is nothing waiting', () => {
     renderShell({ canOpenPublish: true, changeCount: 0 });
     expect(screen.queryByTestId('publish-change-count')).not.toBeInTheDocument();
+  });
+});
+
+describe('EditorShell — device preview (v4)', () => {
+  it('offers three sizes and marks the one showing', () => {
+    renderShell({ device: 'tablet' });
+    const group = screen.getByRole('group', { name: 'Preview size' });
+    expect(group).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Preview on a tablet' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Preview on a phone' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('reports the size the PM picks', async () => {
+    const user = userEvent.setup();
+    const onDeviceChange = vi.fn();
+    renderShell({ onDeviceChange });
+    await user.click(screen.getByRole('button', { name: 'Preview on a phone' }));
+    expect(onDeviceChange).toHaveBeenCalledWith('phone');
   });
 });
 

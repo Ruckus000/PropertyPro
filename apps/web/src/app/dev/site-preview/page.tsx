@@ -82,7 +82,7 @@ export default async function PreviewPage({
         // eslint-disable-next-line @next/next/no-page-custom-font
         <link key={href} rel="stylesheet" href={href} />
       ))}
-      <div style={cssVars} className="min-h-screen flex flex-col font-body">
+      <div style={cssVars} className="site-frame min-h-screen flex flex-col font-body">
         {/* Dev banner */}
         <div className="bg-status-warning-bg border-b border-status-warning-border px-4 py-2 text-center text-xs text-status-warning">
           Preview Mode — Community: <strong>{community.name}</strong> (ID: {community.id})

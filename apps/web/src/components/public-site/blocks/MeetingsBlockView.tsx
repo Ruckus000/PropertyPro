@@ -36,7 +36,7 @@ export type MeetingsBlockViewProps = BlockViewProps<MeetingsBlockContent, Public
 
 export function MeetingsBlockView({ content, blockId, data, community }: MeetingsBlockViewProps) {
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={`meetings-${blockId}`}>
+    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={`meetings-${blockId}`}>
       <div className="mx-auto max-w-3xl">
         <h2
           id={`meetings-${blockId}`}

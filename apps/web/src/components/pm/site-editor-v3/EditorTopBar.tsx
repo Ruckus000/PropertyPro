@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Eye, Plus } from 'lucide-react';
+import { ChevronDown, Eye, Monitor, Plus, Smartphone, Tablet, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,18 @@ export interface EditorTopBarPageProps {
    * also covers the diff-failed case where the count is 0.
    */
   changeCount: number;
+  /** v4 device preview: the width the canvas renders the page at. */
+  device: PreviewDevice;
+  onDeviceChange: (device: PreviewDevice) => void;
 }
+
+export type PreviewDevice = 'desktop' | 'tablet' | 'phone';
+
+const DEVICES: readonly { id: PreviewDevice; label: string; icon: LucideIcon }[] = [
+  { id: 'desktop', label: 'Preview on a computer', icon: Monitor },
+  { id: 'tablet', label: 'Preview on a tablet', icon: Tablet },
+  { id: 'phone', label: 'Preview on a phone', icon: Smartphone },
+];
 
 export interface EditorTopBarProps extends EditorTopBarPageProps {
   communityName: string;
@@ -145,6 +156,8 @@ export function EditorTopBar({
   onSelectPage,
   onManagePages,
   changeCount,
+  device,
+  onDeviceChange,
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3">
@@ -166,6 +179,39 @@ export function EditorTopBar({
         onSelectPage={onSelectPage}
         onManagePages={onManagePages}
       />
+
+      {/*
+       * Toggle buttons, not a radiogroup: each is independently operable with
+       * Tab and Enter, which a three-item control does not need arrow-key
+       * roving for. `aria-pressed` carries which width is showing.
+       */}
+      <div
+        role="group"
+        aria-label="Preview size"
+        className="flex shrink-0 gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5"
+      >
+        {DEVICES.map(({ id, label, icon: Icon }) => {
+          const active = id === device;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-label={label}
+              title={label}
+              aria-pressed={active}
+              onClick={() => onDeviceChange(id)}
+              className={cn(
+                'flex h-9 w-11 items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                active
+                  ? 'bg-surface-card text-content shadow-sm'
+                  : 'text-content-secondary hover:text-content',
+              )}
+            >
+              <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
 
       <div className="ml-auto flex min-w-0 items-center gap-2.5">
         {status}
