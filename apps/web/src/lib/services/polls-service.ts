@@ -3,7 +3,6 @@ import {
   createScopedClient,
   forumReplies,
   forumThreads,
-  listDeletedForumRepliesForThread,
   logAuditEvent,
   paginate,
   polls,
@@ -547,12 +546,23 @@ export async function getForumThreadWithRepliesForCommunity(
     throw new NotFoundError('Forum thread not found');
   }
 
-  const replies = await scoped
-    .selectFrom<ForumReplyRecord>(forumReplies, {}, eq(forumReplies.threadId, threadId))
-    .orderBy(asc(forumReplies.createdAt));
-  const deletedReplies = await listDeletedForumRepliesForThread(communityId, threadId);
-  const allReplies = [...replies, ...deletedReplies].sort(
-    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+  // One scoped read of the thread's replies, soft-deleted ones INCLUDED: a
+  // moderated reply keeps its place in the chronology and is rendered as a
+  // tombstone (mapForumReplyRow blanks its body). This replaced two reads — a
+  // live-rows selectFrom plus an unscoped raw-`db` read of the deleted rows —
+  // merged and re-sorted in JS (roadmap 3.7, PAG-02).
+  //
+  // Deliberately NOT capped: the thread view renders every reply and the
+  // response carries no cursor, so any LIMIT here would silently drop the
+  // newest replies. Bounding it needs the "Load more" cursor UI (roadmap 3.8).
+  const replies = (await scoped.queryWhere(forumReplies, eq(forumReplies.threadId, threadId), {
+    includeSoftDeleted: true,
+  })) as unknown as ForumReplyRecord[];
+  // queryWhere has no ORDER BY; order here, with `id` as the deterministic
+  // tiebreaker the old two-list merge lacked.
+  const allReplies = replies.sort(
+    (left, right) =>
+      left.createdAt.getTime() - right.createdAt.getTime() || left.id - right.id,
   );
 
   return {

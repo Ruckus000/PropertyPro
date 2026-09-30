@@ -18,7 +18,7 @@ import {
   notificationPreferences,
   logAuditEvent,
 } from '@propertypro/db';
-import { eq, and, inArray, isNull, sql } from '@propertypro/db/filters';
+import { eq, and, asc, inArray, sql } from '@propertypro/db/filters';
 import {
   OtpVerificationEmail,
   AccessRequestPendingEmail,
@@ -78,13 +78,22 @@ export async function submitAccessRequest(params: {
   const normalizedEmail = email.toLowerCase();
   const scoped = createScopedClient(communityId);
 
-  // Check for existing pending_verification request (same email + community)
-  const existingRequests = await scoped.query(accessRequests);
-  const pendingVerification = existingRequests.find(
-    (r) =>
-      (r['email'] as string).toLowerCase() === normalizedEmail &&
-      r['status'] === 'pending_verification',
-  );
+  // Check for existing pending_verification request (same email + community).
+  // Case-insensitive on the stored side, as the JS `.find` this replaced was
+  // (inserts are lowercased, older rows may not be). The partial unique index
+  // on (community_id, email) for pending statuses allows at most one match; if
+  // a database lacks it, `id ASC` picks the oldest deterministically.
+  const [pendingVerification] = await scoped
+    .selectFrom<Record<string, unknown>>(
+      accessRequests,
+      {},
+      and(
+        sql`lower(${accessRequests.email}) = ${normalizedEmail}`,
+        eq(accessRequests.status, 'pending_verification'),
+      ),
+    )
+    .orderBy(asc(accessRequests.id))
+    .limit(1);
 
   if (pendingVerification) {
     // Resend OTP
@@ -204,9 +213,8 @@ export async function verifyOtp(params: {
   const { requestId, otp, communityId } = params;
   const scoped = createScopedClient(communityId);
 
-  // Query access request
-  const rows = await scoped.query(accessRequests);
-  const request = rows.find((r) => r['id'] === requestId);
+  // Primary-key lookup, tenant- and soft-delete-scoped.
+  const request = await scoped.queryById(accessRequests, requestId);
 
   if (!request) {
     throw new NotFoundError('Access request not found');
@@ -322,9 +330,8 @@ export async function approveAccessRequest(params: {
   const { requestId, communityId, reviewerId, unitId } = params;
   const scoped = createScopedClient(communityId);
 
-  // Query request
-  const rows = await scoped.query(accessRequests);
-  const request = rows.find((r) => r['id'] === requestId);
+  // Primary-key lookup, tenant- and soft-delete-scoped.
+  const request = await scoped.queryById(accessRequests, requestId);
 
   if (!request) {
     throw new NotFoundError('Access request not found');
@@ -472,9 +479,8 @@ export async function denyAccessRequest(params: {
   const { requestId, communityId, reviewerId, reason } = params;
   const scoped = createScopedClient(communityId);
 
-  // Query request
-  const rows = await scoped.query(accessRequests);
-  const request = rows.find((r) => r['id'] === requestId);
+  // Primary-key lookup, tenant- and soft-delete-scoped.
+  const request = await scoped.queryById(accessRequests, requestId);
 
   if (!request) {
     throw new NotFoundError('Access request not found');
@@ -527,16 +533,8 @@ export async function denyAccessRequest(params: {
 }
 
 // ---------------------------------------------------------------------------
-// listPendingRequests
+// paginatePendingAccessRequests
 // ---------------------------------------------------------------------------
-
-export async function listPendingRequests(
-  communityId: number,
-): Promise<Record<string, unknown>[]> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(accessRequests);
-  return rows.filter((r) => r['status'] === 'pending');
-}
 
 /**
  * Paginated list of pending access requests for the GET admin route. Uses the
