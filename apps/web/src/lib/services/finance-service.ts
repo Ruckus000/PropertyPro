@@ -37,6 +37,7 @@ import { markMatchingViolationFinePaid } from '@/lib/services/violations-service
 import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
+import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import {
   generateCommunityFinanceStatementPdf,
@@ -403,23 +404,6 @@ function billingPeriodFor(
   const offset = (((dueIndex - monthIndexOf(assessment.startDate)) % months) + months) % months;
   const startIndex = dueIndex - offset;
   return { start: firstOfMonthIndex(startIndex), endExclusive: firstOfMonthIndex(startIndex + months) };
-}
-
-/**
- * The assessment's start/end bounds, at MONTH granularity and inclusive on both
- * ends: a date is billable iff its month is on or after startDate's month and,
- * when endDate is set, on or before endDate's month. So "starts 2026-04-20"
- * bills April, and "ends 2026-04-01" bills April. One rule, shared by manual
- * generation (below) and the recurring cron, which passes its period's 1st.
- */
-export function assessmentMonthOutOfRange(
-  assessment: Pick<AssessmentRecord, 'startDate' | 'endDate'>,
-  dateOnly: string,
-): 'before_start' | 'after_end' | null {
-  const month = dateOnly.slice(0, 7);
-  if (month < assessment.startDate.slice(0, 7)) return 'before_start';
-  if (assessment.endDate && month > assessment.endDate.slice(0, 7)) return 'after_end';
-  return null;
 }
 
 function toLineItemDescription(assessment: AssessmentRecord, dueDate: string): string {

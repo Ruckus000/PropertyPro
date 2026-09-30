@@ -29,10 +29,8 @@ import {
 import { and, eq, inArray, isNull, lt, lte, ne } from '@propertypro/db/filters';
 // AUTHZ: Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import {
-  assessmentMonthOutOfRange,
-  generateAssessmentLineItemsForCommunity,
-} from '@/lib/services/finance-service';
+import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
+import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
 import type { AssessmentFrequency } from '@/lib/services/finance-service';
 import { getBaseUrl } from '@/lib/utils/url';
 
