@@ -223,4 +223,42 @@ describe('POST /api/v1/stripe/connect/complete', () => {
     expect(validateConnectOAuthStateMock).not.toHaveBeenCalled();
     expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
   });
+  describe('tenant header cross-check (roadmap 3.6)', () => {
+    function withHeader(communityIdHeader: string | null): NextRequest {
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (communityIdHeader !== null) headers['x-community-id'] = communityIdHeader;
+      return new NextRequest(URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ communityId: 42, code: 'ac_test_code', state: 'valid-state-token' }),
+      });
+    }
+
+    it('returns 404 when the body communityId disagrees with x-community-id, with no side effects', async () => {
+      const response = await POST(withHeader('99'));
+      const json = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(json.error.code).toBe('NOT_FOUND');
+      expect(validateConnectOAuthStateMock).not.toHaveBeenCalled();
+      expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+      expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when x-community-id matches the body communityId', async () => {
+      const response = await POST(withHeader('42'));
+
+      expect(response.status).toBe(200);
+      expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-finance-1');
+      expect(completeConnectOnboardingMock).toHaveBeenCalledWith(42, 'ac_test_code', 'user-finance-1', null);
+    });
+
+    it('uses the body communityId when no tenant header is present (apex OAuth callback)', async () => {
+      const response = await POST(withHeader(null));
+
+      expect(response.status).toBe(200);
+      expect(validateConnectOAuthStateMock).toHaveBeenCalledWith('valid-state-token', 42, 'user-finance-1');
+      expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-finance-1');
+    });
+  });
 });
