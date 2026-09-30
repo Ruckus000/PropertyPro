@@ -158,3 +158,62 @@ describe('POST /api/v1/move-checklists', () => {
     expect(createMoveChecklistMock).not.toHaveBeenCalled();
   });
 });
+
+describe('move-checklists collection — x-community-id cross-check', () => {
+  const MISMATCH_HEADERS = { 'x-community-id': '99' };
+
+  it('GET returns 404 when the header disagrees with ?communityId=, with no membership or service call', async () => {
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists?communityId=42', {
+        headers: MISMATCH_HEADERS,
+      }),
+    );
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error.message).toBe('Community not found');
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(listMoveChecklistsMock).not.toHaveBeenCalled();
+  });
+
+  it('GET keeps auth-first ordering: 401 wins over a header mismatch', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists?communityId=42', {
+        headers: MISMATCH_HEADERS,
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('GET succeeds when the header agrees with ?communityId=', async () => {
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists?communityId=42', {
+        headers: { 'x-community-id': '42' },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(listMoveChecklistsMock).toHaveBeenCalledWith(42, {});
+  });
+
+  it('POST returns 404 when the header disagrees with body.communityId, with no membership or service call', async () => {
+    const res = await POST(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...MISMATCH_HEADERS },
+        body: JSON.stringify({
+          communityId: 42,
+          leaseId: 10,
+          unitId: 20,
+          residentId: '00000000-0000-4000-8000-000000000001',
+          type: 'move_in',
+        }),
+      }),
+    );
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error.message).toBe('Community not found');
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(createMoveChecklistMock).not.toHaveBeenCalled();
+  });
+});

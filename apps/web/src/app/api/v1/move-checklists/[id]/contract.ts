@@ -41,9 +41,15 @@
  *     canonical `VALIDATION_ERROR` shape (was hand-constructed
  *     `ValidationError` with a single message or formatZodErrors). Status
  *     codes unchanged.
- *   - No header/query reconciliation in this route — the handler reads
- *     `communityId` directly from query / body and does NOT call
- *     `resolveEffectiveCommunityId`. Behavior unchanged.
+ *
+ * Tenant scope: GET declares `tenantScope: { in: 'query' }`, POST
+ * `tenantScope: { in: 'body' }`. The app-bound runner (`@/lib/api/run-route`)
+ * reconciles the explicit `communityId` against the middleware
+ * `x-community-id` header (header authoritative) and injects it into the
+ * handler. Delta: a header/explicit mismatch is 404, and — because the runner
+ * resolves before the handler — it is returned before the 401. Missing/invalid
+ * `communityId` was already a pre-auth runner 400, so that ordering is
+ * unchanged.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
@@ -62,6 +68,7 @@ export const getMoveChecklistContract = defineRoute({
   },
   response: z.unknown(),
   permission: { resource: 'move_checklists', action: 'read' },
+  tenantScope: { in: 'query' },
 });
 
 export const completeMoveChecklistContract = defineRoute({
@@ -75,4 +82,5 @@ export const completeMoveChecklistContract = defineRoute({
   },
   response: z.unknown(),
   permission: { resource: 'move_checklists', action: 'update' },
+  tenantScope: { in: 'body' },
 });

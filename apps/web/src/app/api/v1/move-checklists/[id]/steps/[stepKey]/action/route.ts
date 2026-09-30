@@ -7,12 +7,13 @@
  * `./contract.ts` for schemas and auth-chain rationale.
  */
 import { createElement } from 'react';
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute } from '@/lib/api/run-route';
 import { isAdminRole } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError, NotFoundError, ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createInspectionRequestForChecklist,
   getMoveChecklist,
@@ -26,12 +27,13 @@ import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import { moveChecklistStepActionPostContract } from './contract';
 
 export const POST = withErrorHandler(
-  runRoute(moveChecklistStepActionPostContract, async ({ params, body, req }) => {
+  runRoute(moveChecklistStepActionPostContract, async ({ params, body, req, communityId }) => {
     const userId = await requireAuthenticatedUserId();
     const checklistId = params.id;
     const { stepKey } = params;
-    const { communityId, action } = body;
+    const { action } = body;
 
+    await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     if (!isAdminRole(membership.role)) {
       throw new ForbiddenError('Forbidden');

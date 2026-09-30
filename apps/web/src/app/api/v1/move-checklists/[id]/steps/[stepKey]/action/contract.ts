@@ -9,6 +9,13 @@
  * `{ data: { data: <checklist>, action: { triggered, stepKey } } }`.
  * Consumer hook only checks `res.ok` — no hook change required.
  *
+ * Tenant scope: `tenantScope: { in: 'body' }` — the app-bound runner
+ * reconciles `body.communityId` with the middleware `x-community-id` header
+ * and injects `communityId`. Delta: a header/body mismatch is 404, returned
+ * before the 401. The handler also calls `assertNotDemoGrace` after auth and
+ * before membership (matching the sibling step PATCH), so a demo community in
+ * its grace period gets 403 `DEMO_GRACE_READ_ONLY`.
+ *
  * `permission: { resource: 'move_checklists', action: 'update' }` is metadata
  * only; effective gate is inline `isAdminRole`.
  */
@@ -41,4 +48,5 @@ export const moveChecklistStepActionPostContract = defineRoute({
     action: actionMetaSchema,
   }),
   permission: { resource: 'move_checklists', action: 'update' },
+  tenantScope: { in: 'body' },
 });

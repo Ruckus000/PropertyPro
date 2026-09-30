@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import { AppError } from '../../src/lib/api/errors/AppError';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -23,12 +24,14 @@ const {
   isAdminRoleMock,
   getMoveChecklistMock,
   completeChecklistMock,
+  assertNotDemoGraceMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   isAdminRoleMock: vi.fn(),
   getMoveChecklistMock: vi.fn(),
   completeChecklistMock: vi.fn(),
+  assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -42,6 +45,10 @@ vi.mock('@/lib/api/community-membership', () => ({
 vi.mock('@propertypro/shared', async (orig) => ({
   ...((await orig()) as Record<string, unknown>),
   isAdminRole: isAdminRoleMock,
+}));
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
 vi.mock('@/lib/services/move-checklist-service', () => ({
@@ -301,6 +308,74 @@ describe('POST /api/v1/move-checklists/[id]', () => {
     const res = await POST(jsonPost({ communityId: -1 }), ctx(7));
 
     expect(res.status).toBe(400);
+    expect(completeChecklistMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('/api/v1/move-checklists/[id] — x-community-id cross-check (tenantScope)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('admin-1');
+    requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
+    isAdminRoleMock.mockReturnValue(true);
+    getMoveChecklistMock.mockResolvedValue(CHECKLIST_FIXTURE);
+  });
+
+  it('GET returns 404 when the header disagrees with ?communityId=, with no membership or service call', async () => {
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists/7?communityId=42', {
+        headers: { 'x-community-id': '99' },
+      }),
+      ctx(7),
+    );
+
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error: { message: string } };
+    expect(json.error.message).toBe('Community not found');
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(getMoveChecklistMock).not.toHaveBeenCalled();
+  });
+
+  it('POST returns 404 when the header disagrees with body.communityId, with no membership or service call', async () => {
+    const res = await POST(jsonPost({ communityId: 42 }, { 'x-community-id': '99' }), ctx(7));
+
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error: { message: string } };
+    expect(json.error.message).toBe('Community not found');
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(completeChecklistMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/move-checklists/[id] — demo grace', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('admin-1');
+    requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
+    isAdminRoleMock.mockReturnValue(true);
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
+  });
+
+  it('checks demo grace for the resolved community', async () => {
+    completeChecklistMock.mockResolvedValue(CHECKLIST_FIXTURE);
+    const res = await POST(jsonPost({ communityId: 42 }), ctx(7));
+
+    expect(res.status).toBe(200);
+    expect(assertNotDemoGraceMock).toHaveBeenCalledWith(42);
+  });
+
+  it('returns 403 DEMO_GRACE_READ_ONLY and skips membership + service during demo grace', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(
+      new AppError('Your trial has ended. Subscribe to regain full access.', 403, 'DEMO_GRACE_READ_ONLY'),
+    );
+
+    const res = await POST(jsonPost({ communityId: 42 }), ctx(7));
+
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('DEMO_GRACE_READ_ONLY');
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
     expect(completeChecklistMock).not.toHaveBeenCalled();
   });
 });

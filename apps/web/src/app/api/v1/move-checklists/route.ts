@@ -1,10 +1,11 @@
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute } from '@/lib/api/run-route';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { isAdminRole } from '@propertypro/shared';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
@@ -40,7 +41,13 @@ export const GET = withErrorHandler(
       throw new ValidationError('Invalid query', { fields: formatZodErrors(parseResult.error) });
     }
 
-    const { communityId, ...filters } = parseResult.data;
+    const { communityId: explicitCommunityId, ...filters } = parseResult.data;
+    // Cross-check against the middleware `x-community-id` header AFTER auth, so
+    // the contract keeps its auth-first ordering (see contract.ts docblock).
+    // NB: guard:tenant-scope counts per FILE, and this file's POST contract
+    // declares tenantScope, so this hand-resolved GET is invisible to that
+    // census — keep this call if the GET is ever reworked.
+    const communityId = resolveEffectiveCommunityId(req, explicitCommunityId);
     const membership = await requireCommunityMembership(communityId, userId);
     if (!isAdminRole(membership.role)) {
       throw new ForbiddenError('Forbidden');
@@ -53,15 +60,14 @@ export const GET = withErrorHandler(
 );
 
 export const POST = withErrorHandler(
-  runRoute(createMoveChecklistContract, async ({ body }) => {
+  runRoute(createMoveChecklistContract, async ({ body, communityId }) => {
     const userId = await requireAuthenticatedUserId();
-    const { communityId } = body;
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     if (!isAdminRole(membership.role)) {
       throw new ForbiddenError('Forbidden');
     }
 
-    return createMoveChecklist(body, userId);
+    return createMoveChecklist({ ...body, communityId }, userId);
   }),
 );
