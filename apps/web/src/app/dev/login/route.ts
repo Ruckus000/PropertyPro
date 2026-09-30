@@ -23,9 +23,10 @@ const ROLE_ENV_MAP: Record<string, string> = {
   site_manager: 'DEV_LOGIN_SITE_MANAGER_EMAIL',
 };
 
+// board_member is a resident owner with a board seat (seed-demo.ts), so it
+// lands in the resident portal like `owner`.
 const ADMIN_ROLES = new Set([
   'board_president',
-  'board_member',
   'cam',
   'site_manager',
   'pm_admin',

@@ -76,14 +76,18 @@ interface CommunityRoleAssignment {
 
 const DEBUG_DEMO_SEED = process.env.DEBUG_DEMO_SEED === '1';
 
-// v3 end-state demo vocabulary: board members + cam + site_manager + pm_admin
-// all collapse to the uniform `property_manager` role; board members carry a
-// `designation` marker. Same PEOPLE as before so demos look identical.
+// v3 end-state demo vocabulary: board.president + cam + site_manager + pm_admin
+// collapse to the uniform `property_manager` role; board seats carry a
+// `designation` marker. board.member is a resident OWNER with a seat — the only
+// kind of board seat a new appointment can produce (promotion to manager clears
+// the designation), and the persona the board-member UI and help are written
+// for. It is listed AFTER owner.one so owner.one still claims the first unit.
+// board.president stays a manager: e2e specs use it as the admin persona.
 const PRIMARY_ASSIGNMENTS: Record<DemoCommunitySlug, CommunityRoleAssignment[]> = {
   'sunset-condos': [
     { email: 'board.president@sunset.local', role: 'property_manager', designation: BOARD_DESIGNATIONS[0] },
-    { email: 'board.member@sunset.local', role: 'property_manager', designation: BOARD_DESIGNATIONS[1] },
     { email: 'owner.one@sunset.local', role: 'owner' },
+    { email: 'board.member@sunset.local', role: 'owner', designation: BOARD_DESIGNATIONS[1] },
     { email: 'tenant.one@sunset.local', role: 'tenant' },
     { email: 'cam.one@sunset.local', role: 'property_manager' },
     { email: 'pm.admin@sunset.local', role: 'property_manager' },
@@ -1948,8 +1952,8 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     }
   }
 
-  // Link the condo tenant to the SECOND unit by unit number, never the owner's
-  // unit. A tenant does not own, so only `user_roles.unit_id` is written (no
+  // Link the condo tenant to the lowest UNOWNED unit by unit number, never an
+  // owner's (owner.one and board.member each claim one). A tenant does not own, so only `user_roles.unit_id` is written (no
   // `units.owner_user_id`). seedCommunity cannot do this: a condo tenant has no
   // lease to derive a unit from. Without it tenant.one reaches every
   // unit-scoped feature (packages, visitors, work orders, /welcome) unit-less.
@@ -1962,9 +1966,14 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     const secondUnit = await db
       .select({ id: units.id })
       .from(units)
-      .where(and(eq(units.communityId, sunsetCommunityId), isNull(units.deletedAt)))
+      .where(
+        and(
+          eq(units.communityId, sunsetCommunityId),
+          isNull(units.deletedAt),
+          isNull(units.ownerUserId),
+        ),
+      )
       .orderBy(units.unitNumber)
-      .offset(1)
       .limit(1);
 
     if (secondUnit[0]) {
