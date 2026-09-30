@@ -20,6 +20,8 @@ const {
   createUnitForCommunityMock,
   getUnitByIdMock,
   updateUnitByIdMock,
+  listResidentRolesForUnitMock,
+  softDeleteUnitByIdMock,
   tryAutoCompleteMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -35,6 +37,8 @@ const {
   createUnitForCommunityMock: vi.fn(),
   getUnitByIdMock: vi.fn(),
   updateUnitByIdMock: vi.fn(),
+  listResidentRolesForUnitMock: vi.fn(),
+  softDeleteUnitByIdMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
 }));
 
@@ -72,8 +76,8 @@ vi.mock('@/lib/services/unit-service', () => ({
   getUnitByNumber: getUnitByNumberMock,
   createUnitForCommunity: createUnitForCommunityMock,
   getUnitById: getUnitByIdMock,
-  listResidentRolesForUnit: vi.fn(),
-  softDeleteUnitById: vi.fn(),
+  listResidentRolesForUnit: listResidentRolesForUnitMock,
+  softDeleteUnitById: softDeleteUnitByIdMock,
   updateUnitById: updateUnitByIdMock,
 }));
 
@@ -81,7 +85,7 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
 }));
 
-import { GET, PATCH, POST } from '../../src/app/api/v1/units/route';
+import { DELETE, GET, PATCH, POST } from '../../src/app/api/v1/units/route';
 
 const MEMBERSHIP = {
   userId: 'actor-1',
@@ -370,5 +374,23 @@ describe('/api/v1/units', () => {
       const update = updateUnitByIdMock.mock.calls[0]![2] as Record<string, unknown>;
       expect(update).not.toHaveProperty('occupancyConfirmedAt');
     });
+  });
+
+  it('DELETE soft-deletes an empty unit and audits it', async () => {
+    getUnitByIdMock.mockResolvedValue({ id: 7, unitNumber: '7', building: null, floor: 1 });
+    listResidentRolesForUnitMock.mockResolvedValue([]);
+    softDeleteUnitByIdMock.mockResolvedValue(undefined);
+
+    const res = await DELETE(
+      new NextRequest('http://localhost:3000/api/v1/units', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 42, unitId: 7 }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(softDeleteUnitByIdMock).toHaveBeenCalledWith(SCOPED, 7);
+    expect(logAuditEventMock).toHaveBeenCalledWith(expect.objectContaining({ action: 'delete' }));
   });
 });

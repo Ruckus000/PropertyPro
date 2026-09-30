@@ -278,8 +278,6 @@ export const DELETE = withErrorHandler(
     await requireActiveSubscriptionForMutation(communityId);
     const scoped = createScopedClient(communityId);
 
-    assertOccupancyAllowed(occupancy, membership.communityType);
-
     const existing = await getUnitById(scoped, unitId);
 
     if (!existing) {
