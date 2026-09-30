@@ -92,6 +92,26 @@ Each deferral has a trigger. None of them is fixed here.
 - **Support sessions ignore a soft-deleted community.** No community soft-delete path revokes `support_consent_grants` or ends `support_sessions`: `executeCommunitySoftDelete`, `softDeleteCommunityForCancellation` and demo conversion all leave both alone. Neither session creation nor the web verifier checks `communities.deleted_at`. So a platform admin can still open a session, and make audited account writes, under a deleted community whose consent was never revoked. Only a platform admin can reach this, and the only effect is audit rows filed under a dead community. Trigger: the first real community deletion or cancellation, or a restore path that brings a deleted community back.
 - **`contract.permission` metadata** (on 239 contracted routes, enforced nowhere) is not cross-checked against the real gate. Trigger: `runRoute` starts enforcing `permission`, or a review finds the two disagreeing.
 
+## Addendum: raw `communityId` inputs never cross-checked against the tenant header (roadmap 3.6, 2026-09-30)
+
+**Scope.** Routes under `apps/web/src/app/api` that read `communityId`/`communityIds` from the query, body or contract input and reach neither `resolveEffectiveCommunityId` (directly, through `@/lib/finance/request` / `@/lib/calendar/request`, or through a helper such as `requireExportAccess` / `resolveLibraryDocumentRequest`) nor a declared `tenantScope`. Re-measured on 2026-09-30 by listing every `route.ts` that mentions `communityId(s)` and lacks all three markers in itself or its `contract.ts` (34 files), then reading each. Most of the 34 mention the id only as an output field, a cron/webhook row value, or a runner-injected `communityId`. The ones below take it as caller input.
+
+What decides the classification is `resolveEffectiveCommunityId`'s behaviour: header present and the explicit value disagrees → 404 `NotFoundError`; header absent → the explicit value is used unchanged. So a route is a candidate only if its legitimate callers send no tenant header, or send one that equals the explicit id. A route whose UI deliberately picks a community *other* than the host's tenant cannot be cross-checked without breaking it.
+
+| Route | Classification | Reason |
+|---|---|---|
+| `POST stripe/connect/complete` | **changed**: the contract now declares `tenantScope: { in: 'body' }`, and the route imports the app-bound `runRoute` | Single-tenant. Stripe's `redirect_uri` is the fixed `NEXT_PUBLIC_APP_URL`, so the real callback arrives with no header and keeps working. A mismatching header now 404s before auth. Declared rather than hand-called because a hand call would add a 157th route to `guard:tenant-scope`'s shrink-only census (ceiling 156). |
+| `POST communities/claim-root` | excluded | Cross-community by design. `/dashboard/claim-root` is reached from the dashboard banner on any tenant subdomain and lists **every** rootless community the caller manages (via `my-rootless`). Pressing "Claim" on community B from A's subdomain is the intended flow, and a header cross-check would 404 it. Authorization is the claim service's own property_manager-of-a-rootless-community check on the explicit id, and the route is refused under support sessions. (`dispute-root-claim`, which is single-community, already declares `tenantScope: { in: 'body' }`.) |
+| `POST pm/portfolio/templates` | excluded | A portfolio-rail (cross-community) surface. The "Source community" dropdown lists all managed communities, independent of the host. The explicit id is authorized by `requireCommunityMembership` + `requireRole(PM_MANAGER_ROLES)`. Same class as the multi-id PM routes below. |
+| `POST pm/portfolio/templates/[id]/apply`, `POST pm/bulk/announcements`, `POST pm/bulk/documents`, `GET pm/reports/[reportType]` | excluded | Multi-id PM routes. Every id is checked against the caller's managed set. |
+| `POST account/join-requests` | excluded | A request to join a community the caller is not in, by design (its page is in `TENANT_OPTIONAL_PATHS`). |
+| `POST access-requests/verify` | excluded | Public OTP step keyed by `requestId` + `communityId`. There is no session tenant. |
+| `GET public/documents/[id]/download` | excluded | Public documents, read through `getPublicCommunityScopedReader`. |
+| `GET/POST admin/access-plans` (+ `community/[id]`) | excluded | Platform-admin (`requirePlatformAdmin`), cross-tenant by nature. |
+| `export/jobs/**`, `documents/[id]/download` | already cross-checked | Through `requireExportAccess` / `resolveLibraryDocumentRequest`, which both call `resolveEffectiveCommunityId`. |
+
+Pinned by `apps/web/__tests__/finance/stripe-connect-complete-route.test.ts`: a mismatch → 404 with no side effects; a matching header → proceeds; an absent header → the body id is used. Revert-check: restoring the pre-fix `route.ts` + `contract.ts` turned exactly the mismatch case red (`expected 200 to be 404`), and the other 8 stayed green.
+
 ## Addendum: server pages that read tables directly (roadmap 2.3)
 
 Before freezing the 21 server files that import tables directly into `guard:route-table-imports`'s baseline, each was read with the same method as above: who can reach it, whether the read is scoped, and whether it skips a visibility rule the API for the same data applies.

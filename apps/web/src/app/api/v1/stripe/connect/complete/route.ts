@@ -8,7 +8,7 @@
  * Called from the /settings/payments/connected callback page after
  * the user completes Stripe Connect Standard onboarding.
  */
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute } from '@/lib/api/run-route';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -26,9 +26,9 @@ import {
 import { stripeConnectCompletePostContract } from './contract';
 
 export const POST = withErrorHandler(
-  runRoute(stripeConnectCompletePostContract, async ({ body, req }) => {
+  runRoute(stripeConnectCompletePostContract, async ({ body, req, communityId }) => {
     const userId = await requireAuthenticatedUserId();
-    const { communityId, code, state } = body;
+    const { code, state } = body;
 
     validateConnectOAuthState(state, communityId, userId);
 
