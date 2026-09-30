@@ -694,12 +694,21 @@ describe('3. due date computation (via generateAssessmentLineItemsForCommunity)'
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it('an override is shape-checked only: an impossible calendar date passes through', async () => {
-    // CHARACTERIZATION: suspected defect — `parseDateOnly` is a regex, so
-    // '2026-02-31' is accepted and handed to the INSERT. Postgres then rejects it
-    // (`date/time field value out of range`), which surfaces as a 500 instead of the
-    // 400 the malformed-shape case gets.
-    expect(await dueDateFor({ frequency: 'monthly' }, '2026-04-15T12:00:00.000Z', '2026-02-31')).toBe('2026-02-31');
+  it.each(['2026-02-31', '2026-02-29', '2026-04-31', '2026-13-01', '2026-00-10', '2026-01-00'])(
+    'an override that is not a real calendar date (%s) is a 400, not a 500 from the INSERT',
+    async (override) => {
+      // Fixed 2026-09-30 (was a suspected defect: `parseDateOnly` was a regex only,
+      // so '2026-02-31' reached the INSERT and Postgres' out-of-range error surfaced
+      // as a 500). Now guaranteed: the value must round-trip as a calendar date.
+      await expect(
+        dueDateFor({ frequency: 'monthly' }, '2026-04-15T12:00:00.000Z', override),
+      ).rejects.toMatchObject({ statusCode: 400, message: 'dueDate must be a valid calendar date' });
+      expect(insertMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('a real leap day is accepted as an override', async () => {
+    expect(await dueDateFor({ frequency: 'monthly' }, '2026-04-15T12:00:00.000Z', '2028-02-29')).toBe('2028-02-29');
   });
 
   describe('in America/Los_Angeles', () => {

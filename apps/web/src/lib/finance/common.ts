@@ -63,9 +63,19 @@ export function parsePositiveInt(value: string, label: string): number {
   return parsed;
 }
 
+/**
+ * A `YYYY-MM-DD` string that names a real calendar date. The shape check alone
+ * let `2026-02-31` through to Postgres, whose out-of-range error surfaced as a
+ * 500; the round-trip through UTC rejects it (and month 13, day 0, Feb 29 in a
+ * common year) as a 400 here, in the same error class as the shape failure.
+ */
 export function parseDateOnly(value: string, label: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new BadRequestError(`${label} must be in YYYY-MM-DD format`);
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new BadRequestError(`${label} must be a valid calendar date`);
   }
   return value;
 }
