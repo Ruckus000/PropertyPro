@@ -250,7 +250,7 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
 
 /* ─────── Add Resident Dialog ─────── */
 
-interface AddResidentDialogProps {
+export interface AddResidentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   communityType: CommunityType;
@@ -259,9 +259,13 @@ interface AddResidentDialogProps {
   error: string | null;
   sendInvitation: boolean;
   onSendInvitationChange: (value: boolean) => void;
+  /** Directory: choose the unit from a list instead of typing its id. */
+  unitOptions?: readonly { id: number; label: string }[];
+  /** Directory: "Add resident" from a unit's panel starts on that unit. */
+  defaultUnitId?: number | null;
 }
 
-function AddResidentDialog({
+export function AddResidentDialog({
   open,
   onOpenChange,
   communityType,
@@ -270,6 +274,8 @@ function AddResidentDialog({
   error,
   sendInvitation,
   onSendInvitationChange,
+  unitOptions,
+  defaultUnitId,
 }: AddResidentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -290,9 +296,13 @@ function AddResidentDialog({
         )}
 
         <ResidentForm
+          // Remount per target unit so the preset unit is applied each open.
+          key={defaultUnitId ?? 'none'}
           communityType={communityType}
           submitting={submitting}
           onSubmit={onSubmit}
+          unitOptions={unitOptions}
+          defaultValues={defaultUnitId ? { unitId: defaultUnitId } : undefined}
         />
 
         <label className="flex items-center gap-2 pt-2">

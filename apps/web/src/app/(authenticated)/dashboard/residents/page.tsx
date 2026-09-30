@@ -12,6 +12,8 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { ResidentsPageClient } from '@/components/residents/residents-page-client';
 import { PageHeader } from '@/components/shared/page-header';
+import { DirectoryPilotBanner } from '@/components/directory/directory-pilot-banner';
+import { isDirectoryEnabledForCommunity } from '@/lib/directory/directory-flag';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -55,9 +57,14 @@ export default async function ResidentsPage({ searchParams }: PageProps) {
   }
 
   return (
-    <ResidentsPageClient
-      communityId={context.communityId}
-      communityType={membership.communityType}
-    />
+    <>
+      {isDirectoryEnabledForCommunity(context.communityId) ? (
+        <DirectoryPilotBanner communityId={context.communityId} tab="residents" />
+      ) : null}
+      <ResidentsPageClient
+        communityId={context.communityId}
+        communityType={membership.communityType}
+      />
+    </>
   );
 }

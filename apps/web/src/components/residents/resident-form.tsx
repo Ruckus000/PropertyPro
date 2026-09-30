@@ -75,6 +75,11 @@ interface ResidentFormProps {
   defaultValues?: Partial<FormValues>;
   submitting?: boolean;
   onSubmit: (values: ResidentFormSubmitValues) => Promise<void>;
+  /**
+   * When provided, the unit is chosen from this list instead of typed as a
+   * numeric id. Labels should disambiguate ("101 · Building A").
+   */
+  unitOptions?: readonly { id: number; label: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +91,7 @@ export function ResidentForm({
   defaultValues,
   submitting = false,
   onSubmit,
+  unitOptions,
 }: ResidentFormProps) {
   const availableRoles = useMemo(
     () => ROLE_OPTIONS.filter((opt) => opt.communityTypes.includes(communityType)),
@@ -212,7 +218,31 @@ export function ResidentForm({
         </select>
       </label>
 
-      {showUnitField ? (
+      {showUnitField && unitOptions ? (
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-content-secondary">
+            Unit <span className="text-status-danger">*</span>
+          </span>
+          <select
+            required
+            value={values.unitId === null ? '' : String(values.unitId)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setValues((prev) => ({ ...prev, unitId: value === '' ? null : Number(value) }));
+            }}
+            className="w-full rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-base"
+          >
+            <option value="" disabled>
+              {unitOptions.length === 0 ? 'Add a unit before adding residents' : 'Choose a unit'}
+            </option>
+            {unitOptions.map((unit) => (
+              <option key={unit.id} value={String(unit.id)}>
+                {unit.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : showUnitField ? (
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-content-secondary">
             Unit ID <span className="text-status-danger">*</span>

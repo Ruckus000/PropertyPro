@@ -41,6 +41,8 @@ export interface CreateUnitInput {
   bathrooms?: number | null;
   sqft?: number | null;
   rentAmount?: string | null;
+  /** Setting it on create records it as manager-confirmed. */
+  occupancy?: UnitOccupancy | null;
 }
 
 export function useCreateUnit(communityId: number) {

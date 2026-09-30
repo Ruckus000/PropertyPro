@@ -39,9 +39,11 @@ export interface CreateResidentResult {
 
 export function useResidentsList(
   communityId: number,
+  options?: { enabled?: boolean },
 ): UseQueryResult<ResidentRecord[], Error> {
   return useQuery<ResidentRecord[], Error>({
     queryKey: ['residents', communityId],
+    enabled: options?.enabled !== false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/residents?communityId=${communityId}`);
       if (!response.ok) {
