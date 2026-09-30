@@ -112,17 +112,21 @@ function summarizeAggregateAssessmentDueRecords(
     );
 }
 
+/**
+ * Meetings whose `startsAt` falls in `[range.startUtc, range.endUtcExclusive)`.
+ * The range is REQUIRED (PAG-05): every caller reads a bounded calendar
+ * window, and the type keeps a future caller from reading every meeting the
+ * community ever held.
+ */
 export async function listCommunityCalendarMeetings(
   communityId: number,
-  range?: { startUtc: Date; endUtcExclusive: Date },
+  range: { startUtc: Date; endUtcExclusive: Date },
 ): Promise<CalendarMeetingRecord[]> {
   const scoped = createScopedClient(communityId);
-  const whereClause = range
-    ? and(
-        gte(meetings.startsAt, range.startUtc),
-        lt(meetings.startsAt, range.endUtcExclusive),
-      )
-    : undefined;
+  const whereClause = and(
+    gte(meetings.startsAt, range.startUtc),
+    lt(meetings.startsAt, range.endUtcExclusive),
+  );
 
   const rows = await scoped
     .selectFrom<CalendarMeetingRecord>(

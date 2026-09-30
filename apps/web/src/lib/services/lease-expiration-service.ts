@@ -91,15 +91,23 @@ export function isLeaseExpiringWithinDays(
     return false;
   }
 
+  // Lease expires within window if endDate <= windowEnd (inclusive)
+  return parsedEnd.getTime() <= expiringWindowEnd(referenceDate, daysWindow).getTime();
+}
+
+/**
+ * The inclusive end of an "expiring within N days" window: `referenceDate`'s
+ * UTC calendar day plus `daysWindow`, at UTC midnight. Computed in UTC to
+ * avoid a local-timezone off-by-one from addDays. The leases GET pushes the
+ * same bound into SQL, so both must come from here.
+ */
+export function expiringWindowEnd(referenceDate: Date, daysWindow: number): Date {
   const refMidnight = toUTCMidnight(referenceDate);
-  // Compute window end in UTC to avoid local-timezone off-by-one from addDays
-  const windowEnd = new Date(Date.UTC(
+  return new Date(Date.UTC(
     refMidnight.getUTCFullYear(),
     refMidnight.getUTCMonth(),
     refMidnight.getUTCDate() + daysWindow,
   ));
-  // Lease expires within window if endDate <= windowEnd (inclusive)
-  return parsedEnd.getTime() <= windowEnd.getTime();
 }
 
 /**

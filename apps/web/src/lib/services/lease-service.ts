@@ -6,7 +6,7 @@
  * owns table access.
  */
 import { createScopedClient, leases, units, userRoles } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { and, desc, eq, isNotNull, lte, type SQL } from '@propertypro/db/filters';
 
 export interface LeaseRow {
   [key: string]: unknown;
@@ -36,13 +36,95 @@ export interface TenantRoleForLease {
 }
 
 /**
- * List all active lease rows visible in the scoped community.
+ * Hard ceiling on one `listLeasesForCommunity` read (PAG-04).
  *
- * AUTHZ: caller MUST have verified apartment lease access for this community.
+ * The GET list cannot be paginated yet without breaking its only consumer:
+ * `LeaseListPage` derives its "Vacant Units" view from the WHOLE list
+ * (units with no active lease), so a page of leases would misreport vacancy.
+ * The hard-tier design (b3-hard-tier-pagination-design-2026-05-11.md, Leases)
+ * also says to split `renewal_chain_for` out before paginating. Until then
+ * the read is bounded by this explicit cap instead of being unbounded.
+ *
+ * Rows are fetched NEWEST-first (`id desc`) so that, if a community ever
+ * exceeds the cap, what falls off is the oldest lease history, not the
+ * current leases the vacancy view depends on. The caller receives the rows
+ * back in ascending id order, which is what the old unordered full-table read
+ * returned in practice (heap order ≈ insertion order).
  */
-export async function listLeasesForCommunity(communityId: number): Promise<LeaseRow[]> {
+export const LEASE_LIST_MAX_ROWS = 5000;
+
+export interface LeaseListFilters {
+  /** Party scope: only leases naming this resident (non-manager callers). */
+  residentId?: string;
+  /** Exact status. The caller must pass a valid `lease_status` enum value. */
+  status?: string;
+  unitId?: number;
+  /**
+   * Expiring filter pushdown: `status = 'active' AND end_date IS NOT NULL AND
+   * end_date <= <this YYYY-MM-DD>` — the same predicate
+   * `getExpiringLeases` applies in JS (inclusive window end).
+   */
+  activeEndingOnOrBefore?: string;
+}
+
+export interface LeaseListResult {
+  rows: LeaseRow[];
+  /** True when more than `LEASE_LIST_MAX_ROWS` rows matched; the oldest were dropped. */
+  truncated: boolean;
+}
+
+function buildLeaseListWhere(filters: LeaseListFilters): SQL | undefined {
+  const clauses: SQL[] = [];
+  if (filters.residentId !== undefined) clauses.push(eq(leases.residentId, filters.residentId));
+  if (filters.status !== undefined) {
+    clauses.push(eq(leases.status, filters.status as LeaseStatusValue));
+  }
+  if (filters.unitId !== undefined) clauses.push(eq(leases.unitId, filters.unitId));
+  if (filters.activeEndingOnOrBefore !== undefined) {
+    clauses.push(eq(leases.status, 'active'));
+    clauses.push(isNotNull(leases.endDate));
+    clauses.push(lte(leases.endDate, filters.activeEndingOnOrBefore));
+  }
+  if (clauses.length === 0) return undefined;
+  return clauses.length === 1 ? clauses[0] : and(...clauses);
+}
+
+type LeaseStatusValue = (typeof leases.status.enumValues)[number];
+
+/**
+ * List lease rows in the scoped community, with every filter applied in SQL
+ * and at most `LEASE_LIST_MAX_ROWS` rows read (see that constant).
+ *
+ * AUTHZ: caller MUST have verified apartment lease access for this community,
+ * and MUST pass `residentId` for a caller who is not management tier.
+ */
+export async function listLeasesForCommunity(
+  communityId: number,
+  filters: LeaseListFilters = {},
+): Promise<LeaseListResult> {
   const scoped = createScopedClient(communityId);
-  return (await scoped.query(leases)) as unknown as LeaseRow[];
+  const rows = (await scoped
+    .selectFrom<LeaseRow>(leases, {}, buildLeaseListWhere(filters))
+    .orderBy(desc(leases.id))
+    .limit(LEASE_LIST_MAX_ROWS + 1)) as LeaseRow[];
+  const truncated = rows.length > LEASE_LIST_MAX_ROWS;
+  const kept = truncated ? rows.slice(0, LEASE_LIST_MAX_ROWS) : rows;
+  return { rows: kept.reverse(), truncated };
+}
+
+/**
+ * Fetch the lease that renews `leaseId` (its `previous_lease_id` child), if any.
+ */
+export async function getRenewalOfLease(
+  communityId: number,
+  leaseId: number,
+): Promise<LeaseRow | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<LeaseRow>(leases, {}, eq(leases.previousLeaseId, leaseId))
+    .orderBy(leases.id)
+    .limit(1);
+  return (rows[0] as LeaseRow | undefined) ?? null;
 }
 
 /**

@@ -27,7 +27,16 @@ const {
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
-  leasesTableMock: { id: Symbol('leases.id') },
+  // Column refs are plain field names so the in-memory predicate evaluator
+  // below (`@propertypro/db/filters` mock) can read them off a row.
+  leasesTableMock: {
+    id: 'id',
+    unitId: 'unitId',
+    residentId: 'residentId',
+    status: 'status',
+    endDate: 'endDate',
+    previousLeaseId: 'previousLeaseId',
+  },
   unitsTableMock: { id: Symbol('units.id') },
   userRolesTableMock: { id: Symbol('user_roles.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -41,6 +50,37 @@ vi.mock('@propertypro/db', () => ({
   units: unitsTableMock,
   userRoles: userRolesTableMock,
 }));
+
+// PAG-04: lease filters run in SQL, so the scoped-client mock must honour the
+// WHERE it is handed. Each operator returns an inspectable node that
+// `evalPredicate` (below) can apply to an in-memory row — and that tests can
+// assert on directly to pin the SQL shape.
+type PredicateNode =
+  | { op: 'eq' | 'lte'; col: string; val: unknown }
+  | { op: 'isNotNull'; col: string }
+  | { op: 'and'; args: PredicateNode[] };
+
+vi.mock('@propertypro/db/filters', () => ({
+  eq: (col: string, val: unknown) => ({ op: 'eq', col, val }),
+  lte: (col: string, val: unknown) => ({ op: 'lte', col, val }),
+  isNotNull: (col: string) => ({ op: 'isNotNull', col }),
+  and: (...args: unknown[]) => ({ op: 'and', args }),
+  desc: (col: string) => ({ dir: 'desc', col }),
+}));
+
+function evalPredicate(node: PredicateNode | undefined, row: Record<string, unknown>): boolean {
+  if (!node) return true;
+  switch (node.op) {
+    case 'eq':
+      return row[node.col] === node.val;
+    case 'lte':
+      return row[node.col] !== null && row[node.col] !== undefined && String(row[node.col]) <= String(node.val);
+    case 'isNotNull':
+      return row[node.col] !== null && row[node.col] !== undefined;
+    case 'and':
+      return node.args.every((arg) => evalPredicate(arg, row));
+  }
+}
 
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
@@ -71,12 +111,46 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
     }
     return [];
   });
-  const selectFrom = vi.fn().mockImplementation(async (table: unknown) => {
-    const queryImpl = typeof overrides['query'] === 'function'
-      ? overrides['query'] as (table: unknown) => Promise<unknown[]>
-      : query;
-    return queryImpl(table);
-  });
+  const queryImpl = typeof overrides['query'] === 'function'
+    ? overrides['query'] as (table: unknown) => Promise<unknown[]>
+    : query;
+  // A thenable stand-in for the Drizzle dynamic builder. For the leases table
+  // it applies the WHERE, `orderBy`, and `limit` it was given; other tables
+  // keep returning their fixture verbatim (their predicates are not under
+  // test here).
+  const selectFrom = vi.fn().mockImplementation(
+    (table: unknown, _columns: unknown, where?: PredicateNode) => {
+      let order: { dir?: string; col: string } | string | undefined;
+      let limit: number | undefined;
+      const builder = {
+        orderBy(key: { dir?: string; col: string } | string) {
+          order = key;
+          return builder;
+        },
+        limit(n: number) {
+          limit = n;
+          return builder;
+        },
+        then<R>(resolve: (rows: unknown[]) => R, reject?: (err: unknown) => R) {
+          return queryImpl(table)
+            .then((rows: unknown[]) => {
+              if (table !== leasesTableMock) return rows;
+              let out = (rows as Array<Record<string, unknown>>).filter((row) =>
+                evalPredicate(where, row),
+              );
+              if (order !== undefined) {
+                const col = typeof order === 'string' ? order : order.col;
+                const sign = typeof order !== 'string' && order.dir === 'desc' ? -1 : 1;
+                out = [...out].sort((a, b) => sign * ((a[col] as number) - (b[col] as number)));
+              }
+              return limit === undefined ? out : out.slice(0, limit);
+            })
+            .then(resolve, reject);
+        },
+      };
+      return builder;
+    },
+  );
 
   return {
     query,
@@ -1259,6 +1333,327 @@ describe('p2-37 leases route', () => {
       // And the widening is driven by the resolved role, not anything the
       // caller controls.
       expect(routeSource).toMatch(/const seesAllLeases = isAdminRole\(membership\.role\);/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PAG-04 — every lease read is filtered/bounded in SQL
+  //
+  // The harness above applies the WHERE/orderBy/limit it is handed, so the
+  // behavioural cases elsewhere in this file prove the pushed-down predicates
+  // are CORRECT; these cases pin their SHAPE (which predicate, which cap) and
+  // that no path falls back to a whole-table read.
+  // -------------------------------------------------------------------------
+
+  describe('PAG-04 bounded lease reads', () => {
+    const ACTOR = '11111111-1111-4111-8111-111111111111';
+    const OTHER = '22222222-2222-4222-8222-222222222222';
+
+    function lease(id: number, extra: Record<string, unknown> = {}) {
+      return {
+        id, communityId: 42, unitId: 10, residentId: ACTOR,
+        startDate: '2026-01-01', endDate: '2026-12-31',
+        rentAmount: '1000.00', status: 'active', previousLeaseId: null, notes: null,
+        ...extra,
+      };
+    }
+
+    function seed(rows: unknown[]) {
+      const client = makeDefaultScopedClient({
+        query: vi.fn().mockImplementation(async (table: unknown) =>
+          table === leasesTableMock ? rows : [],
+        ),
+      });
+      createScopedClientMock.mockReturnValue(client);
+      return client;
+    }
+
+    /** WHERE nodes of every selectFrom against the leases table, in call order. */
+    function leaseWheres(client: ReturnType<typeof makeDefaultScopedClient>) {
+      return (client.selectFrom as ReturnType<typeof vi.fn>).mock.calls
+        .filter(([table]) => table === leasesTableMock)
+        .map(([, , where]) => where as PredicateNode | undefined);
+    }
+
+    function flatten(node: PredicateNode | undefined): PredicateNode[] {
+      if (!node) return [];
+      return node.op === 'and' ? node.args.flatMap(flatten) : [node];
+    }
+
+    const residentMembership = {
+      userId: ACTOR, communityId: 42, role: 'resident' as const, isAdmin: false,
+      isUnitOwner: false, displayTitle: 'Resident', communityType: 'apartment' as const,
+    };
+
+    it('pushes the non-manager party scope into SQL (resident_id = actor)', async () => {
+      requireAuthenticatedUserIdMock.mockResolvedValue(ACTOR);
+      requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+      const client = seed([lease(1), lease(2, { residentId: OTHER })]);
+
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/leases?communityId=42'));
+      const json = (await res.json()) as { data: Array<{ id: number }> };
+
+      expect(res.status).toBe(200);
+      expect(json.data.map((l) => l.id)).toEqual([1]);
+      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'residentId', val: ACTOR }]);
+    });
+
+    it('applies NO party predicate for the management tier (control)', async () => {
+      const client = seed([lease(1), lease(2, { residentId: OTHER })]);
+
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/leases?communityId=42'));
+      const json = (await res.json()) as { data: Array<{ id: number }> };
+
+      expect(json.data.map((l) => l.id)).toEqual([1, 2]);
+      expect(leaseWheres(client)).toEqual([undefined]);
+    });
+
+    it('pushes status and unit filters into SQL', async () => {
+      const client = seed([
+        lease(1, { status: 'expired', unitId: 11 }),
+        lease(2, { status: 'expired', unitId: 12 }),
+        lease(3, { status: 'active', unitId: 11 }),
+      ]);
+
+      const res = await GET(
+        new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&status=expired&unit=11'),
+      );
+      const json = (await res.json()) as { data: Array<{ id: number }> };
+
+      expect(json.data.map((l) => l.id)).toEqual([1]);
+      expect(flatten(leaseWheres(client)[0])).toEqual([
+        { op: 'eq', col: 'status', val: 'expired' },
+        { op: 'eq', col: 'unitId', val: 11 },
+      ]);
+    });
+
+    it('answers an unknown status with [] and never reaches SQL (no enum-cast 500)', async () => {
+      const client = seed([lease(1)]);
+
+      const res = await GET(
+        new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&status=bogus'),
+      );
+      const json = (await res.json()) as { data: unknown[] };
+
+      expect(res.status).toBe(200);
+      expect(json.data).toEqual([]);
+      expect(leaseWheres(client)).toEqual([]);
+    });
+
+    it('clamps an absurd expiring window instead of overflowing the date (no 500)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-10T12:00:00.000Z'));
+      try {
+        const client = seed([lease(1, { endDate: '2030-01-01' })]);
+        const res = await GET(
+          new NextRequest(
+            'http://localhost:3000/api/v1/leases?communityId=42&expiring_within_days=100000000',
+          ),
+        );
+        expect(res.status).toBe(200);
+        // 36_500 days after 2026-03-10.
+        expect(flatten(leaseWheres(client)[0])).toContainEqual({
+          op: 'lte',
+          col: 'endDate',
+          val: '2126-02-14',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('pushes the expiring window into SQL with an inclusive UTC end date', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-10T23:30:00.000Z'));
+      try {
+        const client = seed([
+          lease(1, { endDate: '2026-04-09' }), // exactly +30d → inclusive
+          lease(2, { endDate: '2026-04-10' }), // +31d → out
+          lease(3, { endDate: '2026-03-20', status: 'expired' }), // not active → out
+          lease(4, { endDate: null }), // month-to-month → out
+          lease(5, { endDate: '2026-03-15' }), // soonest → first
+        ]);
+
+        const res = await GET(
+          new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&expiring_within_days=30'),
+        );
+        const json = (await res.json()) as {
+          data: Array<{ id: number; daysUntilExpiration: number }>;
+        };
+
+        expect(json.data.map((l) => [l.id, l.daysUntilExpiration])).toEqual([
+          [5, 5],
+          [1, 30],
+        ]);
+        expect(flatten(leaseWheres(client)[0])).toEqual([
+          { op: 'eq', col: 'status', val: 'active' },
+          { op: 'isNotNull', col: 'endDate' },
+          { op: 'lte', col: 'endDate', val: '2026-04-09' },
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('caps the list at LEASE_LIST_MAX_ROWS, dropping the OLDEST rows, ascending order kept', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        // 5002 rows in shuffled id order; the cap is 5000.
+        const rows = Array.from({ length: 5002 }, (_, i) => lease(5002 - i));
+        seed(rows);
+
+        const res = await GET(new NextRequest('http://localhost:3000/api/v1/leases?communityId=42'));
+        const json = (await res.json()) as { data: Array<{ id: number }> };
+
+        expect(json.data).toHaveLength(5000);
+        expect(json.data[0]!.id).toBe(3);
+        expect(json.data[4999]!.id).toBe(5002);
+        expect(warn).toHaveBeenCalledWith(
+          '[leases] GET list hit LEASE_LIST_MAX_ROWS; oldest rows dropped',
+          { communityId: 42 },
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('does not warn below the cap', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        seed([lease(2), lease(1)]);
+        const res = await GET(new NextRequest('http://localhost:3000/api/v1/leases?communityId=42'));
+        const json = (await res.json()) as { data: Array<{ id: number }> };
+        expect(json.data.map((l) => l.id)).toEqual([1, 2]);
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('walks renewal_chain_for over ONE read, in memory (reuses getRenewalChain)', async () => {
+      const client = seed([
+        lease(1),
+        lease(2, { previousLeaseId: 1 }),
+        lease(3, { previousLeaseId: 2 }),
+        lease(4), // unrelated
+      ]);
+
+      const res = await GET(
+        new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=3'),
+      );
+      const json = (await res.json()) as { data: Array<{ id: number }> };
+
+      expect(json.data.map((l) => l.id)).toEqual([1, 2, 3]);
+      expect(leaseWheres(client)).toHaveLength(1);
+    });
+
+    it('stops the chain walk on a cycle', async () => {
+      seed([lease(1, { previousLeaseId: 2 }), lease(2, { previousLeaseId: 1 })]);
+
+      const res = await GET(
+        new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=2'),
+      );
+      const json = (await res.json()) as { data: Array<{ id: number }> };
+
+      expect(json.data.map((l) => l.id)).toEqual([1, 2]);
+    });
+
+    it('party-scopes the chain read in SQL for a non-manager', async () => {
+      requireAuthenticatedUserIdMock.mockResolvedValue(ACTOR);
+      requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+      const client = seed([lease(1), lease(2, { previousLeaseId: 1 })]);
+
+      await GET(
+        new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=2'),
+      );
+
+      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'residentId', val: ACTOR }]);
+    });
+
+    it('POST reads only the candidate unit for the overlap check, and the previous lease by id', async () => {
+      const client = makeDefaultScopedClient({
+        query: vi.fn().mockImplementation(async (table: unknown) => {
+          if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
+          if (table === userRolesTableMock) {
+            return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isUnitOwner: false }];
+          }
+          if (table === leasesTableMock) {
+            return [
+              lease(50, { residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' }),
+              // A different unit with an overlapping window: must not block.
+              lease(60, { unitId: 99, startDate: '2027-01-01', endDate: '2027-12-31' }),
+            ];
+          }
+          return [];
+        }),
+        update: vi.fn().mockResolvedValue([{ id: 50, status: 'renewed' }]),
+      });
+      createScopedClientMock.mockReturnValue(client);
+
+      const res = await POST(
+        new NextRequest('http://localhost:3000/api/v1/leases', {
+          method: 'POST',
+          body: JSON.stringify({
+            communityId: 42, unitId: 10,
+            residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            startDate: '2027-01-01', endDate: '2027-12-31',
+            isRenewal: true, previousLeaseId: 50,
+          }),
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(leaseWheres(client)).toEqual([
+        { op: 'eq', col: 'unitId', val: 10 },
+        { op: 'eq', col: 'id', val: 50 },
+      ]);
+    });
+
+    it('PATCH reads only the lease’s unit and its renewal child', async () => {
+      const client = makeDefaultScopedClient({
+        query: vi.fn().mockImplementation(async (table: unknown) =>
+          table === leasesTableMock
+            ? [lease(1), lease(2, { unitId: 11, previousLeaseId: 7 })]
+            : [],
+        ),
+        update: vi.fn().mockResolvedValue([{ id: 1, rentAmount: '1100.00' }]),
+      });
+      createScopedClientMock.mockReturnValue(client);
+
+      const res = await PATCH(
+        new NextRequest('http://localhost:3000/api/v1/leases', {
+          method: 'PATCH',
+          body: JSON.stringify({ id: 1, communityId: 42, rentAmount: '1100.00' }),
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(leaseWheres(client)).toEqual([
+        { op: 'eq', col: 'id', val: 1 },
+        { op: 'eq', col: 'unitId', val: 10 },
+        { op: 'eq', col: 'previousLeaseId', val: 1 },
+      ]);
+    });
+
+    it('PATCH still enforces renewal continuity against the targeted renewal child', async () => {
+      seed([
+        lease(1, { endDate: '2026-12-31' }),
+        lease(2, { previousLeaseId: 1, startDate: '2027-01-01', endDate: '2027-12-31' }),
+      ]);
+
+      const res = await PATCH(
+        new NextRequest('http://localhost:3000/api/v1/leases', {
+          method: 'PATCH',
+          body: JSON.stringify({ id: 1, communityId: 42, endDate: '2026-11-30' }),
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toContain('day after the previous lease endDate');
     });
   });
 });
