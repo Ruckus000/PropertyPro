@@ -120,6 +120,12 @@ configure_supabase() {
 
 write_runtime_env() {
   local status_file="$sandbox/supabase-status.env"
+  # Before ANY write: this file holds the service-role key, the JWT secret and
+  # the S3 keys. `umask 077` used to come later in this function, so the status
+  # file alone was created 0644 while its siblings were 0600. The rm matters too:
+  # `>` truncates an existing file but keeps its old mode.
+  umask 077
+  rm -f "$status_file"
   # KEY=value lines only: this file is `source`d, and pnpm prints warnings on
   # STDOUT (e.g. "WARN Unsupported engine" when the shell's Node is not the
   # .nvmrc major), which made line 1 a bash syntax error. `status()` below
@@ -131,7 +137,6 @@ write_runtime_env() {
   write_secrets_env
   # shellcheck disable=SC1090
   set -a; source "$secrets_env"; set +a
-  umask 077
   cat > "$runtime_env" <<EOF
 NODE_ENV=development
 PROPERTYPRO_AGENT_SANDBOX=1
