@@ -54,7 +54,7 @@ export interface SiteSnapshot {
 }
 
 /** Closed set. Unlike `ChangeKey`, this genuinely will not grow. */
-export type ChangeKind = 'added' | 'edited' | 'removed' | 'reordered';
+type ChangeKind = 'added' | 'edited' | 'removed' | 'reordered';
 
 /**
  * A section's identity within one diff: `p<slot>` for a section that exists on
@@ -120,7 +120,7 @@ export type ChangeKey =
  * Unique across pages because a page id is unique — see `SiteSnapshot.pageId`,
  * which the caller stringifies from `site_pages.id`.
  */
-export type PageScopedChangeKey =
+type PageScopedChangeKey =
   | `${string}/hero`
   | `${string}/order`
   | `${string}/block:${SectionRef}`;

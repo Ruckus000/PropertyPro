@@ -9,7 +9,6 @@ import {
   ESIGN_SUBMISSION_STATUSES,
   ESIGN_SIGNER_STATUSES,
   ESIGN_EVENT_TYPES,
-  ESIGN_REMINDER_INTERVALS_DAYS,
 } from '@propertypro/shared';
 
 describe('e-sign constants', () => {
@@ -138,19 +137,6 @@ describe('e-sign constants', () => {
       ];
       for (const e of coreEvents) {
         expect(ESIGN_EVENT_TYPES).toContain(e);
-      }
-    });
-  });
-
-  describe('ESIGN_REMINDER_INTERVALS_DAYS', () => {
-    it('has values matching ESIGN_MAX_REMINDERS count', () => {
-      expect(ESIGN_REMINDER_INTERVALS_DAYS).toHaveLength(ESIGN_MAX_REMINDERS);
-    });
-
-    it('contains only positive integers', () => {
-      for (const interval of ESIGN_REMINDER_INTERVALS_DAYS) {
-        expect(interval).toBeGreaterThan(0);
-        expect(Number.isInteger(interval)).toBe(true);
       }
     });
   });

@@ -1,13 +1,11 @@
 import type { HelpAudience } from './role-transition';
 
-export interface DefaultFaqDefinition {
+interface DefaultFaqDefinition {
   question: string;
   answer: string;
   category: string;
   roleVisibility?: readonly string[] | null;
 }
-
-export type DefaultFaq = DefaultFaqDefinition;
 
 // Every FAQ below that carries this is a manager action (meeting notices, the
 // compliance dashboard, announcements, uploads, residents). A board designation

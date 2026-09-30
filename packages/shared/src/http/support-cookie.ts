@@ -49,7 +49,7 @@ export const SUPPORT_SESSION_COOKIE_MAX_AGE_SECONDS = Math.round(
  * `ResponseCookies.delete()`. Deliberately not importing Next types — this
  * package is framework-agnostic and is consumed by both apps.
  */
-export interface SupportSessionCookieAttributes {
+interface SupportSessionCookieAttributes {
   name: string;
   value: string;
   path: string;

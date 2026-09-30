@@ -13,7 +13,7 @@ export interface SeedHints {
   announcementTone: 'formal' | 'friendly' | 'urgent';
 }
 
-export interface ContentStrategy {
+interface ContentStrategy {
   id: ContentStrategyId;
   label: string;
   description: string;

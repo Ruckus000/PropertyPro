@@ -40,13 +40,3 @@ export function isTrustedHostname(
 
   return false;
 }
-
-/**
- * Convenience: trust check using NEXT_PUBLIC_APP_URL from the environment.
- */
-export function isTrustedHostnameFromEnv(hostname: string): boolean {
-  const primary = parseHostnameFromAppUrl(
-    typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_APP_URL : undefined,
-  );
-  return isTrustedHostname(hostname, { primaryHostname: primary });
-}

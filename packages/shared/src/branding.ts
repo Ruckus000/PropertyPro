@@ -76,7 +76,7 @@ export interface CommunityBranding {
 }
 
 /** Persisted SEO overrides. Every field optional; absent means "derive it". */
-export interface SiteSettingsBranding {
+interface SiteSettingsBranding {
   /** Overrides the derived `<title>`. */
   seoTitle?: string | null;
   /** Overrides the derived meta description. */
@@ -93,7 +93,7 @@ export interface SiteSettingsBranding {
 }
 
 /** Persisted public-site footer fields. */
-export interface SiteFooterBranding {
+interface SiteFooterBranding {
   /** Overrides the community name in the copyright line. */
   associationName?: string | null;
   /** Free-text line under the copyright. Rendered as text, never as HTML. */
@@ -124,12 +124,6 @@ export interface CustomCssOverrides {
   /** Curated Google Font family. Overrides --theme-font-body. */
   bodyFont?: string;
 }
-
-/** Default branding colors used when no community branding is configured.
- *  Primary is the "Florida Modern" coral that matches the marketing landing
- *  page (see packages/theme THEME_DEFAULTS). */
-export const DEFAULT_PRIMARY_COLOR = '#C2533A';
-export const DEFAULT_SECONDARY_COLOR = '#6B7280';
 
 /** Validates a string is a 6-digit hex color (with leading #). */
 export function isValidHexColor(value: string): boolean {

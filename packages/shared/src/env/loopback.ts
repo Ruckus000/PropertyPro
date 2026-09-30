@@ -90,7 +90,7 @@ const DEV_BACKEND_VARS = ['NEXT_PUBLIC_SUPABASE_URL', 'DATABASE_URL'] as const;
  * check rejects the assignment outright (TS2559: "has no properties in common").
  * The narrower type reads better and does not compile at the only call site.
  */
-export type DevBackendEnv = Readonly<Record<string, string | undefined>>;
+type DevBackendEnv = Readonly<Record<string, string | undefined>>;
 
 /**
  * Why a `/dev/*` route must refuse, or `null` when both backends are

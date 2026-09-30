@@ -8,7 +8,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { signSupportToken } from '@/lib/support/jwt';
-import { CreateSessionSchema, SUPPORT_SESSION_MAX_TTL_HOURS } from '@propertypro/shared';
+import {
+  CreateSessionSchema,
+  SUPPORT_SESSION_MAX_PER_ADMIN_PER_DAY,
+  SUPPORT_SESSION_MAX_TTL_HOURS,
+} from '@propertypro/shared';
 import {
   buildSupportSessionCookie,
   resolveSupportCookieHostname,
@@ -16,7 +20,7 @@ import {
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
-const DAILY_SESSION_LIMIT = 10;
+const DAILY_SESSION_LIMIT = SUPPORT_SESSION_MAX_PER_ADMIN_PER_DAY;
 
 export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();

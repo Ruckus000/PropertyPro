@@ -1,12 +1,8 @@
 import { z } from 'zod';
 
 // --- Access Levels ---
-export const SUPPORT_ACCESS_LEVELS = ['read_only', 'read_write'] as const;
+const SUPPORT_ACCESS_LEVELS = ['read_only', 'read_write'] as const;
 export type SupportAccessLevel = (typeof SUPPORT_ACCESS_LEVELS)[number];
-
-// --- Session End Reasons ---
-export const SESSION_END_REASONS = ['manual', 'expired', 'consent_revoked'] as const;
-export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
 
 // --- Session Constraints ---
 export const SUPPORT_SESSION_MAX_TTL_HOURS = 0.5;
@@ -31,7 +27,7 @@ export const SUPPORT_SESSION_MAX_PER_ADMIN_PER_DAY = 10;
 // `support_access_log.event` is plain `text NOT NULL` with no CHECK and no
 // pgEnum (0000_nappy_guardian.sql), so this tuple is the only vocabulary — it
 // can grow without a migration.
-export const SUPPORT_ACCESS_EVENTS = [
+const SUPPORT_ACCESS_EVENTS = [
   'session_started',
   'session_ended',
   'page_viewed',
@@ -47,14 +43,14 @@ export const SUPPORT_ACCESS_EVENTS = [
   'support_phone_verification_attempted',
   'support_deletion_cancelled',
 ] as const;
-export type SupportAccessEvent = (typeof SUPPORT_ACCESS_EVENTS)[number];
+type SupportAccessEvent = (typeof SUPPORT_ACCESS_EVENTS)[number];
 
 /**
  * The events that record a WRITE made by an operator during a support session.
  * Every one of them is written BEFORE the change it describes (fail closed), so
  * a row means the change was attempted, not necessarily that it landed.
  */
-export const SUPPORT_WRITE_EVENTS = [
+const SUPPORT_WRITE_EVENTS = [
   'support_profile_updated',
   'support_phone_verification_sent',
   'support_phone_verified',
@@ -72,7 +68,7 @@ export type SupportWriteEvent = (typeof SUPPORT_WRITE_EVENTS)[number];
  * can still fail afterwards (a wrong code, a Twilio error, a DB error). A label
  * must stay true in that case.
  */
-export const SUPPORT_ACCESS_EVENT_LABELS: Record<SupportAccessEvent, string> = {
+const SUPPORT_ACCESS_EVENT_LABELS: Record<SupportAccessEvent, string> = {
   session_started: 'Session started',
   session_ended: 'Session ended',
   page_viewed: 'Page viewed',

@@ -9,8 +9,8 @@
  * - completionMarkers
  */
 
-import type { WizardStatus } from './wizard-common';
-export type { WizardStatus };
+import type { ProfileStepData, WizardStatus } from './wizard-common';
+export type { ProfileStepData, WizardStatus };
 
 export interface StatutoryStepData {
     items: {
@@ -18,17 +18,6 @@ export interface StatutoryStepData {
         documentId: number;
         categoryId: number;
     }[];
-}
-
-export interface ProfileStepData {
-    name: string;
-    addressLine1: string;
-    addressLine2?: string | null;
-    city: string;
-    state: string;
-    zipCode: string;
-    timezone: string;
-    logoPath?: string | null;
 }
 
 export interface UnitDraftData {
