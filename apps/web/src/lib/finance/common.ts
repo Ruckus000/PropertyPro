@@ -64,7 +64,6 @@ export function parsePositiveInt(value: string, label: string): number {
   return parsed;
 }
 
-export { isCalendarDate };
 
 /** `isCalendarDate` as a 400, in the same error class as the shape failure. */
 export function parseDateOnly(value: string, label: string): string {

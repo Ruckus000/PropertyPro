@@ -524,12 +524,25 @@ export async function paginateAssessmentsForCommunity(
   };
 }
 
+/**
+ * The contracts can only compare dates sent in the same request; this compares
+ * the dates the row will actually hold (defaults and stored values applied),
+ * so an assessment cannot be saved ending before it starts.
+ */
+function assertAssessmentDateOrder(startDate: string, endDate: string | null): void {
+  if (endDate !== null && endDate < startDate) {
+    throw new BadRequestError('endDate must be on or after startDate');
+  }
+}
+
 export async function createAssessmentForCommunity(
   communityId: number,
   actorUserId: string,
   input: CreateAssessmentInput,
   requestId?: string | null,
 ): Promise<AssessmentRecord> {
+  const startDate = input.startDate ?? format(new Date(), 'yyyy-MM-dd');
+  assertAssessmentDateOrder(startDate, input.endDate ?? null);
   const scoped = createScopedClient(communityId);
   const [inserted] = await scoped.insert(assessments, {
     title: input.title.trim(),
@@ -539,7 +552,7 @@ export async function createAssessmentForCommunity(
     dueDay: input.dueDay ?? null,
     lateFeeAmountCents: input.lateFeeAmountCents ?? 0,
     lateFeeDaysGrace: input.lateFeeDaysGrace ?? 0,
-    startDate: input.startDate ?? format(new Date(), 'yyyy-MM-dd'),
+    startDate,
     endDate: input.endDate ?? null,
     isActive: input.isActive ?? true,
     createdByUserId: actorUserId,
@@ -580,6 +593,10 @@ export async function updateAssessmentForCommunity(
   if (!existing) {
     throw new NotFoundError('Assessment not found');
   }
+  assertAssessmentDateOrder(
+    input.startDate ?? existing.startDate,
+    input.endDate !== undefined ? input.endDate : existing.endDate,
+  );
 
   const [updated] = await scoped.update(assessments, {
     ...(input.title !== undefined ? { title: input.title.trim() } : {}),

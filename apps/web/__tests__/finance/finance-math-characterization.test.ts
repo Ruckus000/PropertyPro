@@ -167,6 +167,8 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 import {
   buildCommunityStatement,
+  createAssessmentForCommunity,
+  updateAssessmentForCommunity,
   buildUnitStatement,
   generateAssessmentLineItemsForCommunity,
   listDelinquentUnits,
@@ -1435,3 +1437,41 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     });
   });
 });
+
+describe('10. assessment date order is checked against the dates the row will hold', () => {
+  it('create: an endDate before the defaulted startDate (today) is a 400, nothing inserted', async () => {
+    setNow('2026-04-15T12:00:00.000Z');
+    await expect(
+      createAssessmentForCommunity(11, 'u-1', {
+        title: 'Dues',
+        amountCents: 100,
+        frequency: 'monthly',
+        endDate: '2026-01-31',
+      } as never),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('update: a lone endDate before the STORED startDate is a 400, nothing written', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, startDate: '2026-05-01', endDate: null })]);
+    await expect(
+      updateAssessmentForCommunity(11, 7, 'u-1', { endDate: '2026-04-01' } as never),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('update: a lone startDate after the STORED endDate is a 400', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, startDate: '2026-01-01', endDate: '2026-06-30' })]);
+    await expect(
+      updateAssessmentForCommunity(11, 7, 'u-1', { startDate: '2026-07-01' } as never),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('update: clearing endDate (null) or a valid lone endDate still saves (control)', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, startDate: '2026-05-01', endDate: '2026-12-31' })]);
+    await updateAssessmentForCommunity(11, 7, 'u-1', { endDate: null } as never);
+    await updateAssessmentForCommunity(11, 7, 'u-1', { endDate: '2026-05-01' } as never);
+    expect(updateMock).toHaveBeenCalledTimes(2);
+  });
+});
+
