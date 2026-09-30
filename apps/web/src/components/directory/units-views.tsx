@@ -72,7 +72,7 @@ export function UnitCards({ units, hasOwnerRole, canSeeBalances, onOpenUnit }: U
               {u.ownerText !== null ? (
                 <span className="flex w-full items-center gap-3">
                   {u.residents.length > 0 ? (
-                    <span className="flex shrink-0 -space-x-2">
+                    <span className="flex shrink-0 -space-x-1.5">
                       {u.residents.slice(0, MAX_AVATARS).map((r) => (
                         <Avatar
                           key={r.userId}

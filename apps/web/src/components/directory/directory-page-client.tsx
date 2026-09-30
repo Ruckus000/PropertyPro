@@ -370,7 +370,7 @@ export function DirectoryPageClient({
     <div className="flex flex-col gap-4">
       <PageHeader title="Directory" hideHelpButton />
 
-      {isAdmin && !unitsLoading ? (
+      {isAdmin && !unitsLoading && !residentsLoading && !unitsQ.isError ? (
         <OverviewStrip
           stats={stats}
           requestCount={requestsQ.data ? requestsQ.data.length : null}
