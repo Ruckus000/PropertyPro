@@ -134,7 +134,7 @@ export const ADMIN_ROLES: readonly MatrixRole[] = [
   'manager',
 ] as const;
 
-export const RESTRICTED_ROLES: readonly MatrixRole[] = [
+const RESTRICTED_ROLES: readonly MatrixRole[] = [
   'tenant',
 ] as const;
 
@@ -233,7 +233,7 @@ export function isRestrictedRole(
   return false;
 }
 
-export function getCategoryAccessForRole(
+function getCategoryAccessForRole(
   role: CommunityRole,
   communityType: CommunityType,
   opts?: DocumentAccessOpts,
@@ -279,14 +279,4 @@ export function canAccessCategory(
   }
 
   return access.includes(categoryKey);
-}
-
-export function canAccessDocument(
-  role: CommunityRole,
-  communityType: CommunityType,
-  categoryName: string | null | undefined,
-  opts?: DocumentAccessOpts,
-): boolean {
-  const normalizedKey = normalizeCategoryName(categoryName);
-  return canAccessCategory(role, communityType, normalizedKey, opts);
 }

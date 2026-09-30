@@ -172,7 +172,7 @@ export const SUPPORT_MAILBOX_CANNED_REPLIES: Record<SupportMailbox, readonly str
 // Thread context strip
 // ---------------------------------------------------------------------------
 
-export interface SupportMailboxContext {
+interface SupportMailboxContext {
   /** Short heading for the strip. */
   title: string;
   /** One sentence of "why this matters" copy. */

@@ -20,7 +20,7 @@
 import type { CommunityRole } from '../index';
 import { ADMIN_TIER_DB_ROLES, isRootManager } from '../role-transition';
 
-export type LockedFeatureBehavior = 'upgrade' | 'request' | 'hidden';
+type LockedFeatureBehavior = 'upgrade' | 'request' | 'hidden';
 
 /**
  * Management-tier predicate. Only the two v3 manager roles qualify; residents

@@ -20,9 +20,9 @@
  * The zod face lives in `./password-policy-zod.ts`; add nothing here that
  * imports it.
  */
-export type PasswordRuleId = 'length' | 'lowercase' | 'uppercase' | 'number' | 'special';
+type PasswordRuleId = 'length' | 'lowercase' | 'uppercase' | 'number' | 'special';
 
-export interface PasswordRule {
+interface PasswordRule {
   id: PasswordRuleId;
   label: string;
   test: (pw: string) => boolean;
@@ -31,7 +31,7 @@ export interface PasswordRule {
 
 export type PasswordStrengthLevel = 'weak' | 'fair' | 'good' | 'strong';
 
-export interface PasswordPolicy {
+interface PasswordPolicy {
   readonly minLength: number;
   readonly maxLength: number;
   readonly strongLengthBonus: number;
@@ -91,7 +91,7 @@ export function getPasswordChecks(pw: string): Record<PasswordRuleId, boolean> {
   return checks;
 }
 
-export interface PasswordScore {
+interface PasswordScore {
   score: number;
   level: PasswordStrengthLevel;
   failedRules: PasswordRuleId[];

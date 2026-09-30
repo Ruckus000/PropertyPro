@@ -47,7 +47,6 @@ export const ESIGN_SIGNER_STATUSES = [
   'completed',
   'declined',
 ] as const;
-export type EsignSignerStatus = (typeof ESIGN_SIGNER_STATUSES)[number];
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -71,7 +70,6 @@ export const ESIGN_EVENT_TYPES = [
   'submission_completed',
   'submission_processing_failed',
 ] as const;
-export type EsignEventType = (typeof ESIGN_EVENT_TYPES)[number];
 
 // E-sign management authorization is enforced at the route layer via
 // `requirePermission('esign', 'write')` (checkPermissionV2), not a static
@@ -132,4 +130,3 @@ export interface EsignFieldsSchema {
 // ---------------------------------------------------------------------------
 
 export const ESIGN_MAX_REMINDERS = 3;
-export const ESIGN_REMINDER_INTERVALS_DAYS = [7, 3, 1] as const;

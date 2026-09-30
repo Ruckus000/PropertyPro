@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   SIGNUP_TRIAL_DAYS,
   signupTrialMarketingLine,
-  signupTrialHeroBullet,
 } from '../billing/signup-trial';
 
 describe('signup trial constants', () => {
@@ -15,10 +14,5 @@ describe('signup trial constants', () => {
     expect(line).toMatch(/30-day/i);
     expect(line).toMatch(/card required/i);
     expect(line.toLowerCase()).not.toContain('no card');
-  });
-
-  it('hero bullet is short and truthful', () => {
-    expect(signupTrialHeroBullet()).toMatch(/30-day/i);
-    expect(signupTrialHeroBullet().toLowerCase()).not.toContain('no card');
   });
 });

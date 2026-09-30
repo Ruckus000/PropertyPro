@@ -10,16 +10,7 @@ export const PAYABLE_SOURCE_TYPES = [
   'rent',
 ] as const;
 
-export type PayableSourceType = (typeof PAYABLE_SOURCE_TYPES)[number];
-
-export interface PayableReference {
-  payableType: PayableType;
-  payableId: number;
-  payableSourceType: PayableSourceType;
-  payableSourceId: string;
-  communityId: number;
-  unitId: number;
-}
+type PayableSourceType = (typeof PAYABLE_SOURCE_TYPES)[number];
 
 export interface StripePayableMetadata {
   communityId: string;

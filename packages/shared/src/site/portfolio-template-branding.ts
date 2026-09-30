@@ -45,16 +45,3 @@ export function extractTemplateBranding(branding: CommunityBranding): PortfolioT
   }
   return out as PortfolioTemplateBranding;
 }
-
-/**
- * Merge a template's captured tokens onto a target community's branding. The
- * captured tokens win; the target's logo paths and assetsBytesUsed (which the
- * template never carries) are preserved. Caller sets siteLogoPath separately
- * after copying the logo asset.
- */
-export function mergeTemplateBranding(
-  target: CommunityBranding,
-  template: PortfolioTemplateBranding,
-): CommunityBranding {
-  return { ...target, ...template };
-}

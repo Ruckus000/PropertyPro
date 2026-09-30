@@ -15,7 +15,7 @@
 import { isChurnedStatus } from '../constants/subscription-statuses';
 import { isWithinPaidGrace } from './paid-grace';
 
-export interface SubscriptionLifecycleState {
+interface SubscriptionLifecycleState {
   stripeSubscriptionId: string | null;
   subscriptionStatus: string | null;
 }
@@ -46,7 +46,7 @@ export type LifecycleState =
   | 'grace'
   | 'lapsed';
 
-export interface LifecycleInput {
+interface LifecycleInput {
   subscriptionStatus: string | null;
   subscriptionCanceledAt: Date | null;
   freeAccessExpiresAt?: Date | null;

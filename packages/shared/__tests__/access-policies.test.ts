@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { CommunityType, CommunityRole } from '../src';
 import {
   canAccessCategory,
-  canAccessDocument,
   getAccessibleKnownCategories,
   isElevatedRole,
   isRestrictedRole,
@@ -149,12 +148,5 @@ describe('access-policies strict matrix', () => {
     expect(getAccessibleKnownCategories('property_manager', 'apartment')).toContain(
       'move_in_out_docs',
     );
-  });
-
-  it('evaluates document access using raw category names', () => {
-    expect(canAccessDocument('resident', 'condo_718', 'Rules & Regulations', TENANT)).toBe(true);
-    expect(canAccessDocument('resident', 'condo_718', 'Meeting Minutes', TENANT)).toBe(false);
-    expect(canAccessDocument('resident', 'hoa_720', 'custom_unmapped', OWNER)).toBe(true);
-    expect(canAccessDocument('resident', 'hoa_720', 'custom_unmapped', TENANT)).toBe(false);
   });
 });

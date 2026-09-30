@@ -14,7 +14,7 @@ export const ALL_STATUSES = [
   'incomplete_expired',
 ] as const;
 
-export type SubscriptionStatus = (typeof ALL_STATUSES)[number];
+type SubscriptionStatus = (typeof ALL_STATUSES)[number];
 
 /** Statuses that count toward billable MRR (customer is paying). */
 export const BILLABLE_STATUSES = ['active', 'past_due'] as const;
@@ -29,14 +29,6 @@ export const CHURNED_STATUSES = [
   'unpaid',
   'incomplete_expired',
 ] as const;
-
-export function isBillableStatus(s: string): boolean {
-  return (BILLABLE_STATUSES as readonly string[]).includes(s);
-}
-
-export function isTrialStatus(s: string): boolean {
-  return (TRIAL_STATUSES as readonly string[]).includes(s);
-}
 
 export function isChurnedStatus(s: string): boolean {
   return (CHURNED_STATUSES as readonly string[]).includes(s);

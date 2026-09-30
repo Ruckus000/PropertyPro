@@ -6,7 +6,7 @@
 
 const HOSTNAME_LABEL = /^[a-z0-9-]+$/i;
 
-export function isValidHostname(hostname: string): boolean {
+function isValidHostname(hostname: string): boolean {
   if (hostname.length < 3 || hostname.length > 253) return false;
   if (!hostname.includes('.')) return false;
   return hostname.split('.').every(

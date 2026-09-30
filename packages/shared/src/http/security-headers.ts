@@ -105,7 +105,7 @@ export function buildCorsHeaders(
 // Security headers
 // ---------------------------------------------------------------------------
 
-export interface SecurityHeaderOptions {
+interface SecurityHeaderOptions {
   /**
    * `X-Frame-Options` value, or `'omit'` to leave the header off entirely.
    *
@@ -148,7 +148,7 @@ export function buildSecurityHeaders(options?: SecurityHeaderOptions): Record<st
 // Content-Security-Policy
 // ---------------------------------------------------------------------------
 
-export interface CspOptions {
+interface CspOptions {
   /**
    * The Supabase project URL. Its SCHEME is preserved rather than assumed to be
    * https: a hosted project is https (so this is a no-op there), but a local

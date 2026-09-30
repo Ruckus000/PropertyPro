@@ -10,7 +10,7 @@
  */
 import type { CommunityType } from './index';
 
-export interface DefaultDocumentCategory {
+interface DefaultDocumentCategory {
   name: string;
   description: string;
 }

@@ -13,6 +13,4 @@ export const CANCELLATION_REASONS = [
   'other',
 ] as const;
 
-export type CancellationReason = (typeof CANCELLATION_REASONS)[number];
-
 export const cancellationReasonSchema = z.enum(CANCELLATION_REASONS);
