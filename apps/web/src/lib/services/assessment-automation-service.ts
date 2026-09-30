@@ -45,10 +45,6 @@ export interface OverdueTransitionSummary {
 }
 
 /**
- * Finds all pending line items with due_date < today and transitions them
- * to 'overdue' status. Scans across all non-deleted communities.
- */
-/**
  * Restricts a cron run to these communities. The crons are global by design;
  * this exists so an integration test can drive the real cron path for its own
  * community without mutating other test files' rows on the shared test DB.
@@ -61,6 +57,10 @@ function inCronScope(communityId: number, scope: CronScope): boolean {
   return scope.onlyCommunityIds === undefined || scope.onlyCommunityIds.includes(communityId);
 }
 
+/**
+ * Finds all pending line items with due_date < today and transitions them
+ * to 'overdue' status. Scans across all non-deleted communities.
+ */
 export async function processOverdueTransitions(
   now: Date = new Date(),
   scope: CronScope = {},

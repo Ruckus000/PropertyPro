@@ -303,8 +303,9 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     );
     expect(waiveResponse.status).toBe(200);
     const waiveJson = await parseJson<{ data: Record<string, unknown> }>(waiveResponse);
-    expect(waiveJson.data['waivedCount']).toBeGreaterThan(0);
-    expect(waiveJson.data['waivedAmountCents']).toBeGreaterThan(0);
+    // Unit A's one line item carries the cron's $5.00 fee.
+    expect(waiveJson.data['waivedCount']).toBe(1);
+    expect(waiveJson.data['waivedAmountCents']).toBe(500);
 
     const afterWaive = await moneyFor(communityA.id, unitAId);
     expect(afterWaive.totalDueCents).toBe(25000);
