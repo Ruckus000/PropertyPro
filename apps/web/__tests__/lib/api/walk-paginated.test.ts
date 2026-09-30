@@ -162,7 +162,9 @@ describe('walkPaginated', () => {
     expect(captureMessageMock).toHaveBeenCalledTimes(1);
     expect(captureMessageMock).toHaveBeenCalledWith('walk_paginated_truncated', {
       level: 'warning',
-      extra: { baseUrl: '/api/v1/things', rows: 2, maxPages: 2 },
+      fingerprint: ['walk_paginated_truncated', '/api/v1/things'],
+      tags: { baseUrl: '/api/v1/things' },
+      extra: { rows: 2, maxPages: 2 },
     });
   });
 

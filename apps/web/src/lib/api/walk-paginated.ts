@@ -108,9 +108,13 @@ export async function walkPaginated<T>(
       rows: collected.length,
       maxPages,
     });
+    // One Sentry issue PER ENDPOINT (fingerprint + tag), so the first
+    // truncation of each endpoint is its own visible trigger.
     captureMessage('walk_paginated_truncated', {
       level: 'warning',
-      extra: { baseUrl, rows: collected.length, maxPages },
+      fingerprint: ['walk_paginated_truncated', baseUrl],
+      tags: { baseUrl },
+      extra: { rows: collected.length, maxPages },
     });
   }
 

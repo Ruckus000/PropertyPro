@@ -43,6 +43,12 @@ const {
   requireCommunityMembershipMock: vi.fn(),
 }));
 
+const { captureMessageMock } = vi.hoisted(() => ({ captureMessageMock: vi.fn() }));
+vi.mock('@sentry/nextjs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@sentry/nextjs')>()),
+  captureMessage: captureMessageMock,
+}));
+
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
@@ -1512,6 +1518,10 @@ describe('p2-37 leases route', () => {
           '[leases] GET list hit LEASE_LIST_MAX_ROWS; oldest rows dropped',
           { communityId: 42 },
         );
+        expect(captureMessageMock).toHaveBeenCalledWith('lease_list_truncated', {
+          level: 'warning',
+          extra: { communityId: 42, path: 'list' },
+        });
       } finally {
         warn.mockRestore();
       }
@@ -1519,12 +1529,14 @@ describe('p2-37 leases route', () => {
 
     it('does not warn below the cap', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      captureMessageMock.mockClear();
       try {
         seed([lease(2), lease(1)]);
         const res = await GET(new NextRequest('http://localhost:3000/api/v1/leases?communityId=42'));
         const json = (await res.json()) as { data: Array<{ id: number }> };
         expect(json.data.map((l) => l.id)).toEqual([1, 2]);
         expect(warn).not.toHaveBeenCalled();
+        expect(captureMessageMock).not.toHaveBeenCalled();
       } finally {
         warn.mockRestore();
       }
