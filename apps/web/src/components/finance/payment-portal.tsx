@@ -333,7 +333,7 @@ export function PaymentPortal({
       {data.truncated && (
         <AlertBanner
           status="warning"
-          title="Showing the 200 most recent items"
+          title={`Showing the ${lineItems.length} most recent items`}
           description="Total due and the overdue count cover only these items. The balance includes everything."
         />
       )}

@@ -486,7 +486,7 @@ describe('PaymentPortal', () => {
       await waitFor(() => {
         expect(screen.queryByText(/all caught up/i)).toBeInTheDocument();
       });
-      const notice = screen.queryByText('Showing the 200 most recent items');
+      const notice = screen.queryByText(/most recent items/);
       if (truncated) {
         expect(notice).toBeInTheDocument();
       } else {

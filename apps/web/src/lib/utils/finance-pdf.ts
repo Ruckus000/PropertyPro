@@ -17,6 +17,8 @@ interface FinanceStatementPayload {
   balanceCents: number;
   ledgerEntries: FinanceStatementLedgerEntry[];
   lineItems: FinanceStatementLineItem[];
+  /** Only the newest statement items are listed (see `buildUnitStatement`). */
+  truncated?: boolean;
 }
 
 interface CommunityFinanceStatementLineItem extends FinanceStatementLineItem {
@@ -28,6 +30,8 @@ interface CommunityFinanceStatementPayload {
   balanceCents: number;
   ledgerEntries: FinanceStatementLedgerEntry[];
   lineItems: CommunityFinanceStatementLineItem[];
+  /** Only the newest statement items are listed (see `buildUnitStatement`). */
+  truncated?: boolean;
 }
 
 const PAGE_WIDTH = 612;
@@ -64,11 +68,22 @@ function buildPageContent(lines: string[]): string {
   return ops.join('\n');
 }
 
+/**
+ * A cut statement must not look complete on paper either (roadmap 3.8): the
+ * portal shows a banner, and the PDF prints this note under the balance.
+ */
+function pushTruncationNote(lines: string[], truncated: boolean | undefined, listed: number): void {
+  if (!truncated) return;
+  lines.push(`NOTE: Payables lists only the ${listed} most recent items; older items are omitted.`);
+  lines.push('The Current Balance above includes everything.');
+}
+
 export function generateFinanceStatementPdf(payload: FinanceStatementPayload): Uint8Array {
   const lines: string[] = [];
   lines.push(`Finance Statement - Unit ${payload.unitId}`);
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
+  pushTruncationNote(lines, payload.truncated, payload.lineItems.length);
   lines.push('');
   lines.push('Payables');
   lines.push('Due Date     Status     Amount    Late Fee');
@@ -98,6 +113,7 @@ export function generateCommunityFinanceStatementPdf(
   lines.push(`Community Finance Statement - Community #${payload.communityId}`);
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
+  pushTruncationNote(lines, payload.truncated, payload.lineItems.length);
   lines.push('');
   lines.push('Payables');
   lines.push('Unit        Due Date     Status     Amount    Late Fee');

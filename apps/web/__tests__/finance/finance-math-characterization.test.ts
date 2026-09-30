@@ -173,6 +173,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 import {
   buildCommunityStatement,
+  exportCommunityStatementPdf,
   createAssessmentForCommunity,
   updateAssessmentForCommunity,
   buildUnitStatement,
@@ -1225,6 +1226,14 @@ describe('6. statements', () => {
         level: 'warning',
         extra: { communityId: 11, rows: 210, limit: 200 },
       });
+    });
+
+    it('the community PDF export carries the truncation note through (roadmap 3.8)', async () => {
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 201 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: '2026-03-01' }))));
+      seed(rentObligationsTable, []);
+      const pdf = new TextDecoder().decode(await exportCommunityStatementPdf(11));
+      expect(pdf).toContain('NOTE: Payables lists only the 200 most recent items');
     });
 
     it('EXACTLY 200 items is complete: not truncated, not reported', async () => {

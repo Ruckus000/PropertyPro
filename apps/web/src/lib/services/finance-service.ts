@@ -1754,6 +1754,7 @@ export async function exportCommunityStatementPdf(
       amountCents: item.amountCents,
       lateFeeCents: item.lateFeeCents,
     })),
+    truncated: statement.truncated,
   });
 }
 
