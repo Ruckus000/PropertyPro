@@ -10,10 +10,7 @@ import {
   requireAmenitiesEnabled,
   requireAmenitiesReadPermission,
 } from '@/lib/work-orders/common';
-import {
-  listReservationsForActor,
-  listReservationsForCommunity,
-} from '@/lib/services/work-orders-service';
+import { listReservationsForCommunity } from '@/lib/services/work-orders-service';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { reservationsListContract } from './contract';
 
@@ -35,20 +32,15 @@ export const GET = withErrorHandler(
     const page = rawPage ? parsePositiveInt(rawPage, 'page') : 1;
     const limit = rawLimit ? Math.min(parsePositiveInt(rawLimit, 'limit'), 100) : 20;
 
-    if (isResidentRole(membership.role)) {
-      const all = await listReservationsForActor(communityId, actorUserId);
-      const total = all.length;
-      const offset = (page - 1) * limit;
-      return {
-        data: all.slice(offset, offset + limit),
-        meta: { page, limit, total },
-      };
-    }
-
-    const { data, total } = await listReservationsForCommunity(communityId, {
-      page,
-      limit,
-    });
+    // Residents see only their own reservations. The window is applied in
+    // SQL (LIMIT/OFFSET + COUNT) on both branches — this used to fetch every
+    // reservation the resident ever made and `.slice()` it in JS (PAG-03).
+    const { data, total } = await listReservationsForCommunity(
+      communityId,
+      isResidentRole(membership.role)
+        ? { page, limit, userId: actorUserId }
+        : { page, limit },
+    );
 
     return { data, meta: { page, limit, total } };
   }),

@@ -981,6 +981,39 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     }
   });
 
+  it('leases GET: status / expiring / renewal-chain filters run in SQL on real Postgres (PAG-04)', async () => {
+    const kit = requireState();
+    const appRoutes = requireRoutes();
+    const communityC = requireCommunity(kit, 'communityC');
+    const seeded = requireSeeded();
+    setActor(kit, 'actorC');
+
+    async function ids(query: string): Promise<number[]> {
+      const response = await appRoutes.leases.GET(
+        new NextRequest(apiUrl(`/api/v1/leases?communityId=${communityC.id}${query}`)),
+      );
+      expect(response.status).toBe(200);
+      const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
+      return json.data.map((row) => row['id'] as number);
+    }
+
+    // eq(status) against the lease_status enum.
+    const expired = await ids('&status=expired');
+    expect(expired).toContain(seeded.leaseCDeleteId);
+    expect(expired).not.toContain(seeded.leaseC1Id);
+
+    // An unknown status is answered [] before SQL (no enum-cast 500).
+    expect(await ids('&status=not-a-status')).toEqual([]);
+
+    // status='active' AND end_date IS NOT NULL AND end_date <= <date-only>.
+    const expiring = await ids('&expiring_within_days=36500');
+    expect(expiring).toContain(seeded.leaseC1Id);
+    expect(expiring).not.toContain(seeded.leaseCDeleteId);
+
+    // Chain walk by primary key; a root with no previous lease is a 1-link chain.
+    expect(await ids(`&renewal_chain_for=${seeded.leaseC1Id}`)).toEqual([seeded.leaseC1Id]);
+  });
+
   it('leases GET: actorA (condo) reads leases → 403 (apartment-only gate)', async () => {
     const kit = requireState();
     const appRoutes = requireRoutes();

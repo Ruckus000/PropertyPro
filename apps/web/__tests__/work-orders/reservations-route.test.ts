@@ -10,7 +10,6 @@ const {
   requireAmenitiesEnabledMock,
   requireAmenitiesReadPermissionMock,
   requirePlanFeatureMock,
-  listReservationsForActorMock,
   listReservationsForCommunityMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -21,7 +20,6 @@ const {
   requireAmenitiesEnabledMock: vi.fn(),
   requireAmenitiesReadPermissionMock: vi.fn(),
   requirePlanFeatureMock: vi.fn(),
-  listReservationsForActorMock: vi.fn(),
   listReservationsForCommunityMock: vi.fn(),
 }));
 
@@ -53,7 +51,6 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
 }));
 
 vi.mock('@/lib/services/work-orders-service', () => ({
-  listReservationsForActor: listReservationsForActorMock,
   listReservationsForCommunity: listReservationsForCommunityMock,
 }));
 
@@ -103,7 +100,6 @@ describe('GET /api/v1/reservations', () => {
     requirePlanFeatureMock.mockResolvedValue(undefined);
     requireAmenitiesReadPermissionMock.mockReturnValue(undefined);
     isResidentRoleMock.mockReturnValue(false);
-    listReservationsForActorMock.mockResolvedValue([]);
     listReservationsForCommunityMock.mockResolvedValue({
       data: [RESERVATION_ITEM],
       total: 1,
@@ -120,7 +116,6 @@ describe('GET /api/v1/reservations', () => {
       page: 1,
       limit: 100,
     });
-    expect(listReservationsForActorMock).not.toHaveBeenCalled();
 
     const authOrder = requireAuthenticatedUserIdMock.mock.invocationCallOrder[0]!;
     const communityOrder = parseCommunityIdFromQueryMock.mock.invocationCallOrder[0]!;
@@ -142,23 +137,28 @@ describe('GET /api/v1/reservations', () => {
     expect(json.data.data[0]?.id).toBe(11);
   });
 
-  it('preserves resident branch slicing behavior', async () => {
+  it('windows the resident branch in SQL, scoped to the actor (PAG-03)', async () => {
     requireAuthenticatedUserIdMock.mockResolvedValueOnce('user-resident-1');
     requireCommunityMembershipMock.mockResolvedValueOnce(RESIDENT_MEMBERSHIP);
     isResidentRoleMock.mockReturnValueOnce(true);
-    listReservationsForActorMock.mockResolvedValueOnce([
-      { ...RESERVATION_ITEM, id: 21 },
-      { ...RESERVATION_ITEM, id: 22 },
-      { ...RESERVATION_ITEM, id: 23 },
-    ]);
+    // The service returns exactly one page plus the SQL count — the route
+    // must pass it through without re-slicing.
+    listReservationsForCommunityMock.mockResolvedValueOnce({
+      data: [{ ...RESERVATION_ITEM, id: 22 }],
+      total: 3,
+    });
 
     const res = await GET(
       new NextRequest('http://localhost:3000/api/v1/reservations?communityId=42&page=2&limit=1'),
     );
 
     expect(res.status).toBe(200);
-    expect(listReservationsForActorMock).toHaveBeenCalledWith(42, 'user-resident-1');
-    expect(listReservationsForCommunityMock).not.toHaveBeenCalled();
+    expect(listReservationsForCommunityMock).toHaveBeenCalledTimes(1);
+    expect(listReservationsForCommunityMock).toHaveBeenCalledWith(42, {
+      page: 2,
+      limit: 1,
+      userId: 'user-resident-1',
+    });
 
     const json = (await res.json()) as {
       data: { data: Array<{ id: number }>; meta: { page: number; limit: number; total: number } };

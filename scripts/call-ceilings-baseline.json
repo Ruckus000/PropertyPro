@@ -175,9 +175,6 @@
   "apps/web/src/lib/services/insurance-service.ts": {
     "fullTableRead": 2
   },
-  "apps/web/src/lib/services/lease-service.ts": {
-    "fullTableRead": 1
-  },
   "apps/web/src/lib/services/marketing-leads-service.ts": {
     "unscoped": 1
   },

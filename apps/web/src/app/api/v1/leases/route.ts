@@ -63,14 +63,12 @@ import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
-import {
-  getExpiringLeases,
-  getRenewalChain,
-  type LeaseRecord,
-} from '@/lib/services/lease-expiration-service';
+import { getExpiringLeases, type LeaseRecord } from '@/lib/services/lease-expiration-service';
 import {
   createLeaseForCommunity,
   getLeaseById,
+  getLeaseRenewalChain,
+  getRenewalOfLease,
   getTenantRoleForLease,
   getUnitLeaseDefaults,
   listLeasesForCommunity,
@@ -82,6 +80,7 @@ import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
+  LEASE_STATUS_VALUES,
   leasesGetContract,
   leasesPostContract,
   leasesPatchContract,
@@ -127,6 +126,18 @@ type LeaseLikeRow = {
   status: string;
   previousLeaseId: number | null;
 };
+
+/** `referenceDate`'s UTC calendar day plus `days`, as YYYY-MM-DD. */
+function utcDateOnlyPlusDays(referenceDate: Date, days: number): string {
+  const d = new Date(
+    Date.UTC(
+      referenceDate.getUTCFullYear(),
+      referenceDate.getUTCMonth(),
+      referenceDate.getUTCDate() + days,
+    ),
+  );
+  return d.toISOString().slice(0, 10);
+}
 
 function parseIsoDateOnly(value: string, fieldName: string): Date {
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -247,6 +258,10 @@ export const GET = withErrorHandler(
     // `notes` is manager-internal (product decision 2026-09-24, #1172): a party
     // sees their own lease rows, but never the notes a manager wrote on them.
     // Redacted here so the list AND the renewal-chain path both inherit it.
+    //
+    // Since PAG-04 the party scope is ALSO pushed into SQL (`partyScope`
+    // below), so a non-manager's read never loads a neighbour's row. The JS
+    // filter here stays as a second fence on the same boundary.
     const seesAllLeases = isAdminRole(membership.role);
     const visibleToActor = (records: LeaseRecord[]): LeaseRecord[] =>
       seesAllLeases
@@ -255,53 +270,71 @@ export const GET = withErrorHandler(
             .filter((l) => l.residentId === actorUserId)
             .map((l) => ({ ...l, notes: null }));
 
-    const rows = await listLeasesForCommunity(communityId);
-    let leaseRecords = visibleToActor(rows.map(coerceLeaseRecord));
-
     // Optional filters — parsed manually from the URL to preserve the
     // pre-migration lenient semantics (malformed values are silently ignored,
-    // not 400-ed). See contract.ts.
+    // not 400-ed). See contract.ts. Every filter is applied IN SQL (PAG-04);
+    // the party scope above is pushed down as `resident_id = actor` too.
     const { searchParams } = new URL(req.url);
+    const partyScope = seesAllLeases ? {} : { residentId: actorUserId };
 
-    const statusFilter = searchParams.get('status');
-    if (statusFilter) {
-      leaseRecords = leaseRecords.filter((l) => l.status === statusFilter);
-    }
-
-    const unitFilter = searchParams.get('unit');
-    if (unitFilter) {
-      const unitId = Number(unitFilter);
-      if (Number.isInteger(unitId) && unitId > 0) {
-        leaseRecords = leaseRecords.filter((l) => l.unitId === unitId);
-      }
-    }
-
-    // Expiring within N days filter
-    const expiringWithinDays = searchParams.get('expiring_within_days');
-    if (expiringWithinDays) {
-      const days = Number(expiringWithinDays);
-      if (Number.isInteger(days) && days > 0) {
-        leaseRecords = getExpiringLeases(leaseRecords, days);
-      }
-    }
-
-    // If requesting a specific lease's renewal chain
+    // Renewal chain: walked link-by-link through `previous_lease_id` over the
+    // actor-visible rows, so a chain rooted at someone else's lease yields an
+    // empty array rather than that tenant's rental history. Checked first —
+    // it replaces the list response, so the list is not read at all.
     const chainFor = searchParams.get('renewal_chain_for');
     if (chainFor) {
       const leaseId = Number(chainFor);
       if (Number.isInteger(leaseId) && leaseId > 0) {
-        // Need all leases (not just active) for chain traversal — but all
-        // leases VISIBLE TO THE ACTOR, the same party-scoped set the list above
-        // uses, so asking for a chain rooted at someone else's lease yields an
-        // empty array rather than that tenant's rental history.
-        const allRows = await listLeasesForCommunity(communityId);
-        const allLeases = visibleToActor(allRows.map(coerceLeaseRecord));
-        const chain = getRenewalChain(leaseId, allLeases);
-        return chain;
+        const chainRows = await getLeaseRenewalChain(communityId, leaseId, partyScope);
+        return visibleToActor(chainRows.map(coerceLeaseRecord));
       }
     }
 
-    return leaseRecords;
+    const statusFilter = searchParams.get('status');
+    if (statusFilter && !(LEASE_STATUS_VALUES as readonly string[]).includes(statusFilter)) {
+      // Not a lease_status value: nothing can match. Answer [] here instead
+      // of letting Postgres reject the enum cast with a 500 — the pre-pushdown
+      // JS filter returned [] for this too.
+      return [];
+    }
+
+    let unitId: number | undefined;
+    const unitFilter = searchParams.get('unit');
+    if (unitFilter) {
+      const parsed = Number(unitFilter);
+      if (Number.isInteger(parsed) && parsed > 0) unitId = parsed;
+    }
+
+    // Expiring within N days: the window predicate is pushed into SQL;
+    // getExpiringLeases still runs over the (already-matching) rows because it
+    // owns `daysUntilExpiration` and the soonest-first sort. One reference
+    // date feeds both so they cannot disagree across a UTC midnight.
+    let expiringDays: number | undefined;
+    const expiringWithinDays = searchParams.get('expiring_within_days');
+    if (expiringWithinDays) {
+      const days = Number(expiringWithinDays);
+      if (Number.isInteger(days) && days > 0) expiringDays = days;
+    }
+    const referenceDate = new Date();
+
+    const { rows, truncated } = await listLeasesForCommunity(communityId, {
+      ...partyScope,
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(unitId !== undefined ? { unitId } : {}),
+      ...(expiringDays !== undefined
+        ? { activeEndingOnOrBefore: utcDateOnlyPlusDays(referenceDate, expiringDays) }
+        : {}),
+    });
+    if (truncated) {
+      console.warn('[leases] GET list hit LEASE_LIST_MAX_ROWS; oldest rows dropped', {
+        communityId,
+      });
+    }
+
+    const leaseRecords = visibleToActor(rows.map(coerceLeaseRecord));
+    return expiringDays !== undefined
+      ? getExpiringLeases(leaseRecords, expiringDays, referenceDate)
+      : leaseRecords;
   }),
 );
 
@@ -337,8 +370,12 @@ export const POST = withErrorHandler(
 
     validateLeaseDateWindow(payload.startDate, payload.endDate ?? null);
 
-    const existingLeaseRows = await listLeasesForCommunity(communityId);
-    const existingLeases = existingLeaseRows as unknown as LeaseLikeRow[];
+    // Overlap can only occur within the candidate's unit, so read that unit's
+    // leases rather than the whole community's (PAG-04).
+    const { rows: unitLeaseRows } = await listLeasesForCommunity(communityId, {
+      unitId: payload.unitId,
+    });
+    const existingLeases = unitLeaseRows as unknown as LeaseLikeRow[];
     ensureNoUnitLeaseOverlap(
       {
         unitId: payload.unitId,
@@ -356,8 +393,12 @@ export const POST = withErrorHandler(
       if (!previousLeaseId) {
         throw new ValidationError('previousLeaseId is required when creating a renewal lease');
       }
-      // Verify the previous lease exists in this community
-      const previousLease = existingLeases.find((row) => row.id === previousLeaseId);
+      // Verify the previous lease exists in this community (any unit — a
+      // different unit is rejected by ensureRenewalContinuity below).
+      const previousLease = (await getLeaseById(
+        communityId,
+        previousLeaseId,
+      )) as unknown as LeaseLikeRow | null;
       if (!previousLease) {
         throw new ValidationError('Previous lease not found in this community');
       }
@@ -497,8 +538,11 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('No fields to update');
     }
 
-    const allRows = await listLeasesForCommunity(communityId);
-    const allLeases = allRows as unknown as LeaseLikeRow[];
+    // Same-unit leases only: overlap cannot cross units (PAG-04).
+    const { rows: unitLeaseRows } = await listLeasesForCommunity(communityId, {
+      unitId: existing['unitId'] as number,
+    });
+    const unitLeases = unitLeaseRows as unknown as LeaseLikeRow[];
     const candidateEndDate =
       fields.endDate !== undefined ? fields.endDate : ((existing['endDate'] as string | null) ?? null);
     ensureNoUnitLeaseOverlap(
@@ -508,10 +552,10 @@ export const PATCH = withErrorHandler(
         startDate: existing['startDate'] as string,
         endDate: candidateEndDate,
       },
-      allLeases,
+      unitLeases,
     );
 
-    const renewalLease = allLeases.find((row) => row.previousLeaseId === id);
+    const renewalLease = (await getRenewalOfLease(communityId, id)) as unknown as LeaseLikeRow | null;
     if (renewalLease && candidateEndDate) {
       ensureRenewalContinuity(
         {

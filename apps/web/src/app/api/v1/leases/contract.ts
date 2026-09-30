@@ -75,7 +75,10 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
-const leaseStatusValues = ['active', 'expired', 'renewed', 'terminated'] as const;
+/** The `lease_status` enum values. The GET handler also uses this to answer
+ *  an unknown `?status=` with `[]` before it reaches SQL (PAG-04). */
+export const LEASE_STATUS_VALUES = ['active', 'expired', 'renewed', 'terminated'] as const;
+const leaseStatusValues = LEASE_STATUS_VALUES;
 
 const getQuerySchema = z.object({
   communityId: z.coerce.number().int().positive(),

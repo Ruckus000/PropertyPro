@@ -98,7 +98,9 @@ describeDb('WS70 calendar/accounting connectors (db-backed integration)', () => 
     await scopedA.insert(state.dbModule.meetings, {
       title: `WS70 Board Meeting ${state.runSuffix}`,
       meetingType: 'board',
-      startsAt: new Date('2026-06-20T14:00:00.000Z'),
+      // Relative, not a fixed date: the Google sync pushes only
+      // [now - 30d, now + 366d) (PAG-05), and a fixed date ages out of it.
+      startsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       location: 'Clubhouse A',
     });
 
