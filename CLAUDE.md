@@ -171,6 +171,8 @@ pnpm --filter @propertypro/db db:migrate  # Run migrations
 pnpm test:integration:local                       # whole suite (add a path for one file)
 pnpm db:test-local:setup                           # just create/migrate the local DB
 pnpm db:test-local:reset                           # clean slate (drop + recreate + migrate)
+# One packages/db integration file (the runner above only passes paths to apps/web's config):
+DATABASE_URL="$(scripts/local-test-db.sh url)" pnpm --filter @propertypro/db exec vitest run --config vitest.integration.config.ts __tests__/<file>
 
 # ⚠️ Integration tests against .env.local's DATABASE_URL — which is PRODUCTION.
 # Avoid; this is how test communities leaked into prod. Prefer the local runner above.
