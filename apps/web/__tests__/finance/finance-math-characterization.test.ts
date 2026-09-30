@@ -880,16 +880,15 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
   describe('in America/New_York', () => {
     inTimeZone('America/New_York', 19);
 
-    it('a start date on the 1st reads as the PREVIOUS month, so quarterly/annual miss their own start month', async () => {
-      // CHARACTERIZATION: suspected defect — shouldGenerateThisMonth parses startDate
-      // as UTC midnight and then reads it with LOCAL getMonth(); `now.getMonth()` is
-      // local too. In New York, '2026-04-01T00:00Z' is 20:00 on March 31, so the start
-      // month is 3. The 05:00 UTC run on April 1 (01:00 EDT, local month 4) then
-      // computes (4 - 3) % 3 = 1 and skips; the annual one waits for March. On UTC
-      // (Vercel) both generate in April.
+    it('a start date on the 1st is its own month, so quarterly/annual generate in their start month', async () => {
+      // Fixed 2026-09-30 (was a suspected defect: shouldGenerateThisMonth parsed
+      // startDate as UTC midnight and read it with LOCAL getMonth(), so in New York
+      // '2026-04-01T00:00Z' — 20:00 on March 31 — gave start month 3, and the 05:00
+      // UTC run on April 1 skipped both). Now guaranteed: the start month is read
+      // from the string, the same way billingPeriodFor reads it.
       const quarterly = await runInMonth(4, { frequency: 'quarterly', startDate: '2026-04-01' });
       const annual = await runInMonth(4, { frequency: 'annual', startDate: '2026-04-01' });
-      expect([quarterly.assessmentsProcessed, annual.assessmentsProcessed]).toEqual([0, 0]);
+      expect([quarterly.assessmentsProcessed, annual.assessmentsProcessed]).toEqual([1, 1]);
     });
   });
 

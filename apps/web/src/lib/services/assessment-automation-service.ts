@@ -400,12 +400,14 @@ function shouldGenerateThisMonth(
     case 'monthly':
       return true;
     case 'quarterly': {
-      // Generate in months that align with the start month's quarter cycle
-      const startMonth = new Date(`${startDate}T00:00:00.000Z`).getMonth() + 1;
+      // Generate in months that align with the start month's quarter cycle.
+      // The month is read from the string, as billingPeriodFor reads it: a
+      // UTC-parsed date read with local getMonth() is the previous month west of UTC.
+      const startMonth = Number(startDate.slice(5, 7));
       return (currentMonth - startMonth) % 3 === 0;
     }
     case 'annual': {
-      const startMonth = new Date(`${startDate}T00:00:00.000Z`).getMonth() + 1;
+      const startMonth = Number(startDate.slice(5, 7));
       return currentMonth === startMonth;
     }
     case 'one_time':
