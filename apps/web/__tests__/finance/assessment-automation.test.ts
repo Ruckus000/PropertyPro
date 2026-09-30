@@ -118,7 +118,9 @@ describe('assessment-automation-service', () => {
       mockSelectFrom.mockResolvedValueOnce([
         { id: 1, lateFeeAmountCents: 2500, lateFeeDaysGrace: 15 },
       ]);
-      mockUpdate.mockResolvedValue(undefined);
+      // The fee UPDATE is conditional (`id = ? AND late_fee_cents = 0`) and the
+      // ledger post is gated on it returning the row, as the real scoped client does.
+      mockUpdate.mockResolvedValue([{ id: 10, lateFeeCents: 2500 }]);
       mockPostLedgerEntry.mockResolvedValue(undefined);
 
       const summary = await processLateFees(new Date('2026-03-01'));

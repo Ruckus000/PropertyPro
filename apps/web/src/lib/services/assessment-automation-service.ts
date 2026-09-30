@@ -224,13 +224,27 @@ export async function processLateFees(
         );
         if (daysOverdue <= assessment.lateFeeDaysGrace) continue;
 
-        // Apply late fee
+        // Apply late fee — conditionally. The SELECT above is not a lock: two
+        // overlapping runs (a cron retry, a manual re-trigger) can both read this
+        // row at lateFeeCents 0. The `late_fee_cents = 0` predicate makes the
+        // UPDATE the arbiter, and only the run whose UPDATE matched a row posts
+        // the ledger entry, so the fee is charged once.
+        //
+        // Not one transaction: the scoped client exposes no transaction API and
+        // postLedgerEntry writes through the scoped client. The residual window
+        // (process dies between UPDATE and post) under-posts rather than
+        // double-posts, and leaves a line item carrying a fee with no ledger row,
+        // which is visible and repairable; a double charge is neither.
         const feeCents = assessment.lateFeeAmountCents;
-        await scoped.update(
+        const updatedRows = await scoped.update(
           assessmentLineItems,
           { lateFeeCents: feeCents },
-          eq(assessmentLineItems.id, item.id),
+          and(
+            eq(assessmentLineItems.id, item.id),
+            eq(assessmentLineItems.lateFeeCents, 0),
+          ),
         );
+        if (updatedRows.length === 0) continue;
 
         // Post ledger entry for the late fee
         await postLedgerEntry(scoped, {

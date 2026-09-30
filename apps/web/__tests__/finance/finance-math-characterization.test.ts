@@ -570,20 +570,42 @@ describe('2. flat, non-compounding late fee (processLateFees)', () => {
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
   });
 
-  it('writes the fee with a where-clause of the row id alone', async () => {
-    // CHARACTERIZATION: suspected defect — the UPDATE is keyed on `id` only, not
-    // `id AND late_fee_cents = 0`, and the ledger post is unconditional. Idempotency
-    // rests entirely on the SELECT predicate, so two overlapping runs (a cron retry
-    // while the first is still going, or a manual re-trigger) that both read the row
-    // at lateFeeCents 0 each post a `fee` ledger entry: the line item says 2500, the
-    // ledger says 5000.
+  it('writes the fee only where lateFeeCents is still 0, and posts the ledger entry only for a row it updated', async () => {
+    // Fixed 2026-09-30 (was a suspected defect: the UPDATE was keyed on `id` alone
+    // and the ledger post was unconditional, so two overlapping runs that both read
+    // the row at lateFeeCents 0 each posted a `fee` entry). Now guaranteed: the
+    // UPDATE is `id = ? AND late_fee_cents = 0`, and a run whose UPDATE matched no
+    // row (another run got there first) posts nothing and counts nothing.
     seed(assessmentLineItemsTable, [lineItem({ id: 10, status: 'overdue', dueDate: '2026-01-01' })]);
     await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
     expect(updateMock).toHaveBeenCalledWith(
       assessmentLineItemsTable,
       { lateFeeCents: 2500 },
-      { op: 'eq', column: assessmentLineItemsTable.id, value: 10 },
+      {
+        op: 'and',
+        args: [
+          { op: 'eq', column: assessmentLineItemsTable.id, value: 10 },
+          { op: 'eq', column: assessmentLineItemsTable.lateFeeCents, value: 0 },
+        ],
+      },
     );
+    expect(postLedgerEntryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('an overlapping run that loses the race to the UPDATE posts no second fee', async () => {
+    seed(assessmentLineItemsTable, [lineItem({ id: 10, status: 'overdue', dueDate: '2026-01-01' })]);
+    // Both runs SELECT the row at lateFeeCents 0; the other run's UPDATE lands
+    // between this run's SELECT and its own UPDATE.
+    const realUpdate = updateMock.getMockImplementation()!;
+    updateMock.mockImplementationOnce(async (table: object, patch: Row, where: Predicate) => {
+      const row = rowsOf(assessmentLineItemsTable).find((r) => r.id === 10)!;
+      row.lateFeeCents = 2500;
+      return realUpdate(table, patch, where);
+    });
+    const summary = await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
+    expect(summary).toMatchObject({ feesApplied: 0, totalFeeCents: 0 });
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    expect(rowsOf(assessmentLineItemsTable)[0]?.lateFeeCents).toBe(2500);
   });
 
   it.each([0, -100])('an assessment fee of %i cents is skipped', async (feeCents) => {
