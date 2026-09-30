@@ -1296,21 +1296,67 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
-  it('idempotency is keyed on dueDate: changing dueDay mid-period generates a second charge', async () => {
-    // CHARACTERIZATION: suspected defect — the "already generated" set is looked up by
-    // (assessmentId, dueDate), not by period. Edit an assessment's dueDay from 1 to 15
-    // after April's run and the next run (manual or cron) charges every unit a second
-    // April installment, due 04-15, with its own ledger `assessment` entry. Nor is
-    // there a database backstop: assessment_line_items has no unique index on
-    // (assessment_id, unit_id, due_date), so two concurrent generations for the same
-    // period (cron + manual button) can each read an empty existing set and both
-    // insert — the check-then-insert is not atomic.
+  it('idempotency is keyed on the billing period: changing dueDay mid-period does not charge the period twice', async () => {
+    // Fixed 2026-09-30 (was a suspected defect: the "already generated" set was
+    // looked up by (assessmentId, dueDate), so editing dueDay from 1 to 15 after
+    // April's run made the next run charge every unit a second April installment).
+    // Now guaranteed: the lookup is by the assessment's PERIOD — the calendar month
+    // for monthly — so any April item for this assessment counts as April billed.
+    // App-level only: assessment_line_items still has no unique index, so two
+    // concurrent generations can each read an empty set (deferred — roadmap 3.T2).
     seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
       lineItem({ id: unitId, assessmentId: 7, unitId, dueDate: '2026-04-01' })));
     seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 15, amountCents: 30000 })]);
 
     const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
-    expect(result).toEqual({ insertedCount: 3, skippedCount: 0, dueDate: '2026-04-15' });
+    expect(result).toEqual({ insertedCount: 0, skippedCount: 3, dueDate: '2026-04-15' });
+    expect(insertMock).not.toHaveBeenCalled();
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+  });
+
+  it('monthly period bounds: the last day of the previous month and the first of the next do not count', async () => {
+    seed(assessmentLineItemsTable, [
+      lineItem({ id: 1, assessmentId: 7, unitId: 1, dueDate: '2026-03-31' }),
+      lineItem({ id: 2, assessmentId: 7, unitId: 2, dueDate: '2026-05-01' }),
+      lineItem({ id: 3, assessmentId: 7, unitId: 3, dueDate: '2026-04-30' }),
+    ]);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(result).toEqual({ insertedCount: 2, skippedCount: 1, dueDate: '2026-04-01' });
+  });
+
+  it('an override date inside an already-billed month is skipped; one in another month is billed', async () => {
+    seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
+      lineItem({ id: unitId, assessmentId: 7, unitId, dueDate: '2026-04-01' })));
+    const sameMonth = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-04-20');
+    expect(sameMonth).toEqual({ insertedCount: 0, skippedCount: 3, dueDate: '2026-04-20' });
+    const nextMonth = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-05-20');
+    expect(nextMonth).toEqual({ insertedCount: 3, skippedCount: 0, dueDate: '2026-05-20' });
+  });
+
+  it.each([
+    // [label, frequency, startDate, existing dueDate, now, expected inserted]
+    ['quarterly: an item in the quarter\'s first month blocks a mid-quarter run', 'quarterly', '2025-05-01', '2026-02-01', '2026-03-10T12:00:00.000Z', 0],
+    ['quarterly: the quarter window is anchored on the start month (Feb-Apr), so a Jan item does not block March', 'quarterly', '2025-05-01', '2026-01-01', '2026-03-10T12:00:00.000Z', 3],
+    ['quarterly: the next quarter is a new period', 'quarterly', '2025-05-01', '2026-02-01', '2026-05-10T12:00:00.000Z', 3],
+    ['annual: an item earlier in the assessment year blocks a later run', 'annual', '2025-09-10', '2025-09-01', '2026-08-10T12:00:00.000Z', 0],
+    ['annual: the next assessment year is a new period', 'annual', '2025-09-10', '2025-09-01', '2026-09-10T12:00:00.000Z', 3],
+  ])('%s', async (_label, frequency, startDate, existingDueDate, nowIso, expectedInserted) => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency, startDate, dueDay: 1, amountCents: 30000 })]);
+    seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
+      lineItem({ id: unitId, assessmentId: 7, unitId, dueDate: existingDueDate })));
+    setNow(nowIso);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(result.insertedCount).toBe(expectedInserted);
+  });
+
+  it('one_time keeps exact-dueDate idempotency', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'one_time', startDate: '2026-04-20', amountCents: 30000 })]);
+    seed(assessmentLineItemsTable, [
+      lineItem({ id: 1, assessmentId: 7, unitId: 1, dueDate: '2026-04-20' }),
+      lineItem({ id: 2, assessmentId: 7, unitId: 2, dueDate: '2026-04-01' }),
+    ]);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(result).toEqual({ insertedCount: 2, skippedCount: 1, dueDate: '2026-04-20' });
   });
 
   it('a community with no units is a 422', async () => {

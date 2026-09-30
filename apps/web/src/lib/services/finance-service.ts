@@ -366,6 +366,45 @@ function computeDueDate(
   return format(candidate, 'yyyy-MM-dd');
 }
 
+/** 'yyyy-MM-dd' → months since year 0 (0-based month), read from the string. */
+function monthIndexOf(dateOnly: string): number {
+  return Number(dateOnly.slice(0, 4)) * 12 + (Number(dateOnly.slice(5, 7)) - 1);
+}
+
+function firstOfMonthIndex(index: number): string {
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+}
+
+/**
+ * The billing period a recurring assessment's due date falls in, as a
+ * half-open `[start, endExclusive)` range of 'yyyy-MM-dd' strings — the
+ * "already generated" check is keyed on this, not on the exact due date, so a
+ * dueDay edit (or an override elsewhere in the same period) cannot bill the
+ * period twice.
+ *
+ * monthly → the calendar month. quarterly / annual → the 3- / 12-month window
+ * anchored on the start date's month, the same anchor shouldGenerateThisMonth
+ * uses for cadence. one_time → null (keyed on the exact due date, as before).
+ * Pure string arithmetic: no Date parsing, so no time-zone dependence.
+ */
+function billingPeriodFor(
+  assessment: Pick<AssessmentRecord, 'frequency' | 'startDate'>,
+  dueDate: string,
+): { start: string; endExclusive: string } | null {
+  const months =
+    assessment.frequency === 'monthly' ? 1
+      : assessment.frequency === 'quarterly' ? 3
+        : assessment.frequency === 'annual' ? 12
+          : null;
+  if (months === null) return null;
+  const dueIndex = monthIndexOf(dueDate);
+  const offset = (((dueIndex - monthIndexOf(assessment.startDate)) % months) + months) % months;
+  const startIndex = dueIndex - offset;
+  return { start: firstOfMonthIndex(startIndex), endExclusive: firstOfMonthIndex(startIndex + months) };
+}
+
 function toLineItemDescription(assessment: AssessmentRecord, dueDate: string): string {
   return `${assessment.title} (${dueDate})`;
 }
@@ -647,13 +686,24 @@ export async function generateAssessmentLineItemsForCommunity(
     throw new UnprocessableEntityError('Cannot generate line items: no units found for this community');
   }
 
+  // "Already generated" = any item for this assessment in the same billing
+  // period (see billingPeriodFor). App-level only: assessment_line_items has
+  // no unique index, so two concurrent generations can still both read an
+  // empty set — a DB backstop is a separate migration decision (roadmap 3.T2).
+  const period = billingPeriodFor(assessment, dueDate);
   const existingRows = await scoped.selectFrom<AssessmentLineItemRecord>(
     assessmentLineItems,
     {},
-    and(
-      eq(assessmentLineItems.assessmentId, assessmentId),
-      eq(assessmentLineItems.dueDate, dueDate),
-    ),
+    period
+      ? and(
+        eq(assessmentLineItems.assessmentId, assessmentId),
+        gte(assessmentLineItems.dueDate, period.start),
+        lt(assessmentLineItems.dueDate, period.endExclusive),
+      )
+      : and(
+        eq(assessmentLineItems.assessmentId, assessmentId),
+        eq(assessmentLineItems.dueDate, dueDate),
+      ),
   );
   const existingUnitIds = new Set(existingRows.map((row) => row.unitId));
 
