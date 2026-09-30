@@ -749,12 +749,14 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
 
   // (m - 5) % 3 === 0 → {2, 5, 8, 11}. For m < 5 the difference is negative, and
   // JS `%` keeps the sign: (2-5)%3 is -0, which `=== 0` accepts, while (1-5)%3 is
-  // -1. So months before the start month still land on the right cycle.
+  // -1. So months before the start month still land on the right cycle. The start
+  // is in the PREVIOUS year so the startDate bound (no period before the start
+  // month) does not mask the cadence in months 1-4.
   it.each([
     [1, false], [2, true], [3, false], [4, false], [5, true], [6, false],
     [7, false], [8, true], [9, false], [10, false], [11, true], [12, false],
   ])('quarterly anchored on a May start: month %i generates=%s', async (month, expected) => {
-    const summary = await runInMonth(month, { frequency: 'quarterly', startDate: '2026-05-01' });
+    const summary = await runInMonth(month, { frequency: 'quarterly', startDate: '2025-05-01' });
     expect(summary.assessmentsProcessed).toBe(expected ? 1 : 0);
   });
 
@@ -815,14 +817,22 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
     expect(generatedDueDates()).toEqual(['2026-04-15']);
   });
 
-  it('startDate is not checked: a monthly assessment starting in the future generates now', async () => {
-    // CHARACTERIZATION: suspected defect — nothing compares `now` with startDate for
-    // recurring frequencies, so a monthly assessment created today with a September
-    // start posts an April charge (line item + ledger `assessment` entry) at the
-    // next cron run.
-    const summary = await runInMonth(4, { frequency: 'monthly', startDate: '2026-09-01' });
-    expect(summary.assessmentsProcessed).toBe(1);
-    expect(generatedDueDates()).toEqual(['2026-04-01']);
+  it.each([
+    ['monthly', '2026-09-01', 4, false],
+    ['monthly', '2026-04-20', 4, true],
+    ['monthly', '2026-03-31', 4, true],
+    ['quarterly', '2026-07-01', 4, false],
+    ['annual', '2027-04-01', 4, false],
+  ])('%s starting %s: the month-%i period is billed=%s (months before the start month are skipped)', async (frequency, startDate, month, expected) => {
+    // Fixed 2026-09-30 (was a suspected defect: nothing compared the period with
+    // startDate, so a monthly assessment created today with a September start posted
+    // an April charge — line item + ledger `assessment` entry — at the next cron
+    // run). Now guaranteed for every recurring frequency: a period is billed only
+    // from the start date's month on. Month-granular, like endDate: a start mid-month
+    // bills that month.
+    const summary = await runInMonth(month, { frequency, startDate });
+    expect(summary.assessmentsProcessed).toBe(expected ? 1 : 0);
+    expect(generatedDueDates()).toEqual(expected ? ['2026-04-01'] : []);
   });
 
   it('the `now` argument gates the month, but the due date comes from the wall clock', async () => {

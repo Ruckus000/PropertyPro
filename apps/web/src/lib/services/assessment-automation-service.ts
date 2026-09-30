@@ -354,6 +354,11 @@ export async function processRecurringAssessments(
           continue;
         }
 
+        // Check start date, at the same month granularity: no period before the
+        // start date's month is billed (a future-start assessment used to charge
+        // at the next cron run).
+        if (periodMonth < assessment.startDate.slice(0, 7)) continue;
+
         // Check end date. endDate is a calendar date, compared at MONTH
         // granularity and inclusive: a period is billed iff its first day is on
         // or before endDate, so "ends 2026-04-01" bills April. (Comparing `now`
