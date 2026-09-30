@@ -68,6 +68,13 @@
  *     return 400.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
+import { isCalendarDate } from '@/lib/finance/date-only';
+
+// A real calendar date: the regex alone let '2026-02-31' reach the UPDATE (500).
+const dateOnlySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => isCalendarDate(value), 'must be a valid calendar date');
 
 const paramsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -82,10 +89,14 @@ const updateBodySchema = z.object({
   dueDay: z.number().int().min(1).max(31).nullable().optional(),
   lateFeeAmountCents: z.number().int().min(0).optional(),
   lateFeeDaysGrace: z.number().int().min(0).optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  startDate: dateOnlySchema.optional(),
+  endDate: dateOnlySchema.nullable().optional(),
   isActive: z.boolean().optional(),
-});
+}).refine(
+  // Only when both arrive together: a lone date is checked against nothing here.
+  (body) => !body.startDate || !body.endDate || body.endDate >= body.startDate,
+  { message: 'endDate must be on or after startDate', path: ['endDate'] },
+);
 
 const deleteQuerySchema = z.object({
   communityId: z.coerce.number().int().positive(),
