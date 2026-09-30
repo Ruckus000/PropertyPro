@@ -228,7 +228,8 @@ export async function processLateFees(
         // overlapping runs (a cron retry, a manual re-trigger) can both read this
         // row at lateFeeCents 0. The `late_fee_cents = 0` predicate makes the
         // UPDATE the arbiter, and only the run whose UPDATE matched a row posts
-        // the ledger entry, so the fee is charged once.
+        // the ledger entry, so the fee is charged once. `status = 'overdue'` is
+        // re-checked for the same reason: an item paid after the SELECT gets no fee.
         //
         // Not one transaction: the scoped client exposes no transaction API and
         // postLedgerEntry writes through the scoped client. The residual window
@@ -241,6 +242,7 @@ export async function processLateFees(
           { lateFeeCents: feeCents },
           and(
             eq(assessmentLineItems.id, item.id),
+            eq(assessmentLineItems.status, 'overdue'),
             eq(assessmentLineItems.lateFeeCents, 0),
           ),
         );

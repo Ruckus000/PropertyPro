@@ -585,6 +585,7 @@ describe('2. flat, non-compounding late fee (processLateFees)', () => {
         op: 'and',
         args: [
           { op: 'eq', column: assessmentLineItemsTable.id, value: 10 },
+          { op: 'eq', column: assessmentLineItemsTable.status, value: 'overdue' },
           { op: 'eq', column: assessmentLineItemsTable.lateFeeCents, value: 0 },
         ],
       },
@@ -606,6 +607,22 @@ describe('2. flat, non-compounding late fee (processLateFees)', () => {
     expect(summary).toMatchObject({ feesApplied: 0, totalFeeCents: 0 });
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
     expect(rowsOf(assessmentLineItemsTable)[0]?.lateFeeCents).toBe(2500);
+  });
+
+  it('an item paid between the overdue SELECT and the fee UPDATE gets no fee and no ledger post', async () => {
+    // The UPDATE re-checks `status = 'overdue'`: the SELECT is not a lock, so a
+    // payment landing in between must not be followed by a late fee on a paid item.
+    seed(assessmentLineItemsTable, [lineItem({ id: 10, status: 'overdue', dueDate: '2026-01-01' })]);
+    const realUpdate = updateMock.getMockImplementation()!;
+    updateMock.mockImplementationOnce(async (table: object, patch: Row, where: Predicate) => {
+      const row = rowsOf(assessmentLineItemsTable).find((r) => r.id === 10)!;
+      row.status = 'paid';
+      return realUpdate(table, patch, where);
+    });
+    const summary = await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
+    expect(summary).toMatchObject({ feesApplied: 0, totalFeeCents: 0 });
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    expect(rowsOf(assessmentLineItemsTable)[0]).toMatchObject({ status: 'paid', lateFeeCents: 0 });
   });
 
   it.each([0, -100])('an assessment fee of %i cents is skipped', async (feeCents) => {
