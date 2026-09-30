@@ -80,9 +80,10 @@ export async function submitAccessRequest(params: {
 
   // Check for existing pending_verification request (same email + community).
   // Case-insensitive on the stored side, as the JS `.find` this replaced was
-  // (inserts are lowercased, older rows may not be). The partial unique index
-  // on (community_id, email) for pending statuses allows at most one match; if
-  // a database lacks it, `id ASC` picks the oldest deterministically.
+  // (inserts are lowercased, older rows may not be). No unique index backs
+  // this — the one in _archive/0114 is not in the squashed baseline, and was
+  // on `email`, not `lower(email)` — so more than one row can match; `id ASC`
+  // picks the oldest deterministically.
   const [pendingVerification] = await scoped
     .selectFrom<Record<string, unknown>>(
       accessRequests,

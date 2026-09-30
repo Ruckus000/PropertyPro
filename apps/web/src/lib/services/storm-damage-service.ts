@@ -4,8 +4,9 @@
  * Every function takes an already-scoped client (AGENTS #13). Callers MUST
  * verify storm_damage read/write authorization before invoking; this layer does
  * not authorize. The scoped client applies community scoping AND soft-delete
- * exclusion, and RLS additionally scopes non-admin actors to their own rows
- * (reported_by = auth.uid()), so neither is repeated here.
+ * exclusion. It does NOT narrow a non-admin to their own rows: the table's
+ * RLS own-rows branch keys on auth.uid(), which the scoped client's
+ * privileged connection never sets — so the list takes `reportedBy`.
  *
  * List reads paginate via the canonical `paginate()` helper (ADR-003): a busy
  * community can log many reports after a single storm, so this is not a bounded
@@ -20,17 +21,21 @@ type ScopedClient = ReturnType<typeof createScopedClient>;
 type Row = Record<string, unknown>;
 
 /**
- * Page storm-damage reports the caller may see (RLS scopes non-admins to their
- * own rows, admin-tier to all), newest-first by id.
+ * Page storm-damage reports, newest-first by id. `reportedBy` narrows the page
+ * to one reporter — pass it for every non-admin caller.
  */
 export async function paginateStormDamageReports(
   scoped: ScopedClient,
-  input: { cursor?: string; pageSize?: number },
+  input: { cursor?: string; pageSize?: number; reportedBy?: string },
 ): Promise<PaginatedResult<Row>> {
-  return paginate<Row>(scoped, stormDamageReports, {
-    cursor: input.cursor,
-    pageSize: input.pageSize,
-  });
+  return paginate<Row>(
+    scoped,
+    stormDamageReports,
+    { cursor: input.cursor, pageSize: input.pageSize },
+    input.reportedBy === undefined
+      ? undefined
+      : { where: eq(stormDamageReports.reportedBy, input.reportedBy) },
+  );
 }
 
 /** Fetch a single report by id inside the caller's scoped community. */

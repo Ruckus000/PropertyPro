@@ -77,7 +77,7 @@ async function requireOwnedDocuments(
 }
 
 // ---------------------------------------------------------------------------
-// GET — list reports (residents see own via RLS, admin-tier sees all)
+// GET — list reports (a resident sees their own, admin-tier sees all)
 // ---------------------------------------------------------------------------
 
 export const GET = withErrorHandler(
@@ -90,9 +90,12 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
+    // Narrowed here, not by RLS: the own-rows policy keys on auth.uid(),
+    // which the scoped client's connection never carries.
     const result = await paginateStormDamageReports(scoped, {
       cursor: query.cursor,
       pageSize: query.pageSize,
+      ...(membership.isAdmin ? {} : { reportedBy: actorUserId }),
     });
 
     // Canonical double-wrap: handler wraps paginate's output in the outer

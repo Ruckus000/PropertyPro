@@ -138,6 +138,22 @@ describe('GET /api/v1/storm-damage', () => {
     expect(requirePermissionMock).toHaveBeenCalledWith(OWNER, 'storm_damage', 'read');
   });
 
+  it('narrows a resident to their own reports (RLS does not: the connection carries no auth.uid())', async () => {
+    await GET(jsonReq('GET', 'http://localhost/api/v1/storm-damage?communityId=42'));
+    expect(paginateStormDamageReportsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ reportedBy: 'u-owner' }),
+    );
+  });
+
+  it('lets an admin-tier member page every report', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(MANAGER);
+    requireAuthenticatedUserIdMock.mockResolvedValue('u-mgr');
+    await GET(jsonReq('GET', 'http://localhost/api/v1/storm-damage?communityId=42'));
+    const input = paginateStormDamageReportsMock.mock.calls[0]![1] as Record<string, unknown>;
+    expect(input).not.toHaveProperty('reportedBy');
+  });
+
   it('403s when storm tools are not enabled for the community type', async () => {
     getFeaturesForCommunityMock.mockReturnValue({ hasStormTools: false });
     const res = await GET(jsonReq('GET', 'http://localhost/api/v1/storm-damage?communityId=42'));
