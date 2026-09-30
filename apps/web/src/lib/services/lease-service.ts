@@ -53,13 +53,6 @@ export interface TenantRoleForLease {
  */
 export const LEASE_LIST_MAX_ROWS = 5000;
 
-/**
- * Hard ceiling on renewal-chain links walked by `getLeaseRenewalChain`.
- * A chain gains one link per renewal; 240 is twenty years of monthly
- * renewals. The walk also stops on a cycle.
- */
-export const LEASE_RENEWAL_CHAIN_MAX_LINKS = 240;
-
 export interface LeaseListFilters {
   /** Party scope: only leases naming this resident (non-manager callers). */
   residentId?: string;
@@ -117,44 +110,6 @@ export async function listLeasesForCommunity(
   const truncated = rows.length > LEASE_LIST_MAX_ROWS;
   const kept = truncated ? rows.slice(0, LEASE_LIST_MAX_ROWS) : rows;
   return { rows: kept.reverse(), truncated };
-}
-
-/**
- * Walk one lease's renewal chain backwards through `previous_lease_id`, one
- * primary-key read per link, instead of loading every lease in the community.
- * Returns oldest → newest (the requested lease last), matching
- * `getRenewalChain` in lease-expiration-service.
- *
- * `residentId` applies the same party scope as the list: a link that does
- * not name that resident ends the walk, exactly as it did when the walk ran
- * over the party-filtered full list.
- */
-export async function getLeaseRenewalChain(
-  communityId: number,
-  leaseId: number,
-  options: { residentId?: string } = {},
-): Promise<LeaseRow[]> {
-  const scoped = createScopedClient(communityId);
-  const chain: LeaseRow[] = [];
-  const visited = new Set<number>();
-  let nextId: number | null = leaseId;
-
-  while (nextId !== null && chain.length < LEASE_RENEWAL_CHAIN_MAX_LINKS) {
-    if (visited.has(nextId)) break;
-    visited.add(nextId);
-    const idMatch: SQL = eq(leases.id, nextId);
-    const where: SQL | undefined =
-      options.residentId !== undefined
-        ? and(idMatch, eq(leases.residentId, options.residentId))
-        : idMatch;
-    const rows: LeaseRow[] = await scoped.selectFrom<LeaseRow>(leases, {}, where);
-    const row: LeaseRow | undefined = rows[0];
-    if (!row) break;
-    chain.unshift(row);
-    nextId = row.previousLeaseId ?? null;
-  }
-
-  return chain;
 }
 
 /**

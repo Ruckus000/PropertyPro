@@ -1508,7 +1508,7 @@ describe('p2-37 leases route', () => {
       }
     });
 
-    it('walks renewal_chain_for by primary key — no list read, no whole-table read', async () => {
+    it('walks renewal_chain_for over ONE read, in memory (reuses getRenewalChain)', async () => {
       const client = seed([
         lease(1),
         lease(2, { previousLeaseId: 1 }),
@@ -1522,13 +1522,7 @@ describe('p2-37 leases route', () => {
       const json = (await res.json()) as { data: Array<{ id: number }> };
 
       expect(json.data.map((l) => l.id)).toEqual([1, 2, 3]);
-      expect(leaseWheres(client)).toEqual([
-        { op: 'eq', col: 'id', val: 3 },
-        { op: 'eq', col: 'id', val: 2 },
-        { op: 'eq', col: 'id', val: 1 },
-      ]);
-      // Three PK reads and nothing else: no unfiltered (whole-table) read.
-      expect(leaseWheres(client).every((w) => w !== undefined)).toBe(true);
+      expect(leaseWheres(client)).toHaveLength(1);
     });
 
     it('stops the chain walk on a cycle', async () => {
@@ -1542,7 +1536,7 @@ describe('p2-37 leases route', () => {
       expect(json.data.map((l) => l.id)).toEqual([1, 2]);
     });
 
-    it('party-scopes each chain link for a non-manager', async () => {
+    it('party-scopes the chain read in SQL for a non-manager', async () => {
       requireAuthenticatedUserIdMock.mockResolvedValue(ACTOR);
       requireCommunityMembershipMock.mockResolvedValue(residentMembership);
       const client = seed([lease(1), lease(2, { previousLeaseId: 1 })]);
@@ -1551,13 +1545,7 @@ describe('p2-37 leases route', () => {
         new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=2'),
       );
 
-      expect(leaseWheres(client)[0]).toEqual({
-        op: 'and',
-        args: [
-          { op: 'eq', col: 'id', val: 2 },
-          { op: 'eq', col: 'residentId', val: ACTOR },
-        ],
-      });
+      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'residentId', val: ACTOR }]);
     });
 
     it('POST reads only the candidate unit for the overlap check, and the previous lease by id', async () => {

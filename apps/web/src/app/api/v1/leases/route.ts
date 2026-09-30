@@ -63,11 +63,14 @@ import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
-import { getExpiringLeases, type LeaseRecord } from '@/lib/services/lease-expiration-service';
+import {
+  getExpiringLeases,
+  getRenewalChain,
+  type LeaseRecord,
+} from '@/lib/services/lease-expiration-service';
 import {
   createLeaseForCommunity,
   getLeaseById,
-  getLeaseRenewalChain,
   getRenewalOfLease,
   getTenantRoleForLease,
   getUnitLeaseDefaults,
@@ -277,16 +280,16 @@ export const GET = withErrorHandler(
     const { searchParams } = new URL(req.url);
     const partyScope = seesAllLeases ? {} : { residentId: actorUserId };
 
-    // Renewal chain: walked link-by-link through `previous_lease_id` over the
-    // actor-visible rows, so a chain rooted at someone else's lease yields an
-    // empty array rather than that tenant's rental history. Checked first —
-    // it replaces the list response, so the list is not read at all.
+    // Renewal chain: walked over the actor-visible rows (one party-scoped read,
+    // no status/unit filters), so a chain rooted at someone else's lease yields
+    // an empty array rather than that tenant's rental history. Checked first —
+    // it replaces the list response.
     const chainFor = searchParams.get('renewal_chain_for');
     if (chainFor) {
       const leaseId = Number(chainFor);
       if (Number.isInteger(leaseId) && leaseId > 0) {
-        const chainRows = await getLeaseRenewalChain(communityId, leaseId, partyScope);
-        return visibleToActor(chainRows.map(coerceLeaseRecord));
+        const { rows: chainRows } = await listLeasesForCommunity(communityId, partyScope);
+        return getRenewalChain(leaseId, visibleToActor(chainRows.map(coerceLeaseRecord)));
       }
     }
 
