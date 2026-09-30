@@ -84,9 +84,24 @@ export async function softDeleteInsurancePolicyById(
  * List certificate requests, newest first (`created_at DESC, id DESC`), capped
  * at CERTIFICATE_REQUEST_LIST_CAP. Not paginated.
  */
-export async function listCertificateRequests(scoped: ScopedClient): Promise<Row[]> {
+/**
+ * `requestedBy` narrows the list to one requester. Pass it for every
+ * non-admin caller: the table's RLS "own rows" branch keys on `auth.uid()`,
+ * which the scoped client's privileged connection never sets, so RLS does
+ * NOT do this narrowing here.
+ */
+export async function listCertificateRequests(
+  scoped: ScopedClient,
+  options: { requestedBy?: string } = {},
+): Promise<Row[]> {
   const rows = await scoped
-    .selectFrom(insuranceCertificateRequests, {})
+    .selectFrom(
+      insuranceCertificateRequests,
+      {},
+      options.requestedBy === undefined
+        ? undefined
+        : eq(insuranceCertificateRequests.requestedBy, options.requestedBy),
+    )
     .orderBy(desc(insuranceCertificateRequests.createdAt), desc(insuranceCertificateRequests.id))
     .limit(CERTIFICATE_REQUEST_LIST_CAP);
   return rows as unknown as Row[];

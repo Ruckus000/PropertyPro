@@ -20,6 +20,7 @@ const { tables } = vi.hoisted(() => ({
       __table: 'insurance_certificate_requests',
       id: { __col: 'id' },
       createdAt: { __col: 'createdAt' },
+      requestedBy: { __col: 'requestedBy' },
     },
     documents: { __table: 'documents', id: { __col: 'id' } },
     users: { __table: 'users', id: { __col: 'id' } },
@@ -169,6 +170,18 @@ describe('listCertificateRequests', () => {
     expect(CERTIFICATE_REQUEST_LIST_CAP).toBe(500);
     // Newest first, id breaking the tie.
     expect(result.map((r) => r.id)).toEqual([4, 3, 1, 2]);
+  });
+
+  it('narrows to one requester in SQL when requestedBy is given', async () => {
+    const { scoped, calls } = fakeScoped(
+      new Map([[tables.insuranceCertificateRequests, requests]]),
+    );
+
+    await listCertificateRequests(scoped as never, { requestedBy: 'u-owner' });
+
+    expect(calls[0]!.where).toEqual({
+      eq: { col: tables.insuranceCertificateRequests.requestedBy, val: 'u-owner' },
+    });
   });
 
   it('returns only the newest CERTIFICATE_REQUEST_LIST_CAP rows when there are more', async () => {

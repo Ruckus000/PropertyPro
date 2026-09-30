@@ -21,6 +21,8 @@ const {
   createCertificateRequestMock,
   getRequesterContactMock,
   selectFromMock,
+  listCertificateRequestsMock,
+  requireEntitledForAdminReadMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -35,6 +37,8 @@ const {
   createCertificateRequestMock: vi.fn(),
   getRequesterContactMock: vi.fn(),
   selectFromMock: vi.fn(),
+  listCertificateRequestsMock: vi.fn(),
+  requireEntitledForAdminReadMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -61,10 +65,13 @@ vi.mock('@/lib/services/insurance-service', () => ({
   getInsurancePolicyById: getInsurancePolicyByIdMock,
   createCertificateRequest: createCertificateRequestMock,
   getRequesterContact: getRequesterContactMock,
-  listCertificateRequests: vi.fn(),
+  listCertificateRequests: listCertificateRequestsMock,
+}));
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
+  requireEntitledForAdminRead: requireEntitledForAdminReadMock,
 }));
 
-import { POST } from '../../src/app/api/v1/insurance/certificate-requests/route';
+import { GET, POST } from '../../src/app/api/v1/insurance/certificate-requests/route';
 
 const OWNER = {
   userId: 'u-owner',
@@ -159,5 +166,39 @@ describe('certificate requests route', () => {
       expect.anything(),
       expect.objectContaining({ status: 'failed' }),
     );
+  });
+
+  describe('GET — who sees which requests', () => {
+    function getReq() {
+      return new NextRequest(
+        'http://localhost:3000/api/v1/insurance/certificate-requests?communityId=42',
+        { method: 'GET' },
+      );
+    }
+
+    beforeEach(() => {
+      requireEntitledForAdminReadMock.mockResolvedValue(undefined);
+      listCertificateRequestsMock.mockResolvedValue([]);
+    });
+
+    it('narrows an owner to the requests they made (RLS does not: the connection carries no auth.uid())', async () => {
+      const res = await GET(getReq());
+      expect(res.status).toBe(200);
+      expect(listCertificateRequestsMock).toHaveBeenCalledWith(expect.anything(), {
+        requestedBy: 'u-owner',
+      });
+    });
+
+    it('lets an admin-tier member see every request', async () => {
+      requireCommunityMembershipMock.mockResolvedValue({
+        ...OWNER,
+        role: 'property_manager',
+        isAdmin: true,
+        isUnitOwner: false,
+      });
+      const res = await GET(getReq());
+      expect(res.status).toBe(200);
+      expect(listCertificateRequestsMock).toHaveBeenCalledWith(expect.anything(), {});
+    });
   });
 });
