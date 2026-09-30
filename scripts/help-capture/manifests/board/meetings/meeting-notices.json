@@ -1,0 +1,84 @@
+{
+  "section": "board",
+  "category": "meetings",
+  "slug": "meeting-notices",
+  "shots": [
+    {
+      "name": "mt-views",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=tab[name=/^Schedule/]"
+        }
+      ],
+      "clipTo": "role=tablist[name=\"View\"]",
+      "highlight": "role=tablist[name=\"View\"]",
+      "step": 1
+    },
+    {
+      "name": "mt-day",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings?view=calendar",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "button[aria-label]:has-text(\"Meeting (\") >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Details\"]"
+        }
+      ],
+      "clipTo": [
+        "button[aria-label]:has-text(\"Meeting (\") >> nth=0",
+        "role=button[name=\"Details\"]"
+      ],
+      "highlight": "button[aria-label]:has-text(\"Meeting (\") >> nth=0",
+      "step": 2
+    },
+    {
+      "name": "mt-detail",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings?view=schedule",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=/Board Meeting \\(52-hour notice\\)/]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Compliance deadlines"
+        }
+      ],
+      "clipTo": "role=dialog >> div.max-w-2xl",
+      "highlight": "div.space-y-3:has(> div:text-is(\"Attached documents\"))",
+      "step": 3
+    },
+    {
+      "name": "mt-past",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings?view=schedule",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=/^Past/]"
+        },
+        {
+          "type": "wait",
+          "ms": 500
+        }
+      ],
+      "clipTo": "div:has(> div > h2:text-is(\"Schedule\"))"
+    }
+  ]
+}

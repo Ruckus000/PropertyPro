@@ -1,0 +1,21 @@
+{
+  "section": "board",
+  "category": "emergency",
+  "slug": "emergency-alerts",
+  "shots": [
+    {
+      "name": "em-r",
+      "kind": "still",
+      "route": "/settings?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h3:text-is(\"SMS Emergency Notifications\")"
+        }
+      ],
+      "clipTo": "div:has(> h3:text-is(\"SMS Emergency Notifications\"))"
+    }
+  ]
+}

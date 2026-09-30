@@ -1,0 +1,59 @@
+{
+  "section": "board",
+  "category": "building",
+  "slug": "insurance",
+  "shots": [
+    {
+      "name": "ins-card",
+      "kind": "still",
+      "route": "/communities/{cid}/insurance",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#insurance-summary-heading"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"insurance-summary-heading\"]"
+    },
+    {
+      "name": "ins-coi",
+      "kind": "still",
+      "route": "/communities/{cid}/insurance",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Request a Certificate for My Lender\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Request a Certificate for My Lender\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Request a certificate for my lender\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "role=dialog >> form",
+      "step": 2
+    },
+    {
+      "name": "ins-wind",
+      "kind": "still",
+      "route": "/communities/{cid}/insurance",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#wind-mitigation-heading"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"wind-mitigation-heading\"]"
+    }
+  ]
+}

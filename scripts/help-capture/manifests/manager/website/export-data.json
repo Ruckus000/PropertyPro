@@ -1,0 +1,58 @@
+{
+  "section": "manager",
+  "category": "website",
+  "slug": "export-data",
+  "shots": [
+    {
+      "name": "exp-page",
+      "kind": "still",
+      "route": "/settings/export?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/account menu/i]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/account menu/i]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=menuitem[name=\"Data Export\"]"
+        }
+      ],
+      "clipTo": [
+        "role=button[name=/account menu/i]",
+        "role=menu"
+      ],
+      "highlight": "role=menuitem[name=\"Data Export\"]",
+      "step": 1
+    },
+    {
+      "name": "exp-auth",
+      "kind": "still",
+      "route": "/settings/export?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Download CSV export\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Download CSV export\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Confirm your identity\"]"
+        }
+      ],
+      "clipTo": "role=dialog[name=\"Confirm your identity\"]",
+      "highlight": "#reauth-password",
+      "step": 2
+    }
+  ]
+}

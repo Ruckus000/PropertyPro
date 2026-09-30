@@ -1,0 +1,69 @@
+{
+  "section": "board",
+  "category": "getting-started",
+  "slug": "your-dashboard",
+  "shots": [
+    {
+      "name": "dash-r",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Recent Announcements\"]"
+        }
+      ],
+      "clipTo": "main"
+    },
+    {
+      "name": "dash-ann",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Recent Announcements\"]"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Recent Announcements\"))",
+      "highlight": "role=heading[name=\"Recent Announcements\"]",
+      "step": 1
+    },
+    {
+      "name": "dash-meet",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Upcoming Meetings\"]"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Upcoming Meetings\"))",
+      "highlight": "role=heading[name=\"Upcoming Meetings\"]",
+      "step": 2
+    },
+    {
+      "name": "dash-sign",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Documents to Sign\"]"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Documents to Sign\"))",
+      "highlight": "role=heading[name=\"Documents to Sign\"]",
+      "step": 3
+    }
+  ]
+}

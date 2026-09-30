@@ -1,0 +1,98 @@
+{
+  "section": "manager",
+  "category": "getting-started",
+  "slug": "manage-faqs",
+  "shots": [
+    {
+      "name": "faq-link",
+      "kind": "still",
+      "route": "/help?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=link[name=/Manage (your )?community.s FAQs/]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=link[name=/Manage (your )?community.s FAQs/]"
+        }
+      ],
+      "clipTo": "role=link[name=/Manage (your )?community.s FAQs/]",
+      "pad": 40,
+      "highlight": "role=link[name=/Manage (your )?community.s FAQs/]",
+      "step": 1
+    },
+    {
+      "name": "faq-list",
+      "kind": "still",
+      "route": "/help/manage?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Add FAQ\"]"
+        }
+      ],
+      "clipTo": "main",
+      "highlight": "role=heading[name=\"Add FAQ\"]",
+      "step": 2
+    },
+    {
+      "name": "faq-edit",
+      "kind": "still",
+      "route": "/help/manage?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "main div.overflow-hidden > button >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "main div.overflow-hidden > button >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Edit FAQ\"]"
+        }
+      ],
+      "clipTo": [
+        "role=heading[name=\"Edit FAQ\"]",
+        "role=button[name=\"Save changes\"]"
+      ],
+      "highlight": "role=textbox[name=\"Question\"]",
+      "step": 3
+    },
+    {
+      "name": "faq-save",
+      "kind": "still",
+      "route": "/help/manage?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "main div.overflow-hidden > button >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "main div.overflow-hidden > button >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Edit FAQ\"]"
+        }
+      ],
+      "clipTo": [
+        "role=heading[name=\"Edit FAQ\"]",
+        "role=button[name=\"Save changes\"]"
+      ],
+      "highlight": "role=button[name=\"Save changes\"]",
+      "step": 4
+    }
+  ]
+}

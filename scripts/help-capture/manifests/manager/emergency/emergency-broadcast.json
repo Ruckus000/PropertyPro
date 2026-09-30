@@ -1,0 +1,158 @@
+{
+  "section": "manager",
+  "category": "emergency",
+  "slug": "emergency-broadcast",
+  "shots": [
+    {
+      "name": "em-btn",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "main"
+        },
+        {
+          "type": "wait",
+          "ms": 1000
+        },
+        {
+          "type": "press",
+          "key": "Control+k"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=combobox[name=\"Search pages, actions, and settings\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "role=combobox[name=\"Search pages, actions, and settings\"]",
+          "value": "emergency"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=option[name=/Send Emergency Broadcast/]"
+        }
+      ],
+      "clipTo": "role=dialog[name=\"Command palette\"]",
+      "highlight": "role=option[name=/Send Emergency Broadcast/] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "em-tpl",
+      "kind": "still",
+      "route": "/emergency/new?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Choose a Template\")"
+        }
+      ],
+      "clipTo": "div.space-y-4:has(> h2:text-is(\"Choose a Template\"))",
+      "highlight": "button:has-text(\"Hurricane Preparation\")",
+      "step": 2
+    },
+    {
+      "name": "em-rec",
+      "kind": "still",
+      "route": "/emergency/new?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Choose a Template\")"
+        },
+        {
+          "type": "click",
+          "selector": "button:has-text(\"Hurricane Preparation\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#severity"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Next: Recipients\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#audience"
+        }
+      ],
+      "clipTo": "div.space-y-4:has(> h2:text-is(\"Select Recipients\"))",
+      "highlight": "#audience",
+      "step": 4
+    },
+    {
+      "name": "em-confirm",
+      "kind": "still",
+      "route": "/emergency/new?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Choose a Template\")"
+        },
+        {
+          "type": "click",
+          "selector": "button:has-text(\"Hurricane Preparation\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#severity"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Next: Recipients\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#audience"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Next: Confirm\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Confirm & Send\")"
+        },
+        {
+          "type": "click",
+          "selector": "label:has-text(\"I understand this will immediately alert\") input"
+        }
+      ],
+      "clipTo": "div.space-y-4:has(> h2:text-is(\"Confirm & Send\"))",
+      "highlight": "role=button[name=\"Send Emergency Alert\"]",
+      "step": 5
+    },
+    {
+      "name": "em-stats",
+      "kind": "still",
+      "route": "/emergency?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "a[href^=\"/emergency/\"]:not([href*=\"/new\"])"
+        },
+        {
+          "type": "click",
+          "selector": "a[href^=\"/emergency/\"]:not([href*=\"/new\"]) >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Delivered"
+        }
+      ],
+      "clipTo": "div.grid:has(> div > div:text-is(\"Delivered\"))"
+    }
+  ]
+}

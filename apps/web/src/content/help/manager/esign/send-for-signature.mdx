@@ -1,0 +1,59 @@
+---
+title: "Send a document for signature"
+description: "Send a PDF or a template to one or more signers, track progress, send reminders, and download the signed PDF."
+section: manager
+category: esign
+slug: send-for-signature
+order: 1
+keywords: ["esign","send","document","signature","signers","recipients","order","reminder","cancel","expire","track","download","signed","link"]
+relatedArticles: ["esign-template"]
+featureGates: [hasEsign]
+contextPaths: ["/esign", "/esign/submissions/*"]
+updatedAt: "2026-09-30"
+---
+
+<StepByStep>
+
+<Step title="Select Send Document" shot="snd-btn">
+
+Open **E-Sign** in the sidebar. **Send Document** is at the top right. To start from a template, open it on the **Templates** tab and select **Send for Signing** instead; its PDF and fields are filled in for you.
+
+</Step>
+
+<Step title="Choose the document">
+
+Choose **Upload a PDF** or **Use a document you have**, then select **Next**. Skip this when you start from a template.
+
+</Step>
+
+<Step title="Add the recipients and signing order" shot="snd-form">
+
+Enter each recipient’s **Name**, **Email** and **Role**, including people outside the community. Select **Add a recipient** for more. Under **Order**, **Everyone at once** lets everyone sign in any order. **One after another, in order** makes later signers wait; they still get their email right away.
+
+</Step>
+
+<Step title="Add a message and expiry" shot="snd-exp">
+
+The **Email subject** and **Message** go in the email. **Expires after** is 7, 14 or 30 days (14 by default), or **Does not expire**. Clear **Email each recipient their link** if you would rather copy the links yourself.
+
+</Step>
+
+<Step title="Place the fields, review, and select Send for signing">
+
+On **Place fields**, give every recipient at least one field. On **Review**, check the details, then select **Send for signing**. Each recipient gets a personal link.
+
+</Step>
+
+</StepByStep>
+
+## Track and follow up
+
+Open a request from the **Requests** tab. Each signer shows **Pending**, **Opened**, **Completed** or **Declined**. Select **Send reminder** to email a signer again (up to 3 per signer), or **Copy signing link** to share it yourself. **Waiting on** lists everyone who still has to sign. When everyone has signed, select **Download Signed Document**.
+
+<Figure shot="snd-track" alt="Request with its signers and their status" />
+
+<Callout type="warning" title="Cancelling">
+
+**Cancel Request** voids every pending signature and cannot be undone; signers are not told. There is no bulk send yet, so send one request per owner for community-wide forms.
+
+</Callout>

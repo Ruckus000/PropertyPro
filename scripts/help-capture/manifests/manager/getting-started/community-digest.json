@@ -1,0 +1,31 @@
+{
+  "section": "manager",
+  "category": "getting-started",
+  "slug": "community-digest",
+  "shots": [
+    {
+      "name": "dig-board",
+      "kind": "still",
+      "route": "/settings?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=switch[name=\"Send the digest to owners\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=switch[name=\"Send the digest to owners\"]"
+        }
+      ],
+      "clipTo": [
+        "text=Community digest",
+        "role=switch[name=\"Send the digest to owners\"]"
+      ],
+      "pad": 24,
+      "highlight": "role=switch[name=\"Send the digest to owners\"]",
+      "step": 2
+    }
+  ]
+}

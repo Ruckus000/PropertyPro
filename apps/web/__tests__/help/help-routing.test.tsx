@@ -28,7 +28,7 @@ describe('help center routing contracts', () => {
     const helpItem = FEATURE_REGISTRY.find((item) => item.id === 'page-help');
     const helpPagePath = path.resolve(
       __dirname,
-      '../../src/app/(authenticated)/help/page.tsx',
+      '../../src/app/(help)/help/page.tsx',
     );
     expect(helpItem?.href).toBe('/help');
     expect(fs.existsSync(helpPagePath)).toBe(true);

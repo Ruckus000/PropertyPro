@@ -1,0 +1,35 @@
+{
+  "section": "manager",
+  "category": "leases",
+  "slug": "move-in-out",
+  "shots": [
+    {
+      "name": "mio-list",
+      "kind": "still",
+      "route": "/dashboard/move-in-out?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [{ "type": "waitFor", "selector": "button:has-text(\"Lease #\")" }],
+      "clipTo": [
+        "div:has(> button[aria-pressed])",
+        "div.grid:has(> button:has-text(\"Lease #\"))"
+      ]
+    },
+    {
+      "name": "mio-card",
+      "kind": "still",
+      "route": "/dashboard/move-in-out?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        { "type": "waitFor", "selector": "button:has-text(\"Lease #\")" },
+        { "type": "click", "selector": "button:has-text(\"Lease #\") >> nth=0" },
+        { "type": "waitFor", "selector": "text=Back to checklists" },
+        { "type": "waitFor", "selector": "label[for^=\"step-\"]" }
+      ],
+      "clipTo": "main",
+      "highlight": "label[for^=\"step-\"] >> nth=0",
+      "step": 1
+    }
+  ]
+}

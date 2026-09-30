@@ -1,0 +1,62 @@
+{
+  "section": "resident",
+  "category": "violations",
+  "slug": "report-violation",
+  "shots": [
+    {
+      "name": "vr-cat",
+      "kind": "still",
+      "route": "/violations/report?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#violation-category"
+        }
+      ],
+      "clipTo": [
+        "div:has(> #violation-category)",
+        "div:has(> #violation-severity)"
+      ],
+      "highlight": "#violation-category",
+      "step": 2
+    },
+    {
+      "name": "vr-desc",
+      "kind": "still",
+      "route": "/violations/report?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#violation-description"
+        }
+      ],
+      "clipTo": [
+        "div:has(> #violation-description)",
+        "div:has(> #violation-photos)"
+      ],
+      "highlight": "#violation-description",
+      "step": 3
+    },
+    {
+      "name": "vr-send",
+      "kind": "still",
+      "route": "/violations/report?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Submit Violation Report\"]"
+        }
+      ],
+      "clipTo": "role=button[name=\"Submit Violation Report\"]",
+      "pad": 24,
+      "highlight": "role=button[name=\"Submit Violation Report\"]",
+      "step": 4
+    }
+  ]
+}

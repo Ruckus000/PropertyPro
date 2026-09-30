@@ -1,0 +1,39 @@
+{
+  "section": "manager",
+  "category": "pm",
+  "slug": "roles-access",
+  "shots": [
+    {
+      "name": "ra-board",
+      "kind": "still",
+      "route": "/settings/roles?communityId={cid}",
+      "role": "root_sunset",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Board\"]"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Board\"))",
+      "highlight": "role=button[name=\"President\"] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "ra-pm",
+      "kind": "still",
+      "route": "/settings/roles?communityId={cid}",
+      "role": "root_sunset",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Members\"]"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Members\"))",
+      "highlight": "role=button[name=\"Promote to property manager\"] >> nth=0",
+      "step": 2
+    }
+  ]
+}

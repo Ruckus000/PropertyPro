@@ -1,0 +1,37 @@
+---
+title: "Set up online payments"
+description: "Connect Stripe so owners can pay by card or bank account, and see how processing fees are handled."
+section: manager
+category: payments
+slug: online-payments
+order: 1
+keywords: ["online","payments","stripe","connect","card","ach","bank","account","fee","processing","payout","setup","configuration"]
+relatedArticles: ["create-assessment"]
+featureGates: [hasFinance]
+contextPaths: ["/settings/payments"]
+updatedAt: "2026-09-30"
+---
+
+<Callout type="info" title="Online payments are off until PropertyPro turns them on">
+
+Every community starts with online payments turned off. Contact PropertyPro support to turn them on. Until then, **Connect with Stripe** does not work, late fees are not added, and owners see their balance with a note to contact you to arrange payment.
+
+</Callout>
+
+<StepByStep>
+
+<Step title="Open Settings, then Payment Configuration, and select Connect with Stripe" shot="op-connect">
+
+**Settings** is in your account menu at the top right. Stripe asks for the association’s legal name, tax ID and bank account for payouts, then returns you to PropertyPro. If you leave early, select **Resume Setup** to finish.
+
+</Step>
+
+<Step title="Check the fee policy" shot="op-fee">
+
+The association absorbs processing costs: about 3% for card payments and 0.8% for bank payments come out of what it collects. Owners are not charged a fee.
+
+</Step>
+
+</StepByStep>
+
+When the card reads **Stripe Connected**, with **Charges** and **Payouts** active, owners see a **Pay Now** button on every unpaid charge. Card and bank details go to Stripe and are never stored in PropertyPro. Payouts go to the association’s own Stripe account, never mixed with other communities’ funds.

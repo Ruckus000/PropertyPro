@@ -1,0 +1,62 @@
+{
+  "section": "manager",
+  "category": "website",
+  "slug": "website-branding",
+  "shots": [
+    {
+      "name": "wb-colors",
+      "kind": "still",
+      "route": "/pm/website-editor?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[data-testid=\"site-editor-tool-styling\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[data-testid=\"site-editor-tool-styling\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/Save colours/]"
+        }
+      ],
+      "clipTo": [
+        "[data-testid=\"site-editor-tool-styling\"]",
+        "role=button[name=/Save colours/]"
+      ],
+      "highlight": "[data-testid=\"site-editor-tool-styling\"]",
+      "step": 1
+    },
+    {
+      "name": "wb-domain",
+      "kind": "still",
+      "route": "/pm/website-editor?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[data-testid=\"site-editor-tool-domain\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[data-testid=\"site-editor-tool-domain\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=textbox[name=\"Your domain\"]"
+        }
+      ],
+      "clipTo": [
+        "[data-testid=\"site-editor-tool-domain\"]",
+        "role=textbox[name=\"Your domain\"]"
+      ],
+      "pad": 48,
+      "highlight": "role=textbox[name=\"Your domain\"]",
+      "step": 2
+    }
+  ]
+}

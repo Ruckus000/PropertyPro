@@ -1,0 +1,39 @@
+{
+  "section": "manager",
+  "category": "payments",
+  "slug": "online-payments",
+  "shots": [
+    {
+      "name": "op-connect",
+      "kind": "still",
+      "route": "/settings/payments?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Connect with Stripe\"]"
+        }
+      ],
+      "clipTo": "div.rounded-md.border:has(h3:text-is(\"Connect Bank Account\"))",
+      "highlight": "role=button[name=\"Connect with Stripe\"]",
+      "step": 1
+    },
+    {
+      "name": "op-fee",
+      "kind": "still",
+      "route": "/settings/payments?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h3:text-is(\"Payment Fee Policy\")"
+        }
+      ],
+      "clipTo": "div.rounded-md.border:has(> h3:text-is(\"Payment Fee Policy\"))",
+      "highlight": "div.rounded-md.border:has(> p:text-is(\"Association absorbs fees\"))",
+      "step": 2
+    }
+  ]
+}

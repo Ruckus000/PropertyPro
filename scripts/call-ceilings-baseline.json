@@ -11,9 +11,6 @@
   "apps/web/src/app/(authenticated)/help/manage/page.tsx": {
     "fullTableRead": 1
   },
-  "apps/web/src/app/(authenticated)/help/search/page.tsx": {
-    "fullTableRead": 1
-  },
   "apps/web/src/app/(authenticated)/settings/account/page.tsx": {
     "unscoped": 1
   },

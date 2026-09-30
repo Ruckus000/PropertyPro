@@ -1,0 +1,134 @@
+{
+  "section": "manager",
+  "category": "violations",
+  "slug": "review-violations",
+  "shots": [
+    {
+      "name": "vi-inbox",
+      "kind": "still",
+      "route": "/violations?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label^=\"Violation #\"]"
+        }
+      ],
+      "clipTo": [
+        "div:has(> input[aria-label=\"Filter violations from date\"])",
+        "div:has(> div > button[aria-label^=\"Violation #\"])"
+      ],
+      "highlight": "select:has(option[value=\"hearing_scheduled\"])",
+      "step": 1
+    },
+    {
+      "name": "vi-new",
+      "kind": "still",
+      "route": "/violations?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"New violation\"]"
+        }
+      ],
+      "clipTo": "[data-page-header]",
+      "highlight": "role=button[name=\"New violation\"]",
+      "step": 2
+    },
+    {
+      "name": "vi-notice",
+      "kind": "still",
+      "route": "/violations?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label^=\"Violation #\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label*=\"— Noise\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Send Notice\"]"
+        }
+      ],
+      "clipTo": "div:has(> button[aria-expanded=\"true\"])",
+      "highlight": "role=button[name=\"Send Notice\"]",
+      "step": 3
+    },
+    {
+      "name": "vi-fine",
+      "kind": "still",
+      "route": "/violations?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label^=\"Violation #\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label*=\"— Unauthorized Modification\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Impose Fine\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#fine-amount"
+        },
+        {
+          "type": "fill",
+          "selector": "#fine-amount",
+          "value": "100"
+        }
+      ],
+      "clipTo": "form:has(#fine-amount)",
+      "highlight": "#fine-amount"
+    },
+    {
+      "name": "vi-hear",
+      "kind": "still",
+      "route": "/violations?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label^=\"Violation #\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label*=\"— Unauthorized Modification\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Schedule Hearing\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#hearing-date"
+        },
+        {
+          "type": "fill",
+          "selector": "#hearing-date",
+          "value": "2026-10-06"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-testid=\"hearing-notice-window-warning\"]"
+        }
+      ],
+      "clipTo": "form:has(#hearing-date)",
+      "highlight": "[data-testid=\"hearing-notice-window-warning\"]"
+    }
+  ]
+}

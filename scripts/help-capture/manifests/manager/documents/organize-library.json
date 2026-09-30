@@ -1,0 +1,29 @@
+{
+  "section": "manager",
+  "category": "documents",
+  "slug": "organize-library",
+  "shots": [
+    {
+      "name": "org-unlinked",
+      "kind": "still",
+      "route": "/communities/{cid}/documents",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=/^Unlinked/]"
+        },
+        {
+          "type": "wait",
+          "ms": 500
+        }
+      ],
+      "clipTo": [
+        "div.flex-wrap:has(> p:has-text(\"statutory records\"))",
+        "table"
+      ],
+      "highlight": "role=button[name=/^Unlinked/]"
+    }
+  ]
+}

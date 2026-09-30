@@ -1,0 +1,38 @@
+---
+title: "How the compliance score works"
+description: "What counts toward the Readiness percentage and what does not."
+section: manager
+category: compliance
+slug: compliance-score
+communityTypes: [condo_718, hoa_720]
+order: 2
+keywords: ["compliance","score","readiness","percentage","calculation","satisfied","overdue","not","applicable","math","late","rolling"]
+relatedArticles: ["compliance-dashboard","fix-compliance-gaps"]
+featureGates: [hasCompliance]
+contextPaths: ["/communities/*/compliance"]
+updatedAt: "2026-09-30"
+---
+
+Readiness is the share of requirements that apply to you and are satisfied. Every requirement counts equally. The card shows it as a percentage and as “X of Y items satisfied”.
+
+- **Satisfied** counts toward the score.
+- **Action needed**, **Needs board action** and **Overdue** do not count. Overdue also appears in the **Overdue** card.
+- **Not applicable** is left out entirely.
+
+Readiness = Satisfied ÷ every requirement not marked Not applicable, rounded to a whole percent.
+
+## When a linked record does not count
+
+- It was linked after its deadline. The row stays **Overdue**.
+- It is a rolling 12-month record, such as approved minutes or meeting notices and agendas, and the linked file was posted more than 12 months ago. Keep these current to avoid slow drift.
+
+## What is not in the score
+
+- The notice timing of each meeting. It is tracked on each meeting in **Meetings**.
+- Financial health, reserve adequacy, and architectural review.
+
+<Callout type="info" title="What 100% means">
+
+A perfect score means every requirement that applies has a record linked on time and, for rolling records, within the last 12 months. It does not check what a record says. **Recent activity** on each record, and the activity feed below the list, show when records were linked.
+
+</Callout>

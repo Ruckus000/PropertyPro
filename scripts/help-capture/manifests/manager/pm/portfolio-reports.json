@@ -1,0 +1,47 @@
+{
+  "section": "manager",
+  "category": "pm",
+  "slug": "portfolio-reports",
+  "shots": [
+    {
+      "name": "rp-tabs",
+      "kind": "still",
+      "route": "/pm/reports",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=tablist"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Apply\"]"
+        }
+      ],
+      "clipTo": [
+        "role=tablist",
+        "role=button[name=\"Apply\"]"
+      ],
+      "highlight": "role=tablist",
+      "step": 1
+    },
+    {
+      "name": "rp-export",
+      "kind": "still",
+      "route": "/pm/reports",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Export CSV\"] >> nth=0"
+        }
+      ],
+      "clipTo": "role=button[name=\"Export CSV\"] >> nth=0",
+      "pad": 24,
+      "highlight": "role=button[name=\"Export CSV\"] >> nth=0",
+      "step": 2
+    }
+  ]
+}

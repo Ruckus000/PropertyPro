@@ -1,0 +1,141 @@
+{
+  "section": "manager",
+  "category": "meetings",
+  "slug": "schedule-meeting",
+  "shots": [
+    {
+      "name": "mt-create",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[data-page-header] >> role=button[name=\"Create Meeting\"]"
+        }
+      ],
+      "clipTo": "[data-page-header]",
+      "highlight": "[data-page-header] >> role=button[name=\"Create Meeting\"]",
+      "step": 1
+    },
+    {
+      "name": "mt-type",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "[data-page-header] >> role=button[name=\"Create Meeting\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog >> form"
+        }
+      ],
+      "clipTo": "role=dialog >> label:has(> span:text-is(\"Meeting Type\"))",
+      "highlight": "role=dialog >> label:has(> span:text-is(\"Meeting Type\")) >> select",
+      "step": 2
+    },
+    {
+      "name": "mt-form",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "[data-page-header] >> role=button[name=\"Create Meeting\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog >> form"
+        },
+        {
+          "type": "fill",
+          "selector": "role=dialog >> label:has(> span:text-is(\"Title\")) >> input",
+          "value": "Board meeting"
+        },
+        {
+          "type": "fill",
+          "selector": "role=dialog >> label:has(> span:text-is(\"Location\")) >> input",
+          "value": "Clubhouse and Zoom (link in the notice)"
+        }
+      ],
+      "clipTo": "role=dialog >> form",
+      "highlight": "role=dialog >> label:has(> span:text-is(\"Title\")) >> input",
+      "step": 3
+    },
+    {
+      "name": "mt-save",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "[data-page-header] >> role=button[name=\"Create Meeting\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog >> form"
+        }
+      ],
+      "clipTo": "role=dialog >> form >> div.border-t",
+      "highlight": "role=dialog >> role=button[name=\"Create Meeting\"]",
+      "step": 4
+    },
+    {
+      "name": "mt-deadlines",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings?view=schedule",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=/Board Meeting \\(52-hour notice\\)/]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Compliance deadlines"
+        }
+      ],
+      "clipTo": "div.space-y-3:has(> div:text-is(\"Compliance deadlines\"))"
+    },
+    {
+      "name": "mt-warn",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "[data-page-header] >> role=button[name=\"Create Meeting\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog >> form"
+        },
+        {
+          "type": "fill",
+          "selector": "role=dialog >> label:has(> span:text-is(\"Start\")) >> input",
+          "value": "2026-10-01T18:00"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-testid=\"meeting-notice-window-warning\"]"
+        }
+      ],
+      "clipTo": [
+        "role=dialog >> label:has(> span:text-is(\"Start\"))",
+        "[data-testid=\"meeting-notice-window-warning\"]"
+      ]
+    }
+  ]
+}

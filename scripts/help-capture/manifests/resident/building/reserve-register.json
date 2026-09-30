@@ -1,0 +1,21 @@
+{
+  "section": "resident",
+  "category": "building",
+  "slug": "reserve-register",
+  "shots": [
+    {
+      "name": "rv-list",
+      "kind": "still",
+      "route": "/communities/{cid}/reserves",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#reserve-transparency-heading"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"reserve-transparency-heading\"]"
+    }
+  ]
+}

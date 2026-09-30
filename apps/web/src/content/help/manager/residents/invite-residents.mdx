@@ -1,0 +1,51 @@
+---
+title: "Invite residents"
+description: "Add owners and tenants one at a time or from a spreadsheet, and resend invitations."
+section: manager
+category: residents
+slug: invite-residents
+order: 0
+featured: true
+keywords: ["residents","invite","add","owner","tenant","roster","import","csv","bulk","resend","invitation","roles","board","access","remove"]
+relatedArticles: ["join-requests","units"]
+contextPaths: ["/dashboard/residents","/dashboard/import-residents"]
+updatedAt: "2026-09-30"
+---
+
+<StepByStep>
+
+<Step title="Select Add Resident" shot="rs-add">
+
+It is at the top right of **Residents**, in the sidebar under **Admin**.
+
+</Step>
+
+<Step title="Enter their details" shot="rs-form">
+
+**Full name**, **Email** and **Unit ID** are required; **Phone** is optional. <OnlyFor types="condo_718 hoa_720">Choose **Owner** or **Tenant** as the **Role**.</OnlyFor><OnlyFor types="apartment">Residents are added as **Tenant**.</OnlyFor> **Unit ID** is PropertyPro’s ID for the unit (shown after **Unit** on each resident row), which is not always the same as the unit number. Leave **Send invitation email** checked to send a sign-up link, then select **Save resident**.
+
+</Step>
+
+<Step title="Resend if needed" shot="rs-resend">
+
+Select **Send Invite** on the resident’s row.
+
+</Step>
+
+</StepByStep>
+
+## Import from a spreadsheet
+
+Select **Import CSV**, then **Download CSV template** (columns name, email, role, unit_number). Fill it in with **owner** or **tenant** as the role and upload it. You see a preview with any row errors before you select the **Import … Residents** button. Import does not send invitations; use **Send Invite** afterward.
+
+<Figure shot="rs-import" alt="Import Residents page with the CSV template download" />
+
+## Board and manager access
+
+Only the community’s root manager can change access, in **Settings → Roles & Access**. It is where property managers are added or removed<OnlyFor types="condo_718 hoa_720"> and board designations are set</OnlyFor>.
+
+<Callout type="info" title="Removing a resident">
+
+Removing someone from a community goes through PropertyPro support for now. Their account stays active for other communities, and their records stay in yours.
+
+</Callout>

@@ -1,0 +1,80 @@
+{
+  "section": "resident",
+  "category": "getting-started",
+  "slug": "getting-around",
+  "shots": [
+    {
+      "name": "gs-nav-r",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=navigation[name=\"Main navigation\"]"
+        }
+      ],
+      "clipTo": "role=navigation[name=\"Main navigation\"]",
+      "highlight": "role=navigation[name=\"Main navigation\"]",
+      "step": 1
+    },
+    {
+      "name": "gs-search",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Search documents, residents, meetings\"]"
+        }
+      ],
+      "clipTo": "role=search",
+      "highlight": "role=button[name=\"Search documents, residents, meetings\"]",
+      "step": 2
+    },
+    {
+      "name": "gs-help",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Open help\"]"
+        }
+      ],
+      "clipTo": [
+        "role=button[name=\"Open help\"]",
+        "role=button[name=/account menu/i]"
+      ],
+      "highlight": "role=button[name=\"Open help\"]",
+      "step": 3
+    },
+    {
+      "name": "gs-helppanel",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Open help\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Open help\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Relevant to this page"
+        }
+      ],
+      "clipTo": "role=complementary[name=\"Help panel\"]"
+    }
+  ]
+}

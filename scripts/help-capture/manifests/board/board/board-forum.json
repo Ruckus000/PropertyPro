@@ -1,0 +1,44 @@
+{
+  "section": "board",
+  "category": "board",
+  "slug": "board-forum",
+  "shots": [
+    {
+      "name": "fr-list",
+      "kind": "still",
+      "route": "/communities/{cid}/board/forum",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"New Thread\"]"
+        }
+      ],
+      "clipTo": [
+        "nav[aria-label=\"Board sections\"]",
+        "nav[aria-label=\"Board sections\"] + div"
+      ]
+    },
+    {
+      "name": "fr-new",
+      "kind": "still",
+      "route": "/communities/{cid}/board/forum",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"New Thread\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#thread-title",
+      "step": 1
+    }
+  ]
+}

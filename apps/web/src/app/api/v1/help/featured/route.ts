@@ -19,21 +19,17 @@
  * so consumers can use `requestJson<HelpArticleResult[]>` and get the array
  * directly after the outer `{ data }` is unwrapped.
  */
-import { getFeaturesForCommunity } from '@propertypro/shared';
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
-import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
-import {
-  getFeaturedForRole,
-  filterArticlesByFeatures,
-} from '@/lib/services/help-article-service';
+import { resolveHelpReader } from '@/lib/help/reader';
+import { getFeaturedForReader } from '@/lib/services/help-article-service';
 import { helpFeaturedContract } from './contract';
 
-// route-gate: community-open — getFeaturedForRole filters by the viewer's role
+// route-gate: community-open — getFeaturedForReader filters by the reader's section, type and features
 export const GET = withErrorHandler(
   runRoute(helpFeaturedContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
@@ -41,13 +37,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
-    const viewer = resolveHelpViewerTokens(membership);
-
-    const features = getFeaturesForCommunity(membership.communityType);
-    const articles = filterArticlesByFeatures(
-      getFeaturedForRole(viewer),
-      features,
-    );
+    // The in-app panel lists a short set; the Help Center home shows six.
+    const articles = getFeaturedForReader(resolveHelpReader(membership), 4);
 
     return articles.map((a) => ({
       title: a.title,

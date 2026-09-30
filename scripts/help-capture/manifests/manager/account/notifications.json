@@ -1,0 +1,90 @@
+{
+  "section": "manager",
+  "category": "account",
+  "slug": "notifications",
+  "shots": [
+    {
+      "name": "ntf-prefs",
+      "kind": "still",
+      "route": "/settings?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=combobox[name=\"Email frequency\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=heading[name=\"Notification Preferences\"s]"
+        }
+      ],
+      "clipTo": [
+        "role=heading[name=\"Notification Preferences\"s]",
+        "role=button[name=\"Save Preferences\"s]"
+      ],
+      "highlight": "role=heading[name=\"Notification Preferences\"s]",
+      "step": 1
+    },
+    {
+      "name": "ntf-freq",
+      "kind": "still",
+      "route": "/settings?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=combobox[name=\"Email frequency\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=heading[name=\"Notification Preferences\"s]"
+        }
+      ],
+      "clipTo": [
+        "role=heading[name=\"Notification Preferences\"s]",
+        "role=checkbox[name=\"Announcements\"s]"
+      ],
+      "highlight": "role=combobox[name=\"Email frequency\"]",
+      "step": 2
+    },
+    {
+      "name": "ntf-save",
+      "kind": "still",
+      "route": "/settings?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Save Preferences\"s]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=button[name=\"Save Preferences\"s]"
+        }
+      ],
+      "clipTo": [
+        "role=checkbox[name=\"Announcements\"s]",
+        "role=button[name=\"Save Preferences\"s]"
+      ],
+      "highlight": "role=button[name=\"Save Preferences\"s]",
+      "step": 4
+    },
+    {
+      "name": "ntf-center",
+      "kind": "still",
+      "route": "/notifications?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Mark all read\"]"
+        }
+      ],
+      "clipTo": "main"
+    }
+  ]
+}

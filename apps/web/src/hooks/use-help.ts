@@ -49,7 +49,7 @@ export interface HelpArticleResult {
   category: string;
   slug: string;
   readTimeMinutes?: number;
-  roles?: string[];
+  section?: string;
 }
 
 export interface HelpFaqResult {

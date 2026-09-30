@@ -1,0 +1,54 @@
+{
+  "section": "resident",
+  "category": "board",
+  "slug": "cast-ballot",
+  "shots": [
+    {
+      "name": "bal-open",
+      "kind": "still",
+      "route": "/communities/{cid}/board/elections",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "article[role=\"button\"]"
+        }
+      ],
+      "clipTo": [
+        "nav[aria-label=\"Board sections\"]",
+        "nav[aria-label=\"Board sections\"] + div"
+      ],
+      "highlight": "nav[aria-label=\"Board sections\"] >> role=link[name=\"Elections\"]",
+      "step": 1
+    },
+    {
+      "name": "bal-cast",
+      "kind": "still",
+      "route": "/communities/{cid}/board/elections",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "article[role=\"button\"]"
+        },
+        {
+          "type": "click",
+          "selector": "article[role=\"button\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"View Details\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Cast your ballot"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "role=button[name=\"Review Ballot\"]",
+      "step": 2
+    }
+  ]
+}

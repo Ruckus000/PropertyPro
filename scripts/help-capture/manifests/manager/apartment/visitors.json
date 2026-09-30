@@ -1,0 +1,105 @@
+{
+  "section": "manager",
+  "category": "apartment",
+  "slug": "visitors",
+  "shots": [
+    {
+      "name": "vs-reg",
+      "kind": "still",
+      "route": "/dashboard/visitors?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Register Visitor\"] >> nth=0"
+        }
+      ],
+      "clipTo": [
+        "role=button[name=\"Today\"]",
+        "role=button[name=\"Register Visitor\"] >> nth=0"
+      ],
+      "highlight": "role=button[name=\"Register Visitor\"] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "vs-list",
+      "kind": "still",
+      "route": "/dashboard/visitors?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/^All$/]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/^All$/]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/^Check In$/] >> nth=0"
+        }
+      ],
+      "clipTo": "table",
+      "highlight": "role=button[name=/^Check In$/] >> nth=0",
+      "step": 2
+    },
+    {
+      "name": "vs-revoke",
+      "kind": "still",
+      "route": "/dashboard/visitors?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/^All$/]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/^All$/]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/^Revoke$/] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/^Revoke$/] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Revoke Visitor Pass\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "role=dialog >> textarea",
+      "step": 4
+    },
+    {
+      "name": "vs-deny",
+      "kind": "still",
+      "route": "/dashboard/visitors?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=tab[name=\"Denied List\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=tab[name=\"Denied List\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add to Denied List\"]"
+        }
+      ],
+      "clipTo": "role=tabpanel",
+      "highlight": "role=button[name=\"Add to Denied List\"]"
+    }
+  ]
+}

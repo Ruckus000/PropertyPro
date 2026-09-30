@@ -1,0 +1,93 @@
+{
+  "section": "manager",
+  "category": "compliance",
+  "slug": "compliance-dashboard",
+  "shots": [
+    {
+      "kind": "still",
+      "route": "/communities/{cid}/compliance",
+      "role": "cam",
+      "community": "condo",
+      "name": "cp-kpis",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section[aria-label=\"Compliance summary\"]"
+        }
+      ],
+      "clipTo": "section[aria-label=\"Compliance summary\"]"
+    },
+    {
+      "kind": "still",
+      "route": "/communities/{cid}/compliance",
+      "role": "cam",
+      "community": "condo",
+      "name": "cp-chips",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=group[name=\"Filter records\"]"
+        }
+      ],
+      "clipTo": "role=group[name=\"Filter records\"]",
+      "highlight": "role=button[name=/^Action needed/]",
+      "step": 1
+    },
+    {
+      "kind": "still",
+      "route": "/communities/{cid}/compliance",
+      "role": "cam",
+      "community": "condo",
+      "name": "cp-row",
+      "actions": [
+        {
+          "type": "scrollTo",
+          "selector": "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Current Insurance Policies\")"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Current Insurance Policies\")",
+      "highlight": "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Current Insurance Policies\") >> td >> nth=0",
+      "step": 2
+    },
+    {
+      "kind": "still",
+      "route": "/communities/{cid}/compliance",
+      "role": "cam",
+      "community": "condo",
+      "name": "cp-upload",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Current Insurance Policies\") >> role=button"
+        },
+        {
+          "type": "waitFor",
+          "selector": "div.max-w-lg:has(h3:text-is(\"Upload Document\"))"
+        }
+      ],
+      "clipTo": "div.max-w-lg:has(h3:text-is(\"Upload Document\"))",
+      "highlight": "role=button[name=\"Upload & Link\"]",
+      "step": 3
+    },
+    {
+      "kind": "still",
+      "route": "/communities/{cid}/compliance",
+      "role": "cam",
+      "community": "condo",
+      "name": "cp-done",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=/^Satisfied/]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "section[aria-labelledby=\"queue-heading\"] >> tbody tr"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"queue-heading\"] >> tbody tr >> nth=0",
+      "highlight": "section[aria-labelledby=\"queue-heading\"] >> tbody tr >> nth=0 >> text=Satisfied",
+      "step": 4
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "section": "manager",
+  "category": "violations",
+  "slug": "arc-review",
+  "shots": [
+    {
+      "name": "arcr-queue",
+      "kind": "still",
+      "route": "/arc-requests?communityId={cid}",
+      "role": "cam",
+      "community": "hoa",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "table"
+        }
+      ],
+      "clipTo": [
+        "[data-page-header]",
+        "table"
+      ],
+      "highlight": "table",
+      "step": 1
+    },
+    {
+      "name": "arcr-panel",
+      "kind": "still",
+      "route": "/arc-requests?communityId={cid}",
+      "role": "cam",
+      "community": "hoa",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Review\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Review\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "role=button[name=\"Mark under review\"]",
+      "step": 2
+    },
+    {
+      "name": "arcr-decide",
+      "kind": "still",
+      "route": "/arc-requests?communityId={cid}",
+      "role": "cam",
+      "community": "hoa",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Review\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Review\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#arc-review-notes"
+        },
+        {
+          "type": "fill",
+          "selector": "#arc-review-notes",
+          "value": "Fences are limited to 6 feet. A 6-foot fence in the same style would be approved."
+        },
+        {
+          "type": "fill",
+          "selector": "#arc-rule-reference",
+          "value": "Architectural Guidelines §5.2"
+        }
+      ],
+      "clipTo": "div:has(> h4:text-is(\"Record a decision\"))",
+      "highlight": "role=button[name=\"Deny\"]",
+      "step": 3
+    }
+  ]
+}
