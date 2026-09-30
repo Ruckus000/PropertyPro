@@ -103,15 +103,29 @@ configure_supabase() {
     s/^vector_port = 54328$/vector_port = $vector_port/m;
     s/^#\\s*auto_expose_new_tables = true/auto_expose_new_tables = true/m;
     s#^site_url = .*#site_url = 'http://localhost:$web_port'#m;
+    s/^\[analytics\]\nenabled = true$/[analytics]\nenabled = false/m;
   " "$config"
   grep -q '^auto_expose_new_tables = true' "$config" || {
     echo 'Could not enable Supabase auto_expose_new_tables.' >&2; exit 70;
+  }
+  # Analytics (Logflare) and its Vector log shipper cost ~800 MiB per stack and
+  # nothing in the app or the tests reads them. With several worktree stacks on
+  # one Docker VM, that is what got a new stack's analytics container OOM-killed
+  # mid-start ("Killed", then LegacyHealthCheckTimeoutError). Realtime stays:
+  # the notification bell and publish status subscribe to it.
+  perl -0ne 'exit(/^\[analytics\]\nenabled = false$/m ? 0 : 1)' "$config" || {
+    echo 'Could not disable Supabase analytics.' >&2; exit 70;
   }
 }
 
 write_runtime_env() {
   local status_file="$sandbox/supabase-status.env"
-  pnpm --dir "$repo_root" exec supabase --workdir "$supabase_workdir" status -o env > "$status_file"
+  # KEY=value lines only: this file is `source`d, and pnpm prints warnings on
+  # STDOUT (e.g. "WARN Unsupported engine" when the shell's Node is not the
+  # .nvmrc major), which made line 1 a bash syntax error. `status()` below
+  # filters the same way. Under pipefail, no matching line fails loudly.
+  pnpm --dir "$repo_root" exec supabase --workdir "$supabase_workdir" status -o env \
+    | grep -E '^[A-Z_][A-Z0-9_]*=' > "$status_file"
   # shellcheck disable=SC1090
   set -a; source "$status_file"; set +a
   write_secrets_env
