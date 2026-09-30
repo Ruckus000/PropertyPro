@@ -2,6 +2,7 @@ import { eq, and, isNull, isNotNull } from '@propertypro/db/filters';
 import {
   communities,
   createScopedClient,
+  leases,
   maintenanceRequests,
   moveChecklists,
   logAuditEvent,
@@ -14,6 +15,7 @@ import {
   type MoveChecklist,
   users,
 } from '@propertypro/db';
+import { ValidationError } from '@/lib/api/errors';
 
 // ─── Types ───
 
@@ -54,6 +56,30 @@ export async function createMoveChecklist(
   userId: string,
 ): Promise<MoveChecklist> {
   const scoped = createScopedClient(input.communityId);
+
+  // The lease must belong to THIS community, and the unit and resident must be
+  // the lease's own. Without this, a manager of one community could file a
+  // checklist naming another community's lease, unit or user: `send_welcome`
+  // would then email that user (users is platform-level), an inspection step
+  // would open a maintenance request on the other community's unit, and the
+  // restrict FKs would block that community from deleting the unit or user.
+  // The scoped read returns nothing for a lease in another community.
+  const leaseRows = await scoped.selectFrom<{ unitId: number; residentId: string }>(
+    leases,
+    { unitId: leases.unitId, residentId: leases.residentId },
+    and(eq(leases.id, input.leaseId), isNull(leases.deletedAt)),
+  );
+  const lease = leaseRows[0];
+  // UUIDs compare case-insensitively: Postgres returns lowercase, while the
+  // contracts' z.string().uuid() also accepts uppercase from an API client.
+  if (
+    !lease ||
+    lease.unitId !== input.unitId ||
+    lease.residentId.toLowerCase() !== input.residentId.toLowerCase()
+  ) {
+    throw new ValidationError('The lease, unit and resident must belong together in this community.');
+  }
+
   const checklistData = initializeChecklistData(input.type);
 
   const rows = await scoped.insert(moveChecklists, {
