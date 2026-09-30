@@ -195,7 +195,7 @@ export function UploadDocumentModal({
                 border border-edge
                 bg-surface-page
                 text-content
-                focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]/20 focus:border-[var(--border-focus)]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]/20 focus:border-[var(--border-focus)]
                 transition-colors disabled:opacity-50
               "
             />

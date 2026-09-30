@@ -58,7 +58,7 @@ export function CommentThread({ communityId, requestId, comments, onCommentAdded
           onChange={(e) => setText(e.target.value)}
           maxLength={5000}
           rows={3}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
           placeholder="Write a comment... (max 5000 characters)"
         />
         {error && <p className="text-xs text-status-danger">{error}</p>}

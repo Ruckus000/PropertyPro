@@ -165,7 +165,7 @@ export function ReportFilters({ communities }: ReportFiltersProps) {
       <select
         value={datePreset}
         onChange={(e) => setDatePreset(e.target.value)}
-        className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm shadow-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+        className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm shadow-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         aria-label="Date range"
       >
         {DATE_PRESETS.map((p) => (

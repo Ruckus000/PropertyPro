@@ -112,7 +112,7 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search communities..."
               aria-label="Search communities"
-              className="w-full rounded border border-edge px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-full rounded border border-edge px-2 py-1.5 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
 

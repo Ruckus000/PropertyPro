@@ -45,13 +45,13 @@ export default function Error({ error, reset }: ErrorProps) {
         <button
           type="button"
           onClick={reset}
-          className="inline-flex rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-coral-700 focus:outline-none focus:ring-2 focus:ring-coral-500 focus:ring-offset-2"
+          className="inline-flex rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-coral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-500 focus-visible:ring-offset-2"
         >
           Try again
         </button>
         <a
           href="/dashboard"
-          className="inline-flex rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-page focus:outline-none focus:ring-2 focus:ring-coral-500 focus:ring-offset-2"
+          className="inline-flex rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-page focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-500 focus-visible:ring-offset-2"
         >
           Go to dashboard
         </a>

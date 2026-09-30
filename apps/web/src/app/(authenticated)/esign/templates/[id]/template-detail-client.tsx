@@ -367,7 +367,7 @@ export function TemplateDetailClient({
               type="text"
               value={cloneName}
               onChange={(e) => setCloneName(e.target.value)}
-              className="mt-4 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--interactive-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--interactive-primary)]"
+              className="mt-4 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--interactive-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--interactive-primary)]"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleClone();

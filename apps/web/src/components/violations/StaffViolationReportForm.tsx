@@ -200,7 +200,7 @@ export function StaffViolationReportForm({ communityId }: StaffViolationReportFo
             value={unitId === '' ? '' : String(unitId)}
             onChange={(e) => setUnitId(e.target.value === '' ? '' : Number(e.target.value))}
             disabled={unitsLoading || units.length === 0}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus disabled:opacity-50"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus disabled:opacity-50"
           >
             <option value="">
               {unitsLoading ? 'Loading units…' : units.length === 0 ? 'No units available' : 'Select a unit…'}
@@ -226,7 +226,7 @@ export function StaffViolationReportForm({ communityId }: StaffViolationReportFo
           id="staff-violation-category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         >
           <option value="">Select a category...</option>
           {VIOLATION_CATEGORIES.map((c) => (
@@ -252,7 +252,7 @@ export function StaffViolationReportForm({ communityId }: StaffViolationReportFo
           rows={4}
           maxLength={4000}
           placeholder="Describe the violation in detail..."
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         />
         <p className="mt-1 text-xs text-content-disabled">{description.length}/4000</p>
         {fieldErrors['description'] && (
@@ -269,7 +269,7 @@ export function StaffViolationReportForm({ communityId }: StaffViolationReportFo
           id="staff-violation-severity"
           value={severity}
           onChange={(e) => setSeverity(e.target.value as ViolationSeverity)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         >
           {SEVERITY_OPTIONS.map((s) => (
             <option key={s.value} value={s.value}>

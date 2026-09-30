@@ -352,7 +352,7 @@ export function MeetingForm({
                     type="text"
                     value={formState.title}
                     onChange={(event) => updateField('title', event.target.value)}
-                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus:ring-2 focus:ring-[var(--focus-ring-color)]/20"
+                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]/20"
                     maxLength={200}
                   />
                   {fieldErrors.title ? (
@@ -365,7 +365,7 @@ export function MeetingForm({
                   <select
                     value={formState.meetingType}
                     onChange={(event) => updateField('meetingType', event.target.value as MeetingTypeOption)}
-                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus:ring-2 focus:ring-[var(--focus-ring-color)]/20"
+                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]/20"
                   >
                     <option value="board">Board</option>
                     <option value="annual">Annual</option>
@@ -381,7 +381,7 @@ export function MeetingForm({
                     type="datetime-local"
                     value={formState.startsAt}
                     onChange={(event) => updateField('startsAt', event.target.value)}
-                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus:ring-2 focus:ring-[var(--focus-ring-color)]/20"
+                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]/20"
                   />
                   {fieldErrors.startsAt ? (
                     <span className="text-xs text-[var(--status-danger)]">{fieldErrors.startsAt}</span>
@@ -394,7 +394,7 @@ export function MeetingForm({
                     type="datetime-local"
                     value={formState.endsAt}
                     onChange={(event) => updateField('endsAt', event.target.value)}
-                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus:ring-2 focus:ring-[var(--focus-ring-color)]/20"
+                    className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]/20"
                   />
                   {fieldErrors.endsAt ? (
                     <span className="text-xs text-[var(--status-danger)]">{fieldErrors.endsAt}</span>
@@ -431,7 +431,7 @@ export function MeetingForm({
                   type="text"
                   value={formState.location}
                   onChange={(event) => updateField('location', event.target.value)}
-                  className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus:ring-2 focus:ring-[var(--focus-ring-color)]/20"
+                  className="h-10 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-page)] px-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-ring-color)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)]/20"
                   maxLength={200}
                 />
                 {fieldErrors.location ? (

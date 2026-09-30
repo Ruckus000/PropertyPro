@@ -295,7 +295,7 @@ export function SignatureCapture({
                   placeholder={
                     mode === 'initials' ? 'Enter your initials' : 'Type your full name'
                   }
-                  className="w-full border border-edge-strong rounded-md px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-focus focus:border-transparent"
+                  className="w-full border border-edge-strong rounded-md px-4 py-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus:border-transparent"
                   maxLength={mode === 'initials' ? 5 : 100}
                   autoFocus
                 />

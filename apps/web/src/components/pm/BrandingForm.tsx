@@ -191,7 +191,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               onChange={(e) => setPrimaryColor(e.target.value)}
               pattern="^#[0-9a-fA-F]{6}$"
               maxLength={7}
-              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
         </div>
@@ -214,7 +214,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               onChange={(e) => setSecondaryColor(e.target.value)}
               pattern="^#[0-9a-fA-F]{6}$"
               maxLength={7}
-              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
         </div>
@@ -238,7 +238,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
               onChange={(e) => setAccentColor(e.target.value)}
               pattern="^#[0-9a-fA-F]{6}$"
               maxLength={7}
-              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-28 rounded border border-edge-strong px-2 py-1.5 font-mono text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
         </div>
@@ -252,7 +252,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
             id="font-heading"
             value={fontHeading}
             onChange={(e) => setFontHeading(e.target.value)}
-            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             {ALLOWED_FONTS.map((font) => (
               <option key={font} value={font}>
@@ -271,7 +271,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
             id="font-body"
             value={fontBody}
             onChange={(e) => setFontBody(e.target.value)}
-            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             {ALLOWED_FONTS.map((font) => (
               <option key={font} value={font}>
@@ -295,7 +295,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
             onChange={(e) => setCustomEmailFooter(e.target.value)}
             rows={3}
             maxLength={500}
-            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             placeholder="e.g. Questions? Contact management at (305) 555-0100"
           />
         </div>

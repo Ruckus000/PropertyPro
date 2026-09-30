@@ -14,7 +14,7 @@ interface MobileSecurityContentProps {
 // ── Input field ──────────────────────────────────────
 
 const inputClassName =
-  'w-full rounded-lg border border-stone-200 bg-white px-3 py-3 text-[15px] text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400';
+  'w-full rounded-lg border border-stone-200 bg-white px-3 py-3 text-[15px] text-stone-900 placeholder:text-stone-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400';
 
 export function MobileSecurityContent({
   email,

@@ -229,7 +229,7 @@ export function ViolationStatusTransition({
               type="date"
               value={hearingDate}
               onChange={(e) => setHearingDate(e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
             {hearingNoticeWarning ? (
               <p
@@ -256,7 +256,7 @@ export function ViolationStatusTransition({
               value={hearingLocation}
               onChange={(e) => setHearingLocation(e.target.value)}
               placeholder="e.g., Community clubhouse, Room 101"
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
         </>
@@ -277,7 +277,7 @@ export function ViolationStatusTransition({
               value={fineAmountDollars}
               onChange={(e) => setFineAmountDollars(e.target.value)}
               placeholder="0.00"
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
           <div>
@@ -290,7 +290,7 @@ export function ViolationStatusTransition({
               value={fineDueDate}
               min={format(new Date(), 'yyyy-MM-dd')}
               onChange={(e) => setFineDueDate(e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
         </>

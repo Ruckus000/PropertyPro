@@ -383,7 +383,7 @@ function CreateAssessmentDialog({
               value={formData.title}
               onChange={(e) => updateField('title', e.target.value)}
               placeholder="Monthly Maintenance Assessment"
-              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
 
@@ -393,7 +393,7 @@ function CreateAssessmentDialog({
               value={formData.description}
               onChange={(e) => updateField('description', e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
 
@@ -407,7 +407,7 @@ function CreateAssessmentDialog({
                 value={formData.amountDollars}
                 onChange={(e) => updateField('amountDollars', e.target.value)}
                 placeholder="350.00"
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
             <div>
@@ -415,7 +415,7 @@ function CreateAssessmentDialog({
               <select
                 value={formData.frequency}
                 onChange={(e) => updateField('frequency', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               >
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
@@ -434,7 +434,7 @@ function CreateAssessmentDialog({
                 max="31"
                 value={formData.dueDay}
                 onChange={(e) => updateField('dueDay', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
             <div>
@@ -446,7 +446,7 @@ function CreateAssessmentDialog({
                 value={formData.lateFeeDollars}
                 onChange={(e) => updateField('lateFeeDollars', e.target.value)}
                 placeholder="25.00"
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
             <div>
@@ -456,7 +456,7 @@ function CreateAssessmentDialog({
                 min="0"
                 value={formData.lateFeeDaysGrace}
                 onChange={(e) => updateField('lateFeeDaysGrace', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
           </div>
@@ -574,7 +574,7 @@ function EditAssessmentDialog({
               type="text"
               value={formData.title}
               onChange={(e) => updateField('title', e.target.value)}
-              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
 
@@ -584,7 +584,7 @@ function EditAssessmentDialog({
               value={formData.description}
               onChange={(e) => updateField('description', e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+              className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
 
@@ -597,7 +597,7 @@ function EditAssessmentDialog({
                 min="0.01"
                 value={formData.amountDollars}
                 onChange={(e) => updateField('amountDollars', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
             <div>
@@ -605,7 +605,7 @@ function EditAssessmentDialog({
               <select
                 value={formData.frequency}
                 onChange={(e) => updateField('frequency', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               >
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
@@ -624,7 +624,7 @@ function EditAssessmentDialog({
                 max="31"
                 value={formData.dueDay}
                 onChange={(e) => updateField('dueDay', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
             <div>
@@ -635,7 +635,7 @@ function EditAssessmentDialog({
                 min="0"
                 value={formData.lateFeeDollars}
                 onChange={(e) => updateField('lateFeeDollars', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
             <div>
@@ -645,7 +645,7 @@ function EditAssessmentDialog({
                 min="0"
                 value={formData.lateFeeDaysGrace}
                 onChange={(e) => updateField('lateFeeDaysGrace', e.target.value)}
-                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="mt-1 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
               />
             </div>
           </div>
@@ -655,7 +655,7 @@ function EditAssessmentDialog({
               type="checkbox"
               checked={formData.isActive}
               onChange={(e) => updateField('isActive', e.target.checked)}
-              className="h-4 w-4 rounded border-edge-strong text-interactive focus:ring-focus"
+              className="h-4 w-4 rounded border-edge-strong text-interactive focus-visible:ring-focus"
             />
             <span className="text-sm text-content-secondary">Active</span>
           </label>

@@ -115,7 +115,7 @@ export function ApproveDialog({
                 className={cn(
                   'flex h-10 w-full rounded-md border border-edge bg-transparent px-3 py-2',
                   'text-sm placeholder:text-content-placeholder',
-                  'focus:outline-none focus:ring-2 focus:ring-focus',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                   'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               />

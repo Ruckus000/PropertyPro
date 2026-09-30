@@ -53,7 +53,7 @@ function validatePassword(pw: string): string | null {
 // ── Shared styles ──────────────────────────────────────
 
 const inputClassName =
-  'w-full rounded-[var(--radius-sm,6px)] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring-color)] disabled:cursor-not-allowed disabled:opacity-50';
+  'w-full rounded-[var(--radius-sm,6px)] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--border-focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] disabled:cursor-not-allowed disabled:opacity-50';
 
 const labelClassName = 'mb-1.5 block text-sm font-medium text-[var(--text-secondary)]';
 

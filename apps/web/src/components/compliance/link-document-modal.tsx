@@ -112,7 +112,7 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
               bg-surface-page
               text-content
               placeholder:text-content-tertiary
-              focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]/20 focus:border-[var(--border-focus)]
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]/20 focus:border-[var(--border-focus)]
               transition-colors
             "
           />

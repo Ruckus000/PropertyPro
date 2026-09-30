@@ -569,7 +569,7 @@ export default function SigningPage() {
               type="checkbox"
               checked={consentChecked}
               onChange={(e) => setConsentChecked(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-edge-strong text-interactive focus:ring-interactive"
+              className="mt-1 h-4 w-4 rounded border-edge-strong text-interactive focus-visible:ring-interactive"
             />
             <span className="text-xs text-content-secondary leading-relaxed">
               {ESIGN_CONSENT_TEXT}
@@ -605,7 +605,7 @@ export default function SigningPage() {
                   value={declineReason}
                   onChange={(e) => setDeclineReason(e.target.value)}
                   placeholder="Reason (optional)"
-                  className="w-full border border-edge-strong rounded-md px-3 py-2 text-sm resize-none h-16 focus:outline-none focus:ring-2 focus:ring-interactive"
+                  className="w-full border border-edge-strong rounded-md px-3 py-2 text-sm resize-none h-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
                 />
                 <div className="flex gap-2">
                   <Button

@@ -175,7 +175,7 @@ export function StartSessionDialog({
               required
               value={targetUserId}
               onChange={(e) => setTargetUserId(e.target.value)}
-              className="w-full rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+              className="w-full rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
             >
               <option value="">Select a member…</option>
               {members.map((m) => (
@@ -202,7 +202,7 @@ export function StartSessionDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Describe why support access is needed…"
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
             />
           </div>
 
@@ -220,7 +220,7 @@ export function StartSessionDialog({
               value={ticketId}
               onChange={(e) => setTicketId(e.target.value)}
               placeholder="e.g. SUPPORT-1234"
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
             />
           </div>
 
