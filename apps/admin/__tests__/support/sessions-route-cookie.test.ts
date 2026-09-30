@@ -12,6 +12,7 @@ const sessionInsert = vi.fn();
 const accessLogInsert = vi.fn();
 const signSupportToken = vi.fn();
 const membershipLookup = vi.fn();
+const sessionEnd = vi.fn();
 const membershipFilters: Array<[string, unknown]> = [];
 
 function makeFromMock(table: string) {
@@ -53,6 +54,12 @@ function makeFromMock(table: string) {
         }),
         insert: (payload: unknown) => ({
           select: () => ({ single: () => sessionInsert(payload) }),
+        }),
+        update: (payload: unknown) => ({
+          eq: async (col: string, val: unknown) => {
+            sessionEnd(payload, col, val);
+            return { error: null };
+          },
         }),
       };
     case 'users':
@@ -232,5 +239,23 @@ describe('POST /api/admin/support/sessions — target must belong to the consent
 
     expect(res.status).toBe(500);
     expect(res.headers.get('set-cookie')).toBeNull();
+    // The never-handed-out row is ended so it does not show as active.
+    expect(sessionEnd).toHaveBeenCalledWith(
+      { ended_at: expect.any(String) },
+      'id',
+      77,
+    );
+  });
+
+  it('does not end the session when session_started was recorded', async () => {
+    sessionEnd.mockClear();
+    membershipLookup.mockResolvedValue({
+      data: { user_id: '11111111-2222-4333-8444-555555555555' },
+      error: null,
+    });
+    const res = await callCreate();
+
+    expect(res.status).toBe(201);
+    expect(sessionEnd).not.toHaveBeenCalled();
   });
 });

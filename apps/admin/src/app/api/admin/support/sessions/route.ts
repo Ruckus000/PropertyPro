@@ -173,8 +173,9 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   }
 
   // 6. Log to support_access_log. Checked: a session that cannot be put on
-  // the record is not handed out (no cookie below). The row just inserted
-  // stays behind, unusable without its token, and expires on its own.
+  // the record is not handed out (no cookie below). The row just inserted is
+  // unusable without its token; it is also ended, best effort, so it neither
+  // shows as active in the Support Access tab nor counts as a live session.
   const { error: accessLogError } = await (db.from('support_access_log')).insert({
     admin_user_id: admin.id,
     community_id: communityId,
@@ -183,6 +184,15 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     metadata: { reason, target_user_id: targetUserId, ticket_id: ticketId },
   });
 
+  if (accessLogError) {
+    try {
+      await (db.from('support_sessions'))
+        .update({ ended_at: new Date().toISOString() })
+        .eq('id', session.id);
+    } catch {
+      // Best effort: the response is already a refusal either way.
+    }
+  }
   assertNoDbError(accessLogError, 'Failed to record session_started in support_access_log');
 
   // 7. Hand the token to the browser as an HttpOnly cookie — never in the body.

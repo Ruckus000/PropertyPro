@@ -186,6 +186,7 @@ export async function recordSupportAction(
   // membership. Unreadable → refuse, like every other branch here.
   const db = createAdminTypedClient();
   let membership: 'member' | 'not_member' | 'unreadable';
+  let membershipError: unknown = null;
   try {
     const { data, error } = await db
       .from('user_roles')
@@ -193,8 +194,10 @@ export async function recordSupportAction(
       .eq('user_id', input.targetUserId)
       .eq('community_id', scope.communityId)
       .maybeSingle();
+    membershipError = error ?? null;
     membership = error ? 'unreadable' : data !== null ? 'member' : 'not_member';
-  } catch {
+  } catch (error) {
+    membershipError = error;
     membership = 'unreadable';
   }
   if (membership === 'not_member') {
@@ -204,6 +207,7 @@ export async function recordSupportAction(
     console.error('[support-audit] membership read failed; refusing the change', {
       event: input.event,
       sessionId: actor.sessionId,
+      error: membershipError,
     });
     throw supportAuditError(
       new AppError(SUPPORT_AUDIT_MEMBERSHIP_UNREADABLE_MESSAGE, 500, SUPPORT_AUDIT_FAILED_CODE),
