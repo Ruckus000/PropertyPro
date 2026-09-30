@@ -19,9 +19,10 @@
  * enforces this.
  *
  * `storm_damage` IS in `RBAC_RESOURCES` (packages/shared/src/rbac-matrix.ts):
- * read + write are open to every resident (they file their own reports, RLS
- * scopes their reads); the admin-only status transition is additionally
- * isAdminRole-gated in the handler.
+ * read + write are open to every resident (they file their own reports, and the
+ * GET handler narrows a non-admin to the reports they filed — RLS does not, since
+ * the scoped client's connection carries no auth.uid()); the admin-only status
+ * transition is additionally isAdminRole-gated in the handler.
  *
  * Response is intentionally `z.unknown()` (loose), matching the insurance/
  * wind-mitigation convention: rows carry `Date` fields that would `safeParse`-fail

@@ -3,8 +3,9 @@
  * (Wave 1 differentiation).
  *
  * Any resident files a report about damage they observed; the board and
- * management see every report and move it through a status. RLS scopes a
- * resident's reads/edits to their own rows and lets admin-tier see all.
+ * management see every report and move it through a status. The GET handler
+ * narrows a non-admin to the reports they filed (RLS cannot: the scoped client's
+ * connection carries no auth.uid()); only admin-tier may PATCH a status.
  *
  * ⚠️ This RECORDS damage for the association. It is NOT an insurance claim and
  * PropertyPro is not a public adjuster (§626.854). Any claim/coverage language
@@ -105,7 +106,7 @@ export const GET = withErrorHandler(
 );
 
 // ---------------------------------------------------------------------------
-// POST — file a report (any resident; RLS scopes ownership)
+// POST — file a report (any resident; reported_by is the session user)
 // ---------------------------------------------------------------------------
 
 export const POST = withErrorHandler(
