@@ -405,6 +405,23 @@ function billingPeriodFor(
   return { start: firstOfMonthIndex(startIndex), endExclusive: firstOfMonthIndex(startIndex + months) };
 }
 
+/**
+ * The assessment's start/end bounds, at MONTH granularity and inclusive on both
+ * ends: a date is billable iff its month is on or after startDate's month and,
+ * when endDate is set, on or before endDate's month. So "starts 2026-04-20"
+ * bills April, and "ends 2026-04-01" bills April. One rule, shared by manual
+ * generation (below) and the recurring cron, which passes its period's 1st.
+ */
+export function assessmentMonthOutOfRange(
+  assessment: Pick<AssessmentRecord, 'startDate' | 'endDate'>,
+  dateOnly: string,
+): 'before_start' | 'after_end' | null {
+  const month = dateOnly.slice(0, 7);
+  if (month < assessment.startDate.slice(0, 7)) return 'before_start';
+  if (assessment.endDate && month > assessment.endDate.slice(0, 7)) return 'after_end';
+  return null;
+}
+
 function toLineItemDescription(assessment: AssessmentRecord, dueDate: string): string {
   return `${assessment.title} (${dueDate})`;
 }
@@ -681,6 +698,14 @@ export async function generateAssessmentLineItemsForCommunity(
   }
 
   const dueDate = computeDueDate(assessment, dueDateOverride);
+  const outOfRange = assessmentMonthOutOfRange(assessment, dueDate);
+  if (outOfRange) {
+    throw new UnprocessableEntityError(
+      outOfRange === 'before_start'
+        ? `Cannot generate line items: ${dueDate} is before the assessment's start month (${assessment.startDate})`
+        : `Cannot generate line items: ${dueDate} is after the assessment's end month (${assessment.endDate})`,
+    );
+  }
   const unitRows = await scoped.selectFrom<{ id: number }>(units, { id: units.id });
   if (unitRows.length === 0) {
     throw new UnprocessableEntityError('Cannot generate line items: no units found for this community');

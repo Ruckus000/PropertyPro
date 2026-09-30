@@ -29,7 +29,10 @@ import {
 import { and, eq, inArray, isNull, lt, lte, ne } from '@propertypro/db/filters';
 // AUTHZ: Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
+import {
+  assessmentMonthOutOfRange,
+  generateAssessmentLineItemsForCommunity,
+} from '@/lib/services/finance-service';
 import type { AssessmentFrequency } from '@/lib/services/finance-service';
 import { getBaseUrl } from '@/lib/utils/url';
 
@@ -356,19 +359,10 @@ export async function processRecurringAssessments(
           continue;
         }
 
-        // Check start date, at the same month granularity: no period before the
-        // start date's month is billed (a future-start assessment used to charge
-        // at the next cron run).
-        if (periodMonth < assessment.startDate.slice(0, 7)) continue;
-
-        // Check end date. endDate is a calendar date, compared at MONTH
-        // granularity and inclusive: a period is billed iff its first day is on
-        // or before endDate, so "ends 2026-04-01" bills April. (Comparing `now`
-        // against endDate's UTC midnight made the 05:00 UTC run on the 1st skip
-        // an assessment ending that day — its final installment.)
-        if (assessment.endDate && periodMonth > assessment.endDate.slice(0, 7)) {
-          continue;
-        }
+        // Start/end bounds: the same month-inclusive rule the generator enforces
+        // (assessmentMonthOutOfRange), checked here first so an out-of-range
+        // assessment is skipped quietly rather than counted as a failed 422.
+        if (assessmentMonthOutOfRange(assessment, `${periodMonth}-01`)) continue;
 
         try {
           const result = await generateAssessmentLineItemsForCommunity(

@@ -852,6 +852,16 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
     expect(generatedDueDates()).toEqual(expected ? ['2026-04-01'] : []);
   });
 
+  it.each([
+    ['before its start month', { startDate: '2026-09-01' }],
+    ['after its end month', { endDate: '2026-03-31' }],
+  ])('an assessment %s is skipped quietly: not processed, not counted as an error', async (_label, overrides) => {
+    // The generator would refuse it with a 422; the cron checks the same rule
+    // (assessmentMonthOutOfRange) first, so a normal skip is not reported as a failure.
+    const summary = await runInMonth(4, { frequency: 'monthly', ...overrides });
+    expect(summary).toMatchObject({ assessmentsProcessed: 0, errors: 0 });
+  });
+
   it('the `now` argument gates the month, but the due date comes from the wall clock', async () => {
     // CHARACTERIZATION: suspected defect (LATENT) — processRecurringAssessments(now)
     // does not pass `now` to generateAssessmentLineItemsForCommunity, whose
@@ -1364,6 +1374,35 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     setNow(nowIso);
     const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
     expect(result.insertedCount).toBe(expectedInserted);
+  });
+
+  it.each([
+    // [label, startDate, endDate, override (null = computed from the clock, April 2026)]
+    ['an override before the start month', '2026-05-01', null, '2026-04-20'],
+    ['the computed due date of a future-start assessment', '2026-09-01', null, null],
+    ['an override after the end month', '2025-01-01', '2026-03-31', '2026-04-01'],
+  ])('manual generate refuses %s with a 422 and writes nothing', async (_label, startDate, endDate, override) => {
+    // The start/end month bounds used to live only in the recurring cron, so the
+    // manual `POST /assessments/[id]/generate` billed outside them. The rule now
+    // lives in generateAssessmentLineItemsForCommunity, shared by both paths.
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 1, startDate, endDate })]);
+    seed(assessmentLineItemsTable, []);
+    await expect(generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', override)).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringMatching(/^Cannot generate line items: 2026-04-\d\d is (before|after) the assessment's (start|end) month \(\d{4}-\d\d-\d\d\)$/),
+    });
+    expect(insertMock).not.toHaveBeenCalled();
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['start mid-month bills its own month', '2026-04-20', null, '2026-04-01'],
+    ['end on the 1st bills that whole month', '2025-01-01', '2026-04-01', '2026-04-30'],
+  ])('manual generate bounds are month-inclusive: %s', async (_label, startDate, endDate, override) => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 1, startDate, endDate })]);
+    seed(assessmentLineItemsTable, []);
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', override);
+    expect(result).toEqual({ insertedCount: 3, skippedCount: 0, dueDate: override });
   });
 
   it('one_time keeps exact-dueDate idempotency', async () => {

@@ -23,6 +23,10 @@
  * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
  *
  * `x-request-id` header forwarded verbatim to the service call.
+ *
+ * A due date outside the assessment's start/end months (month-inclusive) is a
+ * 422 from the service, with a message naming the bound — the same rule the
+ * recurring cron applies.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
