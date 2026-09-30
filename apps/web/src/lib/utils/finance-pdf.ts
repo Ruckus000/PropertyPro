@@ -72,9 +72,9 @@ function buildPageContent(lines: string[]): string {
  * A cut statement must not look complete on paper either (roadmap 3.8): the
  * portal shows a banner, and the PDF prints this note under the balance.
  */
-function pushTruncationNote(lines: string[], truncated: boolean | undefined, listed: number): void {
+function pushTruncationNote(lines: string[], truncated: boolean | undefined): void {
   if (!truncated) return;
-  lines.push(`NOTE: Payables lists only the ${listed} most recent items; older items are omitted.`);
+  lines.push('NOTE: Some items are omitted from Payables (outstanding items are listed oldest-due first).');
   lines.push('The Current Balance above includes everything.');
 }
 
@@ -83,7 +83,7 @@ export function generateFinanceStatementPdf(payload: FinanceStatementPayload): U
   lines.push(`Finance Statement - Unit ${payload.unitId}`);
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
-  pushTruncationNote(lines, payload.truncated, payload.lineItems.length);
+  pushTruncationNote(lines, payload.truncated);
   lines.push('');
   lines.push('Payables');
   lines.push('Due Date     Status     Amount    Late Fee');
@@ -113,7 +113,7 @@ export function generateCommunityFinanceStatementPdf(
   lines.push(`Community Finance Statement - Community #${payload.communityId}`);
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
-  pushTruncationNote(lines, payload.truncated, payload.lineItems.length);
+  pushTruncationNote(lines, payload.truncated);
   lines.push('');
   lines.push('Payables');
   lines.push('Unit        Due Date     Status     Amount    Late Fee');

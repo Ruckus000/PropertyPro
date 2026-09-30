@@ -207,6 +207,47 @@ describe('PaymentPortal', () => {
     }, { timeout: 10000 });
   });
 
+  it('uses the server summary for Total due and the overdue count, not the listed rows', async () => {
+    // The listed row alone would give $350 / 0 overdue. The summary covers items
+    // the list does not show (e.g. capped), so it must win.
+    mockBothFetches({
+      lineItems: [
+        {
+          id: 1,
+          assessmentTitle: 'Monthly Maintenance',
+          amountCents: 35000,
+          lateFeeCents: 0,
+          status: 'pending',
+          dueDate: '2026-04-01',
+          paidAt: null,
+        },
+      ],
+      summary: { totalDueCents: 1234500, overdueCount: 7, outstandingCount: 42 },
+      paymentHistory: [],
+      unitLabel: 'Unit 301',
+    });
+
+    const PaymentPortal = await importPaymentPortal();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <PaymentPortal
+          communityId={42}
+          userRole="owner"
+          paymentsEnabled={false}
+        />
+      </Wrapper>,
+    );
+
+    await waitFor(() => {
+      expect(document.body.textContent || '').toContain('Total Due$12,345.00');
+    }, { timeout: 10000 });
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).toContain('Overdue Items7');
+    expect(bodyText).toContain('Upcoming42');
+  });
+
   it('treats partially paid items as outstanding in upcoming totals', async () => {
     mockBothFetches({
       unitId: 301,
@@ -468,7 +509,7 @@ describe('PaymentPortal', () => {
     it.each([
       [true, 'shows'],
       [false, 'does not show'],
-    ])('truncated=%s %s the "200 most recent items" notice (roadmap 3.8)', async (truncated) => {
+    ])('truncated=%s %s the "some items aren\'t listed" notice (roadmap 3.8)', async (truncated) => {
       mockBothFetches(
         { balanceCents: 0, ledgerEntries: [], lineItems: [], truncated },
         { mode: 'community' },
@@ -486,7 +527,7 @@ describe('PaymentPortal', () => {
       await waitFor(() => {
         expect(screen.queryByText(/all caught up/i)).toBeInTheDocument();
       });
-      const notice = screen.queryByText(/most recent items/);
+      const notice = screen.queryByText("Some items aren't listed");
       if (truncated) {
         expect(notice).toBeInTheDocument();
       } else {

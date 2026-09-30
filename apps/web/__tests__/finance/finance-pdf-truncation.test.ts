@@ -8,7 +8,7 @@ import {
   generateFinanceStatementPdf,
 } from '../../src/lib/utils/finance-pdf';
 
-const NOTE = 'NOTE: Payables lists only the 1 most recent items; older items are omitted.';
+const NOTE = 'NOTE: Some items are omitted from Payables';
 const item = { dueDate: '2026-03-01', status: 'pending', amountCents: 100, lateFeeCents: 0 };
 
 function text(pdf: Uint8Array): string {
