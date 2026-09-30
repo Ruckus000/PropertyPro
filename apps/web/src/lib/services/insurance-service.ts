@@ -8,17 +8,38 @@
  */
 import type { createScopedClient } from '@propertypro/db';
 import { documents, insuranceCertificateRequests, insurancePolicies, users } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { asc, desc, eq } from '@propertypro/db/filters';
 
 type ScopedClient = ReturnType<typeof createScopedClient>;
 type Row = Record<string, unknown>;
 
+/**
+ * Explicit row caps for the two list reads below. Neither route paginates (the
+ * response is a bare array under `{ policies }` / `{ requests }`), so these are
+ * safety bounds, not page sizes. Sort + cap run in SQL (roadmap 3.7, PAG-06).
+ *
+ * - Policies: a community carries one live master policy per coverage type,
+ *   plus the non-deleted history of prior terms; 500 is decades of annual
+ *   renewals across every type. The Insurance hub renders the whole array.
+ * - Certificate requests: a growing log (rate-limited to 5/user/day). The list
+ *   GET has no in-app consumer today; the cap keeps the newest 500.
+ */
+export const INSURANCE_POLICY_LIST_CAP = 500;
+export const CERTIFICATE_REQUEST_LIST_CAP = 500;
+
 // --- Policies -------------------------------------------------------------
 
-/** List policies, soonest-expiring first. Bounded per community — not paginated. */
+/**
+ * List policies, soonest-expiring first (`expires_at ASC, id ASC`), capped at
+ * INSURANCE_POLICY_LIST_CAP. Not paginated. The order is served by
+ * `insurance_policies_community_expires_idx (community_id, expires_at)`.
+ */
 export async function listInsurancePolicies(scoped: ScopedClient): Promise<Row[]> {
-  const rows = (await scoped.query(insurancePolicies)) as Row[];
-  return rows.sort((a, b) => String(a.expiresAt).localeCompare(String(b.expiresAt)));
+  const rows = await scoped
+    .selectFrom(insurancePolicies, {})
+    .orderBy(asc(insurancePolicies.expiresAt), asc(insurancePolicies.id))
+    .limit(INSURANCE_POLICY_LIST_CAP);
+  return rows as unknown as Row[];
 }
 
 export async function getInsurancePolicyById(scoped: ScopedClient, id: number): Promise<Row | null> {
@@ -60,12 +81,30 @@ export async function softDeleteInsurancePolicyById(
 // --- Certificate requests -------------------------------------------------
 
 /**
- * List certificate requests. RLS scopes non-admin actors to their own rows and
- * admin-tier to all, so this returns whatever the caller may see.
+ * List certificate requests, newest first (`created_at DESC, id DESC`), capped
+ * at CERTIFICATE_REQUEST_LIST_CAP. Not paginated.
  */
-export async function listCertificateRequests(scoped: ScopedClient): Promise<Row[]> {
-  const rows = (await scoped.query(insuranceCertificateRequests)) as Row[];
-  return rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+/**
+ * `requestedBy` narrows the list to one requester. Pass it for every
+ * non-admin caller: the table's RLS "own rows" branch keys on `auth.uid()`,
+ * which the scoped client's privileged connection never sets, so RLS does
+ * NOT do this narrowing here.
+ */
+export async function listCertificateRequests(
+  scoped: ScopedClient,
+  options: { requestedBy?: string } = {},
+): Promise<Row[]> {
+  const rows = await scoped
+    .selectFrom(
+      insuranceCertificateRequests,
+      {},
+      options.requestedBy === undefined
+        ? undefined
+        : eq(insuranceCertificateRequests.requestedBy, options.requestedBy),
+    )
+    .orderBy(desc(insuranceCertificateRequests.createdAt), desc(insuranceCertificateRequests.id))
+    .limit(CERTIFICATE_REQUEST_LIST_CAP);
+  return rows as unknown as Row[];
 }
 
 export async function createCertificateRequest(

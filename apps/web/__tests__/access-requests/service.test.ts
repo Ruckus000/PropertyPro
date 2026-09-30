@@ -6,7 +6,8 @@
  * - verifyOtp: valid OTP transitions to pending, max attempts, expired OTP
  * - approveAccessRequest: creates auth user + users + roles, rejects non-pending, handles auth failure
  * - denyAccessRequest: marks denied, sends notification
- * - listPendingRequests: returns only pending rows
+ * - every access_requests read is a targeted SQL lookup, never a full-table
+ *   read filtered in JS (roadmap 3.7, PAG-10)
  */
 import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,7 +28,14 @@ const {
   logAuditEventMock: vi.fn(),
   createAdminClientMock: vi.fn(),
   tables: {
-    accessRequests: Symbol('access_requests'),
+    // Per-column identities so the SQL predicates the service builds can be
+    // asserted and evaluated (PAG-10: no more full reads + JS `.find`).
+    accessRequests: {
+      __table: 'access_requests',
+      id: Symbol('access_requests.id'),
+      email: Symbol('access_requests.email'),
+      status: Symbol('access_requests.status'),
+    },
     // Real per-column identities, not a bare Symbol: the approval path does
     // `eq(users.email, ...)`, and on a Symbol that argument is `undefined`,
     // which makes any predicate assertion pass for ANY column.
@@ -60,6 +68,7 @@ vi.mock('@propertypro/db/filters', () => ({
   // account to their identity, with the whole suite still green.
   eq: vi.fn((col: unknown, val: unknown) => ({ _type: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ _type: 'and', args })),
+  asc: vi.fn((col: unknown) => ({ _type: 'asc', col })),
   isNull: vi.fn((_col: unknown) => ({ _type: 'isNull' })),
   inArray: vi.fn((col: unknown, vals: unknown) => ({ _type: 'inArray', col, vals })),
   sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
@@ -90,7 +99,6 @@ import {
   verifyOtp,
   approveAccessRequest,
   denyAccessRequest,
-  listPendingRequests,
 } from '../../src/lib/services/access-request-service';
 
 // ---------------------------------------------------------------------------
@@ -120,8 +128,14 @@ function setupScopedMock(overrides: {
   roleRows?: Record<string, unknown>[];
   communityRows?: Record<string, unknown>[];
 } = {}) {
+  const accessRequestRows = overrides.accessRequestRows ?? [];
+
   const queryMock = vi.fn(async (table: unknown) => {
-    if (table === tables.accessRequests) return overrides.accessRequestRows ?? [];
+    // PAG-10: a whole-table read of access_requests is exactly the regression
+    // these tests exist to catch, so it fails loudly instead of being served.
+    if (table === tables.accessRequests) {
+      throw new Error('Full-table read of access_requests (PAG-10 regression)');
+    }
     // Mirrors the scoped client's read guard: `users` is platform-global, so an
     // unfiltered read of it is refused rather than served.
     if (table === tables.users) throw new Error('Unscoped query on table "users"');
@@ -143,7 +157,67 @@ function setupScopedMock(overrides: {
   // Cross-tenant FK guard resolves a referenced unitId through queryById.
   // Default to "found in this community"; a test can override to null to
   // exercise the rejection path.
-  const queryByIdMock = vi.fn(async (_table: unknown, id: number) => ({ id }));
+  // access_requests lookups by primary key are served from `accessRequestRows`,
+  // as the SQL `id = $1` would.
+  const queryByIdMock = vi.fn(async (table: unknown, id: number) => {
+    if (table === tables.accessRequests) {
+      return accessRequestRows.find((row) => row['id'] === id) ?? null;
+    }
+    return { id };
+  });
+
+  // The submit-time pending_verification lookup is
+  //   selectFrom(accessRequests, {}, and(sql`lower(email) = x`, eq(status, v)))
+  //     .orderBy(asc(id)).limit(n)
+  // This evaluates exactly that predicate/order/limit over `accessRequestRows`
+  // and records the chain in `accessRequestSelects`, so a test can assert the
+  // SQL shape as well as the row it yields.
+  const accessRequestSelects: Array<{ where: unknown; orderBy: unknown[]; limit: number | null }> = [];
+  function selectAccessRequests(additionalWhere: unknown) {
+    const call = { where: additionalWhere, orderBy: [] as unknown[], limit: null as number | null };
+    accessRequestSelects.push(call);
+    const evaluate = (): Record<string, unknown>[] => {
+      const where = additionalWhere as { _type: 'and'; args: unknown[] } | undefined;
+      if (where?._type !== 'and') throw new Error('unexpected access_requests predicate');
+      let rows = accessRequestRows.filter((row) =>
+        where.args.every((clause) => {
+          const c = clause as
+            | { _type: 'sql'; text: string; values: unknown[] }
+            | { _type: 'eq'; col: unknown; val: unknown };
+          if (
+            c._type === 'sql' &&
+            c.text === 'lower(?) = ?' &&
+            c.values[0] === tables.accessRequests.email
+          ) {
+            return String(row['email']).toLowerCase() === c.values[1];
+          }
+          if (c._type === 'eq' && c.col === tables.accessRequests.status) {
+            return row['status'] === c.val;
+          }
+          throw new Error('unexpected access_requests clause');
+        }),
+      );
+      if (call.orderBy.some((o) => (o as { col?: unknown }).col === tables.accessRequests.id)) {
+        rows = [...rows].sort((a, b) => (a['id'] as number) - (b['id'] as number));
+      }
+      return call.limit === null ? rows : rows.slice(0, call.limit);
+    };
+    const builder = {
+      orderBy: (...cols: unknown[]) => {
+        call.orderBy.push(...cols);
+        return builder;
+      },
+      limit: (n: number) => {
+        call.limit = n;
+        return builder;
+      },
+      then: <R1, R2 = never>(
+        onFulfilled?: (rows: Record<string, unknown>[]) => R1 | PromiseLike<R1>,
+        onRejected?: (e: unknown) => R2 | PromiseLike<R2>,
+      ) => Promise.resolve().then(evaluate).then(onFulfilled, onRejected),
+    };
+    return builder;
+  }
 
   // `users` reads go through selectFrom with a WHERE. The two predicates the
   // service builds are applied to `userRows`, so a lookup only sees the rows it
@@ -154,9 +228,14 @@ function setupScopedMock(overrides: {
   // row" — the ordinary new-resident case; tests override it to model someone
   // pre-provisioned by another community (issue #944).
   const selectFromMock = vi.fn(
-    async (
+    (table: unknown, _columns: unknown, additionalWhere?: unknown) =>
+      table === tables.accessRequests
+        ? selectAccessRequests(additionalWhere)
+        : selectUsers(table, additionalWhere),
+  );
+
+  const selectUsers = async (
       table: unknown,
-      _columns: unknown,
       additionalWhere?: unknown,
     ): Promise<Record<string, unknown>[]> => {
       if (table !== tables.users) return [];
@@ -173,8 +252,7 @@ function setupScopedMock(overrides: {
         return rows.filter((row) => String(row['email']).toLowerCase() === wanted);
       }
       return [];
-    },
-  );
+    };
 
   const scoped = {
     query: queryMock,
@@ -182,6 +260,7 @@ function setupScopedMock(overrides: {
     update: updateMock,
     queryById: queryByIdMock,
     selectFrom: selectFromMock,
+    accessRequestSelects,
   };
 
   createScopedClientMock.mockReturnValue(scoped);
@@ -996,32 +1075,94 @@ describe('access-request-service', () => {
   });
 
   // -------------------------------------------------------------------------
-  // listPendingRequests
+  // PAG-10 (roadmap 3.7): every access_requests read is targeted SQL
   // -------------------------------------------------------------------------
 
-  describe('listPendingRequests', () => {
-    it('returns only pending requests', async () => {
-      setupScopedMock({
-        accessRequestRows: [
-          { id: 1, status: 'pending', email: 'a@example.com' },
-          { id: 2, status: 'approved', email: 'b@example.com' },
-          { id: 3, status: 'pending', email: 'c@example.com' },
-          { id: 4, status: 'denied', email: 'd@example.com' },
-          { id: 5, status: 'pending_verification', email: 'e@example.com' },
-        ],
+  describe('access_requests reads are targeted, never full-table', () => {
+    const mixedRows = [
+      { id: 3, email: 'other@example.com', fullName: 'Other', status: 'pending_verification' },
+      { id: 5, email: 'Resend@Example.com', fullName: 'Old Denied', status: 'denied' },
+      // Mixed-case stored email: the JS `.find` compared lower(stored) too.
+      { id: 7, email: 'Resend@Example.com', fullName: 'Resend Me', status: 'pending_verification' },
+    ];
+
+    it('submit: finds the pending_verification row by lower(email) + status, id ASC, LIMIT 1', async () => {
+      const scoped = setupScopedMock({ accessRequestRows: mixedRows });
+
+      const result = await submitAccessRequest({
+        communityId: COMMUNITY_ID,
+        communitySlug: COMMUNITY_SLUG,
+        email: 'RESEND@example.com',
+        fullName: 'Resend Me',
+        isUnitOwner: false,
       });
 
-      const result = await listPendingRequests(COMMUNITY_ID);
-
-      expect(result).toHaveLength(2);
-      expect(result.map((r) => r['id'])).toEqual([1, 3]);
+      // Same row the full read + `.find` returned.
+      expect(result).toEqual({ requestId: 7, resent: true });
+      expect(scoped.query).not.toHaveBeenCalledWith(tables.accessRequests);
+      expect(scoped.accessRequestSelects).toEqual([
+        {
+          where: {
+            _type: 'and',
+            args: [
+              {
+                _type: 'sql',
+                text: 'lower(?) = ?',
+                values: [tables.accessRequests.email, 'resend@example.com'],
+              },
+              { _type: 'eq', col: tables.accessRequests.status, val: 'pending_verification' },
+            ],
+          },
+          orderBy: [{ _type: 'asc', col: tables.accessRequests.id }],
+          limit: 1,
+        },
+      ]);
+      expect(scoped.update).toHaveBeenCalledWith(
+        tables.accessRequests,
+        expect.objectContaining({ otpAttempts: 0 }),
+        { _type: 'eq', col: tables.accessRequests.id, val: 7 },
+      );
     });
 
-    it('returns empty array when no pending requests', async () => {
-      setupScopedMock();
+    it('submit: with no matching row, inserts a new request', async () => {
+      const scoped = setupScopedMock({ accessRequestRows: mixedRows });
 
-      const result = await listPendingRequests(COMMUNITY_ID);
-      expect(result).toEqual([]);
+      const result = await submitAccessRequest({
+        communityId: COMMUNITY_ID,
+        communitySlug: COMMUNITY_SLUG,
+        email: 'brand-new@example.com',
+        fullName: 'New',
+        isUnitOwner: false,
+      });
+
+      expect(result).toEqual({ requestId: 99, resent: false });
+      expect(scoped.accessRequestSelects).toHaveLength(1);
+    });
+
+    it('verify / approve / deny: look the request up by primary key only', async () => {
+      const rows = [
+        { id: 1, email: 'a@example.com', fullName: 'A', status: 'pending' },
+        { id: 2, email: 'b@example.com', fullName: 'B', status: 'approved' },
+      ];
+
+      let scoped = setupScopedMock({ accessRequestRows: rows });
+      await expect(
+        verifyOtp({ requestId: 2, otp: TEST_OTP, communityId: COMMUNITY_ID }),
+      ).rejects.toThrow('already been verified');
+      expect(scoped.queryById).toHaveBeenCalledWith(tables.accessRequests, 2);
+
+      scoped = setupScopedMock({ accessRequestRows: rows });
+      await expect(
+        approveAccessRequest({ requestId: 2, communityId: COMMUNITY_ID, reviewerId: 'r' }),
+      ).rejects.toThrow('Only pending requests can be approved');
+      expect(scoped.queryById).toHaveBeenCalledWith(tables.accessRequests, 2);
+
+      scoped = setupScopedMock({ accessRequestRows: rows });
+      await denyAccessRequest({ requestId: 1, communityId: COMMUNITY_ID, reviewerId: 'r' });
+      expect(scoped.queryById).toHaveBeenCalledWith(tables.accessRequests, 1);
+      expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ to: 'a@example.com' }));
+
+      expect(scoped.query).not.toHaveBeenCalledWith(tables.accessRequests);
     });
   });
 });
