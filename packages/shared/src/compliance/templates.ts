@@ -12,6 +12,12 @@ export interface ComplianceTemplateItem {
   rollingMonths?: number;
   isConditional?: boolean;
   defaultVisibility: DefaultVisibility;
+  /**
+   * Document category a row's upload is filed under, when `category` (a
+   * checklist grouping) is not itself a document category. The operations
+   * group has no category of that name, so its rows name one here.
+   */
+  documentCategory?: 'Contracts' | 'Inspection Reports';
 }
 
 export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
@@ -142,6 +148,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     title: 'List of Executory Contracts',
     description: 'Contracts and instruments under which the association has obligations.',
     category: 'operations',
+    documentCategory: 'Contracts',
     statuteReference: '§718.111(12)(g)(2)',
     deadlineDays: 30,
     defaultVisibility: 'owner_only',
@@ -151,6 +158,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     title: 'Conflict of Interest Contracts',
     description: 'Contracts involving a financial interest by a director or officer.',
     category: 'operations',
+    documentCategory: 'Contracts',
     statuteReference: '§718.3026',
     deadlineDays: 30,
     isConditional: true,
@@ -161,6 +169,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     title: 'Bids Received (After Bidding Closes)',
     description: 'Bids received for work, services, or materials after bidding closes.',
     category: 'operations',
+    documentCategory: 'Contracts',
     statuteReference: '§718.111(12)(g)(2)',
     rollingMonths: 12,
     isConditional: true,
@@ -171,6 +180,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     title: 'Structural / Milestone Inspection Reports',
     description: 'Milestone or structural inspection reports required for applicable buildings.',
     category: 'operations',
+    documentCategory: 'Inspection Reports',
     statuteReference: '§553.899, §718.301(4)(p)',
     isConditional: true,
     defaultVisibility: 'owner_portal',
@@ -180,6 +190,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     title: 'Structural Integrity Reserve Study (SIRS)',
     description: 'Structural integrity reserve study as required by statute.',
     category: 'operations',
+    documentCategory: 'Inspection Reports',
     statuteReference: '§718.112(2)(g)',
     isConditional: true,
     defaultVisibility: 'owner_portal',
@@ -264,6 +275,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     title: 'Current Contracts',
     description: 'Contracts and agreements for services and operations.',
     category: 'operations',
+    documentCategory: 'Contracts',
     statuteReference: '§720.303(4)',
     deadlineDays: 30,
     defaultVisibility: 'owner_only',
@@ -273,6 +285,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     title: 'Bids Received (After Bidding Closes)',
     description: 'Bids received for work, services, or materials after bidding closes.',
     category: 'operations',
+    documentCategory: 'Contracts',
     statuteReference: '§720.303(4)',
     rollingMonths: 12,
     isConditional: true,

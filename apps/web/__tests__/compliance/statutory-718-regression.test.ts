@@ -15,8 +15,11 @@ import {
   CONDO_718_CHECKLIST_TEMPLATE,
   HOA_720_CHECKLIST_TEMPLATE,
   getComplianceTemplate,
+  getDefaultDocumentCategories,
   type ComplianceTemplateItem,
 } from '@propertypro/shared';
+import { getTemplateDocumentCategory } from '../../src/components/compliance/compliance-visibility';
+import { resolveDocumentCategoryId, toCategorySlug } from '../../src/lib/documents/categories';
 import {
   calculateComplianceStatus,
   calculatePostingDeadline,
@@ -680,5 +683,28 @@ describe('category grouping preserves statutory order', () => {
     }));
     const grouped = groupByCategory(items);
     expect(grouped.get('governing_documents')).toHaveLength(5);
+  });
+});
+
+// Every checklist row must be uploadable: its upload is filed under a document
+// category, and that category must exist in a new community's defaults. The
+// operations rows (contracts, bids, inspections, SIRS) once named a grouping
+// with no category behind it, so "Upload document" was a dead end.
+describe('checklist uploads resolve to a default document category', () => {
+  it.each(['condo_718', 'hoa_720'] as const)('%s', (type) => {
+    const categories = getDefaultDocumentCategories(type).map((category, index) => ({
+      id: index + 1,
+      name: category.name,
+      slug: toCategorySlug(category.name),
+      description: null,
+    }));
+    for (const item of getComplianceTemplate(type)) {
+      const name = getTemplateDocumentCategory(item.templateKey, item.category);
+      expect(resolveDocumentCategoryId(categories, name), item.templateKey).not.toBeNull();
+    }
+  });
+
+  it('apartments have no compliance checklist', () => {
+    expect(getComplianceTemplate('apartment')).toEqual([]);
   });
 });
