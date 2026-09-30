@@ -91,9 +91,9 @@ export const helpFrontmatterSchema = z
     // Position within its category (lower first). Articles without one sort
     // after ordered ones, by title.
     order: z.number().int().nonnegative().optional(),
-    // Written but not published: hidden from every reader-facing surface.
-    // Used for help that documents UI which has not shipped yet.
-    draft: z.boolean().default(false),
+    // Resident-section article only readers with a board seat see (elections
+    // admin, community export — what a seat grants in the UI).
+    boardOnly: z.boolean().default(false),
     keywords: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
     relatedArticles: z.array(z.string()).default([]),

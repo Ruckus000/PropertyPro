@@ -13,6 +13,7 @@ const residentReader = {
   section: 'resident' as const,
   communityType: 'condo_718' as const,
   features: getFeaturesForCommunity('condo_718'),
+  boardSeat: false,
 };
 
 describe('expandQuery — alias resolution', () => {

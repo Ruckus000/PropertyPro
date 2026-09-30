@@ -15,10 +15,11 @@ import {
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import type { HelpSection } from '../../src/lib/help/sections';
 
-const readerFor = (section: HelpSection, communityType: CommunityType = 'condo_718') => ({
+const readerFor = (section: HelpSection, communityType: CommunityType = 'condo_718', boardSeat = false) => ({
   section,
   communityType,
   features: getFeaturesForCommunity(communityType),
+  boardSeat,
 });
 
 describe('help article service', () => {
@@ -48,15 +49,15 @@ This is the example body.
       slug: 'example',
       featured: true,
       section: 'resident',
-      draft: false,
+      boardOnly: false,
       communityTypes: ['condo_718', 'hoa_720', 'apartment'],
     });
     expect(metadata.excerpt).toContain('This is the example body.');
   });
 
-  it('loads the in-repo help articles for all three sections', () => {
+  it('loads the in-repo help articles for both sections', () => {
     const articles = getAllArticles();
-    for (const section of ['resident', 'board', 'manager'] as const) {
+    for (const section of ['resident', 'manager'] as const) {
       expect(articles.some((article) => article.section === section && article.slug === 'getting-around')).toBe(true);
     }
   });
@@ -77,11 +78,10 @@ This is the example body.
     expect(matchesArticleQuery(results[0]!, 'maintenance')).toBe(true);
   });
 
-  it('never shows drafts, another section, or another community type', () => {
+  it('never shows another section or another community type', () => {
     const apartmentManager = getArticlesForReader(readerFor('manager', 'apartment'));
     const condoManager = getArticlesForReader(readerFor('manager'));
 
-    expect(apartmentManager.every((article) => !article.draft)).toBe(true);
     expect(apartmentManager.every((article) => article.communityTypes.includes('apartment'))).toBe(true);
     expect(condoManager.some((article) => article.category === 'leases')).toBe(false);
     expect(apartmentManager.some((article) => article.slug === 'managing-leases')).toBe(true);
@@ -258,39 +258,29 @@ Body.
 });
 
 /**
- * Roadmap 2.8, against the REAL corpus, in section form. A board designation
- * grants power in exactly three places — elections admin, violation admin
- * writes, community export — so the board section may differ from the
- * resident section by exactly those three articles. Anything else in the
- * board section that residents don't have is an admin how-to that ends in a
- * 403 for a board member.
+ * Roadmap 2.8, against the REAL corpus. A board seat adds exactly what the UI
+ * lets a seat do — election administration (the elections page shows its
+ * controls to canActAsBoard) and community export — as `boardOnly` resident
+ * articles. Anything else would be an admin how-to that ends in a 403, or a
+ * control the page does not show (violations stay manager-only).
  *
- * Revert-check: add a board copy of manager/documents/upload-document.mdx and
+ * Revert-check: mark resident/documents/find-documents.mdx `boardOnly` and
  * the case goes red, naming that slug in the diff.
  */
-describe('help corpus — what the board section adds', () => {
-  it('keeps the board admin how-tos drafted while the UI hides their controls', () => {
-    const board = getAllArticles().filter((article) => article.section === 'board');
-    for (const slug of ['review-violations', 'run-election']) {
-      expect(board.find((article) => article.slug === slug)?.draft, slug).toBe(true);
-    }
-  });
-
-  // Elections admin and violation admin are granted by the API
-  // (requireBoardDesignation) but the pages still gate their controls on
-  // `isAdmin`, so those two board articles stay `draft: true` until the UI
-  // lets a board member do them. Undraft them and add their slugs here then.
-  const BOARD_GRANTED = ['export-data'];
-  const slugs = (section: HelpSection, type: CommunityType) =>
-    new Set(getArticlesForReader(readerFor(section, type)).map((article) => article.slug));
+describe('help corpus — what a board seat adds', () => {
+  const BOARD_GRANTED = ['export-data', 'run-election'];
+  const slugs = (type: CommunityType, boardSeat: boolean) =>
+    new Set(getArticlesForReader(readerFor('resident', type, boardSeat)).map((article) => article.slug));
 
   it.each(['condo_718', 'hoa_720'] as const)(
-    'in a %s, the board section is the resident section plus exactly the three statutory articles',
+    'in a %s, a seat adds exactly election administration and export',
     (type) => {
-      const resident = slugs('resident', type);
-      const board = slugs('board', type);
-      expect([...board].filter((slug) => !resident.has(slug)).sort()).toEqual(BOARD_GRANTED);
-      expect([...resident].filter((slug) => !board.has(slug)).sort()).toEqual([]);
+      const without = slugs(type, false);
+      expect([...slugs(type, true)].filter((slug) => !without.has(slug)).sort()).toEqual(BOARD_GRANTED);
     },
   );
+
+  it('adds nothing in an apartment community (no board)', () => {
+    expect([...slugs('apartment', true)].sort()).toEqual([...slugs('apartment', false)].sort());
+  });
 });

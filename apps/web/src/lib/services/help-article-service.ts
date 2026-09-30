@@ -69,7 +69,8 @@ export interface HelpArticleMetadata {
   /** Community types the article applies to (all three when omitted in frontmatter). */
   communityTypes: CommunityType[];
   order?: number;
-  draft: boolean;
+  /** Only readers with a board seat see it (resident section). */
+  boardOnly: boolean;
   keywords: string[];
   tags: string[];
   relatedArticles: string[];
@@ -171,7 +172,7 @@ export function parseArticleFrontmatter(
     section: valid.section,
     communityTypes: valid.communityTypes ?? ['condo_718', 'hoa_720', 'apartment'],
     order: valid.order,
-    draft: valid.draft,
+    boardOnly: valid.boardOnly,
     keywords: valid.keywords,
     tags: valid.tags,
     relatedArticles: valid.relatedArticles,
@@ -250,20 +251,23 @@ export function getAllArticles(): HelpArticleMetadata[] {
 
 type ReaderVisibilityFields = Pick<
   HelpArticleMetadata,
-  'section' | 'communityTypes' | 'featureGates' | 'draft'
+  'section' | 'communityTypes' | 'featureGates' | 'boardOnly'
 >;
 
+/** What visibility needs to know about a reader. */
+export type HelpReaderView = Pick<HelpReader, 'section' | 'communityType' | 'features' | 'boardSeat'>;
+
 /**
- * The single reader-visibility rule: not a draft, written for the reader's
- * section, applicable to the community type being read, and every feature
- * gate on. Feature evaluation fails open (see safelyFilterArticlesByFeatures).
+ * The single reader-visibility rule: written for the reader's section,
+ * board-only articles only for a board seat, applicable to the community type
+ * being read, and every feature gate on. Feature evaluation fails open (see safelyFilterArticlesByFeatures).
  */
 export function isArticleVisibleToReader(
   article: ReaderVisibilityFields,
-  reader: Pick<HelpReader, 'section' | 'communityType' | 'features'>,
+  reader: HelpReaderView,
   options?: { onFeatureError?: (error: unknown) => void },
 ): boolean {
-  if (article.draft) return false;
+  if (article.boardOnly && !reader.boardSeat) return false;
   if (article.section !== reader.section) return false;
   if (!article.communityTypes.includes(reader.communityType)) return false;
   // Unresolvable features fail open (ADR-004): never empty the help center.
@@ -278,7 +282,7 @@ export function isArticleVisibleToReader(
 
 /** Every article the reader can see, in browse order. */
 export function getArticlesForReader(
-  reader: Pick<HelpReader, 'section' | 'communityType' | 'features'>,
+  reader: HelpReaderView,
   options?: { onFeatureError?: (error: unknown) => void },
 ): HelpArticleMetadata[] {
   let reported = false;
@@ -299,7 +303,7 @@ export function getArticlesForReader(
  */
 export function findArticleForReader(
   slug: string,
-  reader: Pick<HelpReader, 'section' | 'communityType' | 'features'>,
+  reader: HelpReaderView,
 ): HelpArticleMetadata | null {
   const article = getAllArticles().find(
     (candidate) => candidate.slug === slug && candidate.section === reader.section,
@@ -459,7 +463,7 @@ export function getAllTags(): string[] {
 }
 
 export function getFeaturedForReader(
-  reader: Pick<HelpReader, 'section' | 'communityType' | 'features'>,
+  reader: HelpReaderView,
   limit = 6,
 ): HelpArticleMetadata[] {
   return getArticlesForReader(reader)
@@ -502,7 +506,7 @@ export function searchArticles(
 export function getArticleForReader(
   category: string,
   slug: string,
-  reader: Pick<HelpReader, 'section' | 'communityType' | 'features'>,
+  reader: HelpReaderView,
 ): HelpArticleSource | null {
   const source = getArticleSources().find(
     (article) =>
@@ -526,7 +530,7 @@ export function matchContextPath(pattern: string, pathname: string): boolean {
 
 export function getContextualArticles(
   pathname: string,
-  reader: Pick<HelpReader, 'section' | 'communityType' | 'features'>,
+  reader: HelpReaderView,
   limit = 3,
 ): HelpArticleMetadata[] {
   return getArticlesForReader(reader)

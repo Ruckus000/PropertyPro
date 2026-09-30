@@ -95,13 +95,14 @@ const ARTICLE = {
   slug: 'compliance-basics',
   section: 'resident',
   communityTypes: ['condo_718', 'hoa_720', 'apartment'],
-  draft: false,
+  boardOnly: false,
   featureGates: [] as string[],
   readTimeMinutes: 5,
 };
 
-// Same slug, other sections: never visible to a resident owner.
-const BOARD_ARTICLE = { ...ARTICLE, section: 'board' };
+// Never visible to a resident owner without a seat: a board-only article, and
+// the manager section's version of the same slug.
+const BOARD_ARTICLE = { ...ARTICLE, slug: 'run-election', boardOnly: true };
 const MANAGER_ARTICLE = { ...ARTICLE, section: 'manager' };
 
 interface SearchEnvelopeJson {

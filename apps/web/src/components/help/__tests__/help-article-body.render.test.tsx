@@ -13,7 +13,7 @@ const metadata: HelpArticleMetadata = {
   slug: 'reviewing-the-compliance-dashboard',
   section: 'manager',
   communityTypes: ['condo_718', 'hoa_720'],
-  draft: false,
+  boardOnly: false,
   keywords: [],
   tags: [],
   relatedArticles: [],

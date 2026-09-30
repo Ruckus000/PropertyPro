@@ -8,16 +8,17 @@ content/help/<section>/<category>/<slug>.mdx
 
 ## Sections (`section:`)
 
-- Three sections: `resident`, `board`, `manager` (`lib/help/sections.ts`). A reader sees only their own section: managers (property or root managers) read `manager`, residents with a board designation read `board`, and everyone else reads `resident`.
-- A task more than one role performs is written once per section, **in that role's words, under the same slug**. `/help/<category>/<slug>` is one URL that shows each reader their own version.
+- Two sections: `resident` and `manager` (`lib/help/sections.ts`). Managers (property or root managers) read `manager`; everyone else — owners, tenants and board members — reads `resident`.
+- A task both residents and managers perform is written once per section, **in that reader's words, under the same slug**. `/help/<category>/<slug>` is one URL that shows each reader their own version.
 - Slugs are unique within a section. `relatedArticles`, `upNext` and `help:` links resolve within the article's own section.
-- **Board articles describe what a board member can actually do.** A board designation grants elections admin, violation admin writes and community export (`requireBoardDesignation`, `isExportEligible`); everything else a board member does as an owner or tenant. Never write a board step that ends in a 403.
+- **Board help is `boardOnly: true` resident articles**, shown only to readers with a board seat. A seat is otherwise an owner's account, so board members read the ordinary resident articles. Write `boardOnly` articles only for what the UI lets a seat do: election administration (`Board → Elections`) and community export. Violations stay manager-only in the UI — never write a board step that the page does not offer.
+- `boardOnly` articles are condo/HOA only (`communityTypes: [condo_718, hoa_720]`). An ordinary article may not link to one in its body (the in-app panel caches rendered HTML per article, not per reader); use `relatedArticles`, which is resolved per reader.
 
 ## Community types (`communityTypes:`) and features (`featureGates:`)
 
 - `communityTypes: [condo_718, hoa_720]` limits an article to those types. Omit it for all three.
 - Parts of an article that apply to fewer types go in `<OnlyFor types="condo_718 hoa_720">…</OnlyFor>`.
-- `featureGates` still applies on top (keys of `CommunityFeatures`). Board members and managers can preview another type's help with the type bar (`?type=`); residents only see their own.
+- `featureGates` still applies on top (keys of `CommunityFeatures`). Managers can preview another type's help with the type bar (`?type=`); residents only see their own.
 
 ## Frontmatter
 
@@ -36,7 +37,7 @@ relatedArticles: ["document-categories"]
 statutes: ["§718.111(12)(g)"]
 contextPaths: ["/communities/*/documents"]   # routes where the in-app panel suggests it
 updatedAt: "2026-09-30"                # quoted — an unquoted date parses as a Date
-draft: true                            # optional: written but hidden (UI not shipped)
+boardOnly: true                        # resident section only: shown to board seats
 ---
 ```
 
@@ -93,7 +94,7 @@ Categories and their order are in `lib/help/category-meta.ts`.
 ```
 
 - `route` may use `{cid}`: the seeded community for `community` (`condo` → Sunset Condos, `hoa` → Palm Shores HOA, `apartment` → Sunset Ridge Apartments).
-- `role` is a `/dev/agent-login` persona: `owner`, `tenant`, `board_member`, `board_president`, `cam`, `pm_admin`, `site_manager` (apartment), `founding_admin` (HOA root), `root_sunset`, `root_sunsetridge`.
+- `role` is a `/dev/agent-login` persona: `owner`, `tenant`, `board_member` (an owner with a board seat — use it for `boardOnly` shots), `board_president` (a manager), `cam`, `pm_admin`, `site_manager` (apartment), `founding_admin` (HOA root), `root_sunset`, `root_sunsetridge`.
 - Selectors are Playwright selectors (`role=button[name="Upload"]`, `text=Save`, CSS). Prefer roles and visible labels over classes.
 - `clipTo` (one selector or several; the crop is their union plus `pad`, default 16px) keeps images small: the budget is 250KB per file.
 - `actions`: `click`, `fill`, `press`, `waitFor`, `wait` (≤ 10s), `scrollTo`.

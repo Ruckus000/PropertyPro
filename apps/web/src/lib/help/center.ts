@@ -62,7 +62,7 @@ export interface HelpTypeBar {
 }
 
 /**
- * The community-type bar (board members and managers only). `currentPath` is
+ * The community-type bar (managers only). `currentPath` is
  * kept when the current article exists for a type; otherwise that option goes
  * to the help home.
  */
@@ -88,6 +88,7 @@ export function buildHelpTypeBar(
         !currentArticle ||
         isArticleVisibleToReader(currentArticle, {
           section: reader.section,
+          boardSeat: reader.boardSeat,
           communityType: type,
           features: getFeaturesForCommunity(type),
         });
@@ -132,7 +133,7 @@ const TOPIC_NAV: Record<string, string | Partial<Record<HelpReader['section'], s
   compliance: 'compliance',
   payments: 'payments',
   maintenance: 'operations',
-  violations: { manager: 'violations-inbox', board: 'violations-report', resident: 'violations-report' },
+  violations: { manager: 'violations-inbox', resident: 'violations-report' },
   board: 'board',
   esign: 'esign',
   residents: 'residents',

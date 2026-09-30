@@ -11,16 +11,16 @@ import {
   type HelpRenderContext,
   type TocItem,
 } from '@/components/help/mdx-components';
-import type { HelpReader } from '@/lib/help/reader';
 import { helpArticleCacheKey } from '@/lib/help/render-version';
 import { sanitizeHelpHtml } from '@/lib/help/sanitize-help-html';
 import { extractTableOfContents } from '@/lib/help/toc';
 import {
   findArticleForReader,
+  type HelpReaderView,
   type HelpArticleSource,
 } from '@/lib/services/help-article-service';
 
-type ReaderView = Pick<HelpReader, 'section' | 'communityType' | 'features'>;
+type ReaderView = HelpReaderView;
 
 export function helpArticleBase(article: { section: string; category: string; slug: string }): string {
   return `${article.section}/${article.category}/${article.slug}`;

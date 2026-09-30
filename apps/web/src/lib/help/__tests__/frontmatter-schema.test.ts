@@ -35,11 +35,11 @@ describe('heroMedia / upNext frontmatter', () => {
 });
 
 describe('section — one closed readership vocabulary', () => {
-  it.each(['resident', 'board', 'manager'])('accepts %s', (section) => {
+  it.each(['resident', 'manager'])('accepts %s', (section) => {
     expect(validateFrontmatter({ ...base, section }).ok).toBe(true);
   });
 
-  it.each(['owner', 'board_member', 'Manager'])(
+  it.each(['board', 'owner', 'board_member', 'Manager'])(
     'rejects %s — an unknown section would hide the article from everyone, silently',
     (section) => {
       expect(validateFrontmatter({ ...base, section }).ok).toBe(false);
@@ -52,11 +52,11 @@ describe('section — one closed readership vocabulary', () => {
   });
 });
 
-describe('communityTypes / draft', () => {
-  it('accepts known community types and defaults draft to false', () => {
+describe('communityTypes / boardOnly', () => {
+  it('accepts known community types and defaults boardOnly to false', () => {
     const r = validateFrontmatter({ ...base, communityTypes: ['condo_718', 'hoa_720'] });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.draft).toBe(false);
+    if (r.ok) expect(r.value.boardOnly).toBe(false);
   });
 
   it('rejects an unknown community type and an empty list', () => {

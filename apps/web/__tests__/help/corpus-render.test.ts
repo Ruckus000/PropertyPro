@@ -20,8 +20,13 @@ const cases = getAllArticles().flatMap((article) =>
 
 describe('help corpus renders', () => {
   it.each(cases)('%s', async (_label, article, communityType) => {
-    // Drafts are hidden from readers; render them directly so they stay valid.
-    const reader = { section: article.section, communityType, features: getFeaturesForCommunity(communityType) };
+    // A feature gate can hide an article for one of its types; render it directly then.
+    const reader = {
+      section: article.section,
+      communityType,
+      features: getFeaturesForCommunity(communityType),
+      boardSeat: article.boardOnly,
+    };
     const source =
       getArticleForReader(article.category, article.slug, reader) ??
       ({ metadata: article, rawContent: (await import('node:fs')).readFileSync(article.filePath, 'utf8') });

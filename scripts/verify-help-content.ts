@@ -10,7 +10,10 @@
  *   1. Frontmatter schema (helpFrontmatterSchema)  - structure + format
  *   2. featureGates ↔ CommunityFeatures sync       - runtime list vs source-of-truth
  *   3. relatedArticles / upNext / help: links      - resolve within the same section
- *   4. layout: content/help/<section>/<category>/<slug>.mdx matches frontmatter
+ *   4. layout: content/help/<section>/<category>/<slug>.mdx matches frontmatter;
+ *      boardOnly only in the resident section, for condo/HOA; no body help:
+ *      link from an ordinary article to a boardOnly one (modal HTML is cached
+ *      per article, not per reader)
  *   5. slug uniqueness within each section (a slug repeats once per section)
  *   6. Staleness:  updatedAt > 365d → error,  > 180d → warning
  *   7. Shots: every <Step shot>/<Figure shot> has a capture manifest; captured
@@ -138,6 +141,17 @@ function checkLayoutMatchesFrontmatter(article: Article): Problem[] {
       message: `frontmatter.category="${category}" does not match parent directory "${article.category}"`,
     });
   }
+  // A board seat is a resident's, and only condos and HOAs have boards.
+  if (article.data.boardOnly === true) {
+    const types = article.data.communityTypes;
+    if (article.section !== 'resident' || !Array.isArray(types) || types.includes('apartment')) {
+      problems.push({
+        severity: 'error',
+        file: article.relativePath,
+        message: 'boardOnly articles belong in the resident section with communityTypes limited to condo_718/hoa_720',
+      });
+    }
+  }
   return problems;
 }
 
@@ -194,6 +208,9 @@ function sectionSlugs(articles: Article[]): Map<string, Set<string>> {
 /** relatedArticles and body `help:` links resolve within the article's own section. */
 function checkLinkIntegrity(articles: Article[]): Problem[] {
   const slugs = sectionSlugs(articles);
+  const boardOnly = new Set(
+    articles.filter((a) => a.data.boardOnly === true).map((a) => `${a.section}/${a.data.slug}`),
+  );
   const problems: Problem[] = [];
   for (const article of articles) {
     const own = slugs.get(article.section) ?? new Set<string>();
@@ -214,6 +231,14 @@ function checkLinkIntegrity(articles: Article[]): Problem[] {
           severity: 'error',
           file: article.relativePath,
           message: `link "help:${match[1]}" has no article in section "${article.section}"`,
+        });
+      } else if (article.data.boardOnly !== true && boardOnly.has(`${article.section}/${match[1]}`)) {
+        // The modal caches rendered HTML per article, not per reader, so a
+        // link's visibility must not depend on the reader's board seat.
+        problems.push({
+          severity: 'error',
+          file: article.relativePath,
+          message: `link "help:${match[1]}" points at a boardOnly article; only boardOnly articles may link to one in the body (use relatedArticles instead)`,
         });
       }
     }
@@ -400,7 +425,6 @@ function loadManifestShots(): Map<string, Set<string>> {
  * Every named shot must be capturable (declared in the article's manifest).
  * A captured shot must exist at 1x and 2x within budget. An uncaptured shot
  * is a warning: the article renders without it until `pnpm help:capture` runs.
- * Drafts document unshipped UI, so their shots are not required yet.
  */
 function checkShots(
   articles: Article[],
@@ -413,7 +437,6 @@ function checkShots(
   for (const article of articles) {
     const base = `${article.section}/${article.category}/${article.slug}`;
     const body = matter(article.rawContent).content;
-    const draft = article.data.draft === true;
     for (const match of body.matchAll(/<(?:Step|Figure)\b[^>]*?\bshot="([^"]+)"/g)) {
       const name = match[1]!;
       const key = `${base}/${name}`;
@@ -433,7 +456,6 @@ function checkShots(
         }
         continue;
       }
-      if (draft) continue;
       if (!manifestShots.get(base)?.has(name)) {
         problems.push({
           severity: 'error',

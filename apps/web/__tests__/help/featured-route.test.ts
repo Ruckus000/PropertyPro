@@ -82,7 +82,7 @@ function article(overrides: Partial<FeaturedArticle> & { slug: string }): Featur
     description: 'Get started',
     section: 'resident',
     communityTypes: ['condo_718', 'hoa_720', 'apartment'],
-    draft: false,
+    boardOnly: false,
     featureGates: [],
     keywords: [],
     relatedArticles: [],

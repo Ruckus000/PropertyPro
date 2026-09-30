@@ -8,6 +8,7 @@
  */
 import {
   getFeaturesForCommunity,
+  hasBoardDesignation,
   type CommunityFeatures,
   type CommunityType,
 } from '@propertypro/shared';
@@ -29,6 +30,8 @@ export interface HelpReader {
    * be resolved: gates then fail open (ADR-004) rather than emptying help.
    */
   features: CommunityFeatures | null;
+  /** Holds a board seat: reads the resident section's `boardOnly` articles. */
+  boardSeat: boolean;
 }
 
 export interface HelpReaderMembership extends HelpViewerMembership {
@@ -48,7 +51,13 @@ export function resolveHelpReader(
   } catch (error) {
     options?.onFeatureError?.(error);
   }
-  return { section, communityType, ownCommunityType: membership.communityType, features };
+  return {
+    section,
+    communityType,
+    ownCommunityType: membership.communityType,
+    features,
+    boardSeat: hasBoardDesignation(membership.designation),
+  };
 }
 
 export function isPreviewingType(reader: HelpReader): boolean {

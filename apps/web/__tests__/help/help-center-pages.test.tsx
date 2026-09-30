@@ -46,7 +46,7 @@ const MANAGER = {
 const OWNER = { ...MANAGER, role: 'resident', isUnitOwner: true, isAdmin: false };
 const BOARD_OWNER = { ...OWNER, designation: 'board_member' };
 
-const params = (value: Record<string, string>) => Promise.resolve(value);
+const params = <T extends Record<string, string>>(value: T) => Promise.resolve(value);
 const render = async (element: Promise<React.ReactElement>) => renderToStaticMarkup(await element);
 
 describe('Help Center pages', () => {
@@ -73,11 +73,27 @@ describe('Help Center pages', () => {
     expect(html).not.toContain('Manage your community’s FAQs');
   });
 
-  it('home: a board-designated owner reads the board section', async () => {
+  it('a board-designated owner reads resident help, plus the board-only guides', async () => {
     membership.current = BOARD_OWNER;
     const html = await render(HelpHomePage({ searchParams: params({ communityId: '2' }) }));
-    expect(html).toContain('Help for board members');
-    expect(html).toContain('Directors and officers');
+    expect(html).toContain('Help for residents');
+    expect(html).not.toContain('role="radiogroup"');
+
+    const election = await render(
+      HelpArticlePage({
+        params: params({ category: 'board', slug: 'run-election' }),
+        searchParams: params({ communityId: '2' }),
+      }),
+    );
+    expect(election).toContain('Run a board election');
+
+    membership.current = OWNER;
+    await expect(
+      HelpArticlePage({
+        params: params({ category: 'board', slug: 'run-election' }),
+        searchParams: params({ communityId: '2' }),
+      }),
+    ).rejects.toMatchObject({ digest: expect.stringContaining('NEXT_HTTP_ERROR_FALLBACK;404') });
   });
 
   it('home: a manager previewing apartments sees the preview bar and apartment topics', async () => {

@@ -76,7 +76,7 @@ const {
 }));
 
 // Service boundary: the lookups are faked over `corpus`, but visibility is the
-// REAL isArticleVisibleToReader (section, community type, drafts, feature gates).
+// REAL isArticleVisibleToReader (section, board seat, community type, feature gates).
 vi.mock('@/lib/services/help-article-service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/services/help-article-service')>();
   type Reader = Parameters<typeof actual.isArticleVisibleToReader>[1];
@@ -152,9 +152,9 @@ function makeMetadata(overrides: Record<string, unknown> & { slug: string }) {
     title: 'Fixing compliance gaps',
     description: 'How to resolve flagged compliance gaps.',
     category: 'compliance',
-    section: 'board',
+    section: 'resident',
     communityTypes: ['condo_718', 'hoa_720', 'apartment'],
-    draft: false,
+    boardOnly: false,
     keywords: [],
     tags: [],
     relatedArticles: [],
@@ -187,7 +187,7 @@ describe('GET /api/v1/help/article', () => {
     vi.clearAllMocks();
     corpus.splice(0, corpus.length, sampleArticle);
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
-    // A board-designated owner: reads the 'board' section.
+    // A board-designated owner: reads the resident section, with a board seat.
     requireCommunityMembershipMock.mockResolvedValue({
       role: 'resident',
       isUnitOwner: true,
@@ -214,7 +214,7 @@ describe('GET /api/v1/help/article', () => {
     expect(body.data.html).not.toContain('<script');
     expect(body.data.toc).toEqual([{ depth: 2, label: 'Heading', anchor: 'heading' }]);
     expect(body.data.metadata.slug).toBe('fix-compliance-gaps');
-    expect(body.data.metadata.section).toBe('board');
+    expect(body.data.metadata.section).toBe('resident');
     expect(body.data.related).toEqual([]);
     expect(body.data.upNext).toBeNull();
     expect(compileMDXMock).toHaveBeenCalledWith(
@@ -227,7 +227,7 @@ describe('GET /api/v1/help/article', () => {
     expect(getArticleForReaderMock).toHaveBeenCalledWith(
       'compliance',
       'fix-compliance-gaps',
-      expect.objectContaining({ section: 'board', communityType: 'condo_718' }),
+      expect.objectContaining({ section: 'resident', communityType: 'condo_718', boardSeat: true }),
     );
   });
 
@@ -255,7 +255,7 @@ describe('GET /api/v1/help/article', () => {
   });
 
   it("returns 404 (not 403) when the article is outside the reader's section", async () => {
-    // Only a manager-section version exists; the board reader must not learn of it.
+    // Only a manager-section version exists; the resident reader must not learn of it.
     corpus.splice(0, corpus.length, {
       ...sampleArticle,
       metadata: { ...sampleArticle.metadata, section: 'manager' },
@@ -307,7 +307,7 @@ describe('GET /api/v1/help/article', () => {
   });
 
   it("resolves an old slug to the reader's replacement article", async () => {
-    // Pre-section URL /help/documents/uploading-documents: a board reader gets
+    // Pre-section URL /help/documents/uploading-documents: a resident reader gets
     // the default replacement ('find-documents'), not the manager's upload guide.
     corpus.splice(
       0,
@@ -317,7 +317,7 @@ describe('GET /api/v1/help/article', () => {
           slug: 'find-documents',
           title: 'Find documents',
           category: 'documents',
-          section: 'board',
+          section: 'resident',
         }),
         rawContent: '## Heading\n\nBody text.',
       },
@@ -340,7 +340,7 @@ describe('GET /api/v1/help/article', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.metadata.slug).toBe('find-documents');
-    expect(body.data.metadata.section).toBe('board');
+    expect(body.data.metadata.section).toBe('resident');
     expect(body.data.metadata.category).toBe('documents');
   });
 });

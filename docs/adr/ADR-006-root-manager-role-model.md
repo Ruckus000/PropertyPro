@@ -169,7 +169,7 @@ drift is how one of them ends up wrong again.
 
 **Census (measured 2026-09-23, `grep -rn
 "hasBoardDesignation\|requireBoardDesignation\|canActAsBoard" apps/web/src packages/shared/src`;
-rows 13–14 added 2026-09-30).**
+rows 13–15 added 2026-09-30).**
 The audit that raised R3-05 named two sites (export eligibility, insurance
 recipients). The growth is **wider** than that — twelve sites — and they are not
 all the same kind of thing:
@@ -190,8 +190,9 @@ all the same kind of thing:
 | 12 | `apps/web/src/lib/elections/common.ts:23` (`requireElectionsAdminRole`) and `apps/web/src/lib/violations/common.ts:34` (`requireViolationAdminWrite`), on the routes enumerated above | **grant** | **sanctioned statutory write** | residents hold `elections`/`violations` write, so the designation arm is what admits a board-designated resident (incl. an acknowledged non-owner) to the admin actions |
 | 13 | `apps/web/src/app/(authenticated)/communities/[id]/board/elections/page.tsx` (`canActAsBoard`) | grant | **UI mirror of #12 (elections only)** | shows the election admin controls (open/close/certify/cancel, eligibility snapshot, proxy approve/reject) with the same predicate as the API gate; proxy **revoke** stays on `isAdmin` or the grantor (`elections-service.ts` revokeProxy). The violations admin UI stays manager-only: its reads are still unit-scoped for residents |
 | 14 | `apps/web/src/lib/announcements/read-visibility.ts` (`canReadAnnouncementAudience`) | grant | **read breadth, mirror of #4** | a board designee can read the `board_only` announcements #4 delivers to them |
+| 15 | `apps/web/src/lib/help/reader.ts` (`boardSeat`) | grant | **UI gating** | shows the resident section's `boardOnly` help articles (election administration, export) — documentation of #1 and #13, no access of its own |
 
-Items 1–10, 13 and 14 grant, and none of them mutates a business record. Item 11
+Items 1–10 and 13–15 grant, and none of them mutates a business record. Item 11
 restricts. Item 12 grants a business-record write — the sanctioned statutory set
 enumerated above, and the only one. (Row 12 was classified "restrict,
 narrowing-only" until 2026-09-28; see the correction note at the top of §2a.)

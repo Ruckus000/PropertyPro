@@ -46,7 +46,7 @@ describe('help-article-service', () => {
         section: 'resident',
         communityTypes: ['condo_718', 'hoa_720', 'apartment'],
         order: undefined,
-        draft: false,
+        boardOnly: false,
         keywords: ['test', 'help'],
         tags: [],
         relatedArticles: [],
@@ -110,8 +110,8 @@ describe('help-article-service', () => {
       const { searchArticles } = await import('../help-article-service');
 
       const articles = [
-        { title: 'Compliance Scoring', description: 'How scoring works', keywords: ['score'], slug: 'scoring', category: 'compliance', section: 'manager' as const, communityTypes: ['condo_718' as const], draft: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 3, filePath: '/a.mdx', contentHash: 'test' },
-        { title: 'Upload Documents', description: 'How to upload', keywords: ['file'], slug: 'upload', category: 'documents', section: 'manager' as const, communityTypes: ['condo_718' as const], draft: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
+        { title: 'Compliance Scoring', description: 'How scoring works', keywords: ['score'], slug: 'scoring', category: 'compliance', section: 'manager' as const, communityTypes: ['condo_718' as const], boardOnly: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 3, filePath: '/a.mdx', contentHash: 'test' },
+        { title: 'Upload Documents', description: 'How to upload', keywords: ['file'], slug: 'upload', category: 'documents', section: 'manager' as const, communityTypes: ['condo_718' as const], boardOnly: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
       ];
 
       const results = searchArticles(articles, 'compliance');
@@ -123,7 +123,7 @@ describe('help-article-service', () => {
       const { searchArticles } = await import('../help-article-service');
 
       const articles = [
-        { title: 'Upload Documents', description: 'How to upload', keywords: ['file', 'pdf', 'upload'], slug: 'upload', category: 'documents', section: 'manager' as const, communityTypes: ['condo_718' as const], draft: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
+        { title: 'Upload Documents', description: 'How to upload', keywords: ['file', 'pdf', 'upload'], slug: 'upload', category: 'documents', section: 'manager' as const, communityTypes: ['condo_718' as const], boardOnly: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
       ];
 
       const results = searchArticles(articles, 'pdf');
@@ -142,12 +142,13 @@ describe('help-article-service', () => {
       section: 'resident' as const,
       communityTypes: ['condo_718' as const, 'hoa_720' as const],
       featureGates: ['hasViolations'],
-      draft: false,
+      boardOnly: false,
     };
     const reader = {
       section: 'resident' as const,
       communityType: 'condo_718' as const,
       features: { hasViolations: true } as never,
+      boardSeat: false,
     };
 
     it('shows an article written for the reader’s section and type', async () => {
@@ -157,7 +158,7 @@ describe('help-article-service', () => {
 
     it('hides another section’s version of the same task', async () => {
       const { isArticleVisibleToReader } = await import('../help-article-service');
-      expect(isArticleVisibleToReader(article, { ...reader, section: 'board' })).toBe(false);
+      expect(isArticleVisibleToReader(article, { ...reader, section: 'manager' })).toBe(false);
     });
 
     it('hides articles for other community types and disabled features', async () => {
@@ -166,9 +167,11 @@ describe('help-article-service', () => {
       expect(isArticleVisibleToReader(article, { ...reader, features: { hasViolations: false } as never })).toBe(false);
     });
 
-    it('hides drafts', async () => {
+    it('shows board-only articles to a board seat and hides them from everyone else', async () => {
       const { isArticleVisibleToReader } = await import('../help-article-service');
-      expect(isArticleVisibleToReader({ ...article, draft: true }, reader)).toBe(false);
+      const boardOnly = { ...article, boardOnly: true };
+      expect(isArticleVisibleToReader(boardOnly, reader)).toBe(false);
+      expect(isArticleVisibleToReader(boardOnly, { ...reader, boardSeat: true })).toBe(true);
     });
 
     it('fails open when feature evaluation throws', async () => {

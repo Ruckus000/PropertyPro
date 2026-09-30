@@ -51,7 +51,7 @@ export const captureShotSchema = z.object({
 });
 
 export const captureManifestSchema = z.object({
-  section: z.enum(['resident', 'board', 'manager']),
+  section: z.enum(['resident', 'manager']),
   category: z.string().min(1),
   slug: z.string().min(1),
   viewport: z

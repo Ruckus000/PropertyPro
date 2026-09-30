@@ -1,5 +1,5 @@
 {
-  "section": "board",
+  "section": "resident",
   "category": "account",
   "slug": "export-data",
   "shots": [
@@ -7,7 +7,7 @@
       "name": "exp-page",
       "kind": "still",
       "route": "/settings/export?communityId={cid}",
-      "role": "owner",
+      "role": "board_member",
       "community": "condo",
       "actions": [
         {
@@ -34,7 +34,7 @@
       "name": "exp-auth",
       "kind": "still",
       "route": "/settings/export?communityId={cid}",
-      "role": "owner",
+      "role": "board_member",
       "community": "condo",
       "actions": [
         {
