@@ -3,8 +3,8 @@
  *
  * Pins what the code DOES today — statements, delinquency, late-fee waiver,
  * line-item generation (due-day clamp + idempotency), the statement date window,
- * and the three assessment-automation crons (overdue grace, flat late fee,
- * recurrence). It is not a spec: where current behaviour looks wrong, the case
+ * and the three assessment-automation crons (overdue transition, late-fee grace
+ * + flat fee, recurrence). It is not a spec: where current behaviour looks wrong, the case
  * pins it anyway and carries a `// CHARACTERIZATION: suspected defect — …`
  * comment. Fixing one of those should turn exactly that case red, on purpose.
  *
@@ -20,9 +20,11 @@
  * One extension: the filter mocks return tagged predicates and the scoped client
  * evaluates them against an in-memory table store, so a case like "a second
  * late-fee run adds nothing" exercises the service's REAL where-clause instead
- * of a canned response. `orderBy` is deliberately NOT emulated: fixtures are
- * stored in the order the SQL declares (dueDate desc, id desc), and `limit(n)`
- * is honoured, as SQL LIMIT would be.
+ * of a canned response. `orderBy(...)` and `limit(n)` are honoured too, as SQL
+ * would: `asc`/`desc` return tagged sort keys, and the store sorts by them
+ * before applying the limit. Statement fixtures are seeded SHUFFLED, so the
+ * order a statement shows — and which rows survive a per-source LIMIT — comes
+ * from the service's declared ORDER BY, not from fixture order.
  *
  * TIME ZONES. Vitest does not pin TZ for this project (see vitest.shared.ts), and
  * the default pool is `forks`, so assigning `process.env.TZ` inside the test
@@ -115,8 +117,8 @@ const {
     gteMock: vi.fn((column: symbol, value: unknown) => ({ op: 'gte', column, value })),
     inArrayMock: vi.fn((column: symbol, value: unknown[]) => ({ op: 'inArray', column, value })),
     andMock: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
-    ascMock: vi.fn((value: unknown) => value),
-    descMock: vi.fn((value: unknown) => value),
+    ascMock: vi.fn((column: symbol) => ({ dir: 'asc', column })),
+    descMock: vi.fn((column: symbol) => ({ dir: 'desc', column })),
     isNullMock: vi.fn((column: symbol) => ({ op: 'isNull', column })),
   };
 });
@@ -173,6 +175,7 @@ import {
 } from '../../src/lib/services/finance-service';
 import {
   processLateFees,
+  processOverdueTransitions,
   processRecurringAssessments,
 } from '../../src/lib/services/assessment-automation-service';
 
@@ -224,10 +227,48 @@ function matches(row: Row, where: Predicate | undefined): boolean {
   }
 }
 
+interface SortKey {
+  dir: 'asc' | 'desc';
+  column: symbol;
+}
+
+function compareBy(keys: SortKey[]) {
+  return (a: Row, b: Row): number => {
+    for (const key of keys) {
+      const x = a[field(key.column)] as string | number;
+      const y = b[field(key.column)] as string | number;
+      if (x === y) continue;
+      const cmp = x < y ? -1 : 1;
+      return key.dir === 'asc' ? cmp : -cmp;
+    }
+    return 0;
+  };
+}
+
+/** Deterministic Fisher-Yates (LCG seed), so fixture order carries no meaning. */
+function shuffled<T>(items: T[], seedValue = 7): T[] {
+  const out = [...items];
+  let state = seedValue;
+  for (let i = out.length - 1; i > 0; i--) {
+    state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+    const j = state % (i + 1);
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+/** Every `orderBy(...)` a query was given, by table. */
+const orderByCalls: Array<{ table: object; keys: SortKey[] }> = [];
+
 function makeQuery(table: object, where: Predicate | undefined) {
   let limit: number | null = null;
+  let order: SortKey[] = [];
   const query = {
-    orderBy: vi.fn(() => query),
+    orderBy: vi.fn((...keys: SortKey[]) => {
+      order = keys;
+      orderByCalls.push({ table, keys });
+      return query;
+    }),
     limit: vi.fn((n: number) => {
       limit = n;
       limitCalls.push({ table, n });
@@ -240,6 +281,7 @@ function makeQuery(table: object, where: Predicate | undefined) {
       const run = async (): Promise<Row[]> => {
         if (selectErrors.has(table)) throw selectErrors.get(table);
         const rows = (store.get(table) ?? []).filter((row) => matches(row, where));
+        if (order.length > 0) rows.sort(compareBy(order));
         return (limit === null ? rows : rows.slice(0, limit)).map((row) => ({ ...row }));
       };
       return run().then(onFulfilled, onRejected);
@@ -309,6 +351,7 @@ beforeEach(() => {
   store.clear();
   selectErrors.clear();
   limitCalls.length = 0;
+  orderByCalls.length = 0;
   nextId = 1000;
   communityRows = [{ id: 11, communitySettings: { assessmentPaymentsEnabled: true } }];
 
@@ -380,6 +423,57 @@ function assessment(overrides: Row): Row {
     ...overrides,
   };
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 0. Overdue transition — processOverdueTransitions
+//    pending → overdue when dueDate < local today (strictly before).
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('0. overdue transition (processOverdueTransitions)', () => {
+  beforeEach(() => {
+    seed(assessmentLineItemsTable, [
+      lineItem({ id: 1, status: 'pending', dueDate: '2026-03-09' }), // yesterday → overdue
+      lineItem({ id: 2, status: 'pending', dueDate: '2026-03-10' }), // today → stays pending
+      lineItem({ id: 3, status: 'pending', dueDate: '2026-03-11' }), // tomorrow → stays pending
+      lineItem({ id: 4, status: 'paid', dueDate: '2026-01-01' }),
+      lineItem({ id: 5, status: 'waived', dueDate: '2026-01-01' }),
+      lineItem({ id: 6, status: 'overdue', dueDate: '2026-01-01' }),
+    ]);
+  });
+
+  function statuses(): Record<string, unknown> {
+    return Object.fromEntries(rowsOf(assessmentLineItemsTable).map((r) => [r.id, r.status]));
+  }
+
+  it('moves only pending items due strictly before today; due-today stays pending', async () => {
+    const summary = await processOverdueTransitions(setNow('2026-03-10T23:59:59.999Z'));
+    expect(summary).toEqual({ communitiesScanned: 1, itemsTransitioned: 1, errors: 0 });
+    expect(statuses()).toEqual({ 1: 'overdue', 2: 'pending', 3: 'pending', 4: 'paid', 5: 'waived', 6: 'overdue' });
+  });
+
+  it('there is no grace here: one day past due is overdue at the first run after midnight', async () => {
+    const summary = await processOverdueTransitions(setNow('2026-03-11T00:00:00.000Z'));
+    expect(summary.itemsTransitioned).toBe(2);
+    expect(statuses()).toMatchObject({ 1: 'overdue', 2: 'overdue', 3: 'pending' });
+  });
+
+  it('a second run transitions nothing', async () => {
+    await processOverdueTransitions(setNow('2026-03-10T12:00:00.000Z'));
+    const second = await processOverdueTransitions(setNow('2026-03-10T13:00:00.000Z'));
+    expect(second.itemsTransitioned).toBe(0);
+  });
+
+  describe('in America/New_York', () => {
+    inTimeZone('America/New_York', 19);
+
+    it('"today" is the process-local date', async () => {
+      // Pinned, not flagged (Vercel runs UTC): 02:00 UTC on March 10 is 22:00 EDT on
+      // March 9, so local today is the 9th and the item due the 9th is not yet overdue.
+      const summary = await processOverdueTransitions(setNow('2026-03-10T02:00:00.000Z'));
+      expect(summary.itemsTransitioned).toBe(0);
+    });
+  });
+});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. Grace days — processLateFees
@@ -462,21 +556,6 @@ describe('2. flat, non-compounding late fee (processLateFees)', () => {
     ]);
   });
 
-  it('selects only overdue items whose lateFeeCents is exactly 0', async () => {
-    await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
-    expect(selectFromMock).toHaveBeenCalledWith(
-      assessmentLineItemsTable,
-      expect.anything(),
-      {
-        op: 'and',
-        args: [
-          { op: 'eq', column: assessmentLineItemsTable.status, value: 'overdue' },
-          { op: 'eq', column: assessmentLineItemsTable.lateFeeCents, value: 0 },
-        ],
-      },
-    );
-  });
-
   it('charges the flat assessment fee (not a % of the amount) once per item; a second run adds nothing', async () => {
     const first = await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
     expect(first).toMatchObject({ feesApplied: 2, totalFeeCents: 5000 });
@@ -512,6 +591,24 @@ describe('2. flat, non-compounding late fee (processLateFees)', () => {
     const summary = await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
     expect(summary.feesApplied).toBe(0);
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['false', { assessmentPaymentsEnabled: false }],
+    ['missing', {}],
+    ['null settings', null],
+  ])('payments gate %s: community skipped and counted, no fee, no ledger post', async (_label, settings) => {
+    communityRows = [{ id: 11, communitySettings: settings }];
+    const summary = await processLateFees(setNow('2026-03-01T00:00:00.000Z'));
+    expect(summary).toMatchObject({
+      communitiesScanned: 1,
+      communitiesSkippedPaymentsDisabled: 1,
+      feesApplied: 0,
+      totalFeeCents: 0,
+    });
+    expect(selectFromMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(postLedgerEntryMock).not.toHaveBeenCalled();
   });
 
   it('an item with no parent assessment is skipped', async () => {
@@ -683,10 +780,13 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
   });
 
   it('the `now` argument gates the month, but the due date comes from the wall clock', async () => {
-    // CHARACTERIZATION: suspected defect — processRecurringAssessments(now) does not
-    // pass `now` to generateAssessmentLineItemsForCommunity, whose computeDueDate
-    // calls `new Date()`. A backfill or delayed re-run for April executed in June
-    // decides "April is a generating month" and then writes a JUNE due date.
+    // CHARACTERIZATION: suspected defect (LATENT) — processRecurringAssessments(now)
+    // does not pass `now` to generateAssessmentLineItemsForCommunity, whose
+    // computeDueDate calls `new Date()`. The only production caller
+    // (api/v1/internal/generate-assessments/route.ts) passes no `now`, so today the
+    // two clocks agree and nothing is wrong. It bites the first time anyone adds a
+    // `now` (a backfill, a delayed re-run, a test): the month gate follows the
+    // argument, the due date follows the wall clock.
     seed(assessmentsTable, [assessment({ id: 7, frequency: 'quarterly', startDate: '2026-04-01' })]);
     setNow('2026-06-15T12:00:00.000Z');
     const summary = await processRecurringAssessments(new Date('2026-04-01T05:00:00.000Z'));
@@ -762,12 +862,14 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     // today, and `pending` is included alongside `overdue`. processOverdueTransitions
     // uses `lt(dueDate, today)`, so the two disagree on whether today's installment is
     // late: a unit whose only item is due today (not yet late by any rule) is listed
-    // as delinquent, and with a lien threshold of 0 it is marked lienEligible.
+    // as delinquent, with its amount in the delinquency totals. (It cannot reach
+    // lienEligible: the route parses the threshold with parsePositiveInt, so the
+    // minimum is 1 and 0 days never qualifies.)
     seed(assessmentLineItemsTable, [
       lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-10', amountCents: 30000 }),
     ]);
-    expect(await listDelinquentUnits(11, 0)).toEqual([
-      { unitId: 5, overdueAmountCents: 30000, daysOverdue: 0, lineItemCount: 1, lienEligible: true },
+    expect(await listDelinquentUnits(11, 1)).toEqual([
+      { unitId: 5, overdueAmountCents: 30000, daysOverdue: 0, lineItemCount: 1, lienEligible: false },
     ]);
   });
 
@@ -777,7 +879,7 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     selectFromMock.mockImplementationOnce(() =>
       Promise.resolve([lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-20' })]),
     );
-    const [row] = await listDelinquentUnits(11, 0);
+    const [row] = await listDelinquentUnits(11, 1);
     expect(row?.daysOverdue).toBe(0);
   });
 
@@ -821,18 +923,17 @@ describe('6. statements', () => {
 
   describe('buildUnitStatement', () => {
     beforeEach(() => {
-      // Stored in the SQL's declared order: dueDate desc, id desc.
-      seed(assessmentLineItemsTable, [
+      // Seeded shuffled: the order below is NOT the order a statement shows.
+      seed(assessmentLineItemsTable, shuffled([
         lineItem({ id: 13, unitId: 88, dueDate: '2026-04-01' }), // outside the window
         lineItem({ id: 12, unitId: 88, dueDate: '2026-03-01', status: 'overdue', lateFeeCents: 2500 }),
         lineItem({ id: 99, unitId: 77, dueDate: '2026-03-01' }), // another unit
         lineItem({ id: 11, unitId: 88, dueDate: '2026-02-01', status: 'paid', paidAt: PAID_AT, paymentIntentId: 'pi_1' }),
-      ]);
-      seed(rentObligationsTable, [
+      ]));
+      seed(rentObligationsTable, shuffled([
+        rent({ id: 500, dueDate: '2026-03-01', lateFeeCents: 999 }), // stray fee must not reach the statement
         rent({ id: 400, dueDate: '2026-03-15' }),
-        // A stray lateFeeCents on a rent row must not reach the statement.
-        rent({ id: 500, dueDate: '2026-03-01', lateFeeCents: 999 }),
-      ]);
+      ]));
       getUnitLedgerBalanceMock.mockResolvedValue(32500);
     });
 
@@ -855,8 +956,18 @@ describe('6. statements', () => {
       ]);
     });
 
-    it('each source is capped at 200 before the merge', async () => {
+    it('each source is ordered dueDate desc, id desc and capped at 200 before the merge', async () => {
       await buildUnitStatement(11, 88, '2026-01-01', '2026-03-31');
+      expect(orderByCalls).toEqual([
+        { table: assessmentLineItemsTable, keys: [
+          { dir: 'desc', column: assessmentLineItemsTable.dueDate },
+          { dir: 'desc', column: assessmentLineItemsTable.id },
+        ] },
+        { table: rentObligationsTable, keys: [
+          { dir: 'desc', column: rentObligationsTable.dueDate },
+          { dir: 'desc', column: rentObligationsTable.id },
+        ] },
+      ]);
       expect(limitCalls).toEqual([
         { table: assessmentLineItemsTable, n: 200 },
         { table: rentObligationsTable, n: 200 },
@@ -866,10 +977,10 @@ describe('6. statements', () => {
     it('the merged list is sliced back to 200, oldest dropped', async () => {
       const day = (i: number) => new Date(Date.UTC(2026, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
       // 150 of each; rent on even days, assessments on odd days, newest first.
-      seed(assessmentLineItemsTable, Array.from({ length: 150 }, (_, i) =>
-        lineItem({ id: 10_000 - i, unitId: 88, dueDate: day(299 - 2 * i) })));
-      seed(rentObligationsTable, Array.from({ length: 150 }, (_, i) =>
-        rent({ id: 20_000 - i, unitId: 88, dueDate: day(298 - 2 * i) })));
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 150 }, (_, i) =>
+        lineItem({ id: 10_000 - i, unitId: 88, dueDate: day(299 - 2 * i) }))));
+      seed(rentObligationsTable, shuffled(Array.from({ length: 150 }, (_, i) =>
+        rent({ id: 20_000 - i, unitId: 88, dueDate: day(298 - 2 * i) }))));
 
       const statement = await buildUnitStatement(11, 88);
       expect(statement.lineItems).toHaveLength(200);
@@ -877,15 +988,36 @@ describe('6. statements', () => {
       expect(statement.lineItems[199]?.dueDate).toBe(day(100));
     });
 
-    it('same-date rows across the two sources keep source order (assessments first), not id order', async () => {
-      // CHARACTERIZATION: suspected defect — the merge sorts on dueDate only (a stable
-      // sort, so ties keep concatenation order) with no id tiebreak. The SQL behind
-      // each source orders `dueDate desc, id desc`, but across sources a same-date rent
-      // row always follows every same-date assessment row. At the 200 cutoff that
-      // decides WHICH rows fall off: here 200 assessment rows dated 03-01 push the one
-      // same-date rent obligation off the statement entirely.
-      seed(assessmentLineItemsTable, Array.from({ length: 200 }, (_, i) =>
-        lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' })));
+    it.each([
+      ['an assessment', 'assessment'],
+      ['a rent', 'rent'],
+    ])('%s source with more than 200 rows contributes its NEWEST 200', async (_label, which) => {
+      const day = (i: number) => new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+      const rows = Array.from({ length: 250 }, (_, i) => ({ id: 1 + i, unitId: 88, dueDate: day(i) }));
+      if (which === 'assessment') {
+        seed(assessmentLineItemsTable, shuffled(rows.map((r) => lineItem(r))));
+        seed(rentObligationsTable, []);
+      } else {
+        seed(assessmentLineItemsTable, []);
+        seed(rentObligationsTable, shuffled(rows.map((r) => rent(r))));
+      }
+      const statement = await buildUnitStatement(11, 88);
+      expect(statement.lineItems).toHaveLength(200);
+      expect(statement.lineItems[0]?.dueDate).toBe(day(249));
+      expect(statement.lineItems[199]?.dueDate).toBe(day(50));
+    });
+
+    it('the merged list is cut to 200 silently: a same-date rent row behind 200 assessment rows vanishes', async () => {
+      // CHARACTERIZATION: suspected defect — silent truncation at 200. The merge is a
+      // stable sort on dueDate (ids come from two different tables, so no id
+      // tiebreak would be meaningful; same-date ties keep concatenation order,
+      // assessments first) and is then cut to 200 with no signal to the caller — no
+      // `truncated` flag, no count, no cursor. A statement for a unit with more than
+      // 200 items in the window just omits the rest: here the one same-date rent
+      // obligation disappears behind 200 assessment rows, and the statement still
+      // looks complete.
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 200 }, (_, i) =>
+        lineItem({ id: 5000 - i, unitId: 88, dueDate: '2026-03-01' }))));
       seed(rentObligationsTable, [rent({ id: 9999, dueDate: '2026-03-01' })]);
 
       const statement = await buildUnitStatement(11, 88);
@@ -916,10 +1048,10 @@ describe('6. statements', () => {
         { id: 2, unitNumber: '102' },
         { id: 3, unitNumber: '103' },
       ]);
-      seed(assessmentLineItemsTable, [
-        lineItem({ id: 21, unitId: 1, dueDate: '2026-03-01', lateFeeCents: 2500 }),
+      seed(assessmentLineItemsTable, shuffled([
         lineItem({ id: 20, unitId: 404, dueDate: '2026-02-01' }), // unit not in the lookup
-      ]);
+        lineItem({ id: 21, unitId: 1, dueDate: '2026-03-01', lateFeeCents: 2500 }),
+      ]));
       seed(rentObligationsTable, [rent({ id: 600, unitId: 2, dueDate: '2026-03-05', lateFeeCents: 999 })]);
       const balances: Record<number, number> = { 1: 1000, 2: -250, 3: 0 };
       getUnitLedgerBalanceMock.mockImplementation(async (_scoped: unknown, unitId: number) => balances[unitId]);
@@ -943,6 +1075,20 @@ describe('6. statements', () => {
         [21, '101', 2500],
         [20, '', 0],
       ]);
+    });
+
+    it('each source contributes its NEWEST 200 (dueDate desc, id desc before the LIMIT)', async () => {
+      const day = (i: number) => new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+      seed(assessmentLineItemsTable, shuffled(Array.from({ length: 250 }, (_, i) =>
+        lineItem({ id: 1 + i, unitId: 1, dueDate: day(2 * i + 1) }))));
+      seed(rentObligationsTable, shuffled(Array.from({ length: 250 }, (_, i) =>
+        rent({ id: 1 + i, unitId: 2, dueDate: day(2 * i) }))));
+      const statement = await buildCommunityStatement(11);
+      expect(statement.lineItems).toHaveLength(200);
+      // Newest 200 of the 500 combined days (0..499) are days 300..499.
+      expect(statement.lineItems[0]?.dueDate).toBe(day(499));
+      expect(statement.lineItems[199]?.dueDate).toBe(day(300));
+      expect(orderByCalls.map((c) => c.keys.map((k) => k.dir))).toEqual([['desc', 'desc'], ['desc', 'desc']]);
     });
 
     it('a missing rent_obligations relation is swallowed', async () => {
@@ -1096,7 +1242,11 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     // CHARACTERIZATION: suspected defect — the "already generated" set is looked up by
     // (assessmentId, dueDate), not by period. Edit an assessment's dueDay from 1 to 15
     // after April's run and the next run (manual or cron) charges every unit a second
-    // April installment, due 04-15, with its own ledger `assessment` entry.
+    // April installment, due 04-15, with its own ledger `assessment` entry. Nor is
+    // there a database backstop: assessment_line_items has no unique index on
+    // (assessment_id, unit_id, due_date), so two concurrent generations for the same
+    // period (cron + manual button) can each read an empty existing set and both
+    // insert — the check-then-insert is not atomic.
     seed(assessmentLineItemsTable, [1, 2, 3].map((unitId) =>
       lineItem({ id: unitId, assessmentId: 7, unitId, dueDate: '2026-04-01' })));
     seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 15, amountCents: 30000 })]);
