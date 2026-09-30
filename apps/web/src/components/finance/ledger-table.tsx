@@ -159,7 +159,7 @@ export function LedgerTable({ communityId }: LedgerTableProps) {
         <select
           value={entryType}
           onChange={(e) => setEntryType(e.target.value)}
-          className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2"
+          className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
         >
           {ENTRY_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -173,7 +173,7 @@ export function LedgerTable({ communityId }: LedgerTableProps) {
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
           aria-label="Start date"
-          className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2"
+          className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
         />
         <span className="text-sm text-content-secondary">to</span>
         <input
@@ -181,7 +181,7 @@ export function LedgerTable({ communityId }: LedgerTableProps) {
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
           aria-label="End date"
-          className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2"
+          className="h-9 rounded-md border border-edge bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
         />
 
         <div className="ml-auto">

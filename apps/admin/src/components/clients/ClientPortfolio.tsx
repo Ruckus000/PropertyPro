@@ -165,7 +165,7 @@ export function ClientPortfolio({ clients, disputes, counts, initialFilter, init
             placeholder="Search by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-md border border-edge-strong py-1.5 pl-8 pr-3 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong py-1.5 pl-8 pr-3 text-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
           />
         </div>
 
@@ -174,7 +174,7 @@ export function ClientPortfolio({ clients, disputes, counts, initialFilter, init
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
           >
             <option value="all">All types</option>
             <option value="condo_718">Condo §718</option>
@@ -189,7 +189,7 @@ export function ClientPortfolio({ clients, disputes, counts, initialFilter, init
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as typeof sort)}
-            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
           >
             <option value="name-asc">Name (A–Z)</option>
             <option value="name-desc">Name (Z–A)</option>

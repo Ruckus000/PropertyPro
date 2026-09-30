@@ -62,7 +62,7 @@ export function AuditFilters({
           id="filter-action"
           value={filters.action ?? ''}
           onChange={(e) => handleChange('action', e.target.value)}
-          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
+          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus-visible:ring-focus"
         >
           {AUDIT_ACTIONS.map((a) => (
             <option key={a.value} value={a.value}>
@@ -81,7 +81,7 @@ export function AuditFilters({
           type="date"
           value={filters.startDate ?? ''}
           onChange={(e) => handleChange('startDate', e.target.value)}
-          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
+          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus-visible:ring-focus"
         />
       </div>
 
@@ -94,7 +94,7 @@ export function AuditFilters({
           type="date"
           value={filters.endDate ?? ''}
           onChange={(e) => handleChange('endDate', e.target.value)}
-          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus:ring-focus"
+          className="mt-1 block rounded-md border-edge-strong text-sm shadow-e0 focus:border-edge-focus focus-visible:ring-focus"
         />
       </div>
 

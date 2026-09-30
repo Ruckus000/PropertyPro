@@ -152,7 +152,7 @@ export function ArcSubmissionForm({
             id="arc-unit"
             value={unitId ?? ''}
             onChange={(e) => setUnitId(e.target.value ? Number(e.target.value) : null)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             <option value="">Select a unit</option>
             {unitIds.map((id) => (
@@ -178,7 +178,7 @@ export function ArcSubmissionForm({
           maxLength={200}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g., Replace front door"
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         />
         {fieldErrors.title && <p className="mt-1 text-xs text-status-danger">{fieldErrors.title}</p>}
       </div>
@@ -191,7 +191,7 @@ export function ArcSubmissionForm({
           id="arc-project-type"
           value={projectTypeChoice}
           onChange={(e) => setProjectTypeChoice(e.target.value)}
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         >
           <option value="">Select a project type</option>
           {PROJECT_TYPES.map((type) => (
@@ -209,7 +209,7 @@ export function ArcSubmissionForm({
             onChange={(e) => setOtherProjectType(e.target.value)}
             placeholder="Describe the type of project"
             aria-label="Describe the type of project"
-            className="mt-2 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            className="mt-2 w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           />
         )}
         {fieldErrors.projectType && (
@@ -228,7 +228,7 @@ export function ArcSubmissionForm({
           maxLength={4000}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe the work, the materials and colors, and who will carry it out."
-          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         />
         <p className="mt-1 text-xs text-content-disabled">
           The more specific you are, the less likely the committee has to come back
@@ -249,7 +249,7 @@ export function ArcSubmissionForm({
             type="date"
             value={estimatedStartDate}
             onChange={(e) => setEstimatedStartDate(e.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           />
         </div>
         <div>
@@ -261,7 +261,7 @@ export function ArcSubmissionForm({
             type="date"
             value={estimatedCompletionDate}
             onChange={(e) => setEstimatedCompletionDate(e.target.value)}
-            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           />
           {fieldErrors.estimatedCompletionDate && (
             <p className="mt-1 text-xs text-status-danger">

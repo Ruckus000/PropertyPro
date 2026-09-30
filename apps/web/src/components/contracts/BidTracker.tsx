@@ -145,7 +145,7 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                     required
                     value={vendorName}
                     onChange={(e) => setVendorName(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+                    className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
                   />
                 </div>
                 <div>
@@ -159,7 +159,7 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                     value={bidAmount}
                     onChange={(e) => setBidAmount(e.target.value)}
                     placeholder="0.00"
-                    className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+                    className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
                   />
                 </div>
               </div>
@@ -172,7 +172,7 @@ export function BidTracker({ communityId, contract, onClose, onBidAdded }: BidTr
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={2}
-                  className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
                 />
               </div>
               <div className="flex justify-end space-x-2">

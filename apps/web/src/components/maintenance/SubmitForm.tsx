@@ -136,7 +136,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={500}
-          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
         />
         {fieldErrors['title'] && (
           <p className="mt-1 text-xs text-status-danger" role="alert">{fieldErrors['title']}</p>
@@ -154,7 +154,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           onChange={(e) => setUnitLabel(e.target.value)}
           maxLength={50}
           placeholder="e.g. 4B, Apt 312"
-          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
         />
         {fieldErrors['unitLabel'] && (
           <p className="mt-1 text-xs text-status-danger" role="alert">{fieldErrors['unitLabel']}</p>
@@ -171,7 +171,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           onChange={(e) => setDescription(e.target.value)}
           maxLength={5000}
           rows={4}
-          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
         />
         {fieldErrors['description'] && (
           <p className="mt-1 text-xs text-status-danger" role="alert">{fieldErrors['description']}</p>
@@ -187,7 +187,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
             id="mr-category"
             value={category}
             onChange={(e) => setCategory(e.target.value as typeof CATEGORIES[number])}
-            className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -205,7 +205,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
             id="mr-priority"
             value={priority}
             onChange={(e) => setPriority(e.target.value as typeof PRIORITIES[number])}
-            className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
           >
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
@@ -226,7 +226,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           accept="image/jpeg,image/png,image/webp,image/gif"
           multiple
           onChange={handlePhotoChange}
-          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content-tertiary shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus file:mr-2 file:rounded-md file:border-0 file:bg-interactive-subtle file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-interactive hover:file:bg-interactive-subtle"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content-tertiary shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus file:mr-2 file:rounded-md file:border-0 file:bg-interactive-subtle file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-interactive hover:file:bg-interactive-subtle"
         />
         {photos.length > 0 && (
           <ul className="mt-2 space-y-1">

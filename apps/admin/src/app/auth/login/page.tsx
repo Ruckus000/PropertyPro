@@ -154,7 +154,7 @@ function LoginForm() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="block w-full rounded-md border border-edge-strong px-3 py-2 text-sm placeholder-content-placeholder shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+                className="block w-full rounded-md border border-edge-strong px-3 py-2 text-sm placeholder-content-placeholder shadow-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
                 placeholder="admin@getpropertypro.com"
               />
             </div>
@@ -170,7 +170,7 @@ function LoginForm() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-md border border-edge-strong px-3 py-2 text-sm placeholder-content-placeholder shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+                className="block w-full rounded-md border border-edge-strong px-3 py-2 text-sm placeholder-content-placeholder shadow-sm focus:border-coral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral-500"
                 placeholder="••••••••"
               />
             </div>

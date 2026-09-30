@@ -47,7 +47,7 @@ export function CommunityFilters() {
           id="communityType"
           value={currentType}
           onChange={(e) => updateParams('communityType', e.target.value)}
-          className="rounded-sm border border-edge bg-surface-card px-3 py-1.5 text-sm text-content shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="rounded-sm border border-edge bg-surface-card px-3 py-1.5 text-sm text-content shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         >
           {COMMUNITY_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -67,7 +67,7 @@ export function CommunityFilters() {
           value={currentSearch}
           onChange={(e) => updateParams('search', e.target.value)}
           placeholder="Name or slug..."
-          className="rounded-sm border border-edge bg-surface-card px-3 py-1.5 text-sm text-content shadow-e0 placeholder:text-content-placeholder focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="rounded-sm border border-edge bg-surface-card px-3 py-1.5 text-sm text-content shadow-e0 placeholder:text-content-placeholder focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         />
       </div>
     </div>

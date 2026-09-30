@@ -77,7 +77,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
           id={`status-${request.id}`}
           value={newStatus}
           onChange={(e) => setNewStatus(e.target.value)}
-          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
         >
           {allowed.map((s) => (
             <option key={s} value={s}>
@@ -96,7 +96,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
           value={internalNotes}
           onChange={(e) => setInternalNotes(e.target.value)}
           rows={2}
-          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+          className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
           placeholder="Internal notes (not visible to residents)"
         />
       </div>
@@ -112,7 +112,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
               value={resolutionDescription}
               onChange={(e) => setResolutionDescription(e.target.value)}
               rows={2}
-              className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+              className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
             />
           </div>
           <div>
@@ -124,7 +124,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
               type="date"
               value={resolutionDate}
               onChange={(e) => setResolutionDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus:outline-none focus:ring-1 ring-focus"
+              className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-e0 focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 ring-focus"
             />
           </div>
         </>

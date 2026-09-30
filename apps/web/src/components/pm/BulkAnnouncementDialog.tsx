@@ -178,7 +178,7 @@ export function BulkAnnouncementDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={500}
-                className="w-full rounded border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="w-full rounded border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
                 placeholder="Announcement title"
               />
             </div>
@@ -193,7 +193,7 @@ export function BulkAnnouncementDialog({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 rows={5}
-                className="w-full rounded border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+                className="w-full rounded border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
                 placeholder="Announcement body text..."
               />
             </div>

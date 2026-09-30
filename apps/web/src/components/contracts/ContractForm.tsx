@@ -117,7 +117,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
             />
           </div>
           <div>
@@ -130,7 +130,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               required
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
-              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
             />
           </div>
         </div>
@@ -144,7 +144,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+            className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
           />
         </div>
 
@@ -159,7 +159,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               value={contractValue}
               onChange={(e) => setContractValue(e.target.value)}
               placeholder="0.00"
-              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
             />
           </div>
           <div>
@@ -172,7 +172,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               required
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
             />
           </div>
           <div>
@@ -184,7 +184,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
             />
           </div>
         </div>
@@ -198,7 +198,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
             type="datetime-local"
             value={biddingClosesAt}
             onChange={(e) => setBiddingClosesAt(e.target.value)}
-            className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+            className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
           />
           <p className="mt-1 text-xs text-content-tertiary">
             Bid details are hidden until this date passes (embargo).
@@ -217,7 +217,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               value={documentId}
               onChange={(e) => setDocumentId(e.target.value)}
               placeholder="Optional document ID"
-              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
             />
             <p className="mt-1 text-xs text-content-tertiary">Link to an uploaded document by its numeric ID.</p>
           </div>
@@ -235,7 +235,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               value={complianceChecklistItemId}
               onChange={(e) => setComplianceChecklistItemId(e.target.value)}
               placeholder="Optional checklist item ID"
-              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus:ring-focus sm:text-sm"
+              className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"
             />
             <p className="mt-1 text-xs text-content-tertiary">
               Link to a compliance checklist item by its numeric ID.
@@ -249,7 +249,7 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
             type="checkbox"
             checked={conflictOfInterest}
             onChange={(e) => setConflictOfInterest(e.target.checked)}
-            className="h-4 w-4 rounded border-edge-strong text-interactive focus:ring-focus"
+            className="h-4 w-4 rounded border-edge-strong text-interactive focus-visible:ring-focus"
           />
           <label htmlFor="conflict-of-interest" className="ml-2 block text-sm text-content-secondary">
             Conflict of interest declared

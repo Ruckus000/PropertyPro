@@ -30,7 +30,7 @@ export default function NotFound() {
       </p>
       <Link
         href="/clients"
-        className="mt-6 inline-flex rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-coral-700 focus:outline-none focus:ring-2 focus:ring-coral-500 focus:ring-offset-2"
+        className="mt-6 inline-flex rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-coral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-500 focus-visible:ring-offset-2"
       >
         Back to clients
       </Link>

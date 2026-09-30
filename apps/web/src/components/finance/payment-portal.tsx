@@ -439,7 +439,7 @@ function UnitSelectCard({
       </p>
       <select
         id="payments-unit-select"
-        className="mt-3 w-full rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content focus:border-interactive focus:outline-none focus:ring-1 focus:ring-interactive"
+        className="mt-3 w-full rounded-md border border-edge bg-surface-card px-3 py-2 text-sm text-content focus:border-interactive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-interactive"
         value={selectedUnitId ?? ''}
         onChange={(event) => onSelect(Number(event.target.value))}
       >

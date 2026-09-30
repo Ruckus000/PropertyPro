@@ -165,7 +165,7 @@ export function ViolationsAdminInbox({
         <select
           value={selectedStatus}
           onChange={(e) => handleFilterChange(setSelectedStatus as (val: string) => void, e.target.value)}
-          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         >
           {STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -177,7 +177,7 @@ export function ViolationsAdminInbox({
         <select
           value={selectedSeverity}
           onChange={(e) => handleFilterChange(setSelectedSeverity as (val: string) => void, e.target.value)}
-          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         >
           {SEVERITY_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -191,7 +191,7 @@ export function ViolationsAdminInbox({
           value={createdAfter}
           onChange={(e) => handleFilterChange(setCreatedAfter, e.target.value)}
           aria-label="Filter violations from date"
-          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         />
         <span className="text-sm text-content-disabled">to</span>
         <input
@@ -199,7 +199,7 @@ export function ViolationsAdminInbox({
           value={createdBefore}
           onChange={(e) => handleFilterChange(setCreatedBefore, e.target.value)}
           aria-label="Filter violations until date"
-          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
+          className="rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         />
 
         <span className="ml-auto text-sm text-content-tertiary">
