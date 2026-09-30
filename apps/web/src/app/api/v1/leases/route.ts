@@ -64,6 +64,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import {
+  expiringWindowEnd,
   getExpiringLeases,
   getRenewalChain,
   type LeaseRecord,
@@ -129,18 +130,6 @@ type LeaseLikeRow = {
   status: string;
   previousLeaseId: number | null;
 };
-
-/** `referenceDate`'s UTC calendar day plus `days`, as YYYY-MM-DD. */
-function utcDateOnlyPlusDays(referenceDate: Date, days: number): string {
-  const d = new Date(
-    Date.UTC(
-      referenceDate.getUTCFullYear(),
-      referenceDate.getUTCMonth(),
-      referenceDate.getUTCDate() + days,
-    ),
-  );
-  return d.toISOString().slice(0, 10);
-}
 
 function parseIsoDateOnly(value: string, fieldName: string): Date {
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -288,7 +277,16 @@ export const GET = withErrorHandler(
     if (chainFor) {
       const leaseId = Number(chainFor);
       if (Number.isInteger(leaseId) && leaseId > 0) {
-        const { rows: chainRows } = await listLeasesForCommunity(communityId, partyScope);
+        const { rows: chainRows, truncated } = await listLeasesForCommunity(
+          communityId,
+          partyScope,
+        );
+        if (truncated) {
+          console.warn('[leases] renewal chain read hit LEASE_LIST_MAX_ROWS; an old chain may be incomplete', {
+            communityId,
+            leaseId,
+          });
+        }
         return getRenewalChain(leaseId, visibleToActor(chainRows.map(coerceLeaseRecord)));
       }
     }
@@ -316,7 +314,9 @@ export const GET = withErrorHandler(
     const expiringWithinDays = searchParams.get('expiring_within_days');
     if (expiringWithinDays) {
       const days = Number(expiringWithinDays);
-      if (Number.isInteger(days) && days > 0) expiringDays = days;
+      // Clamped: an absurd window (1e8 days) would overflow Date/ISO and 500;
+      // 100 years already covers every lease that has an end date.
+      if (Number.isInteger(days) && days > 0) expiringDays = Math.min(days, 36_500);
     }
     const referenceDate = new Date();
 
@@ -325,7 +325,7 @@ export const GET = withErrorHandler(
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(unitId !== undefined ? { unitId } : {}),
       ...(expiringDays !== undefined
-        ? { activeEndingOnOrBefore: utcDateOnlyPlusDays(referenceDate, expiringDays) }
+        ? { activeEndingOnOrBefore: expiringWindowEnd(referenceDate, expiringDays).toISOString().slice(0, 10) }
         : {}),
     });
     if (truncated) {

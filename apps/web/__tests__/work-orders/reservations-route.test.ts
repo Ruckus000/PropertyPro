@@ -166,4 +166,17 @@ describe('GET /api/v1/reservations', () => {
     expect(json.data.meta).toEqual({ page: 2, limit: 1, total: 3 });
     expect(json.data.data.map((row) => row.id)).toEqual([22]);
   });
+
+  it('400s (not 500s) on a page so large OFFSET would overflow', async () => {
+    requireAuthenticatedUserIdMock.mockResolvedValueOnce('user-resident-1');
+    requireCommunityMembershipMock.mockResolvedValueOnce(RESIDENT_MEMBERSHIP);
+    isResidentRoleMock.mockReturnValueOnce(true);
+
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/reservations?communityId=42&page=1000000000000000000'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(listReservationsForCommunityMock).not.toHaveBeenCalled();
+  });
 });

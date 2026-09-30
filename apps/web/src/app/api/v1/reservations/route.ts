@@ -5,6 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { parsePositiveInt } from '@/lib/finance/common';
+import { BadRequestError } from '@/lib/api/errors';
 import {
   isResidentRole,
   requireAmenitiesEnabled,
@@ -31,6 +32,9 @@ export const GET = withErrorHandler(
     const rawLimit = searchParams.get('limit');
     const page = rawPage ? parsePositiveInt(rawPage, 'page') : 1;
     const limit = rawLimit ? Math.min(parsePositiveInt(rawLimit, 'limit'), 100) : 20;
+    // A page past this makes OFFSET overflow Postgres' bigint (a 500), and no
+    // community has a million reservations to page through.
+    if (page > 10_000) throw new BadRequestError('page must be at most 10000');
 
     // Residents see only their own reservations. The window is applied in
     // SQL (LIMIT/OFFSET + COUNT) on both branches — this used to fetch every

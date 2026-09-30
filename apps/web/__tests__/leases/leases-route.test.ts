@@ -1440,6 +1440,28 @@ describe('p2-37 leases route', () => {
       expect(leaseWheres(client)).toEqual([]);
     });
 
+    it('clamps an absurd expiring window instead of overflowing the date (no 500)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-10T12:00:00.000Z'));
+      try {
+        const client = seed([lease(1, { endDate: '2030-01-01' })]);
+        const res = await GET(
+          new NextRequest(
+            'http://localhost:3000/api/v1/leases?communityId=42&expiring_within_days=100000000',
+          ),
+        );
+        expect(res.status).toBe(200);
+        // 36_500 days after 2026-03-10.
+        expect(flatten(leaseWheres(client)[0])).toContainEqual({
+          op: 'lte',
+          col: 'endDate',
+          val: '2126-02-14',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('pushes the expiring window into SQL with an inclusive UTC end date', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-03-10T23:30:00.000Z'));

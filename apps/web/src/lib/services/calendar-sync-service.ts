@@ -31,8 +31,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * How far back a Google sync reaches (PAG-05). Recently-held meetings stay in
- * the pushed set so a late edit (location, end time) still propagates; older
- * history is already on the calendar from earlier syncs.
+ * the pushed set so a late edit (location, end time) still propagates.
+ *
+ * The pushed set is a WINDOW, not every meeting. Today's adapter is a stub
+ * that never deletes or reconciles remote events, so nothing is lost; a real
+ * adapter must never treat this set as authoritative and delete events that
+ * fall outside it (that would erase users' older meetings).
  */
 export const GOOGLE_SYNC_LOOKBACK_DAYS = 30;
 
