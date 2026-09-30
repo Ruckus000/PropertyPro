@@ -1494,12 +1494,16 @@ export async function listDelinquentUnits(
 }>> {
   const scoped = createScopedClient(communityId);
   const today = format(new Date(), 'yyyy-MM-dd');
+  // Strictly before today — the same predicate processOverdueTransitions uses.
+  // An installment due today is not late yet, so it is not delinquent.
+  // `pending` stays in the set so an item the daily cron has not yet flipped to
+  // `overdue` still counts once it is past due.
   const overdueItems = await scoped.selectFrom<AssessmentLineItemRecord>(
     assessmentLineItems,
     {},
     and(
       inArray(assessmentLineItems.status, ['pending', 'overdue']),
-      lte(assessmentLineItems.dueDate, today),
+      lt(assessmentLineItems.dueDate, today),
     ),
   );
 

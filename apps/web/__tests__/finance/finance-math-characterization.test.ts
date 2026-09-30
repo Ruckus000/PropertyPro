@@ -890,16 +890,18 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     setNow('2026-03-10T12:00:00.000Z');
   });
 
-  it('queries pending|overdue items due on or before local today', async () => {
+  it('queries pending|overdue items due strictly before local today (same predicate as the overdue cron)', async () => {
     await listDelinquentUnits(11, 30);
     expect(inArrayMock).toHaveBeenCalledWith(assessmentLineItemsTable.status, ['pending', 'overdue']);
-    expect(lteMock).toHaveBeenCalledWith(assessmentLineItemsTable.dueDate, '2026-03-10');
+    expect(ltMock).toHaveBeenCalledWith(assessmentLineItemsTable.dueDate, '2026-03-10');
+    expect(lteMock).not.toHaveBeenCalledWith(assessmentLineItemsTable.dueDate, expect.anything());
   });
 
   it('sums amount + lateFee per unit, takes the per-unit max days, sorts by amount desc', async () => {
+    // Unit 1's pending item due today (id 2) is not late yet, so it is not summed.
     const result = await listDelinquentUnits(11, 30);
     expect(result).toEqual([
-      { unitId: 1, overdueAmountCents: 62500, daysOverdue: 30, lineItemCount: 2, lienEligible: true },
+      { unitId: 1, overdueAmountCents: 32500, daysOverdue: 30, lineItemCount: 1, lienEligible: true },
       { unitId: 2, overdueAmountCents: 10000, daysOverdue: 29, lineItemCount: 1, lienEligible: false },
     ]);
   });
@@ -913,19 +915,18 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     expect(result.map((row) => row.lienEligible)).toEqual(expected);
   });
 
-  it('a PENDING item due today counts as delinquent, at 0 days', async () => {
-    // CHARACTERIZATION: suspected defect — `lte(dueDate, today)` includes items due
-    // today, and `pending` is included alongside `overdue`. processOverdueTransitions
-    // uses `lt(dueDate, today)`, so the two disagree on whether today's installment is
-    // late: a unit whose only item is due today (not yet late by any rule) is listed
-    // as delinquent, with its amount in the delinquency totals. (It cannot reach
-    // lienEligible: the route parses the threshold with parsePositiveInt, so the
-    // minimum is 1 and 0 days never qualifies.)
+  it('an item due today is not delinquent; one due yesterday is, at 1 day', async () => {
+    // Fixed 2026-09-30 (was a suspected defect: `lte(dueDate, today)` listed a unit
+    // whose only item was due today — not late by any rule — as delinquent, while
+    // processOverdueTransitions uses `lt`). Now guaranteed: delinquency and the
+    // overdue cron agree that an installment is late only from the day after it is
+    // due. lienEligible is unchanged (`daysOverdue >= threshold`).
     seed(assessmentLineItemsTable, [
       lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-10', amountCents: 30000 }),
+      lineItem({ id: 10, unitId: 6, status: 'pending', dueDate: '2026-03-09', amountCents: 20000 }),
     ]);
     expect(await listDelinquentUnits(11, 1)).toEqual([
-      { unitId: 5, overdueAmountCents: 30000, daysOverdue: 0, lineItemCount: 1, lienEligible: false },
+      { unitId: 6, overdueAmountCents: 20000, daysOverdue: 1, lineItemCount: 1, lienEligible: true },
     ]);
   });
 
@@ -942,17 +943,18 @@ describe('5. delinquency (listDelinquentUnits)', () => {
   describe('in America/New_York', () => {
     inTimeZone('America/New_York', 19);
 
-    it('an item due today reports 1 day overdue', async () => {
+    it('an item due yesterday reports 2 days overdue', async () => {
       // CHARACTERIZATION: suspected defect — daysOverdue is differenceInCalendarDays
       // (LOCAL calendar days) between now and the due date parsed as UTC midnight.
-      // West of UTC, '2026-03-10T00:00Z' is the evening of March 9 locally, so every
-      // item is one day older than on a UTC host — enough to flip lienEligible at the
-      // threshold boundary.
+      // West of UTC, '2026-03-09T00:00Z' is the evening of March 8 locally, so every
+      // item is one day older than on a UTC host (1 day, above) — enough to flip
+      // lienEligible at the threshold boundary. (Moved from an item due today when
+      // delinquency became strictly-before-today: that item is no longer listed.)
       seed(assessmentLineItemsTable, [
-        lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-10', amountCents: 30000 }),
+        lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-09', amountCents: 30000 }),
       ]);
-      const [row] = await listDelinquentUnits(11, 1);
-      expect(row).toMatchObject({ daysOverdue: 1, lienEligible: true });
+      const [row] = await listDelinquentUnits(11, 2);
+      expect(row).toMatchObject({ daysOverdue: 2, lienEligible: true });
     });
   });
 });
