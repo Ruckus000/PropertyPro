@@ -9,6 +9,8 @@ import {
   type RequiredSectionPage,
   type RequiredSectionStatus,
 } from '@propertypro/shared';
+import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
+import { upsertableBlockType } from '@/lib/site-editor/upsertable-block-type';
 
 /**
  * Florida-required sections, as the editor's controls need to see them
@@ -42,6 +44,13 @@ export interface RequiredSectionsValue {
   hideNeedsConfirm: (blockType: string) => boolean;
   /** The "Florida law … asks associations to post …" sentence; null if not required. */
   lawFor: (blockType: string) => string | null;
+  /**
+   * Un-hides the section at `target`, on WHATEVER page it is — the pill's
+   * one-click fix. False when it cannot (the section is not in the snapshot,
+   * or sits in the page-less `SITE_CHANGE_GROUP` bucket, which no write can
+   * address); the caller then falls back to taking the PM there.
+   */
+  showSection: (target: { pageId: string; slot: number }) => boolean;
 }
 
 const NOTHING_REQUIRED: RequiredSectionsValue = {
@@ -50,11 +59,14 @@ const NOTHING_REQUIRED: RequiredSectionsValue = {
   canRemove: () => true,
   hideNeedsConfirm: () => false,
   lawFor: () => null,
+  showSection: () => false,
 };
 
 const RequiredSectionsContext = createContext<RequiredSectionsValue>(NOTHING_REQUIRED);
 
 export interface RequiredSectionsProviderProps {
+  /** For `showSection`'s write, which is community-scoped like every block write. */
+  communityId: number;
   communityType: string;
   /**
    * Every page's draft-wins snapshot — `useSiteDiff().validated`. Undefined
@@ -72,10 +84,12 @@ function isVisibleCopy(content: unknown): boolean {
 }
 
 export function RequiredSectionsProvider({
+  communityId,
   communityType,
   pages,
   children,
 }: RequiredSectionsProviderProps) {
+  const upsert = useUpsertContentBlock(communityId);
   const value = useMemo<RequiredSectionsValue>(() => {
     const visibleCount = (blockType: string) =>
       pages === undefined
@@ -98,8 +112,30 @@ export function RequiredSectionsProvider({
         !isRequired(blockType) || (pages !== undefined && countLiveSections(pages, blockType) > 1),
       hideNeedsConfirm: (blockType) => isRequired(blockType) && visibleCount(blockType) <= 1,
       lawFor: (blockType) => requiredSectionLaw(communityType, blockType),
+      showSection: ({ pageId, slot }) => {
+        const numericPageId = Number(pageId);
+        const section = pages
+          ?.find((p) => p.pageId === pageId)
+          ?.snapshot.sections.find((s) => s.slot === slot);
+        const blockType = section ? upsertableBlockType(section.blockType) : null;
+        if (!section || blockType === null || !Number.isFinite(numericPageId)) return false;
+        // The same write `toggleHidden` makes — `hidden` is `z.literal(true)`,
+        // so visible means the key is ABSENT — but carrying an explicit page id.
+        // `toggleHidden` cannot do this: it resolves the block from the
+        // SELECTED page's list, and the write hooks default to that page, so a
+        // copy on another page is out of its reach (D-WRITE).
+        const content = { ...((section.content ?? {}) as Record<string, unknown>) };
+        delete content.hidden;
+        upsert.mutate({
+          blockType,
+          blockOrder: slot,
+          content,
+          pageId: numericPageId,
+        });
+        return true;
+      },
     };
-  }, [communityType, pages]);
+  }, [communityType, pages, upsert]);
 
   return (
     <RequiredSectionsContext.Provider value={value}>{children}</RequiredSectionsContext.Provider>

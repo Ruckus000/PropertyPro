@@ -44,8 +44,10 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
   }),
 }));
 
+const upsertMutate = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
   usePublishedBlocks: () => ({ data: [] }),
+  useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
 }));
 
 const requestRemove = vi.fn();
@@ -90,6 +92,7 @@ function renderWith(
 ) {
   return render(
     <RequiredSectionsProvider
+      communityId={7}
       communityType={communityType}
       pages={pages ?? sitePages({ [HOME]: editor.blocks })}
     >
@@ -102,6 +105,7 @@ beforeEach(() => {
   editor.toggleHidden.mockClear();
   editor.duplicate.mockClear();
   requestRemove.mockClear();
+  upsertMutate.mockClear();
   editor.blocks = [block(2, 'text'), block(3, 'meetings'), block(4, 'documents')];
 });
 
@@ -183,7 +187,7 @@ describe('FloatControls — required sections', () => {
 
   it('stays locked while the whole-site snapshot is still loading', () => {
     render(
-      <RequiredSectionsProvider communityType="condo_718" pages={undefined}>
+      <RequiredSectionsProvider communityId={7} communityType="condo_718" pages={undefined}>
         <FloatControls block={editor.blocks[1]!} communityId={7} />
       </RequiredSectionsProvider>,
     );
@@ -212,18 +216,25 @@ describe('RequirementsPill', () => {
     expect(screen.getByTestId('requirements-pill')).toHaveAccessibleName('Required items: all set');
   });
 
-  it('shows a hidden section on this page in one click', async () => {
+  it('shows a hidden section on this page in one click, writing to this page', async () => {
     const user = userEvent.setup();
-    editor.blocks = [block(3, 'meetings', { content: { hidden: true } }), block(4, 'documents')];
+    editor.blocks = [block(3, 'meetings', { content: { hidden: true, heading: 'Board' } }), block(4, 'documents')];
     renderWith(pill());
 
     await user.click(screen.getByRole('button', { name: 'Required item missing' }));
     await user.click(await screen.findByRole('button', { name: 'Show it' }));
-    expect(editor.toggleHidden).toHaveBeenCalledWith(3, false);
+    expect(upsertMutate).toHaveBeenCalledWith({
+      blockType: 'meetings',
+      blockOrder: 3,
+      content: { heading: 'Board' },
+      pageId: HOME,
+    });
     expect(onGoToSection).not.toHaveBeenCalled();
   });
 
-  it('takes the PM to a hidden section on another page', async () => {
+  it('shows a hidden section on ANOTHER page in one click, writing to that page', async () => {
+    // The write must carry page 11's id: the hooks default to the SELECTED
+    // page, and a page-less write would land on whatever is open (D-WRITE).
     const user = userEvent.setup();
     renderWith(pill(), {
       pages: sitePages({
@@ -233,9 +244,27 @@ describe('RequirementsPill', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Required item missing' }));
-    await user.click(await screen.findByRole('button', { name: 'Go to it' }));
-    expect(onGoToSection).toHaveBeenCalledWith({ pageId: '11', slot: 6 });
-    expect(editor.toggleHidden).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Show it' }));
+    expect(upsertMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ blockType: 'meetings', blockOrder: 6, pageId: 11, content: {} }),
+    );
+    expect(onGoToSection).not.toHaveBeenCalled();
+  });
+
+  it('falls back to taking the PM there when the section is on no page it can write to', async () => {
+    const user = userEvent.setup();
+    renderWith(pill(), {
+      pages: [
+        ...sitePages({ [HOME]: [block(4, 'documents')] }),
+        // `SITE_CHANGE_GROUP` — blocks with no page; no write can address them.
+        { pageId: 'site', snapshot: { hero: null, sections: [{ slot: 6, blockType: 'meetings', content: { hidden: true } }] } },
+      ],
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Required item missing' }));
+    await user.click(await screen.findByRole('button', { name: 'Show it' }));
+    expect(upsertMutate).not.toHaveBeenCalled();
+    expect(onGoToSection).toHaveBeenCalledWith({ pageId: 'site', slot: 6 });
   });
 
   it('opens the Add tool for a missing section', async () => {
@@ -254,7 +283,7 @@ describe('RequirementsPill', () => {
     expect(container).toBeEmptyDOMElement();
 
     const loading = render(
-      <RequiredSectionsProvider communityType="condo_718" pages={undefined}>
+      <RequiredSectionsProvider communityId={7} communityType="condo_718" pages={undefined}>
         {pill()}
       </RequiredSectionsProvider>,
     );

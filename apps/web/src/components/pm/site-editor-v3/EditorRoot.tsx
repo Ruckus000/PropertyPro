@@ -784,6 +784,7 @@ export function EditorRoot({
        * silent — see `RequiredSectionsProviderProps.pages`.
        */}
       <RequiredSectionsProvider
+        communityId={communityId}
         communityType={siteIdentity.communityType}
         pages={diffPending || diffFailed ? undefined : validated}
       >

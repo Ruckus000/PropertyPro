@@ -5,15 +5,15 @@ import { CircleCheck, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-rea
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { useSiteEditor } from './editor-context';
 import { useRequiredSections } from './required-sections-context';
 import type { SlotTarget } from './publish/PublishSheet';
 
 export interface RequirementsPillProps {
   /**
-   * Takes the PM to a hidden required section on ANOTHER page — `EditorRoot`'s
-   * `handleSelectSlot`, the same cross-page hand-off the publish sheet's
-   * "Fix this" uses. A hidden section on the current page is shown in place.
+   * Fallback only: takes the PM to a hidden section that `showSection` cannot
+   * write — `EditorRoot`'s `handleSelectSlot`, the cross-page hand-off the
+   * publish sheet's "Fix this" uses. Normally "Show it" un-hides in place, on
+   * any page.
    */
   onGoToSection: (target: SlotTarget) => void;
   /** Opens the Add tool, for a required section no page has. */
@@ -32,8 +32,7 @@ export interface RequirementsPillProps {
  * keeps an accessible name either way.
  */
 export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPillProps) {
-  const { statuses, lawFor } = useRequiredSections();
-  const { blocks, toggleHidden } = useSiteEditor();
+  const { statuses, lawFor, showSection } = useRequiredSections();
   const [open, setOpen] = useState(false);
 
   if (statuses.length === 0) return null;
@@ -67,14 +66,6 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
         </p>
         <ul className="mt-2 flex flex-col">
           {statuses.map((status) => {
-            const here =
-              status.state === 'hidden'
-                ? blocks.find(
-                    (b) =>
-                      b.blockOrder === status.hiddenAt!.slot &&
-                      String(b.pageId) === status.hiddenAt!.pageId,
-                  )
-                : undefined;
             return (
               <li
                 key={status.blockType}
@@ -115,11 +106,10 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
                     className="shrink-0"
                     onClick={() => {
                       setOpen(false);
-                      if (here) toggleHidden(here.id, false);
-                      else onGoToSection(status.hiddenAt!);
+                      if (!showSection(status.hiddenAt!)) onGoToSection(status.hiddenAt!);
                     }}
                   >
-                    {here ? 'Show it' : 'Go to it'}
+                    Show it
                   </Button>
                 ) : null}
               </li>
