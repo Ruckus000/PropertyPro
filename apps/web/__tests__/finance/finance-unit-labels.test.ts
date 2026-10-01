@@ -47,6 +47,7 @@ vi.mock('@propertypro/db/filters', () => ({
   desc: (column: unknown) => ({ dir: 'desc', column }),
   eq: (column: unknown, value: unknown) => ({ op: 'eq', column, value }),
   inArray: (column: unknown, value: unknown[]) => ({ op: 'inArray', column, value }),
+  lt: (column: unknown, value: unknown) => ({ op: 'lt', column, value }),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({ createUnscopedClient: vi.fn() }));
@@ -56,6 +57,7 @@ vi.mock('@/lib/services/stripe-service', () => ({ getStripeClient: vi.fn() }));
 
 import {
   listAssessmentLineItemsForCommunity,
+  listDelinquentUnits,
   listLedgerForCommunity,
   listPaymentHistoryForCommunity,
 } from '../../src/lib/services/finance-service';
@@ -145,6 +147,20 @@ describe('finance display reads label units by number', () => {
       { id: 2, unitId: null, entryType: 'adjustment' },
       // A unit that no longer exists falls back to its id rather than failing.
       { id: 3, unitId: 99, entryType: 'fee', unitLabel: 'Unit #99' },
+    ]);
+  });
+
+  it('delinquent units (delinquency table)', async () => {
+    store.set(tables.assessmentLineItems, [
+      { ...lineItem(10, 2, 'overdue'), dueDate: '2020-01-01' },
+      { ...lineItem(11, 3, 'overdue'), dueDate: '2020-01-01' },
+    ]);
+
+    const rows = await listDelinquentUnits(42, 90);
+
+    expect(rows.map((row) => [row.unitId, row.unitLabel]).sort()).toEqual([
+      [2, 'Unit 1B'],
+      [3, 'Bldg A • Unit 2A'],
     ]);
   });
 });

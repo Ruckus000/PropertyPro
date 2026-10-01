@@ -991,8 +991,9 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     // Unit 1's pending item due today (id 2) is not late yet, so it is not summed.
     const result = await listDelinquentUnits(11, 30);
     expect(result).toEqual([
-      { unitId: 1, overdueAmountCents: 32500, daysOverdue: 30, lineItemCount: 1, lienEligible: true },
-      { unitId: 2, overdueAmountCents: 10000, daysOverdue: 29, lineItemCount: 1, lienEligible: false },
+      // No units are seeded here, so the label falls back to the id.
+      { unitId: 1, unitLabel: 'Unit #1', overdueAmountCents: 32500, daysOverdue: 30, lineItemCount: 1, lienEligible: true },
+      { unitId: 2, unitLabel: 'Unit #2', overdueAmountCents: 10000, daysOverdue: 29, lineItemCount: 1, lienEligible: false },
     ]);
   });
 
@@ -1016,7 +1017,7 @@ describe('5. delinquency (listDelinquentUnits)', () => {
       lineItem({ id: 10, unitId: 6, status: 'pending', dueDate: '2026-03-09', amountCents: 20000 }),
     ]);
     expect(await listDelinquentUnits(11, 1)).toEqual([
-      { unitId: 6, overdueAmountCents: 20000, daysOverdue: 1, lineItemCount: 1, lienEligible: true },
+      { unitId: 6, unitLabel: 'Unit #6', overdueAmountCents: 20000, daysOverdue: 1, lineItemCount: 1, lienEligible: true },
     ]);
   });
 

@@ -10,6 +10,8 @@ interface ResidentRecord {
   email: string | null;
   role: string;
   unitId: number | null;
+  /** "Unit 1B", resolved server-side. */
+  unitLabel?: string | null;
 }
 
 interface ResidentListProps {
@@ -49,7 +51,7 @@ function ResidentRow({ resident, onResendInvite }: ResidentRowProps) {
         <p className="text-content-secondary">{resident.email ?? 'No email'}</p>
         <p className="text-content-secondary">
           Role: {resident.role}
-          {resident.unitId ? ` • Unit ${resident.unitId}` : ''}
+          {resident.unitId ? ` • ${resident.unitLabel ?? `Unit #${resident.unitId}`}` : ''}
         </p>
       </div>
 

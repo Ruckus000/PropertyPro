@@ -14,6 +14,8 @@ export interface ResidentRecord {
   email: string | null;
   role: string;
   unitId: number | null;
+  /** "Unit 1B", resolved server-side. */
+  unitLabel?: string | null;
 }
 
 export interface CreateResidentResult {

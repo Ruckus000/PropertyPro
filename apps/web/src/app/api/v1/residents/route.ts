@@ -23,6 +23,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 import { assertActorMayAttachExistingUser } from '@/lib/services/user-linking';
 import {
   createResidentNotificationPreferences,
@@ -82,7 +83,13 @@ export const GET = withErrorHandler(
       roleFilter = { role: roleParam };
     }
 
-    return listResidentsForCommunity(communityId, roleFilter);
+    const rows = await listResidentsForCommunity(communityId, roleFilter);
+    // The residents list shows "Unit 1B", not the unit's row id. Managers have no unit.
+    const withUnit = rows.filter((row): row is typeof row & { unitId: number } => row.unitId !== null);
+    const labels = new Map(
+      (await withUnitLabels(createScopedClient(communityId), withUnit)).map((row) => [row.roleId, row.unitLabel]),
+    );
+    return rows.map((row) => ({ ...row, unitLabel: labels.get(row.roleId) ?? null }));
   }),
 );
 

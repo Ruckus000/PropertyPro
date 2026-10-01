@@ -1676,6 +1676,7 @@ export async function listDelinquentUnits(
   lienThresholdDays: number,
 ): Promise<Array<{
   unitId: number;
+  unitLabel: string;
   overdueAmountCents: number;
   daysOverdue: number;
   lineItemCount: number;
@@ -1711,15 +1712,19 @@ export async function listDelinquentUnits(
     bucket.set(item.unitId, current);
   }
 
-  return [...bucket.entries()]
-    .map(([unitId, value]) => ({
-      unitId,
-      overdueAmountCents: value.overdueAmountCents,
-      daysOverdue: value.daysOverdue,
-      lineItemCount: value.lineItemCount,
-      lienEligible: value.daysOverdue >= lienThresholdDays,
-    }))
-    .sort((a, b) => b.overdueAmountCents - a.overdueAmountCents);
+  // The delinquency table shows "Unit 1B", not the unit's row id.
+  return withUnitLabels(
+    scoped,
+    [...bucket.entries()]
+      .map(([unitId, value]) => ({
+        unitId,
+        overdueAmountCents: value.overdueAmountCents,
+        daysOverdue: value.daysOverdue,
+        lineItemCount: value.lineItemCount,
+        lienEligible: value.daysOverdue >= lienThresholdDays,
+      }))
+      .sort((a, b) => b.overdueAmountCents - a.overdueAmountCents),
+  );
 }
 
 export async function waiveLateFeesForUnit(
