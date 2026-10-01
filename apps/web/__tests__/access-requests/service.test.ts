@@ -510,6 +510,10 @@ describe('access-request-service', () => {
       expect(adminSend).toBeDefined();
       expect(adminSend!.category).toBe('transactional');
       expect(adminSend!.react.props['recordCheck']).toEqual({ label: 'Email verified', tone: 'green' });
+      // The "Review request" link names the community, or it opens an error page.
+      expect(adminSend!.react.props['dashboardUrl']).toMatch(
+        new RegExp(`/dashboard/residents\\?communityId=${COMMUNITY_ID}$`),
+      );
     });
 
     describe('admin notification recipients', () => {

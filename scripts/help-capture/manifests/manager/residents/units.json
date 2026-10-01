@@ -1,0 +1,41 @@
+{
+  "section": "manager",
+  "category": "residents",
+  "slug": "units",
+  "shots": [
+    {
+      "name": "un-list",
+      "kind": "still",
+      "route": "/dashboard/units?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "table"
+        }
+      ],
+      "clipTo": "table"
+    },
+    {
+      "name": "un-add",
+      "kind": "still",
+      "route": "/dashboard/units?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Add unit\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#unitNumber",
+      "step": 1
+    }
+  ]
+}

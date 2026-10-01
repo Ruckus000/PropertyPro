@@ -1,0 +1,136 @@
+{
+  "section": "manager",
+  "category": "maintenance",
+  "slug": "dispatch-work-order",
+  "shots": [
+    {
+      "name": "wo-inbox",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=requests",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section[role=\"tabpanel\"]"
+        },
+        {
+          "type": "wait",
+          "ms": 1500
+        }
+      ],
+      "clipTo": [
+        "nav[aria-label=\"Operations tabs\"]",
+        "section[role=\"tabpanel\"]"
+      ],
+      "highlight": "role=tab[name=\"Requests\"]",
+      "step": 1
+    },
+    {
+      "name": "wo-btn",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=work-orders",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Dispatch Work Order\"]"
+        }
+      ],
+      "clipTo": [
+        "h1:text-is(\"Operations\")",
+        "role=button[name=\"Dispatch Work Order\"] >> nth=0"
+      ],
+      "highlight": "role=button[name=\"Dispatch Work Order\"] >> nth=0",
+      "step": 2
+    },
+    {
+      "name": "wo-form",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=work-orders&create=work-order",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#wo-title"
+        },
+        {
+          "type": "fill",
+          "selector": "#wo-title",
+          "value": "Replace lobby light fixtures"
+        },
+        {
+          "type": "fill",
+          "selector": "#wo-description",
+          "value": "Two fixtures by the mailroom flicker. Resident request from unit 4B."
+        }
+      ],
+      "clipTo": [
+        "label[for=\"wo-title\"]",
+        "#wo-priority"
+      ],
+      "highlight": "#wo-title",
+      "step": 3
+    },
+    {
+      "name": "wo-vendor",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=work-orders&create=work-order",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#wo-title"
+        },
+        {
+          "type": "fill",
+          "selector": "#wo-title",
+          "value": "Replace lobby light fixtures"
+        },
+        {
+          "type": "fill",
+          "selector": "#wo-description",
+          "value": "Two fixtures by the mailroom flicker. Resident request from unit 4B."
+        }
+      ],
+      "clipTo": [
+        "label[for=\"wo-vendor\"]",
+        "#wo-notes"
+      ],
+      "highlight": "#wo-vendor",
+      "step": 4
+    },
+    {
+      "name": "wo-send",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=work-orders&create=work-order",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#wo-title"
+        },
+        {
+          "type": "fill",
+          "selector": "#wo-title",
+          "value": "Replace lobby light fixtures"
+        },
+        {
+          "type": "fill",
+          "selector": "#wo-description",
+          "value": "Two fixtures by the mailroom flicker. Resident request from unit 4B."
+        }
+      ],
+      "clipTo": [
+        "#wo-notes",
+        "form:has(#wo-title) button[type=\"submit\"]"
+      ],
+      "highlight": "form:has(#wo-title) button[type=\"submit\"]",
+      "step": 5
+    }
+  ]
+}

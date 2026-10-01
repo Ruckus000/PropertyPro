@@ -82,13 +82,17 @@ function EligibilitySnapshotButton({
 
 interface BoardElectionsPanelProps {
   communityId: number;
+  /** Manager: may also revoke other members' proxies. */
   isAdmin: boolean;
+  /** Manager or board seat: runs elections (canActAsBoard). */
+  canAdminister: boolean;
   userId: string;
 }
 
 export function BoardElectionsPanel({
   communityId,
   isAdmin,
+  canAdminister,
   userId,
 }: BoardElectionsPanelProps) {
   const { data, isLoading, error } = useBoardElections(communityId, { limit: 25 });
@@ -125,7 +129,7 @@ export function BoardElectionsPanel({
             key={election.id}
             communityId={communityId}
             election={election}
-            isAdmin={isAdmin}
+            canAdminister={canAdminister}
             onOpen={() => setSelectedElectionId(election.id)}
           />
         ))}
@@ -135,6 +139,7 @@ export function BoardElectionsPanel({
         communityId={communityId}
         electionId={selectedElectionId}
         isAdmin={isAdmin}
+        canAdminister={canAdminister}
         userId={userId}
         open={selectedElectionId !== null}
         onOpenChange={(open) => {
@@ -150,7 +155,7 @@ export function BoardElectionsPanel({
 function ElectionCard({
   communityId,
   election,
-  isAdmin,
+  canAdminister,
   onOpen,
 }: {
   communityId: number;
@@ -162,7 +167,7 @@ function ElectionCard({
     closesAt: string;
     status: string;
   };
-  isAdmin: boolean;
+  canAdminister: boolean;
   onOpen: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -209,7 +214,7 @@ function ElectionCard({
             >
               View Details
             </Button>
-            {isAdmin && election.status === 'draft' ? (
+            {canAdminister && election.status === 'draft' ? (
               <EligibilitySnapshotButton communityId={communityId} electionId={election.id} />
             ) : null}
           </div>

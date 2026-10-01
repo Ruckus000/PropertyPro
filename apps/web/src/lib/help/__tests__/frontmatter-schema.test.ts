@@ -6,6 +6,7 @@ const base = {
   description: 'D',
   category: 'compliance',
   slug: 'test-article',
+  section: 'manager',
   updatedAt: '2026-06-10',
 };
 
@@ -33,19 +34,33 @@ describe('heroMedia / upNext frontmatter', () => {
   });
 });
 
-describe('roles — one closed audience vocabulary (roadmap 2.8)', () => {
-  it('accepts the five audiences', () => {
-    const r = validateFrontmatter({
-      ...base,
-      roles: ['manager', 'owner', 'tenant', 'board_member', 'board_president'],
-    });
-    expect(r.ok).toBe(true);
+describe('section — one closed readership vocabulary', () => {
+  it.each(['resident', 'manager'])('accepts %s', (section) => {
+    expect(validateFrontmatter({ ...base, section }).ok).toBe(true);
   });
 
-  it.each(['pm_admin', 'site-manager', 'Manager'])(
-    'rejects %s — an unknown token used to hide the article from everyone, silently',
-    (token) => {
-      expect(validateFrontmatter({ ...base, roles: [token] }).ok).toBe(false);
+  it.each(['board', 'owner', 'board_member', 'Manager'])(
+    'rejects %s — an unknown section would hide the article from everyone, silently',
+    (section) => {
+      expect(validateFrontmatter({ ...base, section }).ok).toBe(false);
     },
   );
+
+  it('is required', () => {
+    const { section: _omit, ...rest } = base;
+    expect(validateFrontmatter(rest).ok).toBe(false);
+  });
+});
+
+describe('communityTypes / boardOnly', () => {
+  it('accepts known community types and defaults boardOnly to false', () => {
+    const r = validateFrontmatter({ ...base, communityTypes: ['condo_718', 'hoa_720'] });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.boardOnly).toBe(false);
+  });
+
+  it('rejects an unknown community type and an empty list', () => {
+    expect(validateFrontmatter({ ...base, communityTypes: ['condo'] }).ok).toBe(false);
+    expect(validateFrontmatter({ ...base, communityTypes: [] }).ok).toBe(false);
+  });
 });

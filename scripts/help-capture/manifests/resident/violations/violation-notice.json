@@ -1,0 +1,33 @@
+{
+  "section": "resident",
+  "category": "violations",
+  "slug": "violation-notice",
+  "shots": [
+    {
+      "name": "vn-notice",
+      "kind": "still",
+      "route": "/violations/report?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section:has(> h2:text-is(\"Your Reports\")) a"
+        },
+        {
+          "type": "click",
+          "selector": "section:has(> h2:text-is(\"Your Reports\")) a >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Timeline\")"
+        }
+      ],
+      "clipTo": [
+        "[data-page-header]",
+        "section:has(> h2:text-is(\"Description\"))",
+        "section:has(> h2:text-is(\"Timeline\"))"
+      ]
+    }
+  ]
+}

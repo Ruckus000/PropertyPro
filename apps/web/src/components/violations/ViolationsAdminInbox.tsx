@@ -235,7 +235,7 @@ export function ViolationsAdminInbox({
                 type="button"
                 onClick={() => setExpandedId(expandedId === v.id ? null : v.id)}
                 aria-expanded={expandedId === v.id}
-                aria-label={`Violation #${v.id} — ${CATEGORY_LABELS[v.category] ?? v.category}, Unit ${v.unitId}`}
+                aria-label={`Violation #${v.id} — ${CATEGORY_LABELS[v.category] ?? v.category}, ${v.unitLabel ?? `Unit #${v.unitId}`}`}
                 className={`w-full rounded-md border px-4 py-3 text-left transition-colors duration-quick ${
                   expandedId === v.id
                     ? 'border-interactive bg-interactive-subtle'
@@ -248,7 +248,7 @@ export function ViolationsAdminInbox({
                       #{v.id}
                     </span>
                     <span className="text-sm text-content-secondary">
-                      Unit {v.unitId}
+                      {v.unitLabel ?? `Unit #${v.unitId}`}
                     </span>
                     <span className="text-sm text-content-secondary">
                       {CATEGORY_LABELS[v.category] ?? v.category}

@@ -1,0 +1,70 @@
+{
+  "section": "manager",
+  "category": "website",
+  "slug": "audit-trail",
+  "shots": [
+    {
+      "name": "au-filters",
+      "kind": "still",
+      "route": "/audit-trail?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=combobox[name=\"Action\"]"
+        }
+      ],
+      "clipTo": [
+        "role=combobox[name=\"Action\"]",
+        "role=button[name=\"Export CSV\"]"
+      ],
+      "highlight": "role=combobox[name=\"Action\"]",
+      "step": 1
+    },
+    {
+      "name": "au-meta",
+      "kind": "still",
+      "route": "/audit-trail?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "summary:text-is(\"Metadata\") >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "summary:text-is(\"Metadata\") >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "details[open]"
+        }
+      ],
+      "clipTo": "details[open] >> nth=0",
+      "pad": 64,
+      "highlight": "details[open] > summary >> nth=0",
+      "step": 2
+    },
+    {
+      "name": "au-export",
+      "kind": "still",
+      "route": "/audit-trail?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Export CSV\"]"
+        }
+      ],
+      "clipTo": [
+        "role=combobox[name=\"Action\"]",
+        "role=button[name=\"Export CSV\"]"
+      ],
+      "highlight": "role=button[name=\"Export CSV\"]",
+      "step": 3
+    }
+  ]
+}

@@ -7,7 +7,8 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
+import { getFeaturesForCommunity } from '@propertypro/shared';
+import { canActAsBoard } from '@/lib/db/access-control';
 import { ViolationsAdminInbox } from '@/components/violations/ViolationsAdminInbox';
 import { FeatureGate } from '@/components/billing/feature-gate';
 
@@ -19,8 +20,9 @@ interface PageProps {
  * Violations Admin Inbox
  *
  * Route: /violations?communityId=X
- * Auth: isAdminRole(membership.role) — the v3 admin tier (property_manager or
- * root_manager). Board designation grants no access (ADR-006).
+ * Auth: canActAsBoard — managers, and residents with a board seat, who already
+ * hold the violation admin writes (requireViolationAdminWrite, ADR-006 §2a).
+ * Creating a violation for any unit stays manager-only (the inbox's button).
  * Feature gate: hasViolations must be enabled for the community type
  */
 export default async function ViolationsPage({ searchParams }: PageProps) {
@@ -42,7 +44,7 @@ export default async function ViolationsPage({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  if (!isAdminRole(membership.role)) {
+  if (!canActAsBoard(membership)) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 

@@ -5,17 +5,14 @@
  */
 import {
   Banknote,
+  Briefcase,
   Building2,
   CalendarDays,
-  ClipboardList,
-  CloudRain,
   FileSignature,
   FileText,
-  Landmark,
+  Globe,
   Megaphone,
-  MessagesSquare,
   Rocket,
-  Scale,
   ScrollText,
   ShieldCheck,
   Siren,
@@ -25,7 +22,6 @@ import {
   Users,
   Vote,
   Wrench,
-  Briefcase,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -41,31 +37,52 @@ const WARNING_CHIP = 'bg-status-warning-subtle text-status-warning border-status
 const DANGER_CHIP = 'bg-status-danger-subtle text-status-danger border-status-danger-border';
 const SUCCESS_CHIP = 'bg-status-success-subtle text-status-success border-status-success-border';
 
+/**
+ * Help topics, in the order the Help Center sidebar and home list them.
+ * Each is a directory under content/help/<section>/ and a /help/<category> URL.
+ */
+export const HELP_CATEGORY_ORDER: readonly string[] = [
+  'getting-started',
+  'documents',
+  'meetings',
+  'announcements',
+  'compliance',
+  'payments',
+  'maintenance',
+  'violations',
+  'board',
+  'esign',
+  'residents',
+  'leases',
+  'apartment',
+  'building',
+  'emergency',
+  'website',
+  'pm',
+  'account',
+];
+
 export const HELP_CATEGORY_META: Record<string, HelpCategoryMeta> = {
-  account: { label: 'Account', icon: UserCircle, chipClass: NEUTRAL_CHIP },
-  announcements: { label: 'Announcements', icon: Megaphone, chipClass: BRAND_CHIP },
-  apartment: { label: 'Apartment', icon: Building2, chipClass: NEUTRAL_CHIP },
-  audit: { label: 'Audit', icon: ClipboardList, chipClass: NEUTRAL_CHIP },
-  compliance: { label: 'Compliance', icon: ShieldCheck, chipClass: BRAND_CHIP },
-  contracts: { label: 'Contracts', icon: ScrollText, chipClass: NEUTRAL_CHIP },
+  'getting-started': { label: 'Getting started', icon: Rocket, chipClass: BRAND_CHIP },
   documents: { label: 'Documents', icon: FileText, chipClass: BRAND_CHIP },
+  meetings: { label: 'Meetings', icon: CalendarDays, chipClass: BRAND_CHIP },
+  announcements: { label: 'Announcements', icon: Megaphone, chipClass: BRAND_CHIP },
+  compliance: { label: 'Compliance', icon: ShieldCheck, chipClass: BRAND_CHIP },
+  payments: { label: 'Payments and assessments', icon: Banknote, chipClass: SUCCESS_CHIP },
+  maintenance: { label: 'Maintenance', icon: Wrench, chipClass: WARNING_CHIP },
+  violations: { label: 'Violations and ARC', icon: TriangleAlert, chipClass: WARNING_CHIP },
+  board: { label: 'Board, polls, and elections', icon: Vote, chipClass: BRAND_CHIP },
+  esign: { label: 'E-sign', icon: FileSignature, chipClass: NEUTRAL_CHIP },
+  residents: { label: 'Residents and units', icon: Users, chipClass: NEUTRAL_CHIP },
+  leases: { label: 'Leases', icon: ScrollText, chipClass: NEUTRAL_CHIP },
+  apartment: { label: 'Packages, visitors, and move-ins', icon: Building2, chipClass: NEUTRAL_CHIP },
   // Umbrella, not ShieldCheck — Compliance already owns the shield, and two
   // categories sharing an icon defeats at-a-glance scanning.
-  insurance: { label: 'Insurance', icon: Umbrella, chipClass: BRAND_CHIP },
-  elections: { label: 'Elections', icon: Vote, chipClass: BRAND_CHIP },
-  emergency: { label: 'Emergency', icon: Siren, chipClass: DANGER_CHIP },
-  esign: { label: 'E-Sign', icon: FileSignature, chipClass: NEUTRAL_CHIP },
-  finance: { label: 'Finance', icon: Banknote, chipClass: SUCCESS_CHIP },
-  forum: { label: 'Board forum', icon: MessagesSquare, chipClass: NEUTRAL_CHIP },
-  'getting-started': { label: 'Getting started', icon: Rocket, chipClass: BRAND_CHIP },
-  maintenance: { label: 'Maintenance', icon: Wrench, chipClass: WARNING_CHIP },
-  meetings: { label: 'Meetings', icon: CalendarDays, chipClass: BRAND_CHIP },
-  pm: { label: 'Property management', icon: Briefcase, chipClass: NEUTRAL_CHIP },
-  reserves: { label: 'Reserves', icon: Landmark, chipClass: BRAND_CHIP },
-  residents: { label: 'Residents', icon: Users, chipClass: NEUTRAL_CHIP },
-  'storm-damage': { label: 'Storm damage', icon: CloudRain, chipClass: WARNING_CHIP },
-  transparency: { label: 'Transparency', icon: Scale, chipClass: NEUTRAL_CHIP },
-  violations: { label: 'Violations', icon: TriangleAlert, chipClass: WARNING_CHIP },
+  building: { label: 'Insurance, reserves, and storms', icon: Umbrella, chipClass: BRAND_CHIP },
+  emergency: { label: 'Emergency alerts', icon: Siren, chipClass: DANGER_CHIP },
+  website: { label: 'Website and records', icon: Globe, chipClass: NEUTRAL_CHIP },
+  pm: { label: 'Portfolio', icon: Briefcase, chipClass: NEUTRAL_CHIP },
+  account: { label: 'Your account', icon: UserCircle, chipClass: NEUTRAL_CHIP },
 };
 
 export function getHelpCategoryMeta(category: string): HelpCategoryMeta {

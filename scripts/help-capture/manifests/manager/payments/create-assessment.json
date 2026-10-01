@@ -1,0 +1,169 @@
+{
+  "section": "manager",
+  "category": "payments",
+  "slug": "create-assessment",
+  "shots": [
+    {
+      "name": "as-tabs",
+      "kind": "still",
+      "route": "/communities/{cid}/payments?tab=overview",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=tab[name=\"Assessments\"]"
+        }
+      ],
+      "clipTo": "role=tablist",
+      "highlight": "role=tab[name=\"Assessments\"]",
+      "step": 1
+    },
+    {
+      "name": "as-create",
+      "kind": "still",
+      "route": "/communities/{cid}/payments?tab=assessments",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Create Assessment\"]"
+        }
+      ],
+      "clipTo": "div.flex:has(> div > h2:text-is(\"Assessments\"))",
+      "highlight": "role=button[name=\"Create Assessment\"]",
+      "step": 2
+    },
+    {
+      "name": "as-form",
+      "kind": "still",
+      "route": "/communities/{cid}/payments?tab=assessments",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Create Assessment\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Create Assessment\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Create Assessment\")"
+        },
+        {
+          "type": "fill",
+          "selector": "input[placeholder=\"Monthly Maintenance Assessment\"]",
+          "value": "Special Assessment - Pool Resurfacing"
+        },
+        {
+          "type": "fill",
+          "selector": "input[placeholder=\"350.00\"]",
+          "value": "1200.00"
+        }
+      ],
+      "clipTo": "div.max-w-lg:has(h2:text-is(\"Create Assessment\"))",
+      "highlight": "div.grid.grid-cols-2:has(input[placeholder=\"350.00\"])",
+      "step": 3
+    },
+    {
+      "name": "as-late",
+      "kind": "still",
+      "route": "/communities/{cid}/payments?tab=assessments",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Create Assessment\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Create Assessment\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Create Assessment\")"
+        },
+        {
+          "type": "fill",
+          "selector": "input[placeholder=\"25.00\"]",
+          "value": "25.00"
+        }
+      ],
+      "clipTo": "div.grid.grid-cols-3:has(input[placeholder=\"25.00\"])",
+      "highlight": "div.grid.grid-cols-3:has(input[placeholder=\"25.00\"])",
+      "step": 4
+    },
+    {
+      "name": "as-save",
+      "kind": "still",
+      "route": "/communities/{cid}/payments?tab=assessments",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Create Assessment\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Create Assessment\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Create Assessment\")"
+        }
+      ],
+      "clipTo": [
+        "div.grid.grid-cols-3:has(input[placeholder=\"25.00\"])",
+        "form button[type=\"submit\"]"
+      ],
+      "highlight": "form button[type=\"submit\"]",
+      "step": 5
+    },
+    {
+      "name": "as-lines",
+      "kind": "still",
+      "route": "/communities/{cid}/payments?tab=assessments",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h3:text-is(\"Monthly Maintenance Assessment\")"
+        },
+        {
+          "type": "click",
+          "selector": "div[role=\"button\"]:has(h3:text-is(\"Monthly Maintenance Assessment\"))"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h3:has-text(\"Line Items\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "th:text-is(\"Late Fee\")"
+        }
+      ],
+      "clipTo": "div.rounded-md.border:has(h3:has-text(\"Line Items\"))"
+    },
+    {
+      "name": "as-delinq",
+      "kind": "still",
+      "route": "/communities/{cid}/payments?tab=delinquency",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Waive Late Fees\"]"
+        }
+      ],
+      "clipTo": "table:has(th:has-text(\"Days overdue\"))"
+    }
+  ]
+}

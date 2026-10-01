@@ -1,0 +1,31 @@
+{
+  "section": "resident",
+  "category": "getting-started",
+  "slug": "community-digest",
+  "shots": [
+    {
+      "name": "dig-card",
+      "kind": "still",
+      "route": "/settings?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "text=Community digest"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "text=Community digest"
+        }
+      ],
+      "clipTo": [
+        "text=Community digest",
+        "text=/How often you receive it|turned on the community digest/"
+      ],
+      "pad": 24,
+      "highlight": "role=combobox[name=\"How often you receive it\"]",
+      "step": 2
+    }
+  ]
+}

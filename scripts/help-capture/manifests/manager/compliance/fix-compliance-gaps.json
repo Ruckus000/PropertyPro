@@ -1,0 +1,25 @@
+{
+  "section": "manager",
+  "category": "compliance",
+  "slug": "fix-compliance-gaps",
+  "shots": [
+    {
+      "kind": "still",
+      "route": "/communities/{cid}/compliance",
+      "role": "cam",
+      "community": "condo",
+      "name": "gap-over",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=/^Overdue/]"
+        },
+        {
+          "type": "wait",
+          "ms": 300
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"queue-heading\"]"
+    }
+  ]
+}

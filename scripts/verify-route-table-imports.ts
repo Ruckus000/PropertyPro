@@ -147,7 +147,6 @@ export const KNOWN_DIRECT_TABLE_IMPORTS: ReadonlyMap<string, readonly string[]> 
   // manager-only FAQ editor (isAdmin redirect)
   ['apps/web/src/app/(authenticated)/help/manage/page.tsx', ['faqs']],
   // FAQ search filtered by filterFaqsForRole; searchCommunityFaqs is the service
-  ['apps/web/src/app/(authenticated)/help/search/page.tsx', ['faqs']],
   // the caller's own users row
   ['apps/web/src/app/(authenticated)/settings/account/page.tsx', ['users']],
   // root-only change-plan

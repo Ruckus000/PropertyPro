@@ -39,6 +39,7 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
     id: a.id,
     title: a.title,
     isPinned: a.isPinned,
+    audience: a.audience,
     publishedAt: a.publishedAt.toISOString(),
     source: 'Board',
   }));

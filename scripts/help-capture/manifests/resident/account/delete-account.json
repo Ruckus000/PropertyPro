@@ -1,0 +1,59 @@
+{
+  "section": "resident",
+  "category": "account",
+  "slug": "delete-account",
+  "shots": [
+    {
+      "name": "del-zone",
+      "kind": "still",
+      "route": "/settings/account?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Delete My Account\"s]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=button[name=\"Delete My Account\"s]"
+        }
+      ],
+      "clipTo": [
+        "role=heading[name=\"Danger Zone\"s]",
+        "role=button[name=\"Delete My Account\"s]"
+      ],
+      "highlight": "role=button[name=\"Delete My Account\"s]",
+      "step": 1
+    },
+    {
+      "name": "del-confirm",
+      "kind": "still",
+      "route": "/settings/account?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Delete My Account\"s]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Delete My Account\"s]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        },
+        {
+          "type": "fill",
+          "selector": "role=textbox[name=\"Type DELETE to confirm\"]",
+          "value": "DELETE"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "role=button[name=\"Confirm Deletion\"s]",
+      "step": 2
+    }
+  ]
+}

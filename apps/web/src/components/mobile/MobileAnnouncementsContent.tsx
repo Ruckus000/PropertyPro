@@ -15,6 +15,7 @@ interface SerializedAnnouncement {
   id: number;
   title: string;
   isPinned: boolean;
+  audience: string;
   publishedAt: string;
   source: string;
 }
@@ -103,6 +104,7 @@ export function MobileAnnouncementsContent({
                       </span>
                       <span className="mt-0.5 block text-xs text-stone-400">
                         {a.source} &middot; {formatDate(a.publishedAt, timezone)}
+                        {a.audience === 'board_only' && <> &middot; Board only</>}
                       </span>
                     </li>
                   </StaggerItem>
@@ -128,6 +130,7 @@ export function MobileAnnouncementsContent({
                       </span>
                       <span className="mt-0.5 block text-xs text-stone-400">
                         {a.source} &middot; {formatDate(a.publishedAt, timezone)}
+                        {a.audience === 'board_only' && <> &middot; Board only</>}
                       </span>
                     </li>
                   </StaggerItem>

@@ -1,0 +1,81 @@
+{
+  "section": "manager",
+  "category": "pm",
+  "slug": "portfolio",
+  "shots": [
+    {
+      "name": "pm-table",
+      "kind": "still",
+      "route": "/pm/dashboard/communities",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "table"
+        }
+      ],
+      "clipTo": "table"
+    },
+    {
+      "name": "pm-row",
+      "kind": "still",
+      "route": "/pm/dashboard/communities",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/^Actions for /] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/^Actions for /] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=menuitem[name=\"View Dashboard\"]"
+        }
+      ],
+      "clipTo": [
+        "table tbody tr >> nth=0",
+        "role=menu"
+      ],
+      "highlight": "role=menuitem[name=\"View Dashboard\"]",
+      "step": 1
+    },
+    {
+      "name": "pm-back",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "nav[aria-label=\"Breadcrumb\"]"
+        }
+      ],
+      "clipTo": "nav[aria-label=\"Breadcrumb\"]",
+      "pad": 24,
+      "highlight": "nav[aria-label=\"Breadcrumb\"] >> role=link[name=\"Communities\"]",
+      "step": 2
+    }
+  ]
+}

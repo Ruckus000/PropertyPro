@@ -1,0 +1,44 @@
+---
+title: "Approve join requests"
+description: "Check the unit and role people claim, then approve them or deny with a reason."
+section: manager
+category: residents
+slug: join-requests
+order: 1
+keywords: ["join","requests","access","requests","approve","deny","verify","unit","owner","tenant","pending","queue"]
+relatedArticles: ["invite-residents","units"]
+contextPaths: ["/dashboard/residents","/admin/join-requests"]
+updatedAt: "2026-09-30"
+---
+
+Requests to join your community appear under **Access Requests** at the bottom of **Residents**. People who already have a PropertyPro account and used **Join another community** appear on a separate **Pending Join Requests** page instead, at `/admin/join-requests`; it is not in the sidebar.
+
+<StepByStep>
+
+<Step title="Check the unit" shot="jr-queue">
+
+Each request shows the claimed unit. **Unit exists** means that unit number is on your roster; **Unknown unit** means it is not. Still confirm the person against ownership or lease records.
+
+</Step>
+
+<Step title="Check the role">
+
+Each request is marked **Owner** or **Tenant**. Owners should be on your ownership list; tenants should have a lease or be named by the owner.
+
+</Step>
+
+<Step title="Select Approve, or Deny with a reason" shot="jr-deny">
+
+**Approve** lets you enter a **Unit assignment** (optional) before you select **Approve Request**. **Deny** asks for an optional **Reason for denial**, which may be shared with the applicant, then **Deny Request**. The person gets an email either way. A reason like “The unit number does not match our records; please check your closing papers and resubmit” helps them fix it.
+
+</Step>
+
+</StepByStep>
+
+On **Pending Join Requests**, select **Approve**, or **Deny**, write a note and select **Confirm deny**. A denied person must wait 30 days before applying again.
+
+<Callout type="warning" title="The role cannot be changed later">
+
+Approval grants the role they chose, and the Residents page has no way to switch between owner and tenant. If a tenant picked Owner, deny and ask them to request again as a tenant.
+
+</Callout>

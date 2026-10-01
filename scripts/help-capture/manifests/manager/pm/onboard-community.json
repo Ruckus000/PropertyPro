@@ -1,0 +1,75 @@
+{
+  "section": "manager",
+  "category": "pm",
+  "slug": "onboard-community",
+  "shots": [
+    {
+      "name": "ob-add",
+      "kind": "still",
+      "route": "/pm/dashboard/communities",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add Community\"] >> nth=0"
+        }
+      ],
+      "clipTo": "role=button[name=\"Add Community\"] >> nth=0",
+      "pad": 24,
+      "highlight": "role=button[name=\"Add Community\"] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "ob-form",
+      "kind": "still",
+      "route": "/pm/dashboard/communities",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add Community\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Add Community\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Add a Community\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#add-community-name",
+      "step": 2
+    },
+    {
+      "name": "ob-plan",
+      "kind": "still",
+      "route": "/pm/dashboard/communities",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add Community\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Add Community\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Add a Community\"]"
+        }
+      ],
+      "clipTo": [
+        "#add-community-plan",
+        "role=dialog >> role=button[name=\"Continue to Payment\"]"
+      ],
+      "highlight": "#add-community-plan",
+      "step": 3
+    }
+  ]
+}

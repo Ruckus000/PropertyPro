@@ -104,6 +104,10 @@ vi.mock('@/lib/violations/common', () => ({
   requireNoticePdfEnabled: vi.fn(),
   isResidentRole: isResidentRoleMock,
   getActorUnitIds: getActorUnitIdsMock,
+  // Unit-scoping rule for a non-designated member; the board arm is covered
+  // in lib/violations/__tests__/read-scope.test.ts.
+  getViolationReadUnitIds: async (scoped: unknown, m: { role: string }, userId: string) =>
+    isResidentRoleMock(m.role) ? getActorUnitIdsMock(scoped, userId) : undefined,
   requireViolationsEnabled: requireViolationsEnabledMock,
 }));
 

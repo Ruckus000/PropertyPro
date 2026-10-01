@@ -1,0 +1,40 @@
+{
+  "section": "resident",
+  "category": "announcements",
+  "slug": "read-announcements",
+  "shots": [
+    {
+      "name": "an-list",
+      "kind": "still",
+      "route": "/announcements?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section:has(> h2:text-is(\"Pinned\"))"
+        }
+      ],
+      "clipTo": [
+        "section:has(> h2:text-is(\"Pinned\"))",
+        "article >> nth=-1"
+      ]
+    },
+    {
+      "name": "an-pin",
+      "kind": "still",
+      "route": "/announcements?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section:has(> h2:text-is(\"Pinned\"))"
+        }
+      ],
+      "clipTo": "section:has(> h2:text-is(\"Pinned\"))",
+      "highlight": "section:has(> h2:text-is(\"Pinned\")) >> article span:text-is(\"Pinned\")",
+      "step": 1
+    }
+  ]
+}

@@ -2,8 +2,9 @@
  * Route unit test — `GET /api/v1/help/contextual`.
  *
  * Added alongside Plan A1 drain #27 (Move 2 bundle). Asserts the auth chain,
- * the runner's canonical 400 envelope on missing/invalid query, and the
- * preset-vs-base role fallback in `effectiveRole`.
+ * the runner's canonical 400 envelope on missing/invalid query, and that the
+ * membership resolves to the right help reader SECTION (lib/help/reader.ts)
+ * before the service boundary (getContextualArticles, mocked) is called.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -49,7 +50,7 @@ const ARTICLE = {
   description: 'Intro',
   category: 'Compliance',
   slug: 'compliance-basics',
-  roles: ['resident'],
+  section: 'resident',
   readTimeMinutes: 5,
 };
 
@@ -75,7 +76,7 @@ describe('GET /api/v1/help/contextual', () => {
     getContextualArticlesMock.mockReturnValue([ARTICLE]);
   });
 
-  it('returns contextual articles — resolves a resident owner to the owner viewer role', async () => {
+  it('returns contextual articles — resolves a resident owner to the resident section', async () => {
     const res = await GET(
       buildReq('http://localhost/api/v1/help/contextual?path=/compliance&communityId=42'),
     );
@@ -90,11 +91,15 @@ describe('GET /api/v1/help/contextual', () => {
         slug: 'compliance-basics',
       },
     ]);
-    // MEMBERSHIP is role 'resident' + isUnitOwner, which resolves to 'owner'.
-    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', ['owner'], 8);
+    // MEMBERSHIP is role 'resident' + isUnitOwner, which reads the 'resident' section.
+    expect(getContextualArticlesMock).toHaveBeenCalledWith(
+      '/compliance',
+      expect.objectContaining({ section: 'resident', communityType: 'condo_718' }),
+      8,
+    );
   });
 
-  it('honors a board designation on a property_manager membership for the viewer role', async () => {
+  it('resolves a property_manager with a board designation to the manager section', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       ...MEMBERSHIP,
       role: 'property_manager',
@@ -106,7 +111,12 @@ describe('GET /api/v1/help/contextual', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', ['manager', 'board_member'], 8);
+    // Manager tools are a superset: the manager token wins over the board seat.
+    expect(getContextualArticlesMock).toHaveBeenCalledWith(
+      '/compliance',
+      expect.objectContaining({ section: 'manager', communityType: 'condo_718' }),
+      8,
+    );
   });
 
   it('returns 401 when unauthenticated', async () => {

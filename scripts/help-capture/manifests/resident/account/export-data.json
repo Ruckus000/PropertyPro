@@ -1,0 +1,58 @@
+{
+  "section": "resident",
+  "category": "account",
+  "slug": "export-data",
+  "shots": [
+    {
+      "name": "exp-page",
+      "kind": "still",
+      "route": "/settings/export?communityId={cid}",
+      "role": "board_member",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-haspopup=\"menu\"][aria-label$=\"account menu\" i]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-haspopup=\"menu\"][aria-label$=\"account menu\" i]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=menuitem[name=\"Data Export\"]"
+        }
+      ],
+      "clipTo": [
+        "button[aria-haspopup=\"menu\"][aria-label$=\"account menu\" i]",
+        "role=menu"
+      ],
+      "highlight": "role=menuitem[name=\"Data Export\"]",
+      "step": 1
+    },
+    {
+      "name": "exp-auth",
+      "kind": "still",
+      "route": "/settings/export?communityId={cid}",
+      "role": "board_member",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Download CSV export\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Download CSV export\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Confirm your identity\"]"
+        }
+      ],
+      "clipTo": "role=dialog[name=\"Confirm your identity\"]",
+      "highlight": "#reauth-password",
+      "step": 2
+    }
+  ]
+}

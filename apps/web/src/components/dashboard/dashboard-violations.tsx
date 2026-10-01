@@ -36,10 +36,10 @@ const CATEGORY_LABELS: Record<string, string> = {
 interface DashboardViolationsProps {
   summary: DashboardViolationSummary;
   communityId: number;
-  isAdmin: boolean;
+  canReviewViolations: boolean;
 }
 
-export function DashboardViolations({ summary, communityId, isAdmin }: DashboardViolationsProps) {
+export function DashboardViolations({ summary, communityId, canReviewViolations }: DashboardViolationsProps) {
   const openCount =
     (summary.byStatus['reported'] ?? 0) +
     (summary.byStatus['noticed'] ?? 0) +
@@ -50,7 +50,7 @@ export function DashboardViolations({ summary, communityId, isAdmin }: Dashboard
     <section className="rounded-md border border-edge bg-surface-card p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-content">Violations</h2>
-        {isAdmin ? (
+        {canReviewViolations ? (
           <Link
             href={`/violations?communityId=${communityId}`}
             className="text-sm font-medium text-content-link hover:text-interactive-hover"
@@ -87,7 +87,7 @@ export function DashboardViolations({ summary, communityId, isAdmin }: Dashboard
       {/* Recent violations list */}
       <div className="mt-4 space-y-3">
         {summary.recentViolations.length === 0 ? (
-          <EmptyState preset="no_violations" size="sm" />
+          <EmptyState preset={canReviewViolations ? 'no_violations' : 'no_violations_yours'} size="sm" />
         ) : (
           summary.recentViolations.map((v) => (
             <Link
@@ -100,7 +100,7 @@ export function DashboardViolations({ summary, communityId, isAdmin }: Dashboard
                   <span className="font-medium text-content">
                     {CATEGORY_LABELS[v.category] ?? v.category}
                   </span>
-                  <span className="ml-2 text-content-tertiary">Unit {v.unitId}</span>
+                  <span className="ml-2 text-content-tertiary">{v.unitLabel ?? `Unit #${v.unitId}`}</span>
                 </div>
                 <StatusBadge
                   status={STATUS_KEY_MAP[v.status] ?? 'neutral'}

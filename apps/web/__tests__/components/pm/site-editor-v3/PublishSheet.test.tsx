@@ -267,7 +267,7 @@ function renderSheet({
       onOpenChange={onOpenChange}
       communityId={7}
       onGoToPages={onGoToPages}
-      communityType={communityType}
+      complianceSubject={{ communityType, unitCount: null }}
       {...(onFixIssue ? { onFixIssue } : {})}
     />
   );
@@ -973,7 +973,7 @@ describe('PublishSheet — the PAGE SET can block a publish too', () => {
         onOpenChange={onOpenChange}
         communityId={7}
         onGoToPages={onGoToPages}
-        communityType="apartment"
+        complianceSubject={{ communityType: 'apartment', unitCount: null }}
       />,
     );
 

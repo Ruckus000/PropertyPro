@@ -1,0 +1,45 @@
+{
+  "section": "manager",
+  "category": "building",
+  "slug": "reserve-register",
+  "shots": [
+    {
+      "name": "rv-list",
+      "kind": "still",
+      "route": "/communities/{cid}/reserves",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#reserve-transparency-heading"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"reserve-transparency-heading\"]"
+    },
+    {
+      "name": "rv-add",
+      "kind": "still",
+      "route": "/communities/{cid}/reserves",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add Asset\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Add Asset\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Add reserve asset\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#ra-year",
+      "step": 1
+    }
+  ]
+}

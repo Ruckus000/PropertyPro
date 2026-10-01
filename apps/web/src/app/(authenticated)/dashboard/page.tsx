@@ -8,7 +8,7 @@ import { getCommunityPublicInfo } from '@/lib/api/branding';
 import { FoundingAhaPanel } from '@/components/onboarding/founding-aha-panel';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { checkPermissionV2 } from '@/lib/db/access-control';
+import { canActAsBoard, checkPermissionV2 } from '@/lib/db/access-control';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
@@ -105,7 +105,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             dataPromise={dataPromise}
             publicInfoPromise={publicInfoPromise}
             communityId={context.communityId}
-            isAdmin={membership.isAdmin}
+            canReviewViolations={canActAsBoard(membership)}
             hasViolations={features.hasViolations}
             hasEsign={features.hasEsign}
             canWriteAnnouncements={canWriteAnnouncements}
@@ -121,7 +121,8 @@ interface DashboardPanelsProps {
   dataPromise: ReturnType<typeof loadDashboardData>;
   publicInfoPromise: Promise<Awaited<ReturnType<typeof getCommunityPublicInfo>> | null>;
   communityId: number;
-  isAdmin: boolean;
+  /** Managers and board seats: the community-wide card and the inbox link. */
+  canReviewViolations: boolean;
   hasViolations: boolean;
   hasEsign: boolean;
   canWriteAnnouncements: boolean;
@@ -132,7 +133,7 @@ async function DashboardPanels({
   dataPromise,
   publicInfoPromise,
   communityId,
-  isAdmin,
+  canReviewViolations,
   hasViolations,
   hasEsign,
   canWriteAnnouncements,
@@ -166,7 +167,7 @@ async function DashboardPanels({
           <DashboardViolations
             summary={data.violationSummary}
             communityId={communityId}
-            isAdmin={isAdmin}
+            canReviewViolations={canReviewViolations}
           />
         )}
         {hasEsign && data.pendingSigners.length > 0 && (

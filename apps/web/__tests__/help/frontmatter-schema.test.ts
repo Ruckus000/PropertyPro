@@ -10,7 +10,7 @@ const validFixture = {
   description: 'desc',
   category: 'compliance',
   slug: 'example-slug',
-  roles: ['owner'],
+  section: 'resident',
   keywords: ['foo'],
   tags: ['florida'],
   relatedArticles: [],

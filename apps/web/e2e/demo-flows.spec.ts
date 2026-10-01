@@ -286,10 +286,9 @@ test.describe('Flow 2: Owner document access and isolation', () => {
     // off-screen text instead of the list — passing or failing for reasons
     // unrelated to the documents page.
     // (4) The empty-state alternative had to be the REAL copy. `document-list.tsx`
-    // renders `<EmptyState preset="no_documents">`, whose title in
-    // `lib/constants/empty-states.ts` is "Build your document library" — the
-    // project writes encouraging empty states, never "No documents found". So
-    // `/no documents/i` could not match it. This matters here specifically:
+    // renders `<EmptyState preset="no_documents_yet">` for a reader who cannot
+    // upload — title "No documents yet" in `lib/constants/empty-states.ts`
+    // (managers get "Build your document library"). This matters here specifically:
     // `owner.one@sunset.local` holds unit 1 in Sunset Condos but **NULL** in
     // Palm Shores, and a bare `loginAs(page, 'owner')` lands on Palm Shores, so
     // the empty library is a legitimate outcome for this test.
@@ -297,7 +296,7 @@ test.describe('Flow 2: Owner document access and isolation', () => {
     const content = main
       .getByRole('button', { name: /^Download$/i })
       .or(main.locator('table, [role="table"], [data-testid="document-list"]'))
-      .or(main.getByText(/build your document library/i));
+      .or(main.getByText(/no documents yet|build your document library/i));
     await expect(content.first()).toBeVisible({ timeout: 30_000 });
   });
 

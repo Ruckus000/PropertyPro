@@ -23,7 +23,7 @@ export function DashboardMeetings({ items, timezone }: DashboardMeetingsProps) {
       <h2 className="text-lg font-semibold text-content">Upcoming Meetings</h2>
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
-          <EmptyState preset="no_meetings" size="sm" />
+          <EmptyState preset="no_meetings_yet" size="sm" />
         ) : (
           items.map((item) => (
             <article key={item.id} className="rounded-md border border-edge-subtle p-3">

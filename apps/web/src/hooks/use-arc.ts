@@ -17,6 +17,8 @@ export interface ArcSubmission {
   id: number;
   communityId: number;
   unitId: number;
+  /** "Unit 1B", resolved server-side. */
+  unitLabel?: string;
   submittedByUserId: string;
   title: string;
   description: string;

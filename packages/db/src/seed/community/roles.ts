@@ -25,18 +25,16 @@ function mapSeedRoleToStorage(cfg: {
   role: SeedRole;
   designation?: BoardDesignation;
 }): SeedStorageMapping {
+  // A board seat is valid on any role (role-v3 §3.2), residents included.
+  const designation = cfg.designation ?? null;
+  const boardTitle = designation ? (isBoardPresident(designation) ? 'Board President' : 'Board Member') : null;
   if (cfg.role === 'owner') {
-    return { role: 'resident', isUnitOwner: true, designation: null, displayTitle: 'Owner' };
+    return { role: 'resident', isUnitOwner: true, designation, displayTitle: boardTitle ?? 'Owner' };
   }
   if (cfg.role === 'tenant') {
-    return { role: 'resident', isUnitOwner: false, designation: null, displayTitle: 'Tenant' };
+    return { role: 'resident', isUnitOwner: false, designation, displayTitle: boardTitle ?? 'Tenant' };
   }
-  // role === 'property_manager'
-  const designation = cfg.designation ?? null;
-  const displayTitle = designation
-    ? (isBoardPresident(designation) ? 'Board President' : 'Board Member')
-    : 'Property Manager';
-  return { role: 'property_manager', isUnitOwner: false, designation, displayTitle };
+  return { role: 'property_manager', isUnitOwner: false, designation, displayTitle: boardTitle ?? 'Property Manager' };
 }
 
 /** Announcement authors are the seeded managers (property_manager rows). */

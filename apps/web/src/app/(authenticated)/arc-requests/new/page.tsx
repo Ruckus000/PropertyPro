@@ -23,6 +23,7 @@ import { getActorUnitIds, isResidentRole } from '@/lib/violations/common';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { ArcSubmissionForm } from '@/components/violations/ArcSubmissionForm';
 import { PageHeader } from '@/components/shared/page-header';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -58,6 +59,10 @@ export default async function NewArcRequestPage({ searchParams }: PageProps) {
 
   const scoped = createScopedClient(communityId);
   const unitIds = await getActorUnitIds(scoped, userId);
+  const units = (await withUnitLabels(scoped, unitIds.map((unitId) => ({ unitId })))).map((u) => ({
+    id: u.unitId,
+    label: u.unitLabel,
+  }));
 
   return (
     <FeatureGate feature="hasARC" communityId={communityId}>
@@ -88,7 +93,7 @@ export default async function NewArcRequestPage({ searchParams }: PageProps) {
         <div className="max-w-2xl">
           <ArcSubmissionForm
             communityId={communityId}
-            unitIds={unitIds}
+            units={units}
             defaultUnitId={unitIds.length === 1 ? (unitIds[0] as number) : null}
           />
         </div>

@@ -10,6 +10,7 @@
  *   - [data-zoomable] click  → lightbox
  *   - [data-media-play]      → toggle clip playback (reduced-motion path)
  *   - a[href^="#"]           → scroll within the modal, never mutate the URL
+ *   - a[data-help-article]   → open the linked article in the modal
  *   - clips autoplay via IntersectionObserver unless prefers-reduced-motion
  */
 import { useEffect, useRef, useState } from 'react';
@@ -19,6 +20,7 @@ import { HelpMediaLightbox, type LightboxMedia } from '@/components/help/help-me
 import { ArticleFeedback } from '@/components/help/article-feedback';
 import { ArticleViewTracker } from '@/components/help/article-view-tracker';
 import { HelpArticleDisclaimer } from '@/components/help/help-article-disclaimer';
+import { HELP_ARTICLE_BODY_CLASS } from '@/components/help/mdx-components';
 import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
 
 function formatUpdatedAt(value: string | undefined): string | null {
@@ -93,6 +95,16 @@ export function HelpArticleBody({
         return;
       }
 
+      const articleLink = target.closest<HTMLAnchorElement>('a[data-help-article]');
+      if (articleLink) {
+        const [category, slug] = (articleLink.dataset.helpArticle ?? '').split('/');
+        if (category && slug) {
+          e.preventDefault();
+          onOpenArticle(category, slug);
+        }
+        return;
+      }
+
       const anchor = target.closest<HTMLAnchorElement>('a[href^="#"]');
       if (anchor) {
         e.preventDefault();
@@ -104,7 +116,7 @@ export function HelpArticleBody({
 
     root.addEventListener('click', onClick);
     return () => root.removeEventListener('click', onClick);
-  }, [html]);
+  }, [html, onOpenArticle]);
 
   // Clip playback: autoplay in-viewport unless reduced motion; sync the
   // play-button overlay to playback state either way.
@@ -158,17 +170,18 @@ export function HelpArticleBody({
       />
 
       <header className="space-y-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-content">{metadata.title}</h1>
+        {/* The design's compact article title (in-app panel). */}
+        <h1 className="text-balance text-[1.375rem] font-semibold leading-[1.2] tracking-[-0.01em] text-content">
+          {metadata.title}
+        </h1>
+        <p className="text-pretty text-base leading-[1.55] text-content-secondary">
+          {metadata.description}
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           {typeof metadata.readTimeMinutes === 'number' && (
             <span className={CHIP_CLASS}>{metadata.readTimeMinutes} min read</span>
           )}
           {formattedUpdatedAt && <span className={CHIP_CLASS}>Updated {formattedUpdatedAt}</span>}
-          {metadata.roles.length > 0 && (
-            <span className={CHIP_CLASS}>
-              {metadata.roles.map((r) => r.replace(/_/g, ' ')).join(' · ')}
-            </span>
-          )}
           {(metadata.statutes ?? []).map((statute) => (
             <a
               key={statute}
@@ -206,6 +219,7 @@ export function HelpArticleBody({
       <div
         ref={contentRef}
         data-help-article-content
+        className={HELP_ARTICLE_BODY_CLASS}
         dangerouslySetInnerHTML={{ __html: html }}
       />
 

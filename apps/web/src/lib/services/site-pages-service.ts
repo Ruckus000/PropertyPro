@@ -909,14 +909,19 @@ export async function assertRequiredSectionsSurvive(
   removal: RequiredSectionRemovalInput,
 ): Promise<void> {
   const [community] = await tx
-    .select({ communityType: communities.communityType })
+    .select({ communityType: communities.communityType, unitCount: communities.unitCount })
     .from(communities)
     .where(eq(communities.id, communityId));
-  const communityType = community?.communityType ?? '';
-  if (requiredSectionTypes(communityType).length === 0) return;
+  // An association below the statute's size threshold has nothing to guard;
+  // an unknown count is treated as covered (see `requirementLevel`).
+  const subject = {
+    communityType: community?.communityType ?? '',
+    unitCount: community?.unitCount ?? null,
+  };
+  if (requiredSectionTypes(subject).length === 0) return;
 
   const refusal = requiredRemovalRefusal(
-    communityType,
+    subject,
     await liveSitePages(tx, communityId),
     removal.kind === 'page'
       ? { kind: 'page', pageId: String(removal.pageId) }
@@ -950,6 +955,10 @@ async function liveSitePages(tx: Tx, communityId: number): Promise<RequiredSecti
     .from(siteBlocks)
     .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
 
+  // ponytail: fourth hand-written copy of the draft-wins-per-(page, slot) rule —
+  // also in publishCommunitySite and reorderSiteBlock (site-blocks-service.ts) and
+  // the public reader (public-community-reader.ts). Extract one shared helper when
+  // a bug is fixed in one copy but not the others.
   const winners = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
     const key = `${row.pageId}:${row.blockOrder}`;

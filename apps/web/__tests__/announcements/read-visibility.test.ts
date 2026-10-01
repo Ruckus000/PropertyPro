@@ -364,6 +364,25 @@ describe('filterVisibleAnnouncements full-list visibility', () => {
     expect(result.totalCount).toBe(2);
   });
 
+  it('shows board-only announcements to residents with a board seat, in memory and in SQL', async () => {
+    // Delivery emails board_only posts to board seats (announcement-delivery.ts);
+    // the app must let those readers open them too.
+    const boardOwner = { ...membership, designation: 'board_member' };
+    const result = await filterVisibleAnnouncements(community, boardOwner as never, [
+      announcement(1, 'all'),
+      announcement(2, 'owners_only'),
+      announcement(3, 'tenants_only'),
+      announcement(4, 'board_only'),
+    ]);
+    expect(result.rows.map((row) => row.id).sort()).toEqual([1, 2, 4]);
+
+    const { selectFrom } = mockScopedRows({ announcements: [] });
+    await listVisibleAnnouncements(42, boardOwner as never, { pageSize: 10 });
+    expect(JSON.stringify(selectFrom.mock.calls.at(-1)?.[2])).toContain(
+      JSON.stringify({ __inArray: { col: announcementsTableMock.audience, vals: ['all', 'owners_only', 'board_only'] } }),
+    );
+  });
+
   it('shows tenant-only announcements to tenant residents and honors query filtering', async () => {
     const result = await filterVisibleAnnouncements(
       community,

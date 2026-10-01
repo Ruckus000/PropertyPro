@@ -1,0 +1,83 @@
+{
+  "section": "manager",
+  "category": "documents",
+  "slug": "upload-document",
+  "shots": [
+    {
+      "name": "up-btn",
+      "kind": "still",
+      "route": "/communities/{cid}/documents",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Open upload panel\"]"
+        }
+      ],
+      "clipTo": "[data-page-header]",
+      "highlight": "role=button[name=\"Open upload panel\"]",
+      "step": 1
+    },
+    {
+      "name": "up-cat",
+      "kind": "still",
+      "route": "/communities/{cid}/documents",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Open upload panel\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> role=combobox"
+        }
+      ],
+      "clipTo": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> div:has(> label:text-is(\"Category\"))",
+      "highlight": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> role=combobox",
+      "step": 2
+    },
+    {
+      "name": "up-file",
+      "kind": "still",
+      "route": "/communities/{cid}/documents",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Open upload panel\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> div.border-dashed"
+        }
+      ],
+      "clipTo": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> div.border-dashed",
+      "highlight": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> label:has-text(\"browse\")",
+      "step": 3
+    },
+    {
+      "name": "up-save",
+      "kind": "still",
+      "route": "/communities/{cid}/documents",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Open upload panel\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Upload Document\"s]"
+        }
+      ],
+      "clipTo": "role=button[name=\"Upload Document\"s]",
+      "highlight": "role=button[name=\"Upload Document\"s]",
+      "step": 5
+    }
+  ]
+}

@@ -14,6 +14,10 @@ export { diffPages, isLazyDraftHome, pageTitle, publishedPageBaseline } from './
 export { blockIssues, heroIssues, siteIssues, publishBlocked } from './validate';
 export type { SiteIssuesOptions } from './validate';
 export {
+  requirementLevel,
+  unitCountUnknown,
+  unitThreshold,
+  recommendedSectionTypes,
   requiredSectionTypes,
   isRequiredSectionType,
   requiredSectionStatute,
@@ -24,6 +28,8 @@ export {
   countLiveSections,
 } from './required';
 export type {
+  ComplianceSubject,
+  RequirementLevel,
   RequiredSectionType,
   RequiredSectionPage,
   RequiredSectionState,

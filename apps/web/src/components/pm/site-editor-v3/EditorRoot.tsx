@@ -108,7 +108,7 @@ import type { SitePanelProps } from './panels/SitePanel';
 import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
 import { useSiteDiff } from './use-site-diff';
-import { RequiredSectionsProvider } from './required-sections-context';
+import { RequiredSectionsProvider, useRequiredSections } from './required-sections-context';
 import { RequirementsPill } from './RequirementsPill';
 
 /** Bridges the active inspector form's save state into the top bar. */
@@ -157,6 +157,13 @@ export interface EditorRootProps {
    * spinner and costs no extra query.
    */
   siteIdentity: SitePanelProps['community'];
+  /**
+   * `communities.unit_count` (migration 0081); `null` = unknown. With the type
+   * it decides whether Florida's website rules apply — see `requirementLevel`.
+   */
+  unitCount: number | null;
+  /** Whether this viewer may correct `unitCount` (community admin). */
+  canEditUnitCount: boolean;
   tagline: string | null;
   initialSiteSettings: SiteSettingsRecord | undefined;
   /**
@@ -237,6 +244,8 @@ export function EditorRoot({
   hasPublishedSite,
   initialNotice,
   siteIdentity,
+  unitCount,
+  canEditUnitCount,
   tagline,
   initialSiteSettings,
   initialCustomCss,
@@ -786,6 +795,8 @@ export function EditorRoot({
       <RequiredSectionsProvider
         communityId={communityId}
         communityType={siteIdentity.communityType}
+        unitCount={unitCount}
+        canEditUnitCount={canEditUnitCount}
         pages={diffPending || diffFailed ? undefined : validated}
       >
       <p
@@ -1067,7 +1078,6 @@ export function EditorRoot({
           onOpenChange={setPublishOpen}
           onFixIssue={handleSelectSlot}
           onGoToPages={handleGoToPages}
-          communityType={siteIdentity.communityType}
         />
       ) : null}
       </AutosaveStatusProvider>
@@ -1091,16 +1101,17 @@ function PublishSheetMount({
   onOpenChange,
   onFixIssue,
   onGoToPages,
-  communityType,
 }: {
   communityId: number;
   theme: CanvasContext['theme'] | null;
   onOpenChange: (open: boolean) => void;
   onFixIssue: (target: SlotTarget) => void;
   onGoToPages: () => void;
-  communityType: string;
 }) {
   const { movableSections, select } = useSiteEditor();
+  // From the provider, not a prop: a unit count corrected in the pill this
+  // session must re-decide the sheet's checks too.
+  const { subject } = useRequiredSections();
 
   const handleFixIssue = useCallback(
     (target: SlotTarget) => {
@@ -1142,7 +1153,7 @@ function PublishSheetMount({
       onFixIssue={handleFixIssue}
       // Page-set problems are fixed in the Pages panel and nowhere else.
       onGoToPages={onGoToPages}
-      communityType={communityType}
+      complianceSubject={subject}
     />
   );
 }

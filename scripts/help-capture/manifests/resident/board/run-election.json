@@ -1,0 +1,74 @@
+{
+  "section": "resident",
+  "category": "board",
+  "slug": "run-election",
+  "shots": [
+    {
+      "name": "el-actions",
+      "kind": "still",
+      "route": "/communities/{cid}/board/elections",
+      "role": "board_member",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "article[role=\"button\"]:has-text(\"Draft\")"
+        },
+        {
+          "type": "click",
+          "selector": "article[role=\"button\"]:has-text(\"Draft\") >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"View Details\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Admin actions"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "div.rounded-xl:has(> div > h3:text-is(\"Admin actions\"))"
+        }
+      ],
+      "clipTo": "div.rounded-xl:has(> div > h3:text-is(\"Admin actions\"))",
+      "highlight": "role=button[name=\"Open Election\"]",
+      "step": 4
+    },
+    {
+      "name": "el-results",
+      "kind": "still",
+      "route": "/communities/{cid}/board/elections",
+      "role": "board_member",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "article[role=\"button\"]"
+        },
+        {
+          "type": "click",
+          "selector": "article[role=\"button\"]:has(h2:text-is(\"2026 Annual Board Election\"))"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"View Details\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Quorum"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "div.space-y-4:has(> div.rounded-lg > div > span:text-is(\"Quorum\"))"
+        }
+      ],
+      "clipTo": [
+        "div.space-y-4:has(> div.rounded-lg > div > span:text-is(\"Quorum\"))",
+        "div.rounded-xl:has(> div > h3:text-is(\"Admin actions\"))"
+      ],
+      "highlight": "role=button[name=\"Certify Results\"]",
+      "step": 5
+    }
+  ]
+}

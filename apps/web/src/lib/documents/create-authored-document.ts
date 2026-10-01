@@ -162,7 +162,7 @@ export async function createAuthoredDocument(
         category: 'document',
         title: `New Document: ${input.title}`,
         body: undefined,
-        actionUrl: `/documents/${documentId}`,
+        actionUrl: `/documents/${documentId}?communityId=${input.communityId}`,
         sourceType: 'document',
         sourceId: String(documentId),
       },

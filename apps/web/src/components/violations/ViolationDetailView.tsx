@@ -100,7 +100,8 @@ interface ViolationDetailViewProps {
   violation: ViolationRecord;
   communityId: number;
   userId: string;
-  isAdmin: boolean;
+  /** Managers and board seats (canActAsBoard): the same rule as the API's admin writes. */
+  canManage: boolean;
   /** Per-community `violationFinesEnabled` legal gate. Server guard is authoritative. */
   finesEnabled: boolean;
   fines?: ViolationFineItem[];
@@ -110,7 +111,7 @@ export function ViolationDetailView({
   violation,
   communityId,
   userId,
-  isAdmin,
+  canManage,
   finesEnabled,
   fines,
 }: ViolationDetailViewProps) {
@@ -118,7 +119,7 @@ export function ViolationDetailView({
 
   const statusStyle = STATUS_STYLES[violation.status] ?? 'bg-surface-muted text-content-secondary';
   const severityStyle = SEVERITY_STYLES[violation.severity] ?? 'bg-surface-muted text-content-secondary';
-  const actions = isAdmin ? getAvailableActions(violation.status, finesEnabled) : [];
+  const actions = canManage ? getAvailableActions(violation.status, finesEnabled) : [];
 
   // Map ViolationRecord to ViolationItem shape for the transition component
   const violationItem: ViolationItem = {
@@ -133,6 +134,7 @@ export function ViolationDetailView({
     evidenceDocumentIds: violation.evidenceDocumentIds,
     noticeDate: violation.noticeDate,
     hearingDate: violation.hearingDate ? new Date(violation.hearingDate).toISOString() : null,
+    hearingLocation: violation.hearingLocation ?? null,
     resolutionDate: violation.resolutionDate ? new Date(violation.resolutionDate).toISOString() : null,
     resolutionNotes: violation.resolutionNotes,
     createdAt: new Date(violation.createdAt).toISOString(),
@@ -143,7 +145,7 @@ export function ViolationDetailView({
     <div className="space-y-6">
       <PageHeader
         title={`Violation #${violation.id}`}
-        description={`${CATEGORY_LABELS[violation.category] ?? violation.category} · Unit ${violation.unitId}`}
+        description={`${CATEGORY_LABELS[violation.category] ?? violation.category} · ${violation.unitLabel ?? `Unit #${violation.unitId}`}`}
         actions={
           <div className="flex gap-2">
             <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${statusStyle}`}>
@@ -180,6 +182,12 @@ export function ViolationDetailView({
             <div>
               <span className="text-content-tertiary">Hearing Date:</span>{' '}
               <span className="text-content-secondary">{new Date(violation.hearingDate).toLocaleString()}</span>
+            </div>
+          )}
+          {violation.hearingLocation && (
+            <div>
+              <span className="text-content-tertiary">Hearing Location:</span>{' '}
+              <span className="text-content-secondary">{violation.hearingLocation}</span>
             </div>
           )}
           {violation.resolutionDate && (
@@ -222,7 +230,7 @@ export function ViolationDetailView({
       {fines && <FinesSummary fines={fines} />}
 
       {/* Admin actions */}
-      {isAdmin && actions.length > 0 && !activeAction && (
+      {canManage && actions.length > 0 && !activeAction && (
         <section className="mb-6 rounded-xl border border-edge bg-surface-card p-6">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">Actions</h2>
           <div className="flex flex-wrap gap-2">

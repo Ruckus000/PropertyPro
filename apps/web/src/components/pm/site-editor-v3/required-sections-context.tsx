@@ -1,16 +1,24 @@
 'use client';
 
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import {
   countLiveSections,
   isRequiredSectionType,
+  recommendedSectionTypes,
+  requirementLevel,
   requiredSectionLaw,
   requiredSectionStatus,
+  unitCountUnknown,
+  unitThreshold,
+  type ComplianceSubject,
   type RequiredSectionPage,
   type RequiredSectionStatus,
+  type RequirementLevel,
 } from '@propertypro/shared';
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
+import { useUpdateCommunityUnitCount } from '@/hooks/use-community-unit-count';
 import { upsertableBlockType } from '@/lib/site-editor/upsertable-block-type';
+import { visibleBlocks } from '@/lib/site/visible-blocks';
 
 /**
  * Florida-required sections, as the editor's controls need to see them
@@ -28,6 +36,28 @@ import { upsertableBlockType } from '@/lib/site-editor/upsertable-block-type';
  * publish sheet and the server's delete guard also use.
  */
 export interface RequiredSectionsValue {
+  /**
+   * Community type + unit count — what every rule here is asked about. The
+   * count is the one this session last SAVED, so a correction in the pill
+   * re-decides everything without a reload.
+   */
+  subject: ComplianceSubject;
+  /** `required`, `recommended` (below the size threshold) or `none`. */
+  level: RequirementLevel;
+  /** True when `level` is `required` only because nobody has given the count. */
+  unitCountUnknown: boolean;
+  /** `{ minUnits: 25, unitNoun: 'units' }` for copy; null for apartments. */
+  threshold: { minUnits: number; unitNoun: string } | null;
+  /**
+   * Below the threshold: badged "Recommended", and nothing else — never
+   * locked, confirmed or warned about. Always false when `isRequired` is true.
+   */
+  isRecommended: (blockType: string) => boolean;
+  /** Whether this viewer may change the count (community admin). */
+  canEditUnitCount: boolean;
+  /** Saves the count; rejects with the server's message on refusal. */
+  saveUnitCount: (unitCount: number) => Promise<void>;
+  isSavingUnitCount: boolean;
   /** One entry per required type; `[]` for apartments and while loading. */
   statuses: readonly RequiredSectionStatus[];
   isRequired: (blockType: string) => boolean;
@@ -54,6 +84,14 @@ export interface RequiredSectionsValue {
 }
 
 const NOTHING_REQUIRED: RequiredSectionsValue = {
+  subject: { communityType: '', unitCount: null },
+  level: 'none',
+  unitCountUnknown: false,
+  threshold: null,
+  isRecommended: () => false,
+  canEditUnitCount: false,
+  saveUnitCount: async () => {},
+  isSavingUnitCount: false,
   statuses: [],
   isRequired: () => false,
   canRemove: () => true,
@@ -69,6 +107,13 @@ export interface RequiredSectionsProviderProps {
   communityId: number;
   communityType: string;
   /**
+   * `communities.unit_count` as the page loaded it; `null` = unknown, which the
+   * rules treat as covered (see `requirementLevel`).
+   */
+  unitCount: number | null;
+  /** Community admin — the PATCH route enforces the same; this only offers it. */
+  canEditUnitCount: boolean;
+  /**
    * Every page's draft-wins snapshot — `useSiteDiff().validated`. Undefined
    * while that is loading or has failed: then no status is reported (a pill
    * saying "missing" about a site that has not loaded yet would be false), and
@@ -79,18 +124,34 @@ export interface RequiredSectionsProviderProps {
   children: React.ReactNode;
 }
 
-function isVisibleCopy(content: unknown): boolean {
-  return (content as Record<string, unknown> | null)?.['hidden'] !== true;
-}
-
 export function RequiredSectionsProvider({
   communityId,
   communityType,
+  unitCount: initialUnitCount,
+  canEditUnitCount,
   pages,
   children,
 }: RequiredSectionsProviderProps) {
-  const upsert = useUpsertContentBlock(communityId);
+  // Only the mutation FUNCTIONS go into the memo below: TanStack binds them once
+  // per observer, while the result objects are new on every render — with those
+  // as deps the memo recomputed every render and re-rendered every consumer.
+  const { mutate: upsertBlock } = useUpsertContentBlock(communityId);
+  const { mutateAsync: patchUnitCount, isPending: isSavingUnitCount } =
+    useUpdateCommunityUnitCount(communityId);
+  // The saved value for this session. Seeded from the server prop and replaced
+  // by the server's answer after a save — never by what was typed.
+  const [unitCount, setUnitCount] = useState(initialUnitCount);
+  const saveUnitCount = useCallback(
+    async (next: number) => {
+      const saved = await patchUnitCount(next);
+      setUnitCount(saved.unitCount);
+    },
+    [patchUnitCount],
+  );
+
   const value = useMemo<RequiredSectionsValue>(() => {
+    const subject: ComplianceSubject = { communityType, unitCount };
+    const recommended = recommendedSectionTypes(subject) as readonly string[];
     const visibleCount = (blockType: string) =>
       pages === undefined
         ? 0
@@ -99,14 +160,22 @@ export function RequiredSectionsProvider({
               ...p,
               snapshot: {
                 ...p.snapshot,
-                sections: p.snapshot.sections.filter((s) => isVisibleCopy(s.content)),
+                sections: visibleBlocks(p.snapshot.sections),
               },
             })),
             blockType,
           );
-    const isRequired = (blockType: string) => isRequiredSectionType(communityType, blockType);
+    const isRequired = (blockType: string) => isRequiredSectionType(subject, blockType);
     return {
-      statuses: pages === undefined ? [] : requiredSectionStatus(communityType, pages),
+      subject,
+      level: requirementLevel(subject),
+      unitCountUnknown: unitCountUnknown(subject),
+      threshold: unitThreshold(communityType),
+      isRecommended: (blockType) => recommended.includes(blockType),
+      canEditUnitCount,
+      saveUnitCount,
+      isSavingUnitCount,
+      statuses: pages === undefined ? [] : requiredSectionStatus(subject, pages),
       isRequired,
       canRemove: (blockType) =>
         !isRequired(blockType) || (pages !== undefined && countLiveSections(pages, blockType) > 1),
@@ -126,7 +195,7 @@ export function RequiredSectionsProvider({
         // copy on another page is out of its reach (D-WRITE).
         const content = { ...((section.content ?? {}) as Record<string, unknown>) };
         delete content.hidden;
-        upsert.mutate({
+        upsertBlock({
           blockType,
           blockOrder: slot,
           content,
@@ -135,7 +204,7 @@ export function RequiredSectionsProvider({
         return true;
       },
     };
-  }, [communityType, pages, upsert]);
+  }, [communityType, unitCount, canEditUnitCount, saveUnitCount, isSavingUnitCount, pages, upsertBlock]);
 
   return (
     <RequiredSectionsContext.Provider value={value}>{children}</RequiredSectionsContext.Provider>

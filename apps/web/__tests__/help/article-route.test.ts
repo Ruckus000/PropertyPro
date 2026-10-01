@@ -6,12 +6,17 @@
  * - Invalid params → 400 (ContractValidationError thrown by runRoute; caught
  *   by withErrorHandler)
  * - Missing article → 404
- * - Role-gated article → 404 (NOT 403; we don't leak existence)
+ * - Article outside the reader's section → 404 (NOT 403; we don't leak existence)
  * - Feature-gated article → 404
+ * - Old (pre-section) slug → the reader's replacement article
  *
- * Mocks the service boundary (getArticle, isArticleVisibleToRole,
- * filterArticlesByFeatures), the next-mdx-remote/rsc compileMDX call, and the
- * static React render step.
+ * Mocks the service boundary (getArticleForReader, findArticleForReader) with
+ * fakes over an in-memory corpus that delegate visibility to the REAL
+ * isArticleVisibleToReader, so section / community-type / feature-gate rules
+ * are exercised as the reader resolved by lib/help/reader.ts sees them. The
+ * real lib/help/render-article.ts runs with next-mdx-remote/rsc compileMDX,
+ * the static React render step and unstable_cache stubbed; the real
+ * sanitizeHelpHtml runs on the rendered markup.
  *
  * withErrorHandler is NOT mocked — we use the real implementation so that
  * NotFoundError (thrown in the handler) and ContractValidationError (thrown
@@ -32,11 +37,15 @@ vi.mock('@sentry/nextjs', () => ({
   captureException: vi.fn(),
 }));
 
+type CorpusArticle = {
+  metadata: Record<string, unknown> & { slug: string; category: string; section: string };
+  rawContent: string;
+};
+
 const {
-  getArticleMock,
-  isArticleVisibleToRoleMock,
-  filterArticlesByFeaturesMock,
-  getAllArticlesMock,
+  corpus,
+  getArticleForReaderMock,
+  findArticleForReaderMock,
   compileMDXMock,
   extractTableOfContentsMock,
   unstableCacheMock,
@@ -46,10 +55,10 @@ const {
   getFeaturesForCommunityMock,
   renderToStaticMarkupMock,
 } = vi.hoisted(() => ({
-  getArticleMock: vi.fn(),
-  isArticleVisibleToRoleMock: vi.fn(),
-  filterArticlesByFeaturesMock: vi.fn(),
-  getAllArticlesMock: vi.fn(),
+  // The in-memory help corpus the service fakes read from (reset per test).
+  corpus: [] as CorpusArticle[],
+  getArticleForReaderMock: vi.fn(),
+  findArticleForReaderMock: vi.fn(),
   compileMDXMock: vi.fn(),
   extractTableOfContentsMock: vi.fn(),
   // Return type declared, not inferred: the suite's `beforeEach` swaps in an
@@ -66,12 +75,36 @@ const {
   ),
 }));
 
-vi.mock('@/lib/services/help-article-service', () => ({
-  getArticle: getArticleMock,
-  isArticleVisibleToRole: isArticleVisibleToRoleMock,
-  filterArticlesByFeatures: filterArticlesByFeaturesMock,
-  getAllArticles: getAllArticlesMock,
-}));
+// Service boundary: the lookups are faked over `corpus`, but visibility is the
+// REAL isArticleVisibleToReader (section, board seat, community type, feature gates).
+vi.mock('@/lib/services/help-article-service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/services/help-article-service')>();
+  type Reader = Parameters<typeof actual.isArticleVisibleToReader>[1];
+  type Meta = Parameters<typeof actual.isArticleVisibleToReader>[0];
+  const visible = (article: CorpusArticle, reader: Reader) =>
+    actual.isArticleVisibleToReader(article.metadata as unknown as Meta, reader);
+  getArticleForReaderMock.mockImplementation(
+    (category: string, slug: string, reader: Reader) =>
+      corpus.find(
+        (a) =>
+          a.metadata.category === category &&
+          a.metadata.slug === slug &&
+          a.metadata.section === reader.section &&
+          visible(a, reader),
+      ) ?? null,
+  );
+  findArticleForReaderMock.mockImplementation(
+    (slug: string, reader: Reader) =>
+      corpus.find(
+        (a) => a.metadata.slug === slug && a.metadata.section === reader.section && visible(a, reader),
+      )?.metadata ?? null,
+  );
+  return {
+    isArticleVisibleToReader: actual.isArticleVisibleToReader,
+    getArticleForReader: getArticleForReaderMock,
+    findArticleForReader: findArticleForReaderMock,
+  };
+});
 
 vi.mock('next-mdx-remote/rsc', () => ({
   compileMDX: compileMDXMock,
@@ -102,7 +135,7 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 
 // Real module (it is side-effect free), with only the feature lookup stubbed:
-// the help viewer resolver reads hasBoardDesignation from here.
+// the help reader resolver reads hasBoardDesignation from here.
 vi.mock('@propertypro/shared', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@propertypro/shared')>()),
   getFeaturesForCommunity: getFeaturesForCommunityMock,
@@ -114,13 +147,14 @@ function makeRequest(url: string) {
   return new NextRequest(new URL(url, 'http://localhost:3000'));
 }
 
-const sampleArticle = {
-  metadata: {
+function makeMetadata(overrides: Record<string, unknown> & { slug: string }) {
+  return {
     title: 'Fixing compliance gaps',
     description: 'How to resolve flagged compliance gaps.',
     category: 'compliance',
-    slug: 'fixing-compliance-gaps',
-    roles: ['board_member'],
+    section: 'resident',
+    communityTypes: ['condo_718', 'hoa_720', 'apartment'],
+    boardOnly: false,
     keywords: [],
     tags: [],
     relatedArticles: [],
@@ -132,17 +166,28 @@ const sampleArticle = {
     featureGates: [],
     updatedAt: '2026-05-01',
     readTimeMinutes: 3,
+    stepCount: 0,
     contentHash: 'abc123',
-  },
+    ...overrides,
+  };
+}
+
+const sampleArticle: CorpusArticle = {
+  metadata: makeMetadata({ slug: 'fix-compliance-gaps' }),
   rawContent: '## Heading\n\nBody text.',
 };
+
+const ARTICLE_URL =
+  '/api/v1/help/article?category=compliance&slug=fix-compliance-gaps&communityId=1';
 
 const compiledResult = { content: 'mdx-content-element', frontmatter: {} };
 
 describe('GET /api/v1/help/article', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    corpus.splice(0, corpus.length, sampleArticle);
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
+    // A board-designated owner: reads the resident section, with a board seat.
     requireCommunityMembershipMock.mockResolvedValue({
       role: 'resident',
       isUnitOwner: true,
@@ -151,22 +196,16 @@ describe('GET /api/v1/help/article', () => {
       communityType: 'condo_718',
     });
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
-    getFeaturesForCommunityMock.mockReturnValue({ compliance: true });
-    isArticleVisibleToRoleMock.mockReturnValue(true);
-    filterArticlesByFeaturesMock.mockReturnValue([sampleArticle.metadata]);
-    getAllArticlesMock.mockReturnValue([]);
+    getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true });
     compileMDXMock.mockResolvedValue(compiledResult);
     extractTableOfContentsMock.mockReturnValue([
       { depth: 2, label: 'Heading', anchor: 'heading' },
     ]);
     unstableCacheMock.mockImplementation((fn: () => unknown) => fn());
-    getArticleMock.mockReturnValue(sampleArticle);
   });
 
   it('returns sanitized server-rendered HTML + toc + metadata on happy path', async () => {
-    const res = await GET(
-      makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
-    );
+    const res = await GET(makeRequest(ARTICLE_URL));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.html).toContain('<h2 id="heading">Heading</h2>');
@@ -174,13 +213,21 @@ describe('GET /api/v1/help/article', () => {
     expect(body.data.html).not.toContain('onclick');
     expect(body.data.html).not.toContain('<script');
     expect(body.data.toc).toEqual([{ depth: 2, label: 'Heading', anchor: 'heading' }]);
-    expect(body.data.metadata.slug).toBe('fixing-compliance-gaps');
+    expect(body.data.metadata.slug).toBe('fix-compliance-gaps');
+    expect(body.data.metadata.section).toBe('resident');
     expect(body.data.related).toEqual([]);
+    expect(body.data.upNext).toBeNull();
     expect(compileMDXMock).toHaveBeenCalledWith(
       expect.objectContaining({
         source: sampleArticle.rawContent,
         options: { parseFrontmatter: true },
       }),
+    );
+    // Looked up for the reader the membership resolves to.
+    expect(getArticleForReaderMock).toHaveBeenCalledWith(
+      'compliance',
+      'fix-compliance-gaps',
+      expect.objectContaining({ section: 'resident', communityType: 'condo_718', boardSeat: true }),
     );
   });
 
@@ -194,7 +241,6 @@ describe('GET /api/v1/help/article', () => {
   });
 
   it('returns 404 when article does not exist', async () => {
-    getArticleMock.mockReturnValue(null);
     const res = await GET(
       makeRequest('/api/v1/help/article?category=compliance&slug=missing&communityId=1'),
     );
@@ -204,52 +250,97 @@ describe('GET /api/v1/help/article', () => {
   it('returns 401 when the session is not authenticated', async () => {
     const { UnauthorizedError } = await import('@/lib/api/errors/UnauthorizedError');
     requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError());
-    const res = await GET(
-      makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
-    );
+    const res = await GET(makeRequest(ARTICLE_URL));
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 (not 403) when article is role-gated', async () => {
-    isArticleVisibleToRoleMock.mockReturnValue(false);
-    const res = await GET(
-      makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
-    );
+  it("returns 404 (not 403) when the article is outside the reader's section", async () => {
+    // Only a manager-section version exists; the resident reader must not learn of it.
+    corpus.splice(0, corpus.length, {
+      ...sampleArticle,
+      metadata: { ...sampleArticle.metadata, section: 'manager' },
+    });
+    const res = await GET(makeRequest(ARTICLE_URL));
     expect(res.status).toBe(404);
+    expect(compileMDXMock).not.toHaveBeenCalled();
   });
 
   it('returns 404 when article is feature-gated and feature is off', async () => {
-    filterArticlesByFeaturesMock.mockReturnValue([]);
-    const res = await GET(
-      makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
-    );
+    corpus.splice(0, corpus.length, {
+      ...sampleArticle,
+      metadata: { ...sampleArticle.metadata, featureGates: ['hasCompliance'] },
+    });
+    getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: false });
+    const res = await GET(makeRequest(ARTICLE_URL));
     expect(res.status).toBe(404);
   });
 
   it('excludes feature-gated related articles from the related field', async () => {
-    const gatedRelatedMeta = {
-      ...sampleArticle.metadata,
-      slug: 'gated-related-slug',
-      featureGates: ['evoting'],
+    const gatedRelated: CorpusArticle = {
+      metadata: makeMetadata({ slug: 'gated-related-slug', featureGates: ['hasVoting'] }),
+      rawContent: '',
     };
-    // The requested article includes the gated slug in its relatedArticles list
-    getArticleMock.mockReturnValue({
-      ...sampleArticle,
-      metadata: { ...sampleArticle.metadata, relatedArticles: ['gated-related-slug'] },
-    });
-    // getAllArticles returns the gated related article so the route can find it by slug
-    getAllArticlesMock.mockReturnValue([gatedRelatedMeta]);
-    // filterArticlesByFeatures passes the requested article but blocks the gated related
-    filterArticlesByFeaturesMock.mockImplementation(
-      (articles: { slug: string }[]) =>
-        articles.filter((a) => a.slug !== 'gated-related-slug'),
+    const openRelated: CorpusArticle = {
+      metadata: makeMetadata({ slug: 'open-related-slug', title: 'Compliance score' }),
+      rawContent: '',
+    };
+    // The requested article lists both; the gated one's feature is off here.
+    corpus.splice(
+      0,
+      corpus.length,
+      {
+        ...sampleArticle,
+        metadata: {
+          ...sampleArticle.metadata,
+          relatedArticles: ['gated-related-slug', 'open-related-slug'],
+        },
+      },
+      gatedRelated,
+      openRelated,
+    );
+    getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true, hasVoting: false });
+
+    const res = await GET(makeRequest(ARTICLE_URL));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.related.map((a: { slug: string }) => a.slug)).toEqual(['open-related-slug']);
+  });
+
+  it("resolves an old slug to the reader's replacement article", async () => {
+    // Pre-section URL /help/documents/uploading-documents: a resident reader gets
+    // the default replacement ('find-documents'), not the manager's upload guide.
+    corpus.splice(
+      0,
+      corpus.length,
+      {
+        metadata: makeMetadata({
+          slug: 'find-documents',
+          title: 'Find documents',
+          category: 'documents',
+          section: 'resident',
+        }),
+        rawContent: '## Heading\n\nBody text.',
+      },
+      {
+        metadata: makeMetadata({
+          slug: 'upload-document',
+          title: 'Upload a document',
+          category: 'documents',
+          section: 'manager',
+        }),
+        rawContent: '## Heading\n\nBody text.',
+      },
     );
 
     const res = await GET(
-      makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
+      makeRequest(
+        '/api/v1/help/article?category=documents&slug=uploading-documents&communityId=1',
+      ),
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.related).toEqual([]);
+    expect(body.data.metadata.slug).toBe('find-documents');
+    expect(body.data.metadata.section).toBe('resident');
+    expect(body.data.metadata.category).toBe('documents');
   });
 });

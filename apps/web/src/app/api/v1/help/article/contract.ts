@@ -32,7 +32,10 @@ const helpArticleMetadataSchema = z.object({
   description: z.string(),
   category: z.string(),
   slug: z.string(),
-  roles: z.array(z.string()),
+  section: z.enum(['resident', 'manager']),
+  communityTypes: z.array(z.string()),
+  order: z.number().optional(),
+  boardOnly: z.boolean(),
   keywords: z.array(z.string()),
   tags: z.array(z.string()),
   relatedArticles: z.array(z.string()),
@@ -44,6 +47,7 @@ const helpArticleMetadataSchema = z.object({
   featureGates: z.array(z.string()).optional(),
   updatedAt: z.string().optional(),
   readTimeMinutes: z.number().optional(),
+  stepCount: z.number().optional(),
   heroMedia: z
     .object({
       src: z.string(),

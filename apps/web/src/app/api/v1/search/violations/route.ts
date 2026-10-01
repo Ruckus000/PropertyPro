@@ -18,7 +18,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { searchViolationsByTrigram } from '@propertypro/db';
-import { requirePermission } from '@/lib/db/access-control';
+import { canActAsBoard, requirePermission } from '@/lib/db/access-control';
 import { requireViolationsEnabled } from '@/lib/violations/common';
 import { searchViolationsContract } from './contract';
 
@@ -41,7 +41,7 @@ export const GET = withErrorHandler(
     }
 
     const { results, totalCount } = await searchViolationsByTrigram(communityId, q, limit, {
-      isAdmin: membership.isAdmin,
+      isAdmin: canActAsBoard(membership),
       userId: membership.userId,
     });
 

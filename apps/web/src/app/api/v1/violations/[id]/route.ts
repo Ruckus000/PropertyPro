@@ -14,8 +14,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
-  getActorUnitIds,
-  isResidentRole,
+  getViolationReadUnitIds,
   requireViolationAdminWrite,
   requireViolationsEnabled,
 } from '@/lib/violations/common';
@@ -28,6 +27,7 @@ import {
   violationDetailGetContract,
   violationUpdateContract,
 } from './contract';
+import { withUnitLabel } from '@/lib/units/unit-labels';
 
 export const GET = withErrorHandler(
   runRoute(violationDetailGetContract, async ({ params, req }) => {
@@ -41,11 +41,10 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
-    const residentUnitIds = isResidentRole(membership.role)
-      ? await getActorUnitIds(scoped, actorUserId)
-      : undefined;
+    const residentUnitIds = await getViolationReadUnitIds(scoped, membership, actorUserId);
 
-    return getViolationForCommunity(communityId, params.id, residentUnitIds);
+    const violation = await getViolationForCommunity(communityId, params.id, residentUnitIds);
+    return withUnitLabel(scoped, violation);
   }),
 );
 
@@ -72,6 +71,7 @@ export const PATCH = withErrorHandler(
         evidenceDocumentIds: body.evidenceDocumentIds,
         noticeDate: body.noticeDate,
         hearingDate: body.hearingDate,
+        hearingLocation: body.hearingLocation,
         resolutionNotes:
           body.resolutionNotes != null
             ? sanitizeHtml(body.resolutionNotes)

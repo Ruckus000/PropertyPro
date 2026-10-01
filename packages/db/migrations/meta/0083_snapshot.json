@@ -1,6 +1,6 @@
 {
-  "id": "cfa2618a-0cfe-403d-a467-1bf685d947af",
-  "prevId": "fac34dfa-4d91-42b7-bc4d-1cb482aad35e",
+  "id": "830be29b-4e67-40dd-bc76-d108b7f375e4",
+  "prevId": "0d50e2fc-1221-400f-8a5d-66d82edbc49a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2294,6 +2294,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "unit_count": {
+          "name": "unit_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "logo_path": {
           "name": "logo_path",
           "type": "text",
@@ -2600,6 +2606,10 @@
         "communities_urgent_notice_text_len": {
           "name": "communities_urgent_notice_text_len",
           "value": "\"communities\".\"urgent_notice_text\" IS NULL OR char_length(\"communities\".\"urgent_notice_text\") <= 240"
+        },
+        "communities_unit_count_range": {
+          "name": "communities_unit_count_range",
+          "value": "\"communities\".\"unit_count\" IS NULL OR (\"communities\".\"unit_count\" >= 1 AND \"communities\".\"unit_count\" <= 100000)"
         }
       },
       "isRLSEnabled": false
@@ -6657,6 +6667,12 @@
         "hearing_date": {
           "name": "hearing_date",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hearing_location": {
+          "name": "hearing_location",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

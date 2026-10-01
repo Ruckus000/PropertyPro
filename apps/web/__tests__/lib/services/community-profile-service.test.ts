@@ -19,7 +19,9 @@ vi.mock('@propertypro/db/filters', () => ({
 
 import {
   getCommunityName,
+  getCommunityUnitCount,
   updateCommunityName,
+  updateCommunityUnitCount,
 } from '@/lib/services/community-profile-service';
 
 beforeEach(() => {
@@ -74,5 +76,46 @@ describe('updateCommunityName', () => {
     expect(result).toEqual({ name: 'Same Name', changed: false });
     expect(updateMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateCommunityUnitCount', () => {
+  it('records the first count, auditing unknown -> value', async () => {
+    queryMock.mockResolvedValueOnce([{ unitCount: null }]);
+    updateMock.mockResolvedValueOnce([]);
+
+    const result = await updateCommunityUnitCount(42, 40, { actorUserId: 'user-1' });
+
+    expect(result).toEqual({ unitCount: 40, changed: true });
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.anything(),
+      { unitCount: 40 },
+      { __eq: { col: 'communities.id', val: 42 } },
+    );
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        communityId: 42,
+        resourceType: 'community',
+        oldValues: { unitCount: null },
+        newValues: { unitCount: 40 },
+      }),
+    );
+  });
+
+  it('no-ops (no write, no audit) when the count is unchanged', async () => {
+    queryMock.mockResolvedValueOnce([{ unitCount: 40 }]);
+
+    expect(await updateCommunityUnitCount(42, 40, { actorUserId: 'user-1' })).toEqual({
+      unitCount: 40,
+      changed: false,
+    });
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('reads an unknown count as null', async () => {
+    queryMock.mockResolvedValueOnce([{ unitCount: null }]);
+    expect(await getCommunityUnitCount(42)).toBeNull();
   });
 });

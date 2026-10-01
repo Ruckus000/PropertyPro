@@ -21,6 +21,7 @@ interface ElectionProxySectionProps {
   communityId: number;
   electionId: number;
   isAdmin: boolean;
+  canAdminister: boolean;
   userId: string;
 }
 
@@ -41,6 +42,7 @@ export function ElectionProxySection({
   communityId,
   electionId,
   isAdmin,
+  canAdminister,
   userId,
 }: ElectionProxySectionProps) {
   const { data, isLoading, error } = useBoardElectionProxies(communityId, electionId);
@@ -136,7 +138,8 @@ export function ElectionProxySection({
         <div className="space-y-3">
           {data.map((proxy) => {
             const badge = getProxyBadge(proxy.status);
-            const canApproveOrReject = isAdmin && proxy.status === 'pending';
+            const canApproveOrReject = canAdminister && proxy.status === 'pending';
+            // Revoke stays manager-or-grantor (ADR-006 §2a; elections-service revokeProxy).
             const canRevoke = proxy.status === 'approved' && (isAdmin || proxy.grantorUserId === userId);
             const isMutating = approveProxy.isPending || rejectProxy.isPending || revokeProxy.isPending;
 

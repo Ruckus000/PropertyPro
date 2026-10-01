@@ -52,12 +52,12 @@ The JSON response tells you:
 | Unit Owner | `owner` | Olivia Owner | Sunset Condos | condo_718 |
 | PM Company Admin | `pm_admin` | Pat PM | All 3 communities | mixed |
 | CAM | `cam` | Cameron CAM | Sunset Condos | condo_718 |
-| Board Member | `board_member` | Bianca Board | Sunset Condos | condo_718 |
+| Board Member (owner with a board seat) | `board_member` | Bianca Board | Sunset Condos | condo_718 |
 | Tenant | `tenant` | Tyler Tenant | Sunset Condos | condo_718 |
 | Site Manager | `site_manager` | Sierra Site | Sunset Ridge Apartments | apartment |
 
 **Role routing:**
-- Admin roles (`board_president`, `cam`, `board_member`, `site_manager`, `pm_admin`) → redirect to `/dashboard?communityId=X`
+- Admin roles (`board_president`, `cam`, `site_manager`, `pm_admin`) → redirect to `/dashboard?communityId=X`; `board_member` is a resident owner and lands like `owner`
 - Resident roles (`owner`, `tenant`) → redirect to `/mobile?communityId=X`
 
 **IMPORTANT**: After agent-login, ALWAYS verify the response shows `allCommunities` is non-empty before proceeding. If it's empty, that role has no community membership — skip it and note it in the report.

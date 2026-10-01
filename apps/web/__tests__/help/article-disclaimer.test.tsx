@@ -51,7 +51,7 @@ describe('disclaimer injection points', () => {
   // deep in auth/MDX machinery, and what actually needs guarding is that
   // neither renders article content without the notice above it.
   it.each([
-    ['the /help article route', 'apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx'],
+    ['the /help article route', 'apps/web/src/app/(help)/help/[category]/[slug]/page.tsx'],
     ['the help docs modal', 'apps/web/src/components/help/help-article-body.tsx'],
   ])('%s renders the disclaimer', (_label, path) => {
     const source = readFileSync(resolve(REPO_ROOT, path), 'utf8');

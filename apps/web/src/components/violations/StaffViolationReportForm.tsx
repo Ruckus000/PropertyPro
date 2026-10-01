@@ -13,6 +13,7 @@ import { createViolation } from '@/lib/api/violations';
 import { uploadEvidencePhoto } from '@/lib/violations/evidence-upload';
 import { useUnits } from '@/hooks/use-units';
 import type { ViolationSeverity } from '@propertypro/db';
+import { formatUnitLabel } from '@/lib/units/format-unit-label';
 
 const MAX_PHOTOS = 3;
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024;
@@ -53,10 +54,6 @@ interface UnitOption {
 }
 interface StaffViolationReportFormProps {
   communityId: number;
-}
-
-function formatUnitLabel(unit: UnitOption): string {
-  return unit.building ? `${unit.building} • Unit ${unit.unitNumber}` : `Unit ${unit.unitNumber}`;
 }
 
 export function StaffViolationReportForm({ communityId }: StaffViolationReportFormProps) {

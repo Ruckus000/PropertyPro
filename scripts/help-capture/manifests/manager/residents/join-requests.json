@@ -1,0 +1,56 @@
+{
+  "section": "manager",
+  "category": "residents",
+  "slug": "join-requests",
+  "shots": [
+    {
+      "name": "jr-queue",
+      "kind": "still",
+      "route": "/dashboard/residents?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Access Requests\")"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "div:has(> h2:text-is(\"Access Requests\"))"
+        }
+      ],
+      "clipTo": "div:has(> h2:text-is(\"Access Requests\"))",
+      "highlight": "div:has(> h2:text-is(\"Access Requests\")) >> text=Claimed Unit",
+      "step": 1
+    },
+    {
+      "name": "jr-deny",
+      "kind": "still",
+      "route": "/dashboard/residents?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Access Requests\")"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Deny\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        },
+        {
+          "type": "fill",
+          "selector": "#deny-reason",
+          "value": "The unit number does not match our records; please check your closing papers and resubmit."
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#deny-reason",
+      "step": 3
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "section": "resident",
+  "category": "getting-started",
+  "slug": "join-community",
+  "shots": [
+    {
+      "name": "gs-join-comm",
+      "kind": "still",
+      "route": "/account/join-community",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=textbox[name=\"Search for your community\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "role=textbox[name=\"Search for your community\"]",
+          "value": "Sunset Ridge"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Sunset Ridge Apartments"
+        }
+      ],
+      "clipTo": "main",
+      "highlight": "role=textbox[name=\"Search for your community\"]",
+      "step": 2
+    },
+    {
+      "name": "gs-join-unit",
+      "kind": "still",
+      "route": "/account/join-community",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=textbox[name=\"Search for your community\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "role=textbox[name=\"Search for your community\"]",
+          "value": "Sunset Ridge"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Sunset Ridge Apartments"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Request to Join\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=textbox[name=/Unit identifier/]"
+        }
+      ],
+      "clipTo": "main",
+      "highlight": "role=textbox[name=/Unit identifier/]",
+      "step": 3
+    },
+    {
+      "name": "gs-join-submit",
+      "kind": "still",
+      "route": "/account/join-community",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=textbox[name=\"Search for your community\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "role=textbox[name=\"Search for your community\"]",
+          "value": "Sunset Ridge"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Sunset Ridge Apartments"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Request to Join\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=textbox[name=/Unit identifier/]"
+        },
+        {
+          "type": "fill",
+          "selector": "role=textbox[name=/Unit identifier/]",
+          "value": "Unit 101"
+        }
+      ],
+      "clipTo": "main",
+      "highlight": "role=button[name=\"Submit Request\"]",
+      "step": 4
+    },
+    {
+      "name": "gs-switch",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Switch community\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Switch community\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=All communities overview"
+        }
+      ],
+      "clipTo": [
+        "role=button[name=\"Switch community\"]",
+        "[data-radix-popper-content-wrapper]"
+      ]
+    }
+  ]
+}

@@ -119,7 +119,7 @@ export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
               <div>
                 <h3 className="text-sm font-semibold text-content">{submission.title}</h3>
                 <p className="mt-1 text-xs text-content-secondary">
-                  {submission.projectType} · Unit #{submission.unitId} · Submitted{' '}
+                  {submission.projectType} · {submission.unitLabel ?? `Unit #${submission.unitId}`} · Submitted{' '}
                   {formatDate(submission.createdAt)}
                 </p>
               </div>

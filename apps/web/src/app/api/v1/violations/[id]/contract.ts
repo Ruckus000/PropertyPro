@@ -40,6 +40,7 @@ export const violationUpdateBodySchema = z.object({
   evidenceDocumentIds: z.array(z.number().int().positive()).optional(),
   noticeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   hearingDate: z.string().datetime().nullable().optional(),
+  hearingLocation: z.string().trim().max(200).nullable().optional(),
   resolutionNotes: z.string().max(4000).nullable().optional(),
 });
 

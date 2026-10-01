@@ -1,0 +1,102 @@
+{
+  "section": "manager",
+  "category": "announcements",
+  "slug": "post-announcement",
+  "shots": [
+    {
+      "name": "an-new",
+      "kind": "still",
+      "route": "/announcements?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=link[name=\"New announcement\"]"
+        }
+      ],
+      "clipTo": "[data-page-header]",
+      "highlight": "role=link[name=\"New announcement\"]",
+      "step": 1
+    },
+    {
+      "name": "an-compose",
+      "kind": "still",
+      "route": "/announcements/new?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "fill",
+          "selector": "#announcement-title",
+          "value": "Storm prep: three things to do this weekend"
+        }
+      ],
+      "clipTo": [
+        "div.space-y-2:has(> #announcement-title)",
+        "div.space-y-2:has(> label[for=\"announcement-body\"])"
+      ],
+      "highlight": "#announcement-title",
+      "step": 2
+    },
+    {
+      "name": "an-aud",
+      "kind": "still",
+      "route": "/announcements/new?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "#announcement-audience"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=listbox"
+        }
+      ],
+      "clipTo": [
+        "div.space-y-2:has(> #announcement-audience)",
+        "role=listbox"
+      ],
+      "highlight": "#announcement-audience",
+      "step": 3
+    },
+    {
+      "name": "an-pinbox",
+      "kind": "still",
+      "route": "/announcements/new?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#announcement-pinned"
+        }
+      ],
+      "clipTo": "div:has(> #announcement-pinned)",
+      "highlight": "#announcement-pinned",
+      "step": 4
+    },
+    {
+      "name": "an-publish",
+      "kind": "still",
+      "route": "/announcements/new?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Publish announcement\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=button[name=\"Publish announcement\"]"
+        }
+      ],
+      "clipTo": "role=button[name=\"Publish announcement\"] >> xpath=..",
+      "highlight": "role=button[name=\"Publish announcement\"]",
+      "step": 5
+    }
+  ]
+}

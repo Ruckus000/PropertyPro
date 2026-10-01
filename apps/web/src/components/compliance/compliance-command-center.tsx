@@ -17,6 +17,7 @@ import { ComplianceQueue } from './compliance-queue';
 import { matchesFilter } from './compliance-pill-mapping';
 import type { FilterKey } from './compliance-pill-mapping';
 import { UploadDocumentModal } from './upload-document-modal';
+import { getTemplateDocumentCategory } from './compliance-visibility';
 import { LinkDocumentModal } from './link-document-modal';
 import { hasBoardDesignation, type BoardDesignation } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
@@ -246,7 +247,7 @@ export function ComplianceCommandCenter({
               onLink={(item) => setLinkItem(item)}
               onView={(item) => {
                 if (item.documentId) {
-                  window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+                  window.open(`/documents/${item.documentId}?communityId=${communityId}`, '_blank', 'noopener');
                 }
               }}
               onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
@@ -262,7 +263,7 @@ export function ComplianceCommandCenter({
               onLink={(item) => setLinkItem(item)}
               onView={(item) => {
                 if (item.documentId) {
-                  window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+                  window.open(`/documents/${item.documentId}?communityId=${communityId}`, '_blank', 'noopener');
                 }
               }}
               onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
@@ -277,7 +278,7 @@ export function ComplianceCommandCenter({
         <UploadDocumentModal
           communityId={communityId}
           defaultTitle={uploadItem.title}
-          categoryName={uploadItem.category}
+          categoryName={getTemplateDocumentCategory(uploadItem.templateKey, uploadItem.category)}
           onUploaded={(documentId) => {
             mutations.linkDocument.mutate({ itemId: uploadItem.id, documentId });
             setUploadItem(null);

@@ -1,0 +1,77 @@
+---
+title: "Create dues and special assessments"
+description: "Set up recurring charges or a one-time assessment, with a late fee, and track who has paid."
+section: manager
+category: payments
+slug: create-assessment
+order: 0
+featured: true
+keywords: ["assessment","create","dues","recurring","special","assessment","late","fee","grace","days","billing","charge","ledger","line","items","delinquency","waive","rent"]
+relatedArticles: ["online-payments","post-minutes"]
+featureGates: [hasFinance]
+contextPaths: ["/communities/*/payments"]
+updatedAt: "2026-09-30"
+---
+
+<OnlyFor types="condo_718 hoa_720">
+
+<Callout type="warning" title="The board sets assessments">
+
+Record an assessment only after the board approves it, and note the meeting in its description. PropertyPro records what was approved; it does not vote or suggest amounts.
+
+</Callout>
+
+</OnlyFor>
+
+<StepByStep>
+
+<Step title="Open Payments, then Assessments" shot="as-tabs">
+
+**Payments** is in the sidebar. **Overview** shows billing at a glance, with recent payments. **Assessments**, **Delinquency** and **Ledger** are next to it.
+
+</Step>
+
+<Step title="Select Create Assessment" shot="as-create">
+
+It is at the top right of the list.
+
+</Step>
+
+<Step title="Enter the charge" shot="as-form">
+
+Enter a **Title**, an optional **Description**, the per-unit **Amount ($)**, the **Frequency** (Monthly, Quarterly, Annual or One-Time) and the **Due Day** of the month. For a special assessment, choose **One-Time**.
+
+</Step>
+
+<Step title="Set the late fee" shot="as-late">
+
+Enter a flat **Late Fee ($)** and the **Grace Days** after the due date (15 by default). The fee is added once to each charge still unpaid after that. Late fees are only added while online payments are turned on for your community.
+
+</Step>
+
+<Step title="Select Create Assessment" shot="as-save">
+
+Monthly, Quarterly and Annual assessments are charged to every unit automatically on the 1st of each month they fall due. Owners can pay online if [online payments](help:online-payments) are set up.
+
+</Step>
+
+</StepByStep>
+
+## Track collection
+
+Select an assessment card to open its line items: one row per unit, with a count of pending, overdue and paid charges at the top. The **Delinquency** tab lists units with overdue amounts, days overdue and whether they are lien eligible. Select **Waive Late Fees** on a unit to remove its late fees.
+
+<Figure shot="as-lines" alt="Line items panel with pending, overdue and paid counts" />
+
+<Figure shot="as-delinq" alt="Delinquency tab listing units past due" />
+
+- There are no installment plans or custom splits. Every unit is charged the same amount.
+- To change a rate, select **Edit** on the assessment card and change the **Amount ($)**. Charges already created keep the old amount. Clear **Active** to stop billing.
+- One-Time assessments are not charged by the monthly run. If their line items do not appear, contact PropertyPro support.
+- PropertyPro only records payments made online. Prorate move-ins by hand, and handle write-offs and offline payments in your accounting system.
+
+<Callout type="warning" title="Late fee limits">
+
+PropertyPro does not check late fee limits. Florida law and your governing documents cap them. Check before you set one.
+
+</Callout>

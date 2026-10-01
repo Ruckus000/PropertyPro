@@ -95,6 +95,7 @@ const {
       communityType: 'pending_signups.community_type',
       address: 'pending_signups.address',
       candidateSlug: 'pending_signups.candidate_slug',
+      unitCount: 'pending_signups.unit_count',
       status: 'pending_signups.status',
       expiresAt: 'pending_signups.expires_at',
       updatedAt: 'pending_signups.updated_at',
@@ -214,6 +215,7 @@ const CONDO_SIGNUP = {
   communityType: 'condo_718' as const,
   address: '123 Main St, West Palm Beach, FL 33401',
   candidateSlug: 'palm-gardens',
+  unitCount: 48,
   planKey: 'professional',
   // Accepted days BEFORE provisioning runs — the whole reason the version is
   // carried from pending_signups rather than stamped with new Date() here.
@@ -450,6 +452,27 @@ describe('runProvisioning', () => {
     expect((communityInsert?.values as { subscriptionPlan?: string }).subscriptionPlan).toBe(
       'professional',
     );
+    // The signup's declared size reaches the community (migration 0081) — it is
+    // what decides whether Florida's website rules apply.
+    expect((communityInsert?.values as { unitCount?: number }).unitCount).toBe(48);
+  });
+
+  it("stores a signup's unit count of 1 as unknown — the old form's pre-filled default", async () => {
+    // A 1 would mark a condo exempt from Florida's website rules; null is
+    // treated as "required" until the association states its real count.
+    const { calls } = buildDb({
+      selectSequence: [
+        [makeJob({})],
+        [{ ...CONDO_SIGNUP, unitCount: 1 }],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await runProvisioning(1);
+
+    const communityInsert = calls.find((c) => c.op === 'insert' && c.table === communitiesTable);
+    expect((communityInsert?.values as { unitCount?: number | null }).unitCount).toBeNull();
   });
 
   // 1c. An unrecognised plan_key must not be written verbatim — downstream

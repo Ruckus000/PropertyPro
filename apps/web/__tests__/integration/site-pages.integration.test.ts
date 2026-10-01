@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ValidationError } from '@/lib/api/errors';
 import {
   publishCommunitySite,
+  removeSiteBlock,
   revertToSnapshot,
   upsertPublishedBlock,
 } from '@/lib/services/site-blocks-service';
@@ -1110,5 +1111,70 @@ describeDb('multi-page site (db-backed integration)', () => {
     await expect(
       revertToSnapshot({ communityId, actorUserId, snapshotId: snapshotRow.id }),
     ).rejects.toThrow(/has since been deleted/);
+  });
+
+  /*
+   * v4 Phase 2 / 2b — the Florida-required-section delete guard against REAL
+   * rows. The unit tests mock the transaction, so they cannot catch a query
+   * that is wrong only in SQL (a column, a join, the draft-wins rule as the
+   * database actually stores drafts). Here the guard reads what the services
+   * really wrote.
+   */
+  describe('Florida-required sections guard', () => {
+    async function siteWithMeetingsOnAbout(label: string, unitCount: number | null) {
+      if (!state) throw new Error('Not initialized');
+      const communityId = await createCommunity(label);
+      await state.db
+        .update(state.dbModule.communities)
+        .set({ unitCount })
+        .where(eq(state.dbModule.communities.id, communityId));
+      const homePageId = await ensureHomePage(communityId);
+      const about = await createSitePage({ communityId, actorUserId, name: 'About', slug: 'about' });
+      await upsertPublishedBlock({
+        communityId, actorUserId, pageId: homePageId,
+        blockType: 'documents', blockOrder: 2, content: {}, isDraft: true,
+      });
+      await upsertPublishedBlock({
+        communityId, actorUserId, pageId: about.id,
+        blockType: 'meetings', blockOrder: 3, content: {}, isDraft: true,
+      });
+      return { communityId, homePageId, aboutId: about.id };
+    }
+
+    it('refuses removing the only Meetings section, by section or by page, on a covered condo', async () => {
+      const { communityId, homePageId, aboutId } = await siteWithMeetingsOnAbout('req-guard', 40);
+
+      await expect(
+        removeSiteBlock({ communityId, actorUserId, blockOrder: 3, pageId: aboutId }),
+      ).rejects.toThrow(/only Meetings section/);
+      await expect(
+        stageSitePageDelete({ communityId, actorUserId, pageId: aboutId }),
+      ).rejects.toThrow(/page has your only Meetings section/);
+      // Refused means untouched.
+      expect((await liveBlocks(communityId)).some((b) => b.blockType === 'meetings')).toBe(true);
+
+      // A second copy elsewhere makes both removals fine.
+      await upsertPublishedBlock({
+        communityId, actorUserId, pageId: homePageId,
+        blockType: 'meetings', blockOrder: 4, content: {}, isDraft: true,
+      });
+      await expect(
+        stageSitePageDelete({ communityId, actorUserId, pageId: aboutId }),
+      ).resolves.toEqual({ staged: false });
+    });
+
+    it('treats an unknown unit count as covered', async () => {
+      const { communityId, aboutId } = await siteWithMeetingsOnAbout('req-unknown', null);
+      await expect(
+        stageSitePageDelete({ communityId, actorUserId, pageId: aboutId }),
+      ).rejects.toThrow(/only Meetings section/);
+    });
+
+    it('lets a condo below 25 units remove it — the statute does not reach it', async () => {
+      const { communityId, aboutId } = await siteWithMeetingsOnAbout('req-small', 12);
+      await expect(
+        removeSiteBlock({ communityId, actorUserId, blockOrder: 3, pageId: aboutId }),
+      ).resolves.toEqual({ staged: false });
+    });
   });
 });

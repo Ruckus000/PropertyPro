@@ -3,7 +3,7 @@
  * Every tenant-scoped table references communities.id.
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, boolean, check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
 import { billingGroups } from './billing-groups';
 
@@ -19,6 +19,19 @@ export const communities = pgTable('communities', {
   city: text('city'),
   state: text('state'),
   zipCode: text('zip_code'),
+  /**
+   * Units (condo) or parcels (HOA) — what decides whether Florida's website
+   * rules apply at all: §718.111(12)(g) covers condos of 25+ units, §720.303
+   * HOAs of 100+ parcels (`requirementLevel` in packages/shared site-diff).
+   *
+   * NULLABLE on purpose, and NULL means UNKNOWN, never zero. Signup and
+   * "Add community" always collected this number and dropped it before the
+   * insert, so every community created before migration 0081 has none unless
+   * the backfill could recover it from its pending signup. Unknown is treated
+   * as covered (the safe direction: a false "Required" is a nuisance, a false
+   * "not required" is a legal exposure) and the editor asks the PM for it.
+   */
+  unitCount: integer('unit_count'),
   /** P2-38: Community logo — Supabase Storage path (stored via onboarding wizard). */
   logoPath: text('logo_path'),
   /** P3-47: White-label branding settings. Shape: { primaryColor?, secondaryColor?, logoPath? }.
@@ -213,5 +226,11 @@ export const communities = pgTable('communities', {
   check(
     'communities_urgent_notice_text_len',
     sql`${table.urgentNoticeText} IS NULL OR char_length(${table.urgentNoticeText}) <= 240`,
+  ),
+  // Same bounds as the write contracts (signup allows up to 20,000). The
+  // backstop for a caller that skips them. Mirrors migration 0081.
+  check(
+    'communities_unit_count_range',
+    sql`${table.unitCount} IS NULL OR (${table.unitCount} >= 1 AND ${table.unitCount} <= 100000)`,
   ),
 ]);

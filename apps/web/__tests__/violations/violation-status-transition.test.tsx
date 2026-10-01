@@ -41,6 +41,7 @@ const VIOLATION = {
   evidenceDocumentIds: [],
   noticeDate: '2026-03-20',
   hearingDate: null,
+  hearingLocation: null,
   resolutionDate: null,
   resolutionNotes: null,
   createdAt: '2026-03-20T00:00:00.000Z',
@@ -99,6 +100,10 @@ describe('ViolationStatusTransition — hearing notice window', () => {
     expect(input).not.toHaveAttribute('min');
 
     fireEvent.change(input, { target: { value: '2026-04-03' } });
+    // The location is saved with the hearing (it prints on the hearing notice).
+    fireEvent.change(screen.getByLabelText('Hearing Location (optional)'), {
+      target: { value: '  Clubhouse, Room 101 ' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Schedule Hearing/i }));
 
     await waitFor(() =>
@@ -108,6 +113,7 @@ describe('ViolationStatusTransition — hearing notice window', () => {
           communityId: 42,
           status: 'hearing_scheduled',
           hearingDate: '2026-04-03T00:00:00.000Z',
+          hearingLocation: 'Clubhouse, Room 101',
         }),
       ),
     );

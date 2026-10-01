@@ -182,7 +182,7 @@ export function MeetingsPageShell({
             <Card className="border-edge-subtle bg-surface-card">
               <CardContent>
                 <EmptyState
-                  preset="no_meetings"
+                  preset={canWrite ? 'no_meetings' : 'no_meetings_yet'}
                   action={
                     canWrite ? (
                       <Button onClick={() => setShowCreateForm(true)}>Schedule Meeting</Button>
