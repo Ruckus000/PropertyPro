@@ -290,7 +290,9 @@ export async function verifyOtp(params: {
     { id: users.id, email: users.email, fullName: users.fullName },
     inArray(users.id, adminRoles.map((r) => r['userId'] as string)),
   );
-  const dashboardUrl = `${getBaseUrl()}/dashboard/residents`;
+  // Must carry the community: on the app's root host nothing else names it,
+  // and without it the page can only say "Add a valid communityId".
+  const dashboardUrl = `${getBaseUrl()}/dashboard/residents?communityId=${communityId}`;
 
   for (const adminRole of adminRoles) {
     const adminUser = userRows.find((u) => u.id === adminRole['userId']);
