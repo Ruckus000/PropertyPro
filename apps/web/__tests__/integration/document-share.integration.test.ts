@@ -111,6 +111,11 @@ describeDb('shareDocuments (integration)', () => {
     const tenantMail = testInbox.find((mail) => mail.to === `share-tenant+${state.runSuffix}@example.com`)!;
     expect(tenantMail.subject).toContain('Rules 2026');
     expect(tenantMail.headers['List-Unsubscribe']).toBeTruthy();
+    // Each document links to itself (`/documents/<id>`), only the ones sent.
+    const sent = (tenantMail.react.props as { documents: Array<{ url: string }> }).documents;
+    expect(sent.map((d) => d.url)).toEqual([
+      expect.stringMatching(new RegExp(`/documents/${docs.rules}\\?communityId=${communityId}$`)),
+    ]);
   });
 
   it('reports no_access when a recipient may open none of the documents', async () => {
@@ -128,10 +133,11 @@ describeDb('shareDocuments (integration)', () => {
 
     const m = state.dbModule;
     const queued = await state.db
-      .select({ id: m.notificationDigestQueue.id })
+      .select({ id: m.notificationDigestQueue.id, actionUrl: m.notificationDigestQueue.actionUrl })
       .from(m.notificationDigestQueue)
       .where(and(eq(m.notificationDigestQueue.userId, ids.digest), eq(m.notificationDigestQueue.sourceId, String(docs.rules))));
     expect(queued).toHaveLength(1);
+    expect(queued[0]!.actionUrl).toMatch(new RegExp(`/documents/${docs.rules}\\?communityId=${communityId}$`));
   });
 
   it('refuses deleted or non-library documents before sending anything', async () => {

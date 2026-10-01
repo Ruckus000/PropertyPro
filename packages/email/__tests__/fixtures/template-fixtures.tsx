@@ -285,16 +285,16 @@ export const FIXTURES: Record<string, TemplateFixture> = {
   'document-shared-email': {
     accent: 'coral',
     sender: 'association',
-    minimal: () => <E.DocumentSharedEmail branding={association} recipientName="Marisol" senderName="Carmen Ortiz" documents={[{ title: 'Rules & regulations (rev. 2025)' }]} portalUrl={url('documents')} />,
+    minimal: () => <E.DocumentSharedEmail branding={association} recipientName="Marisol" senderName="Carmen Ortiz" documents={[{ title: 'Rules & regulations (rev. 2025)', url: url('documents/12') }]} portalUrl={url('documents')} />,
     rich: () => (
       <E.DocumentSharedEmail
         branding={bulk}
         recipientName="Marisol"
         senderName="Carmen Ortiz"
         documents={[
-          { title: 'Rules & regulations (rev. 2025)' },
-          { title: '2026 Annual budget' },
-          { title: 'Hurricane preparedness guide' },
+          { title: 'Rules & regulations (rev. 2025)', url: url('documents/12') },
+          { title: '2026 Annual budget', url: url('documents/13') },
+          { title: 'Hurricane preparedness guide', url: url('documents/14') },
         ]}
         portalUrl={url('documents')}
       />
