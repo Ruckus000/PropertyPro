@@ -39,6 +39,7 @@ import { AddResidentDialog } from '@/components/residents/residents-page-client'
 import { DirectorySheet } from './directory-sheet';
 import { EditResidentDialog } from './edit-resident-dialog';
 import { PastDueRuleDialog } from './past-due-rule-dialog';
+import { SendDocumentsDialog } from './send-documents-dialog';
 import { UnitFormDialog } from './unit-form-dialog';
 import { DirectoryToolbar, type FilterToken, type StatusOption, type UnitsView } from './directory-toolbar';
 import {
@@ -49,6 +50,7 @@ import {
   buildingLabelOf,
   computeOverview,
   describeRule,
+  describeSendResults,
   filterResidents,
   filterUnits,
   listBuildings,
@@ -66,7 +68,7 @@ import { ResidentsTable } from './residents-table';
 import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
 
-// ponytail: this route sits ~18 KiB under the 1220 KiB hard per-route budget
+// ponytail: this route sits ~9 KiB under the 1220 KiB hard per-route budget
 // (perf:check). Lazy-loading the dialogs below via next/dynamic was measured
 // and made things WORSE: it reshuffled shared chunks and pushed the web
 // aggregate budget (1490 KiB, routes this page is not even in) over. Re-measure
@@ -80,6 +82,8 @@ interface DirectoryPageClientProps {
   isAdmin: boolean;
   canWrite: boolean;
   canSeeBalances: boolean;
+  /** documents:write — gates every "Send documents" entry point. */
+  canSendDocuments: boolean;
   initialTab: DirectoryTab;
 }
 
@@ -144,6 +148,7 @@ export function DirectoryPageClient({
   isAdmin,
   canWrite,
   canSeeBalances,
+  canSendDocuments,
   initialTab,
 }: DirectoryPageClientProps) {
   const router = useRouter();
@@ -176,6 +181,8 @@ export function DirectoryPageClient({
   // Where focus returns after a confirmation (it has no Radix trigger).
   const confirmReturnRef = useRef<HTMLElement | null>(null);
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
+  // `nonce` remounts the dialog per send, so each send gets its own sendId.
+  const [sendDocs, setSendDocs] = useState<{ userIds: string[]; label: string; nonce: number } | null>(null);
 
   // Search is filtered client-side; deferring keeps typing responsive on
   // large communities without a fixed debounce.
@@ -369,6 +376,11 @@ export function DirectoryPageClient({
     setAddResident({ open: true, unitId });
   }, [inviteResident]);
 
+  const openSendDocs = useCallback(
+    (userIds: string[], label: string) => setSendDocs({ userIds, label, nonce: Date.now() }),
+    [],
+  );
+
   const openUnit = useCallback((id: number) => setPanel({ kind: 'unit', id }), []);
   const openResident = useCallback((id: string) => setPanel({ kind: 'resident', id }), []);
 
@@ -453,6 +465,7 @@ export function DirectoryPageClient({
     onDeleteUnit: () => panelUnitId !== null && askConfirm({ kind: 'delete-unit', unitId: panelUnitId }),
     onEditResident: (userId: string) => setEditResidentId(userId),
     onRemoveResident: (userId: string) => askConfirm({ kind: 'remove-resident', userId }),
+    onSendDocuments: canSendDocuments ? openSendDocs : undefined,
   };
 
   const editResident = editResidentId ? residentRows.find((r) => r.userId === editResidentId) ?? null : null;
@@ -835,6 +848,22 @@ export function DirectoryPageClient({
                         >
                           Resend invites
                         </button>
+                        {canSendDocuments ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openSendDocs(
+                                visibleSelection.map((r) => r.userId),
+                                visibleSelection.length === 1
+                                  ? visibleSelection[0]!.displayName
+                                  : plural(visibleSelection.length, 'resident'),
+                              )
+                            }
+                            className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover md:h-9', FOCUS)}
+                          >
+                            Send documents
+                          </button>
+                        ) : null}
                         <CsvExportButton
                           headers={['Name', 'Email', 'Phone', 'Unit', 'Building', 'Type', 'Board', 'Portal']}
                           rows={visibleSelection.map((r) => ({
@@ -924,6 +953,9 @@ export function DirectoryPageClient({
             inviting={invitingUserId === panelResident.userId}
             onEdit={() => setEditResidentId(panelResident.userId)}
             onRemove={() => askConfirm({ kind: 'remove-resident', userId: panelResident.userId })}
+            onSendDocuments={
+              canSendDocuments ? () => openSendDocs([panelResident.userId], panelResident.displayName) : undefined
+            }
             inSheet
           />
         ) : null}
@@ -972,6 +1004,24 @@ export function DirectoryPageClient({
           onSaved={(moved) => {
             toast.success(moved ? 'Resident moved.' : 'Resident saved.');
             setEditResidentId(null);
+          }}
+        />
+      ) : null}
+      {canSendDocuments && sendDocs ? (
+        <SendDocumentsDialog
+          key={sendDocs.nonce}
+          open
+          onOpenChange={(open) => {
+            if (!open) setSendDocs(null);
+          }}
+          communityId={communityId}
+          userIds={sendDocs.userIds}
+          recipientLabel={sendDocs.label}
+          onSent={(results) => {
+            const { message, tone } = describeSendResults(results);
+            (tone === 'warning' ? toast.warning : toast.success)(message);
+            setSendDocs(null);
+            setSelection(new Set());
           }}
         />
       ) : null}

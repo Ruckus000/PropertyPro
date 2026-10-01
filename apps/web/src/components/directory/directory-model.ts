@@ -10,6 +10,7 @@
  * unit-tested directly — see `__tests__/directory/directory-model.test.ts`.
  */
 import type { Unit, UnitOccupancy } from '@/hooks/use-units';
+import type { DocumentSendStatus } from '@/hooks/use-documents';
 import type { ResidentRecord } from '@/hooks/use-residents-management';
 
 export const NO_BUILDING_KEY = '__none__';
@@ -469,4 +470,30 @@ export function computeOverview(
     adoptionPct: residents.length === 0 ? null : Math.round((active / residents.length) * 100),
     notActiveResidents: residents.length - active,
   };
+}
+
+/* ── Send documents ─────────────────────────────────────────────────────── */
+
+const SEND_STATUS_PHRASE: ReadonlyArray<[DocumentSendStatus, (n: number) => string]> = [
+  ['emailed', (n) => `${n} emailed`],
+  ['digest', (n) => `${n} in their email digest`],
+  ['opted_out', (n) => `${n} turned off document emails`],
+  ['no_access', (n) => `${n} can't open ${n === 1 ? 'them' : 'these'}`],
+  ['not_member', (n) => `${n} no longer in this community`],
+  ['failed', (n) => `${n} failed`],
+];
+
+/**
+ * One toast line for a send, counting every recipient: "3 emailed, 1 in their
+ * email digest, 1 turned off document emails." Opted-out is not a failure (it
+ * is a courtesy copy that respects preferences), so it alone stays a success.
+ */
+export function describeSendResults(results: readonly { status: DocumentSendStatus }[]): {
+  message: string;
+  tone: 'success' | 'warning';
+} {
+  const count = (s: DocumentSendStatus) => results.filter((r) => r.status === s).length;
+  const parts = SEND_STATUS_PHRASE.filter(([s]) => count(s) > 0).map(([s, phrase]) => phrase(count(s)));
+  const problem = count('failed') + count('no_access') + count('not_member') > 0;
+  return { message: `${parts.join(', ')}.`, tone: problem ? 'warning' : 'success' };
 }

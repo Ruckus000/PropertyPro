@@ -21,6 +21,7 @@ const {
   updateUnitMock,
   removeResidentMock,
   batchInviteMock,
+  sendDocumentsMock,
 } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   searchState: { value: '' },
@@ -36,6 +37,7 @@ const {
   updateUnitMock: vi.fn(),
   removeResidentMock: vi.fn(),
   batchInviteMock: vi.fn(),
+  sendDocumentsMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -64,6 +66,17 @@ vi.mock('@/hooks/use-residents-management', () => ({
   useUpdateResident: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
   useRemoveResident: () => ({ mutateAsync: removeResidentMock, isPending: false, error: null, reset: vi.fn() }),
   useBatchInvite: () => ({ mutateAsync: batchInviteMock, isPending: false, error: null, reset: vi.fn() }),
+}));
+vi.mock('@/hooks/use-documents', () => ({
+  useDocuments: () => ({
+    data: [
+      { id: 7, title: 'Rules 2026', createdAt: '2026-03-18T00:00:00Z' },
+      { id: 8, title: '2026 Annual budget', createdAt: '2025-11-12T00:00:00Z' },
+    ],
+    isLoading: false,
+    isError: false,
+  }),
+  useSendDocuments: () => ({ mutateAsync: sendDocumentsMock, isPending: false, error: null }),
 }));
 vi.mock('@/hooks/use-access-requests', () => ({
   useApproveAccessRequest: () => ({ mutate: vi.fn(), isPending: false, isError: false, reset: vi.fn() }),
@@ -130,6 +143,7 @@ function renderClient(props: Partial<Parameters<typeof DirectoryPageClient>[0]> 
       isAdmin
       canWrite
       canSeeBalances
+      canSendDocuments
       initialTab="units"
       {...props}
     />,
@@ -373,5 +387,68 @@ describe('DirectoryPageClient — management (phase 2)', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
     await user.type(screen.getByRole('searchbox', { name: /search name/i }), 'ivy');
     expect(await screen.findByText('1 selected')).toBeInTheDocument();
+  });
+});
+
+describe('DirectoryPageClient — send documents (phase 3)', () => {
+  it('bulk send asks to confirm for 2+ recipients, then reports every result', async () => {
+    searchState.value = 'tab=residents';
+    sendDocumentsMock.mockResolvedValue([
+      { userId: 'Olive Owner', status: 'emailed', documentIds: [7] },
+      { userId: 'Ivy Invited', status: 'opted_out', documentIds: [7] },
+    ]);
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    await user.click(screen.getByRole('button', { name: 'Send documents' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send documents' });
+    expect(within(dialog).getByText('To 2 residents')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Select documents' })).toBeDisabled();
+
+    await user.click(within(dialog).getByRole('checkbox', { name: /Rules 2026/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Send 1 document' }));
+    expect(sendDocumentsMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole('dialog', { name: 'Send 1 document to 2 residents?' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Send 1 document' }));
+
+    expect(sendDocumentsMock).toHaveBeenCalledWith({
+      documentIds: [7],
+      userIds: expect.arrayContaining(['Olive Owner', 'Ivy Invited']),
+      sendId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('1 emailed, 1 turned off document emails.'));
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
+  });
+
+  it('a single resident sends without a confirm step, and a retry reuses the sendId', async () => {
+    searchState.value = 'tab=residents';
+    sendDocumentsMock
+      .mockRejectedValueOnce(new Error('Network down'))
+      .mockResolvedValueOnce([{ userId: 'Olive Owner', status: 'emailed', documentIds: [7, 8] }]);
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: /Olive Owner/ }));
+    await user.click(await screen.findByRole('button', { name: 'Send documents' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send documents' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /Rules 2026/ }));
+    await user.click(within(dialog).getByRole('checkbox', { name: /Annual budget/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Send 2 documents' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Send 2 documents' }));
+
+    expect(sendDocumentsMock).toHaveBeenCalledTimes(2);
+    const [first, second] = sendDocumentsMock.mock.calls.map(([arg]) => arg.sendId);
+    expect(second).toBe(first);
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('1 emailed.'));
+  });
+
+  it('every entry point is hidden without documents:write', async () => {
+    searchState.value = 'tab=residents';
+    const user = userEvent.setup();
+    renderClient({ canSendDocuments: false });
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    expect(screen.queryByRole('button', { name: 'Send documents' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Olive Owner/ }));
+    await screen.findByRole('button', { name: 'Edit details' });
+    expect(screen.queryByRole('button', { name: 'Send documents' })).not.toBeInTheDocument();
   });
 });

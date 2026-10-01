@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { AlertCircle, AlertTriangle, ArrowLeftRight, Bath, BedDouble, DollarSign, Mail, Maximize, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeftRight, Bath, BedDouble, DollarSign, Mail, Maximize, Pencil, Plus, Send, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Avatar,
@@ -31,6 +31,8 @@ export interface UnitDetailPanelProps {
   onDeleteUnit: () => void;
   onEditResident: (userId: string) => void;
   onRemoveResident: (userId: string) => void;
+  /** Send to everyone on this unit. Omitted without documents:write. */
+  onSendDocuments?: (userIds: string[], label: string) => void;
   /** Leaves room for the sheet's own close button in the header band. */
   inSheet?: boolean;
 }
@@ -91,6 +93,7 @@ export function UnitDetailPanel({
   onDeleteUnit,
   onEditResident,
   onRemoveResident,
+  onSendDocuments,
   inSheet = false,
 }: UnitDetailPanelProps) {
   const rent = hasOwnerRole ? null : formatRent(unit.rentAmount);
@@ -156,14 +159,31 @@ export function UnitDetailPanel({
           <section className="flex flex-col gap-2.5" aria-label="Residents">
             <div className="flex items-center justify-between">
               <Overline>Residents · {unit.residents.length}</Overline>
-              <button
-                type="button"
-                onClick={() => onAddResident(unit.id)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-content-link hover:bg-interactive-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                <Plus size={14} aria-hidden="true" />
-                Add resident
-              </button>
+              <div className="flex items-center gap-1">
+                {onSendDocuments && unit.residents.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSendDocuments(
+                        unit.residents.map((r) => r.userId),
+                        `residents of Unit ${unit.unitNumber} (${unit.residents.length})`,
+                      )
+                    }
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-content-link hover:bg-interactive-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    <Send size={14} aria-hidden="true" />
+                    Send documents
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onAddResident(unit.id)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-content-link hover:bg-interactive-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <Plus size={14} aria-hidden="true" />
+                  Add resident
+                </button>
+              </div>
             </div>
             {unit.occupantLine ? (
               <p className={cn('text-sm', unit.hasContradiction ? 'text-status-warning' : 'text-content-secondary')}>

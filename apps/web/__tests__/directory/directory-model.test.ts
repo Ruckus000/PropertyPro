@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Unit } from '../../src/hooks/use-units';
 import type { ResidentRecord } from '../../src/hooks/use-residents-management';
 import {
+  describeSendResults,
   NO_BUILDING_KEY,
   buildDirectoryUnits,
   buildResidentRows,
@@ -348,5 +349,25 @@ describe('past-due rule', () => {
     [{ minCents: 0, minDays: 1 }, 'a balance more than 1 day late'],
   ])('describes %j', (r, text) => {
     expect(describeRule(r)).toBe(text);
+  });
+});
+
+describe('describeSendResults', () => {
+  const r = (...statuses: Parameters<typeof describeSendResults>[0][number]['status'][]) => statuses.map((status) => ({ status }));
+
+  it('counts every recipient, in a fixed order', () => {
+    expect(describeSendResults(r('emailed', 'opted_out', 'emailed', 'digest'))).toEqual({
+      message: '2 emailed, 1 in their email digest, 1 turned off document emails.',
+      tone: 'success',
+    });
+  });
+
+  it('warns when anyone was not reached for a reason the manager should see', () => {
+    expect(describeSendResults(r('emailed', 'no_access'))).toEqual({
+      message: "1 emailed, 1 can't open them.",
+      tone: 'warning',
+    });
+    expect(describeSendResults(r('failed')).tone).toBe('warning');
+    expect(describeSendResults(r('not_member')).message).toBe('1 no longer in this community.');
   });
 });

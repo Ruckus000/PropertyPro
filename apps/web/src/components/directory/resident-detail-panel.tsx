@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeftRight, Mail, Pencil, Phone, Trash2 } from 'lucide-react';
+import { ArrowLeftRight, Mail, Pencil, Phone, Send, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, Overline, PORTAL_DETAIL, avatarToneFor, inviteActionLabel } from './directory-badges';
 import type { DirectoryResidentRow } from './directory-model';
@@ -13,6 +13,8 @@ export interface ResidentDetailPanelProps {
   inviting: boolean;
   onEdit: () => void;
   onRemove: () => void;
+  /** Omitted without documents:write. */
+  onSendDocuments?: () => void;
   inSheet?: boolean;
 }
 
@@ -35,6 +37,7 @@ export function ResidentDetailPanel({
   inviting,
   onEdit,
   onRemove,
+  onSendDocuments,
   inSheet = false,
 }: ResidentDetailPanelProps) {
   const tone = avatarToneFor(resident.isUnitOwner, hasOwnerRole);
@@ -120,6 +123,16 @@ export function ResidentDetailPanel({
         </section>
 
         <div className="flex flex-col overflow-hidden rounded-md border border-edge">
+          {onSendDocuments ? (
+            <button
+              type="button"
+              onClick={onSendDocuments}
+              className="flex min-h-12 items-center gap-3 border-b border-edge px-3.5 text-left text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+            >
+              <Send size={16} className="text-content-tertiary" aria-hidden="true" />
+              Send documents
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onEdit}

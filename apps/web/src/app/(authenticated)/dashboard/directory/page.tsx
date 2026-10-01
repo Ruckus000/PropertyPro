@@ -68,6 +68,12 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
     permissionContext,
   );
 
+  // Sending documents needs the residents list (admin-only) and documents:write,
+  // the same permission POST /api/v1/documents/send checks.
+  const canSendDocuments =
+    membership.isAdmin &&
+    checkPermissionV2(membership.role, membership.communityType, 'documents', 'write', permissionContext);
+
   // Balances: same gates as GET /api/v1/delinquency, evaluated up front so the
   // page does not request a report it would be refused.
   let canSeeBalances =
@@ -89,6 +95,7 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
       isAdmin={membership.isAdmin}
       canWrite={canWrite}
       canSeeBalances={canSeeBalances}
+      canSendDocuments={canSendDocuments}
       initialTab={membership.isAdmin ? parseTab(resolvedSearchParams['tab']) : 'units'}
     />
   );
