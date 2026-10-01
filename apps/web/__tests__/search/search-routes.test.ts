@@ -151,7 +151,7 @@ describe('command palette search routes', () => {
     const res = await getDocuments(req);
     const json = (await res.json()) as {
       data: {
-        results: Array<{ subtitle: string; relevance: number }>;
+        results: Array<{ subtitle: string; relevance: number; href: string }>;
         totalCount: number;
       };
     };
@@ -174,6 +174,32 @@ describe('command palette search routes', () => {
     expect(json.data.results[0]?.subtitle).toBe('Rules');
     expect(json.data.results[0]?.relevance).toBe(0.91);
     expect(json.data.totalCount).toBe(1);
+    // Pinned to the community, so `/documents/<id>` opens it here rather than
+    // bouncing a multi-community user through /select-community.
+    expect(json.data.results[0]?.href).toBe('/documents/9?communityId=42');
+  });
+
+  it('meetings search links each result to /meetings/<id> in the searched community', async () => {
+    searchMeetingsByTrigramMock.mockResolvedValueOnce({
+      results: [
+        {
+          id: 11,
+          title: 'Board Meeting',
+          meeting_type: 'board',
+          starts_at: '2026-10-15T18:00:00.000Z',
+          relevance: 0.7,
+        },
+      ],
+      totalCount: 1,
+    });
+
+    const res = await getMeetings(
+      new NextRequest('http://localhost:3000/api/v1/search/meetings?communityId=42&q=board'),
+    );
+    const json = (await res.json()) as { data: { results: Array<{ href: string }> } };
+
+    expect(res.status).toBe(200);
+    expect(json.data.results[0]?.href).toBe('/meetings/11?communityId=42');
   });
 
   it('maintenance search links results to the Operations hub, not the removed /maintenance/[id] route', async () => {

@@ -43,7 +43,7 @@ export const GET = withErrorHandler(
         id: r.id,
         title: r.title,
         subtitle: r.meeting_type,
-        href: `/meetings/${r.id}`,
+        href: `/meetings/${r.id}?communityId=${communityId}`,
         entityType: 'meeting' as const,
         meetingType: r.meeting_type,
         startsAt: r.starts_at,

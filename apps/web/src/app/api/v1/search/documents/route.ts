@@ -70,7 +70,7 @@ export const GET = withErrorHandler(
         id: r.id,
         title: r.title,
         subtitle: categoryNames.get(r.categoryId ?? -1) ?? r.mimeType,
-        href: `/documents/${r.id}`,
+        href: `/documents/${r.id}?communityId=${communityId}`,
         entityType: 'document' as const,
         category: r.categoryId != null ? categoryNames.get(r.categoryId) ?? null : null,
         fileType: r.mimeType,

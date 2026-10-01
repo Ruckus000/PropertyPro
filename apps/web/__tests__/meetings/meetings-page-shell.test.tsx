@@ -243,3 +243,51 @@ describe('MeetingsPageShell — one switcher, one view at a time', () => {
     expect(screen.queryByRole('region', { name: 'Next notice owed' })).not.toBeInTheDocument();
   });
 });
+
+describe('MeetingsPageShell — ?meeting= from a /meetings/<id> link', () => {
+  it('opens the linked meeting and drops the parameter, keeping the view', () => {
+    search = new URLSearchParams('view=schedule&meeting=12');
+
+    renderShell();
+
+    expect(screen.getByText('Detail 12')).toBeInTheDocument();
+    expect(routerReplace).toHaveBeenCalledWith('/communities/3/meetings?view=schedule', {
+      scroll: false,
+    });
+  });
+
+  it('opens a meeting linked on a soft navigation onto the already-mounted page', () => {
+    const { rerender } = renderShell();
+    expect(screen.queryByText(/^Detail /)).not.toBeInTheDocument();
+
+    search = new URLSearchParams('meeting=11');
+    rerender(
+      <MeetingsPageShell
+        communityId={3}
+        userId="user-1"
+        role="property_manager"
+        timezone="America/New_York"
+        communityType="condo_718"
+        canWrite
+      />,
+    );
+
+    expect(screen.getByText('Detail 11')).toBeInTheDocument();
+    expect(routerReplace).toHaveBeenCalledWith('/communities/3/meetings', { scroll: false });
+  });
+
+  it.each(['abc', '0', '-2', '1.5'])('ignores a malformed id (%s) but still cleans the URL', (raw) => {
+    search = new URLSearchParams(`meeting=${raw}`);
+
+    renderShell();
+
+    expect(screen.queryByText(/^Detail /)).not.toBeInTheDocument();
+    expect(routerReplace).toHaveBeenCalledWith('/communities/3/meetings', { scroll: false });
+  });
+
+  it('leaves the URL alone when no meeting is linked', () => {
+    renderShell();
+
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+});

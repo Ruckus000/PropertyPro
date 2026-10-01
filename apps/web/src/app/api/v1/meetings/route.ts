@@ -358,7 +358,7 @@ async function handleCreate(
       category: 'meeting',
       title: `New Meeting: ${title}`,
       body: `${startsAtDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: communityTimezone })} · ${location}`,
-      actionUrl: `/meetings/${createdMeeting.id}`,
+      actionUrl: `/meetings/${createdMeeting.id}?communityId=${communityId}`,
       sourceType: 'meeting',
       sourceId: String(createdMeeting.id),
     },
