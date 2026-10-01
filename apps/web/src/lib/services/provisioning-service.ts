@@ -151,6 +151,8 @@ type PendingSignupRow = {
   state: string | null;
   zipCode: string | null;
   candidateSlug: string;
+  /** Units or parcels the signup declared — stored on the community (0081). */
+  unitCount: number;
   planKey: string | null;
   payload: Record<string, unknown>;
   /** When the signup accepted the Terms, and which version. Carried to `users`. */
@@ -164,6 +166,17 @@ type JobContext = {
   signup: PendingSignupRow;
   lastSuccessfulStatus: string | null;
 };
+
+/**
+ * The signup form pre-filled "1" from P2-33 (2026-02-16) until this change, so
+ * a signup's 1 usually means nobody answered — and as a real count it would
+ * mark a condo or HOA exempt from Florida's website rules. Store it as unknown
+ * (null), which the requirement logic treats as "required": the safe direction,
+ * and the association can set its real count in the website editor.
+ */
+function communityUnitCountFromSignup(unitCount: number): number | null {
+  return unitCount > 1 ? unitCount : null;
+}
 
 async function stepCommunityCreated(ctx: JobContext): Promise<void> {
   const db = createUnscopedClient();
@@ -217,6 +230,9 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
       state: normalizedAddress.state,
       zipCode: normalizedAddress.zipCode,
       timezone: 'America/New_York',
+      // Signup has always required this (pending_signups.unit_count NOT NULL);
+      // until migration 0081 it never reached the community.
+      unitCount: communityUnitCountFromSignup(ctx.signup.unitCount),
       stripeCustomerId,
       stripeSubscriptionId,
       ...(subscriptionStatus ? { subscriptionStatus } : {}),
@@ -769,6 +785,7 @@ async function loadJobContext(
       state: pendingSignups.state,
       zipCode: pendingSignups.zipCode,
       candidateSlug: pendingSignups.candidateSlug,
+      unitCount: pendingSignups.unitCount,
       planKey: pendingSignups.planKey,
       payload: pendingSignups.payload,
       termsAcceptedAt: pendingSignups.termsAcceptedAt,

@@ -92,8 +92,9 @@ type UserRoleInsert = {
  * Build a transaction-aware unscoped-db mock. Records the values passed to
  * every `tx.insert(userRoles).values(...)` call.
  */
-function buildDb(): { userRoleInserts: UserRoleInsert[] } {
+function buildDb(): { userRoleInserts: UserRoleInsert[]; communityInserts: Record<string, unknown>[] } {
   const userRoleInserts: UserRoleInsert[] = [];
+  const communityInserts: Record<string, unknown>[] = [];
 
   const returningMock = vi.fn(() =>
     Promise.resolve([{ id: 42, slug: 'sunset-condos' }]),
@@ -102,6 +103,9 @@ function buildDb(): { userRoleInserts: UserRoleInsert[] } {
   const valuesMock = vi.fn((table: unknown) => (values: unknown) => {
     if (table === userRolesTable) {
       userRoleInserts.push(values as UserRoleInsert);
+    }
+    if (table === communitiesTable) {
+      communityInserts.push(values as Record<string, unknown>);
     }
     return { returning: returningMock };
   });
@@ -119,7 +123,7 @@ function buildDb(): { userRoleInserts: UserRoleInsert[] } {
 
   createUnscopedClientMock.mockReturnValue(db);
 
-  return { userRoleInserts };
+  return { userRoleInserts, communityInserts };
 }
 
 const VALID_INPUT = {
@@ -153,6 +157,13 @@ describe('createCommunityForPm', () => {
     expect(founding).toBeDefined();
     expect(founding?.role).toBe('root_manager');
     expect(founding?.displayTitle).toBe('Administrator');
+  });
+
+  it('stores the unit count the form collected — it decides whether Florida website rules apply', async () => {
+    // Collected and silently dropped before migration 0081.
+    const { communityInserts } = buildDb();
+    await createCommunityForPm(VALID_INPUT);
+    expect(communityInserts[0]).toMatchObject({ unitCount: 50 });
   });
 
   it('seeds the onboarding checklist with the creator v3 role (root_manager), not legacy pm_admin', async () => {

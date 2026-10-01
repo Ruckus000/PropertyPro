@@ -17,7 +17,11 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
 import { RequirementsPill } from '@/components/pm/site-editor-v3/RequirementsPill';
-import { RequiredSectionsProvider } from '@/components/pm/site-editor-v3/required-sections-context';
+import {
+  RequiredSectionsProvider,
+  useRequiredSections,
+  type RequiredSectionsValue,
+} from '@/components/pm/site-editor-v3/required-sections-context';
 
 const HOME = 10;
 
@@ -45,6 +49,10 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
 }));
 
 const upsertMutate = vi.hoisted(() => vi.fn());
+const unitCountApi = vi.hoisted(() => ({ mutateAsync: vi.fn(), isPending: false }));
+vi.mock('@/hooks/use-community-unit-count', () => ({
+  useUpdateCommunityUnitCount: () => unitCountApi,
+}));
 vi.mock('@/hooks/use-content-blocks', () => ({
   usePublishedBlocks: () => ({ data: [] }),
   useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
@@ -85,15 +93,30 @@ function sitePages(byPage: Record<number, SiteBlockSummary[]>): RequiredSectionP
   }));
 }
 
-/** Defaults to a condo whose whole site is the current page's `editor.blocks`. */
+/**
+ * Defaults to a 60-unit condo (covered by the statute) whose whole site is the
+ * current page's `editor.blocks`, viewed by an admin.
+ */
 function renderWith(
   ui: React.ReactNode,
-  { communityType = 'condo_718', pages }: { communityType?: string; pages?: RequiredSectionPage[] } = {},
+  {
+    communityType = 'condo_718',
+    unitCount = 60,
+    canEditUnitCount = true,
+    pages,
+  }: {
+    communityType?: string;
+    unitCount?: number | null;
+    canEditUnitCount?: boolean;
+    pages?: RequiredSectionPage[];
+  } = {},
 ) {
   return render(
     <RequiredSectionsProvider
       communityId={7}
       communityType={communityType}
+      unitCount={unitCount}
+      canEditUnitCount={canEditUnitCount}
       pages={pages ?? sitePages({ [HOME]: editor.blocks })}
     >
       {ui}
@@ -106,6 +129,7 @@ beforeEach(() => {
   editor.duplicate.mockClear();
   requestRemove.mockClear();
   upsertMutate.mockClear();
+  unitCountApi.mutateAsync.mockReset();
   editor.blocks = [block(2, 'text'), block(3, 'meetings'), block(4, 'documents')];
 });
 
@@ -187,7 +211,13 @@ describe('FloatControls — required sections', () => {
 
   it('stays locked while the whole-site snapshot is still loading', () => {
     render(
-      <RequiredSectionsProvider communityId={7} communityType="condo_718" pages={undefined}>
+      <RequiredSectionsProvider
+        communityId={7}
+        communityType="condo_718"
+        unitCount={60}
+        canEditUnitCount
+        pages={undefined}
+      >
         <FloatControls block={editor.blocks[1]!} communityId={7} />
       </RequiredSectionsProvider>,
     );
@@ -283,10 +313,156 @@ describe('RequirementsPill', () => {
     expect(container).toBeEmptyDOMElement();
 
     const loading = render(
-      <RequiredSectionsProvider communityId={7} communityType="condo_718" pages={undefined}>
+      <RequiredSectionsProvider
+        communityId={7}
+        communityType="condo_718"
+        unitCount={60}
+        canEditUnitCount
+        pages={undefined}
+      >
         {pill()}
       </RequiredSectionsProvider>,
     );
     expect(loading.container).toBeEmptyDOMElement();
+  });
+});
+
+describe('below the size threshold — recommended, never locked', () => {
+  const small = { unitCount: 12 };
+
+  it('badges required types "Recommended" and leaves Duplicate and Hide alone', async () => {
+    const user = userEvent.setup();
+    renderWith(<SectionList />, small);
+
+    expect(screen.queryByText('Required')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Recommended')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Duplicate Meetings section' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Hide Meetings section' }));
+    expect(editor.toggleHidden).toHaveBeenCalledWith(3, true);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('does not lock Remove on the only copy', () => {
+    renderWith(<FloatControls block={editor.blocks[1]!} communityId={7} />, small);
+    expect(screen.getByRole('button', { name: 'Remove Meetings section' })).toBeEnabled();
+  });
+
+  it('shows a neutral pill that says the rules do not apply, and why', async () => {
+    const user = userEvent.setup();
+    editor.blocks = [block(4, 'documents')]; // Meetings missing — not a problem here
+    renderWith(<RequirementsPill onGoToSection={vi.fn()} onAddSection={vi.fn()} />, small);
+
+    await user.click(screen.getByRole('button', { name: 'Florida website rules: not required' }));
+    expect(await screen.findByText(/25 or more units\. Yours has 12/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add it' })).not.toBeInTheDocument();
+  });
+});
+
+describe('the unit count', () => {
+  const pill = () => <RequirementsPill onGoToSection={vi.fn()} onAddSection={vi.fn()} />;
+
+  it('when unknown, treats the sections as required and asks for it', async () => {
+    const user = userEvent.setup();
+    renderWith(<FloatControls block={editor.blocks[1]!} communityId={7} />, { unitCount: null });
+    expect(screen.getByRole('button', { name: 'Remove Meetings section' })).toBeDisabled();
+
+    renderWith(pill(), { unitCount: null });
+    await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
+    expect(await screen.findByText(/Until you tell us how many yours has/)).toBeInTheDocument();
+    expect(screen.getByLabelText('How many units does your association have?')).toBeInTheDocument();
+  });
+
+  it('saving a small count turns "Required" into "Recommended" without a reload', async () => {
+    const user = userEvent.setup();
+    unitCountApi.mutateAsync.mockResolvedValue({ unitCount: 12 });
+    renderWith(
+      <>
+        {pill()}
+        <SectionList />
+      </>,
+      { unitCount: null },
+    );
+    expect(screen.getAllByText('Required')).toHaveLength(2);
+
+    await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
+    await user.type(await screen.findByLabelText('How many units does your association have?'), '12');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(unitCountApi.mutateAsync).toHaveBeenCalledWith(12);
+    expect(await screen.findAllByText('Recommended')).toHaveLength(2);
+    expect(screen.queryByText('Required')).not.toBeInTheDocument();
+  });
+
+  it('refuses a non-number before calling the server', async () => {
+    const user = userEvent.setup();
+    renderWith(pill(), { unitCount: null });
+
+    await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
+    await user.type(await screen.findByLabelText('How many units does your association have?'), '0');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/whole number of units, from 1/);
+    expect(unitCountApi.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows the server refusal', async () => {
+    const user = userEvent.setup();
+    unitCountApi.mutateAsync.mockRejectedValue(new Error('Only admins can change the number of units'));
+    renderWith(pill(), { unitCount: null });
+
+    await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
+    await user.type(await screen.findByLabelText('How many units does your association have?'), '30');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Only admins can change the number of units');
+  });
+
+  it('says "parcels" for an HOA, and offers Change once known', async () => {
+    const user = userEvent.setup();
+    renderWith(pill(), { communityType: 'hoa_720', unitCount: 140 });
+
+    await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
+    expect(await screen.findByText('Based on 140 parcels.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Change' }));
+    expect(screen.getByLabelText('How many parcels does your association have?')).toHaveValue(140);
+  });
+
+  it('is read-only for a non-admin, saying who can change it', async () => {
+    const user = userEvent.setup();
+    renderWith(pill(), { unitCount: null, canEditUnitCount: false });
+
+    await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
+    expect(await screen.findByText(/Ask a community admin/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+});
+
+describe('RequiredSectionsProvider', () => {
+  it('keeps the same value across re-renders with unchanged inputs', () => {
+    // The mutation hooks return a NEW result object every render (as TanStack's
+    // do) with a stable `mutate`. Depending on the object recomputed the value
+    // on every render and re-rendered every row, toolbar and the pill with it.
+    const seen: RequiredSectionsValue[] = [];
+    function Probe() {
+      seen.push(useRequiredSections());
+      return null;
+    }
+    const pages = sitePages({ [HOME]: editor.blocks });
+    const tree = () => (
+      <RequiredSectionsProvider
+        communityId={7}
+        communityType="condo_718"
+        unitCount={60}
+        canEditUnitCount
+        pages={pages}
+      >
+        <Probe />
+      </RequiredSectionsProvider>
+    );
+    const { rerender } = render(tree());
+    rerender(tree());
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toBe(seen[0]);
   });
 });

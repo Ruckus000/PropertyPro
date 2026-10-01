@@ -14,6 +14,11 @@ const ConfirmDialog = dynamic(
   { loading: () => null },
 );
 
+/**
+ * `hidden` is `z.literal(true).optional()`, so only an exact `true` counts —
+ * absence is the sole way content says "visible". The same rule as
+ * `visibleBlocks` (lib/site/visible-blocks.ts), for one block.
+ */
 export function isHiddenBlock(block: SiteBlockSummary): boolean {
   return (
     block.content !== null &&

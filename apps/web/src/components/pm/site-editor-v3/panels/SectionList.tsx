@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { useRequiredSections } from '@/components/pm/site-editor-v3/required-sections-context';
 import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
-import { useHideToggle } from '@/components/pm/site-editor-v3/use-hide-toggle';
+import { isHiddenBlock, useHideToggle } from '@/components/pm/site-editor-v3/use-hide-toggle';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 const KEYBOARD_HINT_ID = 'site-editor-section-reorder-hint';
@@ -95,7 +95,7 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
     duplicateError,
     isDuplicating,
   } = useSiteEditor();
-  const { isRequired } = useRequiredSections();
+  const { isRequired, isRecommended } = useRequiredSections();
   const [drag, setDrag] = useState<DragState | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -209,15 +209,12 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
           const canUp = canMove(section.id, 'up');
           const canDown = canMove(section.id, 'down');
           const isDragging = drag?.blockId === section.id;
-          // `hidden` is `z.literal(true).optional()`, so only an exact `true`
-          // counts — absence is the sole way content says "visible".
-          const isHidden =
-            typeof section.content === 'object' &&
-            section.content !== null &&
-            (section.content as { hidden?: unknown }).hidden === true;
+          const isHidden = isHiddenBlock(section);
           // Florida-required (v4 Phase 2): badged, and not duplicable — see
           // FloatControls for why Duplicate is locked but Hide is not.
           const required = isRequired(section.blockType);
+          // Below the statute's size threshold: a badge, and nothing else.
+          const recommended = isRecommended(section.blockType);
           // The dragged row would land on this slot: draw the seam on the side
           // it is travelling from, so the line reads as "it goes here".
           const showIndicator = drag !== null && overIndex === index && !isDragging;
@@ -283,6 +280,14 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
                   >
                     <Lock className="h-3 w-3" aria-hidden="true" />
                     Required
+                  </span>
+                )}
+                {recommended && (
+                  <span
+                    title="Recommended for every association's website"
+                    className="shrink-0 rounded-full bg-status-neutral-bg px-1.5 py-0.5 text-xs font-medium text-status-neutral"
+                  >
+                    Recommended
                   </span>
                 )}
                 {section.isDraft && (

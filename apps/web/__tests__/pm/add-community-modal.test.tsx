@@ -126,7 +126,7 @@ describe('AddCommunityModal', () => {
     ).toBeNull();
   });
 
-  it('disables submit until name and subdomain are filled', () => {
+  it('disables submit until name, subdomain and unit count are filled', () => {
     setPreview({ data: undefined });
     renderModal();
 
@@ -139,8 +139,18 @@ describe('AddCommunityModal', () => {
     fireEvent.change(screen.getByLabelText('Subdomain'), {
       target: { value: 'sunset-condos' },
     });
+    // The unit count is never pre-filled: it decides whether Florida's website
+    // rules apply, so a default of 1 would mark the association exempt unasked.
+    expect((screen.getByLabelText('Unit count') as HTMLInputElement).value).toBe('');
+    expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
 
+    fireEvent.change(screen.getByLabelText('Unit count'), { target: { value: '40' } });
     expect((submitBtn as HTMLButtonElement).disabled).toBe(false);
+
+    // Clearing it stays empty (it used to snap back to 1) and re-locks submit.
+    fireEvent.change(screen.getByLabelText('Unit count'), { target: { value: '' } });
+    expect((screen.getByLabelText('Unit count') as HTMLInputElement).value).toBe('');
+    expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('submits the form via the mutation and renders EmbeddedCheckout on success', () => {
@@ -156,6 +166,7 @@ describe('AddCommunityModal', () => {
     fireEvent.change(screen.getByLabelText('Subdomain'), {
       target: { value: 'sunset-condos' },
     });
+    fireEvent.change(screen.getByLabelText('Unit count'), { target: { value: '40' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue to Payment' }));
 
     expect(mutateMock).toHaveBeenCalledTimes(1);
@@ -165,6 +176,7 @@ describe('AddCommunityModal', () => {
       subdomain: 'sunset-condos',
       communityType: 'condo_718',
       planId: 'essentials',
+      unitCount: 40,
     });
     expect(screen.getByTestId('embedded-checkout')).toBeDefined();
     expect(screen.queryByText('Add a Community')).toBeNull();
