@@ -181,6 +181,19 @@ describe('DirectoryPageClient — units', () => {
     expect(screen.getByRole('button', { name: /^101/ })).toBeInTheDocument();
   });
 
+  it('filters by building through native radio buttons', async () => {
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    const radio = await screen.findByRole('radio', { name: /Building B/ });
+    expect(screen.getByRole('radio', { name: /All buildings/ })).toBeChecked();
+    await user.click(radio);
+    expect(radio).toBeChecked();
+    expect(screen.getByRole('button', { name: /^103/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^101/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove filter Building B' })).toBeInTheDocument();
+  });
+
   it('search with no match offers to clear filters', async () => {
     const user = userEvent.setup();
     renderClient();

@@ -1,8 +1,9 @@
 'use client';
 
 import { AlertCircle, AlertTriangle, Bath, BedDouble, ChevronDown, ChevronRight, Maximize } from 'lucide-react';
+import { StatusBadge } from '@/components/shared/status-badge';
 import { cn } from '@/lib/utils';
-import { Avatar, OccupancyBadge, Pill, avatarToneFor } from './directory-badges';
+import { Avatar, OccupancyBadge, avatarToneFor } from './directory-badges';
 import {
   OCCUPANCY_LABEL,
   formatCents,
@@ -119,14 +120,10 @@ export function UnitCards({ units, hasOwnerRole, canSeeBalances, onOpenUnit }: U
               {pastDue || u.noOwner ? (
                 <span className="flex w-full flex-wrap gap-1.5 border-t border-edge-subtle pt-3">
                   {pastDue ? (
-                    <Pill tone="danger" icon={AlertCircle} className="font-semibold">
-                      {formatCents(pastDue.amountCents)} past due
-                    </Pill>
+                    <StatusBadge status="overdue" label={`${formatCents(pastDue.amountCents)} past due`} className="font-semibold" />
                   ) : null}
                   {u.noOwner ? (
-                    <Pill tone="warning" icon={AlertTriangle}>
-                      No owner on file
-                    </Pill>
+                    <StatusBadge status="pending" label="No owner on file" />
                   ) : null}
                 </span>
               ) : null}
@@ -202,9 +199,7 @@ export function UnitsByBuilding({
                   <span className="text-xs text-content-tertiary">{summary}</span>
                 </span>
                 {!open && canSeeBalances && g.pastDueCount > 0 ? (
-                  <Pill tone="danger" className="font-semibold">
-                    {g.pastDueCount} past due
-                  </Pill>
+                  <StatusBadge status="overdue" label={`${g.pastDueCount} past due`} className="font-semibold" />
                 ) : null}
               </button>
 

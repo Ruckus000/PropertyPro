@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Building2, Columns2, LayoutGrid, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -62,6 +62,7 @@ export function DirectoryToolbar<T extends string>({
   onViewChange?: (v: UnitsView) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const radioName = `building-${useId()}`;
 
   return (
     <div className="flex items-center gap-2">
@@ -151,40 +152,28 @@ export function DirectoryToolbar<T extends string>({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1" role="radiogroup" aria-label="Building">
-            <span className="pb-1 text-xs font-semibold uppercase tracking-wider text-content-tertiary">Building</span>
+          {/* Native radios: arrow keys, checked state and announcement come free. */}
+          <fieldset className="flex flex-col gap-1">
+            <legend className="pb-1 text-xs font-semibold uppercase tracking-wider text-content-tertiary">Building</legend>
             {[{ key: null as string | null, label: 'All buildings', unitCount: buildings.reduce((n, b) => n + b.unitCount, 0) }, ...buildings].map(
-              (b) => {
-                const selected = building === b.key;
-                return (
-                  <button
-                    key={b.key ?? 'all'}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => onBuildingChange(b.key)}
-                    className={cn(
-                      'flex min-h-10 items-center gap-2.5 rounded-sm px-2.5 text-left text-sm text-content hover:bg-surface-hover',
-                      selected && 'bg-surface-hover',
-                      FOCUS,
-                    )}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
-                        selected ? 'border-interactive' : 'border-edge-strong',
-                      )}
-                    >
-                      {selected ? <span className="h-2 w-2 rounded-full bg-interactive" /> : null}
-                    </span>
-                    <span className="flex-1 font-medium">{b.label}</span>
-                    <span className="text-xs text-content-tertiary">{b.unitCount}</span>
-                  </button>
-                );
-              },
+              (b) => (
+                <label
+                  key={b.key ?? 'all'}
+                  className="flex min-h-10 cursor-pointer items-center gap-2.5 rounded-sm px-2.5 text-sm text-content hover:bg-surface-hover has-[:checked]:bg-surface-hover"
+                >
+                  <input
+                    type="radio"
+                    name={radioName}
+                    checked={building === b.key}
+                    onChange={() => onBuildingChange(b.key)}
+                    className="h-4 w-4 shrink-0 accent-interactive"
+                  />
+                  <span className="flex-1 font-medium">{b.label}</span>
+                  <span className="text-xs text-content-tertiary">{b.unitCount}</span>
+                </label>
+              ),
             )}
-          </div>
+          </fieldset>
 
           <div className="flex justify-between gap-2 border-t border-edge-subtle pt-3">
             <button

@@ -12,8 +12,6 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { UnitsPageClient } from '@/components/units/units-page-client';
 import { PageHeader } from '@/components/shared/page-header';
-import { DirectoryPilotBanner } from '@/components/directory/directory-pilot-banner';
-import { isDirectoryEnabledForCommunity } from '@/lib/directory/directory-flag';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -56,15 +54,10 @@ export default async function UnitsPage({ searchParams }: PageProps) {
   );
 
   return (
-    <>
-      {isDirectoryEnabledForCommunity(context.communityId) ? (
-        <DirectoryPilotBanner communityId={context.communityId} tab="units" />
-      ) : null}
-      <UnitsPageClient
-        communityId={context.communityId}
-        communityType={membership.communityType}
-        canWrite={canWrite}
-      />
-    </>
+    <UnitsPageClient
+      communityId={context.communityId}
+      communityType={membership.communityType}
+      canWrite={canWrite}
+    />
   );
 }

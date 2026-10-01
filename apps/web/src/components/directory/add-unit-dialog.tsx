@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
 import { useCreateUnit, type UnitOccupancy } from '@/hooks/use-units';
 import { OCCUPANCY_LABEL } from './directory-model';
 
@@ -129,30 +128,27 @@ export function AddUnitDialog({ open, onOpenChange, communityId, hasOwnerRole, s
 
           <fieldset className="space-y-1.5">
             <legend className="text-sm font-medium text-content">Occupancy</legend>
-            <div role="radiogroup" aria-label="Occupancy" className="flex flex-wrap gap-1 rounded-md bg-surface-muted p-1">
-              {occupancyChoices.map((choice) => {
-                const selected = values.occupancy === choice;
-                return (
-                  <button
-                    key={choice}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => setValues((prev) => ({ ...prev, occupancy: selected ? null : choice }))}
-                    className={cn(
-                      'min-h-10 flex-1 rounded-sm px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                      selected ? 'bg-surface-card text-content shadow-e1' : 'text-content-secondary hover:text-content',
-                    )}
-                  >
-                    {OCCUPANCY_LABEL[choice]}
-                  </button>
-                );
-              })}
+            {/* Native radios (visually hidden) styled as a segmented control. */}
+            <div className="flex flex-wrap gap-1 rounded-md bg-surface-muted p-1">
+              {[null, ...occupancyChoices].map((choice) => (
+                <label key={choice ?? 'unset'} className="min-w-24 flex-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dir-unit-occupancy"
+                    className="peer sr-only"
+                    checked={values.occupancy === choice}
+                    onChange={() => setValues((prev) => ({ ...prev, occupancy: choice }))}
+                  />
+                  <span className="flex min-h-10 items-center justify-center rounded-sm px-3 text-sm font-medium text-content-secondary hover:text-content peer-checked:bg-surface-card peer-checked:text-content peer-checked:shadow-e1 peer-focus-visible:ring-2 peer-focus-visible:ring-focus">
+                    {choice ? OCCUPANCY_LABEL[choice] : 'Not set'}
+                  </span>
+                </label>
+              ))}
             </div>
             <p className="text-xs text-content-tertiary">
               {hasOwnerRole
-                ? 'Your call — a seasonal owner who is away can stay owner-occupied. Leave blank if unsure.'
-                : 'Leave blank if unsure.'}
+                ? 'Your call — a seasonal owner who is away can stay owner-occupied. Leave it unset if unsure.'
+                : 'Leave it unset if unsure.'}
             </p>
           </fieldset>
 

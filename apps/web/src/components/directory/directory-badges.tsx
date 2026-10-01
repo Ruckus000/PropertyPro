@@ -1,64 +1,29 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { CheckCircle2, Circle, Clock, Home, KeyRound, type LucideIcon } from 'lucide-react';
+import { StatusBadge } from '@/components/shared/status-badge';
 import { cn } from '@/lib/utils';
 import type { UnitOccupancy } from '@/hooks/use-units';
 import type { ResidentPortalStatus } from '@/hooks/use-residents-management';
 import { OCCUPANCY_LABEL } from './directory-model';
 
-export type PillTone = 'danger' | 'warning' | 'success' | 'info' | 'brand' | 'neutral';
-
-const TONE_CLASSES: Record<PillTone, string> = {
-  danger: 'border-status-danger-border bg-status-danger-bg text-status-danger',
-  warning: 'border-status-warning-border bg-status-warning-bg text-status-warning',
-  success: 'border-status-success-border bg-status-success-bg text-status-success',
-  info: 'border-status-info-border bg-status-info-bg text-status-info',
-  brand: 'border-edge bg-interactive-subtle text-content-brand',
-  neutral: 'border-edge bg-surface-muted text-content-secondary',
+// Directory states mapped onto the shared STATUS_CONFIG keys (which carry the
+// colour + icon); the label is always overridden with Directory wording.
+const OCCUPANCY_STATUS: Record<UnitOccupancy, string> = {
+  vacant: 'pending',
+  rented: 'open',
+  owner_occupied: 'brand',
 };
 
-/** Status is never colour alone: every pill carries an icon and text. */
-export function Pill({
-  tone,
-  icon: Icon,
-  children,
-  dashed = false,
-  className,
-  title,
-}: {
-  tone: PillTone;
-  icon?: LucideIcon;
-  children: ReactNode;
-  dashed?: boolean;
-  className?: string;
-  title?: string;
-}) {
-  return (
-    <span
-      title={title}
-      className={cn(
-        'inline-flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 text-xs font-medium',
-        TONE_CLASSES[tone],
-        dashed && 'border-dashed',
-        className,
-      )}
-    >
-      {Icon ? <Icon size={12} strokeWidth={2.5} aria-hidden="true" /> : null}
-      {children}
-    </span>
-  );
-}
-
-const OCCUPANCY_TONE: Record<UnitOccupancy, { tone: PillTone; icon: LucideIcon }> = {
-  vacant: { tone: 'warning', icon: Home },
-  rented: { tone: 'info', icon: KeyRound },
-  owner_occupied: { tone: 'brand', icon: Home },
+const PORTAL_STATUS: Record<ResidentPortalStatus, { key: string; label: string }> = {
+  active: { key: 'completed', label: 'Active' },
+  invited: { key: 'open', label: 'Invited' },
+  not_invited: { key: 'neutral', label: 'Not invited' },
 };
 
 /**
  * An unconfirmed value is a backfilled guess (migration 0080): it renders with
- * a dashed border and says so to assistive tech and on hover.
+ * a dashed border and says so on hover and to assistive tech.
  */
 export function OccupancyBadge({
   occupancy,
@@ -68,33 +33,22 @@ export function OccupancyBadge({
   confirmed: boolean;
 }) {
   if (!occupancy) return null;
-  const { tone, icon } = OCCUPANCY_TONE[occupancy];
   return (
-    <Pill
-      tone={tone}
-      icon={icon}
-      dashed={!confirmed}
-      title={confirmed ? undefined : 'Estimated from who is on file — not yet confirmed by a manager'}
-    >
-      {OCCUPANCY_LABEL[occupancy]}
-      {confirmed ? null : <span className="sr-only"> (unconfirmed)</span>}
-    </Pill>
+    <>
+      <StatusBadge
+        status={OCCUPANCY_STATUS[occupancy]}
+        label={OCCUPANCY_LABEL[occupancy]}
+        className={cn('shrink-0 whitespace-nowrap', !confirmed && 'border-dashed')}
+        title={confirmed ? undefined : 'Estimated from who is on file — not yet confirmed by a manager'}
+      />
+      {confirmed ? null : <span className="sr-only">(unconfirmed)</span>}
+    </>
   );
 }
 
-const PORTAL: Record<ResidentPortalStatus, { tone: PillTone; icon: LucideIcon; label: string }> = {
-  active: { tone: 'success', icon: CheckCircle2, label: 'Active' },
-  invited: { tone: 'info', icon: Clock, label: 'Invited' },
-  not_invited: { tone: 'neutral', icon: Circle, label: 'Not invited' },
-};
-
 export function PortalBadge({ status }: { status: ResidentPortalStatus }) {
-  const { tone, icon, label } = PORTAL[status];
-  return (
-    <Pill tone={tone} icon={icon}>
-      {label}
-    </Pill>
-  );
+  const { key, label } = PORTAL_STATUS[status];
+  return <StatusBadge status={key} label={label} className="shrink-0 whitespace-nowrap" />;
 }
 
 export const PORTAL_DETAIL: Record<ResidentPortalStatus, string> = {
