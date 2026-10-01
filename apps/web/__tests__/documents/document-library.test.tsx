@@ -52,8 +52,8 @@ vi.mock('@/hooks/use-documents', () => ({
   useDocumentDownloadUrl: () => ({ data: null, isLoading: false }),
 }));
 
-vi.mock('../../src/components/documents/document-upload-area', () => ({
-  DocumentUploadArea: () => <div>upload area</div>,
+vi.mock('../../src/components/documents/document-upload-queue', () => ({
+  DocumentUploadQueue: () => <div>upload queue</div>,
 }));
 
 vi.mock('../../src/components/documents/document-category-filter', () => ({

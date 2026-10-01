@@ -37,7 +37,10 @@ export function DocumentReplaceFile({ communityId, document, onReplaced }: Docum
   // Mirrors the server: the category decides whether a question is asked (the
   // public flag only decides WHICH attestation is recorded), as in
   // `publish-document-dialog.tsx`. The server remains the enforcement point.
-  const requiresAttestation = categoryRequiresRedactionAttestation(categoryName);
+  // A draft reaches no owner yet, so the server asks nothing (the question
+  // comes when it is posted). Only a real NULL is a draft.
+  const requiresAttestation =
+    document.postedAt !== null && categoryRequiresRedactionAttestation(categoryName);
 
   const inputId = `document-replace-file-${document.id}`;
 

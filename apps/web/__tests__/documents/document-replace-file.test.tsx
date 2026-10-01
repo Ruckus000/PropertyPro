@@ -102,6 +102,23 @@ describe('DocumentReplaceFile', () => {
     expect(screen.getByRole('button', { name: 'Replace file' })).toBeEnabled();
   });
 
+  it('asks nothing for a DRAFT, even in a sensitive category — the server asks at posting', () => {
+    useDocumentCategoriesMock.mockReturnValue({
+      categories: [{ id: 4, name: 'Lease Agreements', slug: 'lease-agreements', description: null }],
+      isLoading: false,
+      error: null,
+    });
+    render(
+      <DocumentReplaceFile communityId={8} document={{ ...DOC, categoryId: 4, postedAt: null }} onReplaced={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replace file' }));
+    chooseFile();
+
+    expect(screen.queryByRole('checkbox', { name: /Confirm redaction/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Replace file' })).toBeEnabled();
+  });
+
   it('asks nothing for a private document in a non-sensitive category', () => {
     render(<DocumentReplaceFile communityId={8} document={DOC} onReplaced={vi.fn()} />);
 
