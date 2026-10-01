@@ -259,21 +259,21 @@ Body.
 
 /**
  * Roadmap 2.8, against the REAL corpus. A board seat adds exactly what the UI
- * lets a seat do — election administration (the elections page shows its
- * controls to canActAsBoard) and community export — as `boardOnly` resident
- * articles. Anything else would be an admin how-to that ends in a 403, or a
- * control the page does not show (violations stay manager-only).
+ * lets a seat do — election administration and violation enforcement (both
+ * pages show their controls to canActAsBoard) and community export — as
+ * `boardOnly` resident articles. Anything else would be an admin how-to that
+ * ends in a 403, or a control the page does not show.
  *
  * Revert-check: mark resident/documents/find-documents.mdx `boardOnly` and
  * the case goes red, naming that slug in the diff.
  */
 describe('help corpus — what a board seat adds', () => {
-  const BOARD_GRANTED = ['export-data', 'run-election'];
+  const BOARD_GRANTED = ['export-data', 'review-violations', 'run-election'];
   const slugs = (type: CommunityType, boardSeat: boolean) =>
     new Set(getArticlesForReader(readerFor('resident', type, boardSeat)).map((article) => article.slug));
 
   it.each(['condo_718', 'hoa_720'] as const)(
-    'in a %s, a seat adds exactly election administration and export',
+    'in a %s, a seat adds exactly elections, violations and export',
     (type) => {
       const without = slugs(type, false);
       expect([...slugs(type, true)].filter((slug) => !without.has(slug)).sort()).toEqual(BOARD_GRANTED);

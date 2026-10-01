@@ -1,0 +1,50 @@
+{
+  "section": "resident",
+  "category": "violations",
+  "slug": "review-violations",
+  "shots": [
+    {
+      "name": "vi-inbox",
+      "kind": "still",
+      "route": "/violations?communityId={cid}",
+      "role": "board_member",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label^=\"Violation #\"]"
+        }
+      ],
+      "clipTo": [
+        "div:has(> input[aria-label=\"Filter violations from date\"])",
+        "div:has(> div > button[aria-label^=\"Violation #\"])"
+      ],
+      "highlight": "select:has(option[value=\"hearing_scheduled\"])",
+      "step": 1
+    },
+    {
+      "name": "vi-notice",
+      "kind": "still",
+      "route": "/violations?communityId={cid}",
+      "role": "board_member",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label^=\"Violation #\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label*=\"\u2014 Noise\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Send Notice\"]"
+        }
+      ],
+      "clipTo": "div:has(> button[aria-expanded=\"true\"])",
+      "highlight": "role=button[name=\"Send Notice\"]",
+      "step": 2
+    }
+  ]
+}
