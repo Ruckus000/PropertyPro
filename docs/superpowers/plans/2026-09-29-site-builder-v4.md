@@ -63,6 +63,19 @@ the autosave debounce isn't visible yet.
 - A server guard refuses to delete the last required section of a type (defence in
   depth).
 
+### Phase 2b: the statutes' size thresholds
+Phase 2 keyed requirements on community type alone, so a 20-unit condo saw "Required"
+badges the statute does not apply to. Signup and "Add community" always collected a unit
+count and dropped it before the insert.
+- Migration 0080 adds nullable `communities.unit_count` (NULL = unknown), backfilled exactly
+  from `provisioning_jobs` → `pending_signups`. Both creation paths now write it.
+- `requirementLevel({ communityType, unitCount })` in `packages/shared`: `required` at 25+
+  units (condo) or 100+ parcels (HOA), `recommended` below, `none` for apartments. An
+  unknown count counts as `required`, and the pill asks for it.
+- `recommended` is a badge only: no locks, no hide confirmation, no publish warnings, and no
+  server refusal.
+- `PATCH /api/v1/community/unit-count` (admin-only, audited) backs the pill's count field.
+
 ### Phase 3: guided mode, tour, help drawer
 - A first-run chooser (Guide me / Let me edit freely), plus a mode switch in the top
   bar and in Help. The mode and the checklist progress are persisted per user.

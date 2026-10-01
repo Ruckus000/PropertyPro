@@ -35,6 +35,7 @@ import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { listSitePages, type SitePageRecord } from '@/lib/services/site-pages-service';
+import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 import { loadSiteQuotaBytes } from '@/lib/services/site-settings-service';
 import { resolveAssetsBytesUsed } from '@/lib/site-assets/quota';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
@@ -130,6 +131,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     branding,
     onboardingCompletedAt,
     siteQuotaBytes,
+    unitCount,
   ] = await Promise.all([
     getEffectiveFeaturesForPage(communityId, membership.communityType),
     // Only for the signed-in user's display name. Everything community-scoped
@@ -156,6 +158,9 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // refetch would return — `initialData` is fresh for the provider's
     // staleTime, and a first paint that disagrees with it is a visible jump.
     loadSiteQuotaBytes(communityId),
+    // v4 Phase 2b: decides whether Florida's website rules apply at all.
+    // `null` = unknown (pre-0080 rows the backfill could not recover).
+    getCommunityUnitCount(communityId),
   ]);
 
   if (!features.hasSiteEditor) {
@@ -252,6 +257,9 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
           slug: communityInfo?.slug ?? '',
           communityType: membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
         }}
+        unitCount={unitCount}
+        // The route is admin-only too; this only decides whether to OFFER it.
+        canEditUnitCount={membership.isAdmin}
         tagline={branding?.tagline ?? null}
         initialSiteSettings={{
           settings: resolveSiteSettings(branding),

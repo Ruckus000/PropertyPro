@@ -315,6 +315,12 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 // change that shows up nowhere else. This tree is rendered without a
 // QueryClientProvider, so the real hook would throw "No QueryClient set" —
 // mocked COMPLETELY for the same reason as use-content-blocks above.
+// v4 Phase 2b: RequiredSectionsProvider's unit-count save. Mocked like every
+// other data hook here — this file renders with no QueryClient.
+vi.mock('@/hooks/use-community-unit-count', () => ({
+  useUpdateCommunityUnitCount: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock('@/hooks/use-site-pages', () => ({
   sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
   applyPageOrder: (pages: unknown) => pages,
@@ -370,6 +376,8 @@ function rootElement({
       canvasContext={canvasContext as never}
       hasPublishedSite
       initialNotice={null}
+      unitCount={null}
+      canEditUnitCount={false}
       siteIdentity={{
         name: 'Sunset Condos',
         slug: 'sunset-condos',

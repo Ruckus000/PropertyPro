@@ -62,6 +62,7 @@ import {
   requiredSectionIssues,
   siteIssues,
   type Change,
+  type ComplianceSubject,
   type Issue,
   type ResolvedBrandColors,
   type SiteSnapshot,
@@ -152,11 +153,12 @@ export interface PublishSheetProps {
    */
   onGoToPages: () => void;
   /**
-   * `communities.community_type`, which decides which sections Florida law
-   * requires (v4 Phase 2). Required for the reason `onGoToPages` is: omitted,
-   * the "Required by Florida law" warnings would silently never appear.
+   * Community type + unit count, which decide which sections Florida law
+   * requires (v4 Phase 2; the count since 0080). Required for the reason
+   * `onGoToPages` is: omitted, the "Required by Florida law" warnings would
+   * silently never appear.
    */
-  communityType: string;
+  complianceSubject: ComplianceSubject;
 }
 
 /**
@@ -322,7 +324,7 @@ export function PublishSheet({
   brandColors,
   onFixIssue,
   onGoToPages,
-  communityType,
+  complianceSubject,
 }: PublishSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -346,7 +348,7 @@ export function PublishSheet({
             onFixIssue={onFixIssue}
             onGoToPages={onGoToPages}
             onOpenChange={onOpenChange}
-            communityType={communityType}
+            complianceSubject={complianceSubject}
           />
         ) : null}
       </SheetContent>
@@ -365,7 +367,7 @@ interface BodyProps {
   // nothing beyond a typecheck that passes.
   onGoToPages: () => void;
   onOpenChange: (open: boolean) => void;
-  communityType: string;
+  complianceSubject: ComplianceSubject;
 }
 
 function PublishSheetBody({
@@ -374,7 +376,7 @@ function PublishSheetBody({
   onFixIssue,
   onGoToPages,
   onOpenChange,
-  communityType,
+  complianceSubject,
 }: BodyProps) {
   // The same hook the top bar's Publish button reads, so the button's enabled
   // state and this sheet's change count are one computation, not two.
@@ -475,9 +477,9 @@ function PublishSheetBody({
      * the reason above: a page this publish deletes takes its sections with it,
      * so they must not count as present.
      */
-    const required = requiredSectionIssues(communityType, validated);
+    const required = requiredSectionIssues(complianceSubject, validated);
     return [...structural, ...pageSetIssues, ...required, ...contrast];
-  }, [validated, brandColors, pageSetIssues, communityType]);
+  }, [validated, brandColors, pageSetIssues, complianceSubject]);
 
   const blocking = useMemo(() => issues.filter((i) => i.severity === 'error'), [issues]);
   const warnings = useMemo(() => issues.filter((i) => i.severity === 'warning'), [issues]);

@@ -95,6 +95,7 @@ const {
       communityType: 'pending_signups.community_type',
       address: 'pending_signups.address',
       candidateSlug: 'pending_signups.candidate_slug',
+      unitCount: 'pending_signups.unit_count',
       status: 'pending_signups.status',
       expiresAt: 'pending_signups.expires_at',
       updatedAt: 'pending_signups.updated_at',
@@ -214,6 +215,7 @@ const CONDO_SIGNUP = {
   communityType: 'condo_718' as const,
   address: '123 Main St, West Palm Beach, FL 33401',
   candidateSlug: 'palm-gardens',
+  unitCount: 48,
   planKey: 'professional',
   // Accepted days BEFORE provisioning runs — the whole reason the version is
   // carried from pending_signups rather than stamped with new Date() here.
@@ -450,6 +452,9 @@ describe('runProvisioning', () => {
     expect((communityInsert?.values as { subscriptionPlan?: string }).subscriptionPlan).toBe(
       'professional',
     );
+    // The signup's declared size reaches the community (migration 0080) — it is
+    // what decides whether Florida's website rules apply.
+    expect((communityInsert?.values as { unitCount?: number }).unitCount).toBe(48);
   });
 
   // 1c. An unrecognised plan_key must not be written verbatim — downstream

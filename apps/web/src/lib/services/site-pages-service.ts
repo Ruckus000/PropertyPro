@@ -909,14 +909,19 @@ export async function assertRequiredSectionsSurvive(
   removal: RequiredSectionRemovalInput,
 ): Promise<void> {
   const [community] = await tx
-    .select({ communityType: communities.communityType })
+    .select({ communityType: communities.communityType, unitCount: communities.unitCount })
     .from(communities)
     .where(eq(communities.id, communityId));
-  const communityType = community?.communityType ?? '';
-  if (requiredSectionTypes(communityType).length === 0) return;
+  // An association below the statute's size threshold has nothing to guard;
+  // an unknown count is treated as covered (see `requirementLevel`).
+  const subject = {
+    communityType: community?.communityType ?? '',
+    unitCount: community?.unitCount ?? null,
+  };
+  if (requiredSectionTypes(subject).length === 0) return;
 
   const refusal = requiredRemovalRefusal(
-    communityType,
+    subject,
     await liveSitePages(tx, communityId),
     removal.kind === 'page'
       ? { kind: 'page', pageId: String(removal.pageId) }

@@ -83,6 +83,11 @@ vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock }));
 vi.mock('@/lib/services/site-pages-service', () => ({
   listSitePages: vi.fn().mockResolvedValue([]),
 }));
+// v4 Phase 2b: the page reads the association's unit count. Unknown (`null`)
+// is the value every pre-0080 community starts with.
+vi.mock('@/lib/services/community-profile-service', () => ({
+  getCommunityUnitCount: vi.fn().mockResolvedValue(null),
+}));
 // site-settings-service and the real quota module import @propertypro/db and
 // @propertypro/db/unsafe, both of which load drizzle.ts and throw without
 // DATABASE_URL. The quota lookup is mocked above and nothing else reads the DB,

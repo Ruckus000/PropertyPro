@@ -504,6 +504,28 @@ describe('assertRequiredSectionsSurvive — what counts as a live copy', () => {
     });
     await expect(guard({ kind: 'page', pageId: 2 })).resolves.toBeUndefined();
   });
+
+  it('never refuses below the size threshold — a 12-unit condo is not covered', async () => {
+    setRows({
+      pages: [HOME, ABOUT],
+      redirects: [],
+      blocks: [row(1, 2, 'documents'), row(2, 3, 'meetings')],
+      communities: [{ communityType: 'condo_718', unitCount: 12 }],
+    });
+    await expect(guard({ kind: 'page', pageId: 2 })).resolves.toBeUndefined();
+  });
+
+  it('still refuses at the threshold, and when the count is unknown', async () => {
+    for (const unitCount of [25, null]) {
+      setRows({
+        pages: [HOME, ABOUT],
+        redirects: [],
+        blocks: [row(1, 2, 'documents'), row(2, 3, 'meetings')],
+        communities: [{ communityType: 'condo_718', unitCount }],
+      });
+      await expect(guard({ kind: 'page', pageId: 2 })).rejects.toThrow(/only Meetings/);
+    }
+  });
 });
 
 describe('unstageSitePageDelete', () => {

@@ -6,10 +6,14 @@
  * the publish sheet's checks and the server's delete guards — so the five can
  * never disagree about what is required.
  *
- * Keyed by `communityType` alone. The statutes also carry size thresholds
- * (condos of 25+ units, HOAs of 100+ parcels) that no community row records
- * today; every condo and HOA is treated as covered, which is the same
- * assumption `hasCompliance` makes. Copy therefore says what the law asks of
+ * Keyed by a `ComplianceSubject`: the community type AND its unit (or parcel)
+ * count, because the statutes only reach associations above a size threshold —
+ * condos of 25+ units, HOAs of 100+ parcels (`requirementLevel`). Below it the
+ * same sections are "recommended": badged, but never locked, confirmed or
+ * warned about. An UNKNOWN count (`null`, every community created before
+ * migration 0080 whose signup could not be recovered) is treated as covered —
+ * a false "Required" is a nuisance, a false "not required" a legal exposure —
+ * and the editor asks for the number. Copy says what the law asks of
  * associations, never what this association owes — and never a fine amount:
  * the "$50 per day" figure in the design belongs to records-inspection
  * requests, not §718.111(12)(g) posting (see the v4 plan's legal-copy rule).
@@ -32,6 +36,10 @@ interface Requirement {
 
 interface Statute {
   citation: string;
+  /** Smallest association the statute reaches: units (condo) or parcels (HOA). */
+  minUnits: number;
+  /** What `minUnits` counts, in a PM's words. */
+  unitNoun: string;
   requirements: readonly Requirement[];
 }
 
@@ -42,17 +50,60 @@ const WEBSITE_POSTING: readonly Requirement[] = [
 
 /** Website-posting statute per community type. Apartments have none. */
 const STATUTES: Readonly<Record<string, Statute>> = {
-  condo_718: { citation: '§718.111(12)(g)', requirements: WEBSITE_POSTING },
-  hoa_720: { citation: '§720.303', requirements: WEBSITE_POSTING },
+  condo_718: { citation: '§718.111(12)(g)', minUnits: 25, unitNoun: 'units', requirements: WEBSITE_POSTING },
+  hoa_720: { citation: '§720.303', minUnits: 100, unitNoun: 'parcels', requirements: WEBSITE_POSTING },
 };
 
-/** The section types this community's site must show, in display order. */
-export function requiredSectionTypes(communityType: string): readonly RequiredSectionType[] {
+/**
+ * What the rules below are asked about: a community's type and its unit (condo)
+ * or parcel (HOA) count — `communities.unit_count`, where `null` is UNKNOWN.
+ */
+export interface ComplianceSubject {
+  communityType: string;
+  unitCount: number | null;
+}
+
+/**
+ * `required`    — the statute applies, or might (count unknown).
+ * `recommended` — a condo or HOA below the statute's size threshold.
+ * `none`        — no website statute for this community type (apartments).
+ */
+export type RequirementLevel = 'required' | 'recommended' | 'none';
+
+export function requirementLevel({ communityType, unitCount }: ComplianceSubject): RequirementLevel {
+  const statute = STATUTES[communityType];
+  if (!statute) return 'none';
+  if (unitCount === null) return 'required';
+  return unitCount >= statute.minUnits ? 'required' : 'recommended';
+}
+
+/** True when the level hangs on a count nobody has given us yet. */
+export function unitCountUnknown(subject: ComplianceSubject): boolean {
+  return subject.unitCount === null && STATUTES[subject.communityType] !== undefined;
+}
+
+/** The size threshold, for copy: `{ minUnits: 25, unitNoun: 'units' }`; null when none. */
+export function unitThreshold(communityType: string): { minUnits: number; unitNoun: string } | null {
+  const statute = STATUTES[communityType];
+  return statute ? { minUnits: statute.minUnits, unitNoun: statute.unitNoun } : null;
+}
+
+function sectionTypesFor(communityType: string): readonly RequiredSectionType[] {
   return (STATUTES[communityType]?.requirements ?? []).map((r) => r.blockType);
 }
 
-export function isRequiredSectionType(communityType: string, blockType: string): boolean {
-  return (requiredSectionTypes(communityType) as readonly string[]).includes(blockType);
+/** The section types this community's site must show, in display order. */
+export function requiredSectionTypes(subject: ComplianceSubject): readonly RequiredSectionType[] {
+  return requirementLevel(subject) === 'required' ? sectionTypesFor(subject.communityType) : [];
+}
+
+/** The same sections, for an association below the threshold: badge, never lock. */
+export function recommendedSectionTypes(subject: ComplianceSubject): readonly RequiredSectionType[] {
+  return requirementLevel(subject) === 'recommended' ? sectionTypesFor(subject.communityType) : [];
+}
+
+export function isRequiredSectionType(subject: ComplianceSubject, blockType: string): boolean {
+  return (requiredSectionTypes(subject) as readonly string[]).includes(blockType);
 }
 
 /** The statute a community's required sections come from; null when none. */
@@ -120,10 +171,10 @@ export function countLiveSections(pages: readonly RequiredSectionPage[], blockTy
 }
 
 export function requiredSectionStatus(
-  communityType: string,
+  subject: ComplianceSubject,
   pages: readonly RequiredSectionPage[],
 ): RequiredSectionStatus[] {
-  return requiredSectionTypes(communityType).map((blockType) => {
+  return requiredSectionTypes(subject).map((blockType) => {
     const title = `${sectionTitle(blockType)} section`;
     const live = liveSectionsOfType(pages, blockType);
     if (live.length === 0) return { blockType, title, state: 'missing' };
@@ -140,12 +191,12 @@ export function requiredSectionStatus(
  * `validate.ts`).
  */
 export function requiredSectionIssues(
-  communityType: string,
+  subject: ComplianceSubject,
   pages: readonly RequiredSectionPage[],
 ): Issue[] {
-  return requiredSectionStatus(communityType, pages).flatMap((status): Issue[] => {
+  return requiredSectionStatus(subject, pages).flatMap((status): Issue[] => {
     if (status.state === 'visible') return [];
-    const law = requiredSectionLaw(communityType, status.blockType)!;
+    const law = requiredSectionLaw(subject.communityType, status.blockType)!;
     const field = `required.${status.blockType}`;
     if (status.state === 'missing') {
       return [{
@@ -203,12 +254,13 @@ function withoutRemoval(
  * draft-wins snapshot with tombstoned slots removed or listed.
  */
 export function requiredRemovalRefusal(
-  communityType: string,
+  subject: ComplianceSubject,
   pages: readonly RequiredSectionPage[],
   removal: RequiredSectionRemoval,
 ): string | null {
+  const { communityType } = subject;
   const after = withoutRemoval(pages, removal);
-  const lost = requiredSectionTypes(communityType).filter(
+  const lost = requiredSectionTypes(subject).filter(
     (type) => countLiveSections(pages, type) > 0 && countLiveSections(after, type) === 0,
   );
   if (lost.length === 0) return null;
