@@ -446,7 +446,7 @@ describe('POST /api/v1/meetings — create', () => {
         category: 'meeting',
         title: 'New Meeting: sunset-condos Annual Owners Meeting',
         body: 'December 1, 2026 · Clubhouse',
-        actionUrl: '/meetings/7',
+        actionUrl: '/meetings/7?communityId=42',
         sourceType: 'meeting',
         sourceId: '7',
       },

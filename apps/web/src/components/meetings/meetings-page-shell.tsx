@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useDeferredValue, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { endOfMonth, format, isSameDay, startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -77,6 +77,26 @@ export function MeetingsPageShell({
   const [activeMeetingId, setActiveMeetingId] = useState<number | null>(null);
   const [editingMeetingId, setEditingMeetingId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // `?meeting=<id>` — set by the `/meetings/<id>` redirect that emails and
+  // notifications link to — opens that meeting once, then leaves the URL so a
+  // reload or a shared link does not reopen a dialog the user closed. Read from
+  // the live search params, not at mount, so a soft navigation onto this page
+  // (a notification clicked while it is already open) still opens it. The
+  // dialog does its own scoped read, so a meeting the user cannot open shows
+  // its error state rather than someone else's data.
+  const linkedMeetingParam = searchParams.get('meeting');
+  useEffect(() => {
+    if (linkedMeetingParam === null) return;
+    const linkedId = Number(linkedMeetingParam);
+    if (Number.isInteger(linkedId) && linkedId > 0) {
+      setActiveMeetingId(linkedId);
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('meeting');
+    const rest = params.toString();
+    router.replace(rest ? `${pathname}?${rest}` : pathname, { scroll: false });
+  }, [linkedMeetingParam, pathname, router, searchParams]);
 
   const now = new Date();
 

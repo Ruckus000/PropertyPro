@@ -191,6 +191,35 @@ describe('transparency service', () => {
     expect(result.minutesAvailability.months).toHaveLength(12);
   });
 
+  it('does not show "not yet posted" below the website rule’s size threshold', async () => {
+    // A 12-unit condo: §718.111(12)(g) posting does not apply, so an unposted
+    // item is "not required" on this public page. A posted one stays posted.
+    const baseQuery = queryMock.getMockImplementation()!;
+    queryMock.mockImplementation(async (table: unknown) => {
+      const rows = await baseQuery(table);
+      return table === communitiesTable
+        ? (rows as Array<Record<string, unknown>>).map((row) => ({ ...row, unitCount: 12 }))
+        : rows;
+    });
+
+    const result = await getTransparencyPageData({
+      id: 1,
+      slug: 'sunset-condos',
+      name: 'Sunset Condos',
+      communityType: 'condo_718',
+      timezone: 'America/New_York',
+      addressLine1: null,
+      addressLine2: null,
+      city: 'Miami',
+      state: 'FL',
+      zipCode: null,
+    });
+
+    const flattened = result.documents.flatMap((group) => group.items);
+    expect(flattened.find((item) => item.templateKey === '718_bylaws')?.status).toBe('posted');
+    expect(flattened.find((item) => item.templateKey === '718_insurance')?.status).toBe('not_required');
+  });
+
   it.each([
     ['a draft', { deletedAt: null, isDraft: true }],
     ['a deleted document', { deletedAt: new Date('2026-02-01T00:00:00.000Z'), isDraft: false }],

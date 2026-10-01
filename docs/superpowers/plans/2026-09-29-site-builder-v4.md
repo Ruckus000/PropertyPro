@@ -78,11 +78,26 @@ count and dropped it before the insert.
 - Signup and "Add community" no longer pre-fill the count with 1. Since 0081, that default
   would have marked an association exempt without anyone answering the question.
 
+Follow-up: Compliance now agrees with the builder. Every "overdue" the checklist derives is
+the website-posting clock (the 30-day deadline in `calculatePostingDeadline` and the rolling
+posting windows). So `postingClockApplies(subject)` in `packages/shared` is false exactly when
+`requirementLevel` is `recommended`, and the clock is switched off in the three places it
+reaches people:
+- the Compliance API, whose rows go out with no deadline or rolling window, so they are never
+  overdue or "due soon";
+- the daily overdue email, which is not sent;
+- the public transparency page, where an unposted item reads "Not required".
+
+The Compliance page says why in one banner. Rows and scores are unchanged: the duty to keep
+official records still applies, and scores count satisfied ÷ applicable.
+
 Deferred, each with its trigger:
-- **The compliance module still treats every condo and HOA as covered** (`hasCompliance` by
-  type), so a 12-unit condo's Compliance page lists §718.111(12)(g)(2) website items that
-  the builder calls "recommended". This predates 2b; 2b only makes it visible. Trigger: a
-  small-association customer, or the next change to the compliance checklist.
+- **PM portfolio "urgent / critical" counts** (`lib/queries/cross-community.ts`,
+  `packages/db/src/queries/pm-portfolio.ts`) and the admin console's per-item status still read
+  raw deadlines. Only staff and PMs see them; none are public, and none send email. Trigger: a
+  PM or admin managing a sub-threshold association.
+- **The PATCH response from `/api/v1/compliance`** still carries the stored deadline. The client
+  discards it and refetches. Trigger: a client that reads it.
 - **The 25 / 100 thresholds also appear in marketing prose** (`compliance-checker.tsx`,
   `faq-section.tsx`, `who-section.tsx`). Trigger: the statute's threshold changes.
 - **Draft-wins merge has four hand-written copies** (see the `ponytail:` comment in

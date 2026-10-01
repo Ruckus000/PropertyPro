@@ -2,7 +2,7 @@
 import { notFound } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { getOptionalPageCommunityId } from '@/lib/request/page-community-context';
-import { resolveDocumentCommunity } from '@/lib/documents/resolve-document-community';
+import { resolveMeetingCommunity } from '@/lib/meetings/resolve-meeting-community';
 import { redirectIntoCommunity } from '@/lib/communities/redirect-into-community';
 import { getPageSupportScope } from '@/lib/support/support-scope';
 
@@ -11,27 +11,27 @@ interface PageProps {
 }
 
 /**
- * `/documents/<id>` → `/communities/<cid>/documents?doc=<id>`, which opens the
- * document in the library's inspector.
+ * `/meetings/<id>` → `/communities/<cid>/meetings?meeting=<id>`, which opens
+ * the meeting's detail dialog.
  *
- * Emails, notifications, search and the PM activity feed all link here. The
- * request's community (from `?communityId=` or the host, as middleware
- * resolved it) is tried first, then the caller's other communities; a
- * document the caller may not open 404s exactly like a missing one.
+ * New-meeting notifications and the PM overview's upcoming meetings link here.
+ * The request's community is tried first, then the caller's other
+ * communities; a meeting the caller may not open 404s exactly like a missing
+ * one.
  */
-export default async function DocumentRedirectPage({ params }: PageProps) {
+export default async function MeetingRedirectPage({ params }: PageProps) {
   const { id } = await params;
 
-  const documentId = Number(id);
-  if (!Number.isInteger(documentId) || documentId <= 0) {
+  const meetingId = Number(id);
+  if (!Number.isInteger(meetingId) || meetingId <= 0) {
     notFound();
   }
 
   const userId = await requireAuthenticatedUserId();
   const requestCommunityId = await getOptionalPageCommunityId();
-  const match = await resolveDocumentCommunity({
+  const match = await resolveMeetingCommunity({
     userId,
-    documentId,
+    meetingId,
     preferredCommunityId: requestCommunityId,
     supportScope: await getPageSupportScope(),
   });
@@ -42,7 +42,7 @@ export default async function DocumentRedirectPage({ params }: PageProps) {
 
   return redirectIntoCommunity(
     match,
-    `/communities/${match.communityId}/documents?doc=${documentId}`,
+    `/communities/${match.communityId}/meetings?meeting=${meetingId}`,
     requestCommunityId,
   );
 }

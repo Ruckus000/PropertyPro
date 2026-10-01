@@ -141,6 +141,34 @@ describe('useMeeting', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(qc.getQueryCache().find({ queryKey: ['meetings', 'detail', CID, 'none'], exact: true })).toBeDefined();
   });
+
+  // The production client retries failed reads; these use the hook's own
+  // policy (no `retry: false` default), with no delay between attempts.
+  function retryingClient() {
+    return new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } });
+  }
+
+  it('settles a 404 as an error on the first answer — a deleted meeting will not reappear', async () => {
+    fetchMock.mockImplementation(async () =>
+      json({ error: { code: 'NOT_FOUND', message: 'Meeting not found' } }, 404),
+    );
+
+    const { result } = renderHook(() => useMeeting(CID, 999), { wrapper: wrap(retryingClient()) });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('still retries a failure that may be transient', async () => {
+    fetchMock.mockImplementation(async () =>
+      json({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, 500),
+    );
+
+    const { result } = renderHook(() => useMeeting(CID, 12), { wrapper: wrap(retryingClient()) });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
 });
 
 describe('useCalendarEvents', () => {
