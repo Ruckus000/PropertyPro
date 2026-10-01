@@ -85,7 +85,11 @@ export function SignupForm({
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [county, setCounty] = useState('');
-  const [unitCount, setUnitCount] = useState('1');
+  // Empty, not '1': the count decides whether Florida's website rules apply
+  // (packages/shared `requirementLevel`), so a pre-filled answer would quietly
+  // mark an association exempt. The input's `required` and the schema's
+  // min(1) — both already here — make the person actually state it.
+  const [unitCount, setUnitCount] = useState('');
   const [candidateSlug, setCandidateSlug] = useState('');
   const [selectedAddressSuggestionKey, setSelectedAddressSuggestionKey] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);

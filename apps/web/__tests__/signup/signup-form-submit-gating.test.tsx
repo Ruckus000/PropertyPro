@@ -217,4 +217,26 @@ describe('SignupForm submit gating', () => {
     expect(screen.queryByLabelText('Password requirements')).toBeNull();
     expect(screen.getByTestId('password-strength-label')).toHaveTextContent('Strong');
   });
+
+  it('never pre-fills the unit count, and will not submit without one', () => {
+    // The count decides whether Florida's website rules apply; a default of 1
+    // marked associations exempt without anyone answering the question.
+    render(<SignupForm />);
+    expect((screen.getByLabelText('Unit Count') as HTMLInputElement).value).toBe('');
+
+    fillRequiredSignupFields();
+    fireEvent.change(screen.getByLabelText('Password', { selector: 'input' }), {
+      target: { value: 'Abcdefg1!' },
+    });
+    fireEvent.change(screen.getByLabelText('Unit Count'), { target: { value: '' } });
+    act(() => {
+      fireEvent.click(submitButton());
+    });
+
+    // The browser's own `required` stops it before any handler runs — the same
+    // as in a real browser — so nothing is validated server-side or sent.
+    expect((screen.getByLabelText('Unit Count') as HTMLInputElement).validity.valueMissing).toBe(true);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
 });
