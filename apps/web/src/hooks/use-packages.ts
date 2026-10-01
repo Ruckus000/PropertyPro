@@ -12,6 +12,8 @@ export interface PackageListItem {
   id: number;
   communityId: number;
   unitId: number;
+  /** "Unit 1B"; set by the staff list read (withUnitLabels), absent elsewhere. */
+  unitLabel?: string;
   recipientName: string;
   carrier: string;
   trackingNumber: string | null;

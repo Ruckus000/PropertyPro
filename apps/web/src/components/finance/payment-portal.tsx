@@ -33,6 +33,8 @@ interface UnitLineItem {
 
 interface CommunityLineItem extends UnitLineItem {
   unitNumber: string;
+  /** "Unit 1B" / "Bldg A • Unit 1B" from the community statement. */
+  unitLabel?: string;
 }
 
 type LineItem = UnitLineItem | CommunityLineItem;
@@ -537,6 +539,9 @@ function TabButton({
 }
 
 function unitLabel(item: LineItem): string {
+  if ('unitLabel' in item && item.unitLabel) {
+    return item.unitLabel;
+  }
   if ('unitNumber' in item && item.unitNumber) {
     return `Unit ${item.unitNumber}`;
   }

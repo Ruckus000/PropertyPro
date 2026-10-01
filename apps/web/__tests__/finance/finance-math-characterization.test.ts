@@ -105,7 +105,7 @@ const {
       amountCents: col('rent_obligations', 'amountCents'),
     },
     rentPaymentsTable: { id: col('rent_payments', 'id') },
-    unitsTable: { id: col('units', 'id'), unitNumber: col('units', 'unitNumber') },
+    unitsTable: { id: col('units', 'id'), unitNumber: col('units', 'unitNumber'), building: col('units', 'building') },
     communitiesTable: {
       id: col('communities', 'id'),
       deletedAt: col('communities', 'deletedAt'),
@@ -1265,6 +1265,21 @@ describe('6. statements', () => {
         [22, '103', 0],
       ]);
       expect(statement.summary).toEqual({ totalDueCents: 30000 + 32500 + 160000, overdueCount: 0, outstandingCount: 3 });
+    });
+
+    it('labels each line item by unit number (building when set), falling back to the id for an unknown unit', async () => {
+      seed(unitsTable, [
+        { id: 1, unitNumber: '101', building: null },
+        { id: 2, unitNumber: '102', building: 'Bldg A' },
+        { id: 3, unitNumber: '103', building: null },
+      ]);
+      const statement = await buildCommunityStatement(11, '2026-01-01', '2026-03-31');
+      expect(statement.lineItems.map((row) => [row.id, row.unitLabel])).toEqual([
+        [20, 'Unit #404'],
+        [21, 'Unit 101'],
+        [600, 'Bldg A • Unit 102'],
+        [22, 'Unit 103'],
+      ]);
     });
 
     it('more than 200 outstanding items is flagged and reported once; summary stays exact', async () => {

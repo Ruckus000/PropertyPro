@@ -26,6 +26,8 @@ export interface AssessmentLineItem {
   id: number;
   assessmentId: number | null;
   unitId: number;
+  /** "Unit 1B"; set by the line-items GET (withUnitLabels). */
+  unitLabel?: string;
   amountCents: number;
   dueDate: string;
   status: 'pending' | 'paid' | 'overdue' | 'waived';
@@ -67,6 +69,8 @@ export interface LedgerFilters {
 export interface PaymentHistoryItem {
   id: number;
   unitId: number;
+  /** "Unit 1B"; set by the payments history GET (withUnitLabels). */
+  unitLabel?: string;
   amountCents: number;
   dueDate: string;
   paidAt: string | null;

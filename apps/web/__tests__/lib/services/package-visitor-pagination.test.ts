@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   createScopedClientMock,
   getUnitLabelMapMock,
+  paginateMock,
   selectFromMock,
   orderByMock,
   limitMock,
@@ -10,6 +11,7 @@ const {
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   getUnitLabelMapMock: vi.fn(),
+  paginateMock: vi.fn(),
   selectFromMock: vi.fn(),
   orderByMock: vi.fn(),
   limitMock: vi.fn(),
@@ -39,7 +41,8 @@ vi.mock('@propertypro/db', () => ({
     return input;
   },
   createScopedClient: createScopedClientMock,
-  paginate: vi.fn(),
+  paginate: paginateMock,
+  units: { id: 'units.id', unitNumber: 'units.unitNumber', building: 'units.building' },
   logAuditEvent: vi.fn(),
   userRoles: {},
 }));
@@ -65,7 +68,10 @@ vi.mock('@/lib/services/notification-service', () => ({
   queueNotification: vi.fn(),
 }));
 
-import { paginateVisitorsForCommunity } from '../../../src/lib/services/package-visitor-service';
+import {
+  paginatePackageLog,
+  paginateVisitorsForCommunity,
+} from '../../../src/lib/services/package-visitor-service';
 
 function encodeCursor(payload: { expectedArrival: string; id: number }) {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
@@ -208,5 +214,28 @@ describe('paginateVisitorsForCommunity', () => {
     });
 
     expect(selectFromMock.mock.calls[0]![2]).toEqual({ __sql: { strings: ['false'], values: [] } });
+  });
+});
+
+describe('paginatePackageLog', () => {
+  it('labels each package by unit number, not unit id, for the staff table', async () => {
+    const pagination = { nextCursor: null, hasMore: false, pageSize: 50 };
+    paginateMock.mockResolvedValueOnce({
+      data: [
+        { id: 1, unitId: 2, recipientName: 'Ada' },
+        { id: 2, unitId: 3, recipientName: 'Grace' },
+      ],
+      pagination,
+    });
+    // The one units lookup withUnitLabels makes.
+    selectFromMock.mockResolvedValueOnce([
+      { id: 2, unitNumber: '1B', building: null },
+      { id: 3, unitNumber: '2A', building: 'Bldg A' },
+    ]);
+
+    const result = await paginatePackageLog({ communityId: 42 });
+
+    expect(result.data.map((row) => row.unitLabel)).toEqual(['Unit 1B', 'Bldg A • Unit 2A']);
+    expect(result.pagination).toEqual(pagination);
   });
 });

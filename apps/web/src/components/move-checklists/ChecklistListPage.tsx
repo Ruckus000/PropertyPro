@@ -49,7 +49,7 @@ function ChecklistCard({
         </span>
       </div>
       <p className="mt-2 text-sm font-medium text-content">
-        Unit {checklist.unitId} — Lease #{checklist.leaseId}
+        {checklist.unitLabel ?? `Unit #${checklist.unitId}`} — Lease #{checklist.leaseId}
       </p>
       <div className="mt-3">
         <div className="h-2 w-full rounded-full bg-surface-muted">
