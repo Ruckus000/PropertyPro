@@ -3,10 +3,12 @@
 import {
   useMutation,
   useQuery,
+  useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
+import { requestJson } from '@/lib/api/request-json';
 
 export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
 
@@ -114,5 +116,62 @@ export function useInviteResident(
       return json.data;
     },
     onSuccess: options?.onSuccess,
+  });
+}
+
+export interface UpdateResidentInput {
+  userId: string;
+  fullName?: string;
+  phone?: string | null;
+  /** Changing it is the Directory's "Move to another unit". */
+  unitId?: number | null;
+  isUnitOwner?: boolean;
+}
+
+export function useUpdateResident(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, UpdateResidentInput>({
+    mutationFn: (input) =>
+      requestJson('/api/v1/residents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, ...input }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['residents', communityId] }),
+  });
+}
+
+export function useRemoveResident(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, string>({
+    mutationFn: (userId) =>
+      requestJson('/api/v1/residents', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, userId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['residents', communityId] }),
+  });
+}
+
+export interface BatchInviteResult {
+  userId: string;
+  status: 'sent' | 'failed';
+  error?: string;
+}
+
+/** One request for many invites: the per-user write limit is 30/min. */
+export function useBatchInvite(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<BatchInviteResult[], Error, string[]>({
+    mutationFn: async (userIds) =>
+      (
+        await requestJson<{ results: BatchInviteResult[] }>('/api/v1/invitations/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ communityId, userIds }),
+        })
+      ).results,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['residents', communityId] }),
   });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -20,17 +20,26 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AccessRequestList, accessRequestsQueryOptions } from '@/components/access-requests/access-request-list';
-import { AddResidentDialog } from '@/components/residents/residents-page-client';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
-import { useUnits } from '@/hooks/use-units';
+import { useDeleteUnit, useUnits } from '@/hooks/use-units';
 import { useDelinquency } from '@/hooks/use-finance';
 import { usePastDueRule } from '@/hooks/use-past-due-rule';
-import { useInviteResident, useResendInvitation, useResidentsList } from '@/hooks/use-residents-management';
+import {
+  useBatchInvite,
+  useInviteResident,
+  useRemoveResident,
+  useResendInvitation,
+  useResidentsList,
+} from '@/hooks/use-residents-management';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
-import { AddUnitDialog } from './add-unit-dialog';
-import { PastDueRuleDialog } from './past-due-rule-dialog';
+import { CsvExportButton } from '@/components/shared/csv-export-button';
+import { ConfirmDialog } from '@/components/pm/site-editor-v3/ConfirmDialog';
+import { AddResidentDialog } from '@/components/residents/residents-page-client';
 import { DirectorySheet } from './directory-sheet';
+import { EditResidentDialog } from './edit-resident-dialog';
+import { PastDueRuleDialog } from './past-due-rule-dialog';
+import { UnitFormDialog } from './unit-form-dialog';
 import { DirectoryToolbar, type FilterToken, type StatusOption, type UnitsView } from './directory-toolbar';
 import {
   ANY_OVERDUE_RULE,
@@ -57,6 +66,11 @@ import { ResidentsTable } from './residents-table';
 import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
 
+// ponytail: this route sits ~18 KiB under the 1220 KiB hard per-route budget
+// (perf:check). Lazy-loading the dialogs below via next/dynamic was measured
+// and made things WORSE: it reshuffled shared chunks and pushed the web
+// aggregate budget (1490 KiB, routes this page is not even in) over. Re-measure
+// both numbers before adding weight here.
 export type DirectoryTab = 'units' | 'residents';
 
 interface DirectoryPageClientProps {
@@ -70,6 +84,12 @@ interface DirectoryPageClientProps {
 }
 
 type Panel = { kind: 'unit'; id: number } | { kind: 'resident'; id: string } | { kind: 'requests' } | null;
+
+type Confirm =
+  | { kind: 'delete-unit'; unitId: number }
+  | { kind: 'remove-resident'; userId: string }
+  | { kind: 'bulk-invite'; userIds: string[]; skippedActive: number }
+  | null;
 
 const VIEW_STORAGE_KEY = 'propertypro:directory:units-view';
 const VIEWS: readonly UnitsView[] = ['cards', 'building', 'split'];
@@ -145,12 +165,17 @@ export function DirectoryPageClient({
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [panel, setPanel] = useState<Panel>(null);
   const [splitId, setSplitId] = useState<number | null>(null);
-  const [addUnitOpen, setAddUnitOpen] = useState(false);
-  const [addResident, setAddResident] = useState<{ open: boolean; unitId: number | null }>({ open: false, unitId: null });
+    const [addResident, setAddResident] = useState<{ open: boolean; unitId: number | null }>({ open: false, unitId: null });
   const [sendInvitation, setSendInvitation] = useState(true);
   const [inviteWarning, setInviteWarning] = useState<{ userId: string; name: string } | null>(null);
   const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
+  const [unitForm, setUnitForm] = useState<{ open: boolean; unitId: number | null }>({ open: false, unitId: null });
+  const [editResidentId, setEditResidentId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Confirm>(null);
+  // Where focus returns after a confirmation (it has no Radix trigger).
+  const confirmReturnRef = useRef<HTMLElement | null>(null);
+  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
 
   // Search is filtered client-side; deferring keeps typing responsive on
   // large communities without a fixed debounce.
@@ -181,6 +206,7 @@ export function DirectoryPageClient({
     (next: string) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set('tab', next === 'residents' ? 'residents' : 'units');
+      setSelection(new Set());
       // `replace`, not `push`: Back should leave the page, not walk the tabs.
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
@@ -233,6 +259,14 @@ export function DirectoryPageClient({
     () => filterResidents(residentRows, { status: residentStatus, building: activeBuilding, query: deferredResidentQuery }),
     [residentRows, residentStatus, activeBuilding, deferredResidentQuery],
   );
+
+  // Selection only ever acts on rows that are on screen: filtering or searching
+  // narrows it rather than leaving hidden residents selected.
+  const visibleSelection = useMemo(
+    () => filteredResidents.filter((r) => selection.has(r.userId)),
+    [filteredResidents, selection],
+  );
+  const visibleSelectedIds = useMemo(() => new Set(visibleSelection.map((r) => r.userId)), [visibleSelection]);
 
   /* ── Filter options (counts ignore the status filter itself) ── */
   const unitStatusOptions = useMemo((): StatusOption<UnitStatusFilter>[] => {
@@ -338,6 +372,51 @@ export function DirectoryPageClient({
   const openUnit = useCallback((id: number) => setPanel({ kind: 'unit', id }), []);
   const openResident = useCallback((id: string) => setPanel({ kind: 'resident', id }), []);
 
+  const askConfirm = useCallback((next: NonNullable<Confirm>) => {
+    confirmReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setConfirm(next);
+  }, []);
+
+  const deleteUnit = useDeleteUnit(communityId);
+  const removeResident = useRemoveResident(communityId);
+  const batchInvite = useBatchInvite(communityId);
+
+  const runConfirm = useCallback(async () => {
+    if (!confirm) return;
+    try {
+      if (confirm.kind === 'delete-unit') {
+        await deleteUnit.mutateAsync(confirm.unitId);
+        setPanel(null);
+        toast.success('Unit deleted.');
+      } else if (confirm.kind === 'remove-resident') {
+        await removeResident.mutateAsync(confirm.userId);
+        setPanel((p) => (p?.kind === 'resident' ? null : p));
+        toast.success('Resident removed.');
+      } else {
+        const results = await batchInvite.mutateAsync(confirm.userIds);
+        const sent = results.filter((r) => r.status === 'sent').length;
+        const failed = results.length - sent;
+        const parts = [`${plural(sent, 'invitation')} sent`];
+        if (failed) parts.push(`${failed} failed`);
+        if (confirm.skippedActive) parts.push(`${confirm.skippedActive} skipped (already active)`);
+        (failed ? toast.warning : toast.success)(`${parts.join(', ')}.`);
+        setSelection(new Set());
+      }
+    } catch (err) {
+      // The server's message says why (e.g. "its ledger balance is not zero").
+      toast.error(err instanceof Error ? err.message : 'That did not work. Please try again.');
+    }
+  }, [confirm, deleteUnit, removeResident, batchInvite]);
+
+  const toggleSelected = useCallback((userId: string) => {
+    setSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }, []);
+
   const toggleBuilding = useCallback((key: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -358,6 +437,8 @@ export function DirectoryPageClient({
   const splitSelected =
     filteredUnits.find((u) => u.id === splitId) ?? filteredUnits[0] ?? null;
 
+  // The unit the panel (drawer or split pane) is showing.
+  const panelUnitId = panelUnit?.id ?? (effectiveView === 'split' && tab === 'units' ? splitSelected?.id ?? null : null);
   const unitPanelProps = {
     communityId,
     hasOwnerRole,
@@ -367,7 +448,51 @@ export function DirectoryPageClient({
     onAddResident: (unitId: number) => openAddResident(unitId),
     onSendInvite: sendInvite,
     invitingUserId,
+    canWrite,
+    onEditUnit: () => setUnitForm({ open: true, unitId: panelUnitId }),
+    onDeleteUnit: () => panelUnitId !== null && askConfirm({ kind: 'delete-unit', unitId: panelUnitId }),
+    onEditResident: (userId: string) => setEditResidentId(userId),
+    onRemoveResident: (userId: string) => askConfirm({ kind: 'remove-resident', userId }),
   };
+
+  const editResident = editResidentId ? residentRows.find((r) => r.userId === editResidentId) ?? null : null;
+
+  const confirmCopy = (() => {
+    if (confirm?.kind === 'delete-unit') {
+      const u = dirUnits.find((x) => x.id === confirm.unitId);
+      return {
+        title: `Delete unit ${u?.unitNumber ?? ''}?`,
+        description:
+          "This can't be undone. A unit that still has residents, a ledger balance or open violations can't be deleted.",
+        confirmLabel: 'Delete unit',
+        destructive: true,
+      };
+    }
+    if (confirm?.kind === 'remove-resident') {
+      const r = residentRows.find((x) => x.userId === confirm.userId);
+      const lastOwner =
+        hasOwnerRole && r?.isUnitOwner && r.unit !== null && r.unit.owners.length === 1;
+      return {
+        title: `Remove ${r?.displayName ?? 'this resident'}?`,
+        description: `They lose portal access to this community.${
+          lastOwner ? ` Unit ${r!.unit!.unitNumber} will have no owner on file.` : ''
+        }`,
+        confirmLabel: 'Remove resident',
+        destructive: true,
+      };
+    }
+    if (confirm?.kind === 'bulk-invite') {
+      return {
+        title: `Send ${plural(confirm.userIds.length, 'invitation')}?`,
+        description: `Each person gets an email with a link to set up portal access.${
+          confirm.skippedActive ? ` ${plural(confirm.skippedActive, 'resident')} already signed in and will be skipped.` : ''
+        }`,
+        confirmLabel: 'Send invitations',
+        destructive: false,
+      };
+    }
+    return { title: '', description: '', confirmLabel: 'Confirm', destructive: false };
+  })();
 
   /* ── Render ── */
   const unitsLoading = unitsQ.isLoading;
@@ -452,7 +577,7 @@ export function DirectoryPageClient({
               <button
                 type="button"
                 aria-label={primaryLabel}
-                onClick={() => (tab === 'units' ? setAddUnitOpen(true) : openAddResident(null))}
+                onClick={() => (tab === 'units' ? setUnitForm({ open: true, unitId: null }) : openAddResident(null))}
                 className={cn(
                   'inline-flex h-12 min-w-12 items-center justify-center gap-2 rounded-md bg-interactive px-0 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:h-10 md:px-4',
                   FOCUS,
@@ -530,7 +655,7 @@ export function DirectoryPageClient({
                 canWrite ? (
                   <button
                     type="button"
-                    onClick={() => setAddUnitOpen(true)}
+                    onClick={() => setUnitForm({ open: true, unitId: null })}
                     className={cn('inline-flex h-11 items-center gap-2 rounded-md bg-interactive px-4 text-sm font-medium text-content-inverse hover:bg-interactive-hover', FOCUS)}
                   >
                     <Plus size={16} aria-hidden="true" />
@@ -686,12 +811,70 @@ export function DirectoryPageClient({
                 {filteredResidents.length === 0 ? (
                   <NoMatches noun="residents" onClear={clearFilters} />
                 ) : (
-                  <ResidentsTable
-                    rows={filteredResidents}
-                    hasOwnerRole={hasOwnerRole}
-                    onOpenResident={openResident}
-                    onOpenUnit={openUnit}
-                  />
+                  <>
+                    {visibleSelection.length > 0 ? (
+                      <div className="sticky bottom-3 z-10 order-last flex flex-wrap items-center gap-2 rounded-md border border-edge-strong bg-surface-card py-1.5 pl-4 pr-2 shadow-e1 md:top-0 md:order-none">
+                        <span className="mr-2 text-sm font-semibold" role="status">
+                          {visibleSelection.length} selected
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const toInvite = visibleSelection.filter((r) => r.portalStatus !== 'active');
+                            if (toInvite.length === 0) {
+                              toast.info('Everyone selected has already signed in.');
+                              return;
+                            }
+                            askConfirm({
+                              kind: 'bulk-invite',
+                              userIds: toInvite.map((r) => r.userId),
+                              skippedActive: visibleSelection.length - toInvite.length,
+                            });
+                          }}
+                          className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover md:h-9', FOCUS)}
+                        >
+                          Resend invites
+                        </button>
+                        <CsvExportButton
+                          headers={['Name', 'Email', 'Phone', 'Unit', 'Building', 'Type', 'Board', 'Portal']}
+                          rows={visibleSelection.map((r) => ({
+                            Name: r.displayName,
+                            Email: r.email ?? '',
+                            Phone: r.phone ?? '',
+                            Unit: r.unit?.unitNumber ?? '',
+                            Building: r.unit?.buildingLabel ?? '',
+                            Type: hasOwnerRole && r.isUnitOwner ? 'Owner' : 'Tenant',
+                            Board: r.designation === 'board_president' ? 'President' : r.designation === 'board_member' ? 'Member' : '',
+                            Portal: r.portalStatus === 'active' ? 'Active' : r.portalStatus === 'invited' ? 'Invited' : 'Not invited',
+                          }))}
+                          filename="residents"
+                          className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover md:h-9', FOCUS)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSelection(new Set())}
+                          className={cn('ml-auto h-11 rounded-md px-3 text-xs font-medium text-content-secondary hover:bg-surface-hover md:h-9', FOCUS)}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    ) : null}
+                    <ResidentsTable
+                      rows={filteredResidents}
+                      hasOwnerRole={hasOwnerRole}
+                      onOpenResident={openResident}
+                      onOpenUnit={openUnit}
+                      selected={visibleSelectedIds}
+                      onToggle={toggleSelected}
+                      onToggleAll={() =>
+                        setSelection(
+                          visibleSelection.length === filteredResidents.length
+                            ? new Set()
+                            : new Set(filteredResidents.map((r) => r.userId)),
+                        )
+                      }
+                    />
+                  </>
                 )}
               </>
             )}
@@ -739,6 +922,8 @@ export function DirectoryPageClient({
             onOpenUnit={openUnit}
             onSendInvite={sendInvite}
             inviting={invitingUserId === panelResident.userId}
+            onEdit={() => setEditResidentId(panelResident.userId)}
+            onRemove={() => askConfirm({ kind: 'remove-resident', userId: panelResident.userId })}
             inSheet
           />
         ) : null}
@@ -758,19 +943,47 @@ export function DirectoryPageClient({
           }}
         />
       ) : null}
-      {canWrite ? (
-        <AddUnitDialog
-          open={addUnitOpen}
-          onOpenChange={setAddUnitOpen}
+      {canWrite && unitForm.open ? (
+        <UnitFormDialog
+          key={unitForm.unitId ?? 'new'}
+          open
+          unit={unitForm.unitId === null ? null : (unitsQ.data ?? []).find((u) => u.id === unitForm.unitId) ?? null}
+          onOpenChange={(open) => setUnitForm((prev) => ({ ...prev, open }))}
           communityId={communityId}
           hasOwnerRole={hasOwnerRole}
           showRent={!hasOwnerRole}
-          onCreated={() => {
-            setAddUnitOpen(false);
-            toast.success('Unit added.');
+          onSaved={() => {
+            toast.success(unitForm.unitId === null ? 'Unit added.' : 'Unit saved.');
+            setUnitForm({ open: false, unitId: null });
           }}
         />
       ) : null}
+      {editResident ? (
+        <EditResidentDialog
+          key={editResident.userId}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditResidentId(null);
+          }}
+          communityId={communityId}
+          resident={editResident}
+          hasOwnerRole={hasOwnerRole}
+          unitOptions={unitOptions}
+          onSaved={(moved) => {
+            toast.success(moved ? 'Resident moved.' : 'Resident saved.');
+            setEditResidentId(null);
+          }}
+        />
+      ) : null}
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        restoreFocusTo={confirmReturnRef}
+        {...confirmCopy}
+        onConfirm={() => void runConfirm()}
+      />
       {isAdmin ? (
         <AddResidentDialog
           open={addResident.open}

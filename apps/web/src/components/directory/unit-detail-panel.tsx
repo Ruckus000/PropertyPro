@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { AlertCircle, AlertTriangle, Bath, BedDouble, DollarSign, Mail, Maximize, Plus } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeftRight, Bath, BedDouble, DollarSign, Mail, Maximize, Pencil, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Avatar,
@@ -25,6 +25,12 @@ export interface UnitDetailPanelProps {
   onSendInvite: (userId: string) => void;
   /** userId whose invite is in flight, to disable its button. */
   invitingUserId: string | null;
+  /** units.write: edit and delete the unit. */
+  canWrite: boolean;
+  onEditUnit: () => void;
+  onDeleteUnit: () => void;
+  onEditResident: (userId: string) => void;
+  onRemoveResident: (userId: string) => void;
   /** Leaves room for the sheet's own close button in the header band. */
   inSheet?: boolean;
 }
@@ -80,6 +86,11 @@ export function UnitDetailPanel({
   onAddResident,
   onSendInvite,
   invitingUserId,
+  canWrite,
+  onEditUnit,
+  onDeleteUnit,
+  onEditResident,
+  onRemoveResident,
   inSheet = false,
 }: UnitDetailPanelProps) {
   const rent = hasOwnerRole ? null : formatRent(unit.rentAmount);
@@ -180,8 +191,8 @@ export function UnitDetailPanel({
                       </div>
                       <PortalBadge status={r.portalStatus} />
                     </div>
-                    {r.portalStatus !== 'active' ? (
-                      <div className="flex flex-wrap gap-1.5 pl-12">
+                    <div className="flex flex-wrap gap-1.5 pl-12">
+                      {r.portalStatus !== 'active' ? (
                         <button
                           type="button"
                           onClick={() => onSendInvite(r.userId)}
@@ -191,8 +202,24 @@ export function UnitDetailPanel({
                           <Mail size={14} aria-hidden="true" />
                           {invitingUserId === r.userId ? 'Sending…' : inviteActionLabel(r.portalStatus)}
                         </button>
-                      </div>
-                    ) : null}
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => onEditResident(r.userId)}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        <ArrowLeftRight size={14} aria-hidden="true" />
+                        Edit or move
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveResident(r.userId)}
+                        className="inline-flex h-9 items-center rounded-md px-3 text-xs font-medium text-status-danger hover:bg-status-danger-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      >
+                        Remove
+                        <span className="sr-only"> {r.displayName}</span>
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -200,6 +227,27 @@ export function UnitDetailPanel({
           </section>
         ) : null}
       </div>
+
+      {canWrite ? (
+        <div className="flex gap-2 border-t border-edge px-6 py-4">
+          <button
+            type="button"
+            onClick={onEditUnit}
+            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-edge bg-surface-card text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <Pencil size={16} aria-hidden="true" />
+            Edit unit
+          </button>
+          <button
+            type="button"
+            onClick={onDeleteUnit}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium text-status-danger hover:bg-status-danger-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            Delete
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

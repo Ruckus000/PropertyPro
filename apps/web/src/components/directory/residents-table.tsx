@@ -1,6 +1,7 @@
 'use client';
 
 import { BadgeCheck } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { Avatar, PortalBadge, avatarToneFor } from './directory-badges';
@@ -20,17 +21,29 @@ export function ResidentsTable({
   hasOwnerRole,
   onOpenResident,
   onOpenUnit,
+  selected,
+  onToggle,
+  onToggleAll,
 }: {
   rows: DirectoryResidentRow[];
   hasOwnerRole: boolean;
   onOpenResident: (userId: string) => void;
   onOpenUnit: (unitId: number) => void;
+  /** Selection is always a subset of `rows` — the caller intersects it. */
+  selected: ReadonlySet<string>;
+  onToggle: (userId: string) => void;
+  onToggleAll: () => void;
 }) {
+  const selectedCount = rows.filter((r) => selected.has(r.userId)).length;
+  const allState = selectedCount === 0 ? false : selectedCount === rows.length ? true : 'indeterminate';
   return (
     <div className="overflow-hidden rounded-lg border border-edge bg-surface-card">
       <Table aria-label="Residents">
         <TableHeader className="bg-surface-subtle">
           <TableRow className="hover:bg-transparent">
+            <TableHead className="w-11 pr-0">
+              <Checkbox checked={allState} onCheckedChange={onToggleAll} aria-label="Select all shown residents" />
+            </TableHead>
             <TableHead>Name</TableHead>
             <TableHead className={MD}>Unit</TableHead>
             <TableHead className={MD}>Type</TableHead>
@@ -52,7 +65,15 @@ export function ResidentsTable({
               .filter(Boolean)
               .join(' · ');
             return (
-              <TableRow key={r.userId}>
+              <TableRow key={r.userId} data-state={selected.has(r.userId) ? 'selected' : undefined}>
+                <TableCell className="w-11 pr-0">
+                  {/* 44px hit area on touch via the cell; the box itself stays 16px. */}
+                  <Checkbox
+                    checked={selected.has(r.userId)}
+                    onCheckedChange={() => onToggle(r.userId)}
+                    aria-label={`Select ${r.displayName}`}
+                  />
+                </TableCell>
                 <TableCell className="max-w-0 py-1.5">
                   <button
                     type="button"

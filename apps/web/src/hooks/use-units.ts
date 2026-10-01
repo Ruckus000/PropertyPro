@@ -68,3 +68,41 @@ export function useCreateUnit(communityId: number) {
     },
   });
 }
+
+export interface UpdateUnitInput {
+  unitId: number;
+  unitNumber?: string;
+  building?: string | null;
+  floor?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  sqft?: number | null;
+  /** Sending it (even unchanged) records the manager's confirmation. */
+  occupancy?: UnitOccupancy | null;
+}
+
+export function useUpdateUnit(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, UpdateUnitInput>({
+    mutationFn: (input) =>
+      requestJson('/api/v1/units', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, ...input }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['units', communityId] }),
+  });
+}
+
+export function useDeleteUnit(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (unitId) =>
+      requestJson('/api/v1/units', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, unitId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['units', communityId] }),
+  });
+}

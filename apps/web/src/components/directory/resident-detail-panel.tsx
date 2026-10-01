@@ -1,6 +1,6 @@
 'use client';
 
-import { Mail, Phone } from 'lucide-react';
+import { ArrowLeftRight, Mail, Pencil, Phone, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, Overline, PORTAL_DETAIL, avatarToneFor, inviteActionLabel } from './directory-badges';
 import type { DirectoryResidentRow } from './directory-model';
@@ -11,6 +11,8 @@ export interface ResidentDetailPanelProps {
   onOpenUnit: (unitId: number) => void;
   onSendInvite: (userId: string) => void;
   inviting: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
   inSheet?: boolean;
 }
 
@@ -31,6 +33,8 @@ export function ResidentDetailPanel({
   onOpenUnit,
   onSendInvite,
   inviting,
+  onEdit,
+  onRemove,
   inSheet = false,
 }: ResidentDetailPanelProps) {
   const tone = avatarToneFor(resident.isUnitOwner, hasOwnerRole);
@@ -114,6 +118,33 @@ export function ResidentDetailPanel({
           <div className="text-sm">{board ?? 'Not on the board'}</div>
           <div className="text-xs text-content-tertiary">Board designations are managed in Roles &amp; access.</div>
         </section>
+
+        <div className="flex flex-col overflow-hidden rounded-md border border-edge">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="flex min-h-12 items-center gap-3 border-b border-edge px-3.5 text-left text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+          >
+            <Pencil size={16} className="text-content-tertiary" aria-hidden="true" />
+            Edit details
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="flex min-h-12 items-center gap-3 border-b border-edge px-3.5 text-left text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+          >
+            <ArrowLeftRight size={16} className="text-content-tertiary" aria-hidden="true" />
+            Move to another unit
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex min-h-12 items-center gap-3 px-3.5 text-left text-sm font-medium text-status-danger hover:bg-status-danger-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            Remove from community
+          </button>
+        </div>
       </div>
     </div>
   );

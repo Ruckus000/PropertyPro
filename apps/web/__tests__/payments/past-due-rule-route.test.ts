@@ -38,6 +38,7 @@ vi.mock('@/lib/finance/common', () => ({
   requireFinanceAdminWrite: requireFinanceAdminWriteMock,
 }));
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: assertNotDemoGraceMock }));
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@/lib/services/community-settings-service', () => ({
   getPastDueRule: getPastDueRuleMock,
   setPastDueRule: setPastDueRuleMock,

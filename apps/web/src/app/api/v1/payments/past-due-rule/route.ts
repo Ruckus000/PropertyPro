@@ -18,6 +18,7 @@ import {
   requireFinanceReadPermission,
 } from '@/lib/finance/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getPastDueRule, setPastDueRule } from '@/lib/services/community-settings-service';
 import { getPastDueRuleContract, patchPastDueRuleContract } from './contract';
 
@@ -27,6 +28,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireFinanceEnabled(membership);
     requireFinanceReadPermission(membership);
+    // Lapsed communities lose admin reads (same as GET /api/v1/delinquency).
+    await requireEntitledForAdminRead(communityId, membership);
     return getPastDueRule(communityId);
   }),
 );

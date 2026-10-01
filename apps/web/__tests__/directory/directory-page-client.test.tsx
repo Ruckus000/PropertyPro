@@ -17,6 +17,10 @@ const {
   walkPaginatedMock,
   isDesktopMock,
   toastMock,
+  deleteUnitMock,
+  updateUnitMock,
+  removeResidentMock,
+  batchInviteMock,
 } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   searchState: { value: '' },
@@ -27,7 +31,11 @@ const {
   resendMock: vi.fn(),
   walkPaginatedMock: vi.fn(),
   isDesktopMock: vi.fn(() => true),
-  toastMock: { success: vi.fn(), error: vi.fn() },
+  toastMock: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+  deleteUnitMock: vi.fn(),
+  updateUnitMock: vi.fn(),
+  removeResidentMock: vi.fn(),
+  batchInviteMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -41,6 +49,8 @@ vi.mock('@/lib/api/walk-paginated', () => ({ walkPaginated: walkPaginatedMock })
 vi.mock('@/hooks/use-units', () => ({
   useUnits: useUnitsMock,
   useCreateUnit: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
+  useUpdateUnit: () => ({ mutateAsync: updateUnitMock, isPending: false, error: null, reset: vi.fn() }),
+  useDeleteUnit: () => ({ mutateAsync: deleteUnitMock, isPending: false, error: null, reset: vi.fn() }),
 }));
 vi.mock('@/hooks/use-finance', () => ({ useDelinquency: useDelinquencyMock }));
 vi.mock('@/hooks/use-past-due-rule', () => ({
@@ -51,6 +61,9 @@ vi.mock('@/hooks/use-residents-management', () => ({
   useResidentsList: useResidentsListMock,
   useResendInvitation: () => ({ mutateAsync: resendMock }),
   useInviteResident: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
+  useUpdateResident: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
+  useRemoveResident: () => ({ mutateAsync: removeResidentMock, isPending: false, error: null, reset: vi.fn() }),
+  useBatchInvite: () => ({ mutateAsync: batchInviteMock, isPending: false, error: null, reset: vi.fn() }),
 }));
 vi.mock('@/hooks/use-access-requests', () => ({
   useApproveAccessRequest: () => ({ mutate: vi.fn(), isPending: false, isError: false, reset: vi.fn() }),
@@ -293,5 +306,72 @@ describe('DirectoryPageClient — residents', () => {
     renderClient();
     await user.click(screen.getByRole('button', { name: /using the portal/i }));
     expect(replaceMock).toHaveBeenCalledWith('/dashboard/directory?tab=residents', { scroll: false });
+  });
+});
+
+describe('DirectoryPageClient — management (phase 2)', () => {
+  it('editing a unit sends its occupancy, which confirms it', async () => {
+    updateUnitMock.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: /^101/ }));
+    const drawer = await screen.findByRole('dialog', { name: /unit 101/i });
+    await user.click(within(drawer).getByRole('button', { name: 'Edit unit' }));
+    const form = await screen.findByRole('dialog', { name: 'Edit unit 101' });
+    await user.click(within(form).getByRole('button', { name: 'Save changes' }));
+    expect(updateUnitMock).toHaveBeenCalledWith(expect.objectContaining({ unitId: 1, occupancy: 'owner_occupied' }));
+  });
+
+  it('deleting a unit asks first and shows the server refusal', async () => {
+    deleteUnitMock.mockRejectedValue(new Error('Cannot delete unit 3: its ledger balance is not zero. Settle or refund it first.'));
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: /^103/ }));
+    const drawer = await screen.findByRole('dialog', { name: /unit 103/i });
+    await user.click(within(drawer).getByRole('button', { name: 'Delete' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete unit 103?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Delete unit' }));
+    expect(deleteUnitMock).toHaveBeenCalledWith(3);
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/balance is not zero/)));
+  });
+
+  it('removing the last owner warns that the unit will have no owner', async () => {
+    searchState.value = 'tab=residents';
+    removeResidentMock.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: /olive owner/i }));
+    const drawer = await screen.findByRole('dialog', { name: 'Olive Owner' });
+    await user.click(within(drawer).getByRole('button', { name: 'Remove from community' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Remove Olive Owner?' });
+    expect(within(confirm).getByText(/Unit 101 will have no owner on file/)).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Remove resident' }));
+    expect(removeResidentMock).toHaveBeenCalledWith('Olive Owner');
+  });
+
+  it('bulk resend confirms and invites only residents who have not signed in', async () => {
+    searchState.value = 'tab=residents';
+    batchInviteMock.mockResolvedValue([{ userId: 'Ivy Invited', status: 'sent' }]);
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Resend invites' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Send 1 invitation?' });
+    expect(within(confirm).getByText(/1 resident already signed in and will be skipped/)).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Send invitations' }));
+    expect(batchInviteMock).toHaveBeenCalledWith(['Ivy Invited']);
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith('1 invitation sent, 1 skipped (already active).'),
+    );
+  });
+
+  it('selection never includes residents a filter has hidden', async () => {
+    searchState.value = 'tab=residents';
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    await user.type(screen.getByRole('searchbox', { name: /search name/i }), 'ivy');
+    expect(await screen.findByText('1 selected')).toBeInTheDocument();
   });
 });
