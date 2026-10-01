@@ -110,6 +110,7 @@ const SNAPSHOT = {
   fileName: 'budget.pdf',
   fileSize: 1000,
   mimeType: 'application/pdf',
+  postedAt: new Date('2026-01-15T00:00:00.000Z'),
 };
 
 function putRequest(body: Record<string, unknown>, id = '7') {
@@ -234,6 +235,27 @@ describe('PUT /api/v1/documents/[id]/file', () => {
     expect(readValidatedUploadMock).not.toHaveBeenCalled();
     expect(replaceDocumentFileMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('asks NOTHING when the document is a draft — owners cannot see it yet', async () => {
+    getDocumentFileSnapshotMock.mockResolvedValue({ ...SNAPSHOT, postedAt: null, publicAccess: false });
+
+    const res = await putRequest({ ...BODY, redactionAttested: false });
+
+    expect(res.status).toBe(200);
+    expect(enforceRedactionAttestationMock).not.toHaveBeenCalled();
+    expect(enforcePublishRedactionAttestationMock).not.toHaveBeenCalled();
+    expect(replaceDocumentFileMock).toHaveBeenCalled();
+  });
+
+  it('asks when the posted state is unknown — only a real NULL is a draft', async () => {
+    const { postedAt: _omit, ...withoutPostedAt } = SNAPSHOT;
+    getDocumentFileSnapshotMock.mockResolvedValue(withoutPostedAt);
+
+    const res = await putRequest(BODY);
+
+    expect(res.status).toBe(200);
+    expect(enforceRedactionAttestationMock).toHaveBeenCalled();
   });
 
   it('refuses to replace an authored document’s file', async () => {

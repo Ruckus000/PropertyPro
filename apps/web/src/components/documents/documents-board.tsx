@@ -34,12 +34,14 @@ import type {
 /** Fully spelled — `guard:class-resolution` fails on a runtime-built class. */
 const COLUMN_TONE: Record<BoardColumnId, string> = {
   gap: 'border-status-danger-border',
+  draft: 'border-status-warning-border',
   private: 'border-edge',
   public: 'border-status-success-border',
   deleted: 'border-edge-subtle',
 };
 
 const STATE_TONE: Record<string, string> = {
+  draft: 'bg-status-warning-bg text-status-warning',
   public: 'bg-status-success-bg text-status-success',
   owed: 'bg-status-warning-bg text-status-warning',
   private: 'bg-surface-muted text-content-secondary',
@@ -47,11 +49,21 @@ const STATE_TONE: Record<string, string> = {
 };
 
 const STATE_LABEL: Record<string, string> = {
+  draft: 'draft',
   public: 'public',
   owed: 'owed',
   private: 'owners only',
   unlinked: 'not linked',
 };
+
+/**
+ * Columns a card can be dropped on. Not `gap` (a requirement has no file to
+ * move) and not `draft`: posting or un-posting asks questions (redaction,
+ * "owners will lose access") that belong in the inspector, not in a drop.
+ */
+function isDropTarget(id: BoardColumnId): boolean {
+  return id !== 'gap' && id !== 'draft';
+}
 
 export interface DocumentsBoardProps {
   columns: BoardColumn[];
@@ -99,7 +111,7 @@ export function DocumentsBoard({
               key={column.id}
               aria-label={column.label}
               onDragOver={(event) => {
-                if (!canManage || !dragging || column.id === 'gap') return;
+                if (!canManage || !dragging || !isDropTarget(column.id)) return;
                 event.preventDefault();
                 setOver(column.id);
               }}
@@ -107,7 +119,7 @@ export function DocumentsBoard({
               onDrop={(event) => {
                 event.preventDefault();
                 setOver(null);
-                if (!canManage || !dragging || column.id === 'gap') return;
+                if (!canManage || !dragging || !isDropTarget(column.id)) return;
                 const found = findDocument(dragging.id);
                 setDragging(null);
                 if (!found || found.from === column.id) return;
@@ -136,7 +148,7 @@ export function DocumentsBoard({
                     key={`${row.kind}-${row.id}`}
                     row={row}
                     selected={row.kind === 'document' && selectedId === row.id}
-                    draggable={canManage && row.kind === 'document'}
+                    draggable={canManage && row.kind === 'document' && row.state !== 'draft'}
                     onSelect={() => {
                       if (row.kind === 'document') onSelectDocument(row.document);
                     }}

@@ -95,6 +95,12 @@ export const createDocumentBodySchema = z.object({
    * `isRedactionSensitiveCategory` and F-02.
    */
   redactionAttested: z.boolean().optional(),
+  /**
+   * Save as a draft: visible to managers only, no notifications, and no
+   * redaction attestation yet — that is asked when the draft is POSTED, the
+   * moment owners can first see it (PATCH `{ posted: true }`).
+   */
+  draft: z.boolean().optional(),
 });
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
@@ -167,13 +173,13 @@ const patchQuerySchema = z.object({
 });
 
 /**
- * Two document state flags, exactly one per request.
+ * Three document lifecycle flags, exactly one per request.
  *
  * This widened from `publicAccess` alone when the board's Deleted column needed
- * a way back. It is still deliberately NOT a general document PATCH: both keys
- * are lifecycle flags with their own audit entry, and the refine below refuses
- * a body that sets neither or both, so a caller cannot publish and restore in
- * one unreviewable step.
+ * a way back, and again for drafts (`posted`). It is still deliberately NOT a
+ * general document PATCH: each key is a lifecycle flag with its own audit
+ * entry, and the refine below refuses a body that sets none or several, so a
+ * caller cannot post, publish and restore in one unreviewable step.
  */
 const patchBodySchema = z
   .object({
@@ -182,11 +188,18 @@ const patchBodySchema = z
     redactionAttested: z.boolean().optional(),
     /** Undo a soft delete. */
     restore: z.literal(true).optional(),
+    /**
+     * Post a draft (`true`) so owners can see it, or take a posted document
+     * back to a draft (`false`), which also takes it off the public site.
+     * Posting asks the redaction attestation by category.
+     */
+    posted: z.boolean().optional(),
   })
   .strict()
   .refine(
-    (body) => (body.publicAccess === undefined) !== (body.restore === undefined),
-    { message: 'Send exactly one of publicAccess or restore' },
+    (body) =>
+      [body.publicAccess, body.restore, body.posted].filter((v) => v !== undefined).length === 1,
+    { message: 'Send exactly one of publicAccess, restore or posted' },
   );
 
 export const documentsPatchContract = defineRoute({
@@ -200,6 +213,7 @@ export const documentsPatchContract = defineRoute({
     id: z.number().int().positive(),
     publicAccess: z.boolean().optional(),
     restored: z.literal(true).optional(),
+    posted: z.boolean().optional(),
   }),
   permission: { resource: 'documents', action: 'write' },
 });

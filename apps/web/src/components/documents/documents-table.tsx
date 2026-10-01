@@ -33,6 +33,7 @@ import { ExtractionStatusBadge } from './extraction-status-badge';
  * at runtime (`bg-status-${tone}`), and `guard:class-resolution` fails on it.
  */
 const STATE_DISPLAY: Record<DocumentState, { label: string; className: string }> = {
+  draft: { label: 'Draft · owners can’t see it', className: 'bg-status-warning-bg text-status-warning' },
   public: { label: 'On the public site', className: 'bg-status-success-bg text-status-success' },
   owed: { label: 'Owed to public site', className: 'bg-status-warning-bg text-status-warning' },
   private: { label: 'Owners only', className: 'bg-surface-muted text-content-secondary' },

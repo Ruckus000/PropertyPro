@@ -47,6 +47,7 @@ import {
   workOrders,
 } from '@propertypro/db';
 import type { PgTable } from '@propertypro/db';
+import { isNotNull, type SQL } from '@propertypro/db/filters';
 
 export interface ExportColumn {
   /** Property name on the selected row. */
@@ -70,6 +71,12 @@ export interface ExportTableSpec {
    * Writing it down forces the question "would a board actually want this?".
    */
   why: string;
+  /**
+   * Rows that are not records yet and must not leave the system. ANDed into
+   * the worker's read. Not for soft-deleted rows — those ARE records (see
+   * `auditColumns`).
+   */
+  rowFilter?: SQL;
 }
 
 function col(key: string, label: string, column: unknown): ExportColumn {
@@ -194,8 +201,13 @@ export const EXPORT_TABLES: ExportTableSpec[] = [
       // omitted it. In this archive the bytes travel alongside, so the path is
       // what lets a reader match a CSV row to its file.
       col('filePath', 'File Path', documents.filePath),
+      col('postedAt', 'Posted At', documents.postedAt),
       ...auditColumns(documents as unknown as Record<string, unknown>),
     ],
+    // Drafts are not records yet, and a board-designated RESIDENT can run this
+    // export — drafts are managers-only. Same rule for the file bytes
+    // (export-worker's documents phase).
+    rowFilter: isNotNull(documents.postedAt),
   },
   {
     tableName: 'document_categories',

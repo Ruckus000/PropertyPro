@@ -32,7 +32,12 @@ vi.mock('@propertypro/db', () => ({
   COMMUNITY_EXPORTS_BUCKET: 'community-exports',
   DOCUMENTS_BUCKET: 'documents',
   createScopedClient: createScopedClientMock,
-  documents: { id: 'documents.id', filePath: 'documents.file_path', fileName: 'documents.file_name' },
+  documents: {
+    id: 'documents.id',
+    filePath: 'documents.file_path',
+    fileName: 'documents.file_name',
+    postedAt: 'documents.posted_at',
+  },
   openStorageObjectStream: openStorageObjectStreamMock,
   uploadStorageObject: uploadStorageObjectMock,
 }));
@@ -40,6 +45,8 @@ vi.mock('@propertypro/db', () => ({
 vi.mock('@propertypro/db/filters', () => ({
   asc: (c: unknown) => ({ __asc: c }),
   gt: (a: unknown, b: unknown) => ({ __gt: [a, b] }),
+  and: (...parts: unknown[]) => ({ __and: parts }),
+  isNotNull: (c: unknown) => ({ __isNotNull: c }),
 }));
 
 vi.mock('@/lib/services/export/export-job-service', () => ({
@@ -57,6 +64,7 @@ vi.mock('@/lib/services/export/table-registry', () => ({
       table: { id: 'units.id' },
       why: 'test',
       columns: [{ key: 'id', label: 'ID', column: 'units.id' }],
+      rowFilter: { __marker: 'units.rowFilter' },
     },
   ],
   INTENTIONALLY_EXCLUDED: {},
@@ -76,7 +84,8 @@ const JOB = {
 /** Scoped-client stub: `unitRows` for the table phase, `docRows` for documents. */
 function mockScoped(opts: { unitRows?: unknown[]; docRows?: unknown[] }) {
   const scoped = {
-    selectFrom: vi.fn((table: unknown) => {
+    // `where` is captured so a case can assert what the worker filtered on.
+    selectFrom: vi.fn((table: unknown, _projection?: unknown, _where?: unknown) => {
       const isDocs = typeof table === 'object' && table !== null
         && (table as Record<string, unknown>).filePath === 'documents.file_path';
       let served = false;
@@ -219,6 +228,31 @@ describe('runExportJob', () => {
 
     expect(result.manifest.documents?.included).toBe(1);
     expect(result.manifest.warnings ?? []).toHaveLength(0);
+  });
+
+  it('ANDs a table spec’s rowFilter into its read', async () => {
+    const scoped = mockScoped({ unitRows: [], docRows: [] });
+
+    await runExportJob(JOB, { budgetMs: 30_000 });
+
+    const unitsCall = scoped.selectFrom.mock.calls.find(
+      ([table]) => (table as Record<string, unknown>).id === 'units.id',
+    );
+    expect(JSON.stringify(unitsCall?.[2])).toContain('units.rowFilter');
+  });
+
+  it('reads document FILES for posted documents only — drafts never leave in an archive', async () => {
+    // A board-designated resident can request an export; drafts are
+    // managers-only. The rows' CSV is filtered by the registry's rowFilter;
+    // this is the bytes phase.
+    const scoped = mockScoped({ unitRows: [], docRows: [] });
+
+    await runExportJob(JOB, { budgetMs: 30_000 });
+
+    const docsCall = scoped.selectFrom.mock.calls.find(
+      ([table]) => (table as Record<string, unknown>).filePath === 'documents.file_path',
+    );
+    expect(JSON.stringify(docsCall?.[2])).toContain('"__isNotNull":"documents.posted_at"');
   });
 
   it('skips the document phase entirely when includeDocumentFiles is false', async () => {

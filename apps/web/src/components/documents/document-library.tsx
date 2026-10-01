@@ -55,6 +55,7 @@ import {
   coverageFacts,
   filterRows,
   mergeDocumentsAndGaps,
+  isDraft,
   owedToPublic,
   timelineRows,
   unlinkedDocuments,
@@ -219,6 +220,20 @@ export function DocumentLibrary({
     () => owedToPublic(documents, checklist).length,
     [checklist, documents],
   );
+  const draftCount = useMemo(() => documents.filter(isDraft).length, [documents]);
+
+  // The selection is a snapshot taken on click; a lifecycle change (posted,
+  // taken off the site, file replaced) refetches the list but not the
+  // snapshot. Read the live row when there is one. Structural sharing keeps
+  // the reference stable while nothing changed, so the inspector does not
+  // reset on every background refetch.
+  const liveSelectedDocument = useMemo(
+    () =>
+      selectedDocument
+        ? documents.find((document) => document.id === selectedDocument.id) ?? selectedDocument
+        : null,
+    [documents, selectedDocument],
+  );
 
   const selectedRequirement = useMemo(() => {
     if (!selectedDocument) return null;
@@ -226,12 +241,12 @@ export function DocumentLibrary({
   }, [checklist, selectedDocument]);
 
   const selectedState = useMemo(() => {
-    if (!selectedDocument) return null;
-    const row = mergeDocumentsAndGaps([selectedDocument], checklist).find(
+    if (!liveSelectedDocument) return null;
+    const row = mergeDocumentsAndGaps([liveSelectedDocument], checklist).find(
       (candidate) => candidate.kind === 'document',
     );
     return row?.kind === 'document' ? row.state : null;
-  }, [checklist, selectedDocument]);
+  }, [checklist, liveSelectedDocument]);
 
   const openUploadPanel = useCallback(() => {
     setUploadCategoryId(selectedCategoryId);
@@ -396,6 +411,7 @@ export function DocumentLibrary({
                 { label: 'All records', value: 'all' },
                 { label: 'Owed to public', value: 'owed', count: owedCount },
                 { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
+                { label: 'Drafts', value: 'drafts', count: draftCount },
               ]}
             />
           </div>
@@ -465,6 +481,8 @@ export function DocumentLibrary({
                   // is draggable — deleting is destructive and keeps its own
                   // explicit verb, and restoring is offered in the panel.
                   if (from === 'deleted' || to === 'deleted') return;
+                  // Posting a draft asks its own questions in the inspector.
+                  if (from === 'draft' || to === 'draft') return;
                   setSelectedDocument(document);
                   setPublishTarget({ document, publishing: to === 'public' });
                 }}
@@ -497,7 +515,7 @@ export function DocumentLibrary({
             )}
             <DocumentInspector
               communityId={communityId}
-              document={selectedDocument}
+              document={liveSelectedDocument}
               requirement={selectedRequirement}
               state={selectedState}
               canManage={canUpload}

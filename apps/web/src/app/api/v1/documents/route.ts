@@ -24,7 +24,7 @@
 import { runRoute, withEnvelope } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { ConflictError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -32,7 +32,10 @@ import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validato
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
-import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
+import {
+  createUploadedDocument,
+  sendDocumentPostedNotifications,
+} from '@/lib/documents/create-uploaded-document';
 import {
   enforcePublishRedactionAttestation,
   enforceRedactionAttestation,
@@ -45,8 +48,10 @@ import {
   paginateAccessibleDocuments,
   paginateDeletedDocuments,
   restoreDocument,
+  setDocumentPosted,
   setDocumentPublicAccess,
   softDeleteDocument,
+  type DocumentPublishAudit,
 } from '@/lib/services/documents-service';
 import { unlinkChecklistItemsForDocument } from '@/lib/services/compliance-service';
 import {
@@ -125,14 +130,18 @@ export const POST = withErrorHandler(
     await requireActiveSubscriptionForMutation(effectiveCommunityId);
 
     // Before the row exists, not after: an unredacted record that reaches the
-    // portal and is then deleted was still published (F-02).
-    await enforceRedactionAttestation({
-      communityId: effectiveCommunityId,
-      categoryId: body.categoryId,
-      userId,
-      title: body.title,
-      attested: body.redactionAttested,
-    });
+    // portal and is then deleted was still published (F-02). A DRAFT reaches
+    // no portal — only managers see it — so the question waits for posting
+    // (PATCH `{ posted: true }`), the moment owners first can.
+    if (!body.draft) {
+      await enforceRedactionAttestation({
+        communityId: effectiveCommunityId,
+        categoryId: body.categoryId,
+        userId,
+        title: body.title,
+        attested: body.redactionAttested,
+      });
+    }
 
     const result = await createUploadedDocument({
       userId,
@@ -144,6 +153,7 @@ export const POST = withErrorHandler(
       fileName: body.fileName,
       fileSize: body.fileSize,
       sourceType: 'library',
+      draft: body.draft === true,
     });
 
     void tryAutoComplete(effectiveCommunityId, userId, 'upload_first_document');
@@ -255,6 +265,16 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('Document not found');
     }
 
+    if (body.posted !== undefined) {
+      return changePostedState({ communityId, userId, id, existing, posted: body.posted, attested: body.redactionAttested });
+    }
+
+    // A draft is not public, and cannot be made public: owners have not even
+    // been shown it. Post it first.
+    if (body.publicAccess === true && existing.postedAt == null) {
+      throw new ValidationError('Post this draft before putting it on the public site.');
+    }
+
     // Publishing only. Removing a document from the public site reduces
     // disclosure, so it carries no attestation — gating it would strand a
     // record a board wants pulled.
@@ -290,3 +310,76 @@ export const PATCH = withErrorHandler(
     return { id, publicAccess };
   }),
 );
+
+/**
+ * PATCH `{ posted }` — post a draft, or take a posted document back to a draft.
+ *
+ * Posting is when owners first see the document, so it is when the upload's
+ * redaction attestation is asked (by category, as on upload) and when
+ * residents are notified. Taking it back also takes it off the public site
+ * (`setDocumentPosted`) and UNLINKS it from any compliance item, as a delete
+ * does: a draft is not a posted record, and several compliance counters
+ * (portfolio, welcome, cards) read the link alone. Unlinking keeps them all
+ * true without each having to learn about drafts; re-linking after re-posting
+ * stamps an honest posting date.
+ */
+async function changePostedState(params: {
+  communityId: number;
+  userId: string;
+  id: number;
+  existing: DocumentPublishAudit;
+  posted: boolean;
+  attested: boolean | undefined;
+}): Promise<{ id: number; posted: boolean }> {
+  const { communityId, userId, id, existing, posted } = params;
+  const isDraft = existing.postedAt === null;
+  if (posted && !isDraft) {
+    throw new ValidationError('This document is already posted.');
+  }
+  if (!posted && isDraft) {
+    throw new ValidationError('This document is already a draft.');
+  }
+
+  if (posted) {
+    await enforceRedactionAttestation({
+      communityId,
+      // A null category is treated as sensitive, as on the publish path.
+      categoryId: existing.categoryId ?? 0,
+      userId,
+      title: existing.title ?? String(id),
+      attested: params.attested,
+    });
+  }
+
+  const updated = await setDocumentPosted(communityId, id, posted);
+  if (updated.length === 0) {
+    // Another request changed it between the read and this write.
+    throw new ConflictError('This document changed while you were updating it. Reload and try again.');
+  }
+
+  if (!posted) {
+    await unlinkChecklistItemsForDocument(communityId, id, userId);
+  }
+
+  await logAuditEvent({
+    userId,
+    action: 'update',
+    resourceType: 'document',
+    resourceId: String(id),
+    communityId,
+    oldValues: { posted: !posted, publicAccess: existing.publicAccess },
+    newValues: { posted, publicAccess: posted ? existing.publicAccess : false },
+    metadata: posted ? { change: 'posted' } : { change: 'unposted', complianceLinksCleared: true },
+  });
+
+  if (posted && existing.sourceType === 'library') {
+    await sendDocumentPostedNotifications({
+      communityId,
+      documentId: id,
+      title: existing.title ?? 'A document',
+      actorUserId: userId,
+    });
+  }
+
+  return { id, posted };
+}

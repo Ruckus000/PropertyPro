@@ -41,6 +41,7 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@propertypro/db/filters', () => ({
   inArray: vi.fn((_col, ids) => ({ _type: 'inArray', ids })),
+  isNotNull: vi.fn((col) => ({ _type: 'isNotNull', col })),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({

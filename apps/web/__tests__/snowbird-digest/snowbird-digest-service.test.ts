@@ -89,8 +89,8 @@ describe('compileSnowbirdDigest', () => {
     const scoped = fakeScoped({
       documents: [
         [
-          { title: 'Reserve Study 2026', categoryId: 5, createdAt: new Date('2026-07-05T00:00:00Z') },
-          { title: 'Uncategorized memo', categoryId: null, createdAt: new Date('2026-07-06T00:00:00Z') },
+          { title: 'Reserve Study 2026', categoryId: 5, createdAt: new Date('2026-07-05T00:00:00Z'), postedAt: new Date('2026-07-05T00:00:00Z') },
+          { title: 'Uncategorized memo', categoryId: null, createdAt: new Date('2026-07-06T00:00:00Z'), postedAt: new Date('2026-07-06T00:00:00Z') },
         ],
       ],
       documentCategories: [[{ id: 5, name: 'Financial Records' }]],
@@ -107,7 +107,7 @@ describe('compileSnowbirdDigest', () => {
     const many = Array.from({ length: DIGEST_DOCUMENT_CAP + 3 }, (_, i) => ({
       title: `Doc ${i}`,
       categoryId: null,
-      createdAt: new Date('2026-07-05T00:00:00Z'),
+      createdAt: new Date('2026-07-05T00:00:00Z'), postedAt: new Date('2026-07-05T00:00:00Z'),
     }));
     const scoped = fakeScoped({ documents: [many] });
 
@@ -159,7 +159,7 @@ describe('isDigestEmpty', () => {
     expect(isDigestEmpty(empty)).toBe(true);
 
     const nonEmpty = await compileSnowbirdDigest(
-      fakeScoped({ documents: [[{ title: 'X', categoryId: null, createdAt: WIN_END }]] }),
+      fakeScoped({ documents: [[{ title: 'X', categoryId: null, createdAt: WIN_END, postedAt: WIN_END }]] }),
       1,
       WIN_START,
       WIN_END,

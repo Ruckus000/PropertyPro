@@ -124,6 +124,44 @@ describe('calculateComplianceStatus', () => {
     });
   });
 
+  describe('draft document defense', () => {
+    it('a linked DRAFT does not satisfy the item — owners cannot see it', () => {
+      expect(
+        calculateComplianceStatus({
+          documentId: 42,
+          documentIsDraft: true,
+          documentPostedAt: ms('2026-04-15T00:00:00Z'),
+          deadline: ms('2026-06-01T00:00:00Z'),
+          now,
+        }),
+      ).toBe('unsatisfied');
+    });
+
+    it('a linked draft past its deadline is overdue', () => {
+      expect(
+        calculateComplianceStatus({
+          documentId: 42,
+          documentIsDraft: true,
+          documentPostedAt: ms('2026-04-15T00:00:00Z'),
+          deadline: ms('2026-04-30T00:00:00Z'),
+          now,
+        }),
+      ).toBe('overdue');
+    });
+
+    it('control: the same item with a posted document is satisfied', () => {
+      expect(
+        calculateComplianceStatus({
+          documentId: 42,
+          documentIsDraft: false,
+          documentPostedAt: ms('2026-04-15T00:00:00Z'),
+          deadline: ms('2026-06-01T00:00:00Z'),
+          now,
+        }),
+      ).toBe('satisfied');
+    });
+  });
+
   describe('rolling window', () => {
     it('returns satisfied when posted within the rolling window', () => {
       // 12-month window from now (2026-05-04) → start of window = 2025-05-04.

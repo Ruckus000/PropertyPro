@@ -59,6 +59,8 @@ const SOURCE_DELETED_REASON: Record<SoftDeleteSourceType, string> = {
   document: 'Source document was deleted',
 };
 
+const SOURCE_DRAFT_REASON = 'Source document is a draft';
+
 function isSoftDeleteSourceType(value: string): value is SoftDeleteSourceType {
   return value in SOFT_DELETE_SOURCE_TABLES;
 }
@@ -391,6 +393,7 @@ export async function processNotificationDigests(
     // intentionally excluded here; other sourceTypes without a `deletedAt`
     // column (none today) would be no-ops.
     const deletedIdsByType = new Map<SoftDeleteSourceType, Set<number>>();
+    const draftDocumentIds = new Set<number>();
     for (const [sourceType, table] of SOFT_DELETE_SOURCE_ENTRIES) {
       const claimedIds = new Set<number>();
       for (const row of claimedRows) {
@@ -404,8 +407,13 @@ export async function processNotificationDigests(
       const deletedIds = new Set<number>();
       for (const record of allRows) {
         const rid = record['id'];
-        if (typeof rid === 'number' && claimedIds.has(rid) && record['deletedAt'] != null) {
+        if (typeof rid !== 'number' || !claimedIds.has(rid)) continue;
+        if (record['deletedAt'] != null) {
           deletedIds.add(rid);
+        } else if (sourceType === 'document' && record['postedAt'] === null) {
+          // Taken back to a draft after the notice was queued: residents can
+          // no longer open it, so the notice is dropped like a deleted one.
+          draftDocumentIds.add(rid);
         }
       }
       if (deletedIds.size > 0) deletedIdsByType.set(sourceType, deletedIds);
@@ -418,6 +426,11 @@ export async function processNotificationDigests(
         const rid = Number(row.sourceId);
         if (deletedIds && Number.isInteger(rid) && deletedIds.has(rid)) {
           await markRowDiscarded(row, SOURCE_DELETED_REASON[row.sourceType], now);
+          summary.rowsDiscarded += 1;
+          continue;
+        }
+        if (row.sourceType === 'document' && Number.isInteger(rid) && draftDocumentIds.has(rid)) {
+          await markRowDiscarded(row, SOURCE_DRAFT_REASON, now);
           summary.rowsDiscarded += 1;
           continue;
         }

@@ -90,6 +90,16 @@ describe('GET /api/v1/documents/drafts/[id]/document-search', () => {
     expect(json.data[0]!.documentId).toBe(10);
   });
 
+  it('never offers a DRAFT to link — every owner opening the published document would 404', async () => {
+    getAccessibleDocumentsMock.mockResolvedValueOnce([
+      { id: 10, title: 'Bylaws.pdf', categoryId: 1, mimeType: 'application/pdf', postedAt: null },
+      { id: 12, title: 'Bylaws amendment', categoryId: 1, mimeType: 'application/pdf', postedAt: '2026-01-15T00:00:00.000Z' },
+    ]);
+    const res = await GET(req('?communityId=42&q=bylaws'), ctx());
+    const json = (await res.json()) as { data: Array<{ documentId: number }> };
+    expect(json.data.map((d) => d.documentId)).toEqual([12]);
+  });
+
   it('returns 401 when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
     const res = await GET(req(), ctx());

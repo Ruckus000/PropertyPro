@@ -34,7 +34,7 @@ import {
   openStorageObjectStream,
 } from '@propertypro/db';
 import type { CommunityExportJob, ExportJobCursor, ExportJobManifest } from '@propertypro/db';
-import { asc, gt } from '@propertypro/db/filters';
+import { and, asc, gt, isNotNull } from '@propertypro/db/filters';
 import { redactParams } from '@propertypro/shared/observability';
 import { generateCSVHeaderLine, generateCSVRowLine } from '@/lib/services/csv-export';
 import { EXPORT_TABLES, type ExportTableSpec } from './table-registry';
@@ -394,7 +394,8 @@ export async function runExportJob(
             filePath: documentsTable.filePath,
             fileName: documentsTable.fileName,
           },
-          gt(documentsTable.id, lastId),
+          // Drafts' bytes stay out, as their rows do (table-registry rowFilter).
+          and(gt(documentsTable.id, lastId), isNotNull(documentsTable.postedAt)),
         )
         .orderBy(asc(documentsTable.id))
         .limit(ROW_PAGE_SIZE)) as unknown as Array<{
@@ -538,7 +539,11 @@ export async function buildTableCsv(
 
   for (;;) {
     const rows = (await scoped
-      .selectFrom(spec.table, projection, gt(idColumn as never, lastId))
+      .selectFrom(
+        spec.table,
+        projection,
+        spec.rowFilter ? and(gt(idColumn as never, lastId), spec.rowFilter) : gt(idColumn as never, lastId),
+      )
       .orderBy(asc(idColumn as never))
       .limit(ROW_PAGE_SIZE)) as unknown as Array<Record<string, unknown>>;
 

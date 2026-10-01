@@ -68,7 +68,13 @@ export const PUT = withErrorHandler(
     }
 
     // Before any write: new bytes reach the audience the document already has.
-    if (existing.publicAccess) {
+    // A DRAFT has none beyond managers — the question is asked when it is
+    // posted (PATCH /api/v1/documents `{ posted: true }`).
+    // Strictly null: anything else (a row read without the column) asks.
+    const isDraft = existing.postedAt === null;
+    if (isDraft) {
+      // Nothing to ask yet.
+    } else if (existing.publicAccess) {
       await enforcePublishRedactionAttestation({
         communityId,
         // A null category is treated as sensitive, as on the publish path.

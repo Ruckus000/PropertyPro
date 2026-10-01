@@ -36,6 +36,7 @@ vi.mock('@propertypro/db', () => ({
     mimeType: 'documents.mimeType',
     publicAccess: 'documents.publicAccess',
     deletedAt: 'documents.deletedAt',
+    postedAt: 'documents.postedAt',
   },
   communities: {
     id: 'communities.id',
@@ -60,6 +61,7 @@ vi.mock('@propertypro/db/filters', () => ({
   gte: (col: unknown, val: unknown) => ({ __gte: { col, val } }),
   inArray: (col: unknown, vals: unknown) => ({ __inArray: { col, vals } }),
   isNull: (col: unknown) => ({ __isNull: col }),
+  isNotNull: (col: unknown) => ({ __isNotNull: col }),
   lte: (col: unknown, val: unknown) => ({ __lte: { col, val } }),
 }));
 
@@ -185,6 +187,7 @@ function matches(clause: unknown, row: FakeRow): boolean {
     __and?: unknown[];
     __eq?: { col: string; val: unknown };
     __isNull?: string;
+    __isNotNull?: string;
   };
   if (c.__and) return c.__and.every((sub) => matches(sub, row));
   if (c.__eq) {
@@ -194,6 +197,7 @@ function matches(clause: unknown, row: FakeRow): boolean {
     return row[c.__eq.col] === right;
   }
   if (c.__isNull) return row[c.__isNull] == null;
+  if (c.__isNotNull) return row[c.__isNotNull] != null;
   throw new Error(`fake DB cannot evaluate ${JSON.stringify(clause)}`);
 }
 
@@ -242,6 +246,7 @@ const PUBLISHED_DOCUMENT_ROW: FakeRow = {
   'documents.communityId': 42,
   'documents.publicAccess': true,
   'documents.deletedAt': null,
+  'documents.postedAt': new Date('2026-01-15T00:00:00.000Z'),
   'documents.filePath': 'community-42/bylaws.pdf',
   'documents.fileName': 'bylaws.pdf',
   'documents.mimeType': 'application/pdf',
@@ -317,3 +322,28 @@ describe('a community that has been soft-deleted', () => {
     expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 });
+
+describe('a draft', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createPresignedDownloadUrlMock.mockResolvedValue('https://storage.example.com/signed');
+  });
+
+  it('404s, and mints no signed URL, even with public_access set', async () => {
+    // The PATCH refuses to publish a draft, and taking a document back to a
+    // draft clears the flag — this is the reader's own backstop, because it
+    // is the unauthenticated boundary.
+    unscopedClientHolder.db = fakeDbHolding({
+      ...PUBLISHED_DOCUMENT_ROW,
+      'communities.deletedAt': null,
+      'documents.postedAt': null,
+    });
+    const get = await routeWithRealReader();
+
+    const response = await get(request(), params());
+
+    expect(response.status, 'a draft was served on the public download route').toBe(404);
+    expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
+  });
+});
+

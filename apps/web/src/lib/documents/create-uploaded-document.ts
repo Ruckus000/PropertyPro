@@ -23,6 +23,12 @@ interface CreateUploadedDocumentInput {
   fileSize: number;
   sourceType: DocumentSourceType;
   sendDocumentNotifications?: boolean;
+  /**
+   * Save as a DRAFT: `posted_at` NULL, visible to managers only, and no
+   * notifications — residents hear about it when it is posted
+   * (`postDocument`). Library uploads only.
+   */
+  draft?: boolean;
 }
 
 interface InvalidUploadContext {
@@ -179,6 +185,8 @@ export async function createUploadedDocument(
     sourceType: input.sourceType,
     uploadedBy: input.userId,
     extractionStatus: isPdf ? 'pending' : 'not_applicable',
+    // Omitted for a posted upload so the column default stamps it.
+    ...(input.draft ? { postedAt: null } : {}),
   });
 
   const created = insertedRows[0];
@@ -200,6 +208,7 @@ export async function createUploadedDocument(
       fileSize: upload.byteLength,
       mimeType: upload.mime,
       sourceType: input.sourceType,
+      ...(input.draft ? { draft: true } : {}),
     },
   });
 
@@ -221,55 +230,80 @@ export async function createUploadedDocument(
     // Never block document creation on extraction scheduling.
   }
 
-  const warnings: DocumentMutationWarning[] = [];
-
-  if (input.sourceType === 'library' && input.sendDocumentNotifications !== false) {
-    try {
-      const notificationResult = await queueNotificationDetailed(
-        input.communityId,
-        {
-          type: 'document_posted',
-          documentTitle: input.title,
-          uploadedByName: 'Community Team',
-          documentId: String(created['id']),
-          sourceType: 'document',
-          sourceId: String(created['id']),
-        },
-        'all',
-        input.userId,
-      );
-      if (notificationResult.failedCount > 0) {
-        warnings.push(DOCUMENT_NOTIFICATION_WARNING);
-      }
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[documents] notification dispatch failed', {
-        communityId: input.communityId,
-        documentId: String(created['id']),
-        error: error instanceof Error ? error.message : String(error),
-      });
-      warnings.push(DOCUMENT_NOTIFICATION_WARNING);
-    }
-
-    void createNotificationsForEvent(
-      input.communityId,
-      {
-        category: 'document',
-        title: `New Document: ${input.title}`,
-        body: undefined,
-        actionUrl: `/documents/${created['id']}`,
-        sourceType: 'document',
-        sourceId: String(created['id']),
-      },
-      'all',
-      input.userId,
-    ).catch((err: unknown) => {
-      console.error('[documents] in-app notification failed', { communityId: input.communityId, error: err instanceof Error ? err.message : String(err) });
-    });
-  }
+  const warnings: DocumentMutationWarning[] =
+    input.sourceType === 'library' && input.sendDocumentNotifications !== false && !input.draft
+      ? await sendDocumentPostedNotifications({
+          communityId: input.communityId,
+          documentId: Number(created['id']),
+          title: input.title,
+          actorUserId: input.userId,
+        })
+      : [];
 
   return {
     document: created,
     warnings,
   };
+}
+
+/**
+ * Tell the community a document was posted: the email/digest queue and the
+ * in-app feed. Called when an upload is posted directly, and when a draft is
+ * posted later — never for a draft, which residents cannot open.
+ *
+ * Never throws: a failed dispatch is a warning on a write that already
+ * happened, not a reason to report the write as failed.
+ */
+export async function sendDocumentPostedNotifications(params: {
+  communityId: number;
+  documentId: number;
+  title: string;
+  actorUserId: string;
+}): Promise<DocumentMutationWarning[]> {
+  const warnings: DocumentMutationWarning[] = [];
+  const documentId = String(params.documentId);
+  try {
+    const notificationResult = await queueNotificationDetailed(
+      params.communityId,
+      {
+        type: 'document_posted',
+        documentTitle: params.title,
+        uploadedByName: 'Community Team',
+        documentId,
+        sourceType: 'document',
+        sourceId: documentId,
+      },
+      'all',
+      params.actorUserId,
+    );
+    if (notificationResult.failedCount > 0) {
+      warnings.push(DOCUMENT_NOTIFICATION_WARNING);
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[documents] notification dispatch failed', {
+      communityId: params.communityId,
+      documentId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    warnings.push(DOCUMENT_NOTIFICATION_WARNING);
+  }
+
+  void createNotificationsForEvent(
+    params.communityId,
+    {
+      category: 'document',
+      title: `New Document: ${params.title}`,
+      body: undefined,
+      actionUrl: `/documents/${documentId}`,
+      sourceType: 'document',
+      sourceId: documentId,
+    },
+    'all',
+    params.actorUserId,
+  ).catch((err: unknown) => {
+    console.error('[documents] in-app notification failed', { communityId: params.communityId, error: err instanceof Error ? err.message : String(err) });
+  });
+
+  return warnings;
 }

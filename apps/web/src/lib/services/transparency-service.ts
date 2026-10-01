@@ -14,6 +14,10 @@ import { z } from 'zod';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 import { getNoticeLeadDays, type MeetingType } from '@/lib/utils/meeting-calculator';
 import type { ResolvedCommunityRecord } from '@/lib/tenant/community-resolution';
+import {
+  getLinkedDocumentStatesByIds,
+  type LinkedDocumentState,
+} from '@/lib/services/documents-service';
 
 export type TransparencyDocumentStatus = 'posted' | 'not_posted' | 'not_required';
 export type TransparencyMinutesStatus = 'minutes_posted' | 'minutes_missing' | 'not_expected';
@@ -323,7 +327,10 @@ function buildMinutesMonths(
   });
 }
 
-function buildDocumentGroups(rows: ReadonlyArray<Record<string, unknown>>): TransparencyDocumentGroup[] {
+function buildDocumentGroups(
+  rows: ReadonlyArray<Record<string, unknown>>,
+  linkedDocuments: ReadonlyMap<number, LinkedDocumentState>,
+): TransparencyDocumentGroup[] {
   const grouped = new Map<string, TransparencyDocumentItem[]>();
 
   for (const [index, row] of rows.entries()) {
@@ -332,7 +339,15 @@ function buildDocumentGroups(rows: ReadonlyArray<Record<string, unknown>>): Tran
     const templateKey = asString(row['templateKey']) ?? `${category}-${rowId ?? index + 1}`;
     const title = asString(row['title']) ?? 'Checklist item';
     const statuteReference = asString(row['statuteReference']) ?? 'Florida Statute';
-    const documentId = asNumber(row['documentId']);
+    // A link to a deleted document or a draft is not a posted record: this
+    // public page must not say "posted" for something owners cannot open.
+    // Same rule as the compliance calculator (`calculateComplianceStatus`).
+    const linkedId = asNumber(row['documentId']);
+    const linked = linkedId != null ? linkedDocuments.get(linkedId) : undefined;
+    const documentId =
+      linkedId != null && linked != null && linked.deletedAt == null && !linked.isDraft
+        ? linkedId
+        : null;
     const postedAt = asDate(row['documentPostedAt']);
     const isConditional = asBoolean(row['isConditional']);
 
@@ -439,7 +454,15 @@ export async function getTransparencyPageData(
     .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
 
   const minuteMonths = buildMinutesMonths(now, filteredMeetingRows);
-  const documentsByCategory = buildDocumentGroups(checklistRows);
+  const linkedDocumentIds = [
+    ...new Set(
+      checklistRows
+        .map((row) => asNumber(row['documentId']))
+        .filter((id): id is number => id != null),
+    ),
+  ];
+  const linkedDocuments = await getLinkedDocumentStatesByIds(community.id, linkedDocumentIds);
+  const documentsByCategory = buildDocumentGroups(checklistRows, linkedDocuments);
   const features = getFeaturesForCommunity(community.communityType);
 
   const payload: TransparencyPageData = {

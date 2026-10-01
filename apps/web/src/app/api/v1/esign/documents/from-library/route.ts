@@ -10,7 +10,7 @@ import { getDocumentWithAccessCheck, logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { NotFoundError } from '@/lib/api/errors';
+import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { requireEsignWritePermission } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
@@ -46,6 +46,11 @@ export const POST = withErrorHandler(
 
     if (!document) {
       throw new NotFoundError('Document not found');
+    }
+    // A manager can read drafts, but a draft is not a record yet: sending it for
+    // signature would put an unposted document in front of signers.
+    if (document['postedAt'] === null) {
+      throw new ValidationError('Post this document before sending it for signature.');
     }
 
     const fileName = (document['fileName'] as string | undefined) ?? 'document.pdf';

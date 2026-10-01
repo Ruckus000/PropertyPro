@@ -11,7 +11,7 @@
  * scripts/verify-scoped-db-access.ts for that reason.
  */
 import { createScopedClient } from '@propertypro/db';
-import { inArray } from '@propertypro/db/filters';
+import { inArray, isNotNull } from '@propertypro/db/filters';
 // AUTHZ: P4-64: Community data export — residents export joins users table (no community_id column)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
@@ -135,12 +135,17 @@ const DOCUMENTS_HEADERS = [
   { key: 'categoryId', label: 'Category ID' },
   { key: 'createdAt', label: 'Created At' },
   { key: 'updatedAt', label: 'Updated At' },
+  // Last, so existing column positions are unchanged for anyone reading the
+  // file by index.
+  { key: 'postedAt', label: 'Posted At' },
 ] as const;
 
 export async function exportDocuments(communityId: number): Promise<ExportedCSV> {
   const scoped = createScopedClient(communityId);
+  // Drafts are managers-only and not records yet; a board-designated resident
+  // can run this export.
   const rawRows = await scoped
-    .selectFrom(documents, {})
+    .selectFrom(documents, {}, isNotNull(documents.postedAt))
     .limit(MAX_EXPORT_ROWS);
   const typedRows = rawRows as unknown as Document[];
 
@@ -154,6 +159,7 @@ export async function exportDocuments(communityId: number): Promise<ExportedCSV>
     categoryId: row.categoryId ?? '',
     createdAt: formatDateForExport(row.createdAt),
     updatedAt: formatDateForExport(row.updatedAt),
+    postedAt: row.postedAt ? formatDateForExport(row.postedAt) : '',
   }));
 
   return {
