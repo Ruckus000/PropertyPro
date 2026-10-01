@@ -35,7 +35,7 @@ import { useIsDesktop } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { CsvExportButton } from '@/components/shared/csv-export-button';
 import { ConfirmDialog } from '@/components/pm/site-editor-v3/ConfirmDialog';
-import { AddResidentDialog } from '@/components/residents/residents-page-client';
+import { AddResidentDialog } from '@/components/residents/add-resident-dialog';
 import { DirectorySheet } from './directory-sheet';
 import { EditResidentDialog } from './edit-resident-dialog';
 import { PastDueRuleDialog } from './past-due-rule-dialog';
@@ -68,7 +68,7 @@ import { ResidentsTable } from './residents-table';
 import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
 
-// ponytail: this route sits ~9 KiB under the 1220 KiB hard per-route budget
+// ponytail: this route sits ~16 KiB under the 1220 KiB hard per-route budget
 // (perf:check). Lazy-loading the dialogs below via next/dynamic was measured
 // and made things WORSE: it reshuffled shared chunks and pushed the web
 // aggregate budget (1490 KiB, routes this page is not even in) over. Re-measure
