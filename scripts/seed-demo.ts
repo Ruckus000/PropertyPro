@@ -1285,6 +1285,9 @@ async function seedViolationsData(
         isNull(units.deletedAt),
       ),
     )
+    // Deterministic: the demo personas' units (owner.one 1A, tenant.one 1B)
+    // carry a case each.
+    .orderBy(units.unitNumber)
     .limit(4);
 
   if (communityUnits.length === 0) {
@@ -1952,8 +1955,56 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     }
   }
 
+  // board.member owns 3A: past the units seedViolationsData cites (1A–2B), so
+  // the board-seat persona's own unit is clean, and off 1B, so tenant.one keeps
+  // the second unit it had before board.member became an owner. Clearing its
+  // other ownership first moves databases seeded while it held 1B.
+  const boardMemberUserId = await ensureDemoUserRecord(
+    'board.member@sunset.local',
+    resolveUserId(userIdsByEmail, 'board.member@sunset.local'),
+  );
+  userIdsByEmail['board.member@sunset.local'] = boardMemberUserId;
+  {
+    const [boardUnit] = await db
+      .select({ id: units.id })
+      .from(units)
+      .where(
+        and(
+          eq(units.communityId, sunsetCommunityId),
+          eq(units.unitNumber, '3A'),
+          isNull(units.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (boardUnit) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(units)
+          .set({ ownerUserId: null, updatedAt: new Date() })
+          .where(
+            and(
+              eq(units.communityId, sunsetCommunityId),
+              eq(units.ownerUserId, boardMemberUserId),
+            ),
+          );
+        await tx
+          .update(units)
+          .set({ ownerUserId: boardMemberUserId, updatedAt: new Date() })
+          .where(eq(units.id, boardUnit.id));
+        await tx.execute(sql`
+          UPDATE user_roles
+          SET unit_id = ${boardUnit.id}
+          WHERE community_id = ${sunsetCommunityId}
+            AND user_id = ${boardMemberUserId}
+        `);
+      });
+      debugSeed(`linked board member to unit ${boardUnit.id} in community ${sunsetCommunityId}`);
+    }
+  }
+
   // Link the condo tenant to the lowest UNOWNED unit by unit number, never an
-  // owner's (owner.one and board.member each claim one). A tenant does not own, so only `user_roles.unit_id` is written (no
+  // owner's (owner.one holds 1A and board.member 3A, so this is 1B). A tenant does not own, so only `user_roles.unit_id` is written (no
   // `units.owner_user_id`). seedCommunity cannot do this: a condo tenant has no
   // lease to derive a unit from. Without it tenant.one reaches every
   // unit-scoped feature (packages, visitors, work orders, /welcome) unit-less.
