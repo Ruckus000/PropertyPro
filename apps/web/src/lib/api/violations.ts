@@ -17,6 +17,8 @@ export interface ViolationItem {
   id: number;
   communityId: number;
   unitId: number;
+  /** "Unit 1B", resolved server-side. */
+  unitLabel?: string;
   reportedByUserId: string | null;
   category: string;
   description: string;

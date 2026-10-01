@@ -47,4 +47,19 @@ describe('dashboard sections', () => {
     expect(board).toContain('Community is in good standing');
     expect(board).toContain('/violations?communityId=42');
   });
+
+  it('labels a violation by its unit number, not its database id', () => {
+    const summary = {
+      total: 1,
+      byStatus: { noticed: 1 },
+      recentViolations: [
+        { id: 2, unitId: 2, unitLabel: 'Unit 1B', category: 'noise', status: 'noticed' as const, severity: 'minor' as const, createdAt: '2026-10-01T00:00:00.000Z' },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <DashboardViolations summary={summary} communityId={42} canReviewViolations={false} />,
+    );
+    expect(html).toContain('Unit 1B');
+    expect(html).not.toContain('Unit 2<');
+  });
 });

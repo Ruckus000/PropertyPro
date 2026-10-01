@@ -145,7 +145,7 @@ export function ViolationDetailView({
     <div className="space-y-6">
       <PageHeader
         title={`Violation #${violation.id}`}
-        description={`${CATEGORY_LABELS[violation.category] ?? violation.category} · Unit ${violation.unitId}`}
+        description={`${CATEGORY_LABELS[violation.category] ?? violation.category} · ${violation.unitLabel ?? `Unit #${violation.unitId}`}`}
         actions={
           <div className="flex gap-2">
             <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${statusStyle}`}>

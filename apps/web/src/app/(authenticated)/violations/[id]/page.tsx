@@ -18,6 +18,7 @@ import { canActAsBoard } from '@/lib/db/access-control';
 import { getViolationForCommunity } from '@/lib/services/violations-service';
 import { ViolationDetailView } from '@/components/violations/ViolationDetailView';
 import { FeatureGate } from '@/components/billing/feature-gate';
+import { withUnitLabel } from '@/lib/units/unit-labels';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -60,7 +61,10 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
 
   let violation;
   try {
-    violation = await getViolationForCommunity(communityId, violationId, allowedUnitIds);
+    violation = await withUnitLabel(
+      scoped,
+      await getViolationForCommunity(communityId, violationId, allowedUnitIds),
+    );
   } catch {
     notFound();
   }

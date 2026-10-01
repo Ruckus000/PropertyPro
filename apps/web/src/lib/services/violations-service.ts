@@ -31,6 +31,7 @@ import { parseDateOnly } from '@/lib/finance/common';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
 import { listUnitResidentUserIds } from '@/lib/units/actor-units';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 
 export interface ViolationRecord {
   [key: string]: unknown;
@@ -46,6 +47,8 @@ export interface ViolationRecord {
   noticeDate: string | null;
   hearingDate: Date | null;
   hearingLocation: string | null;
+  /** "Unit 1B"; set by the read paths (withUnitLabels), absent on writes. */
+  unitLabel?: string;
   resolutionDate: Date | null;
   resolutionNotes: string | null;
   createdAt: Date;
@@ -73,6 +76,8 @@ export interface ArcSubmissionRecord {
   id: number;
   communityId: number;
   unitId: number;
+  /** "Unit 1B"; set by the read paths (withUnitLabels), absent on writes. */
+  unitLabel?: string;
   submittedByUserId: string;
   title: string;
   description: string;
@@ -1245,7 +1250,7 @@ export async function paginateArcSubmissionsForCommunity(params: {
     { where },
   );
   return {
-    data: result.data.map(mapArcRow),
+    data: await withUnitLabels(scoped, result.data.map(mapArcRow)),
     pagination: result.pagination,
   };
 }
@@ -1338,7 +1343,7 @@ export async function paginateViolationsForCommunity(params: {
   );
 
   const mapped = result.data.map(mapViolationRow);
-  const hydrated = await hydrateReportedByRole(scoped, mapped);
+  const hydrated = await hydrateReportedByRole(scoped, await withUnitLabels(scoped, mapped));
   return {
     data: hydrated,
     pagination: result.pagination,

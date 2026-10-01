@@ -11,6 +11,7 @@ vi.mock('@propertypro/db', () => ({
   meetings: {},
   users: {},
   violations: { unitId: 'violations.unit_id', status: 'status', createdAt: 'created_at', id: 'id' },
+  units: { id: 'units.id', unitNumber: 'unit_number', building: 'building' },
 }));
 vi.mock('@propertypro/db/filters', () => ({
   asc: vi.fn(),

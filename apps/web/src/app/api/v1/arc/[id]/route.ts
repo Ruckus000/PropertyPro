@@ -36,6 +36,7 @@ import { getArcSubmissionForCommunity } from '@/lib/services/violations-service'
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { arcDetailContract } from './contract';
+import { withUnitLabel } from '@/lib/units/unit-labels';
 
 export const GET = withErrorHandler(
   runRoute(arcDetailContract, async ({ params, query, req }) => {
@@ -53,6 +54,7 @@ export const GET = withErrorHandler(
       ? await getActorUnitIds(scoped, actorUserId)
       : undefined;
 
-    return await getArcSubmissionForCommunity(communityId, params.id, residentUnitIds);
+    const submission = await getArcSubmissionForCommunity(communityId, params.id, residentUnitIds);
+    return withUnitLabel(scoped, submission);
   }),
 );

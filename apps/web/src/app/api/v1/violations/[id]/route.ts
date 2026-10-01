@@ -27,6 +27,7 @@ import {
   violationDetailGetContract,
   violationUpdateContract,
 } from './contract';
+import { withUnitLabel } from '@/lib/units/unit-labels';
 
 export const GET = withErrorHandler(
   runRoute(violationDetailGetContract, async ({ params, req }) => {
@@ -42,7 +43,8 @@ export const GET = withErrorHandler(
     const scoped = createScopedClient(communityId);
     const residentUnitIds = await getViolationReadUnitIds(scoped, membership, actorUserId);
 
-    return getViolationForCommunity(communityId, params.id, residentUnitIds);
+    const violation = await getViolationForCommunity(communityId, params.id, residentUnitIds);
+    return withUnitLabel(scoped, violation);
   }),
 );
 

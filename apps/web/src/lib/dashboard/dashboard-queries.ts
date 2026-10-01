@@ -20,6 +20,7 @@ import {
 } from '@propertypro/db/filters';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { canReadAnnouncementAudience, type AnnouncementAudience } from '@/lib/announcements/read-visibility';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import {
   buildViolationSummary,
@@ -256,7 +257,7 @@ export async function getDashboardViolationSummary(
       .limit(DASHBOARD_ITEM_LIMIT),
   ]);
 
-  return buildViolationSummary(statusRows, recentRows);
+  return buildViolationSummary(statusRows, await withUnitLabels(scoped, recentRows));
 }
 
 export async function getDashboardOpenMaintenanceCount(

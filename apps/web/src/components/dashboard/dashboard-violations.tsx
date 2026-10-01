@@ -100,7 +100,7 @@ export function DashboardViolations({ summary, communityId, canReviewViolations 
                   <span className="font-medium text-content">
                     {CATEGORY_LABELS[v.category] ?? v.category}
                   </span>
-                  <span className="ml-2 text-content-tertiary">Unit {v.unitId}</span>
+                  <span className="ml-2 text-content-tertiary">{v.unitLabel ?? `Unit #${v.unitId}`}</span>
                 </div>
                 <StatusBadge
                   status={STATUS_KEY_MAP[v.status] ?? 'neutral'}

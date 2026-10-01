@@ -37,6 +37,9 @@ const {
   createScopedClientMock: vi.fn(),
 }));
 
+// Unit labelling has its own tests (src/lib/units/__tests__/unit-labels.test.ts).
+vi.mock('@/lib/units/unit-labels', () => ({ withUnitLabel: async (_scoped: unknown, row: unknown) => row }));
+
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));

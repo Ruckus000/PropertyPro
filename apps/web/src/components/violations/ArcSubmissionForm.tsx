@@ -53,14 +53,14 @@ const formSchema = z.object({
 
 interface ArcSubmissionFormProps {
   communityId: number;
-  /** The resident's own units. Exactly one means no picker. */
-  unitIds: number[];
+  /** The resident's own units, labelled ("Unit 1B"). Exactly one means no picker. */
+  units: Array<{ id: number; label: string }>;
   defaultUnitId: number | null;
 }
 
 export function ArcSubmissionForm({
   communityId,
-  unitIds,
+  units,
   defaultUnitId,
 }: ArcSubmissionFormProps) {
   const router = useRouter();
@@ -143,7 +143,7 @@ export function ArcSubmissionForm({
         </div>
       )}
 
-      {unitIds.length > 1 && (
+      {units.length > 1 && (
         <div>
           <label htmlFor="arc-unit" className="mb-1 block text-sm font-medium text-content-secondary">
             Unit
@@ -155,9 +155,9 @@ export function ArcSubmissionForm({
             className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
           >
             <option value="">Select a unit</option>
-            {unitIds.map((id) => (
-              <option key={id} value={id}>
-                Unit #{id}
+            {units.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.label}
               </option>
             ))}
           </select>

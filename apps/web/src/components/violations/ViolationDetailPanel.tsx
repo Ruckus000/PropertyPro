@@ -107,7 +107,7 @@ export function ViolationDetailPanel({
         </div>
         <div>
           <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Unit</span>
-          <p className="text-content-secondary">{violation.unitId}</p>
+          <p className="text-content-secondary">{violation.unitLabel ?? `Unit #${violation.unitId}`}</p>
         </div>
         {violation.noticeDate && (
           <div>
