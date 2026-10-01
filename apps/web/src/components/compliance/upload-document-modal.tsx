@@ -42,9 +42,8 @@ export function UploadDocumentModal({
   } = useDocumentCategories(communityId);
   const resolvedCategoryId = resolveCategoryId(categoryName);
   const resolvedCategoryName = categories.find((category) => category.id === resolvedCategoryId)?.name ?? categoryName;
-  // Compliance checklist items map onto financial_records / meeting_records /
-  // operations, all of which the server treats as redaction-sensitive, so this
-  // modal needs the attestation more often than not.
+  // Financial and meeting records are redaction-sensitive on the server;
+  // operations rows file into Contracts / Inspection Reports, which are not.
   const requiresAttestation =
     resolvedCategoryId != null && categoryRequiresRedactionAttestation(resolvedCategoryName);
 

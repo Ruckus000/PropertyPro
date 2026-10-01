@@ -1,0 +1,26 @@
+{
+  "section": "manager",
+  "category": "compliance",
+  "slug": "sirs",
+  "shots": [
+    {
+      "kind": "still",
+      "route": "/communities/{cid}/compliance",
+      "role": "cam",
+      "community": "condo",
+      "name": "sirs-rows",
+      "actions": [
+        {
+          "type": "scrollTo",
+          "selector": "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Structural Integrity Reserve Study\")"
+        }
+      ],
+      "clipTo": [
+        "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Structural / Milestone Inspection Reports\")",
+        "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Structural Integrity Reserve Study\")"
+      ],
+      "highlight": "section[aria-labelledby=\"queue-heading\"] >> tr:has-text(\"Structural Integrity Reserve Study\") >> td >> nth=0",
+      "step": 2
+    }
+  ]
+}

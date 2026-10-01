@@ -5,12 +5,16 @@ const {
   postLedgerEntryMock,
   logAuditEventMock,
   sendNotificationMock,
+  createNotificationsForEventMock,
+  listUnitResidentUserIdsMock,
   tables,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   postLedgerEntryMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   sendNotificationMock: vi.fn(),
+  createNotificationsForEventMock: vi.fn(),
+  listUnitResidentUserIdsMock: vi.fn(),
   tables: {
     arcSubmissions: {
       id: Symbol('arc_submissions.id'),
@@ -52,6 +56,12 @@ vi.mock('@propertypro/db/filters', () => ({
 
 vi.mock('@/lib/services/notification-service', () => ({
   sendNotification: sendNotificationMock,
+  createNotificationsForEvent: createNotificationsForEventMock,
+}));
+
+vi.mock('@/lib/units/actor-units', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/units/actor-units')>()),
+  listUnitResidentUserIds: listUnitResidentUserIdsMock,
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
@@ -299,6 +309,48 @@ describe('violations-service', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
+  // §718.303(3)(b) / §720.305(2)(b): notice goes to the cited unit's owner and
+  // occupants — not the reporter, and never every owner in the community.
+  it('sends the violation notice to each resident of the cited unit, not the reporter', async () => {
+    const row = createViolationRow({ status: 'reported', reportedByUserId: 'manager-1' });
+    createScopedClientMock.mockReturnValue({
+      selectFrom: vi.fn().mockResolvedValue([row]),
+      update: vi.fn().mockResolvedValue([{ ...row, status: 'noticed' }]),
+      insert: vi.fn(),
+    });
+    listUnitResidentUserIdsMock.mockResolvedValue(['owner-9', 'tenant-9']);
+    createNotificationsForEventMock.mockResolvedValue(undefined);
+
+    await updateViolationForCommunity(42, 10, 'manager-1', { status: 'noticed' });
+
+    expect(listUnitResidentUserIdsMock).toHaveBeenCalledWith(expect.anything(), 9);
+    const emailed = sendNotificationMock.mock.calls.map((call) => call[2]);
+    const inApp = createNotificationsForEventMock.mock.calls.map((call) => call[2]);
+    for (const recipients of [emailed, inApp]) {
+      expect(recipients).toEqual([
+        { type: 'specific_user', userId: 'owner-9' },
+        { type: 'specific_user', userId: 'tenant-9' },
+      ]);
+    }
+  });
+
+  it('sends no violation notice when the cited unit has no residents on record', async () => {
+    const row = createViolationRow({ status: 'reported', reportedByUserId: null });
+    createScopedClientMock.mockReturnValue({
+      selectFrom: vi.fn().mockResolvedValue([row]),
+      update: vi.fn().mockResolvedValue([{ ...row, status: 'noticed' }]),
+      insert: vi.fn(),
+    });
+    listUnitResidentUserIdsMock.mockResolvedValue([]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await updateViolationForCommunity(42, 10, 'manager-1', { status: 'noticed' });
+
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(createNotificationsForEventMock).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('soft-deletes the fine and ledger entry if line-item creation fails', async () => {
     const lineItemError = new Error('line item insert failed');
     const selectFrom = vi.fn().mockResolvedValue([
@@ -387,6 +439,9 @@ describe('violations-service', () => {
         caps: { perFineCents: 250_00, aggregateCents: 1_000_00 },
       }),
     ).resolves.toBeDefined();
+    // A fine is charged to the unit, like an assessment — never to the reporter.
+    expect(postLedgerEntryMock.mock.calls[0]?.[1]).toMatchObject({ unitId: 9 });
+    expect(postLedgerEntryMock.mock.calls[0]?.[1]).not.toHaveProperty('userId');
   });
 
   it('refuses when the AGGREGATE would exceed the ceiling', async () => {

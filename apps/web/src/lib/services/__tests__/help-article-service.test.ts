@@ -28,7 +28,7 @@ describe('help-article-service', () => {
           description: 'A test article',
           category: 'getting-started',
           slug: 'test-article',
-          roles: ['owner', 'tenant'],
+          section: 'resident',
           keywords: ['test', 'help'],
           relatedArticles: [],
           featured: false,
@@ -43,7 +43,10 @@ describe('help-article-service', () => {
         description: 'A test article',
         category: 'getting-started',
         slug: 'test-article',
-        roles: ['owner', 'tenant'],
+        section: 'resident',
+        communityTypes: ['condo_718', 'hoa_720', 'apartment'],
+        order: undefined,
+        boardOnly: false,
         keywords: ['test', 'help'],
         tags: [],
         relatedArticles: [],
@@ -53,6 +56,7 @@ describe('help-article-service', () => {
         featureGates: [],
         updatedAt: '2026-04-01',
         readTimeMinutes: expect.any(Number),
+        stepCount: 0,
         filePath: '/fake/path.mdx',
         contentHash: expect.any(String),
       });
@@ -67,7 +71,7 @@ describe('help-article-service', () => {
           description: 'Minimal article',
           category: 'docs',
           slug: 'minimal',
-          roles: [],
+          section: 'manager',
           keywords: [],
           relatedArticles: [],
           updatedAt: '2026-04-01',
@@ -106,8 +110,8 @@ describe('help-article-service', () => {
       const { searchArticles } = await import('../help-article-service');
 
       const articles = [
-        { title: 'Compliance Scoring', description: 'How scoring works', keywords: ['score'], slug: 'scoring', category: 'compliance', roles: [], featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 3, filePath: '/a.mdx', contentHash: 'test' },
-        { title: 'Upload Documents', description: 'How to upload', keywords: ['file'], slug: 'upload', category: 'documents', roles: [], featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
+        { title: 'Compliance Scoring', description: 'How scoring works', keywords: ['score'], slug: 'scoring', category: 'compliance', section: 'manager' as const, communityTypes: ['condo_718' as const], boardOnly: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 3, filePath: '/a.mdx', contentHash: 'test' },
+        { title: 'Upload Documents', description: 'How to upload', keywords: ['file'], slug: 'upload', category: 'documents', section: 'manager' as const, communityTypes: ['condo_718' as const], boardOnly: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
       ];
 
       const results = searchArticles(articles, 'compliance');
@@ -119,7 +123,7 @@ describe('help-article-service', () => {
       const { searchArticles } = await import('../help-article-service');
 
       const articles = [
-        { title: 'Upload Documents', description: 'How to upload', keywords: ['file', 'pdf', 'upload'], slug: 'upload', category: 'documents', roles: [], featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
+        { title: 'Upload Documents', description: 'How to upload', keywords: ['file', 'pdf', 'upload'], slug: 'upload', category: 'documents', section: 'manager' as const, communityTypes: ['condo_718' as const], boardOnly: false, featured: false, contextPaths: [], relatedArticles: [], tags: [], readTimeMinutes: 2, filePath: '/b.mdx', contentHash: 'test'},
       ];
 
       const results = searchArticles(articles, 'pdf');
@@ -133,22 +137,49 @@ describe('help-article-service', () => {
     });
   });
 
-  describe('isArticleVisibleToRole', () => {
-    it('allows public articles for any role', async () => {
-      const { isArticleVisibleToRole } = await import('../help-article-service');
-      expect(isArticleVisibleToRole({ roles: [] }, ['tenant'])).toBe(true);
+  describe('isArticleVisibleToReader', () => {
+    const article = {
+      section: 'resident' as const,
+      communityTypes: ['condo_718' as const, 'hoa_720' as const],
+      featureGates: ['hasViolations'],
+      boardOnly: false,
+    };
+    const reader = {
+      section: 'resident' as const,
+      communityType: 'condo_718' as const,
+      features: { hasViolations: true } as never,
+      boardSeat: false,
+    };
+
+    it('shows an article written for the reader’s section and type', async () => {
+      const { isArticleVisibleToReader } = await import('../help-article-service');
+      expect(isArticleVisibleToReader(article, reader)).toBe(true);
     });
 
-    it('matches a manager viewer against manager frontmatter', async () => {
-      const { isArticleVisibleToRole } = await import('../help-article-service');
-      expect(isArticleVisibleToRole({ roles: ['manager'] }, ['manager'])).toBe(true);
+    it('hides another section’s version of the same task', async () => {
+      const { isArticleVisibleToReader } = await import('../help-article-service');
+      expect(isArticleVisibleToReader(article, { ...reader, section: 'manager' })).toBe(false);
     });
 
-    it('denies when no alias matches', async () => {
-      const { isArticleVisibleToRole } = await import('../help-article-service');
-      expect(
-        isArticleVisibleToRole({ roles: ['board_member'] }, ['tenant']),
-      ).toBe(false);
+    it('hides articles for other community types and disabled features', async () => {
+      const { isArticleVisibleToReader } = await import('../help-article-service');
+      expect(isArticleVisibleToReader(article, { ...reader, communityType: 'apartment' })).toBe(false);
+      expect(isArticleVisibleToReader(article, { ...reader, features: { hasViolations: false } as never })).toBe(false);
+    });
+
+    it('shows board-only articles to a board seat and hides them from everyone else', async () => {
+      const { isArticleVisibleToReader } = await import('../help-article-service');
+      const boardOnly = { ...article, boardOnly: true };
+      expect(isArticleVisibleToReader(boardOnly, reader)).toBe(false);
+      expect(isArticleVisibleToReader(boardOnly, { ...reader, boardSeat: true })).toBe(true);
+    });
+
+    it('fails open when feature evaluation throws', async () => {
+      const { isArticleVisibleToReader } = await import('../help-article-service');
+      const onFeatureError = vi.fn();
+      const throwing = new Proxy({}, { get: () => { throw new Error('boom'); } });
+      expect(isArticleVisibleToReader(article, { ...reader, features: throwing as never }, { onFeatureError })).toBe(true);
+      expect(onFeatureError).toHaveBeenCalledOnce();
     });
   });
 });

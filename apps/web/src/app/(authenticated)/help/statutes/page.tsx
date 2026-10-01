@@ -13,7 +13,8 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
-import { listAllStatutes } from '@/lib/services/help-article-service';
+import { resolveHelpReader } from '@/lib/help/reader';
+import { getArticlesForReader, listAllStatutes } from '@/lib/services/help-article-service';
 
 interface StatutesIndexPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -27,7 +28,8 @@ export default async function StatutesIndexPage({
     resolvedSearchParams,
     '/help/statutes',
   );
-  const statutes = listAllStatutes();
+  // Only statutes the reader has guides for — the detail page would 404 otherwise.
+  const statutes = listAllStatutes(getArticlesForReader(resolveHelpReader(context.membership)));
 
   return (
     <div className="space-y-6">

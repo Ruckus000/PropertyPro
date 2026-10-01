@@ -58,7 +58,8 @@ function main(): void {
     console.log(`    slug:       ${meta.slug}`);
     console.log(`    category:   ${meta.category}`);
     console.log(`    updatedAt:  ${meta.updatedAt}`);
-    console.log(`    roles:      [${meta.roles.join(', ') || '(any)'}]`);
+    console.log(`    section:    ${meta.section}`);
+    console.log(`    types:      [${meta.communityTypes?.join(', ') ?? 'all'}]${meta.draft ? '  (draft)' : ''}`);
     if (meta.featureGates?.length) {
       console.log(`    gates:      [${meta.featureGates.join(', ')}]`);
     }

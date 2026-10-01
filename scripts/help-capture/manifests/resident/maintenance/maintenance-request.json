@@ -1,0 +1,161 @@
+{
+  "section": "resident",
+  "category": "maintenance",
+  "slug": "maintenance-request",
+  "shots": [
+    {
+      "name": "mr-submit",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=requests",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Submit Request\"]"
+        }
+      ],
+      "clipTo": [
+        "h1:text-is(\"Operations\")",
+        "role=button[name=\"Submit Request\"] >> nth=0"
+      ],
+      "highlight": "role=button[name=\"Submit Request\"] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "mr-cat",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=requests&create=request",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#mr-title"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-title",
+          "value": "Kitchen sink leak"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-unit-label",
+          "value": "4B"
+        }
+      ],
+      "clipTo": [
+        "label[for=\"mr-title\"]",
+        "#mr-unit-label"
+      ],
+      "highlight": "#mr-unit-label",
+      "step": 2
+    },
+    {
+      "name": "mr-desc",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=requests&create=request",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#mr-title"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-title",
+          "value": "Kitchen sink leak"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-unit-label",
+          "value": "4B"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-description",
+          "value": "Leak under the kitchen sink, dripping steadily since this morning. Key is with the front desk."
+        }
+      ],
+      "clipTo": [
+        "label[for=\"mr-description\"]",
+        "#mr-description"
+      ],
+      "highlight": "#mr-description",
+      "step": 3
+    },
+    {
+      "name": "mr-prio",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=requests&create=request",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#mr-priority"
+        }
+      ],
+      "clipTo": [
+        "label[for=\"mr-category\"]",
+        "#mr-priority"
+      ],
+      "highlight": "div.grid:has(#mr-category)",
+      "step": 4
+    },
+    {
+      "name": "mr-photos",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=requests&create=request",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#mr-photos"
+        }
+      ],
+      "clipTo": [
+        "label[for=\"mr-photos\"]",
+        "#mr-photos"
+      ],
+      "highlight": "#mr-photos",
+      "step": 5
+    },
+    {
+      "name": "mr-send",
+      "kind": "still",
+      "route": "/communities/{cid}/operations?tab=requests&create=request",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#mr-title"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-title",
+          "value": "Kitchen sink leak"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-unit-label",
+          "value": "4B"
+        },
+        {
+          "type": "fill",
+          "selector": "#mr-description",
+          "value": "Leak under the kitchen sink, dripping steadily since this morning. Key is with the front desk."
+        }
+      ],
+      "clipTo": [
+        "#mr-photos",
+        "form:has(#mr-title) button[type=\"submit\"]"
+      ],
+      "highlight": "form:has(#mr-title) button[type=\"submit\"]",
+      "step": 6
+    }
+  ]
+}

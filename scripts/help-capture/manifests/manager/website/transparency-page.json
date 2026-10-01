@@ -1,0 +1,58 @@
+{
+  "section": "manager",
+  "category": "website",
+  "slug": "transparency-page",
+  "shots": [
+    {
+      "name": "tp-settings",
+      "kind": "still",
+      "route": "/settings/transparency?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=checkbox[name=\"Enable compliance transparency page\"]"
+        }
+      ],
+      "clipTo": [
+        "role=checkbox[name=\"Enable compliance transparency page\"]",
+        "role=link[name=\"Preview what your transparency page will look like\"]"
+      ],
+      "highlight": "role=checkbox[name=\"Enable compliance transparency page\"]",
+      "step": 2
+    },
+    {
+      "name": "tp-ack",
+      "kind": "still",
+      "route": "/settings/transparency?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Save Settings\"]"
+        }
+      ],
+      "clipTo": [
+        "role=checkbox[name=\"Acknowledge transparency page scope\"]",
+        "role=button[name=\"Save Settings\"]"
+      ],
+      "highlight": "role=button[name=\"Save Settings\"]",
+      "step": 3
+    },
+    {
+      "name": "tp-public",
+      "kind": "still",
+      "route": "/transparency?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Document Posting Status\"]"
+        }
+      ]
+    }
+  ]
+}

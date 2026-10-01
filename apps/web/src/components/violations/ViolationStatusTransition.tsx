@@ -163,6 +163,7 @@ export function ViolationStatusTransition({
               communityId,
               status: 'hearing_scheduled',
               hearingDate: new Date(hearingDate).toISOString(),
+              hearingLocation: hearingLocation.trim() || null,
               resolutionNotes: notes.trim() || undefined,
             });
             // The form closes on `onComplete()`, taking the live warning with
@@ -206,7 +207,7 @@ export function ViolationStatusTransition({
         setSubmitting(false);
       }
     },
-    [action, violation.id, communityId, notes, hearingDate, fineAmountDollars, fineDueDate, config, onComplete],
+    [action, violation.id, communityId, notes, hearingDate, hearingLocation, fineAmountDollars, fineDueDate, config, onComplete],
   );
 
   return (

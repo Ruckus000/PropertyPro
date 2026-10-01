@@ -87,7 +87,7 @@ export function SnowbirdDigestCard({ communityId, canManage }: Props) {
               <p className="text-sm text-content-tertiary">
                 {canManage
                   ? 'Turn the digest on above to let owners receive it.'
-                  : "Your board hasn't turned on the community digest yet."}
+                  : "The community digest isn't turned on yet."}
               </p>
             )}
           </>

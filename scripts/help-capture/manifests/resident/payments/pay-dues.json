@@ -1,0 +1,97 @@
+{
+  "section": "resident",
+  "category": "payments",
+  "slug": "pay-dues",
+  "shots": [
+    {
+      "name": "pay-cards",
+      "kind": "still",
+      "route": "/communities/{cid}/payments",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "text=Total Due"
+        }
+      ],
+      "clipTo": "div.grid:has(> div > p:text-is(\"Total Due\"))"
+    },
+    {
+      "name": "pay-now",
+      "kind": "still",
+      "route": "/communities/{cid}/payments",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Pay Now\"]"
+        }
+      ],
+      "clipTo": [
+        "thead:has(th:text-is(\"Late Fee\"))",
+        "tbody tr:has(button:text-is(\"Pay Now\")) >> nth=0"
+      ],
+      "highlight": "role=button[name=\"Pay Now\"] >> nth=0",
+      "step": 2
+    },
+    {
+      "name": "pay-form",
+      "kind": "still",
+      "route": "/communities/{cid}/payments",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Pay Now\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Pay Now\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Make Payment\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "iframe[title=\"Secure payment input frame\"]"
+        },
+        {
+          "type": "wait",
+          "ms": 2000
+        }
+      ],
+      "clipTo": "div.max-w-lg:has(h2:text-is(\"Make Payment\"))",
+      "highlight": "iframe[title=\"Secure payment input frame\"]",
+      "step": 3
+    },
+    {
+      "name": "pay-hist",
+      "kind": "still",
+      "route": "/communities/{cid}/payments",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button:has-text(\"Payment History\")"
+        },
+        {
+          "type": "click",
+          "selector": "button:has-text(\"Payment History\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "th:text-is(\"Paid On\"), p:text-is(\"No payment history yet.\")"
+        }
+      ],
+      "clipTo": [
+        "nav:has(button:has-text(\"Payment History\"))",
+        "div.overflow-x-auto:has(th:text-is(\"Paid On\")), div:has(> p:text-is(\"No payment history yet.\"))"
+      ]
+    }
+  ]
+}

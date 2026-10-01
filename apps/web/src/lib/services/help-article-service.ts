@@ -2,10 +2,12 @@ import * as fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import matter from 'gray-matter';
-import type { CommunityFeatures } from '@propertypro/shared';
+import type { CommunityFeatures, CommunityType } from '@propertypro/shared';
 import { validateFrontmatter } from '@/lib/help/frontmatter-schema';
 import { expandQuery, type ExpandedQuery } from '@/lib/help/aliases';
-import { isVisibleToAudience } from '@/lib/help/viewer-role';
+import { HELP_CATEGORY_ORDER } from '@/lib/help/category-meta';
+import type { HelpReader } from '@/lib/help/reader';
+import type { HelpSection } from '@/lib/help/sections';
 
 /**
  * Maximum article results returned by searchArticles. Help search runs in
@@ -63,7 +65,12 @@ export interface HelpArticleMetadata {
   description: string;
   category: string;
   slug: string;
-  roles: string[];
+  section: HelpSection;
+  /** Community types the article applies to (all three when omitted in frontmatter). */
+  communityTypes: CommunityType[];
+  order?: number;
+  /** Only readers with a board seat see it (resident section). */
+  boardOnly: boolean;
   keywords: string[];
   tags: string[];
   relatedArticles: string[];
@@ -75,6 +82,8 @@ export interface HelpArticleMetadata {
   featureGates?: string[];
   updatedAt?: string;
   readTimeMinutes?: number;
+  /** Steps in the article's first step list (0 when it has none). */
+  stepCount?: number;
   heroMedia?: {
     src: string;
     alt: string;
@@ -111,6 +120,11 @@ function extractExcerpt(content: string): string {
   }
 
   return cleaned.replace(/\s+/g, ' ').slice(0, 180);
+}
+
+function countFirstSteps(content: string): number {
+  const match = /<StepByStep\b[^>]*>([\s\S]*?)<\/StepByStep>/.exec(content);
+  return match ? (match[1]!.match(/<Step\b/g) ?? []).length : 0;
 }
 
 function listArticleFiles(dir: string): string[] {
@@ -155,7 +169,10 @@ export function parseArticleFrontmatter(
     description: valid.description,
     category: valid.category,
     slug: valid.slug,
-    roles: valid.roles,
+    section: valid.section,
+    communityTypes: valid.communityTypes ?? ['condo_718', 'hoa_720', 'apartment'],
+    order: valid.order,
+    boardOnly: valid.boardOnly,
     keywords: valid.keywords,
     tags: valid.tags,
     relatedArticles: valid.relatedArticles,
@@ -167,6 +184,7 @@ export function parseArticleFrontmatter(
     featureGates: valid.featureGates ?? [],
     updatedAt: valid.updatedAt,
     readTimeMinutes: Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE)),
+    stepCount: countFirstSteps(content),
     heroMedia: valid.heroMedia,
     upNext: valid.upNext,
     contentHash: crypto.createHash('sha256').update(rawContent).digest('hex').slice(0, 16),
@@ -195,7 +213,24 @@ function loadArticlesFromDisk(): HelpArticleSource[] {
         rawContent,
       };
     })
-    .sort((left, right) => left.metadata.title.localeCompare(right.metadata.title));
+    .sort((left, right) => compareArticles(left.metadata, right.metadata));
+}
+
+function categoryRank(category: string): number {
+  const index = HELP_CATEGORY_ORDER.indexOf(category);
+  return index === -1 ? HELP_CATEGORY_ORDER.length : index;
+}
+
+/** Category order, then `order`, then title — the order readers browse in. */
+function compareArticles(
+  left: Pick<HelpArticleMetadata, 'category' | 'order' | 'title'>,
+  right: Pick<HelpArticleMetadata, 'category' | 'order' | 'title'>,
+): number {
+  return (
+    categoryRank(left.category) - categoryRank(right.category) ||
+    (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER) ||
+    left.title.localeCompare(right.title)
+  );
 }
 
 function getArticleSources(): HelpArticleSource[] {
@@ -214,15 +249,66 @@ export function getAllArticles(): HelpArticleMetadata[] {
   return getArticleSources().map((article) => article.metadata);
 }
 
+type ReaderVisibilityFields = Pick<
+  HelpArticleMetadata,
+  'section' | 'communityTypes' | 'featureGates' | 'boardOnly'
+>;
+
+/** What visibility needs to know about a reader. */
+export type HelpReaderView = Pick<HelpReader, 'section' | 'communityType' | 'features' | 'boardSeat'>;
+
 /**
- * `viewer` is the token set from `resolveHelpViewerTokens` (e.g.
- * `['owner', 'board_member']`), not a single role.
+ * The single reader-visibility rule: written for the reader's section,
+ * board-only articles only for a board seat, applicable to the community type
+ * being read, and every feature gate on. Feature evaluation fails open (see safelyFilterArticlesByFeatures).
  */
-export function isArticleVisibleToRole(
-  article: Pick<HelpArticleMetadata, 'roles'>,
-  viewer: readonly string[],
+export function isArticleVisibleToReader(
+  article: ReaderVisibilityFields,
+  reader: HelpReaderView,
+  options?: { onFeatureError?: (error: unknown) => void },
 ): boolean {
-  return isVisibleToAudience(article.roles, viewer);
+  if (article.boardOnly && !reader.boardSeat) return false;
+  if (article.section !== reader.section) return false;
+  if (!article.communityTypes.includes(reader.communityType)) return false;
+  // Unresolvable features fail open (ADR-004): never empty the help center.
+  if (!reader.features) return true;
+  try {
+    return isArticleAvailableForFeatures(article, buildFeatureEvaluator(reader.features));
+  } catch (error) {
+    options?.onFeatureError?.(error);
+    return true;
+  }
+}
+
+/** Every article the reader can see, in browse order. */
+export function getArticlesForReader(
+  reader: HelpReaderView,
+  options?: { onFeatureError?: (error: unknown) => void },
+): HelpArticleMetadata[] {
+  let reported = false;
+  const onFeatureError = options?.onFeatureError
+    ? (error: unknown) => {
+        if (!reported) options.onFeatureError!(error);
+        reported = true;
+      }
+    : undefined;
+  return getAllArticles().filter((article) =>
+    isArticleVisibleToReader(article, reader, { onFeatureError }),
+  );
+}
+
+/**
+ * Resolve a slug within the reader's section (slugs repeat across sections),
+ * or null when there is none or the reader cannot see it.
+ */
+export function findArticleForReader(
+  slug: string,
+  reader: HelpReaderView,
+): HelpArticleMetadata | null {
+  const article = getAllArticles().find(
+    (candidate) => candidate.slug === slug && candidate.section === reader.section,
+  );
+  return article && isArticleVisibleToReader(article, reader) ? article : null;
 }
 
 export function isArticleAvailableForFeatures(
@@ -376,46 +462,28 @@ export function getAllTags(): string[] {
   return Array.from(tags).sort();
 }
 
-export function getFeaturedForRole(viewer: readonly string[]): HelpArticleMetadata[] {
-  return getAllArticles()
-    .filter((article) => article.featured && isArticleVisibleToRole(article, viewer))
-    .slice(0, 4);
+export function getFeaturedForReader(
+  reader: HelpReaderView,
+  limit = 6,
+): HelpArticleMetadata[] {
+  return getArticlesForReader(reader)
+    .filter((article) => article.featured)
+    .slice(0, limit);
 }
 
-export function searchArticles(
-  query: string,
-  viewer: readonly string[],
-): HelpArticleMetadata[];
+/**
+ * Rank `articles` against `query`. Callers pass the reader's visible set
+ * (`getArticlesForReader`), so search never widens visibility.
+ */
 export function searchArticles(
   articles: readonly HelpArticleMetadata[],
   query: string,
-  viewer?: readonly string[],
-): HelpArticleMetadata[];
-export function searchArticles(
-  source: string | readonly HelpArticleMetadata[],
-  queryOrViewer: string | readonly string[],
-  maybeViewer?: readonly string[],
 ): HelpArticleMetadata[] {
-  let articles: readonly HelpArticleMetadata[];
-  let query: string;
-  let viewer: readonly string[] | undefined;
-
-  if (Array.isArray(source)) {
-    articles = source as readonly HelpArticleMetadata[];
-    query = queryOrViewer as string;
-    viewer = maybeViewer;
-  } else {
-    articles = getAllArticles();
-    query = source as string;
-    viewer = queryOrViewer as readonly string[];
-  }
-
   const expanded = expandQuery(query);
   if (!expanded.primary.length && !expanded.aliases.length) return [];
 
   const scored: Array<{ article: HelpArticleMetadata; score: number }> = [];
   for (const article of articles) {
-    if (viewer && !isArticleVisibleToRole(article, viewer)) continue;
     const score = scoreArticleForQuery(article, expanded);
     if (score > 0) {
       scored.push({ article, score });
@@ -431,22 +499,22 @@ export function searchArticles(
   return scored.slice(0, SEARCH_RESULT_CAP).map((s) => s.article);
 }
 
-export function getArticle(category: string, slug: string): HelpArticleSource | null {
-  return (
-    getArticleSources().find(
-      (article) =>
-        article.metadata.category === category && article.metadata.slug === slug,
-    ) ?? null
+/**
+ * The reader's version of `/help/<category>/<slug>`, or null when their
+ * section has no such article or they cannot see it.
+ */
+export function getArticleForReader(
+  category: string,
+  slug: string,
+  reader: HelpReaderView,
+): HelpArticleSource | null {
+  const source = getArticleSources().find(
+    (article) =>
+      article.metadata.category === category &&
+      article.metadata.slug === slug &&
+      article.metadata.section === reader.section,
   );
-}
-
-export function getCategoryTree(): Record<string, HelpArticleMetadata[]> {
-  return getAllArticles().reduce<Record<string, HelpArticleMetadata[]>>((acc, article) => {
-    const bucket = acc[article.category] ?? [];
-    bucket.push(article);
-    acc[article.category] = bucket;
-    return acc;
-  }, {});
+  return source && isArticleVisibleToReader(source.metadata, reader) ? source : null;
 }
 
 export function matchContextPath(pattern: string, pathname: string): boolean {
@@ -462,11 +530,10 @@ export function matchContextPath(pattern: string, pathname: string): boolean {
 
 export function getContextualArticles(
   pathname: string,
-  viewer: readonly string[],
+  reader: HelpReaderView,
   limit = 3,
 ): HelpArticleMetadata[] {
-  return getAllArticles()
-    .filter((article) => isArticleVisibleToRole(article, viewer))
+  return getArticlesForReader(reader)
     .filter((article) =>
       (article.contextPaths ?? []).some((pattern) => matchContextPath(pattern, pathname)),
     )
@@ -479,11 +546,14 @@ export function getContextualArticles(
  * normalised form (trim + leading § or HB/SB prefix preserved). Used by
  * `/help/statutes/[ref]` (WS5).
  */
-export function findArticlesByStatute(ref: string): HelpArticleMetadata[] {
+export function findArticlesByStatute(
+  ref: string,
+  articles: readonly HelpArticleMetadata[] = getAllArticles(),
+): HelpArticleMetadata[] {
   const normalised = ref.trim();
   if (!normalised) return [];
   const lower = normalised.toLowerCase();
-  return getAllArticles().filter((article) =>
+  return articles.filter((article) =>
     (article.statutes ?? []).some((entry) => entry.toLowerCase() === lower),
   );
 }
@@ -493,9 +563,11 @@ export function findArticlesByStatute(ref: string): HelpArticleMetadata[] {
  * with the count of articles that cite it. Sorted by count desc then by
  * reference asc for stable display ordering. Used by `/help/statutes`.
  */
-export function listAllStatutes(): Array<{ ref: string; count: number }> {
+export function listAllStatutes(
+  articles: readonly HelpArticleMetadata[] = getAllArticles(),
+): Array<{ ref: string; count: number }> {
   const counts = new Map<string, number>();
-  for (const article of getAllArticles()) {
+  for (const article of articles) {
     for (const ref of article.statutes ?? []) {
       counts.set(ref, (counts.get(ref) ?? 0) + 1);
     }

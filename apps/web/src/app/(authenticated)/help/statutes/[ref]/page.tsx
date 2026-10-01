@@ -11,10 +11,10 @@ import Link from 'next/link';
 import { Clock } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
-import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
+import { resolveHelpReader } from '@/lib/help/reader';
 import {
   findArticlesByStatute,
-  isArticleVisibleToRole,
+  getArticlesForReader,
 } from '@/lib/services/help-article-service';
 
 interface StatuteDetailPageProps {
@@ -35,12 +35,8 @@ export default async function StatuteDetailPage({
     resolvedSearchParams,
     `/help/statutes/${ref}`,
   );
-  const viewer = resolveHelpViewerTokens(context.membership);
-
-  const allMatches = findArticlesByStatute(decodedRef);
-  const articles = allMatches.filter((article) =>
-    isArticleVisibleToRole(article, viewer),
-  );
+  const reader = resolveHelpReader(context.membership);
+  const articles = findArticlesByStatute(decodedRef, getArticlesForReader(reader));
 
   if (articles.length === 0) {
     notFound();

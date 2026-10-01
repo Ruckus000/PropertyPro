@@ -98,7 +98,7 @@ preview_snapshot()
 | `owner` | Unit Owner | Palm Shores, Sunset Condos | **Palm Shores HOA** (Essentials) |
 | `tenant` | Tenant/Renter | Sunset Condos | Sunset Condos |
 | `board_president` | Board President | Palm Shores, Sunset Condos | **Palm Shores HOA** (Essentials) |
-| `board_member` | Board Member | Sunset Condos | Sunset Condos |
+| `board_member` | Unit Owner + Board Member seat (resident) | Sunset Condos | Sunset Condos |
 | `cam` | Community Assoc. Manager | Palm Shores, Sunset Condos | **Palm Shores HOA** (Essentials) |
 | `pm_admin` | PM Company Admin | all three | `/pm/dashboard/communities` (PM tier — no community pin) |
 | `founding_admin` | Root Manager | Palm Shores | Palm Shores HOA (Essentials) |

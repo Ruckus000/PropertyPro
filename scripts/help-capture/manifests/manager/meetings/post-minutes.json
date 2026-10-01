@@ -1,0 +1,69 @@
+{
+  "section": "manager",
+  "category": "meetings",
+  "slug": "post-minutes",
+  "shots": [
+    {
+      "name": "min-author",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings?view=schedule",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Board Meeting\"s] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=link[name=\"Author Minutes\"]"
+        }
+      ],
+      "clipTo": "role=link[name=\"Author Minutes\"] >> xpath=..",
+      "highlight": "role=link[name=\"Author Minutes\"]",
+      "step": 1
+    },
+    {
+      "name": "min-upload",
+      "kind": "still",
+      "route": "/communities/{cid}/documents",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Open upload panel\"]"
+        },
+        {
+          "type": "click",
+          "selector": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> role=combobox"
+        },
+        {
+          "type": "click",
+          "selector": "role=option[name=\"Meeting Records\"]"
+        },
+        {
+          "type": "wait",
+          "ms": 300
+        }
+      ],
+      "clipTo": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> div:has(> label:text-is(\"Category\"))",
+      "highlight": "div.rounded-md:has(> h2:text-is(\"Upload Document\")) >> role=combobox",
+      "step": 2
+    },
+    {
+      "name": "min-list",
+      "kind": "still",
+      "route": "/communities/{cid}/meetings?view=minutes",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "h2:text-is(\"Minutes\")"
+        }
+      ],
+      "clipTo": "div:has(> div > h2:text-is(\"Minutes\"))"
+    }
+  ]
+}

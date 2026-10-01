@@ -1,0 +1,78 @@
+{
+  "section": "manager",
+  "category": "building",
+  "slug": "insurance-hub",
+  "shots": [
+    {
+      "name": "insm-add",
+      "kind": "still",
+      "route": "/communities/{cid}/insurance",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section[aria-labelledby=\"insurance-summary-heading\"] >> role=button[name=\"Add Policy\"] >> nth=0"
+        }
+      ],
+      "clipTo": [
+        "#insurance-summary-heading",
+        "section[aria-labelledby=\"insurance-summary-heading\"] >> role=button[name=\"Add Policy\"] >> nth=0"
+      ],
+      "highlight": "section[aria-labelledby=\"insurance-summary-heading\"] >> role=button[name=\"Add Policy\"] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "insm-form",
+      "kind": "still",
+      "route": "/communities/{cid}/insurance",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section[aria-labelledby=\"insurance-summary-heading\"] >> role=button[name=\"Add Policy\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "section[aria-labelledby=\"insurance-summary-heading\"] >> role=button[name=\"Add Policy\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Add master policy\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#pol-agent-email",
+      "step": 2
+    },
+    {
+      "name": "insm-wind",
+      "kind": "still",
+      "route": "/communities/{cid}/insurance",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "section[aria-labelledby=\"wind-mitigation-heading\"] >> role=button[name=\"Add Report\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "section[aria-labelledby=\"wind-mitigation-heading\"] >> role=button[name=\"Add Report\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Add wind-mitigation report\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#wm-document:has-text(\"Choose an uploaded document\")"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#wm-document",
+      "step": 3
+    }
+  ]
+}

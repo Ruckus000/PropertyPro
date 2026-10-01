@@ -1,0 +1,1137 @@
+{
+  "manager/account/delete-account/del-confirm": [
+    600,
+    458,
+    "2026-10-01"
+  ],
+  "manager/account/delete-account/del-zone": [
+    239,
+    214,
+    "2026-10-01"
+  ],
+  "manager/account/notifications/ntf-center": [
+    1196,
+    818,
+    "2026-10-01"
+  ],
+  "manager/account/notifications/ntf-freq": [
+    1140,
+    494,
+    "2026-10-01"
+  ],
+  "manager/account/notifications/ntf-prefs": [
+    1140,
+    556,
+    "2026-10-01"
+  ],
+  "manager/account/notifications/ntf-save": [
+    221,
+    285,
+    "2026-10-01"
+  ],
+  "manager/account/profile-password/acc-profile": [
+    754,
+    443,
+    "2026-10-01"
+  ],
+  "manager/account/profile-password/acc-pw": [
+    720,
+    255,
+    "2026-10-01"
+  ],
+  "manager/account/profile-password/acc-save": [
+    728,
+    443,
+    "2026-10-01"
+  ],
+  "manager/announcements/post-announcement/an-aud": [
+    644,
+    238,
+    "2026-10-01"
+  ],
+  "manager/announcements/post-announcement/an-compose": [
+    998,
+    545,
+    "2026-10-01"
+  ],
+  "manager/announcements/post-announcement/an-new": [
+    1140,
+    100,
+    "2026-10-01"
+  ],
+  "manager/announcements/post-announcement/an-pinbox": [
+    379,
+    120,
+    "2026-10-01"
+  ],
+  "manager/announcements/post-announcement/an-publish": [
+    998,
+    76,
+    "2026-10-01"
+  ],
+  "manager/apartment/packages/pk-form": [
+    600,
+    656,
+    "2026-10-01"
+  ],
+  "manager/apartment/packages/pk-log": [
+    1092,
+    76,
+    "2026-10-01"
+  ],
+  "manager/apartment/packages/pk-pending": [
+    1138,
+    187,
+    "2026-10-01"
+  ],
+  "manager/apartment/packages/pk-pickup": [
+    440,
+    310,
+    "2026-10-01"
+  ],
+  "manager/apartment/visitors/vs-deny": [
+    1140,
+    242,
+    "2026-10-01"
+  ],
+  "manager/apartment/visitors/vs-list": [
+    1138,
+    186,
+    "2026-10-01"
+  ],
+  "manager/apartment/visitors/vs-reg": [
+    1140,
+    76,
+    "2026-10-01"
+  ],
+  "manager/apartment/visitors/vs-revoke": [
+    600,
+    324,
+    "2026-10-01"
+  ],
+  "manager/board/board-forum/fr-list": [
+    1132,
+    264,
+    "2026-10-01"
+  ],
+  "manager/board/board-forum/fr-new": [
+    600,
+    478,
+    "2026-10-01"
+  ],
+  "manager/board/create-poll/pc-btn": [
+    1140,
+    152,
+    "2026-10-01"
+  ],
+  "manager/board/create-poll/pc-form": [
+    600,
+    713,
+    "2026-10-01"
+  ],
+  "manager/board/create-poll/pc-type": [
+    590,
+    343,
+    "2026-10-01"
+  ],
+  "manager/board/run-election/el-actions": [
+    710,
+    176,
+    "2026-10-01"
+  ],
+  "manager/board/run-election/el-results": [
+    710,
+    458,
+    "2026-10-01"
+  ],
+  "manager/building/insurance-hub/insm-add": [
+    1140,
+    73,
+    "2026-10-01"
+  ],
+  "manager/building/insurance-hub/insm-form": [
+    600,
+    805,
+    "2026-10-01"
+  ],
+  "manager/building/insurance-hub/insm-wind": [
+    600,
+    805,
+    "2026-10-01"
+  ],
+  "manager/building/reserve-register/rv-add": [
+    600,
+    805,
+    "2026-10-01"
+  ],
+  "manager/building/reserve-register/rv-list": [
+    1132,
+    754,
+    "2026-10-01"
+  ],
+  "manager/building/storm-damage/st-list": [
+    1132,
+    559,
+    "2026-10-01"
+  ],
+  "manager/compliance/compliance-dashboard/cp-chips": [
+    1138,
+    91,
+    "2026-10-01"
+  ],
+  "manager/compliance/compliance-dashboard/cp-done": [
+    1138,
+    135,
+    "2026-10-01"
+  ],
+  "manager/compliance/compliance-dashboard/cp-kpis": [
+    1132,
+    204,
+    "2026-10-01"
+  ],
+  "manager/compliance/compliance-dashboard/cp-row": [
+    1138,
+    134,
+    "2026-10-01"
+  ],
+  "manager/compliance/compliance-dashboard/cp-upload": [
+    616,
+    430,
+    "2026-10-01"
+  ],
+  "manager/compliance/fix-compliance-gaps/gap-over": [
+    1132,
+    274,
+    "2026-10-01"
+  ],
+  "manager/compliance/sirs/sirs-rows": [
+    1138,
+    128,
+    "2026-10-01"
+  ],
+  "manager/documents/find-documents/doc-cats": [
+    1090,
+    122,
+    "2026-10-01"
+  ],
+  "manager/documents/find-documents/doc-cats-apt": [
+    1082,
+    114,
+    "2026-10-01"
+  ],
+  "manager/documents/find-documents/doc-dl": [
+    449,
+    72,
+    "2026-10-01"
+  ],
+  "manager/documents/find-documents/doc-row": [
+    629,
+    150,
+    "2026-10-01"
+  ],
+  "manager/documents/find-documents/doc-search": [
+    1090,
+    258,
+    "2026-10-01"
+  ],
+  "manager/documents/find-documents/doc-viewer": [
+    441,
+    385,
+    "2026-10-01"
+  ],
+  "manager/documents/organize-library/org-unlinked": [
+    1140,
+    700,
+    "2026-10-01"
+  ],
+  "manager/documents/upload-document/up-btn": [
+    1140,
+    105,
+    "2026-10-01"
+  ],
+  "manager/documents/upload-document/up-cat": [
+    1090,
+    131,
+    "2026-10-01"
+  ],
+  "manager/documents/upload-document/up-file": [
+    1090,
+    207,
+    "2026-10-01"
+  ],
+  "manager/documents/upload-document/up-save": [
+    1090,
+    79,
+    "2026-10-01"
+  ],
+  "manager/emergency/emergency-broadcast/em-btn": [
+    600,
+    214,
+    "2026-10-01"
+  ],
+  "manager/emergency/emergency-broadcast/em-confirm": [
+    796,
+    393,
+    "2026-10-01"
+  ],
+  "manager/emergency/emergency-broadcast/em-rec": [
+    796,
+    330,
+    "2026-10-01"
+  ],
+  "manager/emergency/emergency-broadcast/em-stats": [
+    1040,
+    118,
+    "2026-10-01"
+  ],
+  "manager/emergency/emergency-broadcast/em-tpl": [
+    796,
+    523,
+    "2026-10-01"
+  ],
+  "manager/esign/esign-template/tpl-btn": [
+    1141,
+    80,
+    "2026-10-01"
+  ],
+  "manager/esign/esign-template/tpl-build": [
+    1200,
+    822,
+    "2026-10-01"
+  ],
+  "manager/esign/esign-template/tpl-clone": [
+    1133,
+    74,
+    "2026-10-01"
+  ],
+  "manager/esign/send-for-signature/snd-btn": [
+    1141,
+    80,
+    "2026-10-01"
+  ],
+  "manager/esign/send-for-signature/snd-exp": [
+    1140,
+    489,
+    "2026-10-01"
+  ],
+  "manager/esign/send-for-signature/snd-form": [
+    1140,
+    687,
+    "2026-10-01"
+  ],
+  "manager/esign/send-for-signature/snd-track": [
+    457,
+    762,
+    "2026-10-01"
+  ],
+  "manager/getting-started/community-digest/dig-board": [
+    1098,
+    156,
+    "2026-10-01"
+  ],
+  "manager/getting-started/getting-around/gs-help": [
+    164,
+    66,
+    "2026-10-01"
+  ],
+  "manager/getting-started/getting-around/gs-helppanel": [
+    520,
+    900,
+    "2026-10-01"
+  ],
+  "manager/getting-started/getting-around/gs-nav-m": [
+    280,
+    900,
+    "2026-10-01"
+  ],
+  "manager/getting-started/getting-around/gs-search": [
+    600,
+    68,
+    "2026-10-01"
+  ],
+  "manager/getting-started/manage-faqs/faq-edit": [
+    415,
+    547,
+    "2026-10-01"
+  ],
+  "manager/getting-started/manage-faqs/faq-link": [
+    325,
+    103,
+    "2026-10-01"
+  ],
+  "manager/getting-started/manage-faqs/faq-list": [
+    1200,
+    822,
+    "2026-10-01"
+  ],
+  "manager/getting-started/manage-faqs/faq-save": [
+    415,
+    547,
+    "2026-10-01"
+  ],
+  "manager/getting-started/your-dashboard/dash-ann": [
+    578,
+    91,
+    "2026-10-01"
+  ],
+  "manager/getting-started/your-dashboard/dash-apt": [
+    1196,
+    818,
+    "2026-10-01"
+  ],
+  "manager/getting-started/your-dashboard/dash-check": [
+    1132,
+    510,
+    "2026-10-01"
+  ],
+  "manager/getting-started/your-dashboard/dash-m": [
+    1196,
+    818,
+    "2026-10-01"
+  ],
+  "manager/getting-started/your-dashboard/dash-meet": [
+    578,
+    91,
+    "2026-10-01"
+  ],
+  "manager/getting-started/your-dashboard/dash-sign": [
+    578,
+    394,
+    "2026-10-01"
+  ],
+  "manager/leases/move-in-out/mio-card": [
+    1200,
+    822,
+    "2026-10-01"
+  ],
+  "manager/leases/move-in-out/mio-list": [
+    1132,
+    226,
+    "2026-10-01"
+  ],
+  "manager/maintenance/dispatch-work-order/wo-btn": [
+    1141,
+    73,
+    "2026-10-01"
+  ],
+  "manager/maintenance/dispatch-work-order/wo-form": [
+    531,
+    324,
+    "2026-10-01"
+  ],
+  "manager/maintenance/dispatch-work-order/wo-inbox": [
+    1140,
+    220,
+    "2026-10-01"
+  ],
+  "manager/maintenance/dispatch-work-order/wo-send": [
+    531,
+    160,
+    "2026-10-01"
+  ],
+  "manager/maintenance/dispatch-work-order/wo-vendor": [
+    531,
+    386,
+    "2026-10-01"
+  ],
+  "manager/meetings/meeting-notices/mt-day": [
+    913,
+    167,
+    "2026-10-01"
+  ],
+  "manager/meetings/meeting-notices/mt-detail": [
+    796,
+    611,
+    "2026-10-01"
+  ],
+  "manager/meetings/meeting-notices/mt-past": [
+    1132,
+    223,
+    "2026-10-01"
+  ],
+  "manager/meetings/meeting-notices/mt-views": [
+    318,
+    79,
+    "2026-10-01"
+  ],
+  "manager/meetings/post-minutes/min-author": [
+    794,
+    106,
+    "2026-10-01"
+  ],
+  "manager/meetings/post-minutes/min-list": [
+    1132,
+    251,
+    "2026-10-01"
+  ],
+  "manager/meetings/post-minutes/min-upload": [
+    1090,
+    131,
+    "2026-10-01"
+  ],
+  "manager/meetings/schedule-meeting/mt-create": [
+    1140,
+    103,
+    "2026-10-01"
+  ],
+  "manager/meetings/schedule-meeting/mt-deadlines": [
+    738,
+    189,
+    "2026-10-01"
+  ],
+  "manager/meetings/schedule-meeting/mt-form": [
+    746,
+    528,
+    "2026-10-01"
+  ],
+  "manager/meetings/schedule-meeting/mt-save": [
+    746,
+    93,
+    "2026-10-01"
+  ],
+  "manager/meetings/schedule-meeting/mt-type": [
+    383,
+    111,
+    "2026-10-01"
+  ],
+  "manager/meetings/schedule-meeting/mt-warn": [
+    738,
+    264,
+    "2026-10-01"
+  ],
+  "manager/payments/create-assessment/as-create": [
+    1140,
+    94,
+    "2026-10-01"
+  ],
+  "manager/payments/create-assessment/as-delinq": [
+    1130,
+    403,
+    "2026-10-01"
+  ],
+  "manager/payments/create-assessment/as-form": [
+    616,
+    563,
+    "2026-10-01"
+  ],
+  "manager/payments/create-assessment/as-late": [
+    568,
+    109,
+    "2026-10-01"
+  ],
+  "manager/payments/create-assessment/as-lines": [
+    1132,
+    364,
+    "2026-10-01"
+  ],
+  "manager/payments/create-assessment/as-save": [
+    568,
+    181,
+    "2026-10-01"
+  ],
+  "manager/payments/create-assessment/as-tabs": [
+    463,
+    79,
+    "2026-10-01"
+  ],
+  "manager/payments/online-payments/op-connect": [
+    1140,
+    192,
+    "2026-10-01"
+  ],
+  "manager/payments/online-payments/op-fee": [
+    1140,
+    266,
+    "2026-10-01"
+  ],
+  "manager/pm/billing/bl-page": [
+    1132,
+    228,
+    "2026-10-01"
+  ],
+  "manager/pm/billing/bl-plans": [
+    1200,
+    822,
+    "2026-10-01"
+  ],
+  "manager/pm/bulk-send/bk-dialog": [
+    600,
+    587,
+    "2026-10-01"
+  ],
+  "manager/pm/bulk-send/bk-select": [
+    1160,
+    356,
+    "2026-10-01"
+  ],
+  "manager/pm/onboard-community/ob-add": [
+    217,
+    87,
+    "2026-10-01"
+  ],
+  "manager/pm/onboard-community/ob-form": [
+    600,
+    795,
+    "2026-10-01"
+  ],
+  "manager/pm/onboard-community/ob-plan": [
+    550,
+    571,
+    "2026-10-01"
+  ],
+  "manager/pm/portfolio-reports/rp-export": [
+    184,
+    84,
+    "2026-10-01"
+  ],
+  "manager/pm/portfolio-reports/rp-tabs": [
+    1140,
+    137,
+    "2026-10-01"
+  ],
+  "manager/pm/portfolio/pm-back": [
+    1204,
+    88,
+    "2026-10-01"
+  ],
+  "manager/pm/portfolio/pm-row": [
+    1187,
+    145,
+    "2026-10-01"
+  ],
+  "manager/pm/portfolio/pm-table": [
+    1155,
+    300,
+    "2026-10-01"
+  ],
+  "manager/pm/roles-access/ra-board": [
+    1140,
+    439,
+    "2026-10-01"
+  ],
+  "manager/pm/roles-access/ra-pm": [
+    1140,
+    283,
+    "2026-10-01"
+  ],
+  "manager/residents/invite-residents/rs-add": [
+    1140,
+    105,
+    "2026-10-01"
+  ],
+  "manager/residents/invite-residents/rs-form": [
+    600,
+    713,
+    "2026-10-01"
+  ],
+  "manager/residents/invite-residents/rs-import": [
+    1140,
+    171,
+    "2026-10-01"
+  ],
+  "manager/residents/invite-residents/rs-resend": [
+    1138,
+    134,
+    "2026-10-01"
+  ],
+  "manager/residents/join-requests/jr-deny": [
+    440,
+    400,
+    "2026-10-01"
+  ],
+  "manager/residents/join-requests/jr-queue": [
+    1140,
+    253,
+    "2026-10-01"
+  ],
+  "manager/residents/units/un-add": [
+    600,
+    407,
+    "2026-10-01"
+  ],
+  "manager/residents/units/un-list": [
+    1130,
+    312,
+    "2026-10-01"
+  ],
+  "manager/violations/arc-review/arcr-decide": [
+    531,
+    482,
+    "2026-10-01"
+  ],
+  "manager/violations/arc-review/arcr-panel": [
+    560,
+    900,
+    "2026-10-01"
+  ],
+  "manager/violations/arc-review/arcr-queue": [
+    1140,
+    183,
+    "2026-10-01"
+  ],
+  "manager/violations/review-violations/vi-fine": [
+    1106,
+    323,
+    "2026-10-01"
+  ],
+  "manager/violations/review-violations/vi-hear": [
+    1106,
+    323,
+    "2026-10-01"
+  ],
+  "manager/violations/review-violations/vi-inbox": [
+    1140,
+    334,
+    "2026-10-01"
+  ],
+  "manager/violations/review-violations/vi-new": [
+    1140,
+    100,
+    "2026-10-01"
+  ],
+  "manager/violations/review-violations/vi-notice": [
+    1140,
+    294,
+    "2026-10-01"
+  ],
+  "manager/website/audit-trail/au-export": [
+    1140,
+    85,
+    "2026-10-01"
+  ],
+  "manager/website/audit-trail/au-filters": [
+    1140,
+    85,
+    "2026-10-01"
+  ],
+  "manager/website/audit-trail/au-meta": [
+    1187,
+    249,
+    "2026-10-01"
+  ],
+  "manager/website/contracts/ct-add": [
+    220,
+    135,
+    "2026-10-01"
+  ],
+  "manager/website/contracts/ct-alerts": [
+    1132,
+    121,
+    "2026-10-01"
+  ],
+  "manager/website/contracts/ct-bids": [
+    332,
+    238,
+    "2026-10-01"
+  ],
+  "manager/website/contracts/ct-form": [
+    1090,
+    550,
+    "2026-10-01"
+  ],
+  "manager/website/export-data/exp-auth": [
+    440,
+    310,
+    "2026-10-01"
+  ],
+  "manager/website/export-data/exp-page": [
+    292,
+    237,
+    "2026-10-01"
+  ],
+  "manager/website/transparency-page/tp-ack": [
+    1077,
+    148,
+    "2026-10-01"
+  ],
+  "manager/website/transparency-page/tp-settings": [
+    419,
+    130,
+    "2026-10-01"
+  ],
+  "manager/website/website-branding/wb-colors": [
+    261,
+    444,
+    "2026-10-01"
+  ],
+  "manager/website/website-branding/wb-domain": [
+    495,
+    370,
+    "2026-10-01"
+  ],
+  "resident/account/delete-account/del-confirm": [
+    600,
+    458,
+    "2026-10-01"
+  ],
+  "resident/account/delete-account/del-zone": [
+    239,
+    214,
+    "2026-10-01"
+  ],
+  "resident/account/export-data/exp-auth": [
+    440,
+    310,
+    "2026-10-01"
+  ],
+  "resident/account/export-data/exp-page": [
+    292,
+    237,
+    "2026-10-01"
+  ],
+  "resident/account/notifications/ntf-center": [
+    1196,
+    818,
+    "2026-10-01"
+  ],
+  "resident/account/notifications/ntf-freq": [
+    1140,
+    494,
+    "2026-10-01"
+  ],
+  "resident/account/notifications/ntf-prefs": [
+    1140,
+    556,
+    "2026-10-01"
+  ],
+  "resident/account/notifications/ntf-save": [
+    221,
+    233,
+    "2026-10-01"
+  ],
+  "resident/account/profile-password/acc-profile": [
+    754,
+    443,
+    "2026-10-01"
+  ],
+  "resident/account/profile-password/acc-pw": [
+    720,
+    255,
+    "2026-10-01"
+  ],
+  "resident/account/profile-password/acc-save": [
+    728,
+    443,
+    "2026-10-01"
+  ],
+  "resident/announcements/read-announcements/an-list": [
+    1132,
+    246,
+    "2026-10-01"
+  ],
+  "resident/announcements/read-announcements/an-pin": [
+    1140,
+    254,
+    "2026-10-01"
+  ],
+  "resident/apartment/packages-visitors/pk-mine": [
+    1196,
+    818,
+    "2026-10-01"
+  ],
+  "resident/apartment/packages-visitors/vs-pass": [
+    600,
+    805,
+    "2026-10-01"
+  ],
+  "resident/board/board-forum/fr-list": [
+    1132,
+    264,
+    "2026-10-01"
+  ],
+  "resident/board/board-forum/fr-new": [
+    600,
+    478,
+    "2026-10-01"
+  ],
+  "resident/board/cast-ballot/bal-cast": [
+    760,
+    852,
+    "2026-10-01"
+  ],
+  "resident/board/cast-ballot/bal-open": [
+    1140,
+    545,
+    "2026-10-01"
+  ],
+  "resident/board/run-election/el-actions": [
+    710,
+    176,
+    "2026-10-01"
+  ],
+  "resident/board/run-election/el-results": [
+    710,
+    459,
+    "2026-10-01"
+  ],
+  "resident/board/vote-poll/poll-list": [
+    1140,
+    517,
+    "2026-10-01"
+  ],
+  "resident/board/vote-poll/poll-vote": [
+    1140,
+    440,
+    "2026-10-01"
+  ],
+  "resident/building/insurance/ins-card": [
+    1132,
+    439,
+    "2026-10-01"
+  ],
+  "resident/building/insurance/ins-coi": [
+    600,
+    598,
+    "2026-10-01"
+  ],
+  "resident/building/insurance/ins-wind": [
+    1132,
+    298,
+    "2026-10-01"
+  ],
+  "resident/building/reserve-register/rv-list": [
+    1132,
+    754,
+    "2026-10-01"
+  ],
+  "resident/building/storm-damage/st-btn": [
+    1140,
+    73,
+    "2026-10-01"
+  ],
+  "resident/building/storm-damage/st-form": [
+    600,
+    805,
+    "2026-10-01"
+  ],
+  "resident/documents/find-documents/doc-cats": [
+    1090,
+    122,
+    "2026-10-01"
+  ],
+  "resident/documents/find-documents/doc-dl": [
+    449,
+    72,
+    "2026-10-01"
+  ],
+  "resident/documents/find-documents/doc-row": [
+    629,
+    150,
+    "2026-10-01"
+  ],
+  "resident/documents/find-documents/doc-search": [
+    1090,
+    258,
+    "2026-10-01"
+  ],
+  "resident/documents/find-documents/doc-viewer": [
+    441,
+    385,
+    "2026-10-01"
+  ],
+  "resident/esign/sign-document/sg-card": [
+    578,
+    240,
+    "2026-10-01"
+  ],
+  "resident/esign/sign-document/sg-field": [
+    1048,
+    470,
+    "2026-10-01"
+  ],
+  "resident/esign/sign-document/sg-finish": [
+    1440,
+    197,
+    "2026-10-01"
+  ],
+  "resident/esign/sign-document/sg-modal": [
+    616,
+    510,
+    "2026-10-01"
+  ],
+  "resident/getting-started/community-digest/dig-card": [
+    1098,
+    191,
+    "2026-10-01"
+  ],
+  "resident/getting-started/getting-around/gs-help": [
+    164,
+    66,
+    "2026-10-01"
+  ],
+  "resident/getting-started/getting-around/gs-helppanel": [
+    520,
+    900,
+    "2026-10-01"
+  ],
+  "resident/getting-started/getting-around/gs-nav-r": [
+    280,
+    900,
+    "2026-10-01"
+  ],
+  "resident/getting-started/getting-around/gs-search": [
+    600,
+    68,
+    "2026-10-01"
+  ],
+  "resident/getting-started/join-community/gs-join-comm": [
+    1200,
+    822,
+    "2026-10-01"
+  ],
+  "resident/getting-started/join-community/gs-join-submit": [
+    1200,
+    822,
+    "2026-10-01"
+  ],
+  "resident/getting-started/join-community/gs-join-unit": [
+    1200,
+    822,
+    "2026-10-01"
+  ],
+  "resident/getting-started/join-community/gs-switch": [
+    312,
+    219,
+    "2026-10-01"
+  ],
+  "resident/getting-started/your-dashboard/dash-ann": [
+    578,
+    277,
+    "2026-10-01"
+  ],
+  "resident/getting-started/your-dashboard/dash-meet": [
+    578,
+    277,
+    "2026-10-01"
+  ],
+  "resident/getting-started/your-dashboard/dash-r": [
+    1196,
+    859,
+    "2026-10-01"
+  ],
+  "resident/getting-started/your-dashboard/dash-sign": [
+    578,
+    240,
+    "2026-10-01"
+  ],
+  "resident/maintenance/maintenance-request/mr-cat": [
+    481,
+    194,
+    "2026-10-01"
+  ],
+  "resident/maintenance/maintenance-request/mr-desc": [
+    481,
+    180,
+    "2026-10-01"
+  ],
+  "resident/maintenance/maintenance-request/mr-photos": [
+    481,
+    122,
+    "2026-10-01"
+  ],
+  "resident/maintenance/maintenance-request/mr-prio": [
+    481,
+    106,
+    "2026-10-01"
+  ],
+  "resident/maintenance/maintenance-request/mr-send": [
+    481,
+    150,
+    "2026-10-01"
+  ],
+  "resident/maintenance/maintenance-request/mr-submit": [
+    1141,
+    73,
+    "2026-10-01"
+  ],
+  "resident/maintenance/track-request/mr-list": [
+    1132,
+    212,
+    "2026-10-01"
+  ],
+  "resident/meetings/meeting-notices/mt-day": [
+    913,
+    167,
+    "2026-10-01"
+  ],
+  "resident/meetings/meeting-notices/mt-detail": [
+    796,
+    544,
+    "2026-10-01"
+  ],
+  "resident/meetings/meeting-notices/mt-past": [
+    1132,
+    223,
+    "2026-10-01"
+  ],
+  "resident/meetings/meeting-notices/mt-views": [
+    318,
+    79,
+    "2026-10-01"
+  ],
+  "resident/payments/balance/bal-up": [
+    1132,
+    208,
+    "2026-10-01"
+  ],
+  "resident/payments/pay-dues/pay-cards": [
+    1132,
+    130,
+    "2026-10-01"
+  ],
+  "resident/payments/pay-dues/pay-hist": [
+    1132,
+    191,
+    "2026-10-01"
+  ],
+  "resident/payments/pay-dues/pay-now": [
+    1138,
+    149,
+    "2026-10-01"
+  ],
+  "resident/violations/arc-request/arc-mine": [
+    1196,
+    818,
+    "2026-10-01"
+  ],
+  "resident/violations/arc-request/arc-new": [
+    796,
+    598,
+    "2026-10-01"
+  ],
+  "resident/violations/arc-request/arc-send": [
+    194,
+    84,
+    "2026-10-01"
+  ],
+  "resident/violations/report-violation/vr-cat": [
+    854,
+    384,
+    "2026-10-01"
+  ],
+  "resident/violations/report-violation/vr-desc": [
+    854,
+    401,
+    "2026-10-01"
+  ],
+  "resident/violations/report-violation/vr-send": [
+    862,
+    94,
+    "2026-10-01"
+  ],
+  "resident/violations/review-violations/vi-inbox": [
+    1140,
+    334,
+    "2026-10-01"
+  ],
+  "resident/violations/review-violations/vi-notice": [
+    1140,
+    294,
+    "2026-10-01"
+  ],
+  "resident/violations/violation-notice/vn-notice": [
+    896,
+    373,
+    "2026-10-01"
+  ]
+}

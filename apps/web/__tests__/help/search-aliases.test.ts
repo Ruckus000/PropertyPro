@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { expandQuery } from '@/lib/help/aliases';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import {
+  getAllArticles,
+  getArticlesForReader,
   matchesArticleQuery,
   scoreArticleForQuery,
   searchArticles,
 } from '@/lib/services/help-article-service';
+
+const residentReader = {
+  section: 'resident' as const,
+  communityType: 'condo_718' as const,
+  features: getFeaturesForCommunity('condo_718'),
+  boardSeat: false,
+};
 
 describe('expandQuery — alias resolution', () => {
   it('expands "fees" to include "assessments" and "dues"', () => {
@@ -132,9 +142,9 @@ describe('scoreArticleForQuery — ranking', () => {
 
 describe('searchArticles — ranking + result cap', () => {
   it('returns alias-derived hits in the in-repo corpus (fees → assessments articles)', async () => {
-    const results = await searchArticles('fees', ['manager']);
-    // The corpus has finance/paying-dues-and-assessments.mdx plus payments
-    // articles; alias expansion should surface these.
+    const results = searchArticles(getArticlesForReader(residentReader), 'fees');
+    // The resident section has payments/pay-dues and payments/balance;
+    // alias expansion (fees → dues, assessment) should surface these.
     expect(results.length).toBeGreaterThan(0);
     const slugs = results.map((a) => a.slug);
     expect(
@@ -145,11 +155,11 @@ describe('searchArticles — ranking + result cap', () => {
   it('caps results at 50', async () => {
     // A super-broad query should not exceed the hard cap even if every
     // article matched.
-    const broad = await searchArticles('the', ['manager']);
+    const broad = searchArticles(getAllArticles(), 'the');
     expect(broad.length).toBeLessThanOrEqual(50);
   });
 
   it('returns no results for an empty query', async () => {
-    expect(await searchArticles('', ['manager'])).toEqual([]);
+    expect(searchArticles(getAllArticles(), '')).toEqual([]);
   });
 });

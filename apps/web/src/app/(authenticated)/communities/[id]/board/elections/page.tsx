@@ -4,7 +4,7 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { BoardElectionsPanel } from '@/components/board/board-elections-panel';
-import { requirePermission } from '@/lib/db/access-control';
+import { canActAsBoard, requirePermission } from '@/lib/db/access-control';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -49,5 +49,12 @@ export default async function BoardElectionsPage({ params }: PageProps) {
 
   requirePermission(membership, 'elections', 'read');
 
-  return <BoardElectionsPanel communityId={communityId} isAdmin={membership.isAdmin} userId={userId} />;
+  return (
+    <BoardElectionsPanel
+      communityId={communityId}
+      isAdmin={membership.isAdmin}
+      canAdminister={canActAsBoard(membership)}
+      userId={userId}
+    />
+  );
 }

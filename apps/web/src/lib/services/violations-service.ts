@@ -30,6 +30,8 @@ import { AppError, BadRequestError, ForbiddenError, NotFoundError, Unprocessable
 import { parseDateOnly } from '@/lib/finance/common';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
+import { listUnitResidentUserIds } from '@/lib/units/actor-units';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 
 export interface ViolationRecord {
   [key: string]: unknown;
@@ -44,6 +46,9 @@ export interface ViolationRecord {
   evidenceDocumentIds: number[];
   noticeDate: string | null;
   hearingDate: Date | null;
+  hearingLocation: string | null;
+  /** "Unit 1B"; set by the read paths (withUnitLabels), absent on writes. */
+  unitLabel?: string;
   resolutionDate: Date | null;
   resolutionNotes: string | null;
   createdAt: Date;
@@ -71,6 +76,8 @@ export interface ArcSubmissionRecord {
   id: number;
   communityId: number;
   unitId: number;
+  /** "Unit 1B"; set by the read paths (withUnitLabels), absent on writes. */
+  unitLabel?: string;
   submittedByUserId: string;
   title: string;
   description: string;
@@ -103,6 +110,7 @@ export interface UpdateViolationInput {
   evidenceDocumentIds?: number[];
   noticeDate?: string | null;
   hearingDate?: string | null;
+  hearingLocation?: string | null;
   resolutionNotes?: string | null;
 }
 
@@ -262,46 +270,60 @@ export function mapArcRow(row: ArcSubmissionRecord): ArcSubmissionRecord {
   };
 }
 
+/**
+ * §718.303(3)(b) / §720.305(2)(b): notice goes to the unit's owner and, where
+ * applicable, its occupants — every resident of the cited unit. Never the
+ * reporter (often the manager or a neighbour), and never a community-wide
+ * broadcast when the unit has nobody on record.
+ */
 async function notifyViolationNotice(
   communityId: number,
   violation: ViolationRecord,
   actorUserId: string,
 ): Promise<void> {
   try {
-    await sendNotification(
-      communityId,
-      {
-        type: 'compliance_alert',
-        alertTitle: 'Violation Notice Issued',
-        alertDescription: `Violation #${violation.id} has been marked as noticed.`,
-        severity: 'warning',
-        sourceType: 'compliance',
-        sourceId: String(violation.id),
-      },
-      violation.reportedByUserId
-        ? { type: 'specific_user', userId: violation.reportedByUserId }
-        : 'owners_only',
-      actorUserId,
-    );
+    const recipients = await listUnitResidentUserIds(createScopedClient(communityId), violation.unitId);
+    if (recipients.length === 0) {
+      console.warn('[violations-service] violation notice has no unit residents to notify', {
+        communityId,
+        violationId: violation.id,
+        unitId: violation.unitId,
+      });
+      return;
+    }
 
-    void createNotificationsForEvent(
-      communityId,
-      {
-        category: 'violation',
-        title: 'Violation Notice Issued',
-        body: `Violation #${violation.id} has been noticed.`,
-        actionUrl: `/violations/${violation.id}`,
-        sourceType: 'violation',
-        sourceId: String(violation.id),
-        priority: 'high',
-      },
-      violation.reportedByUserId
-        ? { type: 'specific_user', userId: violation.reportedByUserId }
-        : 'owners_only',
-      actorUserId,
-    ).catch((err: unknown) => {
-      console.error('[violations] in-app violation notice failed', { communityId, violationId: violation.id, error: err instanceof Error ? err.message : String(err) });
-    });
+    for (const userId of recipients) {
+      await sendNotification(
+        communityId,
+        {
+          type: 'compliance_alert',
+          alertTitle: 'Violation Notice Issued',
+          alertDescription: `Violation #${violation.id} has been marked as noticed.`,
+          severity: 'warning',
+          sourceType: 'compliance',
+          sourceId: String(violation.id),
+        },
+        { type: 'specific_user', userId },
+        actorUserId,
+      );
+
+      void createNotificationsForEvent(
+        communityId,
+        {
+          category: 'violation',
+          title: 'Violation Notice Issued',
+          body: `Violation #${violation.id} has been noticed.`,
+          actionUrl: `/violations/${violation.id}`,
+          sourceType: 'violation',
+          sourceId: String(violation.id),
+          priority: 'high',
+        },
+        { type: 'specific_user', userId },
+        actorUserId,
+      ).catch((err: unknown) => {
+        console.error('[violations] in-app violation notice failed', { communityId, violationId: violation.id, error: err instanceof Error ? err.message : String(err) });
+      });
+    }
   } catch (error) {
     console.error('[violations-service] failed to send violation notice notification', {
       communityId,
@@ -559,6 +581,9 @@ export async function updateViolationForCommunity(
   if (input.hearingDate !== undefined) {
     updates['hearingDate'] = input.hearingDate === null ? null : new Date(input.hearingDate);
   }
+  if (input.hearingLocation !== undefined) {
+    updates['hearingLocation'] = input.hearingLocation?.trim() || null;
+  }
   if (input.resolutionNotes !== undefined) {
     updates['resolutionNotes'] = input.resolutionNotes;
   }
@@ -691,8 +716,8 @@ export async function imposeViolationFineForCommunity(
       description: `Fine imposed for violation #${violationId}`,
       sourceType: 'violation',
       sourceId: String(violationId),
+      // A charge belongs to the unit, like assessments and late fees; userId marks a payer.
       unitId: violation.unitId,
-      userId: violation.reportedByUserId ?? undefined,
       metadata: {
         violationId,
         notes: input.notes ?? undefined,
@@ -1225,7 +1250,7 @@ export async function paginateArcSubmissionsForCommunity(params: {
     { where },
   );
   return {
-    data: result.data.map(mapArcRow),
+    data: await withUnitLabels(scoped, result.data.map(mapArcRow)),
     pagination: result.pagination,
   };
 }
@@ -1318,7 +1343,7 @@ export async function paginateViolationsForCommunity(params: {
   );
 
   const mapped = result.data.map(mapViolationRow);
-  const hydrated = await hydrateReportedByRole(scoped, mapped);
+  const hydrated = await hydrateReportedByRole(scoped, await withUnitLabels(scoped, mapped));
   return {
     data: hydrated,
     pagination: result.pagination,

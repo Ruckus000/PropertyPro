@@ -1,0 +1,87 @@
+{
+  "section": "manager",
+  "category": "website",
+  "slug": "contracts",
+  "shots": [
+    {
+      "name": "ct-alerts",
+      "kind": "still",
+      "route": "/contracts?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "text=Expiration Alerts"
+        }
+      ],
+      "clipTo": "div:has(> h3:text-is(\"Expiration Alerts\"))"
+    },
+    {
+      "name": "ct-add",
+      "kind": "still",
+      "route": "/contracts?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add Contract\"]"
+        }
+      ],
+      "clipTo": "role=button[name=\"Add Contract\"]",
+      "pad": 48,
+      "highlight": "role=button[name=\"Add Contract\"]",
+      "step": 1
+    },
+    {
+      "name": "ct-form",
+      "kind": "still",
+      "route": "/contracts?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add Contract\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Add Contract\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#contract-title"
+        }
+      ],
+      "clipTo": "form:has(#contract-title)",
+      "highlight": "#contract-title",
+      "step": 2
+    },
+    {
+      "name": "ct-bids",
+      "kind": "still",
+      "route": "/contracts?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Bids\"s] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Bids\"s] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=/^Bids for:/]"
+        }
+      ],
+      "clipTo": [
+        "role=heading[name=/^Bids for:/]",
+        "role=button[name=\"+ Add Bid\"]"
+      ]
+    }
+  ]
+}

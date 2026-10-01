@@ -1,0 +1,37 @@
+{
+  "section": "manager",
+  "category": "pm",
+  "slug": "billing",
+  "shots": [
+    {
+      "name": "bl-page",
+      "kind": "still",
+      "route": "/settings/billing?communityId={cid}",
+      "role": "root_sunset",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Current Plan\"]"
+        }
+      ],
+      "clipTo": "div:has(> div > h2:text-is(\"Current Plan\"))"
+    },
+    {
+      "name": "bl-plans",
+      "kind": "still",
+      "route": "/settings/billing/change-plan?communityId={cid}",
+      "role": "founding_admin",
+      "community": "hoa",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Review change\"]"
+        }
+      ],
+      "clipTo": "main",
+      "highlight": "role=button[name=\"Review change\"]",
+      "step": 1
+    }
+  ]
+}

@@ -1,0 +1,132 @@
+---
+title: "Manage leases"
+description: "Track lease agreements for apartment communities: create, edit, renew and terminate leases."
+section: manager
+category: leases
+slug: managing-leases
+communityTypes: [apartment]
+order: 0
+featured: true
+keywords: ["lease","rental","tenant","renewal","termination","rent","lease term","month-to-month","vacant","expiring","chapter 83"]
+relatedArticles: ["move-in-out"]
+statutes: ["§83.49"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-09-30"
+---
+
+<FeatureGate feature="apartment communities only">
+Lease tracking is available in communities set up as apartments. Condos and HOAs don't see **Leases**.
+</FeatureGate>
+
+## What the Leases page shows
+
+Select **Leases** in the sidebar. The page is titled **Lease Management** and lists one row per lease record:
+
+- **Unit** and **Resident** (one resident per lease record)
+- **Start Date** and **End Date** (no end date means month-to-month)
+- **Monthly Rent**
+- **Status**: **Active**, **Expiring Soon** (ends within 60 days), **Expired** (end date has passed), **Renewed**, or **Terminated**
+
+Use the tabs above the list to filter it:
+
+- **All**: every lease record
+- **Expiring Soon**: leases that end in the next 60 days
+- **Month-to-Month**: active leases with no end date
+- **Vacant Units**: units with no active lease, each with a **Create Lease** button
+
+## Create a lease
+
+<StepByStep>
+
+<Step title="Select New Lease">
+
+It is at the top right of the list.
+
+</Step>
+
+<Step title="Pick the unit">
+
+Choose it from **Unit**.
+
+</Step>
+
+<Step title="Select the resident">
+
+Search for them in **Resident**. The resident must already have a tenant account in this community. If they aren't listed, select **Add them first** to open Residents.
+
+</Step>
+
+<Step title="Enter the lease details">
+
+Fill in **Start Date**. **End Date** is optional: leave it blank for month-to-month. **Monthly Rent ($)** is optional: leave it blank to use the unit's rent on file. Add **Notes** if they help.
+
+</Step>
+
+<Step title="Select Create Lease">
+
+The lease is saved as **Active** and a move-in checklist is created on **Move In/Out**. A lease can't overlap another lease on the same unit.
+
+</Step>
+
+</StepByStep>
+
+## View or edit a lease
+
+Select the **⋯** menu at the end of a row, then **View** or **Edit**. The **Lease Details** panel shows the unit, resident, start date and status. You can change **End Date** (clear it for month-to-month), **Monthly Rent ($)** and **Notes**, then select **Save Changes**. If the lease has been renewed, **Renewal History** lists each term.
+
+## Renew a lease
+
+<StepByStep>
+
+<Step title="Find the lease">
+
+Use the **Expiring Soon** tab, or the **Lease Expirations** card on the dashboard.
+
+</Step>
+
+<Step title="Select Renew">
+
+Open the row's **⋯** menu and select **Renew**. It appears for **Active** and **Expiring Soon** leases that have an end date. Month-to-month leases can't be renewed.
+
+</Step>
+
+<Step title="Enter the new terms">
+
+**New Start Date** starts as the day after the current end date. Set **New End Date** (optional: leave blank for month-to-month) and check **Monthly Rent ($)**, which starts at the current rent.
+
+</Step>
+
+<Step title="Select Renew Lease">
+
+The current lease is marked **Renewed** right away and a new lease record is created for the same unit and resident, with its own move-in checklist.
+
+</Step>
+
+</StepByStep>
+
+## Terminate a lease
+
+Terminations record a lease ending before its end date (mutual agreement, breach, buyout).
+
+1. Open the row's **⋯** menu and select **Terminate**. It appears for **Active** and **Expiring Soon** leases.
+2. Enter the **Termination Date**. It becomes the lease's end date. If you leave it blank, the end date is cleared.
+3. Add a **Reason / Notes**. It is added to the lease notes.
+4. Select **Terminate Lease**.
+
+The lease shows **Terminated** and a move-out checklist is created on **Move In/Out**. Terminating does not remove the resident's portal access. There is no undo on this page.
+
+## Who can see leases
+
+Only managers can open **Leases**. Lease data includes rent amounts, so residents and board members don't see it.
+
+## Compliance
+
+<Callout type="warning" title="Florida landlord-tenant law applies">
+Florida Statutes Chapter 83 governs residential leases. PropertyPro records the agreement but does not enforce statutory requirements (notice periods, security deposit handling, habitability). Work with your legal counsel to ensure lease terms comply with Chapter 83.
+</Callout>
+
+## Common patterns
+
+- **Month-to-month after expiration**: renew with **New End Date** blank, or edit the lease and clear **End Date**. It then appears under **Month-to-Month**.
+- **Rent increases**: set the new rent when you renew. Edit rent on a current lease only to fix a mistake.

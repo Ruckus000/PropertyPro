@@ -1,0 +1,141 @@
+{
+  "section": "manager",
+  "category": "esign",
+  "slug": "send-for-signature",
+  "shots": [
+    {
+      "name": "snd-btn",
+      "kind": "still",
+      "route": "/esign?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=link[name=\"Send Document\"]"
+        }
+      ],
+      "clipTo": [
+        "h1:text-is(\"E-Sign\")",
+        "role=tablist[name=\"View\"]",
+        "role=link[name=\"Send Document\"]"
+      ],
+      "highlight": "role=link[name=\"Send Document\"]",
+      "step": 1
+    },
+    {
+      "name": "snd-form",
+      "kind": "still",
+      "route": "/esign?view=templates&communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link"
+        },
+        {
+          "type": "click",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Clone\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=link[name=\"Send for Signing\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#builder-signing-order"
+        },
+        {
+          "type": "fill",
+          "selector": "input[id^=\"recipient-name-\"] >> nth=0",
+          "value": "Olivia Owner"
+        },
+        {
+          "type": "fill",
+          "selector": "input[id^=\"recipient-email-\"] >> nth=0",
+          "value": "owner.one@sunset.local"
+        }
+      ],
+      "clipTo": [
+        "section:has(h2:text-is(\"Recipients\"))",
+        "#builder-signing-order"
+      ],
+      "highlight": "section:has(h2:text-is(\"Recipients\")) li >> nth=0",
+      "step": 3
+    },
+    {
+      "name": "snd-exp",
+      "kind": "still",
+      "route": "/esign?view=templates&communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link"
+        },
+        {
+          "type": "click",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Clone\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=link[name=\"Send for Signing\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#builder-signing-order"
+        },
+        {
+          "type": "fill",
+          "selector": "input[id^=\"recipient-name-\"] >> nth=0",
+          "value": "Olivia Owner"
+        },
+        {
+          "type": "fill",
+          "selector": "input[id^=\"recipient-email-\"] >> nth=0",
+          "value": "owner.one@sunset.local"
+        },
+        {
+          "type": "fill",
+          "selector": "#builder-message",
+          "value": "Please sign before the annual meeting."
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"How it goes out\"))",
+      "highlight": "#builder-expiry",
+      "step": 4
+    },
+    {
+      "name": "snd-track",
+      "kind": "still",
+      "route": "/esign?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "a[href^=\"/esign/submissions/\"]:not([href*=\"/new\"])"
+        },
+        {
+          "type": "click",
+          "selector": "a[href^=\"/esign/submissions/\"]:not([href*=\"/new\"]) >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "text=Signing order"
+        }
+      ],
+      "clipTo": "div.xl\\:col-span-2"
+    }
+  ]
+}

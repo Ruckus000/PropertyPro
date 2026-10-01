@@ -43,9 +43,10 @@ const ROLE_EMAIL_MAP: Record<string, string> = {
   root_sunsetridge: 'root.manager@sunsetridge.local',
 };
 
+// board_member is a resident owner with a board seat (seed-demo.ts), so it
+// lands in the resident portal like `owner`.
 const ADMIN_ROLES = new Set([
   'board_president',
-  'board_member',
   'cam',
   'site_manager',
   'pm_admin',

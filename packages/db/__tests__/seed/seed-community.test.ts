@@ -176,4 +176,17 @@ describe('seedRoles upsert', () => {
     expect(params[3]).toBe(42);
     expect(params[10]).toBeNull();
   });
+
+  it('keeps a board seat on a resident owner (the demo board.member persona)', async () => {
+    const { params } = await renderSeedRolesSql([
+      {
+        communityId: 7,
+        userId: '00000000-0000-4000-8000-000000000001',
+        role: 'owner',
+        designation: 'board_member',
+      },
+    ]);
+    // (user_id, community_id, role, unit_id, is_unit_owner, designation, display_title)
+    expect(params.slice(2, 7)).toEqual(['resident', null, true, 'board_member', 'Board Member']);
+  });
 });

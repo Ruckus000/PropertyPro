@@ -1,0 +1,50 @@
+{
+  "section": "resident",
+  "category": "building",
+  "slug": "storm-damage",
+  "shots": [
+    {
+      "name": "st-btn",
+      "kind": "still",
+      "route": "/communities/{cid}/storm-damage",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Report Damage\"] >> nth=0"
+        }
+      ],
+      "clipTo": [
+        "#storm-damage-heading",
+        "role=button[name=\"Report Damage\"] >> nth=0"
+      ],
+      "highlight": "role=button[name=\"Report Damage\"] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "st-form",
+      "kind": "still",
+      "route": "/communities/{cid}/storm-damage",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Report Damage\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Report Damage\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Report storm damage\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#storm-location",
+      "step": 2
+    }
+  ]
+}

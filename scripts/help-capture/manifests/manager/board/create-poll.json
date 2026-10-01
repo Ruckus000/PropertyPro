@@ -1,0 +1,85 @@
+{
+  "section": "manager",
+  "category": "board",
+  "slug": "create-poll",
+  "shots": [
+    {
+      "name": "pc-btn",
+      "kind": "still",
+      "route": "/communities/{cid}/board/polls",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Create Poll\"]"
+        }
+      ],
+      "clipTo": [
+        "nav[aria-label=\"Board sections\"]",
+        "role=button[name=\"Create Poll\"]"
+      ],
+      "highlight": "role=button[name=\"Create Poll\"]",
+      "step": 1
+    },
+    {
+      "name": "pc-form",
+      "kind": "still",
+      "route": "/communities/{cid}/board/polls",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Create Poll\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        },
+        {
+          "type": "fill",
+          "selector": "#poll-title",
+          "value": "Should the pool open at 7 a.m. on weekends?"
+        },
+        {
+          "type": "fill",
+          "selector": "role=dialog >> input[placeholder=\"Option 1\"]",
+          "value": "Yes"
+        },
+        {
+          "type": "fill",
+          "selector": "role=dialog >> input[placeholder=\"Option 2\"]",
+          "value": "No"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "role=button[name=\"Add Option\"]",
+      "step": 2
+    },
+    {
+      "name": "pc-type",
+      "kind": "still",
+      "route": "/communities/{cid}/board/polls",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Create Poll\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        }
+      ],
+      "clipTo": [
+        "role=dialog >> role=combobox",
+        "#poll-ends-at"
+      ],
+      "pad": 40,
+      "highlight": "role=dialog >> role=combobox",
+      "step": 3
+    }
+  ]
+}

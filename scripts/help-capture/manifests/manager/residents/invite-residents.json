@@ -1,0 +1,77 @@
+{
+  "section": "manager",
+  "category": "residents",
+  "slug": "invite-residents",
+  "shots": [
+    {
+      "name": "rs-add",
+      "kind": "still",
+      "route": "/dashboard/residents?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add Resident\"]"
+        }
+      ],
+      "clipTo": "[data-page-header]",
+      "highlight": "role=button[name=\"Add Resident\"]",
+      "step": 1
+    },
+    {
+      "name": "rs-form",
+      "kind": "still",
+      "route": "/dashboard/residents?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Add Resident\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "role=dialog >> form",
+      "step": 2
+    },
+    {
+      "name": "rs-resend",
+      "kind": "still",
+      "route": "/dashboard/residents?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "button[aria-label^=\"Resend invitation\"]"
+        }
+      ],
+      "clipTo": "li:has(button[aria-label^=\"Resend invitation\"]) >> nth=0",
+      "highlight": "button[aria-label^=\"Resend invitation\"] >> nth=0",
+      "step": 3
+    },
+    {
+      "name": "rs-import",
+      "kind": "still",
+      "route": "/dashboard/import-residents?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Download CSV template\"]"
+        }
+      ],
+      "clipTo": [
+        "[data-page-header]",
+        "role=button[name=\"Download CSV template\"]"
+      ],
+      "highlight": "role=button[name=\"Download CSV template\"]"
+    }
+  ]
+}

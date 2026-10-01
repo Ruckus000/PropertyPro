@@ -5,13 +5,22 @@ import {
   getAllArticles,
   getAllTags,
   getArticlesByTag,
-  getFeaturedForRole,
-  isArticleVisibleToRole,
+  getArticlesForReader,
+  getFeaturedForReader,
   isArticleAvailableForFeatures,
   matchesArticleQuery,
   parseArticleFrontmatter,
   searchArticles,
 } from '../../src/lib/services/help-article-service';
+import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import type { HelpSection } from '../../src/lib/help/sections';
+
+const readerFor = (section: HelpSection, communityType: CommunityType = 'condo_718', boardSeat = false) => ({
+  section,
+  communityType,
+  features: getFeaturesForCommunity(communityType),
+  boardSeat,
+});
 
 describe('help article service', () => {
   it('parses valid frontmatter into article metadata', () => {
@@ -22,8 +31,7 @@ title: "Example"
 description: "Example description"
 category: "example"
 slug: "example"
-roles:
-  - owner
+section: resident
 keywords:
   - sample
 relatedArticles: []
@@ -40,32 +48,43 @@ This is the example body.
       category: 'example',
       slug: 'example',
       featured: true,
-      roles: ['owner'],
+      section: 'resident',
+      boardOnly: false,
+      communityTypes: ['condo_718', 'hoa_720', 'apartment'],
     });
     expect(metadata.excerpt).toContain('This is the example body.');
   });
 
-  it('loads the in-repo help articles', async () => {
-    const articles = await getAllArticles();
-
-    expect(articles.length).toBeGreaterThanOrEqual(5);
-    expect(articles.some((article) => article.slug === 'welcome-to-propertypro')).toBe(true);
+  it('loads the in-repo help articles for both sections', () => {
+    const articles = getAllArticles();
+    for (const section of ['resident', 'manager'] as const) {
+      expect(articles.some((article) => article.section === section && article.slug === 'getting-around')).toBe(true);
+    }
   });
 
-  it('returns featured articles filtered by role', async () => {
-    const tenantArticles = await getFeaturedForRole(['tenant']);
-    const managerArticles = await getFeaturedForRole(['manager']);
+  it('returns featured articles for the reader’s section only', () => {
+    const residentArticles = getFeaturedForReader(readerFor('resident'));
+    const managerArticles = getFeaturedForReader(readerFor('manager'));
 
-    expect(tenantArticles.length).toBeGreaterThan(0);
-    expect(managerArticles.some((article) => article.slug === 'reviewing-the-compliance-dashboard')).toBe(true);
-    expect(tenantArticles.some((article) => article.slug === 'reviewing-the-compliance-dashboard')).toBe(false);
+    expect(residentArticles.length).toBeGreaterThan(0);
+    expect(residentArticles.every((article) => article.section === 'resident')).toBe(true);
+    expect(managerArticles.every((article) => article.section === 'manager')).toBe(true);
   });
 
-  it('searches by title and keywords', async () => {
-    const results = await searchArticles('maintenance', ['tenant']);
+  it('searches the reader’s articles by title and keywords', () => {
+    const results = searchArticles(getArticlesForReader(readerFor('resident')), 'maintenance');
 
-    expect(results.some((article) => article.slug === 'submitting-a-maintenance-request')).toBe(true);
+    expect(results.some((article) => article.slug === 'maintenance-request')).toBe(true);
     expect(matchesArticleQuery(results[0]!, 'maintenance')).toBe(true);
+  });
+
+  it('never shows another section or another community type', () => {
+    const apartmentManager = getArticlesForReader(readerFor('manager', 'apartment'));
+    const condoManager = getArticlesForReader(readerFor('manager'));
+
+    expect(apartmentManager.every((article) => article.communityTypes.includes('apartment'))).toBe(true);
+    expect(condoManager.some((article) => article.category === 'leases')).toBe(false);
+    expect(apartmentManager.some((article) => article.slug === 'managing-leases')).toBe(true);
   });
 
   it('parses tags, updatedAt, statutes, and featureGates from frontmatter', () => {
@@ -76,7 +95,7 @@ title: "Statute Example"
 description: "demo"
 category: "compliance"
 slug: "statute-example"
-roles: []
+section: manager
 keywords: []
 relatedArticles: []
 featured: false
@@ -110,7 +129,7 @@ title: "Minimal"
 description: "demo"
 category: "test"
 slug: "minimal"
-roles: []
+section: resident
 keywords: []
 relatedArticles: []
 featured: false
@@ -136,7 +155,7 @@ title: "Broken"
 description: "missing updatedAt"
 category: "test"
 slug: "broken"
-roles: []
+section: resident
 keywords: []
 relatedArticles: []
 featured: false
@@ -157,7 +176,7 @@ title: "Typo"
 description: "featureGates typo"
 category: "test"
 slug: "typo"
-roles: []
+section: resident
 keywords: []
 relatedArticles: []
 featured: false
@@ -239,34 +258,29 @@ Body.
 });
 
 /**
- * Roadmap 2.8, against the REAL corpus. A board designation grants power in
- * exactly three places — elections admin, violation admin writes, community
- * export — so it may add exactly those three articles to a resident's view.
- * Every other `board_*` tag was a v1 leftover that sends residents into a 403.
+ * Roadmap 2.8, against the REAL corpus. A board seat adds exactly what the UI
+ * lets a seat do — election administration and violation enforcement (both
+ * pages show their controls to canActAsBoard) and community export — as
+ * `boardOnly` resident articles. Anything else would be an admin how-to that
+ * ends in a 403, or a control the page does not show.
  *
- * Revert-check: add `board_member` to documents/uploading-documents.mdx and
- * the matching case goes red, naming that slug in the diff.
+ * Revert-check: mark resident/documents/find-documents.mdx `boardOnly` and
+ * the case goes red, naming that slug in the diff.
  */
-describe('help corpus — what a board designation adds', () => {
-  const BOARD_GRANTED = [
-    'account/exporting-your-data',
-    'elections/running-a-board-election',
-    'violations/reporting-and-managing-violations',
-  ];
-  const visible = (viewer: readonly string[]) =>
-    getAllArticles()
-      .filter((article) => isArticleVisibleToRole(article, viewer))
-      .map((article) => `${article.category}/${article.slug}`);
-  const added = (base: string, designation: string) => {
-    const without = new Set(visible([base]));
-    return visible([base, designation]).filter((slug) => !without.has(slug)).sort();
-  };
+describe('help corpus — what a board seat adds', () => {
+  const BOARD_GRANTED = ['export-data', 'review-violations', 'run-election'];
+  const slugs = (type: CommunityType, boardSeat: boolean) =>
+    new Set(getArticlesForReader(readerFor('resident', type, boardSeat)).map((article) => article.slug));
 
-  it.each([
-    ['owner', 'board_member'],
-    ['tenant', 'board_president'],
-  ])('%s + %s adds exactly the three statutory articles', (base, designation) => {
-    expect(added(base, designation)).toEqual(BOARD_GRANTED);
+  it.each(['condo_718', 'hoa_720'] as const)(
+    'in a %s, a seat adds exactly elections, violations and export',
+    (type) => {
+      const without = slugs(type, false);
+      expect([...slugs(type, true)].filter((slug) => !without.has(slug)).sort()).toEqual(BOARD_GRANTED);
+    },
+  );
+
+  it('adds nothing in an apartment community (no board)', () => {
+    expect([...slugs('apartment', true)].sort()).toEqual([...slugs('apartment', false)].sort());
   });
 });
-

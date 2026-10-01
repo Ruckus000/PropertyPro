@@ -8,7 +8,6 @@ import {
   createScopedClient,
   paginate,
   logAuditEvent,
-  userRoles,
   type PaginatedResult,
   type PackageLogStatus,
   type PaginationInput,
@@ -17,6 +16,7 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from '@pr
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
 import { getUnitLabelMap } from '@/lib/services/units-lookup';
+import { listUnitResidentUserIds } from '@/lib/units/actor-units';
 import {
   deriveVisitorStatus,
   filterDeniedVisitorMatches,
@@ -95,12 +95,6 @@ async function attachUnitLabels(
   const unitIds = [...new Set(rows.map((r) => r.hostUnitId))];
   const labelMap = await getUnitLabelMap(communityId, unitIds);
   return rows.map((r) => ({ ...r, hostUnitLabel: labelMap.get(r.hostUnitId) ?? null }));
-}
-
-interface UnitResidentRow {
-  [key: string]: unknown;
-  userId: string;
-  role: string;
 }
 
 export interface CreatePackageInput {
@@ -294,31 +288,12 @@ function buildVisitorOrderedCursorWhere(
   );
 }
 
-async function resolveUnitResidents(
-  communityId: number,
-  unitId: number,
-): Promise<string[]> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom<UnitResidentRow>(
-    userRoles,
-    {
-      userId: userRoles.userId,
-      role: userRoles.role,
-    },
-    eq(userRoles.unitId, unitId),
-  );
-
-  return rows
-    .filter((row) => row.role === 'resident')
-    .map((row) => row.userId);
-}
-
 async function notifyResidentsOfPackage(
   communityId: number,
   packageEntry: PackageLogRow,
   actorUserId: string,
 ): Promise<number> {
-  const residentUserIds = await resolveUnitResidents(communityId, packageEntry.unitId);
+  const residentUserIds = await listUnitResidentUserIds(createScopedClient(communityId), packageEntry.unitId);
   let notifiedCount = 0;
 
   for (const recipientUserId of residentUserIds) {

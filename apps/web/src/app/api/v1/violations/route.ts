@@ -37,7 +37,12 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
-import { getActorUnitIds, isResidentRole, requireViolationsEnabled } from '@/lib/violations/common';
+import {
+  getActorUnitIds,
+  getViolationReadUnitIds,
+  isResidentRole,
+  requireViolationsEnabled,
+} from '@/lib/violations/common';
 import { requirePermission } from '@/lib/db/access-control';
 import {
   createViolationForCommunity,
@@ -110,9 +115,7 @@ export const GET = withErrorHandler(
     }
 
     const scoped = createScopedClient(communityId);
-    const residentUnitIds = isResidentRole(membership.role)
-      ? await getActorUnitIds(scoped, actorUserId)
-      : undefined;
+    const residentUnitIds = await getViolationReadUnitIds(scoped, membership, actorUserId);
 
     if (residentUnitIds && unitId !== undefined && !residentUnitIds.includes(unitId)) {
       throw new ForbiddenError('You can only view violations for your own unit');

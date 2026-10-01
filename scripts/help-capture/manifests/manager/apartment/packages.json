@@ -1,0 +1,109 @@
+{
+  "section": "manager",
+  "category": "apartment",
+  "slug": "packages",
+  "shots": [
+    {
+      "name": "pk-log",
+      "kind": "still",
+      "route": "/dashboard/packages?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Log Package\"] >> nth=0"
+        }
+      ],
+      "clipTo": [
+        "role=button[name=\"Pending\"]",
+        "role=button[name=\"Log Package\"] >> nth=0"
+      ],
+      "highlight": "role=button[name=\"Log Package\"] >> nth=0",
+      "step": 1
+    },
+    {
+      "name": "pk-form",
+      "kind": "still",
+      "route": "/dashboard/packages?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Log Package\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Log Package\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Log Package\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#pkg-unit",
+      "step": 2
+    },
+    {
+      "name": "pk-pending",
+      "kind": "still",
+      "route": "/dashboard/packages?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Pending\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Pending\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Mark Picked Up\"] >> nth=0"
+        }
+      ],
+      "clipTo": [
+        "role=button[name=\"Pending\"]",
+        "table"
+      ],
+      "highlight": "role=button[name=\"Mark Picked Up\"] >> nth=0",
+      "step": 3
+    },
+    {
+      "name": "pk-pickup",
+      "kind": "still",
+      "route": "/dashboard/packages?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Pending\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Pending\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Mark Picked Up\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=\"Mark Picked Up\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Mark as Picked Up\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#pickup-by",
+      "step": 4
+    }
+  ]
+}

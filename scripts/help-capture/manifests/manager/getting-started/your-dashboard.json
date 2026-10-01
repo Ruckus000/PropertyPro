@@ -1,0 +1,101 @@
+{
+  "section": "manager",
+  "category": "getting-started",
+  "slug": "your-dashboard",
+  "shots": [
+    {
+      "name": "dash-m",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Recent Announcements\"]"
+        }
+      ],
+      "clipTo": "main"
+    },
+    {
+      "name": "dash-ann",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Recent Announcements\"]"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Recent Announcements\"))",
+      "highlight": "role=heading[name=\"Recent Announcements\"]",
+      "step": 1
+    },
+    {
+      "name": "dash-meet",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Upcoming Meetings\"]"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Upcoming Meetings\"))",
+      "highlight": "role=heading[name=\"Upcoming Meetings\"]",
+      "step": 2
+    },
+    {
+      "name": "dash-sign",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "board_president",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Documents to Sign\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section:has(> h2:text-is(\"Documents to Sign\"))"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Documents to Sign\"))",
+      "highlight": "role=heading[name=\"Documents to Sign\"]",
+      "step": 3
+    },
+    {
+      "name": "dash-check",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=region[name=/Setup checklist/]"
+        }
+      ],
+      "clipTo": "role=region[name=/Setup checklist/]"
+    },
+    {
+      "name": "dash-apt",
+      "kind": "still",
+      "route": "/dashboard/apartment?communityId={cid}",
+      "role": "site_manager",
+      "community": "apartment",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "text=Occupancy"
+        }
+      ],
+      "clipTo": "main"
+    }
+  ]
+}

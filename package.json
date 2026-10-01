@@ -80,6 +80,7 @@
     "guard:route-gates": "tsx scripts/verify-route-gates.ts",
     "guard:call-ceilings": "tsx scripts/verify-call-ceilings.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
+    "help:capture:fixtures": "tsx --tsconfig apps/web/tsconfig.json scripts/help-capture/fixtures.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",
     "lint": "turbo run lint && node scripts/run-lint-guards.mjs",

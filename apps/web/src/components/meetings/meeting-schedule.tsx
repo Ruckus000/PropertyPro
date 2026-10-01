@@ -132,7 +132,7 @@ export function MeetingSchedule({
     body =
       range === 'upcoming' ? (
         <EmptyState
-          preset="no_meetings"
+          preset={canWrite ? 'no_meetings' : 'no_meetings_yet'}
           action={canWrite ? <Button onClick={onCreateMeeting}>Schedule Meeting</Button> : undefined}
         />
       ) : (

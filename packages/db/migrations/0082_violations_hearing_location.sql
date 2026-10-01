@@ -1,0 +1,1 @@
+ALTER TABLE "violations" ADD COLUMN "hearing_location" text;

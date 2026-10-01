@@ -1,0 +1,78 @@
+{
+  "section": "manager",
+  "category": "pm",
+  "slug": "bulk-send",
+  "shots": [
+    {
+      "name": "bk-select",
+      "kind": "still",
+      "route": "/pm/dashboard/communities",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=/^Bulk announcement/]"
+        }
+      ],
+      "clipTo": [
+        "role=button[name=/^Bulk announcement/]",
+        "table tbody tr >> nth=0"
+      ],
+      "highlight": "role=button[name=/^Bulk announcement/]",
+      "step": 1
+    },
+    {
+      "name": "bk-dialog",
+      "kind": "still",
+      "route": "/pm/dashboard/communities",
+      "role": "pm_admin",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=radio[name=\"List view\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+        },
+        {
+          "type": "click",
+          "selector": "role=button[name=/^Bulk announcement/]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=dialog[name=\"Bulk Announcement\"]"
+        }
+      ],
+      "clipTo": "role=dialog",
+      "highlight": "#bulk-ann-title",
+      "step": 2
+    }
+  ]
+}

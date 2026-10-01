@@ -15,7 +15,8 @@
  * will fail.
  */
 import { z } from 'zod';
-import { HELP_AUDIENCES } from '@propertypro/shared';
+import { COMMUNITY_TYPES } from '@propertypro/shared';
+import { HELP_SECTIONS } from '@/lib/help/sections';
 // Shared with the public marketing-resources corpus — see
 // lib/content/frontmatter-patterns.ts for why these are single-sourced.
 import {
@@ -71,9 +72,28 @@ export const helpFrontmatterSchema = z
       .string()
       .min(1, 'slug is required')
       .regex(SLUG_REGEX, 'slug must be lowercase kebab-case (e.g. "welcome-to-propertypro")'),
-    // One closed vocabulary (HELP_AUDIENCES): a typo'd or retired token used to
-    // hide an article silently, because visibility matched nobody.
-    roles: z.array(z.enum(HELP_AUDIENCES)).default([]),
+    // The readership this article is written for. Must match the section
+    // directory (content/help/<section>/<category>/<slug>.mdx); the same slug
+    // may exist once per section. See lib/help/sections.ts.
+    section: z.enum(HELP_SECTIONS, {
+      message: `section must be one of: ${HELP_SECTIONS.join(', ')}`,
+    }),
+    // Community types the article applies to. Omit for all three. Parts of an
+    // article that apply to fewer types go in <OnlyFor types="…">.
+    communityTypes: z
+      .array(
+        z.enum(COMMUNITY_TYPES, {
+          message: `communityTypes entry must be one of: ${COMMUNITY_TYPES.join(', ')}`,
+        }),
+      )
+      .min(1)
+      .optional(),
+    // Position within its category (lower first). Articles without one sort
+    // after ordered ones, by title.
+    order: z.number().int().nonnegative().optional(),
+    // Resident-section article only readers with a board seat see (elections
+    // admin, community export — what a seat grants in the UI).
+    boardOnly: z.boolean().default(false),
     keywords: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
     relatedArticles: z.array(z.string()).default([]),

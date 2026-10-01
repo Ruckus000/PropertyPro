@@ -9,6 +9,7 @@ import {
   type PaginatedResult,
 } from '@propertypro/db';
 import { and, desc, eq, inArray, isNull, lt, notInArray, or, sql, type SQL } from '@propertypro/db/filters';
+import { hasBoardDesignation } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { applyDemoAnnouncementProvenancePolicy } from './demo-announcement-provenance';
@@ -106,7 +107,7 @@ function communityContextFromMembership(
 }
 
 export function canReadAnnouncementAudience(
-  membership: Pick<CommunityMembership, 'role' | 'isUnitOwner' | 'isAdmin'>,
+  membership: Pick<CommunityMembership, 'role' | 'isUnitOwner' | 'isAdmin' | 'designation'>,
   audience: AnnouncementAudience,
 ): boolean {
   if (membership.isAdmin) {
@@ -115,6 +116,12 @@ export function canReadAnnouncementAudience(
 
   if (audience === 'all') {
     return true;
+  }
+
+  // Same rule delivery uses (announcement-delivery.ts): board-only posts are
+  // emailed to board seats, so board seats can read them in the app too.
+  if (audience === 'board_only') {
+    return hasBoardDesignation(membership.designation);
   }
 
   if (membership.role !== 'resident') {
@@ -200,14 +207,11 @@ function buildAnnouncementAudienceWhere(membership: CommunityMembership): SQL | 
     return undefined;
   }
 
-  if (membership.role !== 'resident') {
-    return eq(announcements.audience, 'all');
-  }
-
-  return inArray(
-    announcements.audience,
-    membership.isUnitOwner ? ['all', 'owners_only'] : ['all', 'tenants_only'],
+  // One rule for SQL and in-memory reads: the audiences canReadAnnouncementAudience allows.
+  const readable = (Object.keys(AUDIENCE_LABELS) as AnnouncementAudience[]).filter((audience) =>
+    canReadAnnouncementAudience(membership, audience),
   );
+  return inArray(announcements.audience, readable);
 }
 
 function buildAnnouncementOrderedCursorWhere(

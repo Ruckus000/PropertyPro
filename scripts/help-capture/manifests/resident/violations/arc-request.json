@@ -1,0 +1,54 @@
+{
+  "section": "resident",
+  "category": "violations",
+  "slug": "arc-request",
+  "shots": [
+    {
+      "name": "arc-new",
+      "kind": "still",
+      "route": "/arc-requests/new?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#arc-title"
+        }
+      ],
+      "clipTo": "form:has(#arc-title)",
+      "highlight": "#arc-title",
+      "step": 2
+    },
+    {
+      "name": "arc-send",
+      "kind": "still",
+      "route": "/arc-requests/new?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Submit request\"]"
+        }
+      ],
+      "clipTo": "role=button[name=\"Submit request\"]",
+      "pad": 24,
+      "highlight": "role=button[name=\"Submit request\"]",
+      "step": 3
+    },
+    {
+      "name": "arc-mine",
+      "kind": "still",
+      "route": "/arc-requests?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[data-page-header]"
+        }
+      ],
+      "clipTo": "main"
+    }
+  ]
+}

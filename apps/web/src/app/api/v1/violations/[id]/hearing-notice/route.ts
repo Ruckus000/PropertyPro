@@ -73,7 +73,7 @@ export const GET = withErrorHandler(
       category: violation.category,
       description: violation.description,
       hearingDate: violation.hearingDate,
-      hearingLocation: null, // Location not stored on violation record currently
+      hearingLocation: violation.hearingLocation,
       noticeDate,
       timeZone: header.timeZone,
       // The caps the fine service enforces for this community (resolveFineCaps).

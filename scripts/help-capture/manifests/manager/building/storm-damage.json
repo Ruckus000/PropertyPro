@@ -1,0 +1,21 @@
+{
+  "section": "manager",
+  "category": "building",
+  "slug": "storm-damage",
+  "shots": [
+    {
+      "name": "st-list",
+      "kind": "still",
+      "route": "/communities/{cid}/storm-damage",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "#storm-damage-heading"
+        }
+      ],
+      "clipTo": "section[aria-labelledby=\"storm-damage-heading\"]"
+    }
+  ]
+}

@@ -74,6 +74,8 @@ export interface DashboardViolationSummary {
 export interface DashboardViolation {
   id: number;
   unitId: number;
+  /** "Unit 1B" when the query resolved it (withUnitLabels). */
+  unitLabel?: string;
   category: string;
   status: ViolationStatus;
   severity: ViolationSeverity;
@@ -98,6 +100,7 @@ export interface DashboardViolationStatusCount {
 export interface DashboardViolationRecentRow {
   id: number;
   unitId: number;
+  unitLabel?: string;
   category: string;
   status: string;
   severity: string;
@@ -123,6 +126,7 @@ export function buildViolationSummary(
     recentViolations: recentRows.map((row) => ({
       id: row.id,
       unitId: row.unitId,
+      ...(row.unitLabel ? { unitLabel: row.unitLabel } : {}),
       category: row.category,
       status: row.status as ViolationStatus,
       severity: row.severity as ViolationSeverity,

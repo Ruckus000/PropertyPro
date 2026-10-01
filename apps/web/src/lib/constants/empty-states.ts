@@ -57,6 +57,8 @@ export const EMPTY_STATE_CONFIGS = {
       "There are no open maintenance requests. Residents can submit requests through the portal.",
     icon: "wrench",
   },
+  // Manager and resident pairs: managers get the set-up nudge, residents get
+  // copy that holds in every community type (apartments have no board).
   no_meetings: {
     title: "Schedule and track board meetings",
     description:
@@ -64,11 +66,21 @@ export const EMPTY_STATE_CONFIGS = {
     actionLabel: "Schedule Meeting",
     icon: "bell",
   },
+  no_meetings_yet: {
+    title: "No upcoming meetings",
+    description: "Meeting notices appear here as soon as they're posted.",
+    icon: "calendar",
+  },
   no_documents: {
     title: "Build your document library",
     description:
       "Upload governing documents, financials, and meeting minutes to stay compliant.",
     actionLabel: "Upload Document",
+    icon: "file-text",
+  },
+  no_documents_yet: {
+    title: "No documents yet",
+    description: "Documents your community shares with you will appear here.",
     icon: "file-text",
   },
   no_communities: {
@@ -83,6 +95,11 @@ export const EMPTY_STATE_CONFIGS = {
     description: "No violations have been reported. Great job!",
     icon: "shield-check",
   },
+  no_violations_yours: {
+    title: "Nothing on your unit",
+    description: "No violations have been reported for your unit.",
+    icon: "shield-check",
+  },
   no_residents: {
     title: "Add the people in your community",
     description:
@@ -92,8 +109,7 @@ export const EMPTY_STATE_CONFIGS = {
   },
   no_announcements_yet: {
     title: "No announcements yet",
-    description:
-      "Your board hasn't posted any announcements. You'll be notified when they do.",
+    description: "Nothing has been posted yet. You'll be notified when there's news.",
     icon: "bell",
   },
   no_esign_pending: {
@@ -134,9 +150,8 @@ export const EMPTY_STATE_CONFIGS = {
     icon: "users",
   },
   no_board_elections: {
-    title: "No elections to review",
-    description:
-      "Elections will appear here after the attorney-review gate is enabled and a ballot is created.",
+    title: "No elections yet",
+    description: "Elections appear here once one is set up.",
     icon: "shield-check",
   },
   no_operations_items: {

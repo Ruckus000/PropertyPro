@@ -1,0 +1,92 @@
+{
+  "section": "manager",
+  "category": "esign",
+  "slug": "esign-template",
+  "shots": [
+    {
+      "name": "tpl-btn",
+      "kind": "still",
+      "route": "/esign?view=templates&communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=link[name=\"New Template\"]"
+        }
+      ],
+      "clipTo": [
+        "h1:text-is(\"E-Sign\")",
+        "role=tablist[name=\"View\"]",
+        "role=link[name=\"New Template\"]"
+      ],
+      "highlight": "role=link[name=\"New Template\"]",
+      "step": 1
+    },
+    {
+      "name": "tpl-build",
+      "kind": "still",
+      "route": "/esign?view=templates&communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link"
+        },
+        {
+          "type": "click",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Clone\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=link[name=\"Edit Fields\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "h3:text-is(\"Field Type\")"
+        },
+        {
+          "type": "click",
+          "selector": "div:has(> h3:text-is(\"Field Type\")) button:has-text(\"Signature\")"
+        },
+        {
+          "type": "wait",
+          "ms": 2000
+        }
+      ],
+      "clipTo": "main",
+      "highlight": "div:has(> h3:text-is(\"Field Type\"))",
+      "step": 4
+    },
+    {
+      "name": "tpl-clone",
+      "kind": "still",
+      "route": "/esign?view=templates&communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link"
+        },
+        {
+          "type": "click",
+          "selector": "role=region[name=\"E-sign templates\"] >> role=link >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Clone\"]"
+        }
+      ],
+      "clipTo": [
+        "h1",
+        "role=button[name=\"Archive\"]"
+      ]
+    }
+  ]
+}

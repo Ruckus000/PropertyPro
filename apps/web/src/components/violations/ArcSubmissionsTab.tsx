@@ -50,7 +50,7 @@ function buildColumns(
       header: 'Unit',
       cell: ({ row }) => (
         <span className="text-sm text-content-secondary">
-          Unit #{row.original.unitId}
+          {row.original.unitLabel ?? `Unit #${row.original.unitId}`}
         </span>
       ),
     },
@@ -175,7 +175,7 @@ export function ArcSubmissionsTab({ communityId }: ArcSubmissionsTabProps) {
         open={selectedSubmission !== null}
         onClose={() => setSelectedSubmission(null)}
         title={selectedSubmission?.title ?? 'ARC Submission'}
-        description={`Unit #${selectedSubmission?.unitId ?? ''} - ${selectedSubmission?.projectType ?? ''}`}
+        description={`${selectedSubmission?.unitLabel ?? `Unit #${selectedSubmission?.unitId ?? ''}`} - ${selectedSubmission?.projectType ?? ''}`}
         width="md"
       >
         {selectedSubmission && (

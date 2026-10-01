@@ -516,7 +516,7 @@ export function DocumentLibrary({
                   ? {
                       emptyAction: (
                         <EmptyState
-                          preset="no_documents"
+                          preset={canUpload ? 'no_documents' : 'no_documents_yet'}
                           size="sm"
                           {...(canUpload
                             ? { action: <Button onClick={openUploadPanel}>Upload Document</Button> }

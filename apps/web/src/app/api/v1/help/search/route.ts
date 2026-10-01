@@ -16,18 +16,17 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 import { captureMessage } from '@sentry/nextjs';
-import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
-  getAllArticles,
-  safelyFilterArticlesByFeatures,
+  getArticlesForReader,
   searchArticles,
 } from '@/lib/services/help-article-service';
 import { searchCommunityFaqs } from '@/lib/services/faq-service';
+import { resolveHelpReader } from '@/lib/help/reader';
 import { resolveHelpViewerTokens } from '@/lib/help/viewer-role';
 import { helpSearchGetContract } from './contract';
 
@@ -52,26 +51,23 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     // Search both sources in parallel.
-    // Filter articles by community feature gates so apartment-only articles
-    // don't surface in condo/HOA search results (and vice versa). Fail open
-    // (return everything) when feature evaluation throws — see ADR-004.
-    let features;
-    try {
-      features = getFeaturesForCommunity(membership.communityType);
-    } catch (error) {
-      captureMessage('help_feature_gate_failure', {
-        level: 'warning',
-        extra: {
-          source: 'help_search_api',
-          communityId,
-          communityType: membership.communityType,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      features = null;
-    }
-    const allArticles = safelyFilterArticlesByFeatures(getAllArticles(), features, {
-      onError: (error) => {
+    // The reader's visible articles: their section, community type and feature
+    // gates (fail-open on a feature-evaluation error — see ADR-004).
+    const reader = resolveHelpReader(membership, null, {
+      onFeatureError: (error) => {
+        captureMessage('help_feature_gate_failure', {
+          level: 'warning',
+          extra: {
+            source: 'help_search_api',
+            communityId,
+            communityType: membership.communityType,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      },
+    });
+    const allArticles = getArticlesForReader(reader, {
+      onFeatureError: (error) => {
         captureMessage('help_feature_gate_failure', {
           level: 'warning',
           extra: {
@@ -82,10 +78,9 @@ export const GET = withErrorHandler(
         });
       },
     });
-    // Both sources are filtered by the viewer's help role, as /help/article and
-    // /faqs already are (route-authz census F4: this route used to skip it).
+    const articleResults = searchArticles(allArticles, q);
+    // FAQs keep audience-token visibility (faq-service).
     const viewer = resolveHelpViewerTokens(membership);
-    const articleResults = searchArticles(allArticles, q, viewer);
 
     const { hits: faqResults, totalRowCount: faqCount } = await searchCommunityFaqs(
       communityId,
@@ -118,7 +113,7 @@ export const GET = withErrorHandler(
         description: a.description,
         category: a.category,
         slug: a.slug,
-        roles: a.roles,
+        section: a.section,
         readTimeMinutes: a.readTimeMinutes,
       })),
       faqs: faqResults,
