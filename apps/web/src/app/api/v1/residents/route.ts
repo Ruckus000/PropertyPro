@@ -342,6 +342,18 @@ export const DELETE = withErrorHandler(
       throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
     }
 
+    // Same rule as POST/PATCH: manager-tier rows are managed only from the
+    // root-only Roles & Access screen. Without this, any holder of
+    // residents:write (every property manager) could hard-delete the root
+    // manager's role — a root-exclusive power under ADR-006.
+    const existingRoleValue = requireCommunityRole(
+      existingRole['role'],
+      `residents.DELETE existing role (userId=${userId})`,
+    );
+    if (!isResidentTierRole(existingRoleValue)) {
+      throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
+    }
+
     await deleteResidentRole(communityId, userId);
 
     const revokedCount = await revokeVisitorPassesForUser(communityId, userId);
