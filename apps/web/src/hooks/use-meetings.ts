@@ -4,7 +4,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import type { CalendarEvent } from '@/lib/calendar/event-types';
 import type { MeetingDeadlines } from '@/lib/meetings/meeting-response';
 import type { NoticeWarning } from '@/lib/compliance/notice-window';
-import { requestJson, requestJsonEnvelope } from '@/lib/api/request-json';
+import { ApiRequestError, requestJson, requestJsonEnvelope } from '@/lib/api/request-json';
 
 export interface MeetingListItem {
   id: number;
@@ -73,6 +73,11 @@ export function useMeeting(communityId: number, meetingId: number | null) {
       `/api/v1/meetings/${meetingId}?communityId=${communityId}`,
     ),
     enabled: communityId > 0 && meetingId !== null,
+    // A 404 is an answer, not a blip: a deleted meeting or a stale link will
+    // not appear on a retry, and retrying only holds the dialog on "Loading"
+    // for several seconds before it can say so.
+    retry: (failureCount, error) =>
+      !(error instanceof ApiRequestError && error.status === 404) && failureCount < 3,
   });
 }
 

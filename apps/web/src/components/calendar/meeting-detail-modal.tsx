@@ -100,7 +100,7 @@ export function MeetingDetailModal({
                   renders a <div> and removes the dialog's only heading. Classes
                   are CardTitle's verbatim, so nothing moves visually. */}
               <Dialog.Title className="font-semibold leading-none tracking-tight">
-                {meeting?.title ?? 'Loading meeting…'}
+                {meeting?.title ?? (detailQuery.isError ? 'Meeting unavailable' : 'Loading meeting…')}
               </Dialog.Title>
             </div>
             <Dialog.Close asChild>
@@ -114,7 +114,14 @@ export function MeetingDetailModal({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {detailQuery.isLoading || !meeting || !startsAt || !endsAt ? (
+          {detailQuery.isError ? (
+            <div
+              role="alert"
+              className="rounded-[var(--radius-md)] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-8 text-center text-sm text-[var(--status-danger)]"
+            >
+              We couldn&rsquo;t load this meeting. It may have been deleted. Close this and try again.
+            </div>
+          ) : detailQuery.isLoading || !meeting || !startsAt || !endsAt ? (
             <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
               Loading meeting details...
             </div>

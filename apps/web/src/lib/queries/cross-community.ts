@@ -292,7 +292,7 @@ export async function getUpcomingEvents(
         type: 'meeting' as const,
         title: m.title,
         scheduledFor: m.startsAt.toISOString(),
-        link: `/meetings/${m.id}`,
+        link: `/meetings/${m.id}?communityId=${cId}`,
       }));
     }),
   );
