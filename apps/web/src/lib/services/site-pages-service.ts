@@ -35,6 +35,7 @@
  * behind a plan flag of their own — they ship wherever the site editor does.
  */
 import {
+  communities,
   complianceAuditLog,
   createScopedClient,
   siteBlocks,
@@ -49,6 +50,12 @@ import { stampAuditActorMetadata } from '@propertypro/db/audit-actor';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
+import {
+  TOMBSTONE_BLOCK_TYPE,
+  requiredRemovalRefusal,
+  requiredSectionTypes,
+  type RequiredSectionPage,
+} from '@propertypro/shared';
 
 /**
  * Shape a non-home slug must match. Duplicated from the DB CHECK
@@ -872,6 +879,107 @@ export async function reorderSitePages({
 }
 
 // ---------------------------------------------------------------------------
+// Florida-required sections guard (v4 builder, Phase 2)
+// ---------------------------------------------------------------------------
+
+/** What is about to go, in this service's numeric ids. */
+export type RequiredSectionRemovalInput =
+  | { kind: 'section'; pageId: number; blockOrder: number }
+  | { kind: 'page'; pageId: number };
+
+/**
+ * Refuses, inside the caller's transaction, a removal that would leave the site
+ * with no copy of a section its community type requires — one section
+ * (`removeSiteBlock`) or a whole page (`stageSitePageDelete`). The editor locks
+ * Remove on the last copy too, but a gate that exists only in the editor is a
+ * suggestion. The rule itself is `requiredRemovalRefusal` in
+ * `@propertypro/shared`; this only loads what it reads.
+ *
+ * The caller MUST already hold the community `FOR UPDATE` lock (every caller
+ * takes it first), so the count cannot race a concurrent removal of the other
+ * copy.
+ *
+ * Here rather than in a module of its own because its reads go straight to the
+ * transaction, and this file is where the site editor's raw-transaction reads
+ * are allowlisted (`verify-scoped-db-access.ts`).
+ */
+export async function assertRequiredSectionsSurvive(
+  tx: Tx,
+  communityId: number,
+  removal: RequiredSectionRemovalInput,
+): Promise<void> {
+  const [community] = await tx
+    .select({ communityType: communities.communityType, unitCount: communities.unitCount })
+    .from(communities)
+    .where(eq(communities.id, communityId));
+  // An association below the statute's size threshold has nothing to guard;
+  // an unknown count is treated as covered (see `requirementLevel`).
+  const subject = {
+    communityType: community?.communityType ?? '',
+    unitCount: community?.unitCount ?? null,
+  };
+  if (requiredSectionTypes(subject).length === 0) return;
+
+  const refusal = requiredRemovalRefusal(
+    subject,
+    await liveSitePages(tx, communityId),
+    removal.kind === 'page'
+      ? { kind: 'page', pageId: String(removal.pageId) }
+      : { kind: 'section', pageId: String(removal.pageId), slot: removal.blockOrder },
+  );
+  if (refusal) {
+    throw new ValidationError(refusal, { fields: [{ field: 'required', message: refusal }] });
+  }
+}
+
+/**
+ * Every surviving page's sections as a draft-wins snapshot — the winner rule
+ * `publishCommunitySite` validates with, so "the last copy" means the last copy
+ * a publish would keep. A page staged for removal will not survive the next
+ * publish, so its sections do not count.
+ */
+async function liveSitePages(tx: Tx, communityId: number): Promise<RequiredSectionPage[]> {
+  const pages = await tx
+    .select({ id: sitePages.id, deleteStagedAt: sitePages.deleteStagedAt })
+    .from(sitePages)
+    .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
+
+  const rows = await tx
+    .select({
+      pageId: siteBlocks.pageId,
+      blockOrder: siteBlocks.blockOrder,
+      blockType: siteBlocks.blockType,
+      content: siteBlocks.content,
+      isDraft: siteBlocks.isDraft,
+    })
+    .from(siteBlocks)
+    .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
+
+  // ponytail: fourth hand-written copy of the draft-wins-per-(page, slot) rule —
+  // also in publishCommunitySite and reorderSiteBlock (site-blocks-service.ts) and
+  // the public reader (public-community-reader.ts). Extract one shared helper when
+  // a bug is fixed in one copy but not the others.
+  const winners = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const key = `${row.pageId}:${row.blockOrder}`;
+    const existing = winners.get(key);
+    if (!existing || (row.isDraft && !existing.isDraft)) winners.set(key, row);
+  }
+
+  return pages
+    .filter((page) => page.deleteStagedAt === null)
+    .map((page) => ({
+      pageId: String(page.id),
+      snapshot: {
+        hero: null,
+        sections: [...winners.values()]
+          .filter((r) => r.pageId === page.id && r.blockType !== TOMBSTONE_BLOCK_TYPE)
+          .map((r) => ({ slot: r.blockOrder, blockType: r.blockType, content: r.content })),
+      },
+    }));
+}
+
+// ---------------------------------------------------------------------------
 // Delete (staged for published pages)
 // ---------------------------------------------------------------------------
 
@@ -911,6 +1019,10 @@ export async function stageSitePageDelete({
     if (page.isHome) {
       throw new ValidationError('The home page cannot be removed.');
     }
+
+    // Florida-required sections: a page holding the site's only Documents or
+    // Meetings section cannot take it down with it.
+    await assertRequiredSectionsSurvive(tx, communityId, { kind: 'page', pageId });
 
     const scoped = scopedFor(communityId, tx);
     if (page.isDraft) {

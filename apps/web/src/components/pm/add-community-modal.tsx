@@ -56,7 +56,8 @@ export function AddCommunityModal({
     state: 'FL',
     zipCode: '',
     subdomain: '',
-    unitCount: 1,
+    // 0 = not entered yet. Never pre-filled — see the note in signup-form.tsx.
+    unitCount: 0,
     timezone: 'America/New_York',
   });
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -197,10 +198,11 @@ export function AddCommunityModal({
                     id="add-community-units"
                     type="number"
                     min={1}
-                    value={form.unitCount}
-                    onChange={(e) =>
-                      setForm({ ...form, unitCount: Math.max(1, Number(e.target.value)) })
-                    }
+                    value={form.unitCount || ''}
+                    // No clamp: `Math.max(1, …)` snapped a cleared field back to 1,
+                    // so it could never be left unanswered. The submit gate refuses
+                    // anything under 1 instead, and the contract rejects it too.
+                    onChange={(e) => setForm({ ...form, unitCount: Number(e.target.value) })}
                   />
                 </div>
               </div>
@@ -235,7 +237,7 @@ export function AddCommunityModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={submit.isPending || !form.name || !form.subdomain}
+                disabled={submit.isPending || !form.name || !form.subdomain || form.unitCount < 1}
               >
                 {submit.isPending ? 'Starting checkout…' : 'Continue to Payment'}
               </Button>

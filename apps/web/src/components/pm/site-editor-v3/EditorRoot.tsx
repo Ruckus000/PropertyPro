@@ -108,6 +108,8 @@ import type { SitePanelProps } from './panels/SitePanel';
 import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
 import { useSiteDiff } from './use-site-diff';
+import { RequiredSectionsProvider, useRequiredSections } from './required-sections-context';
+import { RequirementsPill } from './RequirementsPill';
 
 /** Bridges the active inspector form's save state into the top bar. */
 function AutosaveStatusLine() {
@@ -155,6 +157,13 @@ export interface EditorRootProps {
    * spinner and costs no extra query.
    */
   siteIdentity: SitePanelProps['community'];
+  /**
+   * `communities.unit_count` (migration 0081); `null` = unknown. With the type
+   * it decides whether Florida's website rules apply — see `requirementLevel`.
+   */
+  unitCount: number | null;
+  /** Whether this viewer may correct `unitCount` (community admin). */
+  canEditUnitCount: boolean;
   tagline: string | null;
   initialSiteSettings: SiteSettingsRecord | undefined;
   /**
@@ -235,6 +244,8 @@ export function EditorRoot({
   hasPublishedSite,
   initialNotice,
   siteIdentity,
+  unitCount,
+  canEditUnitCount,
   tagline,
   initialSiteSettings,
   initialCustomCss,
@@ -245,7 +256,12 @@ export function EditorRoot({
   // Shares the blocks query key, so this adds no request — and the publish
   // sheet calls the same hook, so the button's state and the sheet's "N changes
   // ready to publish" can never disagree.
-  const { diff, isError: diffFailed } = useSiteDiff(communityId);
+  const {
+    diff,
+    validated,
+    isPending: diffPending,
+    isError: diffFailed,
+  } = useSiteDiff(communityId);
   // Closed by default — the v4 builder opens on the page, not on a panel.
   const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -770,6 +786,19 @@ export function EditorRoot({
        * remounted by the very update it is reporting announces nothing.
        */}
       <UndoableRemoveProvider communityId={communityId}>
+      {/*
+       * Florida-required sections (v4 Phase 2). Whole-site, so it sits OUTSIDE
+       * the page-keyed provider and survives page switches. `undefined` while
+       * the diff is loading or failed keeps the controls locked and the pill
+       * silent — see `RequiredSectionsProviderProps.pages`.
+       */}
+      <RequiredSectionsProvider
+        communityId={communityId}
+        communityType={siteIdentity.communityType}
+        unitCount={unitCount}
+        canEditUnitCount={canEditUnitCount}
+        pages={diffPending || diffFailed ? undefined : validated}
+      >
       <p
         data-testid="site-page-announcement"
         role="status"
@@ -819,6 +848,9 @@ export function EditorRoot({
         changeCount={diff.changes.length}
         device={device}
         onDeviceChange={setDevice}
+        requirements={
+          <RequirementsPill onGoToSection={handleSelectSlot} onAddSection={handleGoToAdd} />
+        }
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
         communityId={communityId}
@@ -1050,6 +1082,7 @@ export function EditorRoot({
       ) : null}
       </AutosaveStatusProvider>
       </SiteEditorProvider>
+      </RequiredSectionsProvider>
       </UndoableRemoveProvider>
     </SelectedSitePageProvider>
   );
@@ -1076,6 +1109,9 @@ function PublishSheetMount({
   onGoToPages: () => void;
 }) {
   const { movableSections, select } = useSiteEditor();
+  // From the provider, not a prop: a unit count corrected in the pill this
+  // session must re-decide the sheet's checks too.
+  const { subject } = useRequiredSections();
 
   const handleFixIssue = useCallback(
     (target: SlotTarget) => {
@@ -1117,6 +1153,7 @@ function PublishSheetMount({
       onFixIssue={handleFixIssue}
       // Page-set problems are fixed in the Pages panel and nowhere else.
       onGoToPages={onGoToPages}
+      complianceSubject={subject}
     />
   );
 }

@@ -15,6 +15,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(),
+  // Phase 2 required-section guard reads communities.community_type.
+  communities: Symbol('communities'),
   sitePages: Symbol('sitePages'),
   sitePageRedirects: Symbol('sitePageRedirects'),
   siteBlocks: Symbol('siteBlocks'),
@@ -87,6 +89,9 @@ const {
         return redirects.filter((r) => r['fromSlug'] === slug);
       }
       if (table.includes('siteBlocks')) return rowsByTable['blocks'] ?? [];
+      // Absent by default, which reads as a community with no required
+      // sections — so every pre-Phase-2 case is untouched by the guard.
+      if (table.includes('communities')) return rowsByTable['communities'] ?? [];
       if (!table.includes('sitePages')) return [];
 
       const pages = (rowsByTable['pages'] ?? []) as Record<string, unknown>[];
@@ -161,6 +166,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 
 import {
+  assertRequiredSectionsSurvive,
   createSitePage,
   ensureHomePage,
   reorderSitePages,
@@ -424,6 +430,101 @@ describe('stageSitePageDelete', () => {
     await expect(
       stageSitePageDelete({ communityId: 42, actorUserId: 'u1', pageId: 1 }),
     ).rejects.toThrow(/home page cannot be removed/);
+  });
+
+  it('refuses to remove the page holding the site’s only required section, writing nothing', async () => {
+    setRows({
+      pages: [HOME, ABOUT],
+      redirects: [],
+      communities: [{ communityType: 'condo_718' }],
+      blocks: [
+        { pageId: 1, blockOrder: 2, blockType: 'documents', content: {}, isDraft: false },
+        { pageId: 2, blockOrder: 3, blockType: 'meetings', content: {}, isDraft: false },
+      ],
+    });
+    await expect(
+      stageSitePageDelete({ communityId: 42, actorUserId: 'u1', pageId: 2 }),
+    ).rejects.toThrow(/page has your only Meetings section/);
+    expect(scoped.update).not.toHaveBeenCalled();
+    expect(scoped.softDelete).not.toHaveBeenCalled();
+    expect(txAuditValuesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('assertRequiredSectionsSurvive — what counts as a live copy', () => {
+  /*
+   * The pure rule (last copy, hidden counts, page removals) is tested in
+   * packages/shared `required.test.ts`. These cases pin what only the LOADER
+   * decides: which rows and pages the rule gets to see.
+   */
+  const guard = (removal: Parameters<typeof assertRequiredSectionsSurvive>[2]) =>
+    createUnscopedClientMock().transaction((tx) =>
+      assertRequiredSectionsSurvive(tx as never, 42, removal),
+    );
+  const row = (pageId: number, blockOrder: number, blockType: string, isDraft = false) => ({
+    pageId, blockOrder, blockType, content: {}, isDraft,
+  });
+  const condo = (blocks: unknown[], pages: unknown[] = [HOME, ABOUT]) =>
+    setRows({ pages, redirects: [], blocks, communities: [{ communityType: 'condo_718' }] });
+
+  it('refuses removing the only copy of a required section', async () => {
+    condo([row(1, 2, 'documents'), row(2, 3, 'meetings')]);
+    await expect(guard({ kind: 'section', pageId: 2, blockOrder: 3 })).rejects.toThrow(
+      /only Meetings section.*§718\.111\(12\)\(g\)/,
+    );
+  });
+
+  it('allows it while another copy exists', async () => {
+    condo([row(1, 2, 'documents'), row(2, 3, 'meetings'), row(1, 4, 'meetings')]);
+    await expect(guard({ kind: 'section', pageId: 2, blockOrder: 3 })).resolves.toBeUndefined();
+  });
+
+  it('judges a slot by its draft: a published meetings row under a text draft is no copy', async () => {
+    condo([row(1, 2, 'documents'), row(2, 3, 'meetings'), row(1, 4, 'meetings'), row(1, 4, 'text', true)]);
+    await expect(guard({ kind: 'section', pageId: 2, blockOrder: 3 })).rejects.toThrow(/only Meetings/);
+  });
+
+  it('does not count a copy already staged for removal (tombstone draft)', async () => {
+    condo([row(1, 2, 'documents'), row(2, 3, 'meetings'), row(1, 4, 'meetings'), row(1, 4, 'tombstone', true)]);
+    await expect(guard({ kind: 'section', pageId: 2, blockOrder: 3 })).rejects.toThrow(/only Meetings/);
+  });
+
+  it('does not count a copy on a page already staged for deletion', async () => {
+    const staged = { ...ABOUT, id: 3, slug: 'staged', deleteStagedAt: new Date() };
+    condo([row(1, 2, 'documents'), row(2, 3, 'meetings'), row(3, 4, 'meetings')], [HOME, ABOUT, staged]);
+    await expect(guard({ kind: 'page', pageId: 2 })).rejects.toThrow(/page has your only Meetings/);
+  });
+
+  it('never refuses on an apartment site', async () => {
+    setRows({
+      pages: [HOME, ABOUT],
+      redirects: [],
+      blocks: [row(2, 3, 'meetings')],
+      communities: [{ communityType: 'apartment' }],
+    });
+    await expect(guard({ kind: 'page', pageId: 2 })).resolves.toBeUndefined();
+  });
+
+  it('never refuses below the size threshold — a 12-unit condo is not covered', async () => {
+    setRows({
+      pages: [HOME, ABOUT],
+      redirects: [],
+      blocks: [row(1, 2, 'documents'), row(2, 3, 'meetings')],
+      communities: [{ communityType: 'condo_718', unitCount: 12 }],
+    });
+    await expect(guard({ kind: 'page', pageId: 2 })).resolves.toBeUndefined();
+  });
+
+  it('still refuses at the threshold, and when the count is unknown', async () => {
+    for (const unitCount of [25, null]) {
+      setRows({
+        pages: [HOME, ABOUT],
+        redirects: [],
+        blocks: [row(1, 2, 'documents'), row(2, 3, 'meetings')],
+        communities: [{ communityType: 'condo_718', unitCount }],
+      });
+      await expect(guard({ kind: 'page', pageId: 2 })).rejects.toThrow(/only Meetings/);
+    }
   });
 });
 

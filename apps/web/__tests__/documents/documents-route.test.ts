@@ -244,6 +244,29 @@ describe('GET /api/v1/documents', () => {
     );
   });
 
+  it('narrows to one document with `id`, under the same access filter', async () => {
+    await GET(getReq('http://localhost:3000/api/v1/documents?communityId=42&id=77&pageSize=1'));
+
+    expect(paginateAccessibleDocumentsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: {
+          communityId: 42,
+          role: 'property_manager',
+          communityType: 'condo_718',
+          isUnitOwner: false,
+        },
+        documentId: 77,
+        pageSize: 1,
+      }),
+    );
+  });
+
+  it.each(['abc', '0', '-1'])('returns 400 when id is %s', async (id) => {
+    const res = await GET(getReq(`http://localhost:3000/api/v1/documents?communityId=42&id=${id}`));
+    expect(res.status).toBe(400);
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+  });
+
   it('treats empty-string cursor and pageSize as missing', async () => {
     await GET(
       getReq('http://localhost:3000/api/v1/documents?communityId=42&cursor=&pageSize='),

@@ -40,6 +40,8 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   previewButtonRef: React.Ref<HTMLButtonElement>;
   status?: React.ReactNode;
+  /** Forwarded to the top bar; see `EditorTopBarProps.requirements`. */
+  requirements?: React.ReactNode;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   onPreview: () => void;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
@@ -107,6 +109,7 @@ export function EditorShell({
   previewDisabledReason,
   previewButtonRef,
   status,
+  requirements,
   onPreview,
   onPublish,
   activeTool: controlledTool,
@@ -160,6 +163,7 @@ export function EditorShell({
         communityName={communityName}
         pageName={pageName}
         status={status}
+        requirements={requirements}
         canOpenPublish={canOpenPublish}
         canPreview={canPreview}
         previewDisabledReason={previewDisabledReason}

@@ -13,6 +13,29 @@ export { diffSite, sectionTitle } from './diff';
 export { diffPages, isLazyDraftHome, pageTitle, publishedPageBaseline } from './diff-pages';
 export { blockIssues, heroIssues, siteIssues, publishBlocked } from './validate';
 export type { SiteIssuesOptions } from './validate';
+export {
+  requirementLevel,
+  unitCountUnknown,
+  unitThreshold,
+  recommendedSectionTypes,
+  requiredSectionTypes,
+  isRequiredSectionType,
+  requiredSectionStatute,
+  requiredSectionLaw,
+  requiredSectionStatus,
+  requiredSectionIssues,
+  requiredRemovalRefusal,
+  countLiveSections,
+} from './required';
+export type {
+  ComplianceSubject,
+  RequirementLevel,
+  RequiredSectionType,
+  RequiredSectionPage,
+  RequiredSectionState,
+  RequiredSectionStatus,
+  RequiredSectionRemoval,
+} from './required';
 export { pageIssues, SITE_PAGE_SLUG_PATTERN, HOME_PAGE_SLUG } from './pages';
 export type { PageForValidation, PageIssuesInput } from './pages';
 export {

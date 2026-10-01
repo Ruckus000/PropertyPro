@@ -72,6 +72,12 @@ const listQuerySchema = z.object({
   deleted: z.enum(['true']).optional(),
   communityId: z.coerce.number().int().positive(),
   categoryId: z.coerce.number().int().positive().optional(),
+  /**
+   * One document, through the same access filter as the list — what a
+   * `?doc=<id>` link falls back to when the library's walk (capped at 2,000
+   * rows) did not reach it. Empty page = absent or not visible to the caller.
+   */
+  id: z.coerce.number().int().positive().optional(),
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });

@@ -204,8 +204,14 @@ vi.mock('@propertypro/db/unsafe', () => ({
 // first. Mocked so it neither consumes the select queue nor adds inserts of its
 // own — this file is about the block service; `ensureHomePage` has its own
 // coverage in site-pages-service.test.ts.
+// The required-section guard lives in site-pages-service too and is tested
+// there; here only its wiring into removeSiteBlock is under test.
+const { assertRequiredSectionsSurviveMock } = vi.hoisted(() => ({
+  assertRequiredSectionsSurviveMock: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@/lib/services/site-pages-service', () => ({
   ensureHomePage: vi.fn(async () => 1),
+  assertRequiredSectionsSurvive: assertRequiredSectionsSurviveMock,
 }));
 
 import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite, cleanupSoftDeletedSiteBlocks, reorderSiteBlock, removeSiteBlock, discardSiteDrafts, revertToSnapshot, summarizePublishChanges, paginateSitePublishHistory } from '@/lib/services/site-blocks-service';
@@ -1291,6 +1297,27 @@ describe('removeSiteBlock', () => {
     await expect(
       removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 6 }),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('asks the required-section guard about this slot, and writes nothing when it refuses', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([[{ id: 30, blockType: 'meetings', isDraft: false }]]);
+    assertRequiredSectionsSurviveMock.mockRejectedValueOnce(
+      new ValidationError('This is your only Meetings section.'),
+    );
+
+    await expect(
+      removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 4 }),
+    ).rejects.toThrow(/only Meetings section/);
+    expect(assertRequiredSectionsSurviveMock).toHaveBeenCalledWith(expect.anything(), 42, {
+      kind: 'section',
+      pageId: 1,
+      blockOrder: 4,
+    });
+    expect(scopedClient.softDelete).not.toHaveBeenCalled();
+    expect(scopedClient.insert).not.toHaveBeenCalled();
+    expect(txAuditValuesMock).not.toHaveBeenCalled();
   });
 
   it('throws ValidationError for the hero slot (blockOrder < 2) without opening a transaction', async () => {

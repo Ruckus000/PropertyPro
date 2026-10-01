@@ -63,6 +63,35 @@ the autosave debounce isn't visible yet.
 - A server guard refuses to delete the last required section of a type (defence in
   depth).
 
+### Phase 2b: the statutes' size thresholds
+Phase 2 keyed requirements on community type alone, so a 20-unit condo saw "Required"
+badges the statute does not apply to. Signup and "Add community" always collected a unit
+count and dropped it before the insert.
+- Migration 0081 adds nullable `communities.unit_count` (NULL = unknown), backfilled exactly
+  from `provisioning_jobs` → `pending_signups`. Both creation paths now write it.
+- `requirementLevel({ communityType, unitCount })` in `packages/shared`: `required` at 25+
+  units (condo) or 100+ parcels (HOA), `recommended` below, `none` for apartments. An
+  unknown count counts as `required`, and the pill asks for it.
+- `recommended` is a badge only: no locks, no hide confirmation, no publish warnings, and no
+  server refusal.
+- `PATCH /api/v1/community/unit-count` (admin-only, audited) backs the pill's count field.
+- Signup and "Add community" no longer pre-fill the count with 1. Since 0081, that default
+  would have marked an association exempt without anyone answering the question.
+
+Deferred, each with its trigger:
+- **The compliance module still treats every condo and HOA as covered** (`hasCompliance` by
+  type), so a 12-unit condo's Compliance page lists §718.111(12)(g)(2) website items that
+  the builder calls "recommended". This predates 2b; 2b only makes it visible. Trigger: a
+  small-association customer, or the next change to the compliance checklist.
+- **The 25 / 100 thresholds also appear in marketing prose** (`compliance-checker.tsx`,
+  `faq-section.tsx`, `who-section.tsx`). Trigger: the statute's threshold changes.
+- **Draft-wins merge has four hand-written copies** (see the `ponytail:` comment in
+  `site-pages-service.ts`). Trigger: a bug fixed in one copy but not the others.
+- **No regression test for the top bar's fit.** It was measured in Chromium at 768–1440px
+  (#1252), and a class-name test would be the "layout inferred from text" guess that
+  `guard:responsive-geometry` refuses. Trigger: a new control added to the top bar
+  (re-measure).
+
 ### Phase 3: guided mode, tour, help drawer
 - A first-run chooser (Guide me / Let me edit freely), plus a mode switch in the top
   bar and in Help. The mode and the checklist progress are persisted per user.

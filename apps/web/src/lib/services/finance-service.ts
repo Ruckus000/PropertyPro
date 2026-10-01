@@ -20,6 +20,7 @@ import {
   type PaginatedResult,
   type PaginationInput,
 } from '@propertypro/db';
+import { mergeCommunitySettings } from '@/lib/services/community-settings-service';
 import { and, asc, desc, eq, gte, inArray, lt, lte, notInArray, or, sql, type SQL } from '@propertypro/db/filters';
 import type { LedgerEntryType, StripePayableMetadata, PayableType } from '@propertypro/shared';
 import {
@@ -879,13 +880,12 @@ export interface SetCommunityFeePolicyResult {
 }
 
 /**
- * Read-modify-write the community's `communitySettings.paymentFeePolicy`,
- * preserving every other field in `communitySettings`. Returns the
+ * Set the community's `communitySettings.paymentFeePolicy`. Returns the
  * pre-update value so the route can include it in `audit.oldValues`.
  *
- * Concurrency: settings is a JSONB column, and this is a read-modify-write
- * — concurrent updates to *other* settings keys could be lost. Acceptable
- * per the original route's behavior; not changed here.
+ * The write is an atomic JSONB merge (mergeCommunitySettings), so other
+ * settings keys are never touched — the earlier read-modify-write could lose
+ * a concurrent update to a different key.
  */
 export async function setCommunityFeePolicy(
   communityId: number,
@@ -898,12 +898,7 @@ export async function setCommunityFeePolicy(
   const oldPolicy =
     (currentSettings['paymentFeePolicy'] as string | undefined) ?? 'association_absorbs';
 
-  const updatedSettings = { ...currentSettings, paymentFeePolicy: newPolicy };
-  await scoped.update(
-    communities,
-    { communitySettings: updatedSettings },
-    eq(communities.id, communityId),
-  );
+  await mergeCommunitySettings(communityId, { paymentFeePolicy: newPolicy });
 
   return { oldPolicy, newPolicy };
 }

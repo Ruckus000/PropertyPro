@@ -247,7 +247,7 @@ export function ComplianceCommandCenter({
               onLink={(item) => setLinkItem(item)}
               onView={(item) => {
                 if (item.documentId) {
-                  window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+                  window.open(`/documents/${item.documentId}?communityId=${communityId}`, '_blank', 'noopener');
                 }
               }}
               onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
@@ -263,7 +263,7 @@ export function ComplianceCommandCenter({
               onLink={(item) => setLinkItem(item)}
               onView={(item) => {
                 if (item.documentId) {
-                  window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+                  window.open(`/documents/${item.documentId}?communityId=${communityId}`, '_blank', 'noopener');
                 }
               }}
               onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}

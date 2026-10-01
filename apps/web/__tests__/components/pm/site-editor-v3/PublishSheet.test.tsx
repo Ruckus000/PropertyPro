@@ -240,6 +240,12 @@ interface RenderOptions {
   onFixIssue?: (target: { pageId: string; slot: number }) => void;
   onGoToPages?: () => void;
   open?: boolean;
+  /**
+   * Defaults to `apartment`, which has no Florida-required sections, so every
+   * pre-Phase-2 case sees exactly the warnings it always did. The required-
+   * section cases pass a condo or HOA explicitly.
+   */
+  communityType?: string;
 }
 
 function renderSheet({
@@ -253,6 +259,7 @@ function renderSheet({
   // `src/**` program, so the type system cannot catch it here.
   onGoToPages = vi.fn(),
   open = true,
+  communityType = 'apartment',
 }: RenderOptions = {}) {
   const element = (
     <PublishSheet
@@ -260,6 +267,7 @@ function renderSheet({
       onOpenChange={onOpenChange}
       communityId={7}
       onGoToPages={onGoToPages}
+      complianceSubject={{ communityType, unitCount: null }}
       {...(onFixIssue ? { onFixIssue } : {})}
     />
   );
@@ -965,6 +973,7 @@ describe('PublishSheet — the PAGE SET can block a publish too', () => {
         onOpenChange={onOpenChange}
         communityId={7}
         onGoToPages={onGoToPages}
+        complianceSubject={{ communityType: 'apartment', unitCount: null }}
       />,
     );
 
@@ -1825,3 +1834,40 @@ describe('PublishSheet — schedule read states', () => {
     expect(toastSuccess).toHaveBeenCalledWith(expect.stringContaining('called off'));
   });
 })
+
+describe('PublishSheet — Florida-required sections (v4 Phase 2)', () => {
+  const meetings = (overrides: Partial<SiteBlockSummary> = {}) =>
+    block({ id: 3, blockType: 'meetings', blockOrder: 3, content: {}, ...overrides });
+  const documents = (overrides: Partial<SiteBlockSummary> = {}) =>
+    block({ id: 4, blockType: 'documents', blockOrder: 4, content: {}, ...overrides });
+
+  it('warns a condo about a missing section, without blocking the publish', () => {
+    queries.draft = [...DRAFT_ONE_EDIT, meetings()];
+    renderSheet({ communityType: 'condo_718' });
+
+    expect(screen.getByText(/No page has a Documents section/)).toBeInTheDocument();
+    expect(screen.getByText(/§718\.111\(12\)\(g\)/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+  });
+
+  it('warns about a hidden section', () => {
+    queries.draft = [...DRAFT_ONE_EDIT, meetings({ content: { hidden: true } }), documents()];
+    renderSheet({ communityType: 'hoa_720' });
+
+    expect(screen.getByText(/The Meetings section is hidden/)).toBeInTheDocument();
+    expect(screen.queryByText(/No page has a Documents section|Documents section is hidden/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing when both are visible', () => {
+    queries.draft = [...DRAFT_ONE_EDIT, meetings(), documents()];
+    renderSheet({ communityType: 'condo_718' });
+
+    expect(screen.queryByText(/Florida law/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing to an apartment community with neither', () => {
+    renderSheet({ communityType: 'apartment' });
+
+    expect(screen.queryByText(/Florida law/)).not.toBeInTheDocument();
+  });
+});

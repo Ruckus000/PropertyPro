@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, type DragEvent, type KeyboardEvent } from 'react';
-import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Layers } from 'lucide-react';
+import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Layers, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
+import { useRequiredSections } from '@/components/pm/site-editor-v3/required-sections-context';
 import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
+import { isHiddenBlock, useHideToggle } from '@/components/pm/site-editor-v3/use-hide-toggle';
+import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 const KEYBOARD_HINT_ID = 'site-editor-section-reorder-hint';
 
@@ -88,11 +91,11 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
     move,
     moveTo,
     isMoving,
-    toggleHidden,
     duplicate,
     duplicateError,
     isDuplicating,
   } = useSiteEditor();
+  const { isRequired, isRecommended } = useRequiredSections();
   const [drag, setDrag] = useState<DragState | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -206,12 +209,12 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
           const canUp = canMove(section.id, 'up');
           const canDown = canMove(section.id, 'down');
           const isDragging = drag?.blockId === section.id;
-          // `hidden` is `z.literal(true).optional()`, so only an exact `true`
-          // counts — absence is the sole way content says "visible".
-          const isHidden =
-            typeof section.content === 'object' &&
-            section.content !== null &&
-            (section.content as { hidden?: unknown }).hidden === true;
+          const isHidden = isHiddenBlock(section);
+          // Florida-required (v4 Phase 2): badged, and not duplicable — see
+          // FloatControls for why Duplicate is locked but Hide is not.
+          const required = isRequired(section.blockType);
+          // Below the statute's size threshold: a badge, and nothing else.
+          const recommended = isRecommended(section.blockType);
           // The dragged row would land on this slot: draw the seam on the side
           // it is travelling from, so the line reads as "it goes here".
           const showIndicator = drag !== null && overIndex === index && !isDragging;
@@ -270,6 +273,23 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
                 )}
               >
                 <span className="truncate">{label}</span>
+                {required && (
+                  <span
+                    title="Required by Florida law"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full bg-status-info-bg px-1.5 py-0.5 text-xs font-medium text-status-info"
+                  >
+                    <Lock className="h-3 w-3" aria-hidden="true" />
+                    Required
+                  </span>
+                )}
+                {recommended && (
+                  <span
+                    title="Recommended for every association's website"
+                    className="shrink-0 rounded-full bg-status-neutral-bg px-1.5 py-0.5 text-xs font-medium text-status-neutral"
+                  >
+                    Recommended
+                  </span>
+                )}
                 {section.isDraft && (
                   <span className="shrink-0 rounded-full bg-status-warning-bg px-1.5 py-0.5 text-xs font-medium text-status-warning">
                     Draft
@@ -308,18 +328,7 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
                 guard is in `toggleHidden`, which resolves from the unfiltered
                 `blocks`.
               */}
-              <button
-                type="button"
-                onClick={() => toggleHidden(section.id, !isHidden)}
-                aria-label={`${isHidden ? 'Show' : 'Hide'} ${label} section`}
-                className={ROW_ACTION_CLASS}
-              >
-                {isHidden ? (
-                  <Eye className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <EyeOff className="h-4 w-4" aria-hidden="true" />
-                )}
-              </button>
+              <HideToggleButton section={section} label={label} />
               {/*
                 Disabled across the whole list while any duplicate's write is in
                 flight, not just on the row that started it: the hazard is slot
@@ -332,7 +341,8 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
               */}
               <button
                 type="button"
-                disabled={isDuplicating}
+                disabled={isDuplicating || required}
+                title={required ? 'Your site only needs one of these' : undefined}
                 onClick={() => duplicate(section.id)}
                 aria-label={`Duplicate ${label} section`}
                 className={ROW_ACTION_CLASS}
@@ -344,5 +354,33 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
         })}
       </ul>
     </div>
+  );
+}
+
+/**
+ * The row's Hide / Show toggle. Its own component because `useHideToggle` is a
+ * hook and the rows are a `map`. Shares that hook with the canvas toolbar, so
+ * hiding the last visible Florida-required section asks first on both.
+ */
+function HideToggleButton({ section, label }: { section: SiteBlockSummary; label: string }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const { isHidden, requestToggle, confirm } = useHideToggle(section, ref);
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        onClick={requestToggle}
+        aria-label={`${isHidden ? 'Show' : 'Hide'} ${label} section`}
+        className={ROW_ACTION_CLASS}
+      >
+        {isHidden ? (
+          <Eye className="h-4 w-4" aria-hidden="true" />
+        ) : (
+          <EyeOff className="h-4 w-4" aria-hidden="true" />
+        )}
+      </button>
+      {confirm}
+    </>
   );
 }
