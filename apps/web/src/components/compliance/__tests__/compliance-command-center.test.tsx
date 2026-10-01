@@ -186,6 +186,32 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
   });
 
+  it('explains a sub-threshold association once, instead of "Requirements are now in effect"', () => {
+    // A 12-unit condo: the API already dropped the posting clock; the page says why.
+    renderWithProviders(
+      <ComplianceCommandCenter
+        communityId={1}
+        isAdmin={true}
+        designation={null}
+        canWrite={false}
+        belowPostingThreshold={{ unitCount: 12, minUnits: 25, unitNoun: 'units', statute: '§718.111(12)(g)' }}
+      />,
+    );
+    expect(
+      screen.getByText('Website posting is recommended for this association, not required'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/applies to associations with 25 or more units; this one has 12/)).toBeInTheDocument();
+    expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
+  });
+
+  it('shows no threshold notice when the posting rule applies', () => {
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={false} />,
+    );
+    expect(screen.queryByText(/recommended for this association/)).not.toBeInTheDocument();
+    expect(screen.getByText('Requirements are now in effect')).toBeInTheDocument();
+  });
+
   it('renders the loading skeleton when data is loading', () => {
     mockChecklistReturn = { data: undefined, isLoading: true, error: null };
     renderWithProviders(

@@ -10,9 +10,17 @@
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import {
+  getFeaturesForCommunity,
+  postingClockApplies,
+  requiredSectionStatute,
+  unitThreshold,
+} from '@propertypro/shared';
 import { checkPermissionV2 } from '@/lib/db/access-control';
-import ComplianceCommandCenter from '@/components/compliance/compliance-command-center';
+import ComplianceCommandCenter, {
+  type BelowPostingThreshold,
+} from '@/components/compliance/compliance-command-center';
+import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -47,12 +55,24 @@ export default async function CompliancePage({ params }: PageProps) {
   const canWrite = checkPermissionV2(
     membership.role, membership.communityType, 'compliance', 'write', opts,
   );
+  // Below the website rule's size threshold the API drops the posting clock
+  // (see `postingClockApplies`); the page says why, once.
+  const unitCount = await getCommunityUnitCount(communityId);
+  const subject = { communityType: membership.communityType, unitCount };
+  const threshold = unitThreshold(membership.communityType);
+  const statute = requiredSectionStatute(membership.communityType);
+  const belowPostingThreshold: BelowPostingThreshold | null =
+    !postingClockApplies(subject) && unitCount !== null && threshold && statute
+      ? { unitCount, ...threshold, statute }
+      : null;
+
   return (
     <ComplianceCommandCenter
       communityId={communityId}
       isAdmin={membership.isAdmin}
       designation={membership.designation}
       canWrite={canWrite}
+      belowPostingThreshold={belowPostingThreshold}
     />
   );
 }
