@@ -261,10 +261,13 @@ export function detectAttachments(payload: Record<string, unknown>): boolean {
  * `headerLines` survives the `?attachments=false` flag, the same property
  * `detectAttachments` above relies on.
  *
- * Only the FIRST verdict per method is kept. Each hop prepends its own
- * `Authentication-Results`, and mailparser preserves that order, so the first
- * is the most recent hop — the one that actually authenticated this delivery.
- * A later one was written by a relay we have no reason to trust.
+ * Only the FIRST `Authentication-Results` header is read, and only when our
+ * receiving provider wrote it (RFC 8601 §5: ignore results from an authserv-id
+ * you do not trust). Each hop prepends its own header and mailparser keeps that
+ * order, so the first is the most recent hop. Every other one — including any
+ * the SENDER put in their own message — is attacker-writable: reading them
+ * would let a spoofed message display `dmarc=pass`, or fill in a method the
+ * provider's header left out.
  */
 function readAuthenticationResults(
   payload: Record<string, unknown>,
@@ -275,24 +278,36 @@ function readAuthenticationResults(
     dmarc: null,
   };
 
-  for (const line of readArray(payload.headerLines)) {
-    const record = asRecord(line);
-    const text = readString(record?.line) ?? readString(line);
-    if (!text || !/^authentication-results\s*:/i.test(text)) continue;
+  const first = readArray(payload.headerLines)
+    .map((line) => readString(asRecord(line)?.line) ?? readString(line))
+    .find((text): text is string => !!text && /^authentication-results\s*:/i.test(text));
+  if (!first) return out;
 
-    // The leading `(?:^|[;\s])` is load-bearing: without it `dkim=` would also
-    // match inside tokens like `header.d=`, and `spf=` inside `receivedspf=`.
-    const pairs = /(?:^|[;\s])(spf|dkim|dmarc)\s*=\s*([a-z]+)/gi;
-    for (const match of text.matchAll(pairs)) {
-      const [, rawMethod, rawVerdict] = match;
-      if (rawMethod === undefined || rawVerdict === undefined) continue;
-      const method = rawMethod.toLowerCase() as 'spf' | 'dkim' | 'dmarc';
-      if (out[method] !== null) continue;
-      out[method] = rawVerdict.toLowerCase().slice(0, MAX_VERDICT_CHARS);
-    }
+  const body = first.replace(/^authentication-results\s*:/i, '');
+  const authservId = body.split(';', 1)[0]?.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? '';
+  if (!isTrustedAuthservId(authservId)) return out;
+
+  // Quoted strings and comments are free text (`reason="… dmarc=pass"`) and
+  // must not be read as results.
+  const results = body.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\([^)]*\)/g, ' ');
+
+  // The leading `(?:^|[;\s])` is load-bearing: without it `dkim=` would also
+  // match inside tokens like `header.d=`, and `spf=` inside `receivedspf=`.
+  const pairs = /(?:^|[;\s])(spf|dkim|dmarc)\s*=\s*([a-z]+)/gi;
+  for (const match of results.matchAll(pairs)) {
+    const [, rawMethod, rawVerdict] = match;
+    if (rawMethod === undefined || rawVerdict === undefined) continue;
+    const method = rawMethod.toLowerCase() as 'spf' | 'dkim' | 'dmarc';
+    if (out[method] !== null) continue;
+    out[method] = rawVerdict.toLowerCase().slice(0, MAX_VERDICT_CHARS);
   }
 
   return out;
+}
+
+/** The receiving provider's MTAs (`mx1.forwardemail.net`, …). */
+function isTrustedAuthservId(authservId: string): boolean {
+  return authservId === 'forwardemail.net' || authservId.endsWith('.forwardemail.net');
 }
 
 // ---------------------------------------------------------------------------

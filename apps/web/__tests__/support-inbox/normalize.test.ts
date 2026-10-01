@@ -322,7 +322,7 @@ describe('authentication verdicts', () => {
       from: { value: [{ address: 'jane@example.com' }] },
       recipients: ['support@getpropertypro.com'],
       spf: { result: 'fail' },
-      headerLines: [{ line: 'Authentication-Results: mx1.example.net; spf=pass' }],
+      headerLines: [{ line: 'Authentication-Results: mx1.forwardemail.net; spf=pass' }],
     });
 
     expect(email.spfResult).toBe('fail');
@@ -352,11 +352,57 @@ describe('authentication verdicts', () => {
       from: { value: [{ address: 'jane@example.com' }] },
       recipients: ['support@getpropertypro.com'],
       headerLines: [
-        { line: 'Authentication-Results: mx1.example.net; x-dkim=pass; receivedspf=pass' },
+        { line: 'Authentication-Results: mx1.forwardemail.net; x-dkim=pass; receivedspf=pass' },
       ],
     });
 
     expect(email.dkimResult).toBeNull();
     expect(email.spfResult).toBeNull();
+  });
+
+  it('ignores a top header our provider did not write (a sender can add their own)', () => {
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'board@sunset.example' }] },
+      recipients: ['support@getpropertypro.com'],
+      headerLines: [
+        { line: 'Authentication-Results: mail.attacker.example; spf=pass; dkim=pass; dmarc=pass' },
+      ],
+    });
+
+    expect(email.spfResult).toBeNull();
+    expect(email.dkimResult).toBeNull();
+    expect(email.dmarcResult).toBeNull();
+  });
+
+  it("does not fill a method the provider's header left out from a later header", () => {
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'board@sunset.example' }] },
+      recipients: ['support@getpropertypro.com'],
+      headerLines: [
+        { line: 'Authentication-Results: mx1.forwardemail.net; spf=pass; dkim=none' },
+        { line: 'Authentication-Results: mx1.forwardemail.net; dmarc=pass' },
+      ],
+    });
+
+    expect(email.spfResult).toBe('pass');
+    expect(email.dmarcResult).toBeNull();
+  });
+
+  it('does not read a result out of a quoted reason or a comment', () => {
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'board@sunset.example' }] },
+      recipients: ['support@getpropertypro.com'],
+      headerLines: [
+        {
+          line:
+            'Authentication-Results: mx1.forwardemail.net; spf=fail reason="looks like dmarc=pass" ' +
+            '(dkim=pass in a comment)',
+        },
+      ],
+    });
+
+    expect(email.spfResult).toBe('fail');
+    expect(email.dkimResult).toBeNull();
+    expect(email.dmarcResult).toBeNull();
   });
 });

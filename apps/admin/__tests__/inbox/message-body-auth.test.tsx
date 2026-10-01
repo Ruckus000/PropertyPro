@@ -70,6 +70,12 @@ describe('MessageBody authentication verdicts', () => {
     expect(screen.getByText('fail')).toBeDefined();
   });
 
+  it('does not call an SPF pass alone authenticated — only DMARC vouches for the From', () => {
+    render(<MessageBody message={message({ spfResult: 'pass' })} sanitizedHtml="" />);
+
+    expect(screen.getByText(/sender not authenticated/i)).toBeDefined();
+  });
+
   it('does not treat softfail or none as a pass', () => {
     render(
       <MessageBody message={message({ spfResult: 'softfail' })} sanitizedHtml="" />,

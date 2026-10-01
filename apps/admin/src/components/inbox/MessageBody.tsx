@@ -76,7 +76,11 @@ export function MessageBody({ message, sanitizedHtml }: MessageBodyProps) {
     (entry): entry is { method: (typeof AUTH_METHODS)[number]; verdict: string } =>
       entry.verdict !== null,
   );
-  const allAuthPassed = authVerdicts.every((entry) => isPass(entry.verdict));
+  // DMARC is the only one of the three that vouches for the visible From
+  // address — SPF checks the envelope sender, DKIM any signing domain — so a
+  // message is only "authenticated" when DMARC itself passed.
+  const allAuthPassed =
+    isPass(message.dmarcResult) && authVerdicts.every((entry) => isPass(entry.verdict));
 
   return (
     <article
