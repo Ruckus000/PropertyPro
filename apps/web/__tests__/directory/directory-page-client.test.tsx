@@ -12,6 +12,7 @@ const {
   useUnitsMock,
   useResidentsListMock,
   useDelinquencyMock,
+  usePastDueRuleMock,
   resendMock,
   walkPaginatedMock,
   isDesktopMock,
@@ -22,6 +23,7 @@ const {
   useUnitsMock: vi.fn(),
   useResidentsListMock: vi.fn(),
   useDelinquencyMock: vi.fn(),
+  usePastDueRuleMock: vi.fn(),
   resendMock: vi.fn(),
   walkPaginatedMock: vi.fn(),
   isDesktopMock: vi.fn(() => true),
@@ -41,6 +43,10 @@ vi.mock('@/hooks/use-units', () => ({
   useCreateUnit: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
 }));
 vi.mock('@/hooks/use-finance', () => ({ useDelinquency: useDelinquencyMock }));
+vi.mock('@/hooks/use-past-due-rule', () => ({
+  usePastDueRule: usePastDueRuleMock,
+  useUpdatePastDueRule: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
+}));
 vi.mock('@/hooks/use-residents-management', () => ({
   useResidentsList: useResidentsListMock,
   useResendInvitation: () => ({ mutateAsync: resendMock }),
@@ -125,6 +131,7 @@ beforeEach(() => {
   useUnitsMock.mockReturnValue(ok(UNITS));
   useResidentsListMock.mockReturnValue(ok(RESIDENTS));
   useDelinquencyMock.mockReturnValue(ok([{ unitId: 3, overdueAmountCents: 125_000, daysOverdue: 62 }]));
+  usePastDueRuleMock.mockReturnValue(ok({ minCents: 0, minDays: 0 }));
   walkPaginatedMock.mockResolvedValue([]);
   resendMock.mockResolvedValue(undefined);
 });
@@ -223,6 +230,38 @@ describe('DirectoryPageClient — units', () => {
     isDesktopMock.mockReturnValue(false);
     renderClient();
     expect(screen.getByRole('button', { name: 'Cards' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('DirectoryPageClient — past-due rule', () => {
+  it('a unit under the rule is not flagged and its balance shows neutrally', async () => {
+    usePastDueRuleMock.mockReturnValue(ok({ minCents: 200_000, minDays: 30 }));
+    const user = userEvent.setup();
+    renderClient();
+    const card = screen.getByRole('button', { name: /^103/ });
+    expect(within(card).queryByText(/past due/)).not.toBeInTheDocument();
+    expect(card.className).not.toContain('border-b-status-danger');
+
+    await user.click(card);
+    const drawer = await screen.findByRole('dialog', { name: /unit 103/i });
+    expect(within(drawer).getByText(/\$1,250 overdue — under your past-due rule/)).toBeInTheDocument();
+  });
+
+  it('explains the rule in the filters panel', async () => {
+    usePastDueRuleMock.mockReturnValue(ok({ minCents: 50_000, minDays: 30 }));
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(
+      await screen.findByText(/Past due means a balance over \$500 and more than 30 days late/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change rule' })).toBeInTheDocument();
+  });
+
+  it('hides balances when the rule cannot be loaded', () => {
+    usePastDueRuleMock.mockReturnValue({ data: undefined, isLoading: false, isError: true, isSuccess: false });
+    renderClient();
+    expect(screen.queryByText(/past due/i)).not.toBeInTheDocument();
   });
 });
 

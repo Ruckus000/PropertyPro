@@ -121,6 +121,12 @@ export function UnitDetailPanel({
           </Banner>
         ) : null}
 
+        {canSeeBalances && unit.overdueBelowRule ? (
+          <p className="text-sm text-content-secondary">
+            {formatCents(unit.overdueBelowRule.amountCents)} overdue — under your past-due rule, so not flagged.
+          </p>
+        ) : null}
+
         {unit.noOwner ? (
           <Banner tone="warning" icon={AlertTriangle}>
             <strong className="font-semibold">No owner on file.</strong> Owner records are required for voting and

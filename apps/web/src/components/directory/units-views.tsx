@@ -295,6 +295,10 @@ export function UnitsByBuilding({
                                 <AlertCircle size={13} aria-hidden="true" />
                                 {formatCents(u.pastDue.amountCents)}
                               </span>
+                            ) : u.overdueBelowRule ? (
+                              <span className="whitespace-nowrap text-xs text-content-secondary">
+                                {formatCents(u.overdueBelowRule.amountCents)} overdue
+                              </span>
                             ) : (
                               <span className="text-xs text-content-tertiary">Nothing overdue</span>
                             )}

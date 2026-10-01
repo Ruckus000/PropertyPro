@@ -20,6 +20,27 @@ export interface PastDue {
   daysOverdue: number;
 }
 
+/** Mirrors the server's past-due rule (payments/past-due-rule): both must be exceeded. */
+export interface PastDueRule {
+  minCents: number;
+  minDays: number;
+}
+
+export const ANY_OVERDUE_RULE: PastDueRule = { minCents: 0, minDays: 0 };
+
+export function isPastDue(overdue: PastDue, rule: PastDueRule): boolean {
+  return overdue.amountCents > rule.minCents && overdue.daysOverdue > rule.minDays;
+}
+
+export function describeRule(rule: PastDueRule): string {
+  if (rule.minCents === 0 && rule.minDays === 0) return 'any overdue balance';
+  const parts = [
+    rule.minCents > 0 ? `over ${formatCents(rule.minCents)}` : null,
+    rule.minDays > 0 ? `more than ${plural(rule.minDays, 'day')} late` : null,
+  ].filter(Boolean);
+  return `a balance ${parts.join(' and ')}`;
+}
+
 export interface DelinquencyRow {
   unitId: number;
   overdueAmountCents: number;
@@ -55,7 +76,10 @@ export interface DirectoryUnit {
   /** Occupancy contradicts who is on file (e.g. vacant with residents). */
   hasContradiction: boolean;
   noOwner: boolean;
+  /** Overdue AND over the community's past-due rule: flagged. */
   pastDue: PastDue | null;
+  /** Overdue but under the rule: shown neutrally, never flagged, never "paid up". */
+  overdueBelowRule: PastDue | null;
 }
 
 export interface DirectoryContext {
@@ -189,6 +213,7 @@ export function buildDirectoryUnits(
   residents: readonly ResidentRecord[] | null,
   delinquency: readonly DelinquencyRow[] | null,
   ctx: DirectoryContext,
+  rule: PastDueRule = ANY_OVERDUE_RULE,
 ): DirectoryUnit[] {
   const byUnit = new Map<number, DirectoryResident[]>();
   for (const r of residents ?? []) {
@@ -218,6 +243,7 @@ export function buildDirectoryUnits(
       const tenants = ctx.hasOwnerRole ? people.filter((p) => !p.isUnitOwner) : people;
       const occupant = occupantLineFor(u.occupancy, people, owners, tenants, ctx);
       const buildingKey = buildingKeyOf(u.building);
+      const overdue = pastDueByUnit.get(u.id) ?? null;
       const buildingLabel = buildingLabelOf(buildingKey);
       return {
         id: u.id,
@@ -239,7 +265,8 @@ export function buildDirectoryUnits(
         occupantLine: occupant.text,
         hasContradiction: occupant.contradiction,
         noOwner: ctx.hasOwnerRole && ctx.canSeeResidents && owners.length === 0,
-        pastDue: pastDueByUnit.get(u.id) ?? null,
+        pastDue: overdue && isPastDue(overdue, rule) ? overdue : null,
+        overdueBelowRule: overdue && !isPastDue(overdue, rule) ? overdue : null,
       };
     })
     .sort(

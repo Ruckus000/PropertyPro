@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, MoreHorizontal, Plus, Upload } from 'lucide-react';
+import { AlertTriangle, DollarSign, MoreHorizontal, Plus, Upload } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageHeaderHelpButton } from '@/components/shared/page-header-help-button';
@@ -24,18 +24,22 @@ import { AddResidentDialog } from '@/components/residents/residents-page-client'
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { useUnits } from '@/hooks/use-units';
 import { useDelinquency } from '@/hooks/use-finance';
+import { usePastDueRule } from '@/hooks/use-past-due-rule';
 import { useInviteResident, useResendInvitation, useResidentsList } from '@/hooks/use-residents-management';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { AddUnitDialog } from './add-unit-dialog';
+import { PastDueRuleDialog } from './past-due-rule-dialog';
 import { DirectorySheet } from './directory-sheet';
 import { DirectoryToolbar, type FilterToken, type StatusOption, type UnitsView } from './directory-toolbar';
 import {
+  ANY_OVERDUE_RULE,
   NO_BUILDING_KEY,
   buildDirectoryUnits,
   buildResidentRows,
   buildingLabelOf,
   computeOverview,
+  describeRule,
   filterResidents,
   filterUnits,
   listBuildings,
@@ -146,6 +150,7 @@ export function DirectoryPageClient({
   const [sendInvitation, setSendInvitation] = useState(true);
   const [inviteWarning, setInviteWarning] = useState<{ userId: string; name: string } | null>(null);
   const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
+  const [ruleOpen, setRuleOpen] = useState(false);
 
   // Search is filtered client-side; deferring keeps typing responsive on
   // large communities without a fixed debounce.
@@ -186,11 +191,15 @@ export function DirectoryPageClient({
   const unitsQ = useUnits(communityId);
   const residentsQ = useResidentsList(communityId, { enabled: isAdmin });
   const delinquencyQ = useDelinquency(communityId, { enabled: canSeeBalances });
+  const ruleQ = usePastDueRule(communityId, { enabled: canSeeBalances });
   const requestsQ = useQuery({ ...accessRequestsQueryOptions(communityId), enabled: isAdmin });
 
   // A refused or failed delinquency read hides finance UI rather than showing
   // every unit as "nothing overdue".
-  const balancesVisible = canSeeBalances && delinquencyQ.isSuccess;
+  // Without the rule we cannot say what "past due" means here, so the same
+  // hide-on-failure applies to it.
+  const balancesVisible = canSeeBalances && delinquencyQ.isSuccess && ruleQ.isSuccess;
+  const rule = ruleQ.data ?? ANY_OVERDUE_RULE;
   const residents = isAdmin ? residentsQ.data ?? null : null;
 
   const dirUnits = useMemo(
@@ -198,8 +207,8 @@ export function DirectoryPageClient({
       buildDirectoryUnits(unitsQ.data ?? [], residents, balancesVisible ? (delinquencyQ.data ?? null) : null, {
         hasOwnerRole,
         canSeeResidents: residents !== null,
-      }),
-    [unitsQ.data, residents, balancesVisible, delinquencyQ.data, hasOwnerRole],
+      }, rule),
+    [unitsQ.data, residents, balancesVisible, delinquencyQ.data, hasOwnerRole, rule],
   );
   const residentRows = useMemo(() => buildResidentRows(residents ?? [], dirUnits), [residents, dirUnits]);
   const stats = useMemo(() => computeOverview(dirUnits, residentRows), [dirUnits, residentRows]);
@@ -408,7 +417,7 @@ export function DirectoryPageClient({
             <span />
           )}
           <div className="flex shrink-0 items-center gap-2">
-            {tab === 'residents' ? (
+            {tab === 'residents' || balancesVisible ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -423,12 +432,19 @@ export function DirectoryPageClient({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-52">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/dashboard/import-residents?communityId=${communityId}`}>
-                      <Upload size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
-                      Import from CSV
-                    </Link>
-                  </DropdownMenuItem>
+                  {tab === 'residents' ? (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/dashboard/import-residents?communityId=${communityId}`}>
+                        <Upload size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+                        Import from CSV
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onSelect={() => setRuleOpen(true)}>
+                      <DollarSign size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+                      Past-due rule
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
@@ -554,6 +570,20 @@ export function DirectoryPageClient({
                 onBuildingChange={setBuilding}
                 onClearAll={clearFilters}
                 resultsLabel={`Show ${plural(filteredUnits.length, 'unit')}`}
+                statusNote={
+                  balancesVisible ? (
+                    <span>
+                      Past due means {describeRule(rule)}.{' '}
+                      <button
+                        type="button"
+                        onClick={() => setRuleOpen(true)}
+                        className={cn('font-semibold text-content-link hover:underline', FOCUS)}
+                      >
+                        Change rule
+                      </button>
+                    </span>
+                  ) : undefined
+                }
                 view={effectiveView}
                 onViewChange={changeView}
               />
@@ -715,6 +745,19 @@ export function DirectoryPageClient({
       </DirectorySheet>
 
       {/* ─────────── Dialogs ─────────── */}
+      {balancesVisible ? (
+        <PastDueRuleDialog
+          open={ruleOpen}
+          onOpenChange={setRuleOpen}
+          communityId={communityId}
+          rule={rule}
+          delinquency={delinquencyQ.data ?? []}
+          onSaved={() => {
+            setRuleOpen(false);
+            toast.success('Past-due rule saved.');
+          }}
+        />
+      ) : null}
       {canWrite ? (
         <AddUnitDialog
           open={addUnitOpen}

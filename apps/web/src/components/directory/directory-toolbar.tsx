@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Building2, Columns2, LayoutGrid, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,7 @@ export function DirectoryToolbar<T extends string>({
   onBuildingChange,
   onClearAll,
   resultsLabel,
+  statusNote,
   view,
   onViewChange,
 }: {
@@ -57,6 +58,8 @@ export function DirectoryToolbar<T extends string>({
   onBuildingChange: (key: string | null) => void;
   onClearAll: () => void;
   resultsLabel: string;
+  /** Shown under the status chips (e.g. what "Past due" means here). */
+  statusNote?: ReactNode;
   /** Units tab only. */
   view?: UnitsView;
   onViewChange?: (v: UnitsView) => void;
@@ -150,6 +153,7 @@ export function DirectoryToolbar<T extends string>({
                 );
               })}
             </div>
+            {statusNote ? <div className="text-xs text-content-tertiary">{statusNote}</div> : null}
           </div>
 
           {/* Native radios: arrow keys, checked state and announcement come free. */}

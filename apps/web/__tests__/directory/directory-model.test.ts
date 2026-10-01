@@ -6,6 +6,7 @@ import {
   buildDirectoryUnits,
   buildResidentRows,
   computeOverview,
+  describeRule,
   filterResidents,
   filterUnits,
   formatCents,
@@ -313,5 +314,39 @@ describe('formatting helpers', () => {
 
   it('formats cents as whole dollars', () => {
     expect(formatCents(125_049)).toBe('$1,250');
+  });
+});
+
+describe('past-due rule', () => {
+  const units = [unit(1), unit(2), unit(3), unit(4)];
+  const rows = [
+    { unitId: 1, overdueAmountCents: 60_000, daysOverdue: 45 }, // over both
+    { unitId: 2, overdueAmountCents: 60_000, daysOverdue: 30 }, // days not MORE than 30
+    { unitId: 3, overdueAmountCents: 50_000, daysOverdue: 90 }, // amount not OVER $500
+    { unitId: 4, overdueAmountCents: 0, daysOverdue: 0 },
+  ];
+  const rule = { minCents: 50_000, minDays: 30 };
+
+  it('flags only units over both thresholds; keeps the rest as below-rule balances', () => {
+    const built = buildDirectoryUnits(units, [], rows, ADMIN, rule);
+    expect(built.map((u) => [u.id, u.pastDue !== null, u.overdueBelowRule?.amountCents ?? null])).toEqual([
+      [1, true, null],
+      [2, false, 60_000],
+      [3, false, 50_000],
+      [4, false, null],
+    ]);
+  });
+
+  it('defaults to any overdue balance', () => {
+    const built = buildDirectoryUnits(units, [], rows, ADMIN);
+    expect(built.filter((u) => u.pastDue).map((u) => u.id)).toEqual([1, 2, 3]);
+  });
+
+  it.each([
+    [{ minCents: 0, minDays: 0 }, 'any overdue balance'],
+    [{ minCents: 50_000, minDays: 30 }, 'a balance over $500 and more than 30 days late'],
+    [{ minCents: 0, minDays: 1 }, 'a balance more than 1 day late'],
+  ])('describes %j', (r, text) => {
+    expect(describeRule(r)).toBe(text);
   });
 });

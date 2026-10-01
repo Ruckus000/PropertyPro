@@ -38,6 +38,9 @@ export const communities = pgTable('communities', {
       leasesWriteLevel?: 'all_members' | 'admin_only';
       documentCategoriesWriteLevel?: 'all_members' | 'admin_only';
       paymentFeePolicy?: 'owner_pays' | 'association_absorbs';
+      /** Directory: a unit is "past due" when overdue > pastDueMinCents AND oldest charge > pastDueMinDays. */
+      pastDueMinCents?: number;
+      pastDueMinDays?: number;
       allowResidentVisitorRevoke?: boolean;
       // ── Legal gates ────────────────────────────────────────────────────────
       //
