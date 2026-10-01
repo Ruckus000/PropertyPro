@@ -96,6 +96,10 @@
         {
           "type": "waitFor",
           "selector": "role=button[name=\"Add to Denied List\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=tabpanel >> text=No denied-entry records yet."
         }
       ],
       "clipTo": "role=tabpanel",

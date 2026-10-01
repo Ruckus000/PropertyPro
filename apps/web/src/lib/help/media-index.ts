@@ -1,6 +1,6 @@
 /**
  * Captured help screenshots, keyed `<section>/<category>/<slug>/<name>` →
- * [width, height] of the 1x file. Written by `pnpm help:capture` (never by
+ * [width, height, capture date] of the 1x file. Written by `pnpm help:capture` (never by
  * hand), so an article can name a shot before it has been captured: an
  * uncaptured shot renders nothing rather than a broken image.
  *
@@ -16,7 +16,9 @@ export interface HelpShot {
   height: number;
 }
 
-const INDEX = mediaIndex as Readonly<Record<string, readonly [number, number]>>;
+export type MediaIndexEntry = readonly [width: number, height: number, capturedOn?: string];
+
+const INDEX = mediaIndex as unknown as Readonly<Record<string, MediaIndexEntry>>;
 
 /** `base` is `<section>/<category>/<slug>`. */
 export function resolveHelpShot(base: string, name: string): HelpShot | null {

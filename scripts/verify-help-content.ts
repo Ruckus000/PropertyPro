@@ -32,6 +32,7 @@ import {
   COMMUNITY_FEATURE_KEYS,
   validateFrontmatter,
 } from '../apps/web/src/lib/help/frontmatter-schema';
+import type { MediaIndexEntry } from '../apps/web/src/lib/help/media-index';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -388,7 +389,7 @@ function checkUpNextIntegrity(articles: Article[]): Problem[] {
   return problems;
 }
 
-function loadMediaIndex(): Record<string, [number, number]> {
+function loadMediaIndex(): Record<string, MediaIndexEntry> {
   try {
     return JSON.parse(readFileSync(mediaIndexPath, 'utf8'));
   } catch {
@@ -428,7 +429,7 @@ function loadManifestShots(): Map<string, Set<string>> {
  */
 function checkShots(
   articles: Article[],
-  mediaIndex: Record<string, [number, number]>,
+  mediaIndex: Record<string, MediaIndexEntry>,
   manifestShots: Map<string, Set<string>>,
 ): { problems: Problem[]; uncaptured: number } {
   const problems: Problem[] = [];

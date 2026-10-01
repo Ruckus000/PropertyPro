@@ -12,11 +12,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "article[role=\"button\"]"
+          "selector": "article[role=\"button\"]:has-text(\"Draft\")"
         },
         {
           "type": "click",
-          "selector": "article[role=\"button\"] >> nth=0"
+          "selector": "article[role=\"button\"]:has-text(\"Draft\") >> nth=0"
         },
         {
           "type": "click",
@@ -25,6 +25,10 @@
         {
           "type": "waitFor",
           "selector": "text=Admin actions"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "div.rounded-xl:has(> div > h3:text-is(\"Admin actions\"))"
         }
       ],
       "clipTo": "div.rounded-xl:has(> div > h3:text-is(\"Admin actions\"))",
@@ -44,7 +48,7 @@
         },
         {
           "type": "click",
-          "selector": "article[role=\"button\"]:has-text(\"closed\") >> nth=0"
+          "selector": "article[role=\"button\"]:has(h2:text-is(\"2026 Annual Board Election\"))"
         },
         {
           "type": "click",
@@ -53,6 +57,10 @@
         {
           "type": "waitFor",
           "selector": "text=Quorum"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "div.space-y-4:has(> div.rounded-lg > div > span:text-is(\"Quorum\"))"
         }
       ],
       "clipTo": [

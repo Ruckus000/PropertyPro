@@ -98,7 +98,7 @@
       "actions": [
         {
           "type": "click",
-          "selector": "role=button[name=/Board Meeting \\(52-hour notice\\)/]"
+          "selector": "role=button[name=\"Board Meeting\"s] >> nth=0"
         },
         {
           "type": "waitFor",
@@ -125,7 +125,7 @@
         {
           "type": "fill",
           "selector": "role=dialog >> label:has(> span:text-is(\"Start\")) >> input",
-          "value": "2026-10-01T18:00"
+          "value": "2026-10-03T18:00"
         },
         {
           "type": "waitFor",

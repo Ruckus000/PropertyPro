@@ -53,12 +53,16 @@
       "name": "dash-sign",
       "kind": "still",
       "route": "/dashboard?communityId={cid}",
-      "role": "cam",
+      "role": "board_president",
       "community": "condo",
       "actions": [
         {
           "type": "waitFor",
           "selector": "role=heading[name=\"Documents to Sign\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section:has(> h2:text-is(\"Documents to Sign\"))"
         }
       ],
       "clipTo": "section:has(h2:text-is(\"Documents to Sign\"))",

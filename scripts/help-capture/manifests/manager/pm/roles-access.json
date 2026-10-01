@@ -13,6 +13,10 @@
         {
           "type": "waitFor",
           "selector": "role=heading[name=\"Board\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=heading[name=\"Board\"]"
         }
       ],
       "clipTo": "section:has(h2:text-is(\"Board\"))",

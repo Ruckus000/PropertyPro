@@ -12,11 +12,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "a[href^=\"/violations/\"]"
+          "selector": "section:has(> h2:text-is(\"Your Reports\")) a"
         },
         {
           "type": "click",
-          "selector": "a[href^=\"/violations/\"] >> nth=0"
+          "selector": "section:has(> h2:text-is(\"Your Reports\")) a >> nth=0"
         },
         {
           "type": "waitFor",

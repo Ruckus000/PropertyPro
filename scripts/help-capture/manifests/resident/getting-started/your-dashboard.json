@@ -59,6 +59,10 @@
         {
           "type": "waitFor",
           "selector": "role=heading[name=\"Documents to Sign\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section:has(> h2:text-is(\"Documents to Sign\"))"
         }
       ],
       "clipTo": "section:has(h2:text-is(\"Documents to Sign\"))",

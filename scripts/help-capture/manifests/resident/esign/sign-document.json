@@ -13,6 +13,10 @@
         {
           "type": "waitFor",
           "selector": "h2:text-is(\"Documents to Sign\")"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section:has(> h2:text-is(\"Documents to Sign\"))"
         }
       ],
       "clipTo": "section:has(> h2:text-is(\"Documents to Sign\"))",

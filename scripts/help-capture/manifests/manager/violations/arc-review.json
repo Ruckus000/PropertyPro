@@ -8,7 +8,7 @@
       "kind": "still",
       "route": "/arc-requests?communityId={cid}",
       "role": "cam",
-      "community": "hoa",
+      "community": "condo",
       "actions": [
         {
           "type": "waitFor",
@@ -27,7 +27,7 @@
       "kind": "still",
       "route": "/arc-requests?communityId={cid}",
       "role": "cam",
-      "community": "hoa",
+      "community": "condo",
       "actions": [
         {
           "type": "waitFor",
@@ -51,7 +51,7 @@
       "kind": "still",
       "route": "/arc-requests?communityId={cid}",
       "role": "cam",
-      "community": "hoa",
+      "community": "condo",
       "actions": [
         {
           "type": "waitFor",

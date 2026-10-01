@@ -88,6 +88,10 @@
         {
           "type": "waitFor",
           "selector": "role=button[name=\"Publish announcement\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=button[name=\"Publish announcement\"]"
         }
       ],
       "clipTo": "role=button[name=\"Publish announcement\"] >> xpath=..",

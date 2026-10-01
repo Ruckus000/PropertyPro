@@ -11,7 +11,7 @@
  * Stills:  viewport PNG, optionally cropped to `clipTo` (+ `pad`) with the
  *          `highlight` control outlined and numbered `step` — the design's
  *          per-step callout → sharp → <name>.webp (1x) + <name>@2x.webp.
- *          Each still's 1x size is recorded in media-index.json.
+ *          Each still's 1x size and capture date are recorded in media-index.json.
  * Clips:   context.recordVideo while actions run → ffmpeg → <name>.mp4
  *          (H.264, faststart, scaled to viewport width, capped fps 24)
  *          + <name>-poster.webp from the first frame.
@@ -45,6 +45,7 @@ import {
   type CaptureManifest,
   type CaptureShot,
 } from './manifest-schema.js';
+import type { MediaIndexEntry } from '../../apps/web/src/lib/help/media-index';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..', '..');
@@ -241,7 +242,7 @@ async function captureStill(
   route: string,
   outDir: string,
   viewport: { width: number; height: number },
-): Promise<[number, number]> {
+): Promise<MediaIndexEntry> {
   const page = await context.newPage();
   await login(page, shot.role);
   await page.goto(`${BASE_URL}${route}`);
@@ -267,14 +268,14 @@ async function captureStill(
     .toFile(join(outDir, `${shot.name}.webp`));
   rmSync(pngPath);
   await page.close();
-  return [width, height];
+  return [width, height, new Date().toISOString().slice(0, 10)];
 }
 
-function readMediaIndex(): Record<string, [number, number]> {
+function readMediaIndex(): Record<string, MediaIndexEntry> {
   return existsSync(mediaIndexPath) ? JSON.parse(readFileSync(mediaIndexPath, 'utf8')) : {};
 }
 
-function writeMediaIndex(index: Record<string, [number, number]>): void {
+function writeMediaIndex(index: Record<string, MediaIndexEntry>): void {
   const sorted = Object.fromEntries(Object.entries(index).sort(([a], [b]) => a.localeCompare(b)));
   writeFileSync(mediaIndexPath, `${JSON.stringify(sorted, null, 2)}\n`);
 }

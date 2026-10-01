@@ -141,11 +141,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "a[href^=\"/emergency/\"]:not([href*=\"/new\"])"
+          "selector": "role=link[name=\"Hurricane Preparation Advisory\"]"
         },
         {
           "type": "click",
-          "selector": "a[href^=\"/emergency/\"]:not([href*=\"/new\"]) >> nth=0"
+          "selector": "role=link[name=\"Hurricane Preparation Advisory\"]"
         },
         {
           "type": "waitFor",

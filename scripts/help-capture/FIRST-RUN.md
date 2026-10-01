@@ -13,6 +13,8 @@ What worked on 2026-09-30 (cloud container, Node 22):
 
 ```
 SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npm_config_loglevel=error pnpm agent:env:prepare
+npm_config_loglevel=error scripts/agent-env.sh exec pnpm help:capture:fixtures
+node apps/web/scripts/sync-pdfjs-assets.mjs            # agent:live:web skips predev, so /pdfjs is missing
 npm_config_loglevel=error pnpm agent:live:web          # prints web=http://localhost:<port>
 HELP_CAPTURE_BASE_URL=http://127.0.0.1:<port> HELP_CAPTURE_CHROMIUM=<chromium binary> \
   HELP_CAPTURE_COMMUNITY_IDS=condo=1,hoa=2,apartment=3 pnpm help:capture --all
@@ -31,8 +33,10 @@ the images afterwards: a shot can pass and still show a loading state.
 - Texting on for the community plus `SMS_DISPATCH_ENABLED=true` (`em-r`).
 - `NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED` off for the getting-started help-panel
   shots (they show the legacy panel's labels).
-- `electionsAttorneyReviewed` switched on for Sunset Condos, plus a draft and a
-  closed election (`el-actions`, `el-results`).
+- `pnpm help:capture:fixtures` after the seed (local databases only; safe to
+  re-run). It adds the rows listed under "Seed data" that the seed lacks, and
+  switches `electionsAttorneyReviewed` on for Sunset Condos with a draft, an
+  open and a closed election (`el-actions`, `el-results`, `bal-cast`).
 
 ## Personas
 
@@ -44,25 +48,27 @@ the images afterwards: a shot can pass and still show a loading state.
 
 ## Seed data the shots expect but the seed does not create
 
-- Move-in/out checklists at Sunset Ridge (`mio-card`): create or renew one
-  lease through the UI first.
-- Polls, forum threads, ARC submissions, access and join requests.
+`pnpm help:capture:fixtures` creates pending packages and an expected visitor
+(`pk-*`, `vs-*`), a move-in checklist (`mio-*`), a contract near expiry with
+bids (`ct-*`), an active poll (`poll-vote`), a policy with an agent email
+(`ins-coi`), the digest turned on (`dig-card`), a pinned announcement outside
+the demo registry (`dash-ann`, `an-*`), an access request (`jr-*`), an ARC
+submission (`arcr-*`), elections (`el-*`, `bal-cast`), a meeting this month
+(`mt-day`) and a past meeting with minutes (`mt-past`, `min-list`). Still
+missing:
+
+- Forum threads and join requests.
 - Maintenance requests and work orders (`mr-list`, `wo-inbox`).
-- Past meetings (`mt-past`, `min-list`); a meeting in the current month
-  (`mt-day`).
-- Storm reports (`st-list`), a pending package (`pk-pending`, `pk-pickup`),
-  expected visitors (`vs-list`, `vs-revoke`), reserve assets (`rv-list`), a
-  policy with an agent email (`ins-coi`).
+- Storm reports (`st-list`), reserve assets (`rv-list`).
 - Something waiting for signature (`dash-sign`), an unfinished setup
-  checklist (`dash-check`), contracts near expiry and with bids (`ct-alerts`,
-  `ct-bids`), an audit entry with metadata (`au-meta`), the digest already on
-  (`dig-card`), a seeded violation on owner.one's unit (`vn-notice`).
+  checklist (`dash-check`), an audit entry with metadata (`au-meta`), a seeded
+  violation on owner.one's unit (`vn-notice`).
 - `pm_admin` needs a billing group for `ob-add`, `ob-form`, `ob-plan`.
 
 ## Date-sensitive fills
 
-- `vi-hear` fills `2026-10-06` (must be within 14 days of capture for the
-  warning); `mt-warn` fills `2026-10-01T18:00`. Update both before capturing.
+- `vi-hear` fills `2026-10-08` (must be within 14 days of capture for the
+  warning); `mt-warn` fills `2026-10-03T18:00`. Update both before capturing.
 
 ## Selectors to confirm
 
@@ -80,6 +86,14 @@ the images afterwards: a shot can pass and still show a loading state.
   `/^Actions for /`, `/^Bulk announcement/`
 - Tall crops (`rv-list`, the board roster) are clipped to the 1440×900
   viewport; tighten `clipTo` if an image goes over 250 KB.
+
+## Keeping shots current
+
+Nothing checks a shot against the UI it shows. `media-index.json` records each
+shot's capture date (`[width, height, "YYYY-MM-DD"]`). Re-run
+`pnpm help:capture --all` before a release and after changing a screen a guide
+shows, then review the images by eye: an empty state or a loading skeleton
+still passes the capture.
 
 ## Deliberately not captured
 

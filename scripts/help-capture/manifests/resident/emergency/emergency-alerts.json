@@ -13,6 +13,10 @@
         {
           "type": "waitFor",
           "selector": "h3:text-is(\"SMS Emergency Notifications\")"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "div:has(> h3:text-is(\"SMS Emergency Notifications\"))"
         }
       ],
       "clipTo": "div:has(> h3:text-is(\"SMS Emergency Notifications\"))"

@@ -12,7 +12,7 @@
       "actions": [
         {
           "type": "click",
-          "selector": "role=button[name=/Board Meeting \\(52-hour notice\\)/]"
+          "selector": "role=button[name=\"Board Meeting\"s] >> nth=0"
         },
         {
           "type": "waitFor",

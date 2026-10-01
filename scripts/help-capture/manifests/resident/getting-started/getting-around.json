@@ -72,6 +72,10 @@
         {
           "type": "waitFor",
           "selector": "text=Relevant to this page"
+        },
+        {
+          "type": "wait",
+          "ms": 400
         }
       ],
       "clipTo": "role=complementary[name=\"Help panel\"]"

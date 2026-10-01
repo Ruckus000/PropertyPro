@@ -12,11 +12,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=button[name=/account menu/i]"
+          "selector": "button[aria-haspopup=\"menu\"][aria-label$=\"account menu\" i]"
         },
         {
           "type": "click",
-          "selector": "role=button[name=/account menu/i]"
+          "selector": "button[aria-haspopup=\"menu\"][aria-label$=\"account menu\" i]"
         },
         {
           "type": "waitFor",
@@ -24,7 +24,7 @@
         }
       ],
       "clipTo": [
-        "role=button[name=/account menu/i]",
+        "button[aria-haspopup=\"menu\"][aria-label$=\"account menu\" i]",
         "role=menu"
       ],
       "highlight": "role=menuitem[name=\"Data Export\"]",

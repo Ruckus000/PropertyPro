@@ -50,7 +50,7 @@
         },
         {
           "type": "click",
-          "selector": "text=Sunset Ridge Apartments"
+          "selector": "role=button[name=\"Request to Join\"] >> nth=0"
         },
         {
           "type": "waitFor",
@@ -83,7 +83,7 @@
         },
         {
           "type": "click",
-          "selector": "text=Sunset Ridge Apartments"
+          "selector": "role=button[name=\"Request to Join\"] >> nth=0"
         },
         {
           "type": "waitFor",

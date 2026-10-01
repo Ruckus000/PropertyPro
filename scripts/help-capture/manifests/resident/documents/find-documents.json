@@ -58,6 +58,10 @@
         {
           "type": "waitFor",
           "selector": "role=button[name=/^Annual Budget/]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "tr:has-text(\"Annual Budget\")"
         }
       ],
       "clipTo": "tr:has-text(\"Annual Budget\")",
@@ -77,6 +81,10 @@
         },
         {
           "type": "waitFor",
+          "selector": "role=button[name=\"Download\"s]"
+        },
+        {
+          "type": "scrollTo",
           "selector": "role=button[name=\"Download\"s]"
         }
       ],
@@ -98,6 +106,10 @@
         {
           "type": "waitFor",
           "selector": "role=button[name=\"Version History\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "role=button[name=\"Download\"s]"
         },
         {
           "type": "wait",

@@ -28,7 +28,7 @@
       "actions": [
         {
           "type": "click",
-          "selector": "button[aria-label]:has-text(\"Meeting (\") >> nth=0"
+          "selector": "button[aria-label]:has-text(\"Board Meeting\") >> nth=0"
         },
         {
           "type": "waitFor",
@@ -36,10 +36,10 @@
         }
       ],
       "clipTo": [
-        "button[aria-label]:has-text(\"Meeting (\") >> nth=0",
+        "button[aria-label]:has-text(\"Board Meeting\") >> nth=0",
         "role=button[name=\"Details\"]"
       ],
-      "highlight": "button[aria-label]:has-text(\"Meeting (\") >> nth=0",
+      "highlight": "button[aria-label]:has-text(\"Board Meeting\") >> nth=0",
       "step": 2
     },
     {
@@ -51,7 +51,7 @@
       "actions": [
         {
           "type": "click",
-          "selector": "role=button[name=/Board Meeting \\(52-hour notice\\)/]"
+          "selector": "role=button[name=\"Board Meeting\"s] >> nth=0"
         },
         {
           "type": "waitFor",
