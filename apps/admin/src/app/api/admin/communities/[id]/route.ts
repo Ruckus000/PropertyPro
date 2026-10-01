@@ -144,7 +144,14 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     }
   }
   if (community_settings !== undefined) {
-    updates.community_settings = community_settings;
+    // MERGE into the stored blob, never replace it. patchSchema only lists the
+    // keys this console edits and zod strips the rest, so a straight assignment
+    // erased every key owned elsewhere — paymentFeePolicy (web finance),
+    // allowResidentVisitorRevoke (web packages) — on each admin save.
+    updates.community_settings = {
+      ...(((existing as Record<string, unknown>).community_settings ?? {}) as Record<string, unknown>),
+      ...community_settings,
+    };
   }
 
   const { data: updated, error } = await db
