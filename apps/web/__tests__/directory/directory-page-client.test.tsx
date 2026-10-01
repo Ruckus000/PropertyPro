@@ -285,6 +285,27 @@ describe('DirectoryPageClient — past-due rule', () => {
     expect(screen.getByRole('button', { name: 'Change rule' })).toBeInTheDocument();
   });
 
+  it('an abandoned edit to the rule is gone when the dialog is reopened', async () => {
+    usePastDueRuleMock.mockReturnValue(ok({ minCents: 50_000, minDays: 30 }));
+    const user = userEvent.setup();
+    renderClient();
+    const openRule = async () => {
+      await user.click(screen.getByRole('button', { name: /^Filters/ }));
+      await user.click(await screen.findByRole('button', { name: 'Change rule' }));
+      return screen.findByRole('dialog', { name: 'Past-due rule' });
+    };
+
+    let dialog = await openRule();
+    const amount = within(dialog).getByLabelText('Balance over ($)');
+    await user.clear(amount);
+    await user.type(amount, '999');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Past-due rule' })).not.toBeInTheDocument());
+
+    dialog = await openRule();
+    expect(within(dialog).getByLabelText('Balance over ($)')).toHaveValue(500);
+  });
+
   it('hides balances when the rule cannot be loaded', () => {
     usePastDueRuleMock.mockReturnValue({ data: undefined, isLoading: false, isError: true, isSuccess: false });
     renderClient();

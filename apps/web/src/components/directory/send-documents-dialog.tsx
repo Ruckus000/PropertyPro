@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useDocuments, useSendDocuments, type DocumentSendResult } from '@/hooks/use-documents';
+import { isDraft } from '@/lib/documents/document-state';
 import { cn } from '@/lib/utils';
 import { plural } from './directory-model';
 
@@ -45,7 +46,8 @@ export function SendDocumentsDialog({
 
   const docs = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const all = docsQ.data ?? [];
+    // Posted only: a draft can't be opened by residents, and the API refuses it.
+    const all = (docsQ.data ?? []).filter((d) => !isDraft(d));
     return q ? all.filter((d) => d.title.toLowerCase().includes(q)) : all;
   }, [docsQ.data, query]);
 

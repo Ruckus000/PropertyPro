@@ -76,7 +76,7 @@ describe('listResidentsForCommunity', () => {
   });
 
   it('hydrates owner flag, designation, phone and portal status per resident', async () => {
-    const rows = await listResidentsForCommunity(42);
+    const rows = await listResidentsForCommunity(42, {}, { includePortalActivity: true });
 
     expect(portalActivityMock).toHaveBeenCalledWith(42);
     expect(rows).toEqual([
@@ -108,9 +108,21 @@ describe('listResidentsForCommunity', () => {
     ]);
   });
 
+  it('never reads or returns sign-in history unless asked (residents hold residents:read too)', async () => {
+    const rows = await listResidentsForCommunity(42);
+    expect(portalActivityMock).not.toHaveBeenCalled();
+    for (const row of rows) {
+      expect(row).not.toHaveProperty('portalStatus');
+      expect(row).not.toHaveProperty('lastSignInAt');
+      expect(row).not.toHaveProperty('lastInvitedAt');
+    }
+    // The directory fields residents legitimately see are still there.
+    expect(rows[0]).toMatchObject({ isUnitOwner: true, designation: 'board_president' });
+  });
+
   it('skips the portal lookup when the community has no role rows', async () => {
     queryMock.mockResolvedValue([]);
-    await expect(listResidentsForCommunity(42)).resolves.toEqual([]);
+    await expect(listResidentsForCommunity(42, {}, { includePortalActivity: true })).resolves.toEqual([]);
     expect(portalActivityMock).not.toHaveBeenCalled();
   });
 });

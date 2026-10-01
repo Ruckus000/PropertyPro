@@ -27,7 +27,7 @@ describeDb('shareDocuments (integration)', () => {
   let state: TestKitState;
   let communityId = 0;
   const ids = {} as Record<'actor' | 'owner' | 'tenant' | 'digest' | 'never' | 'outsider', string>;
-  const docs = {} as Record<'rules' | 'minutes' | 'deleted' | 'evidence', number>;
+  const docs = {} as Record<'rules' | 'minutes' | 'deleted' | 'evidence' | 'draft', number>;
 
   const send = (documentIds: number[], userIds: string[], sendId = randomUUID()) =>
     shareDocuments({
@@ -86,6 +86,7 @@ describeDb('shareDocuments (integration)', () => {
     docs.minutes = await doc('September minutes', minutesCat);
     docs.deleted = await doc('Old rules', rulesCat, { deletedAt: new Date() });
     docs.evidence = await doc('Violation photo', rulesCat, { sourceType: 'violation_evidence' });
+    docs.draft = await doc('Draft budget', rulesCat, { postedAt: null });
   });
 
   afterAll(async () => {
@@ -135,14 +136,42 @@ describeDb('shareDocuments (integration)', () => {
     const queued = await state.db
       .select({ id: m.notificationDigestQueue.id, actionUrl: m.notificationDigestQueue.actionUrl })
       .from(m.notificationDigestQueue)
-      .where(and(eq(m.notificationDigestQueue.userId, ids.digest), eq(m.notificationDigestQueue.sourceId, String(docs.rules))));
+      .where(and(eq(m.notificationDigestQueue.userId, ids.digest), eq(m.notificationDigestQueue.sourceId, `${docs.rules}:${sendId}`)));
     expect(queued).toHaveLength(1);
     expect(queued[0]!.actionUrl).toMatch(new RegExp(`/documents/${docs.rules}\\?communityId=${communityId}$`));
   });
 
-  it('refuses deleted or non-library documents before sending anything', async () => {
+  it('a new send reaches a digest user even when that document is already in their digest', async () => {
+    const m = state.dbModule;
+    // What posting the document already queued for this user (bare id).
+    await m.createScopedClient(communityId).insert(m.notificationDigestQueue, {
+      userId: ids.digest,
+      frequency: 'daily_digest',
+      sourceType: 'document',
+      sourceId: String(docs.minutes),
+      eventType: 'document_posted',
+      eventTitle: 'September minutes',
+      status: 'sent',
+    });
+    const rowsFor = () =>
+      state.db
+        .select({ sourceId: m.notificationDigestQueue.sourceId })
+        .from(m.notificationDigestQueue)
+        .where(eq(m.notificationDigestQueue.userId, ids.digest));
+    const before = (await rowsFor()).length;
+
+    const [first] = await send([docs.minutes], [ids.digest]);
+    const [second] = await send([docs.minutes], [ids.digest]);
+    expect(first!.status).toBe('digest');
+    expect(second!.status).toBe('digest');
+    // Two separate sends, two queued items — neither silently swallowed.
+    expect((await rowsFor()).length).toBe(before + 2);
+  });
+
+  it('refuses deleted, unposted (draft) or non-library documents before sending anything', async () => {
     await expect(send([docs.rules, docs.deleted], [ids.owner])).rejects.toThrow(/not found/i);
     await expect(send([docs.evidence], [ids.owner])).rejects.toThrow(/not found/i);
+    await expect(send([docs.draft], [ids.owner])).rejects.toThrow(/not posted/i);
     expect(testInbox).toHaveLength(0);
   });
 

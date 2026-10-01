@@ -82,7 +82,11 @@ export const GET = withErrorHandler(
       roleFilter = { role: roleParam };
     }
 
-    return listResidentsForCommunity(communityId, roleFilter);
+    // Sign-in and invitation history is for management; residents also hold
+    // residents:read (condo/HOA directories), and must not see neighbours'.
+    return listResidentsForCommunity(communityId, roleFilter, {
+      includePortalActivity: membership.isAdmin,
+    });
   }),
 );
 

@@ -962,9 +962,10 @@ export function DirectoryPageClient({
       </DirectorySheet>
 
       {/* ─────────── Dialogs ─────────── */}
-      {balancesVisible ? (
+      {/* Mounted only while open, so every opening starts from the saved rule. */}
+      {balancesVisible && ruleOpen ? (
         <PastDueRuleDialog
-          open={ruleOpen}
+          open
           onOpenChange={setRuleOpen}
           communityId={communityId}
           rule={rule}

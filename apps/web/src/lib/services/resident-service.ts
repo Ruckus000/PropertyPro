@@ -42,9 +42,13 @@ export interface ResidentListRow {
   isUnitOwner: boolean;
   /** Board designation — display only here; statutory gates read it elsewhere. */
   designation: 'board_president' | 'board_member' | null;
-  portalStatus: ResidentPortalStatus;
-  lastSignInAt: string | null;
-  lastInvitedAt: string | null;
+  /**
+   * Portal activity — managers only (`includePortalActivity`). Absent for
+   * everyone else: a neighbour's sign-in history is not theirs to see.
+   */
+  portalStatus?: ResidentPortalStatus;
+  lastSignInAt?: string | null;
+  lastInvitedAt?: string | null;
   createdAt: unknown;
 }
 
@@ -102,10 +106,13 @@ export async function getResidentCommunityTypeValue(
  * profile fields.
  *
  * AUTHZ: caller MUST have verified `requirePermission('residents', 'read')`.
+ * `includePortalActivity` (sign-in / invitation history, read from
+ * `auth.users`) is for management only: residents hold `residents:read` too.
  */
 export async function listResidentsForCommunity(
   communityId: number,
   filter: RoleFilter = {},
+  { includePortalActivity = false }: { includePortalActivity?: boolean } = {},
 ): Promise<ResidentListRow[]> {
   const scoped = createScopedClient(communityId);
 
@@ -164,12 +171,14 @@ export async function listResidentsForCommunity(
     }
   }
 
-  const activityByUser = await findCommunityResidentPortalActivity(communityId);
+  const activityByUser = includePortalActivity
+    ? await findCommunityResidentPortalActivity(communityId)
+    : null;
 
   return roleRows.map((roleRow) => {
     const userId = roleRow['userId'] as string;
     const userRow = userMap.get(userId);
-    const activity = activityByUser.get(userId);
+    const activity = activityByUser?.get(userId);
 
     return {
       userId,
@@ -182,13 +191,17 @@ export async function listResidentsForCommunity(
       phone: (userRow?.['phone'] as string | undefined) ?? null,
       isUnitOwner: roleRow['isUnitOwner'] === true,
       designation: toDesignation(roleRow['designation']),
-      portalStatus: derivePortalStatus(activity),
-      lastSignInAt: activity?.lastSignInAt?.toISOString() ?? null,
-      lastInvitedAt:
-        [activity?.lastInvitedAt, activity?.accessApprovedAt]
-          .filter((d): d is Date => d instanceof Date)
-          .sort((a, b) => b.getTime() - a.getTime())[0]
-          ?.toISOString() ?? null,
+      ...(activityByUser
+        ? {
+            portalStatus: derivePortalStatus(activity),
+            lastSignInAt: activity?.lastSignInAt?.toISOString() ?? null,
+            lastInvitedAt:
+              [activity?.lastInvitedAt, activity?.accessApprovedAt]
+                .filter((d): d is Date => d instanceof Date)
+                .sort((a, b) => b.getTime() - a.getTime())[0]
+                ?.toISOString() ?? null,
+          }
+        : {}),
       createdAt: roleRow['createdAt'],
     };
   });

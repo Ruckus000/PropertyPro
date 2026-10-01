@@ -46,13 +46,10 @@ export function PastDueRuleDialog({
       ).length
     : null;
 
+  // The parent mounts this only while open, so state starts from the saved
+  // rule each time and an abandoned edit (or old error) never survives a close.
   function handleOpenChange(next: boolean) {
     if (update.isPending) return;
-    if (next) {
-      setDollars(String(rule.minCents / 100));
-      setDays(String(rule.minDays));
-      update.reset();
-    }
     onOpenChange(next);
   }
 

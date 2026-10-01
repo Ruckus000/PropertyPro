@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { requestJson } from '@/lib/api/request-json';
+import { sendInChunks } from '@/lib/api/send-in-chunks';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 import type { DocumentRow } from '@/lib/documents/document-state';
 
@@ -353,12 +354,19 @@ export interface DocumentSendResult {
  */
 export function useSendDocuments(communityId: number) {
   return useMutation({
-    mutationFn: async (payload: { documentIds: number[]; userIds: string[]; sendId: string }) => {
-      const data = await requestJson<{ results: DocumentSendResult[] }>('/api/v1/documents/send', {
-        method: 'POST',
-        body: JSON.stringify({ communityId, ...payload }),
-      });
-      return data.results;
-    },
+    // Every chunk shares the sendId, so retrying the whole send dedupes the
+    // chunks that already went out (the email key includes the recipient).
+    mutationFn: (payload: { documentIds: number[]; userIds: string[]; sendId: string }) =>
+      sendInChunks<DocumentSendResult>(
+        payload.userIds,
+        async (chunk) =>
+          (
+            await requestJson<{ results: DocumentSendResult[] }>('/api/v1/documents/send', {
+              method: 'POST',
+              body: JSON.stringify({ communityId, documentIds: payload.documentIds, userIds: chunk, sendId: payload.sendId }),
+            })
+          ).results,
+        (userId) => ({ userId, status: 'failed', documentIds: [] }),
+      ),
   });
 }

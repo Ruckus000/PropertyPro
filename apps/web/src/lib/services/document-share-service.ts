@@ -24,7 +24,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { and, inArray } from '@propertypro/db/filters';
+import { and, inArray, isNotNull } from '@propertypro/db/filters';
 import { DocumentSharedEmail, sendEmail } from '@propertypro/email';
 import { isCommunityRole, type CommunityType } from '@propertypro/shared';
 import { createElement } from 'react';
@@ -65,14 +65,16 @@ export async function shareDocuments(params: {
   const userIds = [...new Set(params.userIds)];
   const scoped = createScopedClient(communityId);
 
-  // Live, user-visible documents only (no drafts, no violation evidence).
+  // Live, POSTED, user-visible documents only: no drafts (posted_at IS NULL —
+  // residents cannot open them, and a manager recipient would be emailed an
+  // unposted draft), no violation evidence.
   const docRows = await scoped.selectFrom<{ id: number; title: string }>(
     documents,
     { id: documents.id, title: documents.title },
-    and(inArray(documents.id, documentIds), buildSourceTypeFilter()),
+    and(inArray(documents.id, documentIds), buildSourceTypeFilter(), isNotNull(documents.postedAt)),
   );
   if (docRows.length !== documentIds.length) {
-    throw new NotFoundError('One or more documents were not found or have been deleted');
+    throw new NotFoundError('One or more documents were not found, have been deleted, or are not posted yet');
   }
   const titleById = new Map(docRows.map((d) => [d.id, d.title]));
 
@@ -150,15 +152,19 @@ export async function shareDocuments(params: {
 
     try {
       if (isDigestFrequency(frequency)) {
-        // sourceId stays the bare document id: the digest processor drops rows
-        // whose document was deleted before the digest goes out.
+        // sourceId is `<documentId>:<sendId>`. Per send, because the digest
+        // queue is unique on (user, source) and keeps rows after they go out:
+        // the bare id would collide with the "document posted" row (or an
+        // earlier send) and this send would silently do nothing. A retry of
+        // the SAME send still dedupes. The processor reads the leading id, so
+        // a document deleted or unposted before the digest is still dropped.
         await enqueueDigestItems(
           sendable.map((id) => ({
             communityId,
             userId,
             frequency,
             sourceType: 'document' as const,
-            sourceId: String(id),
+            sourceId: `${id}:${sendId}`,
             eventType: 'document_shared',
             eventTitle: titleById.get(id)!,
             eventSummary: `Sent by ${senderName}`,

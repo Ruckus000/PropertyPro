@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-query';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { requestJson } from '@/lib/api/request-json';
+import { sendInChunks } from '@/lib/api/send-in-chunks';
 
 export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
 
@@ -164,14 +165,23 @@ export interface BatchInviteResult {
 export function useBatchInvite(communityId: number) {
   const qc = useQueryClient();
   return useMutation<BatchInviteResult[], Error, string[]>({
-    mutationFn: async (userIds) =>
-      (
-        await requestJson<{ results: BatchInviteResult[] }>('/api/v1/invitations/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ communityId, userIds }),
-        })
-      ).results,
+    mutationFn: (userIds) =>
+      sendInChunks<BatchInviteResult>(
+        userIds,
+        async (chunk) =>
+          (
+            await requestJson<{ results: BatchInviteResult[] }>('/api/v1/invitations/batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ communityId, userIds: chunk }),
+            })
+          ).results,
+        (userId, error) => ({
+          userId,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Could not send the invitation',
+        }),
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['residents', communityId] }),
   });
 }
