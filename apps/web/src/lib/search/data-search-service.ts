@@ -77,7 +77,7 @@ async function executeSearchGroup(
           id: row.id,
           title: row.title,
           subtitle: row.category_name ?? row.mime_type,
-          href: `/documents/${row.id}`,
+          href: `/documents/${row.id}?communityId=${communityId}`,
           entityType: 'document',
           category: row.category_name,
           fileType: row.mime_type,
