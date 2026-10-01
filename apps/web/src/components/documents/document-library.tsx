@@ -24,10 +24,11 @@
  * this screen actually reads.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FilePlus2, PenTool } from 'lucide-react';
 import { type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { checkPermissionV2 } from '@/lib/db/access-control';
@@ -146,6 +147,7 @@ export function DocumentLibrary({
   const [quickFilter, setQuickFilter] = useState<DocumentQuickFilter>('all');
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(!!initialSearchQuery);
+  const [linkedDocumentMissing, setLinkedDocumentMissing] = useState(false);
   const [publishTarget, setPublishTarget] = useState<{
     document: DocumentRow;
     publishing: boolean;
@@ -282,6 +284,38 @@ export function DocumentLibrary({
     setSelectedDocument((current) => (current?.id === doc.id ? null : current));
   }, []);
 
+  // `?doc=<id>` (set by the `/documents/<id>` redirect) opens that document
+  // once the list has loaded. It is matched against the list rather than
+  // fetched on its own: the list is already the caller's access-filtered view
+  // (category access, drafts), so a document this viewer may not open cannot
+  // be selected through the URL either.
+  //
+  // Read from the URL, not a prop: a link followed while this screen is
+  // already mounted soft-navigates and keeps the component, so a value taken
+  // once at mount would never see it. And `doc` is removed once acted on, so
+  // the next link — even to the same document — is a URL change again.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const rawLinkedDocumentId = Number(searchParams.get('doc'));
+  const linkedDocumentId =
+    Number.isInteger(rawLinkedDocumentId) && rawLinkedDocumentId > 0 ? rawLinkedDocumentId : null;
+  const documentsLoaded = documentsQuery.isSuccess && !documentsQuery.isPlaceholderData;
+  useEffect(() => {
+    if (linkedDocumentId === null || !documentsLoaded) return;
+    const linked = documents.find((document) => document.id === linkedDocumentId);
+    if (linked) {
+      setSelectedDocument(linked);
+      setLinkedDocumentMissing(false);
+    } else {
+      setLinkedDocumentMissing(true);
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('doc');
+    const rest = params.toString();
+    router.replace(rest ? `${pathname}?${rest}` : pathname, { scroll: false });
+  }, [documents, documentsLoaded, linkedDocumentId, pathname, router, searchParams]);
+
   const errorMessage =
     documentsQuery.error instanceof Error ? documentsQuery.error.message : null;
 
@@ -408,6 +442,17 @@ export function DocumentLibrary({
             />
           </div>
         </div>
+      )}
+
+      {linkedDocumentMissing && (
+        <AlertBanner
+          status="warning"
+          variant="subtle"
+          title="We couldn't open that document."
+          description="It may have been removed, or it isn't shared with you. Browse the library below, or ask your manager for a new link."
+          dismissible
+          onDismiss={() => setLinkedDocumentMissing(false)}
+        />
       )}
 
       {errorMessage && (

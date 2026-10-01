@@ -295,7 +295,7 @@ export async function sendDocumentPostedNotifications(params: {
       category: 'document',
       title: `New Document: ${params.title}`,
       body: undefined,
-      actionUrl: `/documents/${documentId}`,
+      actionUrl: `/documents/${documentId}?communityId=${params.communityId}`,
       sourceType: 'document',
       sourceId: documentId,
     },

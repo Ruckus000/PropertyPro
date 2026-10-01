@@ -238,7 +238,7 @@ export async function getActivityFeed(
           type: 'document',
           title: d.title,
           occurredAt: d.createdAt.toISOString(),
-          link: `/documents/${d.id}`,
+          link: `/documents/${d.id}?communityId=${cId}`,
         });
       }
       for (const a of anns) {
