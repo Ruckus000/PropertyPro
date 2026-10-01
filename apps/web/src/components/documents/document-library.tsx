@@ -44,6 +44,7 @@ import { useDocumentCategories } from '@/hooks/use-document-categories';
 import {
   useDeletedDocuments,
   useDocumentFileInvalidator,
+  fetchAccessibleDocument,
   useDocuments,
   useDocumentsInvalidator,
   useRestoreDocument,
@@ -294,6 +295,11 @@ export function DocumentLibrary({
   // already mounted soft-navigates and keeps the component, so a value taken
   // once at mount would never see it. And `doc` is removed once acted on, so
   // the next link — even to the same document — is a URL change again.
+  //
+  // The list walk stops at 2,000 rows, so a document it did not reach is
+  // asked for once by id — through the same access filter — before the
+  // warning is shown. `doc` is only removed once that answer is in: removing
+  // it re-runs this effect, whose cleanup would abort the request.
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -303,18 +309,34 @@ export function DocumentLibrary({
   const documentsLoaded = documentsQuery.isSuccess && !documentsQuery.isPlaceholderData;
   useEffect(() => {
     if (linkedDocumentId === null || !documentsLoaded) return;
-    const linked = documents.find((document) => document.id === linkedDocumentId);
-    if (linked) {
-      setSelectedDocument(linked);
-      setLinkedDocumentMissing(false);
-    } else {
-      setLinkedDocumentMissing(true);
+
+    const settle = (linked: DocumentRow | null) => {
+      if (linked) {
+        setSelectedDocument(linked);
+        setLinkedDocumentMissing(false);
+      } else {
+        setLinkedDocumentMissing(true);
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('doc');
+      const rest = params.toString();
+      router.replace(rest ? `${pathname}?${rest}` : pathname, { scroll: false });
+    };
+
+    const inList = documents.find((document) => document.id === linkedDocumentId);
+    if (inList) {
+      settle(inList);
+      return;
     }
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete('doc');
-    const rest = params.toString();
-    router.replace(rest ? `${pathname}?${rest}` : pathname, { scroll: false });
-  }, [documents, documentsLoaded, linkedDocumentId, pathname, router, searchParams]);
+
+    const controller = new AbortController();
+    fetchAccessibleDocument(communityId, linkedDocumentId, controller.signal)
+      .catch(() => null)
+      .then((linked) => {
+        if (!controller.signal.aborted) settle(linked);
+      });
+    return () => controller.abort();
+  }, [communityId, documents, documentsLoaded, linkedDocumentId, pathname, router, searchParams]);
 
   const errorMessage =
     documentsQuery.error instanceof Error ? documentsQuery.error.message : null;

@@ -93,6 +93,25 @@ function fetchDocuments(
   return walkPaginated<DocumentRow>('/api/v1/documents', baseParams, { signal });
 }
 
+/**
+ * One document by id, through the list's own access filter, or null when it is
+ * absent or the caller may not see it. For a `?doc=<id>` link the library's
+ * capped walk did not reach.
+ */
+export async function fetchAccessibleDocument(
+  communityId: number,
+  documentId: number,
+  signal?: AbortSignal,
+): Promise<DocumentRow | null> {
+  const params = new URLSearchParams({
+    communityId: String(communityId),
+    id: String(documentId),
+    pageSize: '1',
+  });
+  const page = await requestJson<{ data: DocumentRow[] }>(`/api/v1/documents?${params}`, { signal });
+  return page.data[0] ?? null;
+}
+
 export function useDocuments({ communityId, categoryId, enabled = true }: UseDocumentsOptions) {
   return useQuery({
     // Keep showing the previous page while a filter/page change refetches.

@@ -93,6 +93,7 @@ export const GET = withErrorHandler(
         isUnitOwner: membership.isUnitOwner,
       },
       categoryId,
+      documentId: query.id,
       cursor: query.cursor,
       pageSize: query.pageSize,
     });

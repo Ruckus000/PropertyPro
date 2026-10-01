@@ -66,10 +66,10 @@ function communityId(): number {
   return requireCommunity(kit(), 'communityA').id;
 }
 
-async function listedIds(): Promise<number[]> {
+async function listedIds(extraQuery = ''): Promise<number[]> {
   const route = await import('../../src/app/api/v1/documents/route');
   const res = await route.GET(
-    jsonRequest(apiUrl(`/api/v1/documents?communityId=${communityId()}&pageSize=100`), 'GET'),
+    jsonRequest(apiUrl(`/api/v1/documents?communityId=${communityId()}&pageSize=100${extraQuery}`), 'GET'),
   );
   expect(res.status).toBe(200);
   const body = await parseJson<{ data: { data: Array<{ id: number }> } }>(res);
@@ -183,6 +183,10 @@ describeDb('document drafts are visible to managers only', () => {
       expect(listed).toContain(ids.posted);
       expect(listed).not.toContain(ids.draft);
 
+      // The by-id read a `?doc=` link falls back to applies the same filter.
+      expect(await listedIds(`&id=${ids.draft}`)).toEqual([]);
+      expect(await listedIds(`&id=${ids.posted}`)).toEqual([ids.posted]);
+
       expect(await downloadStatus(ids.draft)).toBe(404);
 
       const palette = await paletteIds(marker);
@@ -202,6 +206,7 @@ describeDb('document drafts are visible to managers only', () => {
     setActor(kit(), 'actorA');
 
     expect(await listedIds()).toEqual(expect.arrayContaining([ids.draft, ids.posted]));
+    expect(await listedIds(`&id=${ids.draft}`)).toEqual([ids.draft]);
     expect(await downloadStatus(ids.draft)).not.toBe(404);
     expect(await paletteIds(marker)).toContain(ids.draft);
   });
