@@ -273,4 +273,16 @@ describe('AnnouncementListContainer', () => {
     });
     expect(routerMock.refresh).toHaveBeenCalled();
   });
+
+  it('marks board-only posts for every reader, so a board seat knows not to share them', () => {
+    renderList({
+      items: [liveAnnouncement, { ...liveAnnouncement, id: 18, title: 'Legal update', audience: 'board_only' }],
+      communityId: 42,
+      currentUserId: 'user-board',
+      isAdmin: false,
+      canWriteAnnouncements: false,
+    });
+    expect(screen.getAllByText('Board only')).toHaveLength(1);
+    expect(screen.getByText('Legal update').closest('article, li, div')?.textContent).toContain('Board only');
+  });
 });

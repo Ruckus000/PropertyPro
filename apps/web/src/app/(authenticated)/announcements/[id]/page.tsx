@@ -100,7 +100,8 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
               Pinned
             </span>
           )}
-          {membership.isAdmin && (
+          {/* Managers see every audience; a board seat sees that a post is board-only. */}
+          {(membership.isAdmin || announcement.audience === 'board_only') && (
             <span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-content-secondary">
               {formatAnnouncementAudienceLabel(
                 announcement.audience as
