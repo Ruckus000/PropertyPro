@@ -3,7 +3,8 @@
  * Violation Detail Page — Phase 1C
  *
  * Route: /violations/:id?communityId=X
- * Auth: residents see own-unit violations only; admins see all
+ * Auth: residents see own-unit violations only; managers and board seats see
+ * all and get the actions (getViolationReadUnitIds, canActAsBoard)
  * Feature gate: hasViolations must be enabled for the community type
  */
 import { redirect, notFound } from 'next/navigation';
@@ -12,7 +13,8 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
-import { isResidentRole, getActorUnitIds } from '@/lib/violations/common';
+import { getViolationReadUnitIds } from '@/lib/violations/common';
+import { canActAsBoard } from '@/lib/db/access-control';
 import { getViolationForCommunity } from '@/lib/services/violations-service';
 import { ViolationDetailView } from '@/components/violations/ViolationDetailView';
 import { FeatureGate } from '@/components/billing/feature-gate';
@@ -53,11 +55,8 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
     redirect('/dashboard?reason=feature-unavailable');
   }
 
-  // Scope to actor's units if resident
   const scoped = createScopedClient(communityId);
-  const allowedUnitIds = isResidentRole(membership.role)
-    ? await getActorUnitIds(scoped, userId)
-    : undefined;
+  const allowedUnitIds = await getViolationReadUnitIds(scoped, membership, userId);
 
   let violation;
   try {
@@ -73,7 +72,7 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
         violation={violation}
         communityId={communityId}
         userId={userId}
-        isAdmin={membership.isAdmin}
+        canManage={canActAsBoard(membership)}
         finesEnabled={membership.violationFinesEnabled}
       />
     </div>

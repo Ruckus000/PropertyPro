@@ -218,9 +218,16 @@ export async function listDashboardMeetings(
   return selectUpcomingMeetings(rows);
 }
 
+/**
+ * `unitIds` scopes the card to a resident's own units (getViolationReadUnitIds);
+ * `undefined` is community-wide, for managers and board seats.
+ */
 export async function getDashboardViolationSummary(
   scoped: ScopedClient,
+  unitIds?: number[],
 ): Promise<DashboardViolationSummary> {
+  if (unitIds?.length === 0) return buildViolationSummary([], []);
+  const where = unitIds ? inArray(violations.unitId, unitIds) : undefined;
   const [statusRows, recentRows] = await Promise.all([
     scoped
       .selectFrom<DashboardViolationStatusCountRow>(
@@ -229,6 +236,7 @@ export async function getDashboardViolationSummary(
           status: violations.status,
           count: sql<number>`count(*)::int`,
         },
+        where,
       )
       .groupBy(violations.status),
     scoped
@@ -242,6 +250,7 @@ export async function getDashboardViolationSummary(
           severity: violations.severity,
           createdAt: violations.createdAt,
         },
+        where,
       )
       .orderBy(desc(violations.createdAt), desc(violations.id))
       .limit(DASHBOARD_ITEM_LIMIT),

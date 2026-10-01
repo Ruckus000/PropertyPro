@@ -3,7 +3,9 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-import { requireBoardDesignation } from '@/lib/db/access-control';
+import type { ScopedClient } from '@propertypro/db';
+import { canActAsBoard, requireBoardDesignation } from '@/lib/db/access-control';
+import { getActorUnitIds } from '@/lib/units/actor-units';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
@@ -32,6 +34,21 @@ export async function requireArcEnabled(membership: CommunityMembership): Promis
 
 export function requireViolationAdminWrite(membership: CommunityMembership): void {
   requireBoardDesignation(membership);
+}
+
+/**
+ * The units a member may read violations for: `undefined` (every unit) for
+ * whoever passes requireViolationAdminWrite — managers and board seats
+ * (ADR-006 §2a) — otherwise the resident's own units. Every violations read
+ * path scopes with this, so the inbox shows a board seat what it may act on
+ * and no resident sees another unit's case.
+ */
+export async function getViolationReadUnitIds(
+  scoped: ScopedClient,
+  membership: Pick<CommunityMembership, 'isAdmin' | 'designation'>,
+  userId: string,
+): Promise<number[] | undefined> {
+  return canActAsBoard(membership) ? undefined : getActorUnitIds(scoped, userId);
 }
 
 // ── Legal gates ─────────────────────────────────────────────────────────────

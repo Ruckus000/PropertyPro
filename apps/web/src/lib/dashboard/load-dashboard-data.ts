@@ -13,6 +13,7 @@ import {
 } from './dashboard-selectors';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { listMyPendingSigners } from '@/lib/services/esign-service';
+import { getViolationReadUnitIds } from '@/lib/violations/common';
 import {
   getDashboardOpenMaintenanceCount,
   getDashboardUserLookup,
@@ -78,7 +79,9 @@ export async function loadDashboardData(
     userLookupPromise,
     listDashboardAnnouncements(scoped, membership),
     listDashboardMeetings(scoped),
-    getDashboardViolationSummary(scoped),
+    getViolationReadUnitIds(scoped, membership, userId).then((unitIds) =>
+      getDashboardViolationSummary(scoped, unitIds),
+    ),
     getDashboardOpenMaintenanceCount(scoped),
     pendingSignersPromise,
   ]);

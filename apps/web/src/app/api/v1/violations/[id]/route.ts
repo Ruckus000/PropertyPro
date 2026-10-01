@@ -14,8 +14,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
-  getActorUnitIds,
-  isResidentRole,
+  getViolationReadUnitIds,
   requireViolationAdminWrite,
   requireViolationsEnabled,
 } from '@/lib/violations/common';
@@ -41,9 +40,7 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
-    const residentUnitIds = isResidentRole(membership.role)
-      ? await getActorUnitIds(scoped, actorUserId)
-      : undefined;
+    const residentUnitIds = await getViolationReadUnitIds(scoped, membership, actorUserId);
 
     return getViolationForCommunity(communityId, params.id, residentUnitIds);
   }),
