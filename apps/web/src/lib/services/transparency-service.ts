@@ -8,6 +8,7 @@ import {
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
+  postingClockApplies,
   type CommunityType,
 } from '@propertypro/shared';
 import { z } from 'zod';
@@ -327,9 +328,15 @@ function buildMinutesMonths(
   });
 }
 
+/**
+ * `postingRequired` is false below the website rule's size threshold
+ * (`postingClockApplies`): an unposted item there is "not required", never a
+ * public "not yet posted" next to a statute that does not apply.
+ */
 function buildDocumentGroups(
   rows: ReadonlyArray<Record<string, unknown>>,
   linkedDocuments: ReadonlyMap<number, LinkedDocumentState>,
+  postingRequired: boolean,
 ): TransparencyDocumentGroup[] {
   const grouped = new Map<string, TransparencyDocumentItem[]>();
 
@@ -353,7 +360,7 @@ function buildDocumentGroups(
 
     const status: TransparencyDocumentStatus = documentId != null
       ? 'posted'
-      : isConditional
+      : isConditional || !postingRequired
         ? 'not_required'
         : 'not_posted';
 
@@ -462,7 +469,14 @@ export async function getTransparencyPageData(
     ),
   ];
   const linkedDocuments = await getLinkedDocumentStatesByIds(community.id, linkedDocumentIds);
-  const documentsByCategory = buildDocumentGroups(checklistRows, linkedDocuments);
+  const documentsByCategory = buildDocumentGroups(
+    checklistRows,
+    linkedDocuments,
+    postingClockApplies({
+      communityType: community.communityType,
+      unitCount: asNumber(communityRow?.['unitCount']),
+    }),
+  );
   const features = getFeaturesForCommunity(community.communityType);
 
   const payload: TransparencyPageData = {

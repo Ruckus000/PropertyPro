@@ -23,7 +23,22 @@
  *    returns a 719-hour "30 days" across a DST transition in a local-time zone.
  */
 
+import { requirementLevel, type ComplianceSubject } from '../site-diff/required';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether the website-posting clock — this 30-day deadline and the checklist's
+ * rolling posting windows — runs for a community. Every "overdue" the
+ * checklist can derive is that clock, so below the statute's size threshold
+ * (condo < 25 units, HOA < 100 parcels: `requirementLevel` 'recommended')
+ * nothing on it can be overdue or due. Unknown size runs the clock, as the
+ * website builder treats it as required. The duty to keep official records is
+ * separate, and this clock never measured it.
+ */
+export function postingClockApplies(subject: ComplianceSubject): boolean {
+  return requirementLevel(subject) !== 'recommended';
+}
 
 /** Default statutory posting window, in days. §718.111(12)(g). */
 export const DEFAULT_POSTING_WINDOW_DAYS = 30;

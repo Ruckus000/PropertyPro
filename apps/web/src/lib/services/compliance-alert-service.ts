@@ -13,6 +13,7 @@ import {
   visitorLog,
 } from '@propertypro/db';
 import { and, gte, inArray, isNull, lte } from '@propertypro/db/filters';
+import { postingClockApplies } from '@propertypro/shared';
 // AUTHZ: Compliance alert cron — cross-community overdue scanning
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { sendNotification } from '@/lib/services/notification-service';
@@ -256,6 +257,7 @@ export async function processComplianceAlerts(
     .select({
       id: communities.id,
       communityType: communities.communityType,
+      unitCount: communities.unitCount,
       timezone: communities.timezone,
     })
     .from(communities)
@@ -315,7 +317,12 @@ export async function processComplianceAlerts(
 
   for (const community of complianceCommunities) {
     try {
-      const result = await checkAndAlertOverdueItems(community.id, undefined, now);
+      // Below the website rule's size threshold there is no posting clock, so
+      // nothing can be overdue — and an overdue digest citing the statute
+      // would be false. Visitor expiry below is unrelated and still runs.
+      const result = postingClockApplies(community)
+        ? await checkAndAlertOverdueItems(community.id, undefined, now)
+        : { communityId: community.id, overdueCount: 0, notifiedCount: 0 };
       const expiryResult = await alertExpiringVisitorsForCommunity(
         community.id,
         community.timezone,
