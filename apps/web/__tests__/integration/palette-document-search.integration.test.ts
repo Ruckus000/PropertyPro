@@ -11,7 +11,7 @@
  * Real database, real route: the defect lived in the SQL and in the caller's
  * wiring, and a mocked query would prove neither.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
 import {
@@ -22,7 +22,6 @@ import {
   parseJson,
   readNumberField,
   requireCommunity,
-  requireCurrentActor,
   requireDatabaseUrlInCI,
   requireInsertedRow,
   seedCommunities,
@@ -36,13 +35,9 @@ requireDatabaseUrlInCI('Palette document search integration tests');
 
 const describeDb = getDescribeDb();
 
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
+// Authentication comes from the shared integration setup
+// (`setup-integration.ts` → `providers/test-auth-provider.ts`): `setActor()`
+// decides who the route sees. No mocks here — `guard:no-mock` forbids them.
 
 type SearchRouteModule = typeof import('../../src/app/api/v1/search/route');
 
@@ -139,10 +134,6 @@ describeDb('command palette document search respects document access', () => {
     }
 
     searchRoute = await import('../../src/app/api/v1/search/route');
-  });
-
-  beforeEach(() => {
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit()));
   });
 
   afterAll(async () => {
