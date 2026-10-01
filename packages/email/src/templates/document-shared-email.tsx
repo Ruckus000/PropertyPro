@@ -1,11 +1,15 @@
+import { Link } from '@react-email/components';
 import { EmailLayout } from '../components/email-layout';
 import { ActionRow, FinePrint, Headline, InlineMark, ItemRows } from '../components/email-blocks';
+import { emailTheme } from '../components/theme';
 import type { BaseEmailProps } from '../types';
 
 export interface DocumentSharedEmailProps extends BaseEmailProps {
   recipientName: string;
   senderName: string;
-  documents: Array<{ title: string }>;
+  /** `url` opens that document (`/documents/<id>`), behind the portal sign-in. */
+  documents: Array<{ title: string; url: string }>;
+  /** The community's document library — the action when several were sent. */
   portalUrl: string;
 }
 
@@ -15,8 +19,8 @@ export interface DocumentSharedEmailProps extends BaseEmailProps {
  * difference is who chose to send it. It is a courtesy copy, not a statutory
  * notice, so it makes no notice claim.
  *
- * ponytail: one link to the library, not one per document — the app has no
- * per-document page yet (`/documents/:id` 404s). Link each title once it does.
+ * One document: the action opens it. Several: each title opens its document
+ * and the action opens the library.
  */
 export function DocumentSharedEmail({
   branding,
@@ -38,8 +42,21 @@ export function DocumentSharedEmail({
       <Headline compact lede={<>Hi {recipientName} — {senderName} at {branding.communityName} sent you {noun}.</>}>
         {documents.length === 1 ? documents[0]!.title : `${documents.length} documents`}
       </Headline>
-      {documents.length > 1 ? <ItemRows items={documents.map((d) => ({ title: d.title }))} /> : null}
-      <ActionRow href={portalUrl} label={documents.length === 1 ? 'View document' : 'View documents'} />
+      {documents.length > 1 ? (
+        <ItemRows
+          items={documents.map((d) => ({
+            title: (
+              <Link href={d.url} style={{ color: emailTheme.ink, textDecoration: 'none' }}>
+                {d.title}
+              </Link>
+            ),
+          }))}
+        />
+      ) : null}
+      <ActionRow
+        href={documents.length === 1 ? documents[0]!.url : portalUrl}
+        label={documents.length === 1 ? 'View document' : 'View documents'}
+      />
       <FinePrint>Sign in to your portal to open {documents.length === 1 ? 'it' : 'them'}. Association documents are always in its Documents section.</FinePrint>
     </EmailLayout>
   );

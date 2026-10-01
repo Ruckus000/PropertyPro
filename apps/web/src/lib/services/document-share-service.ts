@@ -115,8 +115,10 @@ export async function shareDocuments(params: {
   };
 
   const baseUrl = getBaseUrl();
-  // The library, not a per-document URL: `/documents/:id` has no page (404).
   const libraryUrl = `${baseUrl}/documents?communityId=${communityId}`;
+  // `/documents/<id>` opens the document in the library, after the same
+  // per-role access check that chose `sendable` below.
+  const documentUrl = (id: number) => `${baseUrl}/documents/${id}?communityId=${communityId}`;
   let branding: Awaited<ReturnType<typeof loadEmailBranding>> | null = null;
 
   const results: DocumentShareResult[] = [];
@@ -160,7 +162,7 @@ export async function shareDocuments(params: {
             eventType: 'document_shared',
             eventTitle: titleById.get(id)!,
             eventSummary: `Sent by ${senderName}`,
-            actionUrl: libraryUrl,
+            actionUrl: documentUrl(id),
           })),
         );
         results.push({ userId, status: 'digest', documentIds: sendable });
@@ -187,7 +189,7 @@ export async function shareDocuments(params: {
           branding: { ...branding, unsubscribeUrl, unsubscribeLabel: 'Unsubscribe from these emails' },
           recipientName: user.fullName,
           senderName,
-          documents: sendable.map((id) => ({ title: titleById.get(id)! })),
+          documents: sendable.map((id) => ({ title: titleById.get(id)!, url: documentUrl(id) })),
           portalUrl: libraryUrl,
         }),
       });
