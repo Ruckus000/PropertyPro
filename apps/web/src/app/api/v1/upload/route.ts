@@ -33,10 +33,9 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { sanitizeFilename } from '@/lib/utils/sanitize-filename';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES } from '@/lib/documents/upload-rules';
 import { uploadPresignContract } from './contract';
 
-const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const PRESIGN_TTL_SECONDS = 15 * 60;
 
 function validateFileSize(mimeType: string, fileSize: number): void {

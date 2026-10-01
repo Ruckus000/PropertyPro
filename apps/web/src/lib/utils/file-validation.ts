@@ -1,7 +1,7 @@
 import { fileTypeFromBuffer } from 'file-type';
 
-export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024; // 50MB
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
+// Single-sourced with the client's pre-upload check (`upload-rules.ts`).
+import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES } from '@/lib/documents/upload-rules';
 
 export type AllowedExt = 'pdf' | 'docx' | 'png' | 'jpg';
 

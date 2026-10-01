@@ -48,7 +48,8 @@ import {
   useRestoreDocument,
   useSetDocumentPublicAccess,
 } from '@/hooks/use-documents';
-import type { ReplaceFileResult, UploadDocumentResult } from '@/hooks/use-document-upload';
+import type { ReplaceFileResult } from '@/hooks/use-document-upload';
+import type { QueueOutcome } from '@/hooks/use-document-upload-queue';
 import {
   boardColumns,
   coerceDocumentsView,
@@ -94,8 +95,8 @@ import { PublishDocumentDialog } from './publish-document-dialog';
 
 // Pulls the Radix select stack via `@/components/ui/select`. Shown only after
 // the PM presses Upload, which is already a deliberate act with a wait.
-const DocumentUploadArea = dynamic(
-  () => import('./document-upload-area').then((m) => m.DocumentUploadArea),
+const DocumentUploadQueue = dynamic(
+  () => import('./document-upload-queue').then((m) => m.DocumentUploadQueue),
   {
     loading: () => <div className="min-h-40 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
   },
@@ -253,14 +254,14 @@ export function DocumentLibrary({
     setShowUpload(true);
   }, [selectedCategoryId]);
 
-  const handleDocumentUploaded = useCallback(
-    (result: UploadDocumentResult) => {
+  // Any send that changed the library — including a partial one. Replaced
+  // files keep their ids, so their cached signed URLs go too.
+  const handleUploadsChanged = useCallback(
+    (outcome: QueueOutcome) => {
       invalidateDocuments();
-      if (result.warnings.length === 0) {
-        setShowUpload(false);
-      }
+      outcome.documentIds.forEach((id) => invalidateDocumentFile(id));
     },
-    [invalidateDocuments],
+    [invalidateDocuments, invalidateDocumentFile],
   );
 
   // The document keeps its id, so a selected snapshot of it would go on showing
@@ -275,14 +276,6 @@ export function DocumentLibrary({
       );
     },
     [invalidateDocumentFile],
-  );
-
-  const handleDocumentReplaced = useCallback(
-    (result: ReplaceFileResult) => {
-      handleFileReplaced(result);
-      setShowUpload(false);
-    },
-    [handleFileReplaced],
   );
 
   const handleDeleted = useCallback((doc: DocumentRow) => {
@@ -376,13 +369,12 @@ export function DocumentLibrary({
 
       {showUpload && canUpload && (
         <div className="rounded-md border border-edge bg-surface-card p-6">
-          <h2 className="mb-4 text-lg font-medium text-content">Upload Document</h2>
-          <DocumentUploadArea
+          <DocumentUploadQueue
             communityId={communityId}
             initialCategoryId={uploadCategoryId}
-            onUploaded={handleDocumentUploaded}
             existingDocuments={documents}
-            onReplaced={handleDocumentReplaced}
+            onChanged={handleUploadsChanged}
+            onComplete={() => setShowUpload(false)}
           />
         </div>
       )}

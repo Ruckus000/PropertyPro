@@ -22,6 +22,8 @@ export interface LibraryDocumentRef {
   fileName: string;
   categoryId: number | null;
   sourceType?: string | null;
+  /** `null` = a draft. Decides whether replacing its file asks the redaction question. */
+  postedAt?: string | null;
 }
 
 export function normalizeFileName(fileName: string): string {
