@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
  */
 export default function PublicSiteLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="site-frame min-h-screen flex flex-col">
       {children}
     </div>
   );

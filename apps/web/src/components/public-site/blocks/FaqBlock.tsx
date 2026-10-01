@@ -29,7 +29,7 @@ export function FaqBlock(props: BlockRendererProps) {
   const headingId = content.heading ? `faq-${props.block.id}` : undefined;
 
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={headingId}>
+    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={headingId}>
       <div className="mx-auto max-w-3xl">
         {content.heading && (
           <h2 id={headingId} className="mb-6 font-heading text-2xl font-semibold text-content">

@@ -64,4 +64,10 @@ describe('export table registry — column references', () => {
     const columnCount = EXPORT_TABLES.reduce((n, s) => n + s.columns.length, 0);
     expect(columnCount).toBeGreaterThan(100);
   });
+
+  it('exports posted documents only — drafts are managers-only and not records yet', () => {
+    const spec = EXPORT_TABLES.find((t) => t.tableName === 'documents');
+    expect(spec?.rowFilter, 'documents export has no draft filter').toBeDefined();
+  });
 });
+

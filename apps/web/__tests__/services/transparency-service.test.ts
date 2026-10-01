@@ -10,6 +10,7 @@ const {
   documentsTable,
   getComplianceTemplateMock,
   getFeaturesForCommunityMock,
+  getLinkedDocumentStatesByIdsMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   queryMock: vi.fn(),
@@ -20,6 +21,13 @@ const {
   documentsTable: Symbol('documents'),
   getComplianceTemplateMock: vi.fn(),
   getFeaturesForCommunityMock: vi.fn(),
+  getLinkedDocumentStatesByIdsMock: vi.fn(),
+}));
+
+// The linked documents' deleted/draft state. Default: every linked document is
+// live and posted, which is what the cases below were written against.
+vi.mock('@/lib/services/documents-service', () => ({
+  getLinkedDocumentStatesByIds: getLinkedDocumentStatesByIdsMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -152,6 +160,10 @@ describe('transparency service', () => {
     getFeaturesForCommunityMock.mockReturnValue({
       hasPublicNoticesPage: true,
     });
+    getLinkedDocumentStatesByIdsMock.mockImplementation(
+      async (_communityId: number, ids: readonly number[]) =>
+        new Map(ids.map((id) => [id, { deletedAt: null, isDraft: false }])),
+    );
   });
 
   it('maps checklist, meeting, and portal data into transparency output shape', async () => {
@@ -177,6 +189,32 @@ describe('transparency service', () => {
     expect(result.meetingNotices.meetings[0]?.metRequirement).toBe(true);
     expect(result.portalStatus.publicNoticesPage).toBe(true);
     expect(result.minutesAvailability.months).toHaveLength(12);
+  });
+
+  it.each([
+    ['a draft', { deletedAt: null, isDraft: true }],
+    ['a deleted document', { deletedAt: new Date('2026-02-01T00:00:00.000Z'), isDraft: false }],
+  ])('does not report a record as posted when its linked file is %s', async (_label, state) => {
+    getLinkedDocumentStatesByIdsMock.mockResolvedValue(new Map([[10, state]]));
+
+    const result = await getTransparencyPageData({
+      id: 1,
+      slug: 'sunset-condos',
+      name: 'Sunset Condos',
+      communityType: 'condo_718',
+      timezone: 'America/New_York',
+      addressLine1: null,
+      addressLine2: null,
+      city: 'Miami',
+      state: 'FL',
+      zipCode: null,
+    });
+
+    const bylaws = result.documents
+      .flatMap((group) => group.items)
+      .find((item) => item.templateKey === '718_bylaws');
+    expect(bylaws?.status).toBe('not_posted');
+    expect(bylaws?.postedAt).toBeNull();
   });
 
   it('does not round a short notice up into compliance', async () => {

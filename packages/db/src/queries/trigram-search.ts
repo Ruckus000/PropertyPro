@@ -10,6 +10,10 @@
  */
 import { sql } from 'drizzle-orm';
 import { db } from '../drizzle';
+import {
+  buildAccessibleDocumentsFilter,
+  type DocumentAccessContext,
+} from './document-access';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,23 +58,45 @@ export interface DocumentSearchHit {
   relevance: number;
 }
 
+/**
+ * Documents the caller may READ, matched on title (trigram) then content.
+ *
+ * Scoped by the same predicate as the documents library itself —
+ * `buildAccessibleDocumentsFilter` (source type `library`/`authored`, plus the
+ * per-role category rule). This used to filter on community and `deleted_at`
+ * alone, so the command palette showed a tenant the titles and categories of
+ * records their library hid (board minutes, among others), returned
+ * violation-evidence rows, and answered content queries against files the
+ * caller could not open — a word-by-word probe of restricted records.
+ *
+ * The table is deliberately NOT aliased: the drizzle filter renders its columns
+ * table-qualified (`"documents"."category_id"`), which Postgres rejects against
+ * `FROM documents d`.
+ */
 export async function searchDocumentsByTrigram(
-  communityId: number,
+  context: DocumentAccessContext,
   query: string,
   limit: number,
 ): Promise<TrigramSearchResult<DocumentSearchHit>> {
+  // Resolved before the transaction: it reads the community's categories
+  // through the scoped client, not through `tx`.
+  const access = await buildAccessibleDocumentsFilter(context);
+  const accessClause = access ? sql`AND ${access}` : sql``;
+  const communityId = context.communityId;
+
   return withTrigramTx(async (tx) => {
     // Title-first via trigram
     const titleRows = await tx.execute(sql`
-      SELECT d.id, d.title,
+      SELECT documents.id, documents.title,
         dc.name AS category_name,
-        d.mime_type,
-        word_similarity(${query}, d.title) AS relevance
-      FROM documents d
-      LEFT JOIN document_categories dc ON dc.id = d.category_id
-      WHERE d.community_id = ${communityId}
-        AND d.deleted_at IS NULL
-        AND d.title %> ${query}
+        documents.mime_type,
+        word_similarity(${query}, documents.title) AS relevance
+      FROM documents
+      LEFT JOIN document_categories dc ON dc.id = documents.category_id
+      WHERE documents.community_id = ${communityId}
+        AND documents.deleted_at IS NULL
+        ${accessClause}
+        AND documents.title %> ${query}
       ORDER BY relevance DESC
       LIMIT ${limit}
     `);
@@ -85,47 +111,35 @@ export async function searchDocumentsByTrigram(
     // Tsvector fallback on content for remaining slots
     const remaining = limit - titleResults.length;
     const titleIds = titleResults.map((r) => r.id);
+    // An explicit list, not `!= ALL(${titleIds})`: drizzle expands a JS array
+    // into scalar params, which Postgres refuses as a malformed array literal.
+    // That form errored the whole documents group whenever the title search
+    // found some matches but fewer than `limit`.
+    const excludeTitleHits =
+      titleIds.length > 0
+        ? sql`AND documents.id NOT IN (${sql.join(titleIds.map((id) => sql`${id}`), sql`, `)})`
+        : sql``;
 
-    if (titleIds.length > 0) {
-      const contentRows = await tx.execute(sql`
-        SELECT d.id, d.title,
-          dc.name AS category_name,
-          d.mime_type,
-          ts_rank(
-            coalesce(d.search_vector, to_tsvector('english', coalesce(d.search_text, ''))),
-            plainto_tsquery('english', ${query})
-          ) AS relevance
-        FROM documents d
-        LEFT JOIN document_categories dc ON dc.id = d.category_id
-        WHERE d.community_id = ${communityId}
-          AND d.deleted_at IS NULL
-          AND d.id != ALL(${titleIds})
-          AND coalesce(d.search_vector, to_tsvector('english', coalesce(d.search_text, '')))
-            @@ plainto_tsquery('english', ${query})
-        ORDER BY relevance DESC
-        LIMIT ${remaining}
-      `);
-      titleResults.push(...asRows<DocumentSearchHit>(contentRows));
-    } else {
-      const contentRows = await tx.execute(sql`
-        SELECT d.id, d.title,
-          dc.name AS category_name,
-          d.mime_type,
-          ts_rank(
-            coalesce(d.search_vector, to_tsvector('english', coalesce(d.search_text, ''))),
-            plainto_tsquery('english', ${query})
-          ) AS relevance
-        FROM documents d
-        LEFT JOIN document_categories dc ON dc.id = d.category_id
-        WHERE d.community_id = ${communityId}
-          AND d.deleted_at IS NULL
-          AND coalesce(d.search_vector, to_tsvector('english', coalesce(d.search_text, '')))
-            @@ plainto_tsquery('english', ${query})
-        ORDER BY relevance DESC
-        LIMIT ${remaining}
-      `);
-      titleResults.push(...asRows<DocumentSearchHit>(contentRows));
-    }
+    const contentRows = await tx.execute(sql`
+      SELECT documents.id, documents.title,
+        dc.name AS category_name,
+        documents.mime_type,
+        ts_rank(
+          coalesce(documents.search_vector, to_tsvector('english', coalesce(documents.search_text, ''))),
+          plainto_tsquery('english', ${query})
+        ) AS relevance
+      FROM documents
+      LEFT JOIN document_categories dc ON dc.id = documents.category_id
+      WHERE documents.community_id = ${communityId}
+        AND documents.deleted_at IS NULL
+        ${accessClause}
+        ${excludeTitleHits}
+        AND coalesce(documents.search_vector, to_tsvector('english', coalesce(documents.search_text, '')))
+          @@ plainto_tsquery('english', ${query})
+      ORDER BY relevance DESC
+      LIMIT ${remaining}
+    `);
+    titleResults.push(...asRows<DocumentSearchHit>(contentRows));
 
     return { results: titleResults, totalCount: titleResults.length };
   });

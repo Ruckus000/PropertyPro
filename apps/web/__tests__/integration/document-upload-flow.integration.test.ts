@@ -10,6 +10,8 @@
  *   6. DELETE by tenant → 403
  *   7. Document search returns documents by searchText
  *   8. Cross-tenant isolation: actorC cannot see communityA docs
+ *   9. PUT /documents/[id]/file replaces the file in place (same id), and a
+ *      late extraction of the OLD file cannot overwrite the new file's text
  *
  * Storage is mocked — files are not uploaded to Supabase. The magic bytes
  * validation and DB operations are exercised against the real database.
@@ -122,6 +124,7 @@ vi.mock('@/lib/workers/pdf-extraction', () => ({
 
 type DocumentsRouteModule = typeof import('../../src/app/api/v1/documents/route');
 type DocumentSearchRouteModule = typeof import('../../src/app/api/v1/documents/search/route');
+type ReplaceFileRouteModule = typeof import('../../src/app/api/v1/documents/[id]/file/route');
 
 // ---------------------------------------------------------------------------
 // State
@@ -130,6 +133,7 @@ type DocumentSearchRouteModule = typeof import('../../src/app/api/v1/documents/s
 let state: TestKitState | null = null;
 let documentsRoute: DocumentsRouteModule | null = null;
 let searchRoute: DocumentSearchRouteModule | null = null;
+let replaceFileRoute: ReplaceFileRouteModule | null = null;
 let communityADefaultCategoryId: number | null = null;
 
 function requireState(): TestKitState {
@@ -188,6 +192,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
 
     documentsRoute = await import('../../src/app/api/v1/documents/route');
     searchRoute = await import('../../src/app/api/v1/documents/search/route');
+    replaceFileRoute = await import('../../src/app/api/v1/documents/[id]/file/route');
   });
 
   beforeEach(() => {
@@ -477,5 +482,117 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  // =========================================================================
+  // 9. Replace a document's file in place
+  // =========================================================================
+
+  it('PUT /documents/[id]/file keeps the id, and a stale extraction cannot overwrite the new file', async () => {
+    const kit = requireState();
+    const route = requireDocumentsRoute();
+    if (!replaceFileRoute) throw new Error('Route not loaded');
+    const communityA = requireCommunity(kit, 'communityA');
+    const oldPath = `communities/${communityA.id}/documents/replace-old-${kit.runSuffix}.pdf`;
+    const newPath = `communities/${communityA.id}/documents/replace-new-${kit.runSuffix}.pdf`;
+
+    mockStorageBytes.current = PDF_MAGIC;
+    const created = await route.POST(
+      jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
+        communityId: communityA.id,
+        title: `Replace Me ${kit.runSuffix}`,
+        categoryId: requireCommunityADefaultCategoryId(),
+        filePath: oldPath,
+        fileName: 'budget.pdf',
+        fileSize: PDF_MAGIC.byteLength,
+        redactionAttested: true,
+      }),
+    );
+    expect(created.status).toBe(200);
+    const id = readNumberField((await parseJson<{ data: Record<string, unknown> }>(created)).data, 'id');
+
+    mockStorageBytes.current = PNG_MAGIC;
+    const replaced = await replaceFileRoute.PUT(
+      jsonRequest(apiUrl(`/api/v1/documents/${id}/file`), 'PUT', {
+        communityId: communityA.id,
+        filePath: newPath,
+        fileName: 'budget-revised.png',
+        fileSize: PNG_MAGIC.byteLength,
+        redactionAttested: true,
+      }),
+      { params: Promise.resolve({ id: String(id) }) },
+    );
+    expect(replaced.status).toBe(200);
+
+    const scoped = kit.dbModule.createScopedClient(communityA.id);
+    const readRow = async () => {
+      const rows = await scoped.query(kit.dbModule.documents);
+      return rows.find((row) => row['id'] === id)!;
+    };
+    const row = await readRow();
+    expect(row['filePath']).toBe(newPath);
+    expect(row['fileName']).toBe('budget-revised.png');
+    expect(row['mimeType']).toBe('image/png');
+    expect(row['extractionStatus']).toBe('not_applicable');
+
+    // The OLD file's extraction finishing late: pinned to its path, it must miss.
+    await kit.dbModule.updateDocumentExtractionSuccess({
+      communityId: communityA.id,
+      documentId: id,
+      filePath: oldPath,
+      text: 'text of the old file',
+      status: 'completed',
+    });
+    expect((await readRow())['searchText']).toBeNull();
+
+    // A second replace that read the row BEFORE the first one landed still
+    // expects the old file; the conditional write must match nothing.
+    const { replaceDocumentFile } = await import('@/lib/services/documents-service');
+    const stale = await replaceDocumentFile(communityA.id, id, oldPath, {
+      filePath: `communities/${communityA.id}/documents/replace-late-${kit.runSuffix}.pdf`,
+      fileName: 'late.pdf',
+      fileSize: PDF_MAGIC.byteLength,
+      mimeType: 'application/pdf',
+    });
+    expect(stale).toEqual([]);
+    expect((await readRow())['filePath']).toBe(newPath);
+  });
+
+  it('PUT /documents/[id]/file by a tenant is 403 and leaves the row alone', async () => {
+    const kit = requireState();
+    const route = requireDocumentsRoute();
+    if (!replaceFileRoute) throw new Error('Route not loaded');
+    const communityA = requireCommunity(kit, 'communityA');
+    const oldPath = `communities/${communityA.id}/documents/tenant-old-${kit.runSuffix}.pdf`;
+
+    mockStorageBytes.current = PDF_MAGIC;
+    const created = await route.POST(
+      jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
+        communityId: communityA.id,
+        title: `Tenant Cannot Replace ${kit.runSuffix}`,
+        categoryId: requireCommunityADefaultCategoryId(),
+        filePath: oldPath,
+        fileName: 'rules.pdf',
+        fileSize: PDF_MAGIC.byteLength,
+        redactionAttested: true,
+      }),
+    );
+    const id = readNumberField((await parseJson<{ data: Record<string, unknown> }>(created)).data, 'id');
+
+    setActor(kit, 'tenantA');
+    const res = await replaceFileRoute.PUT(
+      jsonRequest(apiUrl(`/api/v1/documents/${id}/file`), 'PUT', {
+        communityId: communityA.id,
+        filePath: `communities/${communityA.id}/documents/tenant-new-${kit.runSuffix}.pdf`,
+        fileName: 'rules.pdf',
+        fileSize: PDF_MAGIC.byteLength,
+        redactionAttested: true,
+      }),
+      { params: Promise.resolve({ id: String(id) }) },
+    );
+    expect(res.status).toBe(403);
+
+    const rows = await kit.dbModule.createScopedClient(communityA.id).query(kit.dbModule.documents);
+    expect(rows.find((row) => row['id'] === id)!['filePath']).toBe(oldPath);
   });
 });

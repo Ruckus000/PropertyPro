@@ -36,6 +36,7 @@ vi.mock('@propertypro/db', () => ({
     createdAt: 'documents.createdAt',
     updatedAt: 'documents.updatedAt',
     deletedAt: 'documents.deletedAt',
+    postedAt: 'documents.postedAt',
   },
   documentCategories: {
     id: 'documentCategories.id',
@@ -107,6 +108,7 @@ vi.mock('@propertypro/db/filters', () => ({
   gte: (col: unknown, val: unknown) => ({ __gte: { col, val } }),
   inArray: (col: unknown, vals: unknown) => ({ __inArray: { col, vals } }),
   isNull: (col: unknown) => ({ __isNull: col }),
+  isNotNull: (col: unknown) => ({ __isNotNull: col }),
   lte: (col: unknown, val: unknown) => ({ __lte: { col, val } }),
   or: (...args: unknown[]) => ({ __or: args }),
 }));
@@ -687,6 +689,28 @@ describe('getPublicCommunityScopedReader', () => {
       .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
       .map((c: unknown) => (c as { __isNull: string }).__isNull);
     expect(isNullCols).toContain('documents.deletedAt');
+  });
+
+  // Drafts (`posted_at` NULL) are never public. One case per reader: the
+  // site's documents block, the public download, and the sitemap.
+  it.each([
+    ['listDocuments', (r: ReturnType<typeof getPublicCommunityScopedReader>) =>
+      r.listDocuments({ limit: 5, includeCategories: ['budget'] })],
+    ['getPublicDocumentFile', (r: ReturnType<typeof getPublicCommunityScopedReader>) =>
+      r.getPublicDocumentFile(7)],
+    ['listPublicDocumentsForSitemap', (r: ReturnType<typeof getPublicCommunityScopedReader>) =>
+      r.listPublicDocumentsForSitemap({ limit: 50 })],
+  ])('%s WHERE excludes drafts (posted_at IS NOT NULL)', async (_name, call) => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    await call(getPublicCommunityScopedReader(42));
+
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    const notNullCols = whereCall.__and
+      .filter((c: unknown) => (c as { __isNotNull?: string }).__isNotNull !== undefined)
+      .map((c: unknown) => (c as { __isNotNull: string }).__isNotNull);
+    expect(notNullCols).toContain('documents.postedAt');
   });
 
   it('listDocuments WHERE includes publicAccess=true (migration 0007 access gate)', async () => {

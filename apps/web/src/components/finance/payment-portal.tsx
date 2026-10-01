@@ -308,8 +308,14 @@ export function PaymentPortal({
     (li) => li.status === 'pending' || li.status === 'partially_paid' || li.status === 'overdue',
   );
   const paidItems = lineItems.filter((li) => li.status === 'paid');
-  const totalDueCents = unpaidItems.reduce((sum, li) => sum + li.amountCents + li.lateFeeCents, 0);
-  const overdueCount = unpaidItems.filter((li) => li.status === 'overdue').length;
+  // Money comes from the server's exact totals, which cover every outstanding
+  // item. Summing the listed rows undercounts whenever the list is capped; the
+  // row sums remain only as a fallback for payloads without `summary`.
+  const totalDueCents = data.summary?.totalDueCents
+    ?? unpaidItems.reduce((sum, li) => sum + li.amountCents + li.lateFeeCents, 0);
+  const overdueCount = data.summary?.overdueCount
+    ?? unpaidItems.filter((li) => li.status === 'overdue').length;
+  const outstandingCount = data.summary?.outstandingCount ?? unpaidItems.length;
   const balanceLabel = mode === 'community' ? 'Community Balance' : 'Current Balance';
   /*
    * Resident-only, and only when something is actually owed. In community mode
@@ -318,7 +324,7 @@ export function PaymentPortal({
    * says "All caught up!" and payment guidance would be noise.
    */
   const showOfflinePaymentGuidance
-    = mode === 'unit' && !paymentsEnabled && unpaidItems.length > 0;
+    = mode === 'unit' && !paymentsEnabled && outstandingCount > 0;
 
   return (
     <div className="space-y-6">
@@ -333,8 +339,8 @@ export function PaymentPortal({
       {data.truncated && (
         <AlertBanner
           status="warning"
-          title={`Showing the ${lineItems.length} most recent items`}
-          description="Total due and the overdue count cover only these items. The balance includes everything."
+          title="Some items aren't listed"
+          description="Upcoming lists the oldest-due items first and Payment History the most recent. Total due, the overdue count and the balance include everything."
         />
       )}
 
@@ -366,7 +372,7 @@ export function PaymentPortal({
         <nav className="-mb-px flex gap-6">
           <TabButton
             label="Upcoming"
-            count={unpaidItems.length}
+            count={outstandingCount}
             active={activeTab === 'upcoming'}
             onClick={() => setActiveTab('upcoming')}
           />

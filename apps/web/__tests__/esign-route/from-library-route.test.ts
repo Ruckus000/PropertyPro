@@ -149,6 +149,15 @@ describe('POST /api/v1/esign/documents/from-library', () => {
     );
   });
 
+  it('refuses a DRAFT — a manager can read it, but signers must not get an unposted document', async () => {
+    getDocumentWithAccessCheckMock.mockResolvedValueOnce({ ...libraryDocument, postedAt: null });
+
+    const response = await post(BODY);
+
+    expect(response.status).toBe(400);
+    expect(copyStorageObjectMock).not.toHaveBeenCalled();
+  });
+
   it('rejects a library file that is not a PDF, checking the copy itself', async () => {
     // The library holds more than PDFs. Everything downstream assumes one, and
     // the validator deletes the object it rejects.

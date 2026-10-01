@@ -550,3 +550,39 @@ describe('sortBlocks', () => {
     expect(sortBlocks([])).toEqual([]);
   });
 });
+
+describe('Canvas — device preview (v4)', () => {
+  it.each([
+    ['desktop', 'max-w-[1000px]'],
+    ['tablet', 'max-w-[820px]'],
+    ['phone', 'max-w-[390px]'],
+  ] as const)('renders the %s frame at its width, inside site-frame', (device, width) => {
+    blocksState.value = {
+      data: [
+        {
+          id: 1,
+          pageId: HOME_PAGE_ID,
+          blockType: 'text',
+          blockOrder: 2,
+          content: { heading: 'About', body: 'Body.' },
+          isDraft: false,
+          publishedAt: null,
+        },
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    render(
+      <UndoableRemoveProvider communityId={7}>
+        <Canvas communityId={7} context={CONTEXT} now={NOW} device={device} />
+      </UndoableRemoveProvider>,
+    );
+    const frame = screen.getByTestId('canvas-frame');
+    // The container the public-site `site-*:` variants query. Without it they
+    // never match and every width shows the phone layout.
+    expect(frame).toHaveClass('site-frame');
+    expect(frame.parentElement).toHaveClass(width);
+    expect(frame.parentElement).toHaveAttribute('data-device', device);
+  });
+});

@@ -31,12 +31,20 @@ interface CommunityLineItem extends UnitLineItem {
   unitNumber: string;
 }
 
+export interface StatementSummaryData {
+  totalDueCents: number;
+  overdueCount: number;
+  outstandingCount: number;
+}
+
 export interface UnitStatementData {
   unitId: number;
   balanceCents: number;
   ledgerEntries: LedgerEntry[];
   lineItems: UnitLineItem[];
-  /** Server read more than 200 items; only the newest 200 are in `lineItems`. */
+  /** Exact totals over every outstanding item (server-computed; absent on legacy payloads). */
+  summary?: StatementSummaryData;
+  /** A list was capped; `summary` still covers everything. */
   truncated?: boolean;
 }
 
@@ -44,7 +52,9 @@ export interface CommunityStatementData {
   balanceCents: number;
   ledgerEntries: LedgerEntry[];
   lineItems: CommunityLineItem[];
-  /** Server read more than 200 items; only the newest 200 are in `lineItems`. */
+  /** Exact totals over every outstanding item (server-computed; absent on legacy payloads). */
+  summary?: StatementSummaryData;
+  /** A list was capped; `summary` still covers everything. */
   truncated?: boolean;
 }
 

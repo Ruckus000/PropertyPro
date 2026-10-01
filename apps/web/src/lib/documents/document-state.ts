@@ -54,6 +54,12 @@ export interface DocumentRow {
   publicAccess?: boolean;
   extractionStatus?: DocumentExtractionStatus | null;
   sourceType?: 'library' | 'violation_evidence' | 'authored' | null;
+  /**
+   * `documents.posted_at`. `null` = a DRAFT: uploaded, not posted, visible to
+   * managers only (the list endpoint never returns one to anyone else).
+   * Absent (an older cached payload) reads as posted.
+   */
+  postedAt?: string | null;
 }
 
 /** A compliance checklist item as `GET /api/v1/compliance` delivers it. */
@@ -77,7 +83,7 @@ export interface ChecklistRow {
  * documents out, so the client never receives one and a state for it would be
  * unreachable.
  */
-export type DocumentState = 'unlinked' | 'owed' | 'public' | 'private';
+export type DocumentState = 'draft' | 'unlinked' | 'owed' | 'public' | 'private';
 
 export type LibraryRow =
   | {
@@ -89,7 +95,7 @@ export type LibraryRow =
     }
   | { kind: 'gap'; id: number; requirement: ChecklistRow };
 
-export type DocumentQuickFilter = 'all' | 'unlinked' | 'owed';
+export type DocumentQuickFilter = 'all' | 'unlinked' | 'owed' | 'drafts';
 
 /** An item counts only when the community has not excluded it. */
 function isApplicable(row: ChecklistRow): boolean {
@@ -98,6 +104,11 @@ function isApplicable(row: ChecklistRow): boolean {
 
 function isPublic(row: DocumentRow): boolean {
   return row.publicAccess === true;
+}
+
+/** Uploaded but not posted. Strictly `null`: an absent field means posted. */
+export function isDraft(row: DocumentRow): boolean {
+  return row.postedAt === null;
 }
 
 /** The reverse of the link: which requirement, if any, points at this file. */
@@ -117,6 +128,9 @@ export function documentState(
   document: DocumentRow,
   requirement: ChecklistRow | null,
 ): DocumentState {
+  // First: whatever else is true of a draft, owners cannot see it, and every
+  // other state describes what owners (or the public) see.
+  if (isDraft(document)) return 'draft';
   if (!requirement) return 'unlinked';
   if (isPublic(document)) return 'public';
   return isApplicable(requirement) ? 'owed' : 'private';
@@ -159,9 +173,13 @@ export function coverageFacts(
   items: readonly ChecklistRow[],
 ): { total: number; covered: number; publicCount: number } {
   const applicable = items.filter(isApplicable);
+  // A requirement linked to a draft is not covered: owners cannot see the
+  // file. The server's compliance status says the same (`documentIsDraft`).
+  const draftIds = new Set(documents.filter(isDraft).map((document) => document.id));
   return {
     total: applicable.length,
-    covered: applicable.filter((row) => row.documentId != null).length,
+    covered: applicable.filter((row) => row.documentId != null && !draftIds.has(row.documentId))
+      .length,
     publicCount: documents.filter(isPublic).length,
   };
 }
@@ -207,6 +225,7 @@ export function filterRows(
 
     if (options.quickFilter === 'unlinked') return row.state === 'unlinked';
     if (options.quickFilter === 'owed') return row.state === 'owed';
+    if (options.quickFilter === 'drafts') return row.state === 'draft';
     return true;
   });
 }
@@ -240,7 +259,7 @@ export function coerceDocumentsView(raw: string | null): DocumentsView {
   }
 }
 
-export type BoardColumnId = 'gap' | 'private' | 'public' | 'deleted';
+export type BoardColumnId = 'gap' | 'draft' | 'private' | 'public' | 'deleted';
 
 export interface BoardColumn {
   id: BoardColumnId;
@@ -250,8 +269,8 @@ export interface BoardColumn {
 }
 
 /**
- * The statutory lifecycle as columns: no file → uploaded but not public → on
- * the public site → deleted. Acting on a record means moving it between them.
+ * The statutory lifecycle as columns: no file → draft (owners cannot see it)
+ * → uploaded but not public → on the public site → deleted. Acting on a record means moving it between them.
  *
  * Deleted documents are passed in separately because the list endpoint filters
  * soft-deleted rows out of every other view; only the board asks for them.
@@ -269,10 +288,18 @@ export function boardColumns(
       rows: rows.filter((row) => row.kind === 'gap'),
     },
     {
+      id: 'draft',
+      label: 'Draft · owners can’t see it',
+      emptyText: 'No drafts.',
+      rows: documents.filter((row) => row.kind === 'document' && row.state === 'draft'),
+    },
+    {
       id: 'private',
       label: 'Uploaded · not public',
       emptyText: 'Nothing here.',
-      rows: documents.filter((row) => row.kind === 'document' && row.state !== 'public'),
+      rows: documents.filter(
+        (row) => row.kind === 'document' && row.state !== 'public' && row.state !== 'draft',
+      ),
     },
     {
       id: 'public',
@@ -358,7 +385,8 @@ export function timelineRows(
         monthOf(requirement.documentPostedAt, year) ??
         currentMonth;
 
-      const isGap = requirement.documentId == null;
+      // A requirement whose file is a draft is still a hole to owners.
+      const isGap = requirement.documentId == null || (document != null && isDraft(document));
       const isOverdue = requirement.status === 'overdue';
       const isOwed = document ? documentState(document, requirement) === 'owed' : false;
 

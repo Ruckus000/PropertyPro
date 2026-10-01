@@ -53,9 +53,9 @@ export function PublicSiteFooter({
   const ownerSentence = owner.endsWith('.') ? owner : `${owner}.`;
 
   return (
-    <footer className="w-full border-t border-edge bg-surface-page px-4 py-6 sm:px-6 lg:px-8">
+    <footer className="w-full border-t border-edge bg-surface-page px-4 py-6 site-sm:px-6 site-lg:px-8">
       <div className="max-w-7xl mx-auto flex flex-col gap-2 text-sm text-content-tertiary">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="flex flex-col site-sm:flex-row items-center justify-between gap-2">
           <span>
             &copy; {currentYear} {ownerSentence} All rights reserved.
           </span>
@@ -72,10 +72,10 @@ export function PublicSiteFooter({
           </span>
         </div>
 
-        {noteText ? <p className="text-center sm:text-left">{noteText}</p> : null}
+        {noteText ? <p className="text-center site-sm:text-left">{noteText}</p> : null}
 
         {showStatutoryLine ? (
-          <p className="text-center sm:text-left">{STATUTORY_FOOTER_LINE}</p>
+          <p className="text-center site-sm:text-left">{STATUTORY_FOOTER_LINE}</p>
         ) : null}
 
         {/*
@@ -94,7 +94,7 @@ export function PublicSiteFooter({
 
           See docs/audits/2026-08-09-legal-risk-audit.md F-12.
         */}
-        <p className="text-center sm:text-left">
+        <p className="text-center site-sm:text-left">
           <a
             href="https://getpropertypro.com/legal/accessibility"
             className="text-content-link hover:text-content-link font-medium"

@@ -1281,6 +1281,7 @@ risks — the ones I found and the ones I didn't. Bring the current `terms.md` a
 ask for a redline, not a from-scratch draft; you will halve the hours.
 
 **2. The generated-notice UPL question. (1–2 hrs)**
+*Packet ready 2026-09-30:* [`2026-09-30-counsel-packet-notices.md`](2026-09-30-counsel-packet-notices.md) (items 2 and 5 plus e-sign consent; sample PDFs regenerate from code).
 Show them `violation-notice-pdf.ts` output and ask one narrow question: does
 generating a hearing notice that recites the owner's statutory rights and asserts
 notice-period compliance constitute UPL by a non-lawyer vendor in Florida, and

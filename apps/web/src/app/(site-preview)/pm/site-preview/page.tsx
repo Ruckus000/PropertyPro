@@ -183,7 +183,7 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
         Same attribute the shell uses on its main column behind the mobile
         drawer (`components/layout/app-shell.tsx`).
       */}
-      <div inert style={cssVars} data-testid="site-preview-root">
+      <div inert style={cssVars} className="site-frame" data-testid="site-preview-root">
         <Layout
           community={{
             id: community!.id,

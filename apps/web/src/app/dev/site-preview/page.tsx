@@ -82,7 +82,7 @@ export default async function PreviewPage({
         // eslint-disable-next-line @next/next/no-page-custom-font
         <link key={href} rel="stylesheet" href={href} />
       ))}
-      <div style={cssVars} className="min-h-screen flex flex-col font-body">
+      <div style={cssVars} className="site-frame min-h-screen flex flex-col font-body">
         {/* Dev banner */}
         <div className="bg-status-warning-bg border-b border-status-warning-border px-4 py-2 text-center text-xs text-status-warning">
           Preview Mode — Community: <strong>{community.name}</strong> (ID: {community.id})
@@ -100,9 +100,9 @@ export default async function PreviewPage({
 
         <main id="main-content" className="flex-1">
           {/* Hero section */}
-          <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
+          <section className="bg-primary px-4 py-20 text-center site-sm:px-6 site-lg:px-8">
             <div className="mx-auto max-w-3xl">
-              <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
+              <h1 className="font-heading text-4xl font-bold text-content-inverse site-sm:text-5xl">
                 {community.name}
               </h1>
               <p className="mt-4 text-lg text-content-inverse">
@@ -120,12 +120,12 @@ export default async function PreviewPage({
           </section>
 
           {/* Sample content to show branding tokens in action */}
-          <section className="bg-surface-card px-4 py-16 sm:px-6 lg:px-8">
+          <section className="bg-surface-card px-4 py-16 site-sm:px-6 site-lg:px-8">
             <div className="mx-auto max-w-5xl">
               <h2 className="font-heading text-2xl font-semibold text-content text-center mb-10">
                 Community Resources
               </h2>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-6 site-sm:grid-cols-2 site-lg:grid-cols-3">
                 {['Documents', 'Meetings', 'Announcements'].map((title) => (
                   <div key={title} className="rounded-md border border-edge bg-surface-card p-6 shadow-e1">
                     <div className="mb-3 h-8 w-8 rounded bg-primary-light flex items-center justify-center">
@@ -141,7 +141,7 @@ export default async function PreviewPage({
             </div>
           </section>
 
-          <section className="bg-accent px-4 py-12 sm:px-6 lg:px-8">
+          <section className="bg-accent px-4 py-12 site-sm:px-6 site-lg:px-8">
             <div className="mx-auto max-w-3xl text-center">
               <h2 className="font-heading text-xl font-semibold text-content">
                 Accent Section

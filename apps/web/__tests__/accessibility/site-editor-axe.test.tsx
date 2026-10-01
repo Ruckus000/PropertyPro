@@ -255,6 +255,8 @@ describe('Website builder v4 chrome — axe', () => {
             onSelectPage={() => {}}
             onManagePages={() => {}}
             changeCount={2}
+            device="desktop"
+            onDeviceChange={() => {}}
             publicSiteUrl={null}
             proToolAccess={{ styling: false, domain: true }}
             communityId={7}

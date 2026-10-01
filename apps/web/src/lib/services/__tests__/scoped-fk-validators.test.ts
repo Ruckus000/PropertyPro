@@ -69,5 +69,19 @@ describe('scoped-fk-validators', () => {
         assertDocumentInCommunity(scoped as never, 99),
       ).rejects.toBeInstanceOf(ValidationError);
     });
+
+    it('refuses a DRAFT: linking stamps a posting date that never happened', async () => {
+      const scoped = makeScoped({ 99: { id: 99, postedAt: null } });
+      await expect(
+        assertDocumentInCommunity(scoped as never, 99),
+      ).rejects.toThrow('Post this document before linking it');
+    });
+
+    it('accepts a posted document', async () => {
+      const scoped = makeScoped({ 99: { id: 99, postedAt: new Date('2026-01-15T00:00:00Z') } });
+      await expect(
+        assertDocumentInCommunity(scoped as never, 99),
+      ).resolves.toBeUndefined();
+    });
   });
 });

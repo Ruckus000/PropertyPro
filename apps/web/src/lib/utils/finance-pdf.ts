@@ -17,7 +17,7 @@ interface FinanceStatementPayload {
   balanceCents: number;
   ledgerEntries: FinanceStatementLedgerEntry[];
   lineItems: FinanceStatementLineItem[];
-  /** Only the newest statement items are listed (see `buildUnitStatement`). */
+  /** Some line items were not listed (see `buildUnitStatement`). */
   truncated?: boolean;
 }
 
@@ -30,7 +30,7 @@ interface CommunityFinanceStatementPayload {
   balanceCents: number;
   ledgerEntries: FinanceStatementLedgerEntry[];
   lineItems: CommunityFinanceStatementLineItem[];
-  /** Only the newest statement items are listed (see `buildUnitStatement`). */
+  /** Some line items were not listed (see `buildUnitStatement`). */
   truncated?: boolean;
 }
 
@@ -61,7 +61,10 @@ function buildPageContent(lines: string[]): string {
   let y = START_Y;
   const ops: string[] = ['BT', '/F1 10 Tf'];
   for (const line of lines) {
-    ops.push(`${START_X} ${y} Td (${escapePdfText(line)}) Tj`);
+    // `Tm` sets an ABSOLUTE position. `Td` is relative to the previous line,
+    // so `x y Td` with absolute coordinates put every line after the first
+    // off the page: until 2026-09-30 statement PDFs showed only their title.
+    ops.push(`1 0 0 1 ${START_X} ${y} Tm (${escapePdfText(line)}) Tj`);
     y -= LINE_HEIGHT;
   }
   ops.push('ET');
@@ -72,9 +75,9 @@ function buildPageContent(lines: string[]): string {
  * A cut statement must not look complete on paper either (roadmap 3.8): the
  * portal shows a banner, and the PDF prints this note under the balance.
  */
-function pushTruncationNote(lines: string[], truncated: boolean | undefined, listed: number): void {
+function pushTruncationNote(lines: string[], truncated: boolean | undefined): void {
   if (!truncated) return;
-  lines.push(`NOTE: Payables lists only the ${listed} most recent items; older items are omitted.`);
+  lines.push('NOTE: Some items are omitted from Payables (outstanding items are listed oldest-due first).');
   lines.push('The Current Balance above includes everything.');
 }
 
@@ -83,9 +86,9 @@ export function generateFinanceStatementPdf(payload: FinanceStatementPayload): U
   lines.push(`Finance Statement - Unit ${payload.unitId}`);
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
-  pushTruncationNote(lines, payload.truncated, payload.lineItems.length);
+  pushTruncationNote(lines, payload.truncated);
   lines.push('');
-  lines.push('Payables');
+  lines.push('Payables (outstanding at any due date, oldest first; then settled items in this period)');
   lines.push('Due Date     Status     Amount    Late Fee');
   for (const item of payload.lineItems) {
     lines.push(
@@ -113,9 +116,9 @@ export function generateCommunityFinanceStatementPdf(
   lines.push(`Community Finance Statement - Community #${payload.communityId}`);
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Current Balance: $${toUsd(payload.balanceCents)}`);
-  pushTruncationNote(lines, payload.truncated, payload.lineItems.length);
+  pushTruncationNote(lines, payload.truncated);
   lines.push('');
-  lines.push('Payables');
+  lines.push('Payables (outstanding at any due date, oldest first; then settled items in this period)');
   lines.push('Unit        Due Date     Status     Amount    Late Fee');
   for (const item of payload.lineItems) {
     const unitLabel = item.unitNumber ? `Unit ${item.unitNumber}` : `Unit #${item.unitNumber}`;

@@ -16,6 +16,8 @@ import { SectionInserter } from './SectionInserter';
 import { useSiteEditor } from '../editor-context';
 import { sectionLabel } from '../section-label';
 import { Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { PreviewDevice } from '../EditorTopBar';
 
 export interface CanvasProps {
   communityId: number;
@@ -29,7 +31,19 @@ export interface CanvasProps {
   onAddSection?: (beforeBlockId: number | null) => void;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
+  /**
+   * The width to render the page at (v4 device preview). The frame is a
+   * `.site-frame` container, so the public-site views re-flow to their real
+   * tablet or phone layout — they respond to the frame, not the window.
+   */
+  device?: PreviewDevice;
 }
+
+const FRAME_WIDTH: Record<PreviewDevice, string> = {
+  desktop: 'max-w-[1000px]',
+  tablet: 'max-w-[820px]',
+  phone: 'max-w-[390px]',
+};
 
 /**
  * The editor canvas — the community's site, rendered from the draft.
@@ -62,7 +76,7 @@ export interface CanvasProps {
  * index, so `nextContentSlot` is page-scoped too and `AddPanel` narrows before
  * calling it.
  */
-export function Canvas({ communityId, context, onAddSection, now }: CanvasProps) {
+export function Canvas({ communityId, context, onAddSection, now, device = 'desktop' }: CanvasProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
   const selectedPageId = useSelectedSitePage();
   // One timestamp for the whole render pass — otherwise two blocks with the
@@ -161,7 +175,13 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
   }
 
   return (
-    <div className="mx-auto max-w-[1000px] px-5 py-4">
+    <div
+      data-device={device}
+      className={cn(
+        'mx-auto px-5 py-4 transition-[max-width] duration-slow',
+        FRAME_WIDTH[device],
+      )}
+    >
       {/* The toolbar's Duplicate can fail with the list looking unchanged, so it
           needs a visible channel here as well as the Sections panel's. */}
       {duplicateError ? (
@@ -169,7 +189,15 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
           {duplicateError}
         </p>
       ) : null}
-      <div className="overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
+      <div
+        data-testid="canvas-frame"
+        className={cn(
+          'site-frame overflow-hidden border bg-surface-card',
+          device === 'phone'
+            ? 'rounded-[var(--radius-lg)] border-4 border-edge-strong'
+            : 'rounded-[var(--radius-md)] border-edge',
+        )}
+      >
         {ordered.length === 0 ? (
           <EmptyState
             title="This page is empty"

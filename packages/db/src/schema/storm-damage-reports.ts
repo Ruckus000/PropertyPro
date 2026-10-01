@@ -16,9 +16,9 @@
  * check the flag, never a raw community-type comparison. All queries run through
  * the scoped client (AGENTS #13).
  *
- * `reported_by` is the resident who filed the report; RLS scopes non-admin reads
- * to that column (tenant_user_scoped family — mirrors insurance_certificate_requests
- * and maintenance_requests). `photo_document_ids` is a jsonb array of ids into the
+ * `reported_by` is the resident who filed the report. The list route narrows
+ * non-admin reads to that column in SQL. RLS does not: its own-rows branch keys on
+ * auth.uid(), which the scoped client's privileged connection never carries. `photo_document_ids` is a jsonb array of ids into the
  * existing `documents` library, so photos reuse the document subsystem's storage,
  * signed downloads, and soft-delete rather than a new upload path.
  */
@@ -64,7 +64,7 @@ export const stormDamageReports = pgTable(
     unitId: bigint('unit_id', { mode: 'number' }).references(() => units.id, {
       onDelete: 'set null',
     }),
-    /** The resident who filed the report. RLS scopes non-admin reads to this column. */
+    /** The resident who filed the report. The list route narrows non-admin reads to this column. */
     reportedBy: uuid('reported_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -90,7 +90,7 @@ export const stormDamageReports = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    // Community listing, newest-first, scoped by reporter for the RLS own-rows read.
+    // Community listing, newest-first, narrowed by reporter for a non-admin's own-rows read.
     index('storm_damage_reports_community_reported_by_idx').on(
       table.communityId,
       table.reportedBy,

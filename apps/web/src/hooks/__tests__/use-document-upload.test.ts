@@ -423,3 +423,74 @@ describe('useDocumentUpload', () => {
   });
 
 });
+
+describe('useDocumentUpload — replaceFile', () => {
+  async function runReplace(result: { current: ReturnType<typeof useDocumentUpload> }) {
+    let value: unknown;
+    let error: Error | undefined;
+    const done = act(async () => {
+      try {
+        value = await result.current.replaceFile({
+          communityId: 1,
+          documentId: 71,
+          file: createTestFile('budget-v2.pdf', 2048),
+          redactionAttested: true,
+        });
+      } catch (e) {
+        error = e as Error;
+      }
+    });
+    await vi.waitFor(() => expect(mockXHRInstance.send).toHaveBeenCalled());
+    await act(async () => {
+      mockXHRInstance.status = 200;
+      mockXHRInstance.onload?.();
+    });
+    await done;
+    return { value, error };
+  }
+
+  it('uploads to a fresh path, then PUTs it onto the SAME document', async () => {
+    mockPresignSuccess();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: { id: 71, fileName: 'budget-v2.pdf', fileSize: 2048, mimeType: 'application/pdf' },
+        }),
+    });
+    const { result } = renderHook(() => useDocumentUpload());
+
+    const { value, error } = await runReplace(result);
+
+    expect(error).toBeUndefined();
+    expect(value).toEqual({ id: 71, fileName: 'budget-v2.pdf', fileSize: 2048, mimeType: 'application/pdf' });
+    const [url, init] = mockFetch.mock.calls[1]!;
+    expect(url).toBe('/api/v1/documents/71/file');
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body)).toEqual({
+      communityId: 1,
+      filePath: '/uploads/test.pdf',
+      fileName: 'budget-v2.pdf',
+      fileSize: 2048,
+      redactionAttested: true,
+    });
+    expect(result.current.isUploading).toBe(false);
+  });
+
+  it('surfaces the server’s own refusal message', async () => {
+    mockPresignSuccess();
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: () =>
+        Promise.resolve({ error: { message: 'This document changed while you were replacing its file.' } }),
+    });
+    const { result } = renderHook(() => useDocumentUpload());
+
+    const { error } = await runReplace(result);
+
+    expect(error?.message).toBe('This document changed while you were replacing its file.');
+    expect(result.current.error).toBe('This document changed while you were replacing its file.');
+  });
+});
+

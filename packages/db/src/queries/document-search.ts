@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, lt, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, isNotNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { createScopedClient } from '../scoped-client';
 import { documents } from '../schema/documents';
@@ -95,6 +95,10 @@ export async function searchDocuments(params: DocumentSearchParams): Promise<Doc
     if (accessFilter) {
       additionalFilters.push(accessFilter);
     }
+  } else {
+    // No role means no proof the caller is a manager, so drafts stay out.
+    // Fails closed for any future caller that forgets to pass one.
+    additionalFilters.push(isNotNull(documents.postedAt));
   }
 
   if (hasTextQuery) {

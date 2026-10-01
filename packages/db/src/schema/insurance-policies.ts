@@ -90,7 +90,11 @@ export const insuranceCertificateRequests = pgTable(
     policyId: bigint('policy_id', { mode: 'number' })
       .notNull()
       .references(() => insurancePolicies.id, { onDelete: 'cascade' }),
-    /** The owner who requested it. RLS scopes non-admin reads to this column. */
+    /**
+     * The owner who requested it. The list route narrows non-admin reads to this
+     * column in SQL; RLS does not (its own-rows branch keys on auth.uid(), which
+     * the scoped client's privileged connection never carries).
+     */
     requestedBy: uuid('requested_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

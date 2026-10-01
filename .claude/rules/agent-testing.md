@@ -30,6 +30,30 @@ The sandbox never sources `.env.local`; it starts local Supabase Auth, Storage,
 and Postgres, then migrates and seeds the demo personas. `pnpm agent:env:reset`
 returns only this worktree to a clean baseline.
 
+## When the sandbox will not start, or the editor hangs
+
+Diagnosed 2026-09-30. Check these in order before touching app code:
+
+1. **Docker VM memory.** Every worktree sandbox is a full Supabase stack, and
+   stacks from other worktrees, other agents (Codex) and other projects share one
+   Docker Desktop VM (about 8 GB by default). When that VM swaps, three different
+   symptoms follow:
+   - a new stack's containers are OOM-killed while starting ("Killed", then
+     `LegacyHealthCheckTimeoutError`);
+   - Docker's embedded DNS times out, so Kong logs `DNS resolution failed`, every
+     `/auth/v1/user` call hangs, and every authenticated route hangs or answers
+     401 after about 28 seconds;
+   - the app's Postgres connects time out (`CONNECT_TIMEOUT 127.0.0.1:<port>`).
+
+   Measure it: `docker exec <any container> cat /proc/pressure/memory`. A `full`
+   value well above zero means the VM is thrashing. Fix it by stopping stacks
+   nobody is using (`supabase stop` keeps their data) or by raising Docker
+   Desktop's memory. `agent-env.sh` already disables analytics and Vector (about
+   800 MiB per stack).
+2. **Node version.** Use the `.nvmrc` major (`nvm use`). Under another major,
+   pnpm prints `WARN Unsupported engine` on stdout. The script now filters that
+   out, but it is still the wrong runtime.
+
 ## Disposable Fixture Login
 
 Create a fixture when a seeded persona cannot express the scenario. The CLI

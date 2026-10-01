@@ -329,7 +329,7 @@ export function apiUrl(pathname: string): string {
 // receives no body — identical to what those calls already did at runtime.
 export function jsonRequest(
   url: string,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: Record<string, unknown>,
   headers?: Record<string, string>,
 ): NextRequest {

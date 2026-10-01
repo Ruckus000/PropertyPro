@@ -195,6 +195,22 @@ export function useDocumentsInvalidator(communityId: number) {
 }
 
 /**
+ * After a document's FILE is replaced. The id did not change, so the cached
+ * signed URL for it (keyed by id, outside the `documents` prefix) still points
+ * at the old object and would keep previewing it; both caches go.
+ */
+export function useDocumentFileInvalidator(communityId: number) {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (documentId: number) => {
+      void queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
+      void queryClient.invalidateQueries({ queryKey: documentDownloadKey(communityId, documentId) });
+    },
+    [queryClient, communityId],
+  );
+}
+
+/**
  * Put a document on the association's public site, or take it off.
  *
  * `redactionAttested` is required by the server when the document's category
@@ -219,6 +235,37 @@ export function useSetDocumentPublicAccess(communityId: number) {
         body.redactionAttested = payload.redactionAttested;
       }
       return requestJson<{ id: number; publicAccess: boolean }>(
+        `/api/v1/documents?${params.toString()}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
+    },
+  });
+}
+
+/**
+ * Post a draft so owners can see it, or take a posted document back to a
+ * draft (which also takes it off the public site).
+ *
+ * Posting asks the upload's redaction attestation by category; omitting it
+ * where required is a 400, not a silent post.
+ */
+export function useSetDocumentPosted(communityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { id: number; posted: boolean; redactionAttested?: boolean }) => {
+      const params = new URLSearchParams({
+        id: String(payload.id),
+        communityId: String(communityId),
+      });
+      const body: Record<string, unknown> = { posted: payload.posted };
+      // The contract body is `.strict()`, so only send the key when it applies.
+      if (payload.redactionAttested !== undefined) {
+        body.redactionAttested = payload.redactionAttested;
+      }
+      return requestJson<{ id: number; posted: boolean }>(
         `/api/v1/documents?${params.toString()}`,
         { method: 'PATCH', body: JSON.stringify(body) },
       );
