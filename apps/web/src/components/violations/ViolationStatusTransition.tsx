@@ -46,6 +46,7 @@ import {
   buildHearingNoticeWarning,
   HEARING_NOTICE_DAYS,
 } from '@/lib/violations/hearing-notice-warning';
+import { useFiningCommitteeCandidates } from '@/hooks/use-fining-committee';
 
 type ActionType = 'notice' | 'hearing' | 'fine' | 'resolve' | 'dismiss';
 
@@ -80,6 +81,8 @@ const ACTION_CONFIG: Record<ActionType, { title: string; notesLabel: string; not
 interface ViolationStatusTransitionProps {
   violation: ViolationItem;
   communityId: number;
+  /** The signed-in user; may not sit on the committee for their own fine. */
+  actorUserId: string;
   action: ActionType;
   onComplete: () => void;
   onCancel: () => void;
@@ -88,6 +91,7 @@ interface ViolationStatusTransitionProps {
 export function ViolationStatusTransition({
   violation,
   communityId,
+  actorUserId,
   action,
   onComplete,
   onCancel,
@@ -102,6 +106,9 @@ export function ViolationStatusTransition({
   const [fineDueDate, setFineDueDate] = useState(
     format(addDays(new Date(), 14), 'yyyy-MM-dd'),
   );
+  const [committeeIds, setCommitteeIds] = useState<string[]>([]);
+  const [committeeApproved, setCommitteeApproved] = useState(false);
+  const committee = useFiningCommitteeCandidates(communityId, actorUserId, action === 'fine');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -141,6 +148,10 @@ export function ViolationStatusTransition({
         const amount = parseFloat(fineAmountDollars);
         if (!amount || amount <= 0) {
           setError('Fine amount must be a positive number.');
+          return;
+        }
+        if (committeeIds.length === 0 || !committeeApproved) {
+          setError('Select the fining committee members and confirm they approved this fine.');
           return;
         }
       }
@@ -188,6 +199,10 @@ export function ViolationStatusTransition({
               amountCents,
               dueDate: fineDueDate,
               notes: notes.trim() || null,
+              approvedByCommittee: true,
+              committeeMembers: (committee.data ?? [])
+                .filter((member) => committeeIds.includes(member.userId))
+                .map((member) => ({ userId: member.userId, name: member.name })),
             });
             break;
           }
@@ -207,7 +222,7 @@ export function ViolationStatusTransition({
         setSubmitting(false);
       }
     },
-    [action, violation.id, communityId, notes, hearingDate, hearingLocation, fineAmountDollars, fineDueDate, config, onComplete],
+    [action, violation.id, communityId, notes, hearingDate, hearingLocation, fineAmountDollars, fineDueDate, committeeIds, committeeApproved, committee.data, config, onComplete],
   );
 
   return (
@@ -294,6 +309,43 @@ export function ViolationStatusTransition({
               className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
             />
           </div>
+          <fieldset>
+            <legend className="mb-1 block text-sm font-medium text-content-secondary">Fining committee</legend>
+            <p className="mb-2 text-xs text-content-tertiary">
+              The owners who approved this fine. Board members and the person imposing the fine cannot serve
+              (Fla. Stat. §718.303(3) / §720.305(2)).
+            </p>
+            {committee.isLoading ? (
+              <p className="text-sm text-content-tertiary">Loading owners…</p>
+            ) : (committee.data ?? []).length === 0 ? (
+              <p className="text-sm text-content-tertiary">No eligible owners found.</p>
+            ) : (
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-edge-strong bg-surface-card p-2">
+                {(committee.data ?? []).map((member) => (
+                  <label key={member.userId} className="flex items-center gap-2 text-sm text-content-secondary">
+                    <input
+                      type="checkbox"
+                      checked={committeeIds.includes(member.userId)}
+                      onChange={(e) =>
+                        setCommitteeIds((ids) =>
+                          e.target.checked ? [...ids, member.userId] : ids.filter((id) => id !== member.userId),
+                        )
+                      }
+                    />
+                    {member.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            <label className="mt-2 flex items-center gap-2 text-sm text-content-secondary">
+              <input
+                type="checkbox"
+                checked={committeeApproved}
+                onChange={(e) => setCommitteeApproved(e.target.checked)}
+              />
+              The fining committee approved this fine
+            </label>
+          </fieldset>
         </>
       )}
 
@@ -313,7 +365,7 @@ export function ViolationStatusTransition({
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || (action === 'fine' && (committeeIds.length === 0 || !committeeApproved))}
           className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover disabled:opacity-50"
         >
           {submitting ? 'Processing...' : config.title}

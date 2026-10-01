@@ -87,13 +87,15 @@ export const violationsFineContract = defineRoute({
       approvedByCommittee: z.literal(true),
       /**
        * Snapshot of who approved. At least one member, because a "committee" of
-       * nobody is the same defect in a different shape.
+       * nobody is the same defect in a different shape. Each member is an
+       * account so the service can check eligibility (an owner with no board
+       * seat, not the person imposing the fine — lib/violations/fining-committee).
        */
       committeeMembers: z
         .array(
           z.object({
             name: z.string().min(1).max(200),
-            userId: z.string().uuid().optional(),
+            userId: z.string().uuid(),
           }),
         )
         .min(1)

@@ -10,6 +10,7 @@ import {
   paginate,
   postLedgerEntry,
   units,
+  userRoles,
   violationFines,
   violations,
 } from '@propertypro/db';
@@ -32,6 +33,7 @@ import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
 import { listUnitResidentUserIds } from '@/lib/units/actor-units';
 import { withUnitLabels } from '@/lib/units/unit-labels';
+import { finingCommitteeIneligibility, type FiningCommitteeIneligibility } from '@/lib/violations/fining-committee';
 
 export interface ViolationRecord {
   [key: string]: unknown;
@@ -635,6 +637,53 @@ export async function updateViolationForCommunity(
   return record;
 }
 
+const INELIGIBLE_REASON: Record<FiningCommitteeIneligibility | 'not_a_member' | 'listed_twice', string> = {
+  not_a_member: 'is not a member of this community',
+  not_an_owner: 'is not a unit owner',
+  board_seat: 'holds a board seat',
+  imposing_the_fine: 'is the person imposing the fine',
+  listed_twice: 'is listed more than once',
+};
+
+/**
+ * §718.303(3) / §720.305(2): the approving committee may not include officers
+ * or directors. Each member must be an owner of this community with no board
+ * seat, and not the person imposing the fine (finingCommitteeIneligibility).
+ */
+async function assertFiningCommitteeEligible(
+  scoped: ReturnType<typeof createScopedClient>,
+  actorUserId: string,
+  members: readonly FiningCommitteeMember[],
+): Promise<void> {
+  const ids = members.map((m) => m.userId).filter((id): id is string => typeof id === 'string');
+  const roles = ids.length === 0
+    ? []
+    : await scoped.selectFrom<{ userId: string; role: string; isUnitOwner: boolean; designation: string | null }>(
+        userRoles,
+        { userId: userRoles.userId, role: userRoles.role, isUnitOwner: userRoles.isUnitOwner, designation: userRoles.designation },
+        inArray(userRoles.userId, ids),
+      );
+  const byUser = new Map(roles.map((r) => [r.userId, r]));
+  const seen = new Set<string>();
+  const problems: string[] = [];
+  for (const member of members) {
+    const role = member.userId ? byUser.get(member.userId) : undefined;
+    const reason = !member.userId || !role
+      ? 'not_a_member'
+      : seen.has(member.userId)
+        ? 'listed_twice'
+        : finingCommitteeIneligibility(role, actorUserId);
+    if (member.userId) seen.add(member.userId);
+    if (reason) problems.push(`${member.name} ${INELIGIBLE_REASON[reason]}`);
+  }
+  if (problems.length > 0) {
+    throw new UnprocessableEntityError(
+      `The fining committee must be owners who are not on the board and are not imposing the fine `
+        + `(Fla. Stat. §718.303(3) / §720.305(2)): ${problems.join('; ')}.`,
+    );
+  }
+}
+
 export async function imposeViolationFineForCommunity(
   communityId: number,
   violationId: number,
@@ -693,6 +742,8 @@ export async function imposeViolationFineForCommunity(
         + `(Fla. Stat. §718.303(3) / §720.305(2)). ${formatCents(alreadyImposed)} has already been imposed.`,
     );
   }
+
+  await assertFiningCommitteeEligible(scoped, actorUserId, input.committeeMembers ?? []);
 
   const dueDate = input.dueDate
     ? parseDateOnly(input.dueDate, 'dueDate')

@@ -24,6 +24,12 @@ const {
     documents: { id: Symbol('documents.id') },
     ledgerEntries: { id: Symbol('ledger_entries.id') },
     violationFines: { id: Symbol('violation_fines.id') },
+    userRoles: {
+      userId: Symbol('user_roles.user_id'),
+      role: Symbol('user_roles.role'),
+      isUnitOwner: Symbol('user_roles.is_unit_owner'),
+      designation: Symbol('user_roles.designation'),
+    },
     violations: {
       id: Symbol('violations.id'),
       status: Symbol('violations.status'),
@@ -42,6 +48,7 @@ vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
   postLedgerEntry: postLedgerEntryMock,
   violationFines: tables.violationFines,
+  userRoles: tables.userRoles,
   violations: tables.violations,
 }));
 
@@ -490,7 +497,8 @@ describe('violations-service', () => {
     const selectFrom = vi
       .fn()
       .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ userId: 'u-dana', role: 'resident', isUnitOwner: true, designation: null }]);
     const insert = vi
       .fn()
       .mockResolvedValueOnce([createViolationFineRow()])
@@ -505,7 +513,7 @@ describe('violations-service', () => {
     await imposeViolationFineForCommunity(42, 10, 'actor-1', {
       amountCents: 2_500,
       approvedByCommittee: true,
-      committeeMembers: [{ name: 'Dana Reyes' }],
+      committeeMembers: [{ name: 'Dana Reyes', userId: 'u-dana' }],
     });
 
     // A SNAPSHOT, not a join: committee membership turns over, and the question
@@ -514,9 +522,52 @@ describe('violations-service', () => {
       tables.violationFines,
       expect.objectContaining({
         approvedByCommittee: true,
-        committeeMembers: [{ name: 'Dana Reyes' }],
+        committeeMembers: [{ name: 'Dana Reyes', userId: 'u-dana' }],
         committeeApprovedAt: expect.any(Date),
       }),
     );
+  });
+
+  describe('fining committee eligibility (§718.303(3) / §720.305(2))', () => {
+    function scopedWithRoles(roles: unknown[]) {
+      const selectFrom = vi
+        .fn()
+        .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(roles);
+      const insert = vi.fn();
+      createScopedClientMock.mockReturnValue({ selectFrom, insert, update: vi.fn() });
+      return { insert };
+    }
+    const fine = (committeeMembers: Array<{ name: string; userId?: string }>) =>
+      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2_500, approvedByCommittee: true, committeeMembers });
+
+    it.each([
+      ['a board seat', { userId: 'u-1', role: 'resident', isUnitOwner: true, designation: 'board_member' }, 'holds a board seat'],
+      ['a tenant', { userId: 'u-1', role: 'resident', isUnitOwner: false, designation: null }, 'is not a unit owner'],
+      ['a manager', { userId: 'u-1', role: 'property_manager', isUnitOwner: false, designation: null }, 'is not a unit owner'],
+    ])('refuses %s, and records nothing', async (_label, role, reason) => {
+      const { insert } = scopedWithRoles([role]);
+      await expect(fine([{ name: 'Pat', userId: 'u-1' }])).rejects.toThrow(`Pat ${reason}`);
+      expect(insert).not.toHaveBeenCalled();
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses the person imposing the fine, a non-member, and a duplicate', async () => {
+      scopedWithRoles([
+        { userId: 'actor-1', role: 'resident', isUnitOwner: true, designation: null },
+        { userId: 'u-2', role: 'resident', isUnitOwner: true, designation: null },
+      ]);
+      await expect(
+        fine([
+          { name: 'Me', userId: 'actor-1' },
+          { name: 'Stranger', userId: 'u-x' },
+          { name: 'Ann', userId: 'u-2' },
+          { name: 'Ann again', userId: 'u-2' },
+        ]),
+      ).rejects.toThrow(
+        /Me is the person imposing the fine; Stranger is not a member of this community; Ann again is listed more than once/,
+      );
+    });
   });
 });

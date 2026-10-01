@@ -86,6 +86,9 @@ export interface ImposeFinePayload {
   dueDate?: string;
   graceDays?: number;
   notes?: string | null;
+  /** §718.303(3) / §720.305(2): the committee approved this fine. */
+  approvedByCommittee: true;
+  committeeMembers: Array<{ userId: string; name: string }>;
 }
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {

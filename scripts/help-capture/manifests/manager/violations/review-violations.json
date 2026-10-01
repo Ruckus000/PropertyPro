@@ -51,7 +51,7 @@
         },
         {
           "type": "click",
-          "selector": "button[aria-label*=\"— Noise\"] >> nth=0"
+          "selector": "button[aria-label*=\"\u2014 Noise\"] >> nth=0"
         },
         {
           "type": "waitFor",
@@ -75,7 +75,7 @@
         },
         {
           "type": "click",
-          "selector": "button[aria-label*=\"— Unauthorized Modification\"] >> nth=0"
+          "selector": "button[aria-label*=\"\u2014 Unauthorized Modification\"] >> nth=0"
         },
         {
           "type": "click",
@@ -89,10 +89,22 @@
           "type": "fill",
           "selector": "#fine-amount",
           "value": "100"
+        },
+        {
+          "type": "waitFor",
+          "selector": "fieldset:has(legend:text-is(\"Fining committee\")) div input[type=\"checkbox\"]"
+        },
+        {
+          "type": "click",
+          "selector": "fieldset:has(legend:text-is(\"Fining committee\")) div input[type=\"checkbox\"] >> nth=0"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "fieldset:has(legend:text-is(\"Fining committee\"))"
         }
       ],
       "clipTo": "form:has(#fine-amount)",
-      "highlight": "#fine-amount"
+      "highlight": "fieldset:has(legend:text-is(\"Fining committee\"))"
     },
     {
       "name": "vi-hear",
@@ -107,7 +119,7 @@
         },
         {
           "type": "click",
-          "selector": "button[aria-label*=\"— Unauthorized Modification\"] >> nth=0"
+          "selector": "button[aria-label*=\"\u2014 Unauthorized Modification\"] >> nth=0"
         },
         {
           "type": "click",
