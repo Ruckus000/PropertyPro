@@ -86,3 +86,19 @@ export function describeHiddenSection(published: 'hidden' | 'shown' | 'none'): P
       };
   }
 }
+
+/**
+ * The confirmation before hiding the site's last visible Florida-required
+ * section (v4 Phase 2) — the half after the statute sentence.
+ *
+ * Conditional on the publish ("Once you publish…"), never a claim about what
+ * the live site shows NOW: hiding is a draft edit, and a section the live site
+ * already hides, or never published, reads just as truly. `claimsPublic` is
+ * false because nothing here asserts the section is on the public site.
+ */
+export function describeRequiredSectionHide(): PageSentence {
+  return {
+    text: 'Once you publish, visitors will not see it while it is hidden. If you only want it lower on the page, move it down instead.',
+    claimsPublic: false,
+  };
+}

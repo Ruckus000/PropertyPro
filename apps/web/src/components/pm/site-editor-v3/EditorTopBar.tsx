@@ -58,6 +58,8 @@ export interface EditorTopBarProps extends EditorTopBarPageProps {
   pageName?: string;
   /** Rendered on the right, before the actions — the save status line (Phase 3). */
   status?: React.ReactNode;
+  /** The Florida requirements pill (v4 Phase 2), rendered before `status`. */
+  requirements?: React.ReactNode;
   /**
    * Required, for the same reason `canOpenPublish` and `canPreview` below are.
    *
@@ -145,6 +147,7 @@ export function EditorTopBar({
   communityName,
   pageName,
   status,
+  requirements,
   onPreview,
   onPublish,
   canOpenPublish,
@@ -213,17 +216,29 @@ export function EditorTopBar({
         })}
       </div>
 
-      <div className="ml-auto flex min-w-0 items-center gap-2.5">
+      {/*
+       * Never shrinks. With `min-w-0` here this group was the one flexbox
+       * squeezed — below its own content — while the community name kept its
+       * full width, so at iPad widths Publish was laid out past the right edge
+       * of the screen. The name block (min-w-0, truncating) is the one that
+       * gives way now; measured at 768–1440px with a long name and page name.
+       */}
+      <div className="ml-auto flex shrink-0 items-center gap-2.5">
+        {requirements}
         {status}
         <Button
           ref={previewButtonRef}
           variant="outline"
           onClick={onPreview}
           disabled={!canPreview}
-          title={canPreview ? undefined : previewDisabledReason}
+          title={canPreview ? 'Preview' : previewDisabledReason}
+          // Icon-only below 1024px (the v4 design's rule) so Publish stays on an
+          // iPad screen; the name is constant so the button never loses it.
+          aria-label="Preview"
+          className="px-3 lg:px-4"
         >
           <Eye className="h-4 w-4" aria-hidden="true" />
-          Preview
+          <span className="hidden lg:inline">Preview</span>
         </Button>
         <Button
           onClick={onPublish}
@@ -284,7 +299,7 @@ function PagePicker({
           <span className="flex flex-col leading-tight">
             <span className="text-xs text-content-tertiary">Editing page</span>
             <span
-              className="max-w-[16rem] truncate text-sm font-semibold text-content"
+              className="max-w-[9rem] truncate text-sm font-semibold text-content xl:max-w-[16rem]"
               data-testid="editing-page-name"
             >
               {pageName ?? 'Loading pages…'}

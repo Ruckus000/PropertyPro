@@ -84,10 +84,22 @@ export function StatusLine({
     return null;
   }
 
+  const savedText = `Draft saved · ${formatSavedAt(lastSavedAt, timeZone)}`;
+  // Below 1280px the top bar cannot fit this line beside the page picker, the
+  // device toggle and the requirements pill: it wrapped onto three lines and
+  // pushed Publish off an iPad screen. So it collapses to its check mark — the
+  // v4 design's rule — while staying in the accessibility tree (sr-only, not
+  // hidden) and readable on hover. Saving and error states keep their words:
+  // those are the ones a PM must not miss.
   return (
-    <p role="status" aria-live="polite" className={cn(base, 'text-content-secondary')}>
+    <p
+      role="status"
+      aria-live="polite"
+      title={savedText}
+      className={cn(base, 'shrink-0 whitespace-nowrap text-content-secondary')}
+    >
       <Check className="h-3.5 w-3.5 shrink-0 text-status-success" aria-hidden="true" />
-      Draft saved · {formatSavedAt(lastSavedAt, timeZone)}
+      <span className="sr-only xl:not-sr-only">{savedText}</span>
     </p>
   );
 }
