@@ -44,6 +44,7 @@ export function queuePdfExtraction(params: QueueParams): void {
         await updateDocumentExtractionSuccess({
           communityId: params.communityId,
           documentId: params.documentId,
+          filePath: params.path,
           text,
           status: 'skipped',
         });
@@ -54,6 +55,7 @@ export function queuePdfExtraction(params: QueueParams): void {
       await updateDocumentExtractionSuccess({
         communityId: params.communityId,
         documentId: params.documentId,
+        filePath: params.path,
         text,
         status: 'completed',
       });
@@ -64,6 +66,7 @@ export function queuePdfExtraction(params: QueueParams): void {
         await updateDocumentExtractionFailure({
           communityId: params.communityId,
           documentId: params.documentId,
+          filePath: params.path,
           errorMessage,
         });
       } catch (updateErr) {

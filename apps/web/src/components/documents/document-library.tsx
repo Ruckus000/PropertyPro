@@ -42,12 +42,13 @@ import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
 import { useDocumentCategories } from '@/hooks/use-document-categories';
 import {
   useDeletedDocuments,
+  useDocumentFileInvalidator,
   useDocuments,
   useDocumentsInvalidator,
   useRestoreDocument,
   useSetDocumentPublicAccess,
 } from '@/hooks/use-documents';
-import type { UploadDocumentResult } from '@/hooks/use-document-upload';
+import type { ReplaceFileResult, UploadDocumentResult } from '@/hooks/use-document-upload';
 import {
   boardColumns,
   coerceDocumentsView,
@@ -167,6 +168,7 @@ export function DocumentLibrary({
   const publicAccessMutation = useSetDocumentPublicAccess(communityId);
   const restoreMutation = useRestoreDocument(communityId);
   const invalidateDocuments = useDocumentsInvalidator(communityId);
+  const invalidateDocumentFile = useDocumentFileInvalidator(communityId);
 
   const documents = useMemo<DocumentRow[]>(() => documentsQuery.data ?? [], [documentsQuery.data]);
   const checklist = useMemo<ChecklistRow[]>(
@@ -244,6 +246,28 @@ export function DocumentLibrary({
       }
     },
     [invalidateDocuments],
+  );
+
+  // The document keeps its id, so a selected snapshot of it would go on showing
+  // the old file's name and size; patch it rather than close the panel.
+  const handleFileReplaced = useCallback(
+    (result: ReplaceFileResult) => {
+      invalidateDocumentFile(result.id);
+      setSelectedDocument((current) =>
+        current?.id === result.id
+          ? { ...current, fileName: result.fileName, fileSize: result.fileSize, mimeType: result.mimeType }
+          : current,
+      );
+    },
+    [invalidateDocumentFile],
+  );
+
+  const handleDocumentReplaced = useCallback(
+    (result: ReplaceFileResult) => {
+      handleFileReplaced(result);
+      setShowUpload(false);
+    },
+    [handleFileReplaced],
   );
 
   const handleDeleted = useCallback((doc: DocumentRow) => {
@@ -342,6 +366,8 @@ export function DocumentLibrary({
             communityId={communityId}
             initialCategoryId={uploadCategoryId}
             onUploaded={handleDocumentUploaded}
+            existingDocuments={documents}
+            onReplaced={handleDocumentReplaced}
           />
         </div>
       )}
@@ -477,6 +503,7 @@ export function DocumentLibrary({
               canManage={canUpload}
               showStatutory={showStatutory}
               isDeleted={selectedIsDeleted}
+              onFileReplaced={handleFileReplaced}
               onRequestPublish={(document, publishing) =>
                 setPublishTarget({ document, publishing })
               }

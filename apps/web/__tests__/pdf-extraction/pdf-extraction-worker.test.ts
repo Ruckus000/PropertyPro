@@ -53,6 +53,9 @@ describe('pdf-extraction worker', () => {
         documentId: 99,
         text: 'Hello Worker',
         status: 'completed',
+        // Pinned to the file extracted: replacing a document's file keeps its
+        // id, so a late extraction of the OLD file must not land on the new one.
+        filePath: 'communities/42/documents/abc/file.pdf',
       }),
     );
   });
@@ -96,6 +99,7 @@ describe('pdf-extraction worker', () => {
         communityId: 1,
         documentId: 2,
         errorMessage: expect.stringContaining('Failed to download pdf'),
+        filePath: 'communities/1/documents/x/y.pdf',
       }),
     );
   });
@@ -121,6 +125,7 @@ describe('pdf-extraction worker', () => {
         communityId: 10,
         documentId: 20,
         status: 'skipped',
+        filePath: 'communities/10/documents/scanned/scan.pdf',
       }),
     );
   });

@@ -289,3 +289,79 @@ export async function restoreDocument(
     and(eq(documents.id, documentId), isNotNull(documents.deletedAt)),
   )) as unknown as Array<Record<string, unknown>>;
 }
+
+export interface DocumentFileSnapshot {
+  title: string;
+  categoryId: number | null;
+  publicAccess: boolean;
+  sourceType: string;
+  filePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
+
+/**
+ * What the replace-file path needs to decide and to audit: the fields that
+ * pick the attestation (category, public flag), the source type (only library
+ * uploads can be replaced), and the current file, which becomes the audit
+ * entry's `oldValues`.
+ */
+export async function getDocumentFileSnapshot(
+  communityId: number,
+  documentId: number,
+): Promise<DocumentFileSnapshot | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    documents,
+    {
+      title: documents.title,
+      categoryId: documents.categoryId,
+      publicAccess: documents.publicAccess,
+      sourceType: documents.sourceType,
+      filePath: documents.filePath,
+      fileName: documents.fileName,
+      fileSize: documents.fileSize,
+      mimeType: documents.mimeType,
+    },
+    eq(documents.id, documentId),
+  )) as unknown as Array<DocumentFileSnapshot>;
+  return rows[0] ?? null;
+}
+
+/**
+ * Point an existing document at a new file, keeping its id.
+ *
+ * The id is what everything else holds: compliance checklist items, the public
+ * site's download links, site blocks, notifications already sent. Replacing in
+ * place is what lets "the link stays the same" be true.
+ *
+ * The search index is reset rather than kept: the old text describes a file
+ * that is no longer served. `expectedFilePath` makes the write conditional on
+ * the row still pointing at the file the caller read, so two replaces racing
+ * cannot both succeed against the same starting point.
+ */
+export async function replaceDocumentFile(
+  communityId: number,
+  documentId: number,
+  expectedFilePath: string,
+  file: { filePath: string; fileName: string; fileSize: number; mimeType: string },
+): Promise<Record<string, unknown>[]> {
+  const scoped = createScopedClient(communityId);
+  const isPdf = file.mimeType.toLowerCase().includes('pdf');
+  return (await scoped.update(
+    documents,
+    {
+      filePath: file.filePath,
+      fileName: file.fileName,
+      fileSize: file.fileSize,
+      mimeType: file.mimeType,
+      searchText: null,
+      searchVector: null,
+      extractionStatus: isPdf ? 'pending' : 'not_applicable',
+      extractionError: null,
+      extractedAt: null,
+    },
+    and(eq(documents.id, documentId), eq(documents.filePath, expectedFilePath)),
+  )) as unknown as Array<Record<string, unknown>>;
+}
