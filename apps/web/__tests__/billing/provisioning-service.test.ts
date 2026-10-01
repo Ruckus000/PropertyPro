@@ -457,6 +457,24 @@ describe('runProvisioning', () => {
     expect((communityInsert?.values as { unitCount?: number }).unitCount).toBe(48);
   });
 
+  it("stores a signup's unit count of 1 as unknown — the old form's pre-filled default", async () => {
+    // A 1 would mark a condo exempt from Florida's website rules; null is
+    // treated as "required" until the association states its real count.
+    const { calls } = buildDb({
+      selectSequence: [
+        [makeJob({})],
+        [{ ...CONDO_SIGNUP, unitCount: 1 }],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await runProvisioning(1);
+
+    const communityInsert = calls.find((c) => c.op === 'insert' && c.table === communitiesTable);
+    expect((communityInsert?.values as { unitCount?: number | null }).unitCount).toBeNull();
+  });
+
   // 1c. An unrecognised plan_key must not be written verbatim — downstream
   // plan gating calls resolvePlanId(), which returns null for junk, so writing
   // it would produce a community that looks subscribed but gates as unplanned.
