@@ -955,6 +955,10 @@ async function liveSitePages(tx: Tx, communityId: number): Promise<RequiredSecti
     .from(siteBlocks)
     .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
 
+  // ponytail: fourth hand-written copy of the draft-wins-per-(page, slot) rule —
+  // also in publishCommunitySite and reorderSiteBlock (site-blocks-service.ts) and
+  // the public reader (public-community-reader.ts). Extract one shared helper when
+  // a bug is fixed in one copy but not the others.
   const winners = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
     const key = `${row.pageId}:${row.blockOrder}`;

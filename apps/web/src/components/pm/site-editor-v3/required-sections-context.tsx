@@ -18,6 +18,7 @@ import {
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import { useUpdateCommunityUnitCount } from '@/hooks/use-community-unit-count';
 import { upsertableBlockType } from '@/lib/site-editor/upsertable-block-type';
+import { visibleBlocks } from '@/lib/site/visible-blocks';
 
 /**
  * Florida-required sections, as the editor's controls need to see them
@@ -123,10 +124,6 @@ export interface RequiredSectionsProviderProps {
   children: React.ReactNode;
 }
 
-function isVisibleCopy(content: unknown): boolean {
-  return (content as Record<string, unknown> | null)?.['hidden'] !== true;
-}
-
 export function RequiredSectionsProvider({
   communityId,
   communityType,
@@ -135,12 +132,15 @@ export function RequiredSectionsProvider({
   pages,
   children,
 }: RequiredSectionsProviderProps) {
-  const upsert = useUpsertContentBlock(communityId);
-  const updateUnitCount = useUpdateCommunityUnitCount(communityId);
+  // Only the mutation FUNCTIONS go into the memo below: TanStack binds them once
+  // per observer, while the result objects are new on every render — with those
+  // as deps the memo recomputed every render and re-rendered every consumer.
+  const { mutate: upsertBlock } = useUpsertContentBlock(communityId);
+  const { mutateAsync: patchUnitCount, isPending: isSavingUnitCount } =
+    useUpdateCommunityUnitCount(communityId);
   // The saved value for this session. Seeded from the server prop and replaced
   // by the server's answer after a save — never by what was typed.
   const [unitCount, setUnitCount] = useState(initialUnitCount);
-  const { mutateAsync: patchUnitCount, isPending: isSavingUnitCount } = updateUnitCount;
   const saveUnitCount = useCallback(
     async (next: number) => {
       const saved = await patchUnitCount(next);
@@ -160,7 +160,7 @@ export function RequiredSectionsProvider({
               ...p,
               snapshot: {
                 ...p.snapshot,
-                sections: p.snapshot.sections.filter((s) => isVisibleCopy(s.content)),
+                sections: visibleBlocks(p.snapshot.sections),
               },
             })),
             blockType,
@@ -195,7 +195,7 @@ export function RequiredSectionsProvider({
         // copy on another page is out of its reach (D-WRITE).
         const content = { ...((section.content ?? {}) as Record<string, unknown>) };
         delete content.hidden;
-        upsert.mutate({
+        upsertBlock({
           blockType,
           blockOrder: slot,
           content,
@@ -204,7 +204,7 @@ export function RequiredSectionsProvider({
         return true;
       },
     };
-  }, [communityType, unitCount, canEditUnitCount, saveUnitCount, isSavingUnitCount, pages, upsert]);
+  }, [communityType, unitCount, canEditUnitCount, saveUnitCount, isSavingUnitCount, pages, upsertBlock]);
 
   return (
     <RequiredSectionsContext.Provider value={value}>{children}</RequiredSectionsContext.Provider>

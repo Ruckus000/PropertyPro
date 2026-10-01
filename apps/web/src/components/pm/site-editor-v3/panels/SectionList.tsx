@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { useRequiredSections } from '@/components/pm/site-editor-v3/required-sections-context';
 import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
-import { useHideToggle } from '@/components/pm/site-editor-v3/use-hide-toggle';
+import { isHiddenBlock, useHideToggle } from '@/components/pm/site-editor-v3/use-hide-toggle';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 const KEYBOARD_HINT_ID = 'site-editor-section-reorder-hint';
@@ -209,12 +209,7 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
           const canUp = canMove(section.id, 'up');
           const canDown = canMove(section.id, 'down');
           const isDragging = drag?.blockId === section.id;
-          // `hidden` is `z.literal(true).optional()`, so only an exact `true`
-          // counts — absence is the sole way content says "visible".
-          const isHidden =
-            typeof section.content === 'object' &&
-            section.content !== null &&
-            (section.content as { hidden?: unknown }).hidden === true;
+          const isHidden = isHiddenBlock(section);
           // Florida-required (v4 Phase 2): badged, and not duplicable — see
           // FloatControls for why Duplicate is locked but Hide is not.
           const required = isRequired(section.blockType);

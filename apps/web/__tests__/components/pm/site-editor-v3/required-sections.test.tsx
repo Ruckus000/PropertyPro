@@ -17,7 +17,11 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
 import { RequirementsPill } from '@/components/pm/site-editor-v3/RequirementsPill';
-import { RequiredSectionsProvider } from '@/components/pm/site-editor-v3/required-sections-context';
+import {
+  RequiredSectionsProvider,
+  useRequiredSections,
+  type RequiredSectionsValue,
+} from '@/components/pm/site-editor-v3/required-sections-context';
 
 const HOME = 10;
 
@@ -430,5 +434,35 @@ describe('the unit count', () => {
     await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
     expect(await screen.findByText(/Ask a community admin/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+});
+
+describe('RequiredSectionsProvider', () => {
+  it('keeps the same value across re-renders with unchanged inputs', () => {
+    // The mutation hooks return a NEW result object every render (as TanStack's
+    // do) with a stable `mutate`. Depending on the object recomputed the value
+    // on every render and re-rendered every row, toolbar and the pill with it.
+    const seen: RequiredSectionsValue[] = [];
+    function Probe() {
+      seen.push(useRequiredSections());
+      return null;
+    }
+    const pages = sitePages({ [HOME]: editor.blocks });
+    const tree = () => (
+      <RequiredSectionsProvider
+        communityId={7}
+        communityType="condo_718"
+        unitCount={60}
+        canEditUnitCount
+        pages={pages}
+      >
+        <Probe />
+      </RequiredSectionsProvider>
+    );
+    const { rerender } = render(tree());
+    rerender(tree());
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toBe(seen[0]);
   });
 });
