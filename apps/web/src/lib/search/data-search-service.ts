@@ -107,7 +107,8 @@ async function executeSearchGroup(
           id: row.id,
           title: row.title,
           subtitle: row.meeting_type,
-          href: `/meetings/${row.id}`,
+          // No per-meeting page exists; open the community's meetings.
+          href: `/communities/${communityId}/meetings`,
           entityType: 'meeting',
           meetingType: row.meeting_type,
           startsAt: row.starts_at,
@@ -143,7 +144,7 @@ async function executeSearchGroup(
           id: row.id,
           title: row.description.slice(0, 100),
           subtitle: `${row.severity} · ${row.status}`,
-          href: `/violations/${row.id}`,
+          href: `/violations/${row.id}?communityId=${communityId}`,
           entityType: 'violation',
           status: row.status,
           severity: row.severity,
@@ -164,7 +165,8 @@ async function executeSearchGroup(
           id: row.id,
           title: row.full_name ?? row.email,
           subtitle: row.unit_number ? `Unit ${row.unit_number}` : row.role,
-          href: `/residents/${row.id}`,
+          // No per-resident page exists (search is admin-only); open the residents list.
+          href: `/dashboard/residents?communityId=${communityId}`,
           entityType: 'resident',
           role: row.role,
           unitNumber: row.unit_number,
