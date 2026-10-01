@@ -22,6 +22,8 @@ const {
   updateUnitByIdMock,
   listResidentRolesForUnitMock,
   softDeleteUnitByIdMock,
+  getUnitBalanceCentsMock,
+  countOpenViolationsForUnitMock,
   tryAutoCompleteMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -39,6 +41,8 @@ const {
   updateUnitByIdMock: vi.fn(),
   listResidentRolesForUnitMock: vi.fn(),
   softDeleteUnitByIdMock: vi.fn(),
+  getUnitBalanceCentsMock: vi.fn(),
+  countOpenViolationsForUnitMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
 }));
 
@@ -79,6 +83,8 @@ vi.mock('@/lib/services/unit-service', () => ({
   listResidentRolesForUnit: listResidentRolesForUnitMock,
   softDeleteUnitById: softDeleteUnitByIdMock,
   updateUnitById: updateUnitByIdMock,
+  getUnitBalanceCents: getUnitBalanceCentsMock,
+  countOpenViolationsForUnit: countOpenViolationsForUnitMock,
 }));
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
@@ -376,9 +382,49 @@ describe('/api/v1/units', () => {
     });
   });
 
+  describe('DELETE guards: money and enforcement history', () => {
+    function deleteUnit() {
+      return DELETE(
+        new NextRequest('http://localhost:3000/api/v1/units', {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 42, unitId: 7 }),
+        }),
+      );
+    }
+
+    beforeEach(() => {
+      getUnitByIdMock.mockResolvedValue({ id: 7, unitNumber: '7', building: null, floor: 1 });
+      listResidentRolesForUnitMock.mockResolvedValue([]);
+      getUnitBalanceCentsMock.mockResolvedValue(0);
+      countOpenViolationsForUnitMock.mockResolvedValue(0);
+    });
+
+    it.each([
+      ['an amount owed', 12_500],
+      ['a credit owed back', -4_000],
+    ])('refuses with %s on the ledger', async (_label, cents) => {
+      getUnitBalanceCentsMock.mockResolvedValue(cents);
+      const res = await deleteUnit();
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.message).toMatch(/balance is not zero/);
+      expect(softDeleteUnitByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses with open violations', async () => {
+      countOpenViolationsForUnitMock.mockResolvedValue(2);
+      const res = await deleteUnit();
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.message).toMatch(/2 open violation/);
+      expect(softDeleteUnitByIdMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('DELETE soft-deletes an empty unit and audits it', async () => {
     getUnitByIdMock.mockResolvedValue({ id: 7, unitNumber: '7', building: null, floor: 1 });
     listResidentRolesForUnitMock.mockResolvedValue([]);
+    getUnitBalanceCentsMock.mockResolvedValue(0);
+    countOpenViolationsForUnitMock.mockResolvedValue(0);
     softDeleteUnitByIdMock.mockResolvedValue(undefined);
 
     const res = await DELETE(

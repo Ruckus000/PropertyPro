@@ -18,7 +18,9 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import {
+  countOpenViolationsForUnit,
   createUnitForCommunity,
+  getUnitBalanceCents,
   getUnitById,
   getUnitByNumber,
   listResidentRolesForUnit,
@@ -289,6 +291,22 @@ export const DELETE = withErrorHandler(
     if (activeResidents.length > 0) {
       throw new ValidationError(
         `Cannot delete unit ${unitId}: ${activeResidents.length} active resident(s) are still assigned. Reassign or remove them first.`,
+      );
+    }
+
+    // Money and enforcement history must not disappear with the unit.
+    const [balanceCents, openViolations] = await Promise.all([
+      getUnitBalanceCents(scoped, unitId),
+      countOpenViolationsForUnit(scoped, unitId),
+    ]);
+    if (balanceCents !== 0) {
+      throw new ValidationError(
+        `Cannot delete unit ${unitId}: its ledger balance is not zero. Settle or refund it first.`,
+      );
+    }
+    if (openViolations > 0) {
+      throw new ValidationError(
+        `Cannot delete unit ${unitId}: ${openViolations} open violation(s). Resolve or dismiss them first.`,
       );
     }
 
