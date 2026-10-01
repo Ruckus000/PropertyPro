@@ -86,8 +86,12 @@
           "ms": 1500
         },
         {
+          "type": "scrollTo",
+          "selector": "div.absolute.inset-0 > button:has-text(\"Signature\") >> nth=0"
+        },
+        {
           "type": "click",
-          "selector": "div.absolute.inset-0 > button >> nth=0"
+          "selector": "div.absolute.inset-0 > button:has-text(\"Signature\") >> nth=0"
         },
         {
           "type": "waitFor",

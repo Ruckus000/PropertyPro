@@ -23,19 +23,24 @@ import {
   documents,
   electionCandidates,
   elections,
+  forumThreads,
   insurancePolicies,
   leases,
+  maintenanceRequests,
   meetingDocuments,
   meetings,
   moveChecklists,
   packageLog,
   polls,
+  reserveAssets,
+  stormDamageReports,
   units,
   userRoles,
   users,
   visitorLog,
+  windMitigationReports,
 } from '@propertypro/db';
-import { and, eq, inArray, isNotNull, isNull, ne, sql } from '@propertypro/db/filters';
+import { and, eq, ilike, inArray, isNotNull, isNull, ne, sql } from '@propertypro/db/filters';
 // AUTHZ: local-only capture fixtures; refuses any non-loopback DATABASE_URL before touching the database.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAnnouncementForCommunity } from '@/lib/services/announcement-service';
@@ -343,6 +348,93 @@ async function main(): Promise<void> {
       projectType: 'Fence',
       estimatedStartDate: isoDate(new Date(Date.now() + 30 * DAY)),
       estimatedCompletionDate: isoDate(new Date(Date.now() + 37 * DAY)),
+    });
+    return true;
+  });
+
+  // fr-list (both sections). Direct insert: same row the service writes,
+  // without its audit entry.
+  await step('forum thread', async () => {
+    const title = 'Lobby furniture: keep or replace?';
+    const existing = await first(condo.selectFrom(forumThreads, { id: forumThreads.id }, eq(forumThreads.title, title)).limit(1));
+    if (existing) return false;
+    await condo.insert(forumThreads, {
+      title,
+      body: 'The lobby chairs are worn. Should we reupholster them or put replacement on next year’s budget?',
+      authorUserId: ownerId,
+      isPinned: false,
+      isLocked: false,
+    });
+    return true;
+  });
+
+  // rv-list (both sections)
+  await step('reserve assets', async () => {
+    const existing = await first(condo.selectFrom(reserveAssets, { id: reserveAssets.id }, isNull(reserveAssets.deletedAt)).limit(1));
+    if (existing) return false;
+    for (const asset of [
+      { name: 'Main roof', category: 'roof', yearInstalled: 2012, usefulLifeYears: 20 },
+      { name: 'Elevator 1', category: 'elevator', yearInstalled: 2008, usefulLifeYears: 25 },
+      { name: 'Pool resurfacing', category: 'pool', yearInstalled: 2019, usefulLifeYears: 12 },
+    ]) {
+      await condo.insert(reserveAssets, asset);
+    }
+    return true;
+  });
+
+  // st-list
+  await step('storm-damage report', async () => {
+    const locationLabel = 'North pool deck';
+    const existing = await first(
+      condo.selectFrom(stormDamageReports, { id: stormDamageReports.id }, eq(stormDamageReports.locationLabel, locationLabel)).limit(1),
+    );
+    if (existing) return false;
+    await condo.insert(stormDamageReports, {
+      reportedBy: ownerId,
+      unitId: ownerUnit.id,
+      occurredAt: new Date(Date.now() - 3 * DAY),
+      locationLabel,
+      category: 'common_area',
+      severity: 'moderate',
+      description: 'Two pool-deck pavers lifted and a section of the screen enclosure is torn.',
+    });
+    return true;
+  });
+
+  // wo-inbox (manager) and mr-list (owner): the condo has no requests otherwise.
+  await step('maintenance request', async () => {
+    const title = 'Hallway light out by unit 1A';
+    const existing = await first(condo.selectFrom(maintenanceRequests, { id: maintenanceRequests.id }, eq(maintenanceRequests.title, title)).limit(1));
+    if (existing) return false;
+    await condo.insert(maintenanceRequests, {
+      unitId: ownerUnit.id,
+      submittedById: ownerId,
+      title,
+      description: 'The ceiling light outside my door has been out for two days.',
+      category: 'electrical',
+      priority: 'normal',
+      status: 'open',
+    });
+    return true;
+  });
+
+  // ins-wind (resident): a report on a seeded inspection PDF.
+  await step('wind-mitigation report', async () => {
+    const existing = await first(
+      condo.selectFrom(windMitigationReports, { id: windMitigationReports.id }, isNull(windMitigationReports.deletedAt)).limit(1),
+    );
+    if (existing) return false;
+    const pdf = await first<{ id: number }>(
+      condo.selectFrom(documents, { id: documents.id }, ilike(documents.title, '%inspection%')).limit(1),
+    );
+    if (!pdf) throw new Error('No seeded inspection document at Sunset Condos for the wind-mitigation report');
+    await condo.insert(windMitigationReports, {
+      documentId: pdf.id,
+      formType: 'oir_b1_1802',
+      inspectedAt: isoDate(new Date(Date.now() - 400 * DAY)),
+      expiresAt: isoDate(new Date(Date.now() + 1425 * DAY)),
+      inspectorName: 'Coastal Home Inspections',
+      createdBy: camId,
     });
     return true;
   });

@@ -42,7 +42,7 @@
           "selector": "role=button[name=\"Send Notice\"]"
         }
       ],
-      "clipTo": "div:has(> button[aria-expanded=\"true\"])",
+      "clipTo": "div:has(> button[aria-label^=\"Violation #\"][aria-expanded=\"true\"])",
       "highlight": "role=button[name=\"Send Notice\"]",
       "step": 2
     }

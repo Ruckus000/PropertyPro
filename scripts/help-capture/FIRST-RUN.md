@@ -1,11 +1,8 @@
 # First capture run — known prerequisites
 
-The manifests here were written against the code, not against a
-running app: none has been captured yet. Until a shot is captured, its article
-renders that step without an image (`guard:help-content` reports how many are
-pending). This list is what the authors could not confirm without a seeded app.
-Delete entries as they are resolved; delete this file when every shot has
-captured cleanly.
+Until a shot is captured, its article renders that step without an image
+(`guard:help-content` reports how many are pending). This is what a capture
+run needs beyond a seeded app, and what is still uncaptured.
 
 ## Setup
 
@@ -54,21 +51,15 @@ bids (`ct-*`), an active poll (`poll-vote`), a policy with an agent email
 (`ins-coi`), the digest turned on (`dig-card`), a pinned announcement outside
 the demo registry (`dash-ann`, `an-*`), an access request (`jr-*`), an ARC
 submission (`arcr-*`), elections (`el-*`, `bal-cast`), a meeting this month
-(`mt-day`) and a past meeting with minutes (`mt-past`, `min-list`). Still
-missing:
-
-- Forum threads and join requests.
-- Maintenance requests and work orders (`mr-list`, `wo-inbox`).
-- Storm reports (`st-list`), reserve assets (`rv-list`).
-- Something waiting for signature (`dash-sign`), an unfinished setup
-  checklist (`dash-check`), an audit entry with metadata (`au-meta`), a seeded
-  violation on owner.one's unit (`vn-notice`).
-- `pm_admin` needs a billing group for `ob-add`, `ob-form`, `ob-plan`.
+(`mt-day`), a past meeting with minutes (`mt-past`, `min-list`), a forum
+thread (`fr-list`), reserve assets (`rv-list`), a storm report (`st-list`), a
+condo maintenance request (`wo-inbox`, `mr-list`) and a wind-mitigation report
+(`ins-wind`). The demo seed itself is unchanged.
 
 ## Date-sensitive fills
 
 - `vi-hear` fills `2026-10-08` (must be within 14 days of capture for the
-  warning); `mt-warn` fills `2026-10-03T18:00`. Update both before capturing.
+  warning); `mt-warn` fills `2026-10-02T12:00`. Update both before capturing.
 
 ## Selectors to confirm
 
@@ -100,68 +91,20 @@ still passes the capture.
 - Account deletion and emergency-broadcast undo: capturing them would schedule
   a deletion or send an alert.
 
-## Status after the 2026-09-30 capture run
+## Status after the 2026-10-01 capture run
 
-171 of 230 shots are captured against the seeded local app (condo=1, hoa=2, apartment=3) and were reviewed by eye. These 59 are not, and their steps render text-only until they are:
+227 of 232 shots are captured against the seeded local app with the fixtures
+above, and each was reviewed by eye. These 5 are not; their steps render
+text-only:
 
 | Article | Shot | Why |
 |---|---|---|
-| `manager/announcements/post-announcement` | `an-publish` | crop target empty or off-screen |
-| `manager/apartment/packages` | `pk-pending` | target never appeared: missing seed data (see above) or selector |
-| `manager/apartment/packages` | `pk-pickup` | target never appeared: missing seed data (see above) or selector |
-| `manager/apartment/visitors` | `vs-list` | target never appeared: missing seed data (see above) or selector |
-| `manager/apartment/visitors` | `vs-revoke` | target never appeared: missing seed data (see above) or selector |
-| `manager/apartment/visitors` | `vs-deny` | captured a loading skeleton (removed) |
-| `manager/board/run-election` | `el-actions` | crop landed on the dialog backdrop (removed) |
-| `manager/board/run-election` | `el-results` | target never appeared: missing seed data (see above) or selector |
-| `manager/compliance/compliance-dashboard` | `cp-upload` | captured the modal while loading (removed) |
-| `manager/documents/find-documents` | `doc-row` | crop target empty or off-screen |
-| `manager/documents/find-documents` | `doc-dl` | crop target empty or off-screen |
-| `manager/documents/find-documents` | `doc-viewer` | crop target empty or off-screen |
-| `manager/emergency/emergency-broadcast` | `em-stats` | target never appeared: missing seed data (see above) or selector |
-| `manager/getting-started/getting-around` | `gs-helppanel` | panel crop only 24–59px wide (removed) |
-| `manager/getting-started/your-dashboard` | `dash-sign` | target never appeared: missing seed data (see above) or selector |
-| `manager/leases/move-in-out` | `mio-list` | target never appeared: missing seed data (see above) or selector |
-| `manager/leases/move-in-out` | `mio-card` | target never appeared: missing seed data (see above) or selector |
-| `manager/meetings/meeting-notices` | `mt-day` | click target missing |
-| `manager/meetings/meeting-notices` | `mt-detail` | click target missing |
-| `manager/meetings/post-minutes` | `min-author` | click target missing |
-| `manager/meetings/schedule-meeting` | `mt-deadlines` | click target missing |
-| `manager/pm/roles-access` | `ra-board` | crop target empty or off-screen |
-| `manager/residents/join-requests` | `jr-queue` | target never appeared: missing seed data (see above) or selector |
-| `manager/residents/join-requests` | `jr-deny` | click target missing |
-| `manager/violations/arc-review` | `arcr-queue` | target never appeared: missing seed data (see above) or selector |
-| `manager/violations/arc-review` | `arcr-panel` | target never appeared: missing seed data (see above) or selector |
-| `manager/violations/arc-review` | `arcr-decide` | target never appeared: missing seed data (see above) or selector |
-| `manager/violations/review-violations` | `vi-notice` | crop landed on the sidebar (removed) |
-| `manager/website/contracts` | `ct-alerts` | target never appeared: missing seed data (see above) or selector |
-| `manager/website/contracts` | `ct-bids` | target never appeared: missing seed data (see above) or selector |
-| `manager/website/export-data` | `exp-page` | target never appeared: missing seed data (see above) or selector |
-| `manager/website/transparency-page` | `tp-public` | target never appeared: missing seed data (see above) or selector |
-| `resident/account/export-data` | `exp-page` | target never appeared: missing seed data (see above) or selector |
-| `resident/announcements/read-announcements` | `an-list` | target never appeared: missing seed data (see above) or selector |
-| `resident/announcements/read-announcements` | `an-pin` | target never appeared: missing seed data (see above) or selector |
-| `resident/board/cast-ballot` | `bal-cast` | target never appeared: missing seed data (see above) or selector |
-| `resident/board/run-election` | `el-actions` | crop landed on the dialog backdrop (removed) |
-| `resident/board/run-election` | `el-results` | target never appeared: missing seed data (see above) or selector |
-| `resident/board/vote-poll` | `poll-vote` | target never appeared: missing seed data (see above) or selector |
-| `resident/building/insurance` | `ins-coi` | target never appeared: missing seed data (see above) or selector |
-| `resident/documents/find-documents` | `doc-row` | crop target empty or off-screen |
-| `resident/documents/find-documents` | `doc-dl` | crop target empty or off-screen |
-| `resident/documents/find-documents` | `doc-viewer` | crop target empty or off-screen |
-| `resident/documents/find-documents` | `doc-cats-apt` | target never appeared: missing seed data (see above) or selector |
-| `resident/emergency/emergency-alerts` | `em-r` | target never appeared: missing seed data (see above) or selector |
-| `resident/esign/sign-document` | `sg-card` | crop target empty or off-screen |
-| `resident/esign/sign-document` | `sg-field` | target never appeared: missing seed data (see above) or selector |
-| `resident/esign/sign-document` | `sg-modal` | target never appeared: missing seed data (see above) or selector |
-| `resident/esign/sign-document` | `sg-finish` | target never appeared: missing seed data (see above) or selector |
-| `resident/getting-started/community-digest` | `dig-card` | target never appeared: missing seed data (see above) or selector |
-| `resident/getting-started/getting-around` | `gs-helppanel` | panel crop only 24–59px wide (removed) |
-| `resident/getting-started/join-community` | `gs-join-unit` | target never appeared: missing seed data (see above) or selector |
-| `resident/getting-started/join-community` | `gs-join-submit` | target never appeared: missing seed data (see above) or selector |
-| `resident/getting-started/your-dashboard` | `dash-sign` | target never appeared: missing seed data (see above) or selector |
-| `resident/meetings/meeting-notices` | `mt-day` | click target missing |
-| `resident/meetings/meeting-notices` | `mt-detail` | click target missing |
-| `resident/payments/balance` | `bal-clear` | target never appeared: missing seed data (see above) or selector |
-| `resident/payments/pay-dues` | `pay-form` | target never appeared: missing seed data (see above) or selector |
-| `resident/violations/violation-notice` | `vn-notice` | target never appeared: missing seed data (see above) or selector |
+| `manager/website/transparency-page` | `tp-public` | The public page is host-based (`<slug>.localhost/transparency`); manifests take a path only. |
+| `resident/documents/find-documents` | `doc-cats-apt` | No apartment resident persona in `/dev/agent-login`. |
+| `resident/emergency/emergency-alerts` | `em-r` | Needs `SMS_DISPATCH_ENABLED=true`, which makes an accidental send real. |
+| `resident/payments/balance` | `bal-clear` | No persona has a cleared balance; Palm Shores' plan has no finance. |
+| `resident/payments/pay-dues` | `pay-form` | Needs Stripe keys and a connected account. |
+
+Captured but showing an honest empty state: `ntf-center` (no notifications
+yet), `pay-hist` (no payments yet), `vs-deny` (the step is the add button) and
+`gap-over` (nothing overdue in the demo).

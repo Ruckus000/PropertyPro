@@ -64,6 +64,10 @@
         {
           "type": "waitFor",
           "selector": "role=dialog[name=\"Add wind-mitigation report\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "#wm-document:has-text(\"Choose an uploaded document\")"
         }
       ],
       "clipTo": "role=dialog",
