@@ -84,7 +84,7 @@ vi.mock('@/lib/services/site-pages-service', () => ({
   listSitePages: vi.fn().mockResolvedValue([]),
 }));
 // v4 Phase 2b: the page reads the association's unit count. Unknown (`null`)
-// is the value every pre-0080 community starts with.
+// is the value every pre-0081 community starts with.
 vi.mock('@/lib/services/community-profile-service', () => ({
   getCommunityUnitCount: vi.fn().mockResolvedValue(null),
 }));

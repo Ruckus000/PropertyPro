@@ -154,7 +154,7 @@ export interface PublishSheetProps {
   onGoToPages: () => void;
   /**
    * Community type + unit count, which decide which sections Florida law
-   * requires (v4 Phase 2; the count since 0080). Required for the reason
+   * requires (v4 Phase 2; the count since 0081). Required for the reason
    * `onGoToPages` is: omitted, the "Required by Florida law" warnings would
    * silently never appear.
    */

@@ -52,7 +52,7 @@ export async function createCommunityForPm(
         state: input.state,
         zipCode: input.zipCode,
         timezone: input.timezone,
-        // Collected by the form and, until migration 0080, dropped here. It
+        // Collected by the form and, until migration 0081, dropped here. It
         // decides whether Florida's website rules apply (packages/shared
         // `requirementLevel`).
         unitCount: input.unitCount,

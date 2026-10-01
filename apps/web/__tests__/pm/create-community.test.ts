@@ -160,7 +160,7 @@ describe('createCommunityForPm', () => {
   });
 
   it('stores the unit count the form collected — it decides whether Florida website rules apply', async () => {
-    // Collected and silently dropped before migration 0080.
+    // Collected and silently dropped before migration 0081.
     const { communityInserts } = buildDb();
     await createCommunityForPm(VALID_INPUT);
     expect(communityInserts[0]).toMatchObject({ unitCount: 50 });

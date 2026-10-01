@@ -11,7 +11,7 @@
  * condos of 25+ units, HOAs of 100+ parcels (`requirementLevel`). Below it the
  * same sections are "recommended": badged, but never locked, confirmed or
  * warned about. An UNKNOWN count (`null`, every community created before
- * migration 0080 whose signup could not be recovered) is treated as covered —
+ * migration 0081 whose signup could not be recovered) is treated as covered —
  * a false "Required" is a nuisance, a false "not required" a legal exposure —
  * and the editor asks for the number. Copy says what the law asks of
  * associations, never what this association owes — and never a fine amount:

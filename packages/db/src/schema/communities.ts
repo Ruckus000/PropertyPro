@@ -26,7 +26,7 @@ export const communities = pgTable('communities', {
    *
    * NULLABLE on purpose, and NULL means UNKNOWN, never zero. Signup and
    * "Add community" always collected this number and dropped it before the
-   * insert, so every community created before migration 0080 has none unless
+   * insert, so every community created before migration 0081 has none unless
    * the backfill could recover it from its pending signup. Unknown is treated
    * as covered (the safe direction: a false "Required" is a nuisance, a false
    * "not required" is a legal exposure) and the editor asks the PM for it.
@@ -225,7 +225,7 @@ export const communities = pgTable('communities', {
     sql`${table.urgentNoticeText} IS NULL OR char_length(${table.urgentNoticeText}) <= 240`,
   ),
   // Same bounds as the write contracts (signup allows up to 20,000). The
-  // backstop for a caller that skips them. Mirrors migration 0080.
+  // backstop for a caller that skips them. Mirrors migration 0081.
   check(
     'communities_unit_count_range',
     sql`${table.unitCount} IS NULL OR (${table.unitCount} >= 1 AND ${table.unitCount} <= 100000)`,

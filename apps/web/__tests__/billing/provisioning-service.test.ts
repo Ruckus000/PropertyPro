@@ -452,7 +452,7 @@ describe('runProvisioning', () => {
     expect((communityInsert?.values as { subscriptionPlan?: string }).subscriptionPlan).toBe(
       'professional',
     );
-    // The signup's declared size reaches the community (migration 0080) — it is
+    // The signup's declared size reaches the community (migration 0081) — it is
     // what decides whether Florida's website rules apply.
     expect((communityInsert?.values as { unitCount?: number }).unitCount).toBe(48);
   });

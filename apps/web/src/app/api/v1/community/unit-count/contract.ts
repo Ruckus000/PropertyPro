@@ -2,7 +2,7 @@
  * Route contract for `/api/v1/community/unit-count` (v4 builder, Phase 2b).
  *
  * How many units (condo) or parcels (HOA) the association has —
- * `communities.unit_count` (migration 0080). It decides whether Florida's
+ * `communities.unit_count` (migration 0081). It decides whether Florida's
  * website rules apply: §718.111(12)(g) reaches condos of 25+ units, §720.303
  * HOAs of 100+ parcels (`requirementLevel` in @propertypro/shared). The site
  * builder asks for it when it is unknown and lets an admin correct it.

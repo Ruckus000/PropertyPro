@@ -151,7 +151,7 @@ type PendingSignupRow = {
   state: string | null;
   zipCode: string | null;
   candidateSlug: string;
-  /** Units or parcels the signup declared — stored on the community (0080). */
+  /** Units or parcels the signup declared — stored on the community (0081). */
   unitCount: number;
   planKey: string | null;
   payload: Record<string, unknown>;
@@ -220,7 +220,7 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
       zipCode: normalizedAddress.zipCode,
       timezone: 'America/New_York',
       // Signup has always required this (pending_signups.unit_count NOT NULL);
-      // until migration 0080 it never reached the community.
+      // until migration 0081 it never reached the community.
       unitCount: ctx.signup.unitCount,
       stripeCustomerId,
       stripeSubscriptionId,

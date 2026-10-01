@@ -158,7 +158,7 @@ export interface EditorRootProps {
    */
   siteIdentity: SitePanelProps['community'];
   /**
-   * `communities.unit_count` (migration 0080); `null` = unknown. With the type
+   * `communities.unit_count` (migration 0081); `null` = unknown. With the type
    * it decides whether Florida's website rules apply — see `requirementLevel`.
    */
   unitCount: number | null;
