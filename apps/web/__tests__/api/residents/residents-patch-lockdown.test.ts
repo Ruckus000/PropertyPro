@@ -1,5 +1,5 @@
 /**
- * Security regression tests — residents POST + PATCH manager-tier lockdown.
+ * Security regression tests — residents POST + PATCH + DELETE manager-tier lockdown.
  *
  * Proves that the `isResidentTierRole` guard in residents/route.ts blocks
  * manager-tier role assignments even when the actor holds full `residents:write`
@@ -108,7 +108,7 @@ vi.mock('@/lib/utils/community-validators', () => ({
   requireCommunityRole: requireCommunityRoleMock,
 }));
 
-import { POST, PATCH } from '../../../src/app/api/v1/residents/route';
+import { DELETE, POST, PATCH } from '../../../src/app/api/v1/residents/route';
 
 const COMMUNITY_ID = 42;
 
@@ -126,6 +126,17 @@ const ACTOR_MEMBERSHIP = {
 function postReq(body: Record<string, unknown>): NextRequest {
   return new NextRequest('http://localhost:3000/api/v1/residents', {
     method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-community-id': String(COMMUNITY_ID),
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function deleteReq(body: Record<string, unknown>): NextRequest {
+  return new NextRequest('http://localhost:3000/api/v1/residents', {
+    method: 'DELETE',
     headers: {
       'content-type': 'application/json',
       'x-community-id': String(COMMUNITY_ID),
@@ -307,6 +318,45 @@ describe('residents manager-tier lockdown', () => {
 
       // Must NOT be 403 from the manager-tier guard
       expect(res.status).not.toBe(403);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // DELETE: removing a manager-tier row via the residents path → 403.
+  // Before this guard any residents:write holder (every property manager)
+  // could hard-delete the root manager's role — a root-exclusive power
+  // (ADR-006) — or another manager's.
+  // -----------------------------------------------------------------------
+  describe('DELETE on an existing manager-tier row', () => {
+    it.each(['root_manager', 'property_manager'])(
+      '%s: returns 403 and deletes nothing',
+      async (role) => {
+        getResidentRoleByUserIdMock.mockResolvedValue({ role, unitId: null, isUnitOwner: false });
+
+        const res = await DELETE(
+          deleteReq({ communityId: COMMUNITY_ID, userId: 'b0476f53-6f95-4493-b329-13ff1a2334e6' }),
+        );
+
+        expect(res.status).toBe(403);
+        const json = await res.json();
+        expect(json.error.message).toMatch(/Manager roles/i);
+        expect(deleteResidentRoleMock).not.toHaveBeenCalled();
+        expect(revokeVisitorPassesForUserMock).not.toHaveBeenCalled();
+        expect(logAuditEventMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still removes a resident (positive control)', async () => {
+      getResidentRoleByUserIdMock.mockResolvedValue({ role: 'resident', unitId: 3, isUnitOwner: true });
+      deleteResidentRoleMock.mockResolvedValue(undefined);
+      revokeVisitorPassesForUserMock.mockResolvedValue(0);
+
+      const res = await DELETE(
+        deleteReq({ communityId: COMMUNITY_ID, userId: 'b0476f53-6f95-4493-b329-13ff1a2334e6' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(deleteResidentRoleMock).toHaveBeenCalledWith(COMMUNITY_ID, 'b0476f53-6f95-4493-b329-13ff1a2334e6');
     });
   });
 });
