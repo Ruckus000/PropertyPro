@@ -151,7 +151,6 @@ const KNOWN_RAW_FETCH_HOOKS = new Set<string>([
   'apps/web/src/hooks/use-condo-onboarding.ts',
   'apps/web/src/hooks/use-content-blocks.ts',
   'apps/web/src/hooks/use-contracts.ts',
-  'apps/web/src/hooks/use-custom-css.ts',
   'apps/web/src/hooks/use-custom-domain.ts',
   'apps/web/src/hooks/use-data-search.ts',
   'apps/web/src/hooks/use-demo-self-service-upgrade.ts',

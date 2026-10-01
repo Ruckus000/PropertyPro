@@ -155,9 +155,12 @@ the draft.
 
 Deferred, each with its trigger:
 - **"Use the template's pages too".** Trigger: page sets exist for every community type.
-- **Other branding writers still change the look live:** `/pm/settings/branding`,
-  copy-branding, the admin app and portfolio templates. Trigger: a manager reports a
-  settings change bypassing Publish.
+- **Other branding writers still change the look live:** the admin app, applying a
+  portfolio template, and the default seeding at community creation. The old
+  `BrandingForm`, `BrandingCopyDialog` and `useBrandingForm` are no longer rendered
+  anywhere, since `/pm/settings/branding` redirects to the editor; they are dead
+  code. Trigger: a manager reports a design change made outside the editor going
+  live without Publish.
 - **The public header background ignores custom colours** (`PublicSiteHeader.tsx`,
   inline `theme.primaryColor`). This predates Phase 4. Trigger: the next public-header
   change.

@@ -391,7 +391,7 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'branding',
     label: 'Website',
     icon: Paintbrush,
-    // Branding settings live in the editor's Colours tool; /pm/settings/branding
+    // Branding settings live in the editor's Design tool; /pm/settings/branding
     // is a permanent redirect there.
     //
     // No communityId: this is the portfolio rail, which has no tenant in scope.

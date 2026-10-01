@@ -6,6 +6,9 @@ import { useContentBlocks } from '@/hooks/use-content-blocks';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
+import { applyDesignToCanvas } from '@/lib/site-editor/canvas-design';
+import { useSiteDesign } from '@/hooks/use-site-design';
+import type { PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
 import { StatusLine } from './StatusLine';
@@ -58,11 +61,11 @@ const AddPanel = dynamic(() => import('./panels/AddPanel').then((m) => m.AddPane
   loading: () => null,
 });
 
-// The two Pro tools, split for the same budget reason as everything above — and
-// with more force, since they are the two panels the median PM opens least. The
-// domain panel in particular pulls its own query stack and DNS table.
-const StylingPanel = dynamic(
-  () => import('./panels/StylingPanel').then((m) => m.StylingPanel),
+// Split for the same budget reason as everything above. Design carries the
+// colour-set grid and the custom-colour pickers; the domain panel pulls its own
+// query stack and DNS table.
+const DesignPanel = dynamic(
+  () => import('./panels/DesignPanel').then((m) => m.DesignPanel),
   { loading: () => null },
 );
 const DomainPanel = dynamic(
@@ -100,7 +103,6 @@ import type { EditorToolId, ProToolAccess } from './tools';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import { UndoableRemoveProvider } from './undoable-remove-context';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
-import type { CustomCssOverrides } from '@propertypro/shared';
 import { THEME_DEFAULTS } from '@propertypro/theme';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
@@ -167,14 +169,13 @@ export interface EditorRootProps {
   tagline: string | null;
   initialSiteSettings: SiteSettingsRecord | undefined;
   /**
-   * Stored Pro+ colour/font overrides, from the same `branding` read that
-   * feeds the Site panel. The Colours panel needs no query of its own.
-   *
-   * There is no matching prop for the Address panel: its state lives at
-   * Vercel, and server-seeding it would put a provider round-trip on every
-   * editor load for a tab most PMs never open. It fetches on mount instead.
+   * The colour-set catalog (`site_theme_presets`) for the Design panel — the
+   * same list the wizard shows. The look itself is read through
+   * `useSiteDesign`, because it changes while the editor is open.
    */
-  initialCustomCss: CustomCssOverrides | null;
+  presets: PresetCardData[];
+  /** Pro+: the Design panel's custom-colours section (`hasSiteCustomCss`). */
+  hasSiteCustomCss: boolean;
   /**
    * True when `communities.site_onboarding_completed_at` is null — the wizard
    * was never finished. Surfaces the wizard prompt the legacy editor carried;
@@ -208,7 +209,7 @@ export interface EditorRootProps {
 }
 
 /**
- * What the site renders today — the Colours panel seeds its pickers from this
+ * What the canvas shows (the draft look) — the Design panel's custom colours seed their pickers from this
  * so turning an override on starts from the live colour rather than a constant.
  *
  * Falls back to the platform defaults only when the community row could not be
@@ -240,7 +241,7 @@ export function EditorRoot({
   publicSiteUrl,
   proToolAccess,
   hasPolishBlocks,
-  canvasContext,
+  canvasContext: serverCanvasContext,
   hasPublishedSite,
   initialNotice,
   siteIdentity,
@@ -248,11 +249,21 @@ export function EditorRoot({
   canEditUnitCount,
   tagline,
   initialSiteSettings,
-  initialCustomCss,
+  presets,
+  hasSiteCustomCss,
   showWizardBanner,
   initialPages,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
+  // The canvas, preview and publish-sheet contrast check all show the DRAFT
+  // look (website builder v4), which changes as the Design panel saves. The
+  // server context carries the live look; this re-derives theme and layout
+  // from the design query, and is the server context until that query lands.
+  const { data: design } = useSiteDesign(communityId);
+  const canvasContext = useMemo(
+    () => applyDesignToCanvas(serverCanvasContext, design),
+    [serverCanvasContext, design],
+  );
   // Shares the blocks query key, so this adds no request — and the publish
   // sheet calls the same hook, so the button's state and the sheet's "N changes
   // ready to publish" can never disagree.
@@ -971,12 +982,13 @@ export function EditorRoot({
               />
             );
           }
-          if (tool === 'styling') {
+          if (tool === 'design') {
             return (
-              <StylingPanel
+              <DesignPanel
                 communityId={communityId}
-                hasSiteCustomCss={proToolAccess.styling}
-                initial={initialCustomCss}
+                communityType={siteIdentity.communityType}
+                presets={presets}
+                hasSiteCustomCss={hasSiteCustomCss}
                 theme={resolveStylingTheme(canvasContext)}
               />
             );
