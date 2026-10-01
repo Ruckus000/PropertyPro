@@ -15,6 +15,8 @@ export interface UploadRequest {
    * contain such information and 400s without it — see F-02.
    */
   redactionAttested?: boolean;
+  /** Save as a draft: managers only, no notifications, no attestation yet. */
+  draft?: boolean;
 }
 
 export interface ReplaceFileRequest {
@@ -164,6 +166,7 @@ export function useDocumentUpload() {
           fileSize: request.file.size,
           mimeType: request.file.type,
           redactionAttested: request.redactionAttested ?? false,
+          ...(request.draft ? { draft: true } : {}),
         }),
       });
 

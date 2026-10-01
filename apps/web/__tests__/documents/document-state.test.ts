@@ -219,27 +219,74 @@ describe('coerceDocumentsView', () => {
 });
 
 describe('boardColumns', () => {
-  it('lays the statutory lifecycle out as four columns', () => {
+  it('lays the statutory lifecycle out as five columns', () => {
     const rows = mergeDocumentsAndGaps(
-      [doc({ id: 1, publicAccess: true }), doc({ id: 2, publicAccess: false })],
+      [
+        doc({ id: 1, publicAccess: true }),
+        doc({ id: 2, publicAccess: false }),
+        doc({ id: 3, postedAt: null }),
+      ],
       [item({ id: 100, documentId: 1 }), item({ id: 101, documentId: 2 }), item({ id: 102 })],
     );
 
     const columns = boardColumns(rows, [doc({ id: 9, title: 'Old minutes' })]);
 
-    expect(columns.map((c) => c.id)).toEqual(['gap', 'private', 'public', 'deleted']);
+    expect(columns.map((c) => c.id)).toEqual(['gap', 'draft', 'private', 'public', 'deleted']);
     expect(columns[0]?.rows).toHaveLength(1);
-    expect(columns[1]?.rows.map((r) => r.id)).toEqual([2]);
-    expect(columns[2]?.rows.map((r) => r.id)).toEqual([1]);
-    expect(columns[3]?.rows.map((r) => r.id)).toEqual([9]);
+    expect(columns[1]?.rows.map((r) => r.id)).toEqual([3]);
+    expect(columns[2]?.rows.map((r) => r.id)).toEqual([2]);
+    expect(columns[3]?.rows.map((r) => r.id)).toEqual([1]);
+    expect(columns[4]?.rows.map((r) => r.id)).toEqual([9]);
   });
 
   it('keeps deleted documents out of the live columns', () => {
     // They arrive on their own channel — the list endpoint filters them out of
     // every other view, so a deleted file must never appear as "not public".
     const columns = boardColumns([], [doc({ id: 9 })]);
-    expect(columns[1]?.rows).toHaveLength(0);
-    expect(columns[3]?.rows).toHaveLength(1);
+    expect(columns[2]?.rows).toHaveLength(0);
+    expect(columns[4]?.rows).toHaveLength(1);
+  });
+});
+
+describe('drafts', () => {
+  it('a draft reads as a draft whatever else is true of it', () => {
+    // Linked AND flagged public: still a draft, because owners cannot see it.
+    expect(documentState(doc({ postedAt: null, publicAccess: true }), item({ documentId: 1 }))).toBe(
+      'draft',
+    );
+    expect(documentState(doc({ postedAt: null }), null)).toBe('draft');
+  });
+
+  it('an absent postedAt (an older cached payload) reads as posted', () => {
+    expect(documentState(doc({ postedAt: undefined }), null)).toBe('unlinked');
+  });
+
+  it('a requirement linked to a draft is not covered', () => {
+    const facts = coverageFacts(
+      [doc({ id: 1, postedAt: null }), doc({ id: 2 })],
+      [item({ id: 100, documentId: 1 }), item({ id: 101, documentId: 2 })],
+    );
+    expect(facts).toMatchObject({ total: 2, covered: 1 });
+  });
+
+  it('the Drafts quick filter shows drafts only, and no gaps', () => {
+    const rows = mergeDocumentsAndGaps(
+      [doc({ id: 1, postedAt: null }), doc({ id: 2 })],
+      [item({ id: 102 })],
+    );
+    expect(
+      filterRows(rows, { categoryId: null, quickFilter: 'drafts' }).map((r) => r.id),
+    ).toEqual([1]);
+  });
+
+  it('a requirement whose file is a draft is still an open hole on the timeline', () => {
+    const [row] = timelineRows(
+      [doc({ id: 1, postedAt: null })],
+      [item({ documentId: 1, deadline: '2026-03-10T00:00:00.000Z' })],
+      new Date('2026-08-15T00:00:00.000Z'),
+    );
+    expect(row?.label).toBe('no file');
+    expect(row?.bar).not.toBeNull();
   });
 });
 

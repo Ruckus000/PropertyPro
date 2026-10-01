@@ -13,7 +13,7 @@
  * community.
  */
 import type { createScopedClient } from '@propertypro/db';
-import { documents, documentCategories, elections, meetings, polls } from '@propertypro/db';
+import { buildSourceTypeFilter, documents, documentCategories, elections, meetings, polls } from '@propertypro/db';
 import { and, gte, lte, eq, isNotNull } from '@propertypro/db/filters';
 
 type ScopedClient = ReturnType<typeof createScopedClient>;
@@ -122,11 +122,20 @@ export async function compileSnowbirdDigest(
   }
 
   // --- New documents in-window, grouped by category, capped ---
+  // Windowed on POSTED time, not upload time: a draft is invisible to owners
+  // until it is posted, and a draft uploaded last month and posted today is
+  // news today. `posted_at IS NOT NULL` falls out of the range predicate.
+  // Library and authored records only — violation evidence is not a document
+  // owners are sent.
   const recentDocs = await rows(
     scoped.selectFrom(
       documents,
       {},
-      and(gte(documents.createdAt, windowStart), lte(documents.createdAt, windowEnd)),
+      and(
+        gte(documents.postedAt, windowStart),
+        lte(documents.postedAt, windowEnd),
+        buildSourceTypeFilter(),
+      ),
     ),
   );
   const categoryRows = await rows(scoped.query(documentCategories));
@@ -137,7 +146,7 @@ export async function compileSnowbirdDigest(
   const newDocuments: DigestItem[] = recentDocs.slice(0, DIGEST_DOCUMENT_CAP).map((d) => ({
     title: String(d.title),
     detail: d.categoryId != null ? categoryName.get(Number(d.categoryId)) : undefined,
-    date: formatDate(d.createdAt as Date),
+    date: formatDate(d.postedAt as Date),
     actionUrl: link('/documents'),
   }));
   if (recentDocs.length > DIGEST_DOCUMENT_CAP) {

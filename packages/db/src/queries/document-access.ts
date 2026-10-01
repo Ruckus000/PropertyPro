@@ -9,6 +9,7 @@ import {
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import {
   getAccessibleKnownCategories,
+  isAdminRole,
   isElevatedRole,
   normalizeCategoryName,
   type KnownDocumentCategoryKey,
@@ -75,11 +76,27 @@ async function getAllowedCategoryIds(
   return ids;
 }
 
+/**
+ * Drafts (`posted_at IS NULL`) are visible to managers only.
+ *
+ * `isAdminRole`, not `isElevatedRole`: elevated also admits unit OWNERS, who
+ * read every category but must never see an unposted document. `isAdminRole`
+ * is the population that holds `documents:write`, i.e. the people who can post
+ * a draft.
+ */
+export function buildDraftVisibilityFilter(role: CommunityRole): SQL | undefined {
+  return isAdminRole(role) ? undefined : isNotNull(documents.postedAt);
+}
+
 export async function buildDocumentAccessFilter(
   context: DocumentAccessContext,
 ): Promise<SQL | undefined> {
+  // Applied BEFORE the elevated early return below — that return is exactly
+  // where owners used to slip past every filter.
+  const draftFilter = buildDraftVisibilityFilter(context.role);
+
   if (isElevatedRole(context.role, { isUnitOwner: context.isUnitOwner })) {
-    return undefined;
+    return draftFilter;
   }
 
   const allowedCategoryIds = await getAllowedCategoryIds(context);
@@ -90,6 +107,7 @@ export async function buildDocumentAccessFilter(
   return and(
     isNotNull(documents.categoryId),
     inArray(documents.categoryId, allowedCategoryIds),
+    draftFilter,
   ) as SQL;
 }
 

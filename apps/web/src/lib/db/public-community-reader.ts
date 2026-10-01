@@ -28,7 +28,7 @@ import { cache } from 'react';
 import { announcements, communities, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from '@propertypro/db/filters';
 import { BOARD_DESIGNATIONS, TOMBSTONE_BLOCK_TYPE, isBoardPresident } from '@propertypro/shared';
 import { announcementNotExpiredWhere } from '@/lib/announcements/expiry';
 
@@ -564,6 +564,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             eq(documents.communityId, communityId),
             isNull(documents.deletedAt),
             eq(documents.publicAccess, true),
+            // A draft is never public, even if the flag were set on one.
+            isNotNull(documents.postedAt),
             inArray(documentCategories.name, opts.includeCategories),
           ),
         )
@@ -624,6 +626,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             eq(documents.communityId, communityId),
             isNull(documents.deletedAt),
             eq(documents.publicAccess, true),
+            // A draft is never public, even if the flag were set on one.
+            isNotNull(documents.postedAt),
             isNull(communities.deletedAt),
           ),
         )
@@ -649,6 +653,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             eq(documents.communityId, communityId),
             isNull(documents.deletedAt),
             eq(documents.publicAccess, true),
+            // A draft is never public, even if the flag were set on one.
+            isNotNull(documents.postedAt),
           ),
         )
         .orderBy(asc(documents.id))

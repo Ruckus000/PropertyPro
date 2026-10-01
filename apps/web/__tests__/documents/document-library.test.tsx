@@ -41,6 +41,7 @@ vi.mock('@/hooks/use-documents', () => ({
   useRestoreDocument: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useDocumentsInvalidator: () => vi.fn(),
   useDocumentFileInvalidator: () => vi.fn(),
+  useSetDocumentPosted: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
   useDeleteDocument: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
   useSetDocumentPublicAccess: () => ({
     mutate: vi.fn(),

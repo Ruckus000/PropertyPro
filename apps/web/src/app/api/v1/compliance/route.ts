@@ -40,7 +40,10 @@ import {
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
-import { getDocumentDeletedAtByIds } from '@/lib/services/documents-service';
+import {
+  getLinkedDocumentStatesByIds,
+  type LinkedDocumentState,
+} from '@/lib/services/documents-service';
 import {
   insertComplianceChecklistItems,
   listComplianceChecklistItems,
@@ -65,13 +68,13 @@ function requireCondoCommunity(communityType: CommunityType): void {
 /**
  * Decorate a checklist row with its derived compliance status.
  *
- * `documentDeletedAtById` maps a linked document id to its `deleted_at` (or
- * null when live). A soft-deleted linked document must not keep the item
- * satisfied, so the deletion timestamp is threaded into the calculator.
+ * `documentStateById` maps a linked document id to whether it is deleted or a
+ * draft. Neither may keep the item satisfied, so both are threaded into the
+ * calculator.
  */
 function withDerivedStatus(
   row: Record<string, unknown>,
-  documentDeletedAtById: Map<number, Date | null> = new Map(),
+  documentStateById: Map<number, LinkedDocumentState> = new Map(),
 ): Record<string, unknown> {
   const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
   const documentPostedAt = row['documentPostedAt']
@@ -83,8 +86,7 @@ function withDerivedStatus(
     typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
 
   const documentId = (row['documentId'] as number | null) ?? null;
-  const documentDeletedAt =
-    documentId != null ? documentDeletedAtById.get(documentId) ?? null : null;
+  const linked = documentId != null ? documentStateById.get(documentId) : undefined;
 
   return {
     ...row,
@@ -92,7 +94,8 @@ function withDerivedStatus(
       isApplicable: row['isApplicable'] as boolean | undefined,
       documentId,
       documentPostedAt,
-      documentDeletedAt,
+      documentDeletedAt: linked?.deletedAt ?? null,
+      documentIsDraft: linked?.isDraft ?? false,
       deadline,
       rollingWindowMonths,
     }),
@@ -122,12 +125,12 @@ export const GET = withErrorHandler(
           .filter((v): v is number => typeof v === 'number'),
       ),
     ];
-    const documentDeletedAtById = await getDocumentDeletedAtByIds(
+    const documentStateById = await getLinkedDocumentStatesByIds(
       communityId,
       linkedDocumentIds,
     );
 
-    const data = rows.map((row) => withDerivedStatus(row, documentDeletedAtById));
+    const data = rows.map((row) => withDerivedStatus(row, documentStateById));
 
     if (data.length > 0) {
       void tryAutoComplete(communityId, userId, 'review_compliance');

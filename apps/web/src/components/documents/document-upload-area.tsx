@@ -142,6 +142,9 @@ export function DocumentUploadArea({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Which button submitted: "Save as draft" posts nothing to owners.
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const asDraft = submitter?.getAttribute('data-action') === 'draft';
 
     if (!selectedFile) {
       return;
@@ -180,7 +183,9 @@ export function DocumentUploadArea({
         description: description.trim() || null,
         categoryId: selectedCategoryId,
         file: selectedFile,
-        redactionAttested,
+        // A draft reaches no owner, so the attestation waits for posting.
+        redactionAttested: asDraft ? false : redactionAttested,
+        draft: asDraft,
       });
 
       setWarnings(result.warnings);
@@ -191,7 +196,7 @@ export function DocumentUploadArea({
       setCategoryError(null);
       setRedactionAttested(false);
 
-      toast.success('Document uploaded.');
+      toast.success(asDraft ? 'Saved as a draft. Owners can’t see it yet.' : 'Document uploaded.');
       onUploaded?.(result);
     } catch {
       // Error is handled by the hook
@@ -426,18 +431,32 @@ export function DocumentUploadArea({
 
       {error && <p className="text-sm text-status-danger">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={
-          isUploading
-          || !selectedFile
-          || (!replacing && (!title.trim() || selectedCategoryId == null))
-          || (requiresAttestation && !redactionAttested)
-        }
-        className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isUploading ? 'Uploading...' : replacing ? 'Replace File' : 'Upload Document'}
-      </button>
+      <div className="flex flex-col gap-2 sm:flex-row-reverse">
+        <button
+          type="submit"
+          data-action="post"
+          disabled={
+            isUploading
+            || !selectedFile
+            || (!replacing && (!title.trim() || selectedCategoryId == null))
+            || (requiresAttestation && !redactionAttested)
+          }
+          className="w-full rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isUploading ? 'Uploading...' : replacing ? 'Replace File' : 'Upload Document'}
+        </button>
+        {/* A replacement keeps the document's own posted/draft state. */}
+        {!replacing && (
+          <button
+            type="submit"
+            data-action="draft"
+            disabled={isUploading || !selectedFile || !title.trim() || selectedCategoryId == null}
+            className="w-full rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Save as Draft
+          </button>
+        )}
+      </div>
     </form>
   );
 }

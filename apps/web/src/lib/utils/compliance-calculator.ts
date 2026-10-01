@@ -19,6 +19,12 @@ export interface ComplianceStatusInput {
    * is still possible).
    */
   documentDeletedAt?: Date | null;
+  /**
+   * The linked document is a DRAFT (`posted_at` NULL): owners cannot see it,
+   * so it is not posted and cannot satisfy the item. Same read-time treatment
+   * as a soft-deleted document.
+   */
+  documentIsDraft?: boolean;
   deadline?: Date | null;
   rollingWindowMonths?: number | null;
   now?: Date;
@@ -54,7 +60,7 @@ export function calculateComplianceStatus(input: ComplianceStatusInput): Complia
   // the same transaction as the document soft-delete; this branch is the
   // read-time defense-in-depth check).
   const documentEffectivelyLinked =
-    input.documentId != null && input.documentDeletedAt == null;
+    input.documentId != null && input.documentDeletedAt == null && input.documentIsDraft !== true;
 
   if (documentEffectivelyLinked) {
     if (input.rollingWindowMonths && input.documentPostedAt) {

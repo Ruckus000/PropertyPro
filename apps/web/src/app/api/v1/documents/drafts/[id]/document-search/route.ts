@@ -67,9 +67,12 @@ export const GET = withErrorHandler(
     // Resolve category names for display.
     const categoryById = await listAllDocumentCategoryNames(communityId);
 
+    // Only posted documents can be linked from an authored one: a link to a
+    // draft would 404 for every owner who opens the published document.
+    const postedRows = allRows.filter((r) => r['postedAt'] !== null);
     const filtered = (q.length === 0
-      ? allRows
-      : allRows.filter((r) => String(r['title'] ?? '').toLowerCase().includes(q))
+      ? postedRows
+      : postedRows.filter((r) => String(r['title'] ?? '').toLowerCase().includes(q))
     )
       .slice(0, limit)
       .map((r) => ({

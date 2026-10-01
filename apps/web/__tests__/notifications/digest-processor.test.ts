@@ -563,6 +563,81 @@ describe('notification digest processor', () => {
     expect(updateQueuedDigestAnnouncementStatusMock).not.toHaveBeenCalled();
   });
 
+  it('drops a queued document notice whose document went back to a draft', async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    hasMoreDigestRowsMock.mockResolvedValue(false);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [{ id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
+      preferences: [
+        {
+          userId: 'u-1',
+          emailFrequency: 'daily_digest',
+          emailAnnouncements: true,
+          emailMeetings: true,
+          emailDocuments: true,
+          inAppEnabled: true,
+        },
+      ],
+    });
+
+    const docRow = (id: number, sourceId: string, title: string) => ({
+      id,
+      communityId: 101,
+      userId: 'u-1',
+      frequency: 'daily_digest',
+      sourceType: 'document',
+      sourceId,
+      eventType: 'document_posted',
+      eventTitle: title,
+      eventSummary: '',
+      actionUrl: `https://app.local/documents/${sourceId}`,
+      attemptCount: 0,
+    });
+    claimDigestQueueRowsMock.mockResolvedValue([
+      docRow(20, '700', 'Taken back to a draft'),
+      docRow(21, '701', 'Still posted'),
+    ]);
+
+    createScopedClientMock.mockImplementation((communityId: number) => ({
+      query: vi.fn(async (table: unknown) => {
+        const state = queryState.get(communityId);
+        if (!state) return [];
+        if (table === tables.communities) return state.communities;
+        if (table === tables.users) throw new Error('Unscoped query on table "users"');
+        if (table === tables.notificationPreferences) return state.preferences;
+        return [];
+      }),
+      selectFrom: selectUsersFor(communityId),
+      queryIncludingDeleted: vi.fn(async (table: unknown) => {
+        if (table === tables.documents) {
+          return [
+            { id: 700, deletedAt: null, postedAt: null },
+            { id: 701, deletedAt: null, postedAt: new Date('2026-02-17T12:00:00.000Z') },
+          ];
+        }
+        return [];
+      }),
+      update: updateMock,
+    }));
+
+    const summary = await processNotificationDigests({
+      now: new Date('2026-02-18T13:30:00.000Z'),
+    });
+
+    expect(summary.rowsDiscarded).toBe(1);
+    const discardReasons = updateMock.mock.calls
+      .filter((call) => (call[1] as Record<string, unknown>)['status'] === 'discarded')
+      .map((call) => (call[1] as Record<string, unknown>)['errorMessage']);
+    expect(discardReasons).toEqual(['Source document is a draft']);
+
+    const sendCall = sendEmailMock.mock.calls[0]?.[0] as
+      | { react: { props: { items: Array<{ title: string }> } } }
+      | undefined;
+    expect(sendCall?.react.props.items.map((item) => item.title)).toEqual(['Still posted']);
+  });
+
   it('respects per-tick email cap and reports hasMore', async () => {
     findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
     hasMoreDigestRowsMock.mockResolvedValue(true);

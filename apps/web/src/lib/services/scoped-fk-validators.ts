@@ -41,4 +41,12 @@ export async function assertDocumentInCommunity(
       { fields: { documentId: 'Document not found in this community' } },
     );
   }
+  // Linking stamps the item's `documentPostedAt`, so linking a draft would
+  // record a posting that never happened. Drafts are refused until posted.
+  if (row['postedAt'] === null) {
+    throw new ValidationError(
+      'Post this document before linking it. Owners cannot see a draft.',
+      { fields: { documentId: 'Document is a draft' } },
+    );
+  }
 }

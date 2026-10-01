@@ -360,4 +360,46 @@ describe('DocumentUploadArea', () => {
       expect(screen.getByRole('button', { name: 'Upload Document' })).toBeInTheDocument();
     });
   });
+
+  describe('Save as Draft', () => {
+    beforeEach(() => {
+      useDocumentCategoriesMock.mockReturnValue({
+        // Sensitive: posting would need the attestation; a draft must not.
+        categories: [{ id: 4, name: 'Lease Agreements', slug: 'lease-agreements', description: null }],
+        isLoading: false,
+        error: null,
+      });
+      uploadDocumentMock.mockResolvedValue({ document: { id: 55 }, warnings: [] });
+    });
+
+    it('saves a draft without the attestation, and says owners cannot see it', async () => {
+      const { container } = render(<DocumentUploadArea communityId={8} initialCategoryId={4} />);
+      fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+        target: { files: [new File(['x'], 'lease.pdf', { type: 'application/pdf' })] },
+      });
+
+      expect(screen.getByRole('button', { name: 'Upload Document' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Save as Draft' }));
+
+      await vi.waitFor(() => expect(uploadDocumentMock).toHaveBeenCalled());
+      expect(uploadDocumentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ draft: true, redactionAttested: false }),
+      );
+    });
+
+    it('the Upload button still posts', async () => {
+      const { container } = render(<DocumentUploadArea communityId={8} initialCategoryId={4} />);
+      fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+        target: { files: [new File(['x'], 'lease.pdf', { type: 'application/pdf' })] },
+      });
+      fireEvent.click(screen.getByRole('checkbox', { name: /Confirm redaction/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Upload Document' }));
+
+      await vi.waitFor(() => expect(uploadDocumentMock).toHaveBeenCalled());
+      expect(uploadDocumentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ draft: false, redactionAttested: true }),
+      );
+    });
+  });
 });
+

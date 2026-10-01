@@ -18,6 +18,7 @@ import { useDeleteDocument } from '@/hooks/use-documents';
 import type { ReplaceFileResult } from '@/hooks/use-document-upload';
 import type { ChecklistRow, DocumentRow, DocumentState } from '@/lib/documents/document-state';
 import dynamic from 'next/dynamic';
+import { DocumentPostingControl } from './document-posting-control';
 import { DocumentReplaceFile } from './document-replace-file';
 import { DocumentViewer } from './document-viewer';
 
@@ -152,7 +153,16 @@ export function DocumentInspector({
             Restore
           </Button>
         )}
-        {canManage && showStatutory && !isDeleted && (
+        {canManage && !isDeleted && (
+          <DocumentPostingControl
+            communityId={communityId}
+            document={document}
+            requirement={requirement}
+          />
+        )}
+        {/* A draft cannot be made public — the server refuses — so the action
+            is not offered until it is posted. */}
+        {canManage && showStatutory && !isDeleted && state !== 'draft' && (
           <Button
             variant="outline"
             size="sm"
