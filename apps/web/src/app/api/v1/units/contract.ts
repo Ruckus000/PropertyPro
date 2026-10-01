@@ -8,7 +8,7 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
-/** Mirrors the `units_occupancy_check` CHECK constraint (migration 0080). */
+/** Mirrors the `units_occupancy_check` CHECK constraint (migration `unit_occupancy`). */
 export const UNIT_OCCUPANCY_VALUES = ['owner_occupied', 'rented', 'vacant'] as const;
 const occupancySchema = z.enum(UNIT_OCCUPANCY_VALUES);
 

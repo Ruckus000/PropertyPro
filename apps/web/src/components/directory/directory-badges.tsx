@@ -22,7 +22,7 @@ const PORTAL_STATUS: Record<ResidentPortalStatus, { key: string; label: string }
 };
 
 /**
- * An unconfirmed value is a backfilled guess (migration 0080): it renders with
+ * An unconfirmed value is a backfilled guess (migration `unit_occupancy`): it renders with
  * a dashed border and says so on hover and to assistive tech.
  */
 export function OccupancyBadge({

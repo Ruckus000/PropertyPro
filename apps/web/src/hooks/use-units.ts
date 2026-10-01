@@ -14,7 +14,7 @@ export interface Unit {
   sqft: number | null;
   rentAmount: string | null;
   ownerUserId: string | null;
-  /** Manager-only (null for everyone else). See migration 0080. */
+  /** Manager-only (null for everyone else). See migration `unit_occupancy`. */
   occupancy: UnitOccupancy | null;
   /** False while `occupancy` is a backfilled guess no manager has confirmed. */
   occupancyConfirmed: boolean;

@@ -281,7 +281,7 @@ describe('/api/v1/units', () => {
     expect(json.error.code).toBe('VALIDATION_ERROR');
   });
 
-  describe('occupancy (migration 0080)', () => {
+  describe('occupancy (migration unit_occupancy)', () => {
     function postUnit(body: Record<string, unknown>) {
       return POST(
         new NextRequest('http://localhost:3000/api/v1/units', {

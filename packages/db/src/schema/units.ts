@@ -49,7 +49,7 @@ export const units = pgTable('units', {
   occupancy: text('occupancy'),
   /**
    * When a manager last confirmed `occupancy`. Null while the value is a
-   * best-guess backfill (migration 0080) — the UI labels those "Unconfirmed"
+   * best-guess backfill (migration `unit_occupancy`) — the UI labels those "Unconfirmed"
    * so day one never presents an inferred value as fact.
    */
   occupancyConfirmedAt: timestamp('occupancy_confirmed_at', { withTimezone: true }),
