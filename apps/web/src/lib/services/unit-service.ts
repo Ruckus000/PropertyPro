@@ -1,6 +1,6 @@
 import type { createScopedClient } from '@propertypro/db';
-import { units, userRoles } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { getUnitLedgerBalance, units, userRoles, violations } from '@propertypro/db';
+import { and, eq, notInArray } from '@propertypro/db/filters';
 
 type ScopedClient = ReturnType<typeof createScopedClient>;
 
@@ -85,6 +85,25 @@ export async function listResidentRolesForUnit(
     eq(userRoles.unitId, unitId),
   );
   return rows as unknown as UnitRouteRow[];
+}
+
+/**
+ * Unit ledger balance in cents (charges minus payments). Non-zero either way —
+ * owed or in credit — blocks unit deletion: soft-deleting the unit would
+ * orphan money the association still has to collect or refund.
+ */
+export async function getUnitBalanceCents(scoped: ScopedClient, unitId: number): Promise<number> {
+  return getUnitLedgerBalance(scoped, unitId);
+}
+
+/** Violations on the unit that are still in progress (not resolved/dismissed). */
+export async function countOpenViolationsForUnit(scoped: ScopedClient, unitId: number): Promise<number> {
+  const rows = await scoped.selectFrom(
+    violations,
+    { id: violations.id },
+    and(eq(violations.unitId, unitId), notInArray(violations.status, ['resolved', 'dismissed'])),
+  );
+  return rows.length;
 }
 
 /**

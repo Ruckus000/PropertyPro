@@ -227,7 +227,9 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Users,
     href: (cid) => `/dashboard/residents?communityId=${cid}`,
     visibility: 'admin',
-    matchPrefixes: ['/dashboard/residents'],
+    // Directory pilot: flagged communities are redirected there; one item can
+    // win a prefix, and Residents is where managers land.
+    matchPrefixes: ['/dashboard/residents', '/dashboard/directory'],
   },
   {
     id: 'units',

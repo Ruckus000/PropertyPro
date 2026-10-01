@@ -71,6 +71,10 @@ vi.mock('@/lib/db/access-control', () => ({
   requirePermission: requirePermissionMock,
 }));
 
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
+  requireEntitledForAdminRead: vi.fn(async () => undefined),
+}));
+
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
 }));
@@ -108,7 +112,7 @@ vi.mock('@/lib/utils/community-validators', () => ({
   requireCommunityRole: requireCommunityRoleMock,
 }));
 
-import { DELETE, POST, PATCH } from '../../../src/app/api/v1/residents/route';
+import { DELETE, GET, POST, PATCH } from '../../../src/app/api/v1/residents/route';
 
 const COMMUNITY_ID = 42;
 
@@ -358,5 +362,30 @@ describe('residents manager-tier lockdown', () => {
       expect(res.status).toBe(200);
       expect(deleteResidentRoleMock).toHaveBeenCalledWith(COMMUNITY_ID, 'b0476f53-6f95-4493-b329-13ff1a2334e6');
     });
+  });
+});
+
+describe('GET /api/v1/residents — portal activity is for management only', () => {
+  const getReq = () =>
+    new NextRequest(`http://localhost:3000/api/v1/residents?communityId=${COMMUNITY_ID}`, {
+      headers: { 'x-community-id': String(COMMUNITY_ID) },
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveEffectiveCommunityIdMock.mockReturnValue(COMMUNITY_ID);
+    listResidentsForCommunityMock.mockResolvedValue([]);
+  });
+
+  it('a manager gets sign-in and invitation history', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(ACTOR_MEMBERSHIP);
+    expect((await GET(getReq())).status).toBe(200);
+    expect(listResidentsForCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, {}, { includePortalActivity: true });
+  });
+
+  it("a resident (who also holds residents:read) never gets neighbours' sign-in history", async () => {
+    requireCommunityMembershipMock.mockResolvedValue({ ...ACTOR_MEMBERSHIP, role: 'resident', isAdmin: false, isUnitOwner: true });
+    expect((await GET(getReq())).status).toBe(200);
+    expect(listResidentsForCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, {}, { includePortalActivity: false });
   });
 });

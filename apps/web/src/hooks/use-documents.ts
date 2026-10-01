@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { requestJson } from '@/lib/api/request-json';
+import { sendInChunks } from '@/lib/api/send-in-chunks';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 import type { DocumentRow } from '@/lib/documents/document-state';
 
@@ -336,5 +337,36 @@ export function useRestoreDocument(communityId: number) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['documents', communityId] });
     },
+  });
+}
+
+export type DocumentSendStatus = 'emailed' | 'digest' | 'opted_out' | 'no_access' | 'not_member' | 'failed';
+
+export interface DocumentSendResult {
+  userId: string;
+  status: DocumentSendStatus;
+  documentIds: number[];
+}
+
+/**
+ * Send documents to members (courtesy copy). `sendId` is the idempotency key:
+ * mint one per dialog and reuse it on retry so nobody is emailed twice.
+ */
+export function useSendDocuments(communityId: number) {
+  return useMutation({
+    // Every chunk shares the sendId, so retrying the whole send dedupes the
+    // chunks that already went out (the email key includes the recipient).
+    mutationFn: (payload: { documentIds: number[]; userIds: string[]; sendId: string }) =>
+      sendInChunks<DocumentSendResult>(
+        payload.userIds,
+        async (chunk) =>
+          (
+            await requestJson<{ results: DocumentSendResult[] }>('/api/v1/documents/send', {
+              method: 'POST',
+              body: JSON.stringify({ communityId, documentIds: payload.documentIds, userIds: chunk, sendId: payload.sendId }),
+            })
+          ).results,
+        (userId) => ({ userId, status: 'failed', documentIds: [] }),
+      ),
   });
 }

@@ -12,12 +12,22 @@ import {
   users,
 } from '@propertypro/db';
 import { eq, inArray, sql } from '@propertypro/db/filters';
+// AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
+import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
 import { expandTransitionRoleFilter } from '@propertypro/shared';
 
 type RoleFilter = {
   role?: string;
   roles?: string[];
 };
+
+/**
+ * - `active`: has signed in to the portal at least once.
+ * - `invited`: sent an invitation (or approved via access request, which emails
+ *   a login link) but has never signed in.
+ * - `not_invited`: on file, never invited, never signed in.
+ */
+export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
 
 export interface ResidentListRow {
   userId: string;
@@ -28,7 +38,32 @@ export interface ResidentListRow {
   email: string | null;
   fullName: string | null;
   phone: string | null;
+  /** Owner vs tenant; only meaningful when role = 'resident'. */
+  isUnitOwner: boolean;
+  /** Board designation — display only here; statutory gates read it elsewhere. */
+  designation: 'board_president' | 'board_member' | null;
+  /**
+   * Portal activity — managers only (`includePortalActivity`). Absent for
+   * everyone else: a neighbour's sign-in history is not theirs to see.
+   */
+  portalStatus?: ResidentPortalStatus;
+  lastSignInAt?: string | null;
+  lastInvitedAt?: string | null;
   createdAt: unknown;
+}
+
+export function derivePortalStatus(activity: {
+  lastSignInAt: Date | null;
+  lastInvitedAt: Date | null;
+  accessApprovedAt: Date | null;
+} | undefined): ResidentPortalStatus {
+  if (activity?.lastSignInAt) return 'active';
+  if (activity?.lastInvitedAt || activity?.accessApprovedAt) return 'invited';
+  return 'not_invited';
+}
+
+function toDesignation(value: unknown): ResidentListRow['designation'] {
+  return value === 'board_president' || value === 'board_member' ? value : null;
 }
 
 export interface ResidentUserRow {
@@ -71,10 +106,13 @@ export async function getResidentCommunityTypeValue(
  * profile fields.
  *
  * AUTHZ: caller MUST have verified `requirePermission('residents', 'read')`.
+ * `includePortalActivity` (sign-in / invitation history, read from
+ * `auth.users`) is for management only: residents hold `residents:read` too.
  */
 export async function listResidentsForCommunity(
   communityId: number,
   filter: RoleFilter = {},
+  { includePortalActivity = false }: { includePortalActivity?: boolean } = {},
 ): Promise<ResidentListRow[]> {
   const scoped = createScopedClient(communityId);
 
@@ -133,9 +171,14 @@ export async function listResidentsForCommunity(
     }
   }
 
+  const activityByUser = includePortalActivity
+    ? await findCommunityResidentPortalActivity(communityId)
+    : null;
+
   return roleRows.map((roleRow) => {
     const userId = roleRow['userId'] as string;
     const userRow = userMap.get(userId);
+    const activity = activityByUser?.get(userId);
 
     return {
       userId,
@@ -146,6 +189,19 @@ export async function listResidentsForCommunity(
       email: (userRow?.['email'] as string | undefined) ?? null,
       fullName: (userRow?.['fullName'] as string | undefined) ?? null,
       phone: (userRow?.['phone'] as string | undefined) ?? null,
+      isUnitOwner: roleRow['isUnitOwner'] === true,
+      designation: toDesignation(roleRow['designation']),
+      ...(activityByUser
+        ? {
+            portalStatus: derivePortalStatus(activity),
+            lastSignInAt: activity?.lastSignInAt?.toISOString() ?? null,
+            lastInvitedAt:
+              [activity?.lastInvitedAt, activity?.accessApprovedAt]
+                .filter((d): d is Date => d instanceof Date)
+                .sort((a, b) => b.getTime() - a.getTime())[0]
+                ?.toISOString() ?? null,
+          }
+        : {}),
       createdAt: roleRow['createdAt'],
     };
   });

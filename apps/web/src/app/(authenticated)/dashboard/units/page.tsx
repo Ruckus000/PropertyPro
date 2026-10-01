@@ -5,6 +5,8 @@
  * Auth: gated on units.read; write actions gated on units.write.
  */
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { isDirectoryEnabledForCommunity } from '@/lib/directory/directory-flag';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -37,6 +39,13 @@ export default async function UnitsPage({ searchParams }: PageProps) {
         </p>
       </div>
     );
+  }
+
+  // Directory pilot: flagged communities use the Directory, so every existing
+  // link (nav, palette, checklist, emails) lands there. 307, so turning the
+  // flag off is the rollback. The Directory does its own auth and permissions.
+  if (isDirectoryEnabledForCommunity(context.communityId)) {
+    redirect(`/dashboard/directory?communityId=${context.communityId}&tab=units`);
   }
 
   const userId = await requireAuthenticatedUserId();

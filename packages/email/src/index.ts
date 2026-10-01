@@ -32,6 +32,8 @@ export type { MaintenanceUpdateEmailProps } from "./templates/maintenance-update
 
 export { DocumentPostedEmail } from "./templates/document-posted-email";
 export type { DocumentPostedEmailProps } from "./templates/document-posted-email";
+export { DocumentSharedEmail } from "./templates/document-shared-email";
+export type { DocumentSharedEmailProps } from "./templates/document-shared-email";
 
 export { NotificationDigestEmail } from "./templates/notification-digest-email";
 export type {
