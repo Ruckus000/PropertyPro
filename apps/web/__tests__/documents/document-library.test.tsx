@@ -8,12 +8,13 @@
  * throws Forbidden for a community without `hasCompliance` (every apartment).
  * Firing it anyway 403s the screen for those viewers.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const { useComplianceChecklistMock, useDocumentsMock } = vi.hoisted(() => ({
+const { useComplianceChecklistMock, useDocumentsMock, fetchAccessibleDocumentMock } = vi.hoisted(() => ({
+  fetchAccessibleDocumentMock: vi.fn(async (): Promise<unknown> => null),
   useComplianceChecklistMock: vi.fn(() => ({ data: [], isLoading: false, error: null })),
   useDocumentsMock: vi.fn((): Record<string, unknown> => ({
     data: [],
@@ -25,9 +26,11 @@ const { useComplianceChecklistMock, useDocumentsMock } = vi.hoisted(() => ({
 
 let searchParams = new URLSearchParams();
 const routerReplace = vi.fn();
+// Stable across renders, as Next's router is.
+const router = { replace: routerReplace, push: vi.fn() };
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
+  useRouter: () => router,
   usePathname: () => '/communities/9/documents',
   useSearchParams: () => searchParams,
 }));
@@ -43,6 +46,7 @@ vi.mock('@/hooks/use-document-categories', () => ({
 
 vi.mock('@/hooks/use-documents', () => ({
   useDocuments: useDocumentsMock,
+  fetchAccessibleDocument: fetchAccessibleDocumentMock,
   useDeletedDocuments: () => ({ data: [], isLoading: false, error: null }),
   useRestoreDocument: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useDocumentsInvalidator: () => vi.fn(),
@@ -340,6 +344,8 @@ describe('opening a linked document (?doc=)', () => {
     searchParams = new URLSearchParams();
     routerReplace.mockClear();
     useDocumentsMock.mockReset();
+    fetchAccessibleDocumentMock.mockReset();
+    fetchAccessibleDocumentMock.mockResolvedValue(null);
   });
 
   it('opens the linked document in the inspector once the list loads', () => {
@@ -349,6 +355,21 @@ describe('opening a linked document (?doc=)', () => {
 
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('text/plain');
     expect(screen.queryByText(MISSING)).toBeNull();
+    // Found in the list: no extra request.
+    expect(fetchAccessibleDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('asks for a document the capped list walk did not reach, and opens it', async () => {
+    // The walk stops at 2,000 rows; an older document is still the caller's.
+    listReturns([{ ...linked, id: 78 }]);
+    fetchAccessibleDocumentMock.mockResolvedValue(linked);
+    searchParams = new URLSearchParams('view=list&doc=77');
+    renderLibrary();
+
+    await waitFor(() => expect(screen.getByTestId('viewer-mime')).toHaveTextContent('text/plain'));
+    expect(fetchAccessibleDocumentMock).toHaveBeenCalledWith(9, 77, expect.any(AbortSignal));
+    expect(screen.queryByText(MISSING)).toBeNull();
+    expect(routerReplace).toHaveBeenCalledWith('/communities/9/documents?view=list', { scroll: false });
   });
 
   it('opens a link followed while the screen is already mounted', () => {
@@ -377,16 +398,29 @@ describe('opening a linked document (?doc=)', () => {
     });
   });
 
-  it('says so, and opens nothing, when the viewer cannot see the document', () => {
+  it('says so, and opens nothing, when the viewer cannot see the document', async () => {
     // A resident's list omits drafts and restricted categories; a deleted
     // document is absent for everyone. All three look the same from here.
+    // Not in the list, and the by-id request (same access filter) finds
+    // nothing either — or fails; both end in the warning.
     listReturns([{ ...linked, id: 78 }]);
     searchParams = new URLSearchParams('doc=77');
     renderLibrary();
 
+    expect(await screen.findByText(MISSING)).toBeDefined();
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('none');
-    expect(screen.getByText(MISSING)).toBeDefined();
+    expect(fetchAccessibleDocumentMock).toHaveBeenCalledWith(9, 77, expect.any(AbortSignal));
     expect(routerReplace).toHaveBeenCalledWith('/communities/9/documents', { scroll: false });
+  });
+
+  it('shows the warning when the by-id request fails', async () => {
+    listReturns([]);
+    fetchAccessibleDocumentMock.mockRejectedValue(new Error('network'));
+    searchParams = new URLSearchParams('doc=77');
+    renderLibrary();
+
+    expect(await screen.findByText(MISSING)).toBeDefined();
+    expect(screen.getByTestId('viewer-mime')).toHaveTextContent('none');
   });
 
   it('waits for the list rather than reporting a miss while it loads', () => {

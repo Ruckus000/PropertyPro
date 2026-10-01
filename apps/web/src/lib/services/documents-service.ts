@@ -95,11 +95,17 @@ export async function getLinkedDocumentStatesByIds(
 export async function paginateAccessibleDocuments(params: {
   filter: DocumentAccessContext;
   categoryId?: number | null;
+  /** Narrow to one document; the access filter still applies. */
+  documentId?: number;
   cursor?: string;
   pageSize?: number;
 }) {
+  const clauses = [
+    params.categoryId != null ? eq(documents.categoryId, params.categoryId) : undefined,
+    params.documentId != null ? eq(documents.id, params.documentId) : undefined,
+  ].filter((clause): clause is NonNullable<typeof clause> => clause !== undefined);
   const extraClause =
-    params.categoryId != null ? eq(documents.categoryId, params.categoryId) : undefined;
+    clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : and(...clauses);
   const where = await buildAccessibleDocumentsFilter(params.filter, extraClause);
 
   const scoped = createScopedClient(params.filter.communityId);
