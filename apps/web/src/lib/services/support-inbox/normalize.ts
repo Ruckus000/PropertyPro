@@ -72,16 +72,34 @@ function readString(value: unknown): string | null {
 /**
  * An authentication verdict from the provider, clamped.
  *
- * `readString` already rejects non-strings and empty strings. The clamp is the
- * addition that matters: this is a remote party's value crossing a trust
+ * Accepts a bare string OR one level of object nesting, because the provider
+ * sends the latter — see the comment in the body. A boolean still does not
+ * stringify, for the reason `readString` documents.
+ *
+ * The clamp matters either way: this is a remote party's value crossing a trust
  * boundary into an unconstrained text column, and a verdict is a word. Anything
  * longer is not a verdict, so keep a prefix — enough to recognise in a
  * quarantine investigation — rather than storing an unbounded blob or dropping
  * the evidence entirely.
  */
 function readVerdict(value: unknown): string | null {
-  const verdict = readString(value);
-  return verdict === null ? null : verdict.slice(0, MAX_VERDICT_CHARS);
+  // A bare string is the shape this reader was written for. It is NOT what
+  // production sends: the first real message after this feature shipped stored
+  // three nulls. Forward Email's MX is built on mailauth, which reports a
+  // verdict as an OBJECT, so a string-only reader silently drops every one.
+  // `result` and `status` are the keys mailauth uses; dig one level through
+  // each rather than betting on a single shape.
+  const direct = readString(value);
+  if (direct !== null) return direct.slice(0, MAX_VERDICT_CHARS);
+
+  const record = asRecord(value);
+  if (record === null) return null;
+
+  const nested =
+    readString(record.result) ??
+    readString(asRecord(record.status)?.result) ??
+    readString(record.status);
+  return nested === null ? null : nested.slice(0, MAX_VERDICT_CHARS);
 }
 
 function readArray(value: unknown): unknown[] {
@@ -230,6 +248,68 @@ export function detectAttachments(payload: Record<string, unknown>): boolean {
   return false;
 }
 
+/**
+ * SPF/DKIM/DMARC verdicts read out of the RFC 8601 `Authentication-Results`
+ * header, as a fallback for the provider's own JSON fields.
+ *
+ * This exists because the JSON fields are a bet on one vendor's undocumented
+ * shape — the docblock at the top of this file says as much — and that bet lost
+ * on the first real message. The header does not have that problem: it is a
+ * standard every receiving MTA writes, in a format the RFC fixes, so a reader
+ * for it survives a provider changing its payload or being swapped out.
+ *
+ * `headerLines` survives the `?attachments=false` flag, the same property
+ * `detectAttachments` above relies on.
+ *
+ * Only the FIRST `Authentication-Results` header is read, and only when our
+ * receiving provider wrote it (RFC 8601 §5: ignore results from an authserv-id
+ * you do not trust). Each hop prepends its own header and mailparser keeps that
+ * order, so the first is the most recent hop. Every other one — including any
+ * the SENDER put in their own message — is attacker-writable: reading them
+ * would let a spoofed message display `dmarc=pass`, or fill in a method the
+ * provider's header left out.
+ */
+function readAuthenticationResults(
+  payload: Record<string, unknown>,
+): { spf: string | null; dkim: string | null; dmarc: string | null } {
+  const out: { spf: string | null; dkim: string | null; dmarc: string | null } = {
+    spf: null,
+    dkim: null,
+    dmarc: null,
+  };
+
+  const first = readArray(payload.headerLines)
+    .map((line) => readString(asRecord(line)?.line) ?? readString(line))
+    .find((text): text is string => !!text && /^authentication-results\s*:/i.test(text));
+  if (!first) return out;
+
+  const body = first.replace(/^authentication-results\s*:/i, '');
+  const authservId = body.split(';', 1)[0]?.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? '';
+  if (!isTrustedAuthservId(authservId)) return out;
+
+  // Quoted strings and comments are free text (`reason="… dmarc=pass"`) and
+  // must not be read as results.
+  const results = body.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\([^)]*\)/g, ' ');
+
+  // The leading `(?:^|[;\s])` is load-bearing: without it `dkim=` would also
+  // match inside tokens like `header.d=`, and `spf=` inside `receivedspf=`.
+  const pairs = /(?:^|[;\s])(spf|dkim|dmarc)\s*=\s*([a-z]+)/gi;
+  for (const match of results.matchAll(pairs)) {
+    const [, rawMethod, rawVerdict] = match;
+    if (rawMethod === undefined || rawVerdict === undefined) continue;
+    const method = rawMethod.toLowerCase() as 'spf' | 'dkim' | 'dmarc';
+    if (out[method] !== null) continue;
+    out[method] = rawVerdict.toLowerCase().slice(0, MAX_VERDICT_CHARS);
+  }
+
+  return out;
+}
+
+/** The receiving provider's MTAs (`mx1.forwardemail.net`, …). */
+function isTrustedAuthservId(authservId: string): boolean {
+  return authservId === 'forwardemail.net' || authservId.endsWith('.forwardemail.net');
+}
+
 // ---------------------------------------------------------------------------
 // The normalizer
 // ---------------------------------------------------------------------------
@@ -248,6 +328,7 @@ export function normalizeForwardEmailPayload(payload: unknown): InboundEmail {
   }
 
   const { mailbox, deliveredTo } = resolveMailbox(record);
+  const authResults = readAuthenticationResults(record);
 
   return {
     mailbox,
@@ -267,8 +348,11 @@ export function normalizeForwardEmailPayload(payload: unknown): InboundEmail {
     ),
     sentAt: readDate(record.date),
     hasAttachments: detectAttachments(record),
-    spfResult: readVerdict(record.spf),
-    dkimResult: readVerdict(record.dkim),
-    dmarcResult: readVerdict(record.dmarc),
+    // Provider field first — it is their own explicit verdict — then the
+    // standard header. Either may be absent; both being absent is the honest
+    // null, and means this provider reports authentication nowhere we can read.
+    spfResult: readVerdict(record.spf) ?? authResults.spf,
+    dkimResult: readVerdict(record.dkim) ?? authResults.dkim,
+    dmarcResult: readVerdict(record.dmarc) ?? authResults.dmarc,
   };
 }
