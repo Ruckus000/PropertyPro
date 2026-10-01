@@ -3,9 +3,10 @@
  *
  * PATCH /api/v1/pm/onboarding/website
  *
- * Persists a partial wizard step into the community's branding jsonb.
- * Each wizard step writes the field(s) it owns; the PATCH merges into
- * existing branding so multiple steps can run in any order.
+ * Persists a partial wizard step. Each wizard step writes the field(s) it
+ * owns, so steps can run in any order. Layout, colour set, colours and fonts
+ * are saved as the site's DRAFTED look (`site-design-service`) and go live on
+ * step 5's publish; the tagline and name are live-immediate.
  *
  * Step → fields:
  *   1. Layout            → layoutId
@@ -24,7 +25,9 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-import { updateBrandingForCommunity } from '@/lib/api/branding';
+import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
+import { saveDraftDesign } from '@/lib/services/site-design-service';
+import { effectiveLook } from '@propertypro/shared';
 import { updateCommunityName } from '@/lib/services/community-profile-service';
 import { wizardPatchContract } from './contract';
 import type { NextRequest } from 'next/server';
@@ -47,9 +50,28 @@ export const PATCH = withErrorHandler(
     const { userId, communityId } = await ensurePmAccess(req, body.communityId);
 
     // `name` is a top-level communities column, NOT branding — pull it out so
-    // it never leaks into the branding jsonb merge below.
-    const { communityId: _id, name, ...brandingPatch } = body;
-    const branding = await updateBrandingForCommunity(communityId, brandingPatch);
+    // it never leaks into the branding jsonb merge below. The tagline stays
+    // live-immediate; the look fields are the site's DRAFTED look (website
+    // builder v4) and go live on the wizard's final Publish step. A chosen
+    // colour set is saved with its colours and fonts, so it reaches the live
+    // site — saving only its slug is how it never did.
+    //
+    // Order matters: `updateBrandingForCommunity` writes the whole object back
+    // from a request-cached read, so it runs BEFORE the draft's atomic merge,
+    // never after it. The response is built from the two writes' own results
+    // for the same reason — a re-read here would hit that cache.
+    const { communityId: _id, name, tagline, ...lookPatch } = body;
+    const afterTagline =
+      tagline !== undefined
+        ? await updateBrandingForCommunity(communityId, { tagline })
+        : ((await getBrandingForCommunity(communityId)) ?? {});
+    const design =
+      Object.keys(lookPatch).length > 0
+        ? await saveDraftDesign(communityId, lookPatch, { actorUserId: userId })
+        : null;
+    const branding = design
+      ? { ...afterTagline, ...design.live, ...design.draft }
+      : effectiveLook(afterTagline, { includeDraft: true });
 
     // Community-name edit (spec §4.1 Step 3) — the service writes
     // communities.name and emits a `community` update audit entry, no-opping

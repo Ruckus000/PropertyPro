@@ -7,7 +7,8 @@
 import { LAYOUT_IDS, type LayoutId } from '@/components/public-site/layouts/types';
 import { type CommunityType } from '@propertypro/shared';
 
-function isLayoutId(v: unknown): v is LayoutId {
+/** True for one of the layouts the public site can render. */
+export function isLayoutId(v: unknown): v is LayoutId {
   return typeof v === 'string' && (LAYOUT_IDS as readonly string[]).includes(v);
 }
 
