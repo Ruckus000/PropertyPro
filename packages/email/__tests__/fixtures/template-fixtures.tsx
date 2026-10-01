@@ -282,6 +282,24 @@ export const FIXTURES: Record<string, TemplateFixture> = {
       <E.DocumentPostedEmail branding={bulk} recipientName="Marisol" documentTitle="August 2026 financial statements" documentCategory="Financials" uploadedByName="Carmen Ortiz" portalUrl={url('documents/99')} />
     ),
   },
+  'document-shared-email': {
+    accent: 'coral',
+    sender: 'association',
+    minimal: () => <E.DocumentSharedEmail branding={association} recipientName="Marisol" senderName="Carmen Ortiz" documents={[{ title: 'Rules & regulations (rev. 2025)' }]} portalUrl={url('documents')} />,
+    rich: () => (
+      <E.DocumentSharedEmail
+        branding={bulk}
+        recipientName="Marisol"
+        senderName="Carmen Ortiz"
+        documents={[
+          { title: 'Rules & regulations (rev. 2025)' },
+          { title: '2026 Annual budget' },
+          { title: 'Hurricane preparedness guide' },
+        ]}
+        portalUrl={url('documents')}
+      />
+    ),
+  },
   'certificate-request-email': {
     accent: 'coral',
     sender: 'association',
