@@ -33,6 +33,8 @@ const {
   setDocumentPublicAccessMock,
   paginateDeletedDocumentsMock,
   restoreDocumentMock,
+  setDocumentPostedMock,
+  sendDocumentPostedNotificationsMock,
   enforcePublishRedactionAttestationMock,
   tryAutoCompleteMock,
   logAuditEventMock,
@@ -56,6 +58,8 @@ const {
   setDocumentPublicAccessMock: vi.fn(),
   paginateDeletedDocumentsMock: vi.fn(),
   restoreDocumentMock: vi.fn(),
+  setDocumentPostedMock: vi.fn(),
+  sendDocumentPostedNotificationsMock: vi.fn(),
   enforcePublishRedactionAttestationMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
   logAuditEventMock: vi.fn(),
@@ -99,6 +103,7 @@ vi.mock('@/lib/documents/redaction-attestation', () => ({
 
 vi.mock('@/lib/documents/create-uploaded-document', () => ({
   createUploadedDocument: createUploadedDocumentMock,
+  sendDocumentPostedNotifications: sendDocumentPostedNotificationsMock,
 }));
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
@@ -113,6 +118,7 @@ vi.mock('@/lib/services/documents-service', () => ({
   setDocumentPublicAccess: setDocumentPublicAccessMock,
   paginateDeletedDocuments: paginateDeletedDocumentsMock,
   restoreDocument: restoreDocumentMock,
+  setDocumentPosted: setDocumentPostedMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -331,6 +337,20 @@ describe('POST /api/v1/documents', () => {
         attested: true,
       }),
     );
+  });
+
+  it('saves a DRAFT without asking the redaction question — owners cannot see it', async () => {
+    const res = await POST(jsonPost({ ...VALID_CREATE_BODY, draft: true }));
+
+    expect(res.status).toBe(200);
+    expect(enforceRedactionAttestationMock).not.toHaveBeenCalled();
+    expect(createUploadedDocumentMock).toHaveBeenCalledWith(expect.objectContaining({ draft: true }));
+  });
+
+  it('a non-draft upload is created posted', async () => {
+    await POST(jsonPost(VALID_CREATE_BODY));
+
+    expect(createUploadedDocumentMock).toHaveBeenCalledWith(expect.objectContaining({ draft: false }));
   });
 
   it('creates a document and returns the row (no warnings)', async () => {
@@ -566,6 +586,8 @@ describe('PATCH /api/v1/documents - public_access', () => {
       title: 'Bylaws',
       categoryId: 3,
       publicAccess: false,
+      postedAt: new Date('2026-01-15T00:00:00.000Z'),
+      sourceType: 'library',
     });
     setDocumentPublicAccessMock.mockResolvedValue([{ id: 7, publicAccess: true }]);
     logAuditEventMock.mockResolvedValue(undefined);
@@ -633,6 +655,8 @@ describe('PATCH /api/v1/documents - public_access', () => {
       title: 'Bylaws',
       categoryId: 3,
       publicAccess: true,
+      postedAt: new Date('2026-01-15T00:00:00.000Z'),
+      sourceType: 'library',
     });
     setDocumentPublicAccessMock.mockResolvedValue([{ id: 7, publicAccess: false }]);
 
@@ -657,6 +681,160 @@ describe('PATCH /api/v1/documents - public_access', () => {
 
     expect(response.status).toBe(400);
     expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /api/v1/documents - drafts (posted)', () => {
+  /**
+   * Posting is when owners first see a document, so it is where the upload's
+   * redaction question is asked and residents are told. Taking it back must
+   * also take it off the public site.
+   */
+  function patch(body: unknown) {
+    return PATCH(
+      new NextRequest('http://localhost/api/v1/documents?id=7&communityId=42', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }
+
+  const DRAFT = {
+    title: 'Budget',
+    categoryId: 3,
+    publicAccess: false,
+    postedAt: null,
+    sourceType: 'library',
+  };
+  const POSTED = { ...DRAFT, publicAccess: true, postedAt: new Date('2026-01-15T00:00:00.000Z') };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-admin');
+    resolveEffectiveCommunityIdMock.mockReturnValue(42);
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
+    requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
+    requirePermissionMock.mockReturnValue(undefined);
+    requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
+    enforceRedactionAttestationMock.mockResolvedValue(undefined);
+    enforcePublishRedactionAttestationMock.mockResolvedValue(undefined);
+    setDocumentPostedMock.mockResolvedValue([{ id: 7 }]);
+    sendDocumentPostedNotificationsMock.mockResolvedValue([]);
+    logAuditEventMock.mockResolvedValue(undefined);
+    scopedUpdateMock.mockResolvedValue([]);
+    createScopedClientMock.mockReturnValue({ update: scopedUpdateMock });
+  });
+
+  it('posts a draft: asks the attestation by category, writes, audits, then notifies', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(DRAFT);
+
+    const res = await patch({ posted: true, redactionAttested: true });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ data: { id: 7, posted: true } });
+    expect(enforceRedactionAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ communityId: 42, categoryId: 3, attested: true }),
+    );
+    expect(setDocumentPostedMock).toHaveBeenCalledWith(42, 7, true);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceId: '7',
+        oldValues: { posted: false, publicAccess: false },
+        newValues: { posted: true, publicAccess: false },
+        metadata: { change: 'posted' },
+      }),
+    );
+    expect(sendDocumentPostedNotificationsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ communityId: 42, documentId: 7, title: 'Budget' }),
+    );
+  });
+
+  it('refuses to post without the attestation, and writes and tells no one', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(DRAFT);
+    enforceRedactionAttestationMock.mockRejectedValueOnce(new ValidationError('Confirm redaction'));
+
+    const res = await patch({ posted: true });
+
+    expect(res.status).toBe(400);
+    expect(setDocumentPostedMock).not.toHaveBeenCalled();
+    expect(sendDocumentPostedNotificationsMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('takes a posted document back to a draft without asking, and records it left the public site', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(POSTED);
+
+    const res = await patch({ posted: false });
+
+    expect(res.status).toBe(200);
+    expect(enforceRedactionAttestationMock).not.toHaveBeenCalled();
+    expect(setDocumentPostedMock).toHaveBeenCalledWith(42, 7, false);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        oldValues: { posted: true, publicAccess: true },
+        newValues: { posted: false, publicAccess: false },
+        metadata: { change: 'unposted', complianceLinksCleared: true },
+      }),
+    );
+    expect(sendDocumentPostedNotificationsMock).not.toHaveBeenCalled();
+    // Unlinked from compliance, as a delete is: several counters read the link alone.
+    expect(scopedUpdateMock).toHaveBeenCalledWith(
+      complianceChecklistItemsTable,
+      expect.objectContaining({ documentId: null, documentPostedAt: null }),
+      expect.anything(),
+    );
+  });
+
+  it('posting leaves compliance links alone', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(DRAFT);
+
+    await patch({ posted: true, redactionAttested: true });
+
+    expect(scopedUpdateMock).not.toHaveBeenCalledWith(
+      complianceChecklistItemsTable,
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('refuses to put a DRAFT on the public site', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(DRAFT);
+
+    const res = await patch({ publicAccess: true, redactionAttested: true });
+
+    expect(res.status).toBe(400);
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['posting what is already posted', POSTED, true],
+    ['un-posting what is already a draft', DRAFT, false],
+  ])('400s %s', async (_label, existing, posted) => {
+    getDocumentForPublishAuditMock.mockResolvedValue(existing);
+
+    const res = await patch({ posted });
+
+    expect(res.status).toBe(400);
+    expect(setDocumentPostedMock).not.toHaveBeenCalled();
+  });
+
+  it('409s, and audits and notifies nothing, when another request got there first', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(DRAFT);
+    setDocumentPostedMock.mockResolvedValue([]);
+
+    const res = await patch({ posted: true, redactionAttested: true });
+
+    expect(res.status).toBe(409);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+    expect(sendDocumentPostedNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a body that posts AND publishes in one step', async () => {
+    const res = await patch({ posted: true, publicAccess: true });
+
+    expect(res.status).toBe(400);
+    expect(getDocumentForPublishAuditMock).not.toHaveBeenCalled();
   });
 });
 

@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   describeHiddenSection,
+  describeRequiredSectionHide,
   describeSectionRemoval,
 } from '@/lib/site-editor/describe-section-state';
 
@@ -74,5 +75,14 @@ describe('describeHiddenSection', () => {
 
   it('tells the PM a live section stays up until they publish', () => {
     expect(describeHiddenSection('shown').text).toMatch(/until you publish/);
+  });
+});
+
+describe('describeRequiredSectionHide', () => {
+  it('conditions the claim on the next publish and claims nothing public now', () => {
+    const sentence = describeRequiredSectionHide();
+    expect(sentence.text).toMatch(/^Once you publish/);
+    expect(sentence.text).toMatch(/move it down instead/);
+    expect(sentence.claimsPublic).toBe(false);
   });
 });

@@ -50,7 +50,7 @@ import {
 } from '@propertypro/shared';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
-import { ensureHomePage } from '@/lib/services/site-pages-service';
+import { assertRequiredSectionsSurvive, ensureHomePage } from '@/lib/services/site-pages-service';
 
 /**
  * Content blocks occupy block_order 2..99; the hero is reserved at order 1
@@ -1478,6 +1478,10 @@ export async function removeSiteBlock({
     if (!hasPublished && !visibleDraft) {
       throw new NotFoundError('Content section not found for this community');
     }
+
+    // Florida-required sections: refuse removing the site's last copy. Under
+    // the community lock taken above, so it cannot race the other copy's removal.
+    await assertRequiredSectionsSurvive(tx, communityId, { kind: 'section', pageId, blockOrder });
 
     // Clear any draft at the slot (edited draft or stale tombstone). For a
     // draft-only slot this IS the removal; for a published slot it makes room

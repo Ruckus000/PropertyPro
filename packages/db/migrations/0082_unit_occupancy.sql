@@ -1,4 +1,6 @@
--- 0080_unit_occupancy — Directory (Phase 0): per-unit occupancy.
+-- unit_occupancy — Directory (Phase 0): per-unit occupancy.
+-- (No migration number in this file on purpose: production's ledger records
+-- this file's sha256, so renumbering must never change its bytes.)
 --
 -- EXPAND-only: two nullable columns + a CHECK. Safe to apply before the code
 -- that reads them ships; nothing reads them until the Directory page does.

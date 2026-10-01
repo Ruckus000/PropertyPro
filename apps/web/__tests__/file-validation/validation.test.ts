@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-  MAX_DOCUMENT_BYTES,
-  MAX_IMAGE_BYTES,
-  detectFileTypeFromBytes,
-  validateFile,
-} from '../../src/lib/utils/file-validation';
+import { detectFileTypeFromBytes, validateFile } from '../../src/lib/utils/file-validation';
+import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES } from '../../src/lib/documents/upload-rules';
 
 function bytesFromHex(hex: string): Uint8Array {
   const clean = hex.replace(/\s+/g, '');

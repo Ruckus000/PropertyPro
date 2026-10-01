@@ -8,7 +8,7 @@
  * document attachment flows.
  */
 import { communities, createScopedClient, documents, meetingDocuments, meetings } from '@propertypro/db';
-import { and, asc, eq, gte, inArray, lt } from '@propertypro/db/filters';
+import { and, asc, eq, gte, inArray, isNotNull, lt } from '@propertypro/db/filters';
 import type { MeetingResponseRecord } from '@/lib/meetings/meeting-response';
 
 const meetingColumns = {
@@ -253,7 +253,13 @@ export async function getMeetingDocumentTargets(
   const scoped = createScopedClient(communityId);
   const [meetingRows, documentRows] = await Promise.all([
     scoped.selectFrom(meetings, { id: meetings.id }, eq(meetings.id, meetingId)),
-    scoped.selectFrom(documents, { id: documents.id }, eq(documents.id, documentId)),
+    // A draft cannot be attached: the meeting is visible to residents, and the
+    // draft is not. Reported as not found, like a document in another community.
+    scoped.selectFrom(
+      documents,
+      { id: documents.id },
+      and(eq(documents.id, documentId), isNotNull(documents.postedAt)),
+    ),
   ]);
   return {
     meetingFound: meetingRows.length > 0,
@@ -360,6 +366,8 @@ export async function listMeetingAttachedDocuments(
       mimeType: documents.mimeType,
       categoryId: documents.categoryId,
     },
-    inArray(documents.id, documentIds),
+    // A document taken back to a draft after it was attached stays linked
+    // but is not shown — residents read this list.
+    and(inArray(documents.id, documentIds), isNotNull(documents.postedAt)),
   );
 }

@@ -36,7 +36,7 @@ const {
     meetingId: Symbol('meeting_documents.meetingId'),
     documentId: Symbol('meeting_documents.documentId'),
   },
-  documentsTableMock: { id: Symbol('documents.id') },
+  documentsTableMock: { id: Symbol('documents.id'), postedAt: Symbol('documents.postedAt') },
   communitiesTableMock: {
     id: Symbol('communities.id'),
     timezone: Symbol('communities.timezone'),
@@ -47,6 +47,7 @@ const {
     eq: vi.fn((left, right) => ({ type: 'eq', left, right })),
     gte: vi.fn((left, right) => ({ type: 'gte', left, right })),
     lt: vi.fn((left, right) => ({ type: 'lt', left, right })),
+    isNotNull: vi.fn((value) => ({ type: 'isNotNull', value })),
   },
 }));
 

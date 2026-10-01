@@ -1,5 +1,5 @@
 {
-  "id": "db8c79b6-50a7-4efc-90dc-930d40e03141",
+  "id": "fac34dfa-4d91-42b7-bc4d-1cb482aad35e",
   "prevId": "716b4d69-5416-4902-822f-f730c365101e",
   "version": "7",
   "dialect": "postgresql",
@@ -3209,18 +3209,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "occupancy": {
-          "name": "occupancy",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "occupancy_confirmed_at": {
-          "name": "occupancy_confirmed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3274,12 +3262,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "units_occupancy_check": {
-          "name": "units_occupancy_check",
-          "value": "\"units\".\"occupancy\" IS NULL OR \"units\".\"occupancy\" IN ('owner_occupied', 'rented', 'vacant')"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.document_categories": {
@@ -3476,6 +3459,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "posted_at": {
+          "name": "posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
         },
         "created_at": {
           "name": "created_at",

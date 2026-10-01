@@ -40,6 +40,8 @@ vi.mock('@/hooks/use-documents', () => ({
   useDeletedDocuments: () => ({ data: [], isLoading: false, error: null }),
   useRestoreDocument: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useDocumentsInvalidator: () => vi.fn(),
+  useDocumentFileInvalidator: () => vi.fn(),
+  useSetDocumentPosted: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
   useDeleteDocument: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
   useSetDocumentPublicAccess: () => ({
     mutate: vi.fn(),
@@ -50,8 +52,8 @@ vi.mock('@/hooks/use-documents', () => ({
   useDocumentDownloadUrl: () => ({ data: null, isLoading: false }),
 }));
 
-vi.mock('../../src/components/documents/document-upload-area', () => ({
-  DocumentUploadArea: () => <div>upload area</div>,
+vi.mock('../../src/components/documents/document-upload-queue', () => ({
+  DocumentUploadQueue: () => <div>upload queue</div>,
 }));
 
 vi.mock('../../src/components/documents/document-category-filter', () => ({

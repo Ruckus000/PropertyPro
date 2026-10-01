@@ -42,18 +42,21 @@ import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
 import { useDocumentCategories } from '@/hooks/use-document-categories';
 import {
   useDeletedDocuments,
+  useDocumentFileInvalidator,
   useDocuments,
   useDocumentsInvalidator,
   useRestoreDocument,
   useSetDocumentPublicAccess,
 } from '@/hooks/use-documents';
-import type { UploadDocumentResult } from '@/hooks/use-document-upload';
+import type { ReplaceFileResult } from '@/hooks/use-document-upload';
+import type { QueueOutcome } from '@/hooks/use-document-upload-queue';
 import {
   boardColumns,
   coerceDocumentsView,
   coverageFacts,
   filterRows,
   mergeDocumentsAndGaps,
+  isDraft,
   owedToPublic,
   timelineRows,
   unlinkedDocuments,
@@ -92,8 +95,8 @@ import { PublishDocumentDialog } from './publish-document-dialog';
 
 // Pulls the Radix select stack via `@/components/ui/select`. Shown only after
 // the PM presses Upload, which is already a deliberate act with a wait.
-const DocumentUploadArea = dynamic(
-  () => import('./document-upload-area').then((m) => m.DocumentUploadArea),
+const DocumentUploadQueue = dynamic(
+  () => import('./document-upload-queue').then((m) => m.DocumentUploadQueue),
   {
     loading: () => <div className="min-h-40 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
   },
@@ -167,6 +170,7 @@ export function DocumentLibrary({
   const publicAccessMutation = useSetDocumentPublicAccess(communityId);
   const restoreMutation = useRestoreDocument(communityId);
   const invalidateDocuments = useDocumentsInvalidator(communityId);
+  const invalidateDocumentFile = useDocumentFileInvalidator(communityId);
 
   const documents = useMemo<DocumentRow[]>(() => documentsQuery.data ?? [], [documentsQuery.data]);
   const checklist = useMemo<ChecklistRow[]>(
@@ -217,6 +221,20 @@ export function DocumentLibrary({
     () => owedToPublic(documents, checklist).length,
     [checklist, documents],
   );
+  const draftCount = useMemo(() => documents.filter(isDraft).length, [documents]);
+
+  // The selection is a snapshot taken on click; a lifecycle change (posted,
+  // taken off the site, file replaced) refetches the list but not the
+  // snapshot. Read the live row when there is one. Structural sharing keeps
+  // the reference stable while nothing changed, so the inspector does not
+  // reset on every background refetch.
+  const liveSelectedDocument = useMemo(
+    () =>
+      selectedDocument
+        ? documents.find((document) => document.id === selectedDocument.id) ?? selectedDocument
+        : null,
+    [documents, selectedDocument],
+  );
 
   const selectedRequirement = useMemo(() => {
     if (!selectedDocument) return null;
@@ -224,26 +242,40 @@ export function DocumentLibrary({
   }, [checklist, selectedDocument]);
 
   const selectedState = useMemo(() => {
-    if (!selectedDocument) return null;
-    const row = mergeDocumentsAndGaps([selectedDocument], checklist).find(
+    if (!liveSelectedDocument) return null;
+    const row = mergeDocumentsAndGaps([liveSelectedDocument], checklist).find(
       (candidate) => candidate.kind === 'document',
     );
     return row?.kind === 'document' ? row.state : null;
-  }, [checklist, selectedDocument]);
+  }, [checklist, liveSelectedDocument]);
 
   const openUploadPanel = useCallback(() => {
     setUploadCategoryId(selectedCategoryId);
     setShowUpload(true);
   }, [selectedCategoryId]);
 
-  const handleDocumentUploaded = useCallback(
-    (result: UploadDocumentResult) => {
+  // Any send that changed the library — including a partial one. Replaced
+  // files keep their ids, so their cached signed URLs go too.
+  const handleUploadsChanged = useCallback(
+    (outcome: QueueOutcome) => {
       invalidateDocuments();
-      if (result.warnings.length === 0) {
-        setShowUpload(false);
-      }
+      outcome.documentIds.forEach((id) => invalidateDocumentFile(id));
     },
-    [invalidateDocuments],
+    [invalidateDocuments, invalidateDocumentFile],
+  );
+
+  // The document keeps its id, so a selected snapshot of it would go on showing
+  // the old file's name and size; patch it rather than close the panel.
+  const handleFileReplaced = useCallback(
+    (result: ReplaceFileResult) => {
+      invalidateDocumentFile(result.id);
+      setSelectedDocument((current) =>
+        current?.id === result.id
+          ? { ...current, fileName: result.fileName, fileSize: result.fileSize, mimeType: result.mimeType }
+          : current,
+      );
+    },
+    [invalidateDocumentFile],
   );
 
   const handleDeleted = useCallback((doc: DocumentRow) => {
@@ -337,11 +369,12 @@ export function DocumentLibrary({
 
       {showUpload && canUpload && (
         <div className="rounded-md border border-edge bg-surface-card p-6">
-          <h2 className="mb-4 text-lg font-medium text-content">Upload Document</h2>
-          <DocumentUploadArea
+          <DocumentUploadQueue
             communityId={communityId}
             initialCategoryId={uploadCategoryId}
-            onUploaded={handleDocumentUploaded}
+            existingDocuments={documents}
+            onChanged={handleUploadsChanged}
+            onComplete={() => setShowUpload(false)}
           />
         </div>
       )}
@@ -370,6 +403,7 @@ export function DocumentLibrary({
                 { label: 'All records', value: 'all' },
                 { label: 'Owed to public', value: 'owed', count: owedCount },
                 { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
+                { label: 'Drafts', value: 'drafts', count: draftCount },
               ]}
             />
           </div>
@@ -439,6 +473,8 @@ export function DocumentLibrary({
                   // is draggable — deleting is destructive and keeps its own
                   // explicit verb, and restoring is offered in the panel.
                   if (from === 'deleted' || to === 'deleted') return;
+                  // Posting a draft asks its own questions in the inspector.
+                  if (from === 'draft' || to === 'draft') return;
                   setSelectedDocument(document);
                   setPublishTarget({ document, publishing: to === 'public' });
                 }}
@@ -471,12 +507,13 @@ export function DocumentLibrary({
             )}
             <DocumentInspector
               communityId={communityId}
-              document={selectedDocument}
+              document={liveSelectedDocument}
               requirement={selectedRequirement}
               state={selectedState}
               canManage={canUpload}
               showStatutory={showStatutory}
               isDeleted={selectedIsDeleted}
+              onFileReplaced={handleFileReplaced}
               onRequestPublish={(document, publishing) =>
                 setPublishTarget({ document, publishing })
               }

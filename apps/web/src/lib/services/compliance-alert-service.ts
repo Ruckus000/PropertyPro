@@ -18,7 +18,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { sendNotification } from '@/lib/services/notification-service';
 import type { ComplianceAlertEvent } from '@/lib/services/notification-service';
 import { calculateComplianceStatus } from '@/lib/utils/compliance-calculator';
-import { getDocumentDeletedAtByIds } from '@/lib/services/documents-service';
+import { getLinkedDocumentStatesByIds } from '@/lib/services/documents-service';
 
 export interface ComplianceAlertResult {
   communityId: number;
@@ -135,7 +135,7 @@ export async function checkAndAlertOverdueItems(
         .filter((v): v is number => typeof v === 'number'),
     ),
   ];
-  const documentDeletedAtById = await getDocumentDeletedAtByIds(
+  const documentStateById = await getLinkedDocumentStatesByIds(
     communityId,
     linkedDocumentIds,
   );
@@ -154,21 +154,23 @@ export async function checkAndAlertOverdueItems(
         : null;
 
     const documentId = (row['documentId'] as number | null) ?? null;
+    const linked = documentId != null ? documentStateById.get(documentId) : undefined;
 
     const status = calculateComplianceStatus({
       isApplicable: row['isApplicable'] as boolean | undefined,
       documentId,
       documentPostedAt,
-      documentDeletedAt:
-        documentId != null ? documentDeletedAtById.get(documentId) ?? null : null,
+      documentDeletedAt: linked?.deletedAt ?? null,
+      documentIsDraft: linked?.isDraft ?? false,
       deadline,
       rollingWindowMonths,
       now,
     });
 
     if (status === 'overdue') {
+      // A draft is as absent to owners as a deleted file.
       const documentDeleted =
-        documentId != null && (documentDeletedAtById.get(documentId) ?? null) != null;
+        linked != null && (linked.deletedAt != null || linked.isDraft);
       overdueItems.push({
         hasNoDocument: documentId == null || documentDeleted,
         title: typeof row['title'] === 'string' ? row['title'] : 'Compliance Item',

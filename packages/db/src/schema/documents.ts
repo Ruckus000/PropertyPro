@@ -59,6 +59,17 @@ export const documents = pgTable(
      * apps/web/src/app/sitemap.ts.
      */
     publicAccess: boolean('public_access').notNull().default(false),
+    /**
+     * When the document was posted for owners to see. NULL = a DRAFT: uploaded
+     * but not posted, visible only to managers (`isAdminRole`), never to
+     * owners, tenants, the public site, search, digests or notifications.
+     *
+     * Defaults to now() so every insert path that predates drafts (authored
+     * publishes, PM bulk upload, e-sign, violation evidence) stays posted
+     * without change; only the library upload path writes NULL on purpose.
+     * Backfilled to `created_at` for rows that existed before the column.
+     */
+    postedAt: timestamp('posted_at', { withTimezone: true }).defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

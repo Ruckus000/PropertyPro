@@ -60,7 +60,18 @@ async function executeSearchGroup(
 
     switch (group.key) {
       case 'documents': {
-        const response = await searchDocumentsByTrigram(communityId, query, limit);
+        // The caller's own read rule — the same one the documents library
+        // applies — so the palette cannot surface a record the library hides.
+        const response = await searchDocumentsByTrigram(
+          {
+            communityId,
+            role: membership.role,
+            communityType: membership.communityType,
+            isUnitOwner: membership.isUnitOwner,
+          },
+          query,
+          limit,
+        );
         totalCount = response.totalCount;
         results = response.results.map((row) => ({
           id: row.id,

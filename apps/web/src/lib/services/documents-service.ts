@@ -21,7 +21,7 @@ import {
   type DocumentAccessContext,
   type PaginatedResult,
 } from '@propertypro/db';
-import { and, eq, inArray, isNotNull } from '@propertypro/db/filters';
+import { and, eq, inArray, isNotNull, isNull } from '@propertypro/db/filters';
 
 /**
  * Row ceiling for the un-paginated deleted list below — the same ceiling
@@ -37,9 +37,16 @@ import { and, eq, inArray, isNotNull } from '@propertypro/db/filters';
 const WALK_PAGINATED_MAX_PAGES = 20;
 const DELETED_DOCUMENTS_ROW_CAP = WALK_PAGINATED_MAX_PAGES * MAX_PAGE_SIZE;
 
+export interface LinkedDocumentState {
+  deletedAt: Date | null;
+  /** `posted_at` is NULL: owners cannot see it, so it is not posted. */
+  isDraft: boolean;
+}
+
 /**
- * Resolve `deleted_at` for a specific set of document ids, INCLUDING
- * soft-deleted rows, as `documentId -> deletedAt | null`.
+ * The two facts compliance needs about the documents its items link to, for a
+ * specific set of ids, INCLUDING soft-deleted rows: is it deleted, and is it a
+ * draft. Either one means the item is not satisfied.
  *
  * Compliance needs to distinguish "document is gone" from "document is
  * live": under a normal scoped read a soft-deleted document simply drops
@@ -52,11 +59,11 @@ const DELETED_DOCUMENTS_ROW_CAP = WALK_PAGINATED_MAX_PAGES * MAX_PAGE_SIZE;
  *
  * AUTHZ: tenant-scoped — caller MUST have already verified membership.
  */
-export async function getDocumentDeletedAtByIds(
+export async function getLinkedDocumentStatesByIds(
   communityId: number,
   documentIds: readonly number[],
-): Promise<Map<number, Date | null>> {
-  const result = new Map<number, Date | null>();
+): Promise<Map<number, LinkedDocumentState>> {
+  const result = new Map<number, LinkedDocumentState>();
   if (documentIds.length === 0) return result;
 
   const scoped = createScopedClient(communityId);
@@ -69,7 +76,10 @@ export async function getDocumentDeletedAtByIds(
   for (const row of rows) {
     const id = row['id'] as number;
     const deletedAtRaw = row['deletedAt'] as string | Date | null;
-    result.set(id, deletedAtRaw ? new Date(deletedAtRaw) : null);
+    result.set(id, {
+      deletedAt: deletedAtRaw ? new Date(deletedAtRaw) : null,
+      isDraft: row['postedAt'] === null,
+    });
   }
   return result;
 }
@@ -153,6 +163,9 @@ export interface DocumentPublishAudit {
   title: string | null;
   categoryId: number | null;
   publicAccess: boolean;
+  /** NULL = a draft. */
+  postedAt: Date | null;
+  sourceType: string;
 }
 
 /**
@@ -174,6 +187,8 @@ export async function getDocumentForPublishAudit(
       title: documents.title,
       categoryId: documents.categoryId,
       publicAccess: documents.publicAccess,
+      postedAt: documents.postedAt,
+      sourceType: documents.sourceType,
     },
     eq(documents.id, documentId),
   )) as unknown as Array<DocumentPublishAudit>;
@@ -287,5 +302,109 @@ export async function restoreDocument(
   return (await scoped.restoreSoftDelete(
     documents,
     and(eq(documents.id, documentId), isNotNull(documents.deletedAt)),
+  )) as unknown as Array<Record<string, unknown>>;
+}
+
+export interface DocumentFileSnapshot {
+  title: string;
+  categoryId: number | null;
+  publicAccess: boolean;
+  sourceType: string;
+  filePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  /** NULL = a draft. */
+  postedAt: Date | null;
+}
+
+/**
+ * What the replace-file path needs to decide and to audit: the fields that
+ * pick the attestation (category, public flag), the source type (only library
+ * uploads can be replaced), and the current file, which becomes the audit
+ * entry's `oldValues`.
+ */
+export async function getDocumentFileSnapshot(
+  communityId: number,
+  documentId: number,
+): Promise<DocumentFileSnapshot | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    documents,
+    {
+      title: documents.title,
+      categoryId: documents.categoryId,
+      publicAccess: documents.publicAccess,
+      sourceType: documents.sourceType,
+      filePath: documents.filePath,
+      fileName: documents.fileName,
+      fileSize: documents.fileSize,
+      mimeType: documents.mimeType,
+      postedAt: documents.postedAt,
+    },
+    eq(documents.id, documentId),
+  )) as unknown as Array<DocumentFileSnapshot>;
+  return rows[0] ?? null;
+}
+
+/**
+ * Point an existing document at a new file, keeping its id.
+ *
+ * The id is what everything else holds: compliance checklist items, the public
+ * site's download links, site blocks, notifications already sent. Replacing in
+ * place is what lets "the link stays the same" be true.
+ *
+ * The search index is reset rather than kept: the old text describes a file
+ * that is no longer served. `expectedFilePath` makes the write conditional on
+ * the row still pointing at the file the caller read, so two replaces racing
+ * cannot both succeed against the same starting point.
+ */
+export async function replaceDocumentFile(
+  communityId: number,
+  documentId: number,
+  expectedFilePath: string,
+  file: { filePath: string; fileName: string; fileSize: number; mimeType: string },
+): Promise<Record<string, unknown>[]> {
+  const scoped = createScopedClient(communityId);
+  const isPdf = file.mimeType.toLowerCase().includes('pdf');
+  return (await scoped.update(
+    documents,
+    {
+      filePath: file.filePath,
+      fileName: file.fileName,
+      fileSize: file.fileSize,
+      mimeType: file.mimeType,
+      searchText: null,
+      searchVector: null,
+      extractionStatus: isPdf ? 'pending' : 'not_applicable',
+      extractionError: null,
+      extractedAt: null,
+    },
+    and(eq(documents.id, documentId), eq(documents.filePath, expectedFilePath)),
+  )) as unknown as Array<Record<string, unknown>>;
+}
+
+/**
+ * Post a draft, or take a posted document back to a draft.
+ *
+ * Conditional on the current state, so a double-click or two managers acting
+ * at once changes the row once and the second caller gets zero rows back.
+ * Taking a document back to a draft also takes it off the public site: a
+ * draft is never public, and leaving the flag set would put it back online the
+ * moment it is re-posted, without the publish attestation being asked again.
+ */
+export async function setDocumentPosted(
+  communityId: number,
+  documentId: number,
+  posted: boolean,
+): Promise<Record<string, unknown>[]> {
+  const scoped = createScopedClient(communityId);
+  return (await scoped.update(
+    documents,
+    posted ? { postedAt: new Date() } : { postedAt: null, publicAccess: false },
+    and(
+      eq(documents.id, documentId),
+      posted ? isNull(documents.postedAt) : isNotNull(documents.postedAt),
+    ),
   )) as unknown as Array<Record<string, unknown>>;
 }
