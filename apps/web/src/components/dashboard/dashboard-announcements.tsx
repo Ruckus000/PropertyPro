@@ -40,7 +40,7 @@ export function DashboardAnnouncements({
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
           <EmptyState
-            preset="no_announcements"
+            preset={canWriteAnnouncements ? 'no_announcements' : 'no_announcements_yet'}
             size="sm"
             action={
               createHref ? (
