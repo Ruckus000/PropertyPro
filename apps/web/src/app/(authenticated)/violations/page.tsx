@@ -25,6 +25,11 @@ interface PageProps {
  * Creating a violation for any unit stays manager-only (the inbox's button).
  * Feature gate: hasViolations must be enabled for the community type
  */
+function positiveInt(value: string | string[] | undefined): number | undefined {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 export default async function ViolationsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const rawId = Number(params['communityId']);
@@ -69,6 +74,7 @@ export default async function ViolationsPage({ searchParams }: PageProps) {
         userId={userId}
         userRole={membership.role}
         finesEnabled={membership.violationFinesEnabled}
+        initialUnitId={positiveInt(params['unitId'])}
       />
     </FeatureGate>
   );

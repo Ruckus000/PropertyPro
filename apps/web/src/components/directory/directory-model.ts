@@ -81,6 +81,8 @@ export interface DirectoryUnit {
   pastDue: PastDue | null;
   /** Overdue but under the rule: shown neutrally, never flagged, never "paid up". */
   overdueBelowRule: PastDue | null;
+  /** Open violations (0 when none or not visible to the viewer). */
+  openViolations: number;
 }
 
 export interface DirectoryContext {
@@ -268,6 +270,7 @@ export function buildDirectoryUnits(
         noOwner: ctx.hasOwnerRole && ctx.canSeeResidents && owners.length === 0,
         pastDue: overdue && isPastDue(overdue, rule) ? overdue : null,
         overdueBelowRule: overdue && !isPastDue(overdue, rule) ? overdue : null,
+        openViolations: u.openViolations ?? 0,
       };
     })
     .sort(

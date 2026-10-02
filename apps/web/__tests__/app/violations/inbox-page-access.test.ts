@@ -46,3 +46,13 @@ describe('violations inbox access', () => {
     await expect(open()).rejects.toThrow('redirect:/dashboard?reason=insufficient-permissions');
   });
 });
+
+describe('violations inbox for one unit', () => {
+  it('passes ?unitId= to the inbox as its starting filter (the Directory\'s Records link)', async () => {
+    membershipMock.mockResolvedValue({ ...base, role: 'property_manager', isAdmin: true, designation: null });
+    const page = (await ViolationsPage({ searchParams: Promise.resolve({ communityId: '1', unitId: '5' }) })) as {
+      props: { children: { props: { initialUnitId?: number } } };
+    };
+    expect(page.props.children.props.initialUnitId).toBe(5);
+  });
+});

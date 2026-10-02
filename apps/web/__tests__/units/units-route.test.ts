@@ -24,6 +24,8 @@ const {
   softDeleteUnitByIdMock,
   getUnitBalanceCentsMock,
   countOpenViolationsForUnitMock,
+  countOpenViolationsByUnitMock,
+  requireViolationsEnabledMock,
   tryAutoCompleteMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -43,6 +45,8 @@ const {
   softDeleteUnitByIdMock: vi.fn(),
   getUnitBalanceCentsMock: vi.fn(),
   countOpenViolationsForUnitMock: vi.fn(),
+  countOpenViolationsByUnitMock: vi.fn(),
+  requireViolationsEnabledMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
 }));
 
@@ -87,7 +91,10 @@ vi.mock('@/lib/services/unit-service', async (importOriginal) => ({
   updateUnitById: updateUnitByIdMock,
   getUnitBalanceCents: getUnitBalanceCentsMock,
   countOpenViolationsForUnit: countOpenViolationsForUnitMock,
+  countOpenViolationsByUnit: countOpenViolationsByUnitMock,
 }));
+
+vi.mock('@/lib/violations/common', () => ({ requireViolationsEnabled: requireViolationsEnabledMock }));
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
@@ -121,6 +128,38 @@ describe('/api/v1/units', () => {
     createScopedClientMock.mockReturnValue(SCOPED);
     logAuditEventMock.mockResolvedValue(undefined);
     tryAutoCompleteMock.mockResolvedValue(undefined);
+    requireViolationsEnabledMock.mockResolvedValue(undefined);
+    countOpenViolationsByUnitMock.mockResolvedValue(new Map());
+  });
+
+  describe('GET open-violation counts', () => {
+    const ROWS = [
+      { id: 1, communityId: 42, unitNumber: '101', createdAt: '', updatedAt: '' },
+      { id: 2, communityId: 42, unitNumber: '102', createdAt: '', updatedAt: '' },
+    ];
+    const list = async () => {
+      listUnitsForCommunityMock.mockResolvedValue(ROWS);
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/units?communityId=42'));
+      return ((await res.json()) as { data: Array<{ openViolations: number | null }> }).data;
+    };
+
+    it('managers get a count per unit, from one community-wide query (0 where none)', async () => {
+      countOpenViolationsByUnitMock.mockResolvedValue(new Map([[2, 3]]));
+      expect((await list()).map((u) => u.openViolations)).toEqual([0, 3]);
+      expect(countOpenViolationsByUnitMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('null, and not queried, when violations are off for the community', async () => {
+      requireViolationsEnabledMock.mockRejectedValue(new ForbiddenError('off'));
+      expect((await list()).map((u) => u.openViolations)).toEqual([null, null]);
+      expect(countOpenViolationsByUnitMock).not.toHaveBeenCalled();
+    });
+
+    it('null, and not queried, for residents — a neighbour\'s enforcement history is not theirs', async () => {
+      requireCommunityMembershipMock.mockResolvedValue({ ...MEMBERSHIP, role: 'resident', isAdmin: false, isUnitOwner: true });
+      expect((await list()).map((u) => u.openViolations)).toEqual([null, null]);
+      expect(countOpenViolationsByUnitMock).not.toHaveBeenCalled();
+    });
   });
 
   it('GET lists units for community', async () => {

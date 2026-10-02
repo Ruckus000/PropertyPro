@@ -45,7 +45,7 @@ const MAX_AVATARS = 3;
 
 export function UnitCards({ units, hasOwnerRole, canSeeBalances, onOpenUnit }: UnitsViewProps) {
   return (
-    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3">
       {units.map((u) => {
         const pastDue = canSeeBalances ? u.pastDue : null;
         const rent = hasOwnerRole ? null : formatRent(u.rentAmount);
@@ -117,13 +117,16 @@ export function UnitCards({ units, hasOwnerRole, canSeeBalances, onOpenUnit }: U
                 {rent ? <span className="ml-auto font-semibold text-content">{rent}</span> : null}
               </span>
 
-              {pastDue || u.noOwner ? (
+              {pastDue || u.noOwner || u.openViolations > 0 ? (
                 <span className="flex w-full flex-wrap gap-1.5 border-t border-edge-subtle pt-3">
                   {pastDue ? (
                     <StatusBadge status="overdue" label={`${formatCents(pastDue.amountCents)} past due`} className="font-semibold" />
                   ) : null}
                   {u.noOwner ? (
                     <StatusBadge status="pending" label="No owner on file" />
+                  ) : null}
+                  {u.openViolations > 0 ? (
+                    <StatusBadge status="review" label={plural(u.openViolations, 'open violation')} />
                   ) : null}
                 </span>
               ) : null}

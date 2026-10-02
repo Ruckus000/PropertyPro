@@ -49,6 +49,10 @@ export type AuditAction =
   // being folded into 'document_accessed'. "Who downloaded the whole
   // association, and when" must be answerable on its own.
   | 'community_export_downloaded'
+  // Directory CSV export (units or residents) — names, emails and phones of
+  // members leave the system in a file, so it is findable by name like the
+  // community export. Metadata carries counts and columns, never the rows.
+  | 'directory_exported'
   // Community purge — the terminal, irreversible step of the deletion
   // lifecycle. Its own action for the same reason as the export above: the
   // audit UI filters on a free-text `action` box, and a board asking "when was

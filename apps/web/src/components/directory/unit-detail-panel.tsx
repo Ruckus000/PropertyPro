@@ -20,6 +20,8 @@ export interface UnitDetailPanelProps {
   hasOwnerRole: boolean;
   isAdmin: boolean;
   canSeeBalances: boolean;
+  /** Violations are on for this community and the viewer may read them (admins). */
+  canSeeViolations: boolean;
   onOpenResident: (userId: string) => void;
   onAddResident: (unitId: number) => void;
   onSendInvite: (userId: string) => void;
@@ -78,12 +80,20 @@ function Banner({
 
 const orDash = (n: number | null) => (n === null ? '—' : String(n));
 
+/** This unit's ledger (the admin payments page narrows to `?unitId=`). */
+const ledgerHref = (communityId: number, unitId: number) =>
+  `/communities/${communityId}/payments?tab=ledger&unitId=${unitId}`;
+
+const RECORD_LINK =
+  'flex min-h-12 items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus';
+
 export function UnitDetailPanel({
   unit,
   communityId,
   hasOwnerRole,
   isAdmin,
   canSeeBalances,
+  canSeeViolations,
   onOpenResident,
   onAddResident,
   onSendInvite,
@@ -123,7 +133,7 @@ export function UnitDetailPanel({
             icon={AlertCircle}
             action={
               <Link
-                href={`/communities/${communityId}/payments?tab=delinquency`}
+                href={ledgerHref(communityId, unit.id)}
                 className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md border border-status-danger-border bg-surface-card px-3 text-xs font-semibold text-status-danger hover:bg-status-danger-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
                 View ledger
@@ -244,6 +254,34 @@ export function UnitDetailPanel({
                 ))}
               </ul>
             ) : null}
+          </section>
+        ) : null}
+
+        {canSeeBalances || canSeeViolations ? (
+          <section aria-labelledby={`records-${unit.id}`} className="flex flex-col gap-2">
+            <Overline>
+              <span id={`records-${unit.id}`}>Records</span>
+            </Overline>
+            <ul className="flex flex-col divide-y divide-edge-subtle rounded-md border border-edge">
+              {canSeeBalances ? (
+                <li>
+                  <Link href={ledgerHref(communityId, unit.id)} className={RECORD_LINK}>
+                    <span>Ledger</span>
+                    <span className="text-xs text-content-tertiary">Charges and payments</span>
+                  </Link>
+                </li>
+              ) : null}
+              {canSeeViolations ? (
+                <li>
+                  <Link href={`/violations?communityId=${communityId}&unitId=${unit.id}`} className={RECORD_LINK}>
+                    <span>Violations</span>
+                    <span className="text-xs text-content-tertiary">
+                      {unit.openViolations > 0 ? plural(unit.openViolations, 'open violation') : 'None open'}
+                    </span>
+                  </Link>
+                </li>
+              ) : null}
+            </ul>
           </section>
         ) : null}
       </div>

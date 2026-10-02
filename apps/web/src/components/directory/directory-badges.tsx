@@ -59,7 +59,9 @@ export const PORTAL_DETAIL: Record<ResidentPortalStatus, string> = {
 
 /** Label for the invite action, by portal status. */
 export function inviteActionLabel(status: ResidentPortalStatus): string {
-  return status === 'invited' ? 'Resend invite' : status === 'active' ? 'Send login link' : 'Send invite';
+  // ponytail: no action for `active` — a manager-triggered login link would be a
+  // new way to send sign-in emails for someone; residents have "Forgot password".
+  return status === 'invited' ? 'Resend invite' : 'Send invite';
 }
 
 export type AvatarTone = 'owner' | 'tenant' | 'neutral';

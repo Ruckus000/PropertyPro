@@ -49,8 +49,8 @@ vi.mock('@/components/finance/delinquency-table', () => ({
   },
 }));
 vi.mock('@/components/finance/ledger-table', () => ({
-  LedgerTable: () => {
-    ledgerSpy();
+  LedgerTable: (props: { unitId?: number; onShowAllUnits?: () => void }) => {
+    ledgerSpy(props);
     return <div>Ledger Content</div>;
   },
 }));
@@ -140,5 +140,22 @@ describe('AdminPaymentsTabs — one switcher', () => {
     expect(routerReplace).toHaveBeenCalledWith('/communities/3/payments?unitId=9&tab=ledger', {
       scroll: false,
     });
+  });
+});
+
+describe('AdminPaymentsTabs — one unit\'s ledger (Directory unit panel)', () => {
+  it('?unitId= narrows the ledger, and "show all units" drops only that param', () => {
+    search = new URLSearchParams('tab=ledger&unitId=7');
+    renderTabs();
+    const props = ledgerSpy.mock.calls[0]![0] as { unitId?: number; onShowAllUnits: () => void };
+    expect(props.unitId).toBe(7);
+    props.onShowAllUnits();
+    expect(routerReplace).toHaveBeenCalledWith('/communities/3/payments?tab=ledger', { scroll: false });
+  });
+
+  it('ignores a unitId that is not a positive integer', () => {
+    search = new URLSearchParams('tab=ledger&unitId=abc');
+    renderTabs();
+    expect((ledgerSpy.mock.calls[0]![0] as { unitId?: number }).unitId).toBeUndefined();
   });
 });

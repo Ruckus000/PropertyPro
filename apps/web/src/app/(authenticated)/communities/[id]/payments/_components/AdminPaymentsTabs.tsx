@@ -55,6 +55,15 @@ export function AdminPaymentsTabs({ communityId, userId, userRole }: AdminPaymen
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab = coercePaymentsTab(searchParams.get('tab'));
+  // `?unitId=` narrows the ledger to one unit (the Directory's unit panel links here).
+  const rawUnitId = Number(searchParams.get('unitId'));
+  const unitId = Number.isInteger(rawUnitId) && rawUnitId > 0 ? rawUnitId : undefined;
+
+  function showAllUnits() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('unitId');
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
 
   function handleTabChange(nextValue: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -88,7 +97,9 @@ export function AdminPaymentsTabs({ communityId, userId, userRole }: AdminPaymen
         <AssessmentManager communityId={communityId} userId={userId} userRole={userRole} />
       )}
       {activeTab === 'delinquency' && <DelinquencyTable communityId={communityId} />}
-      {activeTab === 'ledger' && <LedgerTable communityId={communityId} />}
+      {activeTab === 'ledger' && (
+        <LedgerTable communityId={communityId} unitId={unitId} onShowAllUnits={showAllUnits} />
+      )}
     </div>
   );
 }
