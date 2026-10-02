@@ -10,8 +10,11 @@
 export const HELP_RENDER_VERSION = 3;
 
 /**
- * Rendered HTML varies by section (same slug, different article) and by the
- * community type being read (`<OnlyFor>` blocks, which `help:` links resolve).
+ * Rendered HTML varies by section (same slug, different article), by the
+ * community type being read (`<OnlyFor>` blocks, which `help:` links resolve),
+ * and by board seat: a `help:` link to a board-only article is a link for a
+ * board member and plain text for everyone else. Every other input to that
+ * resolution (`reader.features`) is derived from the community type.
  */
 export function helpArticleCacheKey(
   section: string,
@@ -19,6 +22,7 @@ export function helpArticleCacheKey(
   slug: string,
   contentHash: string,
   communityType: string,
+  boardSeat: boolean,
 ): string {
-  return `${section}:${category}:${slug}:${contentHash}:${communityType}:v${HELP_RENDER_VERSION}`;
+  return `${section}:${category}:${slug}:${contentHash}:${communityType}:${boardSeat ? 'board' : 'no-board'}:v${HELP_RENDER_VERSION}`;
 }

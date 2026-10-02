@@ -7,7 +7,8 @@
  * - Full CSV generation with headers and data rows
  */
 import { describe, expect, it } from 'vitest';
-import { sanitizeCell, escapeCSVField, generateCSV } from '../../src/lib/services/csv-export';
+import { generateCSV } from '../../src/lib/services/csv-export';
+import { sanitizeCell, escapeCSVField } from '../../src/lib/utils/csv-cell';
 
 describe('csv-export', () => {
   // -------------------------------------------------------------------------
@@ -53,6 +54,22 @@ describe('csv-export', () => {
 
     it('only sanitizes the first character', () => {
       expect(sanitizeCell('normal =formula')).toBe('normal =formula');
+    });
+
+    // A negative amount is data: prefixing it made the ledger export's
+    // amounts text, so they would not sum in a spreadsheet.
+    it.each(['-12.50', '-$1,250.00', '+3', '15%', '-0.01'])('leaves the amount %j alone', (value) => {
+      expect(sanitizeCell(value)).toBe(value);
+    });
+
+    it.each([
+      ['-2+3', "'-2+3"],
+      ['-1-1', "'-1-1"],
+      ['=1+1', "'=1+1"],
+      ['@SUM(A1)', "'@SUM(A1)"],
+      ['-12.50 or more', "'-12.50 or more"],
+    ])('still neutralises the formula %j', (value, expected) => {
+      expect(sanitizeCell(value)).toBe(expected);
     });
   });
 
@@ -103,6 +120,34 @@ describe('csv-export', () => {
   // -------------------------------------------------------------------------
 
   describe('generateCSV', () => {
+    it('neutralises a formula inside a non-string value (a jsonb array column)', () => {
+      // vendors.specialties reaches the export worker as a JS array; String()
+      // joins it, so user text leads the cell.
+      const headers = [{ key: 'specialties', label: 'Specialties' }];
+      const rows = [{ specialties: ['=HYPERLINK("http://evil","x")', 'HVAC'] }];
+
+      const lines = generateCSV(headers, rows).split('\r\n');
+
+      expect(lines[1]).toBe(`"'=HYPERLINK(""http://evil"",""x""),HVAC"`);
+    });
+
+    it('writes negative amounts as numbers, not text', () => {
+      // What exportLedgerCsv produces: `(amountCents / 100).toFixed(2)`.
+      const headers = [
+        { key: 'description', label: 'Description' },
+        { key: 'amountDollars', label: 'Amount' },
+      ];
+      const rows = [
+        { description: 'Late fee waived', amountDollars: '-25.00' },
+        { description: 'Refund', amountDollars: -40 },
+      ];
+
+      const lines = generateCSV(headers, rows).split('\r\n');
+
+      expect(lines[1]).toBe('Late fee waived,-25.00');
+      expect(lines[2]).toBe('Refund,-40');
+    });
+
     it('generates CSV with headers and data', () => {
       const headers = [
         { key: 'id', label: 'ID' },
