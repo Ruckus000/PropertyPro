@@ -6,13 +6,19 @@
  * Allows platform admins to customise a community's public-facing landing page
  * branding: colors, fonts, and logo. Includes theme preset quick-picks.
  *
+ * Saves go LIVE and replace the manager's unpublished draft of the same
+ * settings (see the branding route). When the manager has unpublished design
+ * changes, a notice lists them so the admin knows what a save will replace.
+ * It is computed from the last load or save, so a draft saved after that is
+ * replaced without warning: best-effort, not a lock.
+ *
  * Domain display (URL, live/not-live, custom-domain status) moved to
  * `WebsiteDomainCard` (task 17c) — this component owns branding only, so the
  * domain isn't rendered twice in the same tab from two divergent call sites.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, Save, RotateCcw, Upload, X } from 'lucide-react';
-import type { CommunityBranding } from '@propertypro/shared';
+import { pendingLook, type CommunityBranding, type SiteLookField } from '@propertypro/shared';
 import {
   ALLOWED_FONTS,
   THEME_DEFAULTS,
@@ -20,7 +26,32 @@ import {
   presetToBranding,
   darkenHex,
 } from '@propertypro/theme';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '@propertypro/ui';
+import {
+  AlertBanner,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+} from '@propertypro/ui';
+
+/** How each drafted look field is named in the pending-changes notice. */
+const LOOK_FIELD_LABELS: Record<SiteLookField, string> = {
+  layoutId: 'layout',
+  themePresetSlug: 'theme preset',
+  primaryColor: 'primary color',
+  secondaryColor: 'secondary color',
+  accentColor: 'accent color',
+  fontHeading: 'heading font',
+  fontBody: 'body font',
+  customCssOverrides: 'custom colors',
+};
+
+function pendingLabels(branding: CommunityBranding): string[] {
+  return (Object.keys(pendingLook(branding)) as SiteLookField[]).map((f) => LOOK_FIELD_LABELS[f]);
+}
 
 // ---------------------------------------------------------------------------
 // Magic-byte validation (client-side, matches admin upload route)
@@ -94,6 +125,8 @@ export function CommunityWebsiteEditor({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  // The manager's unpublished design changes, as of the last load or save.
+  const [pending, setPending] = useState<string[]>([]);
 
   // Logo preview (local object URL before upload)
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
@@ -120,6 +153,7 @@ export function CommunityWebsiteEditor({
         if (!cancelled) {
           setForm(f);
           setInitial(f);
+          setPending(pendingLabels(branding ?? {}));
           setLoading(false);
         }
       } catch {
@@ -255,9 +289,11 @@ export function CommunityWebsiteEditor({
         return;
       }
 
-      const f = brandingToForm(data.branding as CommunityBranding);
+      const saved = data.branding as CommunityBranding;
+      const f = brandingToForm(saved);
       setForm(f);
       setInitial(f);
+      setPending(pendingLabels(saved ?? {}));
       setSuccess(true);
     } catch {
       setError('Network error');
@@ -283,6 +319,13 @@ export function CommunityWebsiteEditor({
 
   return (
     <form onSubmit={handleSave} className="space-y-6">
+      {pending.length > 0 && (
+        <AlertBanner
+          status="info"
+          title="The community's manager has unpublished design changes"
+          description={`Unpublished: ${pending.join(', ')}. Saving a setting here makes it live and replaces the manager's unpublished change to that setting; the others stay pending until the manager publishes.`}
+        />
+      )}
       {/* Theme Presets */}
       <Card>
         <CardHeader>
