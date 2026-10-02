@@ -12,10 +12,10 @@
  * public presigned-URL path for unauthenticated access once the per-document
  * public_access boolean is added to the documents table.
  *
- * Category note: the documentsBlockSchema includeCategories enum values
- * ('budget', 'minutes', 'financial', 'rules', 'other') are matched against
- * documentCategories.name (no slug column exists). Categories are the only
- * public-access control on documents in PR #4.
+ * Category note: the documentsBlockSchema includeCategories values
+ * ('budget', 'minutes', 'financial', 'rules', 'other') are matched against the
+ * community's category names BY MEANING (`documentMatchesSectionCategories`),
+ * not as strings — there is no slug column, and the names are free text.
  */
 import { documentsBlockSchema, type DocumentsBlockContent } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';

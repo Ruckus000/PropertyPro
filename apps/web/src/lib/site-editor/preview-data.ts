@@ -26,11 +26,12 @@
  * is to refetch the superset when a SoR block's config changes — not to make
  * these selectors cleverer.
  */
-import type {
-  AnnouncementsBlockContent,
-  ContactBlockContent,
-  DocumentsBlockContent,
-  MeetingsBlockContent,
+import {
+  documentMatchesSectionCategories,
+  type AnnouncementsBlockContent,
+  type ContactBlockContent,
+  type DocumentsBlockContent,
+  type MeetingsBlockContent,
 } from '@propertypro/shared';
 import type {
   PublicContactInfo,
@@ -95,8 +96,9 @@ export function selectDocuments(
 ): PublicDocument[] {
   const categories = content.includeCategories ?? [];
   if (categories.length === 0) return [];
+  // Same match as the live site's reader — by meaning, not by name.
   return all
-    .filter((d) => d.categoryName !== null && categories.includes(d.categoryName as never))
+    .filter((d) => documentMatchesSectionCategories(d.categoryName, categories))
     .slice(0, content.limit);
 }
 

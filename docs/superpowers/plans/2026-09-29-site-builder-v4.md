@@ -206,6 +206,30 @@ in the shared documents layer, so the app's documents library can use them too:
 - replacing an uploaded file
 - a draft state for uploaded documents
 
+**Revised 2026-10-02.** Those four capabilities have since shipped in the documents
+library (#1253, #1260, #1261). Rebuilding the library inside the editor would give the
+same records two interfaces that drift apart. So Phase 6 is now thin: a Documents tool
+that reports each category's status from the compliance checklist (which already follows
+the size thresholds) and links into the library, plus the design's last-document guard,
+added to the library itself.
+
+The design's fine copy ("$50 per day") is not used, per the legal-copy rule above, and
+neither is its hard-coded "Due soon".
+
+**Fixed first: the website's records section never showed a document.**
+- The section filters by fixed values (`budget`, `minutes`, `financial`, `rules`, `other`).
+- The reader compared those to the community's category *names* as strings
+  ("Financial Records"…), which matched nothing.
+- Every condo and HOA starter site therefore got an empty records section.
+- They are now matched by meaning, through `normalizeCategoryName`
+  (`documentMatchesSectionCategories`).
+
+Deferred, with its trigger:
+- **The section has no "governing documents" value.** The declaration, bylaws and
+  articles, first on the §718.111(12)(g) list, can't be selected. Adding one means an
+  additive schema value plus updating the condo and HOA starter-pack rows. Trigger: the
+  next change to the records section, or a board asking where its declaration is.
+
 ### Deferred
 - A full undo/redo stack (the user's decision). It needs a design for reversing
   changes on the server.
