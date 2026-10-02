@@ -42,7 +42,7 @@
     "fullTableRead": 1
   },
   "apps/web/src/lib/api/branding.ts": {
-    "unscoped": 6
+    "unscoped": 5
   },
   "apps/web/src/lib/api/require-platform-admin.ts": {
     "unscoped": 1

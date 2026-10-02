@@ -15,6 +15,10 @@ const applyResultSchema = z.object({
   communityName: z.string(),
   status: z.enum(['applied', 'failed']),
   reason: z.string().optional(),
+  // An applied community where part of the template was left out, e.g. custom
+  // colours on a plan without them. Must be declared: z.object strips unknown
+  // keys, so an undeclared field would vanish before the client saw it.
+  notes: z.array(z.string()).optional(),
 });
 
 export const templateApplyContract = defineRoute({

@@ -15,11 +15,16 @@ const mockUpdate = vi.fn();
 const mockSet = vi.fn();
 const mockUpdateWhere = vi.fn();
 
+// The live write: one atomic UPDATE in packages/db. Hoisted because vi.mock
+// factories run before module-level consts.
+const { mockApplyLive } = vi.hoisted(() => ({ mockApplyLive: vi.fn() }));
+
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: () => ({
     select: mockSelect,
     update: mockUpdate,
   }),
+  applyLiveBrandingPatchUnscoped: mockApplyLive,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -121,6 +126,7 @@ describe('seedDefaultSiteBranding', () => {
     mockUpdateWhere.mockResolvedValue(undefined);
     mockSet.mockReturnValue({ where: mockUpdateWhere });
     mockUpdate.mockReturnValue({ set: mockSet });
+    mockApplyLive.mockResolvedValue({ before: null, after: {} });
   });
 
   it('seeds layoutId (from community type) + themePresetSlug (layout default) for a fresh community', async () => {
@@ -128,25 +134,24 @@ describe('seedDefaultSiteBranding', () => {
       // 1) getBrandingForCommunity → no existing branding
       .mockResolvedValueOnce([{ branding: null }])
       // 2) site_layout_metadata read → tidewater's default preset
-      .mockResolvedValueOnce([{ defaultPresetSlug: 'bay-light' }])
-      // 3) updateBrandingForCommunity's internal getBranding → still empty
-      .mockResolvedValueOnce([{ branding: null }]);
+      .mockResolvedValueOnce([{ defaultPresetSlug: 'bay-light' }]);
 
     await seedDefaultSiteBranding(7, 'condo_718');
 
-    expect(mockUpdate).toHaveBeenCalledTimes(1);
-    const setArg = mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> };
-    expect(setArg.branding).toEqual({ layoutId: 'tidewater', themePresetSlug: 'bay-light' });
+    // Written through the atomic op, never as a whole-object update().set()
+    // from a read — the shape that erased concurrent writes.
+    expect(mockApplyLive).toHaveBeenCalledTimes(1);
+    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: 'bay-light' });
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it('maps hoa_720 → boulevard and apartment → sable', async () => {
     // hoa_720
     mockLimit
       .mockResolvedValueOnce([{ branding: null }])
-      .mockResolvedValueOnce([{ defaultPresetSlug: 'palm-shadow' }])
-      .mockResolvedValueOnce([{ branding: null }]);
+      .mockResolvedValueOnce([{ defaultPresetSlug: 'palm-shadow' }]);
     await seedDefaultSiteBranding(8, 'hoa_720');
-    expect((mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> }).branding).toEqual({
+    expect(mockApplyLive).toHaveBeenCalledWith(8, {
       layoutId: 'boulevard',
       themePresetSlug: 'palm-shadow',
     });
@@ -158,14 +163,14 @@ describe('seedDefaultSiteBranding', () => {
     mockSet.mockReturnValue({ where: mockUpdateWhere });
     mockUpdate.mockReturnValue({ set: mockSet });
     mockUpdateWhere.mockResolvedValue(undefined);
+    mockApplyLive.mockResolvedValue({ before: null, after: {} });
 
     // apartment
     mockLimit
       .mockResolvedValueOnce([{ branding: null }])
-      .mockResolvedValueOnce([{ defaultPresetSlug: 'linen-bronze' }])
-      .mockResolvedValueOnce([{ branding: null }]);
+      .mockResolvedValueOnce([{ defaultPresetSlug: 'linen-bronze' }]);
     await seedDefaultSiteBranding(9, 'apartment');
-    expect((mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> }).branding).toEqual({
+    expect(mockApplyLive).toHaveBeenCalledWith(9, {
       layoutId: 'sable',
       themePresetSlug: 'linen-bronze',
     });
@@ -176,7 +181,8 @@ describe('seedDefaultSiteBranding', () => {
 
     await seedDefaultSiteBranding(7, 'condo_718');
 
-    // Returned before the layout read or any update.
+    // Returned before the layout read or any write.
+    expect(mockApplyLive).not.toHaveBeenCalled();
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
@@ -185,6 +191,7 @@ describe('seedDefaultSiteBranding', () => {
 
     await seedDefaultSiteBranding(7, 'unknown_type');
 
+    expect(mockApplyLive).not.toHaveBeenCalled();
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
@@ -192,12 +199,10 @@ describe('seedDefaultSiteBranding', () => {
     mockLimit
       .mockResolvedValueOnce([{ branding: null }])
       // layout row missing → no defaultPresetSlug
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ branding: null }]);
+      .mockResolvedValueOnce([]);
 
     await seedDefaultSiteBranding(7, 'condo_718');
 
-    const setArg = mockSet.mock.calls[0]![0] as { branding: Record<string, unknown> };
-    expect(setArg.branding).toEqual({ layoutId: 'tidewater', themePresetSlug: null });
+    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: null });
   });
 });

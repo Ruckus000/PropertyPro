@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveLook, liveLook, pendingLook, type CommunityBranding } from '../branding';
+import {
+  effectiveLook,
+  liveLook,
+  liveLookKeysToStrip,
+  pendingLook,
+  type CommunityBranding,
+} from '../branding';
 
 const LIVE: CommunityBranding = {
   primaryColor: '#111111',
@@ -47,5 +53,50 @@ describe('pendingLook', () => {
 describe('liveLook', () => {
   it('keeps only the look fields', () => {
     expect(liveLook(LIVE)).toEqual({ primaryColor: '#111111', layoutId: 'tidewater' });
+  });
+});
+
+describe('liveLookKeysToStrip', () => {
+  it('strips nothing for a write with no look fields (logos, tagline, footer)', () => {
+    expect(
+      liveLookKeysToStrip({ siteLogoPath: 'x.webp', tagline: 'Hi', customEmailFooter: '' }),
+    ).toEqual([]);
+  });
+
+  it('strips a written colour AND the drafted colour-set slug that described it', () => {
+    expect(liveLookKeysToStrip({ primaryColor: '#112233' })).toEqual([
+      'themePresetSlug',
+      'primaryColor',
+    ]);
+  });
+
+  it('strips the slug for a font write too: fonts are part of a colour set', () => {
+    expect(liveLookKeysToStrip({ fontBody: 'Lato' })).toEqual(['themePresetSlug', 'fontBody']);
+  });
+
+  it('leaves the slug alone for a layout-only write', () => {
+    expect(liveLookKeysToStrip({ layoutId: 'tidewater' })).toEqual(['layoutId']);
+  });
+
+  it('strips customCssOverrides as a whole key, including a null that clears it', () => {
+    expect(liveLookKeysToStrip({ customCssOverrides: null })).toEqual(['customCssOverrides']);
+  });
+
+  it('ignores undefined values: they are not writes', () => {
+    expect(liveLookKeysToStrip({ primaryColor: undefined, layoutId: 'sable' })).toEqual([
+      'layoutId',
+    ]);
+  });
+
+  it('covers a full template in SITE_LOOK_FIELDS order', () => {
+    expect(
+      liveLookKeysToStrip({
+        tagline: 'Welcome',
+        customCssOverrides: { primaryColor: '#000000' },
+        fontHeading: 'Lato',
+        layoutId: 'boulevard',
+        themePresetSlug: 'coastal',
+      }),
+    ).toEqual(['layoutId', 'themePresetSlug', 'fontHeading', 'customCssOverrides']);
   });
 });

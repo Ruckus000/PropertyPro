@@ -4,7 +4,10 @@
  * PM Portfolio Templates manager (PT-PR6). Save a community's brand as a
  * template, list/rename/delete templates, and bulk-apply a template across the
  * communities you manage (one-time push with an explicit confirm + per-community
- * result reporting — branding is live the instant it is applied).
+ * result reporting). Branding is live the instant it is applied, unlike a
+ * manager's own design changes, which are drafts until Publish; applying also
+ * replaces any unpublished design changes to the same settings (see
+ * `applyTemplate`).
  *
  * Client component: talks to the API via the use-portfolio-templates hooks only.
  */
@@ -293,7 +296,8 @@ function ManagerBody({ communities }: { communities: CommunityOption[] }) {
                         <p className="text-sm text-content-secondary">
                           This replaces the colors, fonts, layout, theme, tagline, and logo on the{' '}
                           <strong className="font-medium text-content">live sites</strong> of{' '}
-                          {selected.size} {selected.size === 1 ? 'community' : 'communities'}.
+                          {selected.size} {selected.size === 1 ? 'community' : 'communities'}, and
+                          replaces any unpublished design changes to those settings.
                         </p>
                         <div className="flex items-center gap-2">
                           <button
@@ -335,7 +339,10 @@ function ManagerBody({ communities }: { communities: CommunityOption[] }) {
                               <AlertCircle aria-hidden="true" className="h-4 w-4" />
                             )}
                             <span>
-                              {r.communityName} — {r.status === 'applied' ? 'Applied' : `Failed${r.reason ? `: ${r.reason}` : ''}`}
+                              {r.communityName} —{' '}
+                              {r.status === 'applied'
+                                ? `Applied${r.notes?.length ? `. ${r.notes.join('. ')}` : ''}`
+                                : `Failed${r.reason ? `: ${r.reason}` : ''}`}
                             </span>
                           </li>
                         ))}

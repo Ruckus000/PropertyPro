@@ -56,10 +56,10 @@ export const PATCH = withErrorHandler(
     // colour set is saved with its colours and fonts, so it reaches the live
     // site — saving only its slug is how it never did.
     //
-    // Order matters: `updateBrandingForCommunity` writes the whole object back
-    // from a request-cached read, so it runs BEFORE the draft's atomic merge,
-    // never after it. The response is built from the two writes' own results
-    // for the same reason — a re-read here would hit that cache.
+    // Both writes are single atomic UPDATEs, so neither can erase the other
+    // and their order is free. The response is built from the two writes' own
+    // results, because a re-read here would hit the request cache and return
+    // the pre-write row.
     const { communityId: _id, name, tagline, ...lookPatch } = body;
     const afterTagline =
       tagline !== undefined

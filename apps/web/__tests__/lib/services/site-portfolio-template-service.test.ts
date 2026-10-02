@@ -95,6 +95,7 @@ import {
   deleteTemplate,
   userHasPortfolioTemplatesAccess,
   applyTemplate,
+  CUSTOM_COLOURS_SKIPPED_NOTE,
 } from '@/lib/services/site-portfolio-template-service';
 import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 
@@ -299,5 +300,87 @@ describe('applyTemplate', () => {
 
     expect(out.results[0]).toMatchObject({ communityId: 1, status: 'failed', reason: 'db down' });
     expect(out.results[1]).toMatchObject({ communityId: 2, status: 'applied' });
+  });
+
+  describe('custom colours follow each target community\'s plan', () => {
+    const CUSTOM = { primaryColor: '#112233' };
+    // Sunset Condos (1) on Professional has hasSiteCustomCss; Palm Shores (2)
+    // on Essentials does not.
+    const PLAN_ROWS = [
+      { id: 1, communityType: 'condo_718', subscriptionPlan: 'professional' },
+      { id: 2, communityType: 'hoa_720', subscriptionPlan: 'essentials' },
+    ];
+
+    it('leaves custom colours out for an Essentials target, applies the rest, and says so', async () => {
+      resultQueue.push([
+        { id: 5, branding: { primaryColor: '#abc', customCssOverrides: CUSTOM }, siteLogoPath: null },
+      ]);
+      resultQueue.push(PLAN_ROWS);
+
+      const out = await applyTemplate('user-1', 5, [1, 2]);
+
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
+        primaryColor: '#abc',
+        customCssOverrides: CUSTOM,
+      });
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(2, { primaryColor: '#abc' });
+      expect(out.results).toEqual([
+        { communityId: 1, communityName: 'Sunset Condos', status: 'applied' },
+        {
+          communityId: 2,
+          communityName: 'Palm Shores',
+          status: 'applied',
+          notes: [CUSTOM_COLOURS_SKIPPED_NOTE],
+        },
+      ]);
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          communityId: 2,
+          newValues: { templateId: 5, skipped: ['customCssOverrides'] },
+        }),
+      );
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ communityId: 1, newValues: { templateId: 5 } }),
+      );
+    });
+
+    it('withholds a null customCssOverrides too, without a note', async () => {
+      // null would CLEAR colours an Essentials community may still hold from
+      // an earlier plan; there is nothing to report, as nothing was skipped
+      // that the template meant to add.
+      resultQueue.push([
+        { id: 5, branding: { primaryColor: '#abc', customCssOverrides: null }, siteLogoPath: null },
+      ]);
+      resultQueue.push(PLAN_ROWS);
+
+      const out = await applyTemplate('user-1', 5, [2]);
+
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(2, { primaryColor: '#abc' });
+      expect(out.results[0]).toEqual({ communityId: 2, communityName: 'Palm Shores', status: 'applied' });
+    });
+
+    it('fails open when a target\'s plan row is missing, as plan-guard does', async () => {
+      resultQueue.push([
+        { id: 5, branding: { customCssOverrides: CUSTOM }, siteLogoPath: null },
+      ]);
+      resultQueue.push([]); // no plan rows
+
+      await applyTemplate('user-1', 5, [2]);
+
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(2, { customCssOverrides: CUSTOM });
+    });
+
+    it('resolves every target\'s plan in ONE query, not one per community', async () => {
+      resultQueue.push([{ id: 5, branding: { customCssOverrides: CUSTOM }, siteLogoPath: null }]);
+      resultQueue.push(PLAN_ROWS);
+      const SENTINEL = [{ sentinel: true }];
+      resultQueue.push(SENTINEL);
+
+      await applyTemplate('user-1', 5, [1, 2]);
+
+      // Template load + one plan query consumed; a per-community query would
+      // have eaten the sentinel.
+      expect(resultQueue).toEqual([SENTINEL]);
+    });
   });
 });
