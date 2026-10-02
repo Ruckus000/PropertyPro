@@ -610,6 +610,13 @@ export function DirectoryPageClient({
                         Import from CSV
                       </Link>
                     </DropdownMenuItem>
+                  ) : tab === 'units' && canWrite ? (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/dashboard/import-units?communityId=${communityId}`}>
+                        <Upload size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+                        Import from CSV
+                      </Link>
+                    </DropdownMenuItem>
                   ) : null}
                   <DropdownMenuItem
                     disabled={exporter.isPending}

@@ -329,7 +329,7 @@ describe('getActiveItemId', () => {
   });
 
   it('one Directory item covers the Directory, its old routes and resident import — not Dashboard', () => {
-    for (const path of ['/dashboard/directory', '/dashboard/units', '/dashboard/residents', '/dashboard/import-residents']) {
+    for (const path of ['/dashboard/directory', '/dashboard/units', '/dashboard/residents', '/dashboard/import-residents', '/dashboard/import-units']) {
       expect(getActiveItemId(NAV_ITEMS, path)).toBe('directory');
     }
     expect(NAV_ITEMS.some((i) => i.id === 'residents' || i.id === 'units')).toBe(false);
