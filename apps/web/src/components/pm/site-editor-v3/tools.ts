@@ -13,11 +13,11 @@ import {
 /**
  * The eight editor tools, in rail order (v4 builder, 2026-09-29).
  *
- * Labels are the design's, deliberately plain: "Colours" not "Theme",
+ * Labels are the design's, deliberately plain: "Design" not "Theme",
  * "Address" not "Domain". The audience is a property manager, not a designer.
  *
  * v4 puts the tools a manager reaches for while BUILDING first — Add, Pages,
- * Sections, Colours — and the site-wide ones after. "Notice" stays high: it is
+ * Sections, Design — and the site-wide ones after. "Notice" stays high: it is
  * the tool used under time pressure, and the only one whose writes skip the
  * draft layer. "Site" and "Address" are here only until the Settings view
  * (plan Phase 5) gives them a home; removing them first would drop features.
@@ -29,7 +29,7 @@ export const EDITOR_TOOLS = [
   { id: 'add', label: 'Add', icon: Plus },
   { id: 'pages', label: 'Pages', icon: Files },
   { id: 'sections', label: 'Sections', icon: Layers },
-  { id: 'styling', label: 'Colours', icon: Palette },
+  { id: 'design', label: 'Design', icon: Palette },
   { id: 'notice', label: 'Notice', icon: TriangleAlert },
   { id: 'site', label: 'Site', icon: Building2 },
   { id: 'domain', label: 'Address', icon: Globe },
@@ -45,7 +45,7 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
   pages: 'Pages',
   sections: 'Sections',
   add: 'Add a section',
-  styling: 'Colours & fonts',
+  design: 'Design',
   domain: 'Web address',
   help: 'Help',
 };
@@ -62,9 +62,13 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
  * uses membership here for exactly one thing: rendering
  * `<span className="sr-only">Professional feature</span>` on the tab. There is
  * no `disabled`, no changed `onClick`, no guard. A tool listed here is
- * *labelled* Pro, not locked — every panel that is genuinely gated (Colours,
- * Address) enforces that itself, inside the panel, and would still be gated if
- * this map were deleted.
+ * *labelled* Pro, not locked — every panel that is genuinely gated (Address)
+ * enforces that itself, inside the panel, and would still be gated if this map
+ * were deleted.
+ *
+ * "Design" is absent for the same reason as "Pages": templates and colour sets
+ * are on every plan. Only its custom-colours section is Professional, and that
+ * section gates itself (`StylingPanel`, `hasSiteCustomCss`).
  *
  * That is why "Pages" is absent. Multi-page ships wherever the editor ships
  * (the pages API carries no plan feature of its own), so there is nothing to
@@ -73,7 +77,6 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
  * belongs in `PagesPanel`, not here.
  */
 export const TOOL_PLAN_FEATURE = {
-  styling: 'hasSiteCustomCss',
   domain: 'hasSiteCustomDomain',
 } as const satisfies Partial<Record<EditorToolId, string>>;
 

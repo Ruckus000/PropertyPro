@@ -50,6 +50,87 @@ function Swatch({ color, label }: { color?: string; label: string }) {
   );
 }
 
+/**
+ * The colour-set cards on their own: the wizard's step 2 and the website
+ * editor's Design panel render the same grid, so a set looks identical in
+ * both. Single-column on purpose — see the note inside.
+ */
+export function PresetCards({
+  presets,
+  selected,
+  onChoose,
+  name,
+}: {
+  presets: PresetCardData[];
+  selected: string | null;
+  onChoose: (slug: string) => void;
+  /** Radio-group name; must be unique on the page. */
+  name: string;
+}) {
+  // No `sm:`/`lg:` columns, for the same reason `LayoutChooser` has none: those
+  // test the VIEWPORT while this fieldset lives in the wizard's half-width pane,
+  // which is ~280px at 1024px. Three columns there gave 83px cards. Caught by
+  // e2e/responsive-overflow.spec.ts after the LayoutChooser fix missed this twin.
+  // The Design panel is ~340px wide, so the same holds there.
+  return (
+    <fieldset className="grid grid-cols-1 gap-3">
+      <legend className="sr-only">Theme preset</legend>
+      {presets.map((preset) => {
+        const isSelected = preset.slug === selected;
+        return (
+          <label
+            key={preset.slug}
+            data-testid={`preset-card-${preset.slug}`}
+            className={`relative cursor-pointer rounded-md border p-4 transition-colors ${
+              isSelected
+                ? 'border-interactive bg-interactive-subtle ring-2 ring-interactive'
+                : 'border-edge bg-surface-card hover:border-interactive-hover'
+            }`}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={preset.slug}
+              checked={isSelected}
+              onChange={() => onChoose(preset.slug)}
+              className="sr-only"
+            />
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-base font-semibold text-content">{preset.displayName}</span>
+              {isSelected && (
+                <span
+                  aria-hidden="true"
+                  className="rounded-full bg-interactive px-2 py-0.5 text-xs font-medium text-content-inverse"
+                >
+                  Selected
+                </span>
+              )}
+            </div>
+            <div
+              data-testid={`preset-swatches-${preset.slug}`}
+              className="mb-2 flex items-center gap-1.5"
+            >
+              <Swatch color={preset.tokens.primaryColor} label="Primary" />
+              <Swatch color={preset.tokens.secondaryColor} label="Secondary" />
+              <Swatch color={preset.tokens.accentColor} label="Accent" />
+            </div>
+            {(preset.tokens.headingFont || preset.tokens.bodyFont) && (
+              <p className="mb-2 text-xs text-content-secondary">
+                {preset.tokens.headingFont}
+                {preset.tokens.headingFont && preset.tokens.bodyFont ? ' · ' : ''}
+                {preset.tokens.bodyFont}
+              </p>
+            )}
+            {preset.description && (
+              <p className="text-xs text-content-secondary">{preset.description}</p>
+            )}
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
+
 export function PresetChooser({
   communityId,
   presets,
@@ -125,67 +206,12 @@ export function PresetChooser({
         </p>
       </div>
 
-      {/*
-        No `sm:`/`lg:` columns, for the same reason `LayoutChooser` has none: those
-        test the VIEWPORT while this fieldset lives in the wizard's half-width pane,
-        which is ~280px at 1024px. Three columns there gave 83px cards. Caught by
-        e2e/responsive-overflow.spec.ts after the LayoutChooser fix missed this twin.
-      */}
-      <fieldset className="grid grid-cols-1 gap-3">
-        <legend className="sr-only">Theme preset</legend>
-        {presets.map((preset) => {
-          const isSelected = preset.slug === selected;
-          return (
-            <label
-              key={preset.slug}
-              data-testid={`preset-card-${preset.slug}`}
-              className={`relative cursor-pointer rounded-md border p-4 transition-colors ${
-                isSelected
-                  ? 'border-interactive bg-interactive-subtle ring-2 ring-interactive'
-                  : 'border-edge bg-surface-card hover:border-interactive-hover'
-              }`}
-            >
-              <input
-                type="radio"
-                name="wizard-preset"
-                value={preset.slug}
-                checked={isSelected}
-                onChange={() => choose(preset.slug)}
-                className="sr-only"
-              />
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-base font-semibold text-content">{preset.displayName}</span>
-                {isSelected && (
-                  <span
-                    aria-hidden="true"
-                    className="rounded-full bg-interactive px-2 py-0.5 text-xs font-medium text-content-inverse"
-                  >
-                    Selected
-                  </span>
-                )}
-              </div>
-              <div
-                data-testid={`preset-swatches-${preset.slug}`}
-                className="mb-2 flex items-center gap-1.5"
-              >
-                <Swatch color={preset.tokens.primaryColor} label="Primary" />
-                <Swatch color={preset.tokens.secondaryColor} label="Secondary" />
-                <Swatch color={preset.tokens.accentColor} label="Accent" />
-              </div>
-              {(preset.tokens.headingFont || preset.tokens.bodyFont) && (
-                <p className="mb-2 text-xs text-content-secondary">
-                  {preset.tokens.headingFont}
-                  {preset.tokens.headingFont && preset.tokens.bodyFont ? ' · ' : ''}
-                  {preset.tokens.bodyFont}
-                </p>
-              )}
-              {preset.description && (
-                <p className="text-xs text-content-secondary">{preset.description}</p>
-              )}
-            </label>
-          );
-        })}
-      </fieldset>
+      <PresetCards
+        presets={presets}
+        selected={selected}
+        onChoose={choose}
+        name="wizard-preset"
+      />
 
       <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
         <button

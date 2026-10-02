@@ -88,6 +88,10 @@ vi.mock('@/lib/services/site-pages-service', () => ({
 vi.mock('@/lib/services/community-profile-service', () => ({
   getCommunityUnitCount: vi.fn().mockResolvedValue(null),
 }));
+// v4 Phase 4: the Design panel's colour sets — a platform catalog read.
+vi.mock('@/lib/db/theme-preset-catalog', () => ({
+  listThemePresetsForWizard: vi.fn().mockResolvedValue([]),
+}));
 // site-settings-service and the real quota module import @propertypro/db and
 // @propertypro/db/unsafe, both of which load drizzle.ts and throw without
 // DATABASE_URL. The quota lookup is mocked above and nothing else reads the DB,

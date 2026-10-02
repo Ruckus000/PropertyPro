@@ -58,7 +58,7 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
     <EditorShell
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
-      proToolAccess={{ styling: true, domain: true }}
+      proToolAccess={{ domain: true }}
       communityId={42}
       hasPublishedSite
       initialNotice={null}
