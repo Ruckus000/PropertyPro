@@ -1197,6 +1197,15 @@ describeDb('P4-55 RLS policies (integration)', () => {
         'pp_site_publish_schedules_select',
         'pp_site_publish_schedules_update',
       ],
+      // unit_occupants (0085): per-table names, manager-tier predicate on every
+      // command including SELECT — household members' contact details are not
+      // a neighbour's to read.
+      unit_occupants: [
+        'pp_unit_occupants_delete',
+        'pp_unit_occupants_insert',
+        'pp_unit_occupants_select',
+        'pp_unit_occupants_update',
+      ],
       support_consent_grants: ['consent_community_read', 'consent_service_bypass'],
       support_access_log: ['access_log_community_read', 'access_log_service_bypass'],
       // onboarding_checklist_items (tenant_user_scoped): bespoke per-user policy

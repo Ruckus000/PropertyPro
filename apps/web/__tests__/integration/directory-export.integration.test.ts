@@ -90,7 +90,7 @@ describeDb('buildDirectoryExport (integration)', () => {
     const { csv, rowCount } = await buildDirectoryExport({
       communityId,
       kind: 'residents',
-      userIds: [tenant],
+      selection: { userIds: [tenant], occupantIds: [] },
       access: { isAdmin: true, canSeeBalances: false, canSeeViolations: false },
       actorUserId: actor,
     });

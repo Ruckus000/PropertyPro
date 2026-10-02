@@ -45,6 +45,7 @@ vi.mock('@propertypro/db', () => {
     meetingDocuments: tableProxy('meetingDocuments'),
     meetings: tableProxy('meetings'),
     reserveAssets: tableProxy('reserveAssets'),
+    unitOccupants: tableProxy('unitOccupants'),
     units: tableProxy('units'),
     userRoles: tableProxy('userRoles'),
     vendors: tableProxy('vendors'),

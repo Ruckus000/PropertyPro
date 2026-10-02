@@ -7,9 +7,16 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectoryResidentRow } from '../../src/components/directory/directory-model';
 
-const { mutateAsyncMock } = vi.hoisted(() => ({ mutateAsyncMock: vi.fn() }));
+const { mutateAsyncMock, updateOccupantMock } = vi.hoisted(() => ({
+  mutateAsyncMock: vi.fn(),
+  updateOccupantMock: vi.fn(),
+}));
 vi.mock('@/hooks/use-residents-management', () => ({
   useUpdateResident: () => ({ mutateAsync: mutateAsyncMock, isPending: false, error: null, reset: vi.fn() }),
+}));
+
+vi.mock('@/hooks/use-occupants', () => ({
+  useUpdateOccupant: () => ({ mutateAsync: updateOccupantMock, isPending: false, error: null, reset: vi.fn() }),
 }));
 
 import { EditResidentDialog } from '../../src/components/directory/edit-resident-dialog';
@@ -32,13 +39,13 @@ const resident = {
   unit: null,
 } as DirectoryResidentRow;
 
-function renderDialog(onSaved = vi.fn()) {
+function renderDialog(onSaved = vi.fn(), row: DirectoryResidentRow = resident) {
   render(
     <EditResidentDialog
       open
       onOpenChange={vi.fn()}
       communityId={42}
-      resident={resident}
+      resident={row}
       hasOwnerRole
       unitOptions={[
         { id: 4, label: 'Unit 4' },
@@ -51,7 +58,10 @@ function renderDialog(onSaved = vi.fn()) {
 }
 
 describe('EditResidentDialog', () => {
-  beforeEach(() => mutateAsyncMock.mockReset().mockResolvedValue({}));
+  beforeEach(() => {
+    mutateAsyncMock.mockReset().mockResolvedValue({});
+    updateOccupantMock.mockReset().mockResolvedValue({});
+  });
 
   it('sends only the changed field, with the version token — an unchanged unit is not a move', async () => {
     const user = userEvent.setup();
@@ -74,5 +84,34 @@ describe('EditResidentDialog', () => {
     await user.click(screen.getByRole('button', { name: /save/i }));
     expect(mutateAsyncMock).not.toHaveBeenCalled();
     expect(onSaved).toHaveBeenCalledWith(false);
+  });
+
+  it('a household member saves through occupants, and their contact email is editable', async () => {
+    const user = userEvent.setup();
+    renderDialog(vi.fn(), {
+      ...resident,
+      userId: 'occupant:5',
+      occupantId: 5,
+      ownerHousehold: true,
+      isUnitOwner: false,
+      email: null,
+      portalStatus: 'no_login',
+    });
+    expect(screen.getByRole('radio', { name: "Owner's household" })).toBeChecked();
+    await user.type(screen.getByLabelText('Email'), 'kid@x.test');
+    await user.click(screen.getByRole('radio', { name: "Tenant's household" }));
+    await user.click(screen.getByRole('button', { name: /save/i }));
+    expect(updateOccupantMock).toHaveBeenCalledWith({
+      id: 5,
+      expectedUpdatedAt: '2026-10-01T09:00:00.456Z',
+      email: 'kid@x.test',
+      isOwnerHousehold: false,
+    });
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("a member's sign-in email is read-only", () => {
+    renderDialog();
+    expect(screen.getByLabelText('Email')).toBeDisabled();
   });
 });

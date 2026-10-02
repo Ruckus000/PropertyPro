@@ -68,6 +68,8 @@ export interface ResidentFormSubmitValues {
   role: CommunityRole;
   unitId: number | null;
   isUnitOwner: boolean;
+  /** Household member with no portal login (only when `allowHousehold`): email optional, no invitation. */
+  household?: boolean;
 }
 
 interface ResidentFormProps {
@@ -80,6 +82,9 @@ interface ResidentFormProps {
    * numeric id. Labels should disambiguate ("101 · Building A").
    */
   unitOptions?: readonly { id: number; label: string }[];
+  /** Offer "Household member — no portal login" (the Directory). */
+  allowHousehold?: boolean;
+  onHouseholdChange?: (household: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +97,10 @@ export function ResidentForm({
   submitting = false,
   onSubmit,
   unitOptions,
+  allowHousehold = false,
+  onHouseholdChange,
 }: ResidentFormProps) {
+  const [household, setHousehold] = useState(false);
   const availableRoles = useMemo(
     () => ROLE_OPTIONS.filter((opt) => opt.communityTypes.includes(communityType)),
     [communityType],
@@ -152,6 +160,7 @@ export function ResidentForm({
       role: selectedRole.apiRole,
       unitId: values.unitId,
       isUnitOwner: selectedRole.isUnitOwner,
+      ...(household ? { household: true } : {}),
     };
 
     await onSubmit(submitValues);
@@ -173,10 +182,32 @@ export function ResidentForm({
         />
       </label>
 
+      {allowHousehold ? (
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={household}
+            onChange={(event) => {
+              setHousehold(event.target.checked);
+              onHouseholdChange?.(event.target.checked);
+            }}
+            className="mt-1 h-4 w-4 rounded border-edge-strong accent-interactive"
+            aria-describedby="resident-household-hint"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium text-content">Household member — no portal login</span>
+            <span id="resident-household-hint" className="text-xs text-content-tertiary">
+              Someone who lives here but won&apos;t sign in (a child, a parent, a caregiver). Email is optional and no
+              invitation is sent.
+            </span>
+          </span>
+        </label>
+      ) : null}
+
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-content-secondary">Email</span>
+        <span className="mb-1 block text-sm font-medium text-content-secondary">{household ? 'Email (optional)' : 'Email'}</span>
         <input
-          required
+          required={!household}
           type="email"
           value={values.email}
           onChange={(event) => setValues((prev) => ({ ...prev, email: event.target.value }))}
@@ -214,7 +245,7 @@ export function ResidentForm({
         >
           {availableRoles.map((opt) => (
             <option key={opt.key} value={opt.key}>
-              {opt.label}
+              {household ? `${opt.label}'s household` : opt.label}
             </option>
           ))}
         </select>

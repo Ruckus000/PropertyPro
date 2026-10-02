@@ -6,12 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUpdateResident } from '@/hooks/use-residents-management';
+import { useUpdateOccupant } from '@/hooks/use-occupants';
 import type { DirectoryResidentRow } from './directory-model';
 
 /**
  * Edit a resident's name, phone, owner/tenant and unit. "Move to another unit"
- * is this same form — the unit field is the move. Email is the sign-in and the
- * API does not change it, so it is shown, not edited.
+ * is this same form — the unit field is the move. A member's email is their
+ * sign-in and the API does not change it, so it is shown, not edited; a
+ * household member's email is contact-only and is editable.
  */
 export function EditResidentDialog({
   open,
@@ -30,11 +32,17 @@ export function EditResidentDialog({
   unitOptions: readonly { id: number; label: string }[];
   onSaved: (moved: boolean) => void;
 }) {
-  const update = useUpdateResident(communityId);
+  // Household members (no login) save through /api/v1/occupants; their email
+  // is contact-only, so unlike a member's sign-in email it can be edited.
+  const household = resident.occupantId !== undefined;
+  const updateMember = useUpdateResident(communityId);
+  const updateHousehold = useUpdateOccupant(communityId);
+  const update = household ? updateHousehold : updateMember;
   // Keyed by userId in the parent, so initial state is per resident.
   const [fullName, setFullName] = useState(resident.fullName ?? '');
+  const [email, setEmail] = useState(resident.email ?? '');
   const [phone, setPhone] = useState(resident.phone ?? '');
-  const [isUnitOwner, setIsUnitOwner] = useState(resident.isUnitOwner);
+  const [isUnitOwner, setIsUnitOwner] = useState(household ? resident.ownerHousehold === true : resident.isUnitOwner);
   const [unitId, setUnitId] = useState(resident.unitId === null ? '' : String(resident.unitId));
 
   function handleOpenChange(next: boolean) {
@@ -50,18 +58,30 @@ export function EditResidentDialog({
     const nextPhone = phone.trim() || null;
     // Only what changed: an unchanged unit is not a move, and the server
     // audits exactly the fields it is sent.
+    const nextEmail = email.trim() || null;
     const changes = {
       ...(nextName !== (resident.fullName ?? '') ? { fullName: nextName } : {}),
       ...(nextPhone !== (resident.phone ?? null) ? { phone: nextPhone } : {}),
       ...(nextUnitId !== resident.unitId ? { unitId: nextUnitId } : {}),
-      ...(hasOwnerRole && isUnitOwner !== resident.isUnitOwner ? { isUnitOwner } : {}),
+      ...(household
+        ? {
+            ...(nextEmail !== (resident.email ?? null) ? { email: nextEmail } : {}),
+            ...(hasOwnerRole && isUnitOwner !== (resident.ownerHousehold === true) ? { isOwnerHousehold: isUnitOwner } : {}),
+          }
+        : hasOwnerRole && isUnitOwner !== resident.isUnitOwner
+          ? { isUnitOwner }
+          : {}),
     };
     if (Object.keys(changes).length === 0) {
       onSaved(false);
       return;
     }
     try {
-      await update.mutateAsync({ userId: resident.userId, expectedUpdatedAt: resident.updatedAt, ...changes });
+      if (household) {
+        await updateHousehold.mutateAsync({ id: resident.occupantId!, expectedUpdatedAt: resident.updatedAt, ...changes });
+      } else {
+        await updateMember.mutateAsync({ userId: resident.userId, expectedUpdatedAt: resident.updatedAt, ...changes });
+      }
     } catch {
       return; // Rendered from update.error (a 409 also refreshes the list).
     }
@@ -84,10 +104,16 @@ export function EditResidentDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="edit-resident-email">Email</Label>
-            <Input id="edit-resident-email" value={resident.email ?? ''} readOnly disabled aria-describedby="edit-resident-email-note" />
-            <p id="edit-resident-email-note" className="text-xs text-content-tertiary">
-              Their email is how they sign in, so it can&apos;t be changed here.
-            </p>
+            {household ? (
+              <Input id="edit-resident-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            ) : (
+              <>
+                <Input id="edit-resident-email" value={resident.email ?? ''} readOnly disabled aria-describedby="edit-resident-email-note" />
+                <p id="edit-resident-email-note" className="text-xs text-content-tertiary">
+                  Their email is how they sign in, so it can&apos;t be changed here.
+                </p>
+              </>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="edit-resident-phone">Phone</Label>
@@ -98,8 +124,8 @@ export function EditResidentDialog({
               <legend className="text-sm font-medium text-content">Type</legend>
               <div className="flex gap-4">
                 {[
-                  { label: 'Owner', value: true },
-                  { label: 'Tenant', value: false },
+                  { label: household ? "Owner's household" : 'Owner', value: true },
+                  { label: household ? "Tenant's household" : 'Tenant', value: false },
                 ].map((opt) => (
                   <label key={opt.label} className="flex min-h-10 items-center gap-2 text-sm text-content">
                     <input

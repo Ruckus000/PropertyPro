@@ -3,7 +3,7 @@
 import { ArrowLeftRight, Mail, Pencil, Phone, Send, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, Overline, PORTAL_DETAIL, avatarToneFor, inviteActionLabel } from './directory-badges';
-import type { DirectoryResidentRow } from './directory-model';
+import { canBeInvited, isHouseholdMember, residentTypeLabel, type DirectoryResidentRow } from './directory-model';
 
 export interface ResidentDetailPanelProps {
   resident: DirectoryResidentRow;
@@ -27,6 +27,7 @@ const PORTAL_CARD: Record<DirectoryResidentRow['portalStatus'], string> = {
   active: 'border-status-success-border bg-status-success-bg text-status-success',
   invited: 'border-status-info-border bg-status-info-bg text-status-info',
   not_invited: 'border-edge bg-surface-muted text-content-secondary',
+  no_login: 'border-edge bg-surface-muted text-content-secondary',
 };
 
 export function ResidentDetailPanel({
@@ -41,7 +42,7 @@ export function ResidentDetailPanel({
   inSheet = false,
 }: ResidentDetailPanelProps) {
   const tone = avatarToneFor(resident.isUnitOwner, hasOwnerRole);
-  const typeLabel = hasOwnerRole && resident.isUnitOwner ? 'Owner' : 'Tenant';
+  const typeLabel = residentTypeLabel(resident, hasOwnerRole);
   const board = resident.designation ? DESIGNATION_LABEL[resident.designation] : null;
 
   return (
@@ -82,7 +83,7 @@ export function ResidentDetailPanel({
             <Overline>Portal access</Overline>
             <span className="text-sm font-medium">{PORTAL_DETAIL[resident.portalStatus]}</span>
           </div>
-          {resident.portalStatus !== 'active' ? (
+          {canBeInvited(resident) ? (
             <button
               type="button"
               onClick={() => onSendInvite(resident.userId)}
@@ -116,11 +117,13 @@ export function ResidentDetailPanel({
           </div>
         </section>
 
-        <section className="flex flex-col gap-2.5" aria-label="Board">
-          <Overline>Board</Overline>
-          <div className="text-sm">{board ?? 'Not on the board'}</div>
-          <div className="text-xs text-content-tertiary">Board designations are managed in Roles &amp; access.</div>
-        </section>
+        {isHouseholdMember(resident) ? null : (
+          <section className="flex flex-col gap-2.5" aria-label="Board">
+            <Overline>Board</Overline>
+            <div className="text-sm">{board ?? 'Not on the board'}</div>
+            <div className="text-xs text-content-tertiary">Board designations are managed in Roles &amp; access.</div>
+          </section>
+        )}
 
         <div className="flex flex-col overflow-hidden rounded-md border border-edge">
           {onSendDocuments ? (
@@ -155,7 +158,7 @@ export function ResidentDetailPanel({
             className="flex min-h-12 items-center gap-3 px-3.5 text-left text-sm font-medium text-status-danger hover:bg-status-danger-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
           >
             <Trash2 size={16} aria-hidden="true" />
-            Remove from community
+            {isHouseholdMember(resident) ? 'Remove from household' : 'Remove from community'}
           </button>
         </div>
       </div>

@@ -12,7 +12,7 @@ import {
   avatarToneFor,
   inviteActionLabel,
 } from './directory-badges';
-import { OCCUPANCY_LABEL, formatCents, formatRent, plural, type DirectoryUnit } from './directory-model';
+import { OCCUPANCY_LABEL, canBeInvited, residentTypeLabel, formatCents, formatRent, plural, type DirectoryUnit } from './directory-model';
 
 export interface UnitDetailPanelProps {
   unit: DirectoryUnit;
@@ -215,14 +215,14 @@ export function UnitDetailPanel({
                           {r.displayName}
                         </button>
                         <div className="truncate text-xs text-content-secondary" title={r.email ?? undefined}>
-                          {hasOwnerRole ? (r.isUnitOwner ? 'Owner' : 'Tenant') : 'Tenant'}
+                          {residentTypeLabel(r, hasOwnerRole)}
                           {r.email ? ` · ${r.email}` : ''}
                         </div>
                       </div>
                       <PortalBadge status={r.portalStatus} />
                     </div>
                     <div className="flex flex-wrap gap-1.5 pl-12">
-                      {r.portalStatus !== 'active' ? (
+                      {canBeInvited(r) ? (
                         <button
                           type="button"
                           onClick={() => onSendInvite(r.userId)}

@@ -9,6 +9,7 @@ import { generateCSV } from '@/lib/services/csv-export';
 import { listResidentsForCommunity } from '@/lib/services/resident-service';
 import { countOpenViolationsByUnit, listUnitsForCommunity } from '@/lib/services/unit-service';
 import { listDelinquentUnits } from '@/lib/services/finance-service';
+import { listOccupantsForExport } from '@/lib/services/occupant-service';
 
 export type DirectoryExportKind = 'units' | 'residents';
 
@@ -28,8 +29,8 @@ export interface DirectoryExportAccess {
 export async function buildDirectoryExport(params: {
   communityId: number;
   kind: DirectoryExportKind;
-  /** Residents only: export just these members (the Directory selection). */
-  userIds?: readonly string[];
+  /** Residents only: export just these (the Directory selection). */
+  selection?: { userIds: readonly string[]; occupantIds: readonly number[] };
   access: DirectoryExportAccess;
   actorUserId: string;
 }): Promise<{ csv: string; rowCount: number }> {
@@ -37,7 +38,7 @@ export async function buildDirectoryExport(params: {
   const { columns, rows } =
     kind === 'units'
       ? await unitRows(communityId, access)
-      : await residentRows(communityId, params.userIds);
+      : await residentRows(communityId, params.selection);
 
   await logAuditEvent({
     userId: actorUserId,
@@ -45,7 +46,7 @@ export async function buildDirectoryExport(params: {
     resourceType: 'directory',
     resourceId: kind,
     communityId,
-    metadata: { kind, rowCount: rows.length, columns: columns.map((c) => c.label), selection: params.userIds !== undefined },
+    metadata: { kind, rowCount: rows.length, columns: columns.map((c) => c.label), selection: params.selection !== undefined },
   });
 
   return { csv: generateCSV(columns, rows), rowCount: rows.length };
@@ -121,14 +122,19 @@ async function unitRows(communityId: number, access: DirectoryExportAccess) {
 const PORTAL: Record<string, string> = { active: 'Active', invited: 'Invited', not_invited: 'Not invited' };
 const BOARD: Record<string, string> = { board_president: 'President', board_member: 'Board member' };
 
-async function residentRows(communityId: number, userIds?: readonly string[]) {
+async function residentRows(
+  communityId: number,
+  selection?: { userIds: readonly string[]; occupantIds: readonly number[] },
+) {
   const scoped = createScopedClient(communityId);
-  const [residents, units] = await Promise.all([
+  const [residents, units, occupants] = await Promise.all([
     listResidentsForCommunity(communityId, { role: 'resident' }, { includePortalActivity: true }),
     listUnitsForCommunity(scoped),
+    listOccupantsForExport(communityId, selection?.occupantIds),
   ]);
   const unitById = new Map(units.map((u) => [u['id'] as number, u]));
-  const wanted = userIds ? new Set(userIds) : null;
+  const wanted = selection ? new Set(selection.userIds) : null;
+  const wantedOccupants = selection ? new Set(selection.occupantIds) : null;
 
   const columns: Column[] = [
     { key: 'name', label: 'Name' },
@@ -140,18 +146,33 @@ async function residentRows(communityId: number, userIds?: readonly string[]) {
     { key: 'board', label: 'Board' },
     { key: 'portal', label: 'Portal' },
   ];
-  const rows = residents
+  const unitCells = (unitId: number | null) => ({
+    unit: (unitId !== null && (unitById.get(unitId)?.['unitNumber'] as string | undefined)) || '',
+    building: (unitId !== null && (unitById.get(unitId)?.['building'] as string | null | undefined)) || '',
+  });
+  const memberRows = residents
     .filter((r) => !wanted || wanted.has(r.userId))
     .map((r) => ({
       name: r.fullName ?? '',
       email: r.email ?? '',
       phone: r.phone ?? '',
-      unit: (r.unitId !== null && (unitById.get(r.unitId)?.['unitNumber'] as string | undefined)) || '',
-      building: (r.unitId !== null && (unitById.get(r.unitId)?.['building'] as string | null | undefined)) || '',
+      ...unitCells(r.unitId),
       type: r.isUnitOwner ? 'Owner' : 'Tenant',
       board: r.designation ? BOARD[r.designation] : '',
       portal: r.portalStatus ? PORTAL[r.portalStatus] : '',
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    }));
+  // Household members (no login) are part of the roster too.
+  const occupantRows = occupants
+    .filter((o) => !wantedOccupants || wantedOccupants.has(o.id))
+    .map((o) => ({
+      name: o.fullName,
+      email: o.email ?? '',
+      phone: o.phone ?? '',
+      ...unitCells(o.unitId),
+      type: o.isOwnerHousehold ? 'Household (owner)' : 'Household (tenant)',
+      board: '',
+      portal: 'No login',
+    }));
+  const rows = [...memberRows, ...occupantRows].sort((a, b) => a.name.localeCompare(b.name));
   return { columns, rows };
 }

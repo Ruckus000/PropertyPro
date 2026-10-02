@@ -11,7 +11,12 @@ import type { ResidentFormSubmitValues } from '@/components/residents/resident-f
 import { ApiRequestError, requestJson } from '@/lib/api/request-json';
 import { limitMessageOf, sendInChunks } from '@/lib/api/send-in-chunks';
 
-export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
+/**
+ * `no_login` never comes from the residents API: it marks a household member
+ * (`/api/v1/occupants`) merged into the Directory's list — someone on file
+ * with no portal account at all.
+ */
+export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited' | 'no_login';
 
 export interface ResidentRecord {
   userId: string;
@@ -27,6 +32,10 @@ export interface ResidentRecord {
   lastInvitedAt: string | null;
   /** Membership version; sent back as `expectedUpdatedAt` so a stale edit is refused. */
   updatedAt: string;
+  /** Set only on household members: the `unit_occupants` id (their `userId` is synthetic). */
+  occupantId?: number;
+  /** Household members: part of the owner's household (true) or a tenant's. */
+  ownerHousehold?: boolean;
 }
 
 export interface CreateResidentResult {

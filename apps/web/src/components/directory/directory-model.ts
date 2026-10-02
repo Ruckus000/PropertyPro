@@ -206,6 +206,25 @@ export function occupantLineFor(
 
 /* ─────────────── Build ─────────────── */
 
+/** A household member (no portal login): never invited, emailed documents or counted as of record. */
+export function isHouseholdMember(r: Pick<ResidentRecord, 'occupantId'>): boolean {
+  return r.occupantId !== undefined;
+}
+
+/** "Owner", "Tenant" or "Household member" — one rule for every place that labels a person. */
+export function residentTypeLabel(
+  r: Pick<ResidentRecord, 'isUnitOwner' | 'occupantId'>,
+  hasOwnerRole: boolean,
+): 'Owner' | 'Tenant' | 'Household member' {
+  if (r.occupantId !== undefined) return 'Household member';
+  return hasOwnerRole && r.isUnitOwner ? 'Owner' : 'Tenant';
+}
+
+/** Can be invited or re-invited: has a login account that has not been used yet. */
+export function canBeInvited(r: Pick<ResidentRecord, 'portalStatus' | 'occupantId'>): boolean {
+  return !isHouseholdMember(r) && r.portalStatus !== 'active';
+}
+
 export function toDirectoryResident(r: ResidentRecord): DirectoryResident {
   const displayName = r.fullName?.trim() || r.email || 'Unnamed resident';
   return { ...r, displayName, initials: initialsFor(displayName) };
@@ -242,8 +261,11 @@ export function buildDirectoryUnits(
       const people = (byUnit.get(u.id) ?? []).sort((a, b) =>
         a.displayName.localeCompare(b.displayName),
       );
-      const owners = ctx.hasOwnerRole ? people.filter((p) => p.isUnitOwner) : [];
-      const tenants = ctx.hasOwnerRole ? people.filter((p) => !p.isUnitOwner) : people;
+      // Owners and tenants OF RECORD: household members (no login) live here
+      // but are neither, so they never satisfy "owner/tenant on file".
+      const ofRecord = people.filter((p) => p.occupantId === undefined);
+      const owners = ctx.hasOwnerRole ? ofRecord.filter((p) => p.isUnitOwner) : [];
+      const tenants = ctx.hasOwnerRole ? ofRecord.filter((p) => !p.isUnitOwner) : ofRecord;
       const occupant = occupantLineFor(u.occupancy, people, owners, tenants, ctx);
       const buildingKey = buildingKeyOf(u.building);
       const overdue = pastDueByUnit.get(u.id) ?? null;
@@ -347,11 +369,12 @@ export function matchesResidentStatus(r: DirectoryResidentRow, status: ResidentS
     case 'owners':
       return r.isUnitOwner;
     case 'tenants':
-      return !r.isUnitOwner;
+      return !r.isUnitOwner && r.occupantId === undefined;
     case 'board':
       return r.designation !== null;
     case 'not_active':
-      return r.portalStatus !== 'active';
+      // Household members cannot sign in, so they are never "not activated".
+      return r.portalStatus !== 'active' && r.portalStatus !== 'no_login';
     default:
       return true;
   }
@@ -462,7 +485,9 @@ export function computeOverview(
 ): OverviewStats {
   const vacantUnits = units.filter((u) => u.occupancy === 'vacant').length;
   const pastDue = units.filter((u) => u.pastDue !== null);
-  const active = residents.filter((r) => r.portalStatus === 'active').length;
+  // Adoption is a share of people who CAN sign in: household members are out.
+  const withLogin = residents.filter((r) => r.portalStatus !== 'no_login');
+  const active = withLogin.filter((r) => r.portalStatus === 'active').length;
   return {
     totalUnits: units.length,
     vacantUnits,
@@ -470,8 +495,8 @@ export function computeOverview(
     pastDueCents: pastDue.reduce((sum, u) => sum + (u.pastDue?.amountCents ?? 0), 0),
     pastDueUnits: pastDue.length,
     oldestPastDueDays: pastDue.reduce((max, u) => Math.max(max, u.pastDue?.daysOverdue ?? 0), 0),
-    adoptionPct: residents.length === 0 ? null : Math.round((active / residents.length) * 100),
-    notActiveResidents: residents.length - active,
+    adoptionPct: withLogin.length === 0 ? null : Math.round((active / withLogin.length) * 100),
+    notActiveResidents: withLogin.length - active,
   };
 }
 
