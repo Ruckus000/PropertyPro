@@ -154,3 +154,48 @@ export function useUploadFavicon(communityId: number) {
     },
   });
 }
+
+/**
+ * The sharing image (builder v4, Phase 5): presign → PUT → finalize, the same
+ * three steps as the favicon. Finalize records the image in branding itself.
+ */
+export function useUploadShareImage(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<SiteSettings['shareImage'], Error, File>({
+    mutationFn: async (file) => {
+      const presign = await requestJson<PresignResponse>('/api/v1/site/uploads/presign', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId,
+          kind: 'share',
+          filename: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+        }),
+      });
+
+      // A direct PUT to Supabase Storage's presigned URL, not an /api/v1 call.
+      const upload = await fetch(presign.uploadUrl, { method: 'PUT', body: file });
+      if (!upload.ok) {
+        throw new Error("We couldn't upload that image. Please try again.");
+      }
+
+      return requestJson<{ path: string; bytes: number }>(
+        '/api/v1/site/images/finalize-share-image',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId, storagePath: presign.storagePath }),
+        },
+      );
+    },
+    onSuccess: (shareImage) => {
+      qc.setQueryData<SiteSettingsRecord>(siteSettingsQueryKey(communityId), (prev) =>
+        prev ? { ...prev, settings: { ...prev.settings, shareImage } } : prev,
+      );
+      // Finalize also charged the storage quota, which the record carries.
+      void qc.invalidateQueries({ queryKey: siteSettingsQueryKey(communityId) });
+    },
+  });
+}

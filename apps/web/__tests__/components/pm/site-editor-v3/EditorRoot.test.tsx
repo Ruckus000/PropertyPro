@@ -59,6 +59,14 @@ vi.mock('next/dynamic', () => ({
     // used: its count is what the rail shows.
     String(loader).includes('RecordsAttention')
       ? (props: RecordsAttentionProps) => <RealRecordsAttention {...props} />
+      : // The Settings view, as a stand-in exposing the one callback EditorRoot
+        // gives it. Its content has its own suite (SettingsView.test.tsx).
+        String(loader).includes('SettingsView')
+        ? ({ onOpenDocuments }: { onOpenDocuments: () => void }) => (
+            <button type="button" onClick={onOpenDocuments}>
+              Settings stand-in: open Documents
+            </button>
+          )
       : String(loader).includes('PagesPanel')
       ? ({
           selectedPageId,
@@ -415,7 +423,7 @@ function rootElement({
       communityId={42}
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
-      proToolAccess={{ domain: true }}
+      hasSiteCustomDomain
       hasPolishBlocks
       // Null on purpose by default: takes the degraded-canvas branch, so the
       // whole block-view tree stays out of this test.
@@ -540,10 +548,8 @@ describe('EditorRoot — tool panels', () => {
   // What these pin is which tabs still fall through to `ToolPanelPlaceholder` —
   // the state that makes a tool unusable.
   it.each([
-    // Exact: `/Add/` also matches the "Address" tab.
     ['Add', 'Add'],
     ['Design', /Design/],
-    ['Address', /Address/],
     ['Help', /Help/],
   ])('renders a real panel, not a placeholder, on the %s tab', async (_name, accessibleName) => {
     renderRoot();
@@ -573,12 +579,38 @@ describe('EditorRoot — tool panels', () => {
     renderRoot();
 
     const tiles = screen.getAllByTestId(/^site-editor-tool-/);
-    expect(tiles).toHaveLength(9);
+    expect(tiles).toHaveLength(7);
     for (const tile of tiles) {
       await userEvent.click(tile);
       expect(tile).toHaveAttribute('aria-expanded', 'true');
       expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
     }
+  });
+});
+
+describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
+  it('switches to Settings and back, and the old Site and Address tools are gone', async () => {
+    renderRoot();
+    expect(screen.queryByTestId('site-editor-tool-site')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('site-editor-tool-domain')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByText('Settings stand-in: open Documents')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Website' }));
+    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+  });
+
+  it("Settings' link to the records returns to the page with Documents open", async () => {
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getByText('Settings stand-in: open Documents'));
+
+    expect(screen.getByTestId('site-editor-tool-documents')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
   });
 });
 

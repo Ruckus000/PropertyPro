@@ -406,6 +406,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // remove the original. Tenancy is enforced before any storage call by
   // parseSiteAssetPath, which rejects a path outside the caller's community.
   resolve(repoRoot, 'apps/web/src/app/api/v1/site/images/finalize-favicon/route.ts'),
+  // Website builder v4 Phase 5 — sharing-image finalize. The same admin-client
+  // use as the favicon route above, with the same check first: parseSiteAssetPath
+  // rejects a path outside the caller's community, and a kind other than 'share'.
+  resolve(repoRoot, 'apps/web/src/app/api/v1/site/images/finalize-share-image/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/account/profile/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/documents/drafts/[id]/images/route.ts'),
 ]);

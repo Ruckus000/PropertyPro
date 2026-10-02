@@ -20,7 +20,8 @@ export const sitePresignRequestSchema = z.object({
   // 'logo' uses the existing branding upload flow. 'favicon' (website editor
   // v3, Phase 8) finalizes through /api/v1/site/images/finalize-favicon rather
   // than the 1600w/800w image route — different variants, different response.
-  kind: z.enum(['hero', 'content', 'favicon']),
+  // 'share' (builder v4, Phase 5) likewise, via finalize-share-image.
+  kind: z.enum(['hero', 'content', 'favicon', 'share']),
   filename: z.string().min(1).max(255),
   mimeType: z.enum(ALLOWED_MIME_TYPES),
   fileSize: z.number().int().positive().max(MAX_FILE_SIZE_BYTES),

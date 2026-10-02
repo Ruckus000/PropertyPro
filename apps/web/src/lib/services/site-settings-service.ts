@@ -53,6 +53,7 @@ import {
   resolveFooterSettings,
   resolveSiteSettings,
   type SiteFaviconPaths,
+  type SiteShareImage,
   type SiteFooterSettings,
   type SiteSettings,
   type SiteStorage,
@@ -387,4 +388,31 @@ export async function clearSiteFavicon(params: {
   });
 
   return { previous: before.settings.favicon };
+}
+
+/**
+ * Record a processed sharing image (builder v4, Phase 5). Called by the
+ * share-image finalize route, which has already written the bytes and charged
+ * the quota. Returns what it replaced, so the caller can delete it and release
+ * exactly its bytes — same split as `setSiteFavicon`.
+ */
+export async function setSiteShareImage(params: {
+  communityId: number;
+  actorUserId: string;
+  shareImage: SiteShareImage;
+}): Promise<{ previous: SiteShareImage | null }> {
+  const before = await readSiteSettingsFields(params.communityId);
+  await mergeBranding(params.communityId, { siteSettings: { shareImage: params.shareImage } });
+
+  await logAuditEvent({
+    userId: params.actorUserId,
+    communityId: params.communityId,
+    action: 'site_settings_updated',
+    resourceType: 'community',
+    resourceId: String(params.communityId),
+    oldValues: { shareImage: before.settings.shareImage },
+    newValues: { shareImage: params.shareImage },
+  });
+
+  return { previous: before.settings.shareImage };
 }

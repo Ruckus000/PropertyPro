@@ -230,12 +230,9 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         communityId={communityId}
         communityName={membership.communityName}
         publicSiteUrl={communityInfo ? buildCommunityUrl(communityInfo.slug, '/') : null}
-        proToolAccess={{
-          domain: features.hasSiteCustomDomain,
-        }}
+        hasSiteCustomDomain={features.hasSiteCustomDomain}
         hasSiteCustomCss={features.hasSiteCustomCss}
-        // Separate from `proToolAccess` on purpose: that map gates whole TOOLS
-        // and would lock the Add tab. This gates three rows inside it.
+        // Gates three rows inside the Add panel, not the panel.
         hasPolishBlocks={features.hasSitePolishBlocks}
         canvasContext={canvasContext}
         // Phase 7. Both derived from the `getCommunityPublicInfo` read above, so

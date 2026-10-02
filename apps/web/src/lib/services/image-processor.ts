@@ -86,6 +86,10 @@ export interface FaviconVariants {
   appleTouch180: Buffer;
 }
 
+/** The Open Graph size every link-preview client draws without cropping. */
+export const SHARE_IMAGE_WIDTH = 1200;
+export const SHARE_IMAGE_HEIGHT = 630;
+
 const FAVICON_SIZE = 32;
 const APPLE_TOUCH_SIZE = 180;
 
@@ -119,4 +123,21 @@ export async function resizeFavicon(input: Buffer): Promise<FaviconVariants> {
   ]);
 
   return { icon32, appleTouch180 };
+}
+
+/**
+ * The site's sharing image (website builder v4, Phase 5): one 1200×630 JPEG.
+ *
+ * JPEG rather than WebP: it is the one format every link-preview client
+ * (messages apps, mail, social sites) renders, and a share image that some
+ * previews drop is worse than a few more kilobytes. `cover` from the centre,
+ * because previews crop to this ratio anyway. Re-encoding is also the
+ * sanitisation step, as for the favicon.
+ */
+export async function resizeShareImage(input: Buffer): Promise<Buffer> {
+  return sharp(input)
+    .rotate()
+    .resize(SHARE_IMAGE_WIDTH, SHARE_IMAGE_HEIGHT, { fit: 'cover', position: 'center' })
+    .jpeg({ quality: 82, mozjpeg: true })
+    .toBuffer();
 }

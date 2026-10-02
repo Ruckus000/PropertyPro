@@ -68,6 +68,7 @@ import {
   clearSiteFavicon,
   getSiteSettings,
   setSiteFavicon,
+  setSiteShareImage,
   updateSiteSettings,
 } from '@/lib/services/site-settings-service';
 import {
@@ -183,6 +184,14 @@ describe('storage — read-only usage against the plan quota', () => {
     stubDb([{ branding: {} }]);
     await updateSiteSettings({ communityId: COMMUNITY_ID, actorUserId: ACTOR, seoTitle: 'T' });
     expect(getQuotaMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('the sharing-image writer reports what it replaced, and never touches storage', async () => {
+    const shareImage = { path: '42/share/new.jpg', bytes: 900 };
+    stubDb([{ branding: { siteSettings: { shareImage: { path: '42/share/old.jpg', bytes: 7 } } } }]);
+    const result = await setSiteShareImage({ communityId: COMMUNITY_ID, actorUserId: ACTOR, shareImage });
+    expect(result).toEqual({ previous: { path: '42/share/old.jpg', bytes: 7 } });
+    expect(getQuotaMock).not.toHaveBeenCalled();
   });
 
   it('the favicon writers never touch storage — they return no record', async () => {

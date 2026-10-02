@@ -59,7 +59,13 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 vi.mock('@/hooks/use-site-settings', () => ({
   useSiteSettings: () => ({
     data: {
-      settings: { seoTitle: null, seoDescription: null, searchIndexing: true, favicon: null },
+      settings: {
+        seoTitle: null,
+        seoDescription: null,
+        searchIndexing: true,
+        favicon: null,
+        shareImage: null,
+      },
       footer: { associationName: null, note: null, showStatutoryLine: false },
       // With a quota, so the storage meter's progressbar is inside the audit.
       storage: { assetsBytesUsed: 250 * 1024 * 1024, quotaBytes: 500 * 1024 * 1024 },
@@ -67,6 +73,7 @@ vi.mock('@/hooks/use-site-settings', () => ({
   }),
   useUpdateSiteSettings: () => ({ mutate: vi.fn(), isPending: false }),
   useUploadFavicon: () => ({ mutate: vi.fn(), isPending: false }),
+  useUploadShareImage: () => ({ mutate: vi.fn(), isPending: false }),
   siteSettingsQueryKey: (communityId: number) =>
     ['pm', 'site', 'settings', communityId] as const,
 }));
@@ -258,7 +265,9 @@ describe('Website builder v4 chrome — axe', () => {
             device="desktop"
             onDeviceChange={() => {}}
             publicSiteUrl={null}
-            proToolAccess={{ domain: true }}
+            view="website"
+            onViewChange={() => {}}
+            settings={null}
             communityId={7}
             hasPublishedSite
             initialNotice={null}
@@ -528,12 +537,15 @@ describe('Site settings + footer — axe (Phase 8)', () => {
     city: 'Miami',
   };
 
-  it('has no violations in the Site tool panel', async () => {
-    const { container } = render(
-      <SitePanel communityId={7} community={community} tagline={null} />,
-    );
-    expect(await axe(container)).toHaveNoViolations();
-  });
+  it.each(['search', 'footer'] as const)(
+    'has no violations in the site %s form',
+    async (part) => {
+      const { container } = render(
+        <SitePanel communityId={7} community={community} tagline={null} part={part} />,
+      );
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
 
   it('has no violations on the PUBLIC footer, with every optional line shown', async () => {
     // The footer is a surface residents and the public meet, so it gets its

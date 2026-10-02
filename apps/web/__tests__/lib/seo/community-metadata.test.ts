@@ -65,23 +65,30 @@ describe('buildCommunityMetadata', () => {
     expect(meta.robots).toMatchObject({ index: true, follow: true });
   });
 
-  it('produces no openGraph image when no heroImageUrl is provided', () => {
+  it('produces no openGraph image when no sharing image is set', () => {
     const meta = buildCommunityMetadata(baseCommunity);
     expect(meta.openGraph?.images ?? []).toEqual([]);
   });
 
-  it('emits a 1600x900 openGraph image when heroImageUrl is provided', () => {
+  it('emits the 1200x630 sharing image when one is set', () => {
     const meta = buildCommunityMetadata({
       ...baseCommunity,
-      heroImageUrl: 'https://cdn.example.com/hero.webp',
+      siteSettings: {
+        ...DEFAULT_SITE_SETTINGS,
+        shareImage: { path: '1/share/abc-photo.jpg.1200x630.jpg', bytes: 90_000 },
+      },
     });
-    expect(meta.openGraph?.images).toEqual([
-      { url: 'https://cdn.example.com/hero.webp', width: 1600, height: 900, alt: 'Sunset Condos' },
-    ]);
+    const images = meta.openGraph?.images as Array<Record<string, unknown>>;
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ width: 1200, height: 630, alt: 'Sunset Condos' });
+    expect(String(images[0]?.url)).toContain('1/share/abc-photo.jpg.1200x630.jpg');
   });
 
-  it('uses summary_large_image when there is a heroImageUrl, summary otherwise', () => {
-    const withImage = buildCommunityMetadata({ ...baseCommunity, heroImageUrl: 'https://x/y.webp' });
+  it('uses summary_large_image when there is a sharing image, summary otherwise', () => {
+    const withImage = buildCommunityMetadata({
+      ...baseCommunity,
+      siteSettings: { ...DEFAULT_SITE_SETTINGS, shareImage: { path: '1/share/x.jpg', bytes: 1 } },
+    });
     expect(twitterCard(withImage.twitter)).toBe('summary_large_image');
 
     const noImage = buildCommunityMetadata(baseCommunity);

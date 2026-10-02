@@ -2,13 +2,7 @@
 
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
-import {
-  EDITOR_TOOLS,
-  TOOL_PLAN_FEATURE,
-  type EditorToolId,
-  type ProToolAccess,
-  type ProToolId,
-} from './tools';
+import { EDITOR_TOOLS, type EditorToolId } from './tools';
 
 export interface ToolRailProps {
   /** The open tool, or null when the panel is closed and the canvas has the room. */
@@ -18,8 +12,6 @@ export interface ToolRailProps {
    * tool's button closes it — the v4 rail is a set of disclosures, not tabs.
    */
   onSelect: (id: EditorToolId | null) => void;
-  /** Per-tool unlock state — the two Pro tools have separate plan features. */
-  proToolAccess: ProToolAccess;
   /** Id of the panel the open tool's button controls. */
   panelId: string;
   /**
@@ -43,7 +35,7 @@ export interface ToolRailProps {
  * mount a panel (and fetch its code-split chunk) for every tile an arrow key
  * passes over.
  */
-export function ToolRail({ active, onSelect, proToolAccess, panelId, badges }: ToolRailProps) {
+export function ToolRail({ active, onSelect, panelId, badges }: ToolRailProps) {
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeIndex = active === null ? -1 : EDITOR_TOOLS.findIndex((t) => t.id === active);
   // The roving tab stop. Follows the open tool when there is one, otherwise the
@@ -82,14 +74,11 @@ export function ToolRail({ active, onSelect, proToolAccess, panelId, badges }: T
     >
       {EDITOR_TOOLS.map((tool, index) => {
         const isOpen = tool.id === active;
-        const isProLocked =
-          tool.id in TOOL_PLAN_FEATURE && !proToolAccess[tool.id as ProToolId];
         const isAdd = tool.id === 'add';
         const Icon = tool.icon;
         const badge = badges?.[tool.id] ?? 0;
-        const label = isProLocked
-          ? `${tool.label} (Professional feature)`
-          : badge > 0
+        const label =
+          badge > 0
             ? `${tool.label} (${badge} need${badge === 1 ? 's' : ''} attention)`
             : undefined;
 
@@ -102,8 +91,6 @@ export function ToolRail({ active, onSelect, proToolAccess, panelId, badges }: T
             type="button"
             data-testid={`site-editor-tool-${tool.id}`}
             aria-expanded={isOpen}
-            // A locked Pro tool is labelled, not disabled: its panel explains
-            // the plan and offers the upgrade.
             aria-label={label}
             aria-controls={isOpen ? panelId : undefined}
             tabIndex={index === tabStop ? 0 : -1}

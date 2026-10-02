@@ -44,13 +44,12 @@ const UrgentNoticePanel = dynamic(
   { loading: () => null },
 );
 
-// Phase 8. Same reasoning as the notice panel: `renderToolPanel` only renders
-// the ACTIVE tool, so this chunk (the form, the switches, the favicon upload
-// path) is requested on the tab click rather than on mount. A PM who never
-// opens Site pays nothing for it — which is the whole reason this route is
-// still inside its 700 KiB budget.
-const SitePanel = dynamic(
-  () => import('./panels/SitePanel').then((m) => m.SitePanel),
+// v4 Phase 5. The Settings view (site icon, footer, search, sharing image,
+// web address and custom domain) is fetched when the PM switches to it, for
+// the same budget reason as every panel: the web JS aggregate has little
+// headroom, and a PM who never opens Settings should not pay for it.
+const SettingsView = dynamic(
+  () => import('./settings/SettingsView').then((m) => m.SettingsView),
   { loading: () => null },
 );
 
@@ -62,14 +61,9 @@ const AddPanel = dynamic(() => import('./panels/AddPanel').then((m) => m.AddPane
 });
 
 // Split for the same budget reason as everything above. Design carries the
-// colour-set grid and the custom-colour pickers; the domain panel pulls its own
-// query stack and DNS table.
+// colour-set grid and the custom-colour pickers.
 const DesignPanel = dynamic(
   () => import('./panels/DesignPanel').then((m) => m.DesignPanel),
-  { loading: () => null },
-);
-const DomainPanel = dynamic(
-  () => import('./panels/DomainPanel').then((m) => m.DomainPanel),
   { loading: () => null },
 );
 const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
@@ -107,7 +101,7 @@ import { Button } from '@/components/ui/button';
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
-import type { EditorToolId, ProToolAccess } from './tools';
+import type { EditorToolId } from './tools';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import { UndoableRemoveProvider } from './undoable-remove-context';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
@@ -115,6 +109,7 @@ import { THEME_DEFAULTS } from '@propertypro/theme';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
 import type { SitePanelProps } from './panels/SitePanel';
+import type { EditorView } from './EditorTopBar';
 import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
 import { useSiteDiff } from './use-site-diff';
@@ -138,16 +133,14 @@ export interface EditorRootProps {
   communityId: number;
   communityName: string;
   publicSiteUrl: string | null;
-  proToolAccess: ProToolAccess;
+  /** Whether the plan includes a custom domain (Settings → Address & domain). */
+  hasSiteCustomDomain: boolean;
   /**
    * `hasSitePolishBlocks` — whether the plan includes the FAQ / Gallery /
    * Amenities blocks the Add panel offers.
    *
-   * Deliberately NOT folded into `proToolAccess`. That map is keyed by
-   * `TOOL_PLAN_FEATURE`, and `ToolRail` renders any tool present in it as
-   * Pro-locked — so adding `add` there would lock the Add TAB, which is false:
-   * seven of the ten types it offers are available on Essentials. This gates
-   * three rows inside the panel, not the panel.
+   * Seven of the ten types the Add panel offers are on Essentials, so this
+   * gates three rows inside the panel, not the panel.
    */
   hasPolishBlocks: boolean;
   /** Null when the community row could not be read; the canvas degrades. */
@@ -247,7 +240,7 @@ export function EditorRoot({
   communityId,
   communityName,
   publicSiteUrl,
-  proToolAccess,
+  hasSiteCustomDomain,
   hasPolishBlocks,
   canvasContext: serverCanvasContext,
   hasPublishedSite,
@@ -285,6 +278,8 @@ export function EditorRoot({
   } = useSiteDiff(communityId);
   // Closed by default — the v4 builder opens on the page, not on a panel.
   const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
+  // v4 Phase 5: the page being built, or the site's settings.
+  const [view, setView] = useState<EditorView>('website');
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
    * `previewOpen`, mirrored — read by the preview gate effect below.
@@ -798,6 +793,12 @@ export function EditorRoot({
   // The publish sheet's route out of a page-set problem — a duplicate address
   // or a missing home page has no section slot, so "Fix this" cannot reach it.
   const handleGoToPages = useCallback(() => setActiveTool('pages'), []);
+  const handleViewChange = useCallback((next: EditorView) => setView(next), []);
+  // Settings → Access links to the records: back to the page, Documents open.
+  const handleOpenDocuments = useCallback(() => {
+    setView('website');
+    setActiveTool('documents');
+  }, []);
 
   return (
     <SelectedSitePageProvider pageId={effectivePageId}>
@@ -878,7 +879,21 @@ export function EditorRoot({
           <RequirementsPill onGoToSection={handleSelectSlot} onAddSection={handleGoToAdd} />
         }
         publicSiteUrl={publicSiteUrl}
-        proToolAccess={proToolAccess}
+        view={view}
+        onViewChange={handleViewChange}
+        settings={
+          view === 'settings' ? (
+            <SettingsView
+              communityId={communityId}
+              community={siteIdentity}
+              tagline={tagline}
+              initialSettings={initialSiteSettings}
+              publicSiteUrl={publicSiteUrl}
+              hasSiteCustomDomain={hasSiteCustomDomain}
+              onOpenDocuments={handleOpenDocuments}
+            />
+          ) : null
+        }
         toolBadges={recordsAttention > 0 ? { documents: recordsAttention } : undefined}
         communityId={communityId}
         hasPublishedSite={hasPublishedSite}
@@ -979,16 +994,6 @@ export function EditorRoot({
               />
             );
           }
-          if (tool === 'site') {
-            return (
-              <SitePanel
-                communityId={communityId}
-                community={siteIdentity}
-                tagline={tagline}
-                initialSettings={initialSiteSettings}
-              />
-            );
-          }
           if (tool === 'notice') {
             return (
               <UrgentNoticePanel
@@ -1006,14 +1011,6 @@ export function EditorRoot({
                 presets={presets}
                 hasSiteCustomCss={hasSiteCustomCss}
                 theme={resolveStylingTheme(canvasContext)}
-              />
-            );
-          }
-          if (tool === 'domain') {
-            return (
-              <DomainPanel
-                communityId={communityId}
-                hasSiteCustomDomain={proToolAccess.domain}
               />
             );
           }

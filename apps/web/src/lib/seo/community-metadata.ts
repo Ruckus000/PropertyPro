@@ -15,8 +15,6 @@ export interface CommunityMetadataInput {
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
   city?: string | null;
   tagline?: string | null;
-  /** Fully-qualified URL to the hero image (1600×900 recommended). */
-  heroImageUrl?: string | null;
   /**
    * Website editor v3, Phase 8 — the PM's overrides.
    *
@@ -38,8 +36,18 @@ export function buildCommunityMetadata(community: CommunityMetadataInput): Metad
   const description = resolveSeoDescription(settings, community, community.tagline);
 
   const url = buildCommunityUrl(community.slug, '/');
-  const images = community.heroImageUrl
-    ? [{ url: community.heroImageUrl, width: 1600, height: 900, alt: community.name }]
+  // The PM's sharing image (builder v4, Phase 5), always 1200×630. There was a
+  // `heroImageUrl` input here that no caller ever passed, so until this every
+  // shared link went out with no image.
+  const images = settings.shareImage
+    ? [
+        {
+          url: buildPublicAssetUrl(settings.shareImage.path),
+          width: 1200,
+          height: 630,
+          alt: community.name,
+        },
+      ]
     : [];
 
   // Absent settings, and anything other than an explicit opt-out, stay

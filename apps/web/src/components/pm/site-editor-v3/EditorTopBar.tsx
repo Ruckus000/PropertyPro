@@ -1,7 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Eye, Monitor, Plus, Smartphone, Tablet, type LucideIcon } from 'lucide-react';
+import {
+  ChevronDown,
+  Eye,
+  LayoutTemplate,
+  Monitor,
+  Plus,
+  Settings,
+  Smartphone,
+  Tablet,
+  type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -33,6 +43,18 @@ export interface EditorTopBarPageProps {
 }
 
 export type PreviewDevice = 'desktop' | 'tablet' | 'phone';
+
+/**
+ * The editor's two areas (v4 builder, Phase 5): the page being built, and the
+ * site's settings. The design also drew a Documents view; documents stay a rail
+ * tool that links into the library, so there is no third area to switch to.
+ */
+export type EditorView = 'website' | 'settings';
+
+const VIEWS: readonly { id: EditorView; label: string; icon: LucideIcon }[] = [
+  { id: 'website', label: 'Website', icon: LayoutTemplate },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
 
 const DEVICES: readonly { id: PreviewDevice; label: string; icon: LucideIcon }[] = [
   { id: 'desktop', label: 'Preview on a computer', icon: Monitor },
@@ -131,6 +153,12 @@ export interface EditorTopBarProps extends EditorTopBarPageProps {
    * A missing prop must fail typecheck, not fail quietly on a keyboard.
    */
   previewButtonRef: React.Ref<HTMLButtonElement>;
+  /**
+   * Which area is showing. Required, both halves, for the reason the handlers
+   * above are: a switch without its handler renders and does nothing.
+   */
+  view: EditorView;
+  onViewChange: (view: EditorView) => void;
 }
 
 /**
@@ -161,6 +189,8 @@ export function EditorTopBar({
   changeCount,
   device,
   onDeviceChange,
+  view,
+  onViewChange,
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3">
@@ -172,49 +202,90 @@ export function EditorTopBar({
       <span aria-hidden="true" className="h-7 w-px shrink-0 bg-edge" />
 
       {/*
-       * Outside the `<h1>` on purpose: the heading is the route's identity and
-       * must not change every time the PM switches page.
+       * Buttons with `aria-current`, the design's own markup: the two areas are
+       * places, not a tab set. Labels hide below 1280px (icon plus accessible
+       * name only) so Publish keeps its room on an iPad — the rule Preview
+       * already follows.
        */}
-      <PagePicker
-        pageName={pageName}
-        pages={pages}
-        selectedPageId={selectedPageId}
-        onSelectPage={onSelectPage}
-        onManagePages={onManagePages}
-      />
+      <nav aria-label="Website areas" className="shrink-0">
+        <div className="flex gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5">
+          {VIEWS.map(({ id, label, icon: Icon }) => {
+            const active = id === view;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-current={active ? 'page' : undefined}
+                aria-label={label}
+                title={label}
+                data-testid={`editor-view-${id}`}
+                onClick={() => {
+                  if (!active) onViewChange(id);
+                }}
+                className={cn(
+                  'flex h-9 items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  active
+                    ? 'bg-surface-card text-content shadow-sm'
+                    : 'text-content-secondary hover:text-content',
+                )}
+              >
+                <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+                <span className="hidden xl:inline">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
-      {/*
-       * Toggle buttons, not a radiogroup: each is independently operable with
-       * Tab and Enter, which a three-item control does not need arrow-key
-       * roving for. `aria-pressed` carries which width is showing.
-       */}
-      <div
-        role="group"
-        aria-label="Preview size"
-        className="flex shrink-0 gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5"
-      >
-        {DEVICES.map(({ id, label, icon: Icon }) => {
-          const active = id === device;
-          return (
-            <button
-              key={id}
-              type="button"
-              aria-label={label}
-              title={label}
-              aria-pressed={active}
-              onClick={() => onDeviceChange(id)}
-              className={cn(
-                'flex h-9 w-11 items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                active
-                  ? 'bg-surface-card text-content shadow-sm'
-                  : 'text-content-secondary hover:text-content',
-              )}
-            >
-              <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
-          );
-        })}
-      </div>
+      {/* The page picker and preview widths describe the canvas, so they go with it. */}
+      {view === 'website' ? (
+        <>
+        {/*
+         * Outside the `<h1>` on purpose: the heading is the route's identity and
+         * must not change every time the PM switches page.
+         */}
+        <PagePicker
+          pageName={pageName}
+          pages={pages}
+          selectedPageId={selectedPageId}
+          onSelectPage={onSelectPage}
+          onManagePages={onManagePages}
+        />
+
+        {/*
+         * Toggle buttons, not a radiogroup: each is independently operable with
+         * Tab and Enter, which a three-item control does not need arrow-key
+         * roving for. `aria-pressed` carries which width is showing.
+         */}
+        <div
+          role="group"
+          aria-label="Preview size"
+          className="flex shrink-0 gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5"
+        >
+          {DEVICES.map(({ id, label, icon: Icon }) => {
+            const active = id === device;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-label={label}
+                title={label}
+                aria-pressed={active}
+                onClick={() => onDeviceChange(id)}
+                className={cn(
+                  'flex h-9 w-11 items-center justify-center rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  active
+                    ? 'bg-surface-card text-content shadow-sm'
+                    : 'text-content-secondary hover:text-content',
+                )}
+              >
+                <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+              </button>
+            );
+          })}
+        </div>
+        </>
+      ) : null}
 
       {/*
        * Never shrinks. With `min-w-0` here this group was the one flexbox

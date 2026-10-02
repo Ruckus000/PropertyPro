@@ -27,7 +27,7 @@ export { SITE_ASSETS_BUCKET, buildPublicAssetUrl } from './public-url';
  * drifted apart. Deriving the sweep from this constant is what makes that class
  * of bug impossible rather than merely fixed.
  */
-export const SITE_ASSET_KINDS = ['logo', 'hero', 'content', 'favicon'] as const;
+export const SITE_ASSET_KINDS = ['logo', 'hero', 'content', 'favicon', 'share'] as const;
 export type AssetKind = (typeof SITE_ASSET_KINDS)[number];
 
 function sanitizeFilename(name: string): string {
