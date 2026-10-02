@@ -13,7 +13,7 @@ import {
   type CommunityType,
 } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
@@ -22,6 +22,7 @@ import { isResidentTierRole, validateRoleAssignment } from '@/lib/utils/role-val
 import { requirePermission } from '@/lib/db/access-control';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { duplicateMemberConflict, withDuplicateMemberAsConflict } from '@/lib/services/duplicate-member';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 import { assertActorMayAttachExistingUser } from '@/lib/services/user-linking';
 import {
@@ -133,32 +134,34 @@ export const POST = withErrorHandler(
     }
 
     if (isNewUser) {
-      userRow = await createResidentUser(communityId, {
-        id: userId,
-        email: normalizedEmail,
-        fullName,
-        phone: phone ?? null,
-      });
+      userRow = await withDuplicateMemberAsConflict(() =>
+        createResidentUser(communityId, {
+          id: userId,
+          email: normalizedEmail,
+          fullName,
+          phone: phone ?? null,
+        }),
+      );
     }
 
     const existingRole = await getResidentRoleByUserId(communityId, userId);
 
     if (existingRole) {
-      throw new ValidationError(
-        `User already has role "${existingRole['role']}" in this community. Use PATCH to update.`,
-      );
+      throw duplicateMemberConflict(existingRole['role']);
     }
 
     const effectiveIsUnitOwner = role === 'resident' ? (isUnitOwner ?? false) : false;
     const displayTitle = resolveDisplayTitle(role, effectiveIsUnitOwner);
 
-    const insertedRole = await createResidentRole(communityId, {
-      userId,
-      role,
-      unitId: unitId ?? null,
-      isUnitOwner: effectiveIsUnitOwner,
-      displayTitle,
-    });
+    const insertedRole = await withDuplicateMemberAsConflict(() =>
+      createResidentRole(communityId, {
+        userId,
+        role,
+        unitId: unitId ?? null,
+        isUnitOwner: effectiveIsUnitOwner,
+        displayTitle,
+      }),
+    );
 
     await createResidentNotificationPreferences(communityId, userId);
 
@@ -201,6 +204,7 @@ export const PATCH = withErrorHandler(
       role,
       unitId,
       isUnitOwner: patchIsUnitOwner,
+      expectedUpdatedAt,
     } = body;
     const actorUserId = await requireAuthenticatedUserId();
     const actorMembership = await requireCommunityMembership(communityId, actorUserId);
@@ -254,63 +258,79 @@ export const PATCH = withErrorHandler(
     const oldValues: Record<string, unknown> = {};
     const newValues: Record<string, unknown> = {};
 
+    // Contact fields (platform-level `users` row). Only what actually changes
+    // is written and audited: the edit form re-sends every field, and an audit
+    // row reading "unit 4 → 4" is noise that hides real moves.
+    const userUpdate: Record<string, unknown> = {};
     if (fullName !== undefined || phone !== undefined) {
       const currentUser = await getResidentUserById(communityId, userId);
-
-      const userUpdate: Record<string, unknown> = {};
-
-      if (fullName !== undefined) {
+      if (fullName !== undefined && fullName !== (currentUser?.['fullName'] ?? null)) {
         oldValues['fullName'] = currentUser?.['fullName'] ?? null;
         newValues['fullName'] = fullName;
         userUpdate['fullName'] = fullName;
       }
-
-      if (phone !== undefined) {
+      if (phone !== undefined && (phone ?? null) !== (currentUser?.['phone'] ?? null)) {
         oldValues['phone'] = currentUser?.['phone'] ?? null;
         newValues['phone'] = phone;
         userUpdate['phone'] = phone;
       }
+    }
 
-      if (Object.keys(userUpdate).length > 0) {
-        await updateResidentUser(communityId, userId, userUpdate);
+    // Membership fields (`user_roles`), validated before anything is written.
+    const roleUpdate: Record<string, unknown> = {};
+    if (role !== undefined && role !== oldRole) {
+      oldValues['role'] = oldRole;
+      newValues['role'] = role;
+      roleUpdate['role'] = role;
+    }
+    if (unitId !== undefined && (unitId ?? null) !== oldUnitId) {
+      oldValues['unitId'] = oldUnitId;
+      newValues['unitId'] = unitId ?? null;
+      roleUpdate['unitId'] = unitId ?? null;
+    }
+    if (role !== undefined || patchIsUnitOwner !== undefined) {
+      const effectiveIsUnitOwner = newRole === 'resident'
+        ? (patchIsUnitOwner ?? (existingRole['isUnitOwner'] as boolean) ?? false)
+        : false;
+      if (newRole === 'resident' && effectiveIsUnitOwner && (await getCommunityType(communityId)) === 'apartment') {
+        throw new ValidationError('Owners are not allowed in apartment communities');
+      }
+      const oldIsUnitOwner = existingRole['isUnitOwner'] === true;
+      if (effectiveIsUnitOwner !== oldIsUnitOwner || 'role' in roleUpdate) {
+        if (effectiveIsUnitOwner !== oldIsUnitOwner) {
+          oldValues['isUnitOwner'] = oldIsUnitOwner;
+          newValues['isUnitOwner'] = effectiveIsUnitOwner;
+        }
+        roleUpdate['isUnitOwner'] = effectiveIsUnitOwner;
+        roleUpdate['displayTitle'] = resolveDisplayTitle(newRole as CommunityRole, effectiveIsUnitOwner);
       }
     }
 
-    if (role !== undefined || unitId !== undefined || patchIsUnitOwner !== undefined) {
-      const communityType = await getCommunityType(communityId);
-      const roleUpdate: Record<string, unknown> = {};
+    const changed = Object.keys(userUpdate).length > 0 || Object.keys(roleUpdate).length > 0;
 
-      if (role !== undefined) {
-        oldValues['role'] = oldRole;
-        newValues['role'] = role;
-        roleUpdate['role'] = role;
+    // The membership row is the version (`ResidentListRow.updatedAt`). With a
+    // token, it is written first — conditionally, and even when only contact
+    // fields change, which bumps its updatedAt — so of two managers saving from
+    // the same read, the second is refused before touching anything.
+    // ponytail: no transaction (the scoped client has none). A failure writing
+    // `users` after this leaves the membership bumped; the retry then gets a
+    // 409 and a refreshed form, which is safe. A resident editing their own
+    // profile in between is not detected — their edits go through `users`
+    // only, outside this version.
+    if (changed && expectedUpdatedAt !== undefined) {
+      const fresh = await updateResidentRole(communityId, userId, roleUpdate, expectedUpdatedAt);
+      if (!fresh) {
+        throw new ConflictError('Someone else changed this resident since you opened them. Reload to see their changes.');
       }
+    } else if (Object.keys(roleUpdate).length > 0) {
+      await updateResidentRole(communityId, userId, roleUpdate);
+    }
+    if (Object.keys(userUpdate).length > 0) {
+      await updateResidentUser(communityId, userId, userUpdate);
+    }
 
-      if (unitId !== undefined) {
-        oldValues['unitId'] = oldUnitId;
-        newValues['unitId'] = unitId ?? null;
-        roleUpdate['unitId'] = unitId ?? null;
-      }
-
-      if (role !== undefined || patchIsUnitOwner !== undefined) {
-        const effectiveIsUnitOwner = newRole === 'resident'
-          ? (patchIsUnitOwner ?? (existingRole['isUnitOwner'] as boolean) ?? false)
-          : false;
-        roleUpdate['isUnitOwner'] = effectiveIsUnitOwner;
-
-        if (newRole === 'resident' && effectiveIsUnitOwner && communityType === 'apartment') {
-          throw new ValidationError('Owners are not allowed in apartment communities');
-        }
-
-        roleUpdate['displayTitle'] = resolveDisplayTitle(
-          newRole as CommunityRole,
-          effectiveIsUnitOwner,
-        );
-      }
-
-      if (Object.keys(roleUpdate).length > 0) {
-        await updateResidentRole(communityId, userId, roleUpdate);
-      }
+    if (!changed) {
+      return { userId, communityId, role: oldRole, unitId: oldUnitId };
     }
 
     await logAuditEvent({

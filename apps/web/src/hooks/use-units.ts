@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { requestJson } from '@/lib/api/request-json';
+import { ApiRequestError, requestJson } from '@/lib/api/request-json';
 
 export type UnitOccupancy = 'owner_occupied' | 'rented' | 'vacant';
 
@@ -79,6 +79,8 @@ export interface UpdateUnitInput {
   sqft?: number | null;
   /** Sending it (even unchanged) records the manager's confirmation. */
   occupancy?: UnitOccupancy | null;
+  /** The unit's `updatedAt` as shown: a save over someone else's change is refused (409). */
+  expectedUpdatedAt?: string;
 }
 
 export function useUpdateUnit(communityId: number) {
@@ -91,6 +93,13 @@ export function useUpdateUnit(communityId: number) {
         body: JSON.stringify({ communityId, ...input }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['units', communityId] }),
+    // Someone else saved first: fetch their version, so what is on screen —
+    // and the token the next save sends — is current.
+    onError: (error) => {
+      if (error instanceof ApiRequestError && error.status === 409) {
+        void qc.invalidateQueries({ queryKey: ['units', communityId] });
+      }
+    },
   });
 }
 

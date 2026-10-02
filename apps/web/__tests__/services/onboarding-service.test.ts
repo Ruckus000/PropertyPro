@@ -89,27 +89,7 @@ vi.mock('@/lib/utils/role-validator', () => ({
   validateRoleAssignment: vi.fn(() => ({ valid: true })),
 }));
 
-vi.mock('@/lib/api/errors', () => ({
-  NotFoundError: class NotFoundError extends Error {
-    constructor(msg: string) {
-      super(msg);
-      this.name = 'NotFoundError';
-    }
-  },
-  // Thrown by the cross-tenant guard in user-linking.ts.
-  ForbiddenError: class ForbiddenError extends Error {
-    constructor(msg: string) {
-      super(msg);
-      this.name = 'ForbiddenError';
-    }
-  },
-  ValidationError: class ValidationError extends Error {
-    constructor(msg: string) {
-      super(msg);
-      this.name = 'ValidationError';
-    }
-  },
-}));
+// The real error classes: the tests assert on their HTTP status.
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks are in place)
@@ -289,6 +269,43 @@ describe('createOnboardingResident', () => {
         communityType: 'condo_718',
       }),
     ).rejects.toThrow('User already has role "resident" in this community');
+  });
+
+  it('a duplicate is a 409 conflict, not a 400', async () => {
+    setupResidentQueryMocks({
+      existingUsers: [{ id: USER_ID, email: 'dup@example.com' }],
+      existingRoles: [{ userId: USER_ID, role: 'resident' }],
+    });
+    const error = await createOnboardingResident({
+      communityId: COMMUNITY_ID,
+      email: 'dup@example.com',
+      fullName: 'Dup User',
+      phone: null,
+      role: 'resident',
+      unitId: 4,
+      actorUserId: ACTOR_USER_ID,
+      communityType: 'condo_718',
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ statusCode: 409, code: 'CONFLICT' });
+  });
+
+  it('a concurrent add of the same email (unique violation) is a 409, not a 500', async () => {
+    setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
+    const race = Object.assign(new Error('Failed query: insert into "users"'), {
+      cause: { code: '23505', constraint_name: 'users_email_unique' },
+    });
+    mockScopedInsert.mockRejectedValueOnce(race);
+    const error = await createOnboardingResident({
+      communityId: COMMUNITY_ID,
+      email: 'race@example.com',
+      fullName: 'Race User',
+      phone: null,
+      role: 'resident',
+      unitId: 4,
+      actorUserId: ACTOR_USER_ID,
+      communityType: 'condo_718',
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ statusCode: 409, code: 'CONFLICT' });
   });
 
   it('resolves displayTitle as "Tenant" for resident without isUnitOwner', async () => {

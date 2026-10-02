@@ -3,7 +3,7 @@
  * P2-38: Extended with apartment-specific metadata (bedrooms, bathrooms, sqft, rentAmount).
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, check, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { users } from './users';
 
@@ -61,4 +61,12 @@ export const units = pgTable('units', {
     'units_occupancy_check',
     sql`${table.occupancy} IS NULL OR ${table.occupancy} IN ('owner_occupied', 'rented', 'vacant')`,
   ),
+  // One live unit per number per community, case-insensitively ("1a" = "1A"),
+  // matching how resident CSV import resolves unit numbers. The route checks
+  // first for a friendly message; this is the arbiter for concurrent writes.
+  // Per community, not per building: import, packages, visitors and finance
+  // labels all resolve a unit by its number alone.
+  uniqueIndex('units_community_unit_number_unique')
+    .on(table.communityId, sql`lower(${table.unitNumber})`)
+    .where(sql`${table.deletedAt} IS NULL`),
 ]);

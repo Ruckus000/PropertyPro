@@ -110,6 +110,7 @@ const {
       id: col('communities', 'id'),
       deletedAt: col('communities', 'deletedAt'),
       communitySettings: col('communities', 'communitySettings'),
+      timezone: col('communities', 'timezone'),
     },
     usersTable: { id: col('users', 'id') },
     userRolesTable: { id: col('user_roles', 'id') },
@@ -416,7 +417,10 @@ beforeEach(() => {
   limitCalls.length = 0;
   orderByCalls.length = 0;
   nextId = 1000;
-  communityRows = [{ id: 11, communitySettings: { assessmentPaymentsEnabled: true } }];
+  // The community's own time zone decides "today" for due dates. UTC here, so
+  // the cases read in plain UTC instants; the zone cases below set it.
+  communityRows = [{ id: 11, communitySettings: { assessmentPaymentsEnabled: true }, timezone: 'UTC' }];
+  seed(communitiesTable, [{ id: 11, timezone: 'UTC' }]);
 
   createScopedClientMock.mockImplementation(() => makeScopedClient());
   createUnscopedClientMock.mockImplementation(() => ({
@@ -527,14 +531,28 @@ describe('0. overdue transition (processOverdueTransitions)', () => {
     expect(second.itemsTransitioned).toBe(0);
   });
 
-  describe('in America/New_York', () => {
-    inTimeZone('America/New_York', 19);
+  describe('a community in America/New_York', () => {
+    beforeEach(() => {
+      communityRows = [{ id: 11, communitySettings: { assessmentPaymentsEnabled: true }, timezone: 'America/New_York' }];
+    });
 
-    it('"today" is the process-local date', async () => {
-      // Pinned, not flagged (Vercel runs UTC): 02:00 UTC on March 10 is 22:00 EDT on
-      // March 9, so local today is the 9th and the item due the 9th is not yet overdue.
+    it('"today" is the community\'s date: 22:00 EDT on the due date is not overdue yet', async () => {
+      // 02:00 UTC on March 10 is 22:00 EDT on March 9. The server (UTC) already
+      // says the 10th; the community is still on the 9th, its due date.
       const summary = await processOverdueTransitions(setNow('2026-03-10T02:00:00.000Z'));
       expect(summary.itemsTransitioned).toBe(0);
+      // After local midnight (04:00 UTC = 00:00 EDT on the 10th) it is.
+      const after = await processOverdueTransitions(setNow('2026-03-10T04:00:00.000Z'));
+      expect(after.itemsTransitioned).toBe(1);
+    });
+
+    describe('whatever zone the server process runs in', () => {
+      inTimeZone('Asia/Tokyo', 9);
+
+      it('it is the community\'s zone that decides', async () => {
+        const summary = await processOverdueTransitions(setNow('2026-03-10T02:00:00.000Z'));
+        expect(summary.itemsTransitioned).toBe(0);
+      });
     });
   });
 });
@@ -599,6 +617,21 @@ describe('1. late-fee grace window (processLateFees)', () => {
       // 23:59 UTC on day 15 is 19:59 EDT the same day: still 15 days, no fee.
       const summary = await processLateFees(setNow('2026-03-16T23:59:00.000Z'));
       expect(summary.feesApplied).toBe(0);
+    });
+  });
+
+  describe('a community in America/New_York', () => {
+    beforeEach(() => {
+      communityRows = [{ id: 11, communitySettings: { assessmentPaymentsEnabled: true }, timezone: 'America/New_York' }];
+    });
+
+    it('grace 0: no fee on the evening of the due date, though UTC is already the next day', async () => {
+      seed(assessmentsTable, [assessment({ id: 7, lateFeeAmountCents: 2500, lateFeeDaysGrace: 0 })]);
+      // 02:00 UTC March 2 = 21:00 EST March 1, the due date. Formerly counted as
+      // day 1 (epoch arithmetic from UTC midnight) and charged a fee.
+      expect((await processLateFees(setNow('2026-03-02T02:00:00.000Z'))).feesApplied).toBe(0);
+      // Local midnight (05:00 UTC) makes it day 1.
+      expect((await processLateFees(setNow('2026-03-02T05:00:00.000Z'))).feesApplied).toBe(1);
     });
   });
 });
@@ -1021,30 +1054,35 @@ describe('5. delinquency (listDelinquentUnits)', () => {
   });
 
   it('daysOverdue is clamped at 0 for a row dated after now', async () => {
-    // Unreachable through the query predicate on a UTC host; pinned by handing the
-    // service the row directly (e.g. DB clock ahead of the app clock).
-    selectFromMock.mockImplementationOnce(() =>
-      Promise.resolve([lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-20' })]),
+    // Unreachable through the query predicate; pinned by handing the service the
+    // row directly (e.g. DB clock ahead of the app clock).
+    selectFromMock.mockImplementation(
+      (table: object, projection: Record<string, unknown> | undefined, where?: Predicate) =>
+        table === assessmentLineItemsTable
+          ? Promise.resolve([lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-20' })])
+          : makeQuery(table, where, projection),
     );
     const [row] = await listDelinquentUnits(11, 1);
     expect(row?.daysOverdue).toBe(0);
   });
 
-  describe('in America/New_York', () => {
-    inTimeZone('America/New_York', 19);
+  describe('a community in America/New_York', () => {
+    beforeEach(() => seed(communitiesTable, [{ id: 11, timezone: 'America/New_York' }]));
 
-    it('an item due yesterday reports 2 days overdue', async () => {
-      // CHARACTERIZATION: suspected defect — daysOverdue is differenceInCalendarDays
-      // (LOCAL calendar days) between now and the due date parsed as UTC midnight.
-      // West of UTC, '2026-03-09T00:00Z' is the evening of March 8 locally, so every
-      // item is one day older than on a UTC host (1 day, above) — enough to flip
-      // lienEligible at the threshold boundary. (Moved from an item due today when
-      // delinquency became strictly-before-today: that item is no longer listed.)
+    it('days are counted on the community\'s calendar: due yesterday is 1 day, even when UTC is already a day ahead', async () => {
+      // Formerly 2 days in a New York process: the due date was read as UTC
+      // midnight and diffed in local days, so every item aged a day early —
+      // enough to flip lienEligible at the threshold. Now: 23:30 EDT on March 10
+      // (03:30 UTC on the 11th), due March 9 → 1 day.
       seed(assessmentLineItemsTable, [
         lineItem({ id: 9, unitId: 5, status: 'pending', dueDate: '2026-03-09', amountCents: 30000 }),
+        // Due the 10th: still "today" locally, so not delinquent yet.
+        lineItem({ id: 10, unitId: 6, status: 'pending', dueDate: '2026-03-10', amountCents: 30000 }),
       ]);
-      const [row] = await listDelinquentUnits(11, 2);
-      expect(row).toMatchObject({ daysOverdue: 2, lienEligible: true });
+      setNow('2026-03-11T03:30:00.000Z');
+      expect(await listDelinquentUnits(11, 2)).toEqual([
+        { unitId: 5, overdueAmountCents: 30000, daysOverdue: 1, lineItemCount: 1, lienEligible: false },
+      ]);
     });
   });
 });
