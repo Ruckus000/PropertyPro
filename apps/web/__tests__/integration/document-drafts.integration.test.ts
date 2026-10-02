@@ -215,7 +215,7 @@ describeDb('document drafts are visible to managers only', () => {
     const { getPublicCommunityScopedReader } = await import('../../src/lib/db/public-community-reader');
     const reader = getPublicCommunityScopedReader(communityId());
 
-    const listed = (await reader.listDocuments({ limit: 50, includeCategories: ['Rules'] })).map((d) => d.id);
+    const listed = (await reader.listDocuments({ limit: 50, includeCategories: ['rules'] })).map((d) => d.id);
     expect(listed).toContain(ids.posted);
     expect(listed).not.toContain(ids.draft);
 

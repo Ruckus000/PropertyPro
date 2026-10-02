@@ -99,6 +99,7 @@ export {
   amenitiesBlockSchema,
   paymentsBlockSchema,
   DOCUMENT_CATEGORIES,
+  documentMatchesSectionCategories,
 } from './site-blocks/index';
 export type {
   BlockType,
