@@ -115,7 +115,7 @@ describe('useResendInvitation', () => {
   });
 
   it('throws the route { message } on non-OK with JSON body', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(false, { message: 'Email send failed' }));
+    fetchMock.mockResolvedValue(jsonResponse(false, { error: { code: 'VALIDATION_ERROR', message: 'Email send failed' } }));
 
     const { result } = renderHook(() => useResendInvitation(COMMUNITY_ID), { wrapper });
     result.current.mutate(USER_ID);
@@ -204,8 +204,10 @@ describe('useInviteResident', () => {
     expect(body.sendInvitation).toBe(false);
   });
 
-  it('throws the route { message } on non-OK with JSON body', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(false, { message: 'Email already exists' }));
+  it('throws the server reason from the { error: { message } } envelope (a duplicate email)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(false, { error: { code: 'CONFLICT', message: 'Email already exists' } }),
+    );
 
     const { result } = renderHook(
       () => useInviteResident(COMMUNITY_ID),

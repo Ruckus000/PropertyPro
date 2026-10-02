@@ -120,6 +120,7 @@ function resident(userId: string, over: Partial<ResidentRecord> = {}): ResidentR
     portalStatus: 'active',
     lastSignInAt: null,
     lastInvitedAt: null,
+    updatedAt: '2026-10-01T09:00:00.000Z',
     ...over,
   };
 }

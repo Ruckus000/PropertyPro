@@ -133,6 +133,21 @@ export function utcDateToWallClockValue(date: Date, timeZone: string): string {
   return formatWallClock(getZonedParts(date, resolveTimezone(timeZone)));
 }
 
+/**
+ * The calendar date ('YYYY-MM-DD') it is at `now` in `timeZone` — a community's
+ * "today". Due dates are community calendar dates, so anything deciding "is it
+ * past due yet" must compare against this, not the server's (UTC) date: at
+ * 9pm in Florida it is already tomorrow in UTC.
+ */
+export function dateOnlyInTimeZone(now: Date, timeZone: string): string {
+  return utcDateToWallClockValue(now, timeZone).slice(0, 10);
+}
+
+/** Whole calendar days from `from` to `to` (both 'YYYY-MM-DD'); negative when `to` is earlier. */
+export function calendarDaysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
 export function wallClockValueToUtcDate(value: string, timeZone: string): Date {
   return zonedDateTimeToUtc(parseWallClockValue(value), resolveTimezone(timeZone));
 }

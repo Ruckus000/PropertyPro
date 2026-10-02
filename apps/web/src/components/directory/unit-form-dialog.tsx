@@ -98,7 +98,7 @@ export function UnitFormDialog({
     try {
       if (unit) {
         // Occupancy is always sent: saving the form is the manager confirming it.
-        await updateUnit.mutateAsync({ unitId: unit.id, ...common });
+        await updateUnit.mutateAsync({ unitId: unit.id, expectedUpdatedAt: unit.updatedAt, ...common });
         savedId = unit.id;
       } else {
         savedId = (await createUnit.mutateAsync({

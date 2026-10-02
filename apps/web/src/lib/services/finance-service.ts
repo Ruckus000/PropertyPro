@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { addDays, differenceInCalendarDays, endOfMonth, format, startOfMonth } from 'date-fns';
+import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
 import {
   assessmentLineItems,
   assessments,
@@ -45,6 +45,8 @@ import {
   generateFinanceStatementPdf,
 } from '@/lib/utils/finance-pdf';
 import { getBaseUrl } from '@/lib/utils/url';
+import { resolveTimezone } from '@/lib/utils/timezone';
+import { calendarDaysBetween, dateOnlyInTimeZone } from '@/lib/utils/zoned-datetime';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 
 export type AssessmentFrequency = 'monthly' | 'quarterly' | 'annual' | 'one_time';
@@ -1667,7 +1669,13 @@ export async function listDelinquentUnits(
   lienEligible: boolean;
 }>> {
   const scoped = createScopedClient(communityId);
-  const today = format(new Date(), 'yyyy-MM-dd');
+  // "Today" in the community's time zone — the same clock the overdue cron uses.
+  const [community] = await scoped.selectFrom<{ timezone: string | null }>(
+    communities,
+    { timezone: communities.timezone },
+    eq(communities.id, communityId),
+  );
+  const today = dateOnlyInTimeZone(new Date(), resolveTimezone(community?.timezone));
   // Strictly before today — the same predicate processOverdueTransitions uses.
   // An installment due today is not late yet, so it is not delinquent.
   // `pending` stays in the set so an item the daily cron has not yet flipped to
@@ -1683,8 +1691,7 @@ export async function listDelinquentUnits(
 
   const bucket = new Map<number, { overdueAmountCents: number; daysOverdue: number; lineItemCount: number }>();
   for (const item of overdueItems) {
-    const dueDate = new Date(`${item.dueDate}T00:00:00.000Z`);
-    const daysOverdue = Math.max(0, differenceInCalendarDays(new Date(), dueDate));
+    const daysOverdue = Math.max(0, calendarDaysBetween(item.dueDate, today));
     const current = bucket.get(item.unitId) ?? {
       overdueAmountCents: 0,
       daysOverdue: 0,

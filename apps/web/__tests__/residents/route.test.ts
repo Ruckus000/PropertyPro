@@ -224,6 +224,40 @@ describe('p1-18 residents route', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
+  it('POST: two managers adding the same email at once — the losing insert is a 409, not a 500', async () => {
+    // clearAllMocks keeps queued *Once values; earlier tests leave some behind.
+    scopedSelectFromMock.mockReset();
+    scopedInsertMock.mockReset();
+    scopedSelectFromMock
+      .mockResolvedValueOnce([{ id: 42, communityType: 'condo_718' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    scopedInsertMock.mockRejectedValueOnce(
+      Object.assign(new Error('Failed query: insert into "users"'), {
+        cause: { code: '23505', constraint_name: 'users_email_unique' },
+      }),
+    );
+
+    const res = await POST(
+      new NextRequest('http://localhost:3000/api/v1/residents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 42,
+          email: 'race@example.com',
+          fullName: 'Race One',
+          phone: null,
+          role: 'resident',
+          isUnitOwner: true,
+          unitId: 12,
+        }),
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('CONFLICT');
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
   it('POST returns 403 when role is property_manager (manager-tier lockdown)', async () => {
     // Manager roles must be assigned via the root-only Roles & Access endpoints.
     // The residents POST path is locked to resident-tier roles only.

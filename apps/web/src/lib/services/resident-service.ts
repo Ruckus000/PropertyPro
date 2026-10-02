@@ -11,7 +11,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { eq, inArray, sql } from '@propertypro/db/filters';
+import { and, eq, inArray, sql } from '@propertypro/db/filters';
 // AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
 import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
 import { expandTransitionRoleFilter } from '@propertypro/shared';
@@ -50,6 +50,13 @@ export interface ResidentListRow {
   lastSignInAt?: string | null;
   lastInvitedAt?: string | null;
   createdAt: unknown;
+  /**
+   * Version of this membership for optimistic concurrency: the `user_roles`
+   * row's `updatedAt`. PATCH /api/v1/residents bumps it on every edit made
+   * there (name and phone included), so two managers editing the same person
+   * cannot silently overwrite each other.
+   */
+  updatedAt: unknown;
 }
 
 export function derivePortalStatus(activity: {
@@ -203,6 +210,7 @@ export async function listResidentsForCommunity(
           }
         : {}),
       createdAt: roleRow['createdAt'],
+      updatedAt: roleRow['updatedAt'],
     };
   });
 }
@@ -332,15 +340,29 @@ export async function updateResidentUser(
 }
 
 /**
- * Update a community role row.
+ * Update a community role row. `updatedAt` is always bumped (scoped update).
+ *
+ * With `expectedUpdatedAt` (optimistic concurrency) the write applies only if
+ * the row is unchanged since the caller read it, compared at millisecond
+ * precision (what JSON carries; `defaultNow()` stores microseconds). Returns
+ * false when someone else saved in between.
  */
 export async function updateResidentRole(
   communityId: number,
   userId: string,
   values: Record<string, unknown>,
-): Promise<void> {
+  expectedUpdatedAt?: string,
+): Promise<boolean> {
   const scoped = createScopedClient(communityId);
-  await scoped.update(userRoles, values, eq(userRoles.userId, userId));
+  const where =
+    expectedUpdatedAt === undefined
+      ? eq(userRoles.userId, userId)
+      : and(
+          eq(userRoles.userId, userId),
+          sql`date_trunc('milliseconds', ${userRoles.updatedAt}) = date_trunc('milliseconds', ${expectedUpdatedAt}::timestamptz)`,
+        );
+  const rows = await scoped.update(userRoles, values, where);
+  return expectedUpdatedAt === undefined || (rows as unknown[]).length > 0;
 }
 
 /**
