@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
-import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -16,7 +15,6 @@ const {
   resizeSiteLogoMock,
   fileTypeFromBufferMock,
   assertNotDemoGraceMock,
-  requirePlanFeatureMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -30,7 +28,6 @@ const {
   resizeSiteLogoMock: vi.fn(),
   fileTypeFromBufferMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
-  requirePlanFeatureMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -60,9 +57,6 @@ vi.mock('file-type', () => ({
 }));
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
-}));
-vi.mock('@/lib/middleware/plan-guard', () => ({
-  requirePlanFeature: requirePlanFeatureMock,
 }));
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: vi.fn(),
@@ -142,21 +136,67 @@ describe('pm branding route', () => {
   });
 
   describe('PATCH', () => {
-    it('updates branding colors and logs audit event', async () => {
+    // Since builder v4 the site's look is a draft saved via /pm/site/design,
+    // so this route refuses every look field outright. The values below are
+    // VALID (a real hex, an allowlisted font): the 400 comes from the body
+    // being .strict(), not from a format check. Revert-check: drop .strict()
+    // and each case returns 200 with the field silently stripped.
+    it.each([
+      ['primaryColor', '#aabbcc'],
+      ['secondaryColor', '#112233'],
+      ['accentColor', '#445566'],
+      ['fontHeading', 'Lato'],
+      ['fontBody', 'Lato'],
+      ['customCssOverrides', { primaryColor: '#112233' }],
+    ])('rejects the look field %s with 400 and writes nothing', async (field, value) => {
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, primaryColor: '#aabbcc', secondaryColor: '#112233' }),
+        body: JSON.stringify({ communityId: 1, [field]: value }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(400);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a look field even alongside a valid live field', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customEmailFooter: 'Hi', primaryColor: '#aabbcc' }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(400);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('updates the email footer and audits only the changed field', async () => {
+      // The stored branding carries a manager's unpublished draft; none of it
+      // belongs in this request's audit row.
+      updateBrandingForCommunityMock.mockResolvedValueOnce({
+        customEmailFooter: 'Questions? Call the office.',
+        draftLook: { primaryColor: '#000000' },
+      });
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customEmailFooter: 'Questions? Call the office.' }),
       });
       const res = await PATCH(req);
 
       expect(res.status).toBe(200);
       expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
-        primaryColor: '#aabbcc',
-        secondaryColor: '#112233',
+        customEmailFooter: 'Questions? Call the office.',
       });
       expect(logAuditEventMock).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'settings_changed', communityId: 1 }),
+        expect.objectContaining({
+          action: 'settings_changed',
+          communityId: 1,
+          newValues: { customEmailFooter: 'Questions? Call the office.' },
+        }),
       );
     });
 
@@ -177,110 +217,6 @@ describe('pm branding route', () => {
       });
     });
 
-    it('returns 400 for invalid hex color', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, primaryColor: 'red' }),
-      });
-      const res = await PATCH(req);
-
-      expect(res.status).toBe(400);
-      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
-    });
-
-    it('persists customCssOverrides and enforces hasSiteCustomCss', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 1,
-          customCssOverrides: { primaryColor: '#112233', bodyFont: 'Lato' },
-        }),
-      });
-      const res = await PATCH(req);
-
-      expect(res.status).toBe(200);
-      expect(requirePlanFeatureMock).toHaveBeenCalledWith(1, 'hasSiteCustomCss');
-      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
-        customCssOverrides: { primaryColor: '#112233', bodyFont: 'Lato' },
-      });
-    });
-
-    it('returns 403 when the plan lacks hasSiteCustomCss', async () => {
-      requirePlanFeatureMock.mockRejectedValueOnce(new ForbiddenError('Upgrade required'));
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, customCssOverrides: { primaryColor: '#112233' } }),
-      });
-      const res = await PATCH(req);
-
-      expect(res.status).toBe(403);
-      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
-    });
-
-    it('rejects an unknown key inside customCssOverrides (strict — no raw CSS)', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 1,
-          customCssOverrides: { primaryColor: '#112233', rawCss: 'body{display:none}' },
-        }),
-      });
-      const res = await PATCH(req);
-
-      expect(res.status).toBe(400);
-      expect(requirePlanFeatureMock).not.toHaveBeenCalled();
-      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
-    });
-
-    it('rejects an invalid hex inside customCssOverrides', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, customCssOverrides: { accentColor: 'red' } }),
-      });
-      const res = await PATCH(req);
-      expect(res.status).toBe(400);
-      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
-    });
-
-    it('rejects a non-allowlisted bodyFont inside customCssOverrides', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, customCssOverrides: { bodyFont: 'Comic Sans MS' } }),
-      });
-      const res = await PATCH(req);
-      expect(res.status).toBe(400);
-      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
-    });
-
-    it('clears overrides with null (still gated)', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, customCssOverrides: null }),
-      });
-      const res = await PATCH(req);
-
-      expect(res.status).toBe(200);
-      expect(requirePlanFeatureMock).toHaveBeenCalledWith(1, 'hasSiteCustomCss');
-      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, { customCssOverrides: null });
-    });
-
-    it('does NOT gate a plain color PATCH on hasSiteCustomCss', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, primaryColor: '#aabbcc' }),
-      });
-      await PATCH(req);
-      expect(requirePlanFeatureMock).not.toHaveBeenCalled();
-    });
-
     it('returns 403 for non-PM user — demo grace runs but update does not', async () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         ...PM_MEMBERSHIP,
@@ -291,7 +227,7 @@ describe('pm branding route', () => {
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, primaryColor: '#aabbcc' }),
+        body: JSON.stringify({ communityId: 1, customEmailFooter: 'Hi' }),
       });
       const res = await PATCH(req);
 

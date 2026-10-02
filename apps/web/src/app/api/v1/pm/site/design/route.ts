@@ -7,8 +7,8 @@
  * Authorization matches publish, site settings and the urgent notice
  * (`ensurePmAccess`): a PM manager role in the target community plus the
  * `hasSiteEditor` plan feature. Custom colours additionally need
- * `hasSiteCustomCss`, the same gate `/api/v1/pm/branding` applies, and a write
- * is refused during a demo's grace window, as there.
+ * `hasSiteCustomCss`, and a write is refused during a demo's grace window, as
+ * on `/api/v1/pm/branding` (which no longer accepts look fields at all).
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';

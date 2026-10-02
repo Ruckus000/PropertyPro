@@ -16,12 +16,25 @@
  *     → assertNotDemoGrace
  *     → requireCommunityMembership
  *     → membership.role is property_manager-tier
- *     → [optional requirePlanFeature when customCssOverrides touched]
  *     → [optional logo sharp pipeline when logoStoragePath set]
  *     → updateBrandingForCommunity → logAuditEvent → tryAutoComplete
  *
- * PR #11 — `customCssOverrides` uses `.strict()` on the nested object; unknown
- * keys are rejected at the schema layer (token-allowlist sanitization boundary).
+ * ## PATCH writes the LIVE-ONLY branding fields, nothing else
+ *
+ * Since website builder v4 (#1272/#1273) the site's look — the
+ * `SITE_LOOK_FIELDS` in `@propertypro/shared` (layout, colour set, colours,
+ * fonts, custom colours) — is a draft that goes live on Publish, saved through
+ * `PATCH /api/v1/pm/site/design`. This route used to write those fields
+ * straight to the live site; it now accepts only the fields v4 keeps live: the
+ * two logos and the email footer.
+ *
+ * The body is `.strict()` so a look field is a 400, not silently dropped: a
+ * caller that still sends `primaryColor` here must find out, rather than see a
+ * 200 while nothing changed. Removing `.strict()` is what the route test's
+ * look-field cases revert-check.
+ *
+ * `hexColor`, `allowedFont` and `customCssOverridesSchema` stay exported: the
+ * design route and the onboarding website route validate the look with them.
  *
  * Response: loose `z.unknown()` — branding payloads may evolve additively and
  * the service return type is a partial community branding projection.
@@ -55,18 +68,14 @@ export const customCssOverridesSchema = z
   })
   .strict();
 
-export const patchPmBrandingBodySchema = z.object({
-  communityId: z.number().int().positive(),
-  primaryColor: hexColor.optional(),
-  secondaryColor: hexColor.optional(),
-  accentColor: hexColor.optional(),
-  fontHeading: allowedFont.optional(),
-  fontBody: allowedFont.optional(),
-  logoStoragePath: z.string().min(1).max(500).optional(),
-  siteLogoStoragePath: z.string().min(1).max(500).optional(),
-  customEmailFooter: z.string().max(500).optional(),
-  customCssOverrides: customCssOverridesSchema.nullable().optional(),
-});
+export const patchPmBrandingBodySchema = z
+  .object({
+    communityId: z.number().int().positive(),
+    logoStoragePath: z.string().min(1).max(500).optional(),
+    siteLogoStoragePath: z.string().min(1).max(500).optional(),
+    customEmailFooter: z.string().max(500).optional(),
+  })
+  .strict();
 
 export type PatchPmBrandingBody = z.infer<typeof patchPmBrandingBodySchema>;
 
