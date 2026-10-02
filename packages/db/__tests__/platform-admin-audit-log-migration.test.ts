@@ -150,6 +150,6 @@ describe('platform_admin_audit_log RLS registration', () => {
     // community_export_job_parts), then 82 → 83 by 0065
     // (site_publish_schedules) — all tenant tables. The assertion still does
     // its job: it pins the value so an accidental bump is visible.
-    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(83);
+    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(84);
   });
 });

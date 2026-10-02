@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { CommunityType } from '@propertypro/shared';
 import { ResidentForm, type ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -26,6 +27,8 @@ export interface AddResidentDialogProps {
   unitOptions?: readonly { id: number; label: string }[];
   /** Directory: "Add resident" from a unit's panel starts on that unit. */
   defaultUnitId?: number | null;
+  /** Directory: offer adding a household member with no portal login. */
+  allowHousehold?: boolean;
 }
 
 export function AddResidentDialog({
@@ -39,7 +42,9 @@ export function AddResidentDialog({
   onSendInvitationChange,
   unitOptions,
   defaultUnitId,
+  allowHousehold = false,
 }: AddResidentDialogProps) {
+  const [household, setHousehold] = useState(false);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md" resizable>
@@ -66,8 +71,11 @@ export function AddResidentDialog({
           onSubmit={onSubmit}
           unitOptions={unitOptions}
           defaultValues={defaultUnitId ? { unitId: defaultUnitId } : undefined}
+          allowHousehold={allowHousehold}
+          onHouseholdChange={setHousehold}
         />
 
+        {household ? null : (
         <label className="flex items-center gap-2 pt-2">
           <input
             type="checkbox"
@@ -79,6 +87,7 @@ export function AddResidentDialog({
             Send invitation email
           </span>
         </label>
+        )}
       </DialogContent>
     </Dialog>
   );

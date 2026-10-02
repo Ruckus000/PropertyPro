@@ -18,6 +18,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { requireViolationsEnabled } from '@/lib/violations/common';
+import { countOccupantsForUnit } from '@/lib/services/occupant-service';
 import {
   countOpenViolationsForUnit,
   countOpenViolationsByUnit,
@@ -310,6 +311,15 @@ export const DELETE = withErrorHandler(
     if (activeResidents.length > 0) {
       throw new ValidationError(
         `Cannot delete unit ${unitId}: ${activeResidents.length} active resident(s) are still assigned. Reassign or remove them first.`,
+      );
+    }
+
+    // Household members (no login) are on file too; deleting the unit would
+    // leave them pointing at nothing.
+    const householdMembers = await countOccupantsForUnit(communityId, unitId);
+    if (householdMembers > 0) {
+      throw new ValidationError(
+        `Cannot delete unit ${unitId}: ${householdMembers} household member(s) are still on file. Move or remove them first.`,
       );
     }
 

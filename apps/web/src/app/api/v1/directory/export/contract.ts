@@ -21,6 +21,12 @@ export const directoryExportContract = defineRoute({
         .optional()
         .transform((v) => (v ? v.split(',').map((id) => id.trim()).filter(Boolean) : undefined))
         .pipe(z.array(z.string().uuid()).max(DIRECTORY_EXPORT_MAX_SELECTED).optional()),
+      /** Residents only: comma-separated household-member ids in the selection. */
+      occupantIds: z
+        .string()
+        .optional()
+        .transform((v) => (v ? v.split(',').map((id) => Number(id.trim())) : undefined))
+        .pipe(z.array(z.number().int().positive()).max(DIRECTORY_EXPORT_MAX_SELECTED).optional()),
     }),
   },
   response: z.object({

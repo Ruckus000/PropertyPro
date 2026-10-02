@@ -31,12 +31,12 @@ export const GET = withErrorHandler(
     requirePermission(membership, 'units', 'read');
     await requireEntitledForAdminRead(communityId, membership);
 
-    const { kind, userIds } = query;
+    const { kind, userIds, occupantIds } = query;
     if (kind === 'residents' && !membership.isAdmin) {
       throw new ForbiddenError('Only managers can export residents');
     }
-    if (userIds && kind !== 'residents') {
-      throw new BadRequestError('userIds applies to residents only');
+    if ((userIds || occupantIds) && kind !== 'residents') {
+      throw new BadRequestError('userIds and occupantIds apply to residents only');
     }
 
     const permissionContext = { isUnitOwner: membership.isUnitOwner };
@@ -52,7 +52,8 @@ export const GET = withErrorHandler(
     const { csv, rowCount } = await buildDirectoryExport({
       communityId,
       kind,
-      userIds,
+      // A selection is the union of both id lists; neither means "everyone".
+      selection: userIds || occupantIds ? { userIds: userIds ?? [], occupantIds: occupantIds ?? [] } : undefined,
       access: { isAdmin: membership.isAdmin, canSeeBalances, canSeeViolations },
       actorUserId,
     });

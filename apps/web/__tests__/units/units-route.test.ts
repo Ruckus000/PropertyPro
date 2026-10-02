@@ -26,6 +26,7 @@ const {
   countOpenViolationsForUnitMock,
   countOpenViolationsByUnitMock,
   requireViolationsEnabledMock,
+  countOccupantsForUnitMock,
   tryAutoCompleteMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -47,6 +48,7 @@ const {
   countOpenViolationsForUnitMock: vi.fn(),
   countOpenViolationsByUnitMock: vi.fn(),
   requireViolationsEnabledMock: vi.fn(),
+  countOccupantsForUnitMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
 }));
 
@@ -96,6 +98,8 @@ vi.mock('@/lib/services/unit-service', async (importOriginal) => ({
 
 vi.mock('@/lib/violations/common', () => ({ requireViolationsEnabled: requireViolationsEnabledMock }));
 
+vi.mock('@/lib/services/occupant-service', () => ({ countOccupantsForUnit: countOccupantsForUnitMock }));
+
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
 }));
@@ -130,6 +134,7 @@ describe('/api/v1/units', () => {
     tryAutoCompleteMock.mockResolvedValue(undefined);
     requireViolationsEnabledMock.mockResolvedValue(undefined);
     countOpenViolationsByUnitMock.mockResolvedValue(new Map());
+    countOccupantsForUnitMock.mockResolvedValue(0);
   });
 
   describe('GET open-violation counts', () => {
@@ -498,6 +503,14 @@ describe('/api/v1/units', () => {
       const res = await deleteUnit();
       expect(res.status).toBe(400);
       expect((await res.json()).error.message).toMatch(/2 open violation/);
+      expect(softDeleteUnitByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses while household members (no login) are on file', async () => {
+      countOccupantsForUnitMock.mockResolvedValue(1);
+      const res = await deleteUnit();
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.message).toMatch(/1 household member/);
       expect(softDeleteUnitByIdMock).not.toHaveBeenCalled();
     });
   });

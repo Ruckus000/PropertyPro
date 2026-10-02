@@ -80,7 +80,7 @@ describe('GET /api/v1/directory/export', () => {
 
   it('passes the selection for residents, and refuses it for units or when malformed', async () => {
     await get(`kind=residents&userIds=${UUID}`);
-    expect(buildMock.mock.calls[0]![0].userIds).toEqual([UUID]);
+    expect(buildMock.mock.calls[0]![0].selection).toEqual({ userIds: [UUID], occupantIds: [] });
     expect((await get(`kind=units&userIds=${UUID}`)).status).toBe(400);
     expect((await get('kind=residents&userIds=not-a-uuid')).status).toBe(400);
     expect((await get('kind=everything')).status).toBe(400);

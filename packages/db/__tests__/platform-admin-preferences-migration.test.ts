@@ -199,7 +199,7 @@ describe('migration 0073 — platform admin preferences and push subscriptions',
       // Pinning the number here is what makes the previous assertion load
       // bearing: classifying either table as tenant-scoped would be the exact
       // opposite of the intent, and would show up as a bump to 84 or 85.
-      expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(83);
+      expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(84);
     });
   });
 

@@ -24,6 +24,8 @@ vi.mock('@propertypro/db', () => ({
   userRoles: { id: Symbol('user_roles.id') },
 }));
 
+vi.mock('@/lib/services/occupant-service', () => ({ countOccupantsForUnit: async () => 0 }));
+
 // Violation counts are covered in units-route.test.ts; off here.
 vi.mock('@/lib/violations/common', () => ({
   requireViolationsEnabled: async () => {

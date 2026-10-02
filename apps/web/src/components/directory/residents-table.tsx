@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { Avatar, PortalBadge, avatarToneFor } from './directory-badges';
-import type { DirectoryResidentRow } from './directory-model';
+import { residentTypeLabel, type DirectoryResidentRow } from './directory-model';
 
 // Columns by breakpoint: <md name · portal (unit · type · board in the subline),
 // md adds unit · type, xl adds board · phone.
@@ -55,7 +55,7 @@ export function ResidentsTable({
         <TableBody>
           {rows.map((r) => {
             const isOwner = hasOwnerRole && r.isUnitOwner;
-            const typeLabel = isOwner ? 'Owner' : 'Tenant';
+            const typeLabel = residentTypeLabel(r, hasOwnerRole);
             const board = r.designation ? DESIGNATION_SHORT[r.designation] : null;
             const mobileSubline = [
               r.unit ? `Unit ${r.unit.unitNumber}` : 'No unit',
@@ -112,7 +112,11 @@ export function ResidentsTable({
                   <span
                     className={cn(
                       'inline-flex h-6 items-center rounded-full px-2 text-xs font-medium',
-                      isOwner ? 'bg-interactive-subtle text-content-brand' : 'bg-status-info-bg text-status-info',
+                      r.occupantId !== undefined
+                        ? 'bg-surface-muted text-content-secondary'
+                        : isOwner
+                          ? 'bg-interactive-subtle text-content-brand'
+                          : 'bg-status-info-bg text-status-info',
                     )}
                   >
                     {typeLabel}

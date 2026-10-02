@@ -19,6 +19,7 @@ const PORTAL_STATUS: Record<ResidentPortalStatus, { key: string; label: string }
   active: { key: 'completed', label: 'Active' },
   invited: { key: 'open', label: 'Invited' },
   not_invited: { key: 'neutral', label: 'Not invited' },
+  no_login: { key: 'neutral', label: 'No login' },
 };
 
 /**
@@ -55,6 +56,7 @@ export const PORTAL_DETAIL: Record<ResidentPortalStatus, string> = {
   active: 'Active — signed in to the portal',
   invited: 'Invited — has not signed in yet',
   not_invited: 'Not invited yet',
+  no_login: 'Household member — no portal login',
 };
 
 /** Label for the invite action, by portal status. */

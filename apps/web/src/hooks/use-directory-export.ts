@@ -7,8 +7,10 @@ import type { DirectoryExportResponse } from '@/app/api/v1/directory/export/cont
 
 export interface DirectoryExportInput {
   kind: 'units' | 'residents';
-  /** Residents only: export just these (the selection). */
+  /** Residents only: export just these (the selection) — members by user id… */
   userIds?: readonly string[];
+  /** …and household members by occupant id. */
+  occupantIds?: readonly number[];
 }
 
 /**
@@ -17,9 +19,10 @@ export interface DirectoryExportInput {
  */
 export function useDirectoryExport(communityId: number) {
   return useMutation<DirectoryExportResponse, Error, DirectoryExportInput>({
-    mutationFn: ({ kind, userIds }) => {
+    mutationFn: ({ kind, userIds, occupantIds }) => {
       const params = new URLSearchParams({ communityId: String(communityId), kind });
-      if (userIds) params.set('userIds', userIds.join(','));
+      if (userIds?.length) params.set('userIds', userIds.join(','));
+      if (occupantIds?.length) params.set('occupantIds', occupantIds.join(','));
       return requestJson<DirectoryExportResponse>(`/api/v1/directory/export?${params}`);
     },
     onSuccess: ({ csv, filename }) => saveCsvFile(csv, filename),

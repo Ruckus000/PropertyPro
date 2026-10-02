@@ -23,6 +23,9 @@ const {
   batchInviteMock,
   sendDocumentsMock,
   exportMock,
+  useOccupantsMock,
+  createOccupantMock,
+  removeOccupantMock,
 } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   searchState: { value: '' },
@@ -40,6 +43,9 @@ const {
   batchInviteMock: vi.fn(),
   sendDocumentsMock: vi.fn(),
   exportMock: vi.fn(),
+  useOccupantsMock: vi.fn(),
+  createOccupantMock: vi.fn(),
+  removeOccupantMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -82,6 +88,14 @@ vi.mock('@/hooks/use-documents', () => ({
 }));
 vi.mock('@/hooks/use-directory-export', () => ({
   useDirectoryExport: () => ({ mutate: exportMock, isPending: false }),
+}));
+vi.mock('@/hooks/use-occupants', async (importOriginal) => ({
+  // The real key and row helpers; only the network hooks are stubbed.
+  ...(await importOriginal<typeof import('../../src/hooks/use-occupants')>()),
+  useOccupants: useOccupantsMock,
+  useCreateOccupant: () => ({ mutateAsync: createOccupantMock, isPending: false, error: null, reset: vi.fn() }),
+  useUpdateOccupant: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
+  useRemoveOccupant: () => ({ mutateAsync: removeOccupantMock, isPending: false, error: null, reset: vi.fn() }),
 }));
 vi.mock('@/hooks/use-access-requests', async (importOriginal) => ({
   // The real query options (they fetch through the mocked walkPaginated).
@@ -165,6 +179,7 @@ beforeEach(() => {
   isDesktopMock.mockReturnValue(true);
   useUnitsMock.mockReturnValue(ok(UNITS));
   useResidentsListMock.mockReturnValue(ok(RESIDENTS));
+  useOccupantsMock.mockReturnValue(ok([]));
   useDelinquencyMock.mockReturnValue(ok([{ unitId: 3, overdueAmountCents: 125_000, daysOverdue: 62 }]));
   usePastDueRuleMock.mockReturnValue(ok({ minCents: 0, minDays: 0 }));
   walkPaginatedMock.mockResolvedValue([]);
@@ -579,6 +594,139 @@ describe('DirectoryPageClient — violations, records and export (design gaps)',
     await user.type(screen.getByRole('searchbox', { name: /search name/i }), 'ivy');
     await screen.findByText('1 selected');
     await user.click(screen.getByRole('button', { name: 'Export CSV' }));
-    expect(exportMock).toHaveBeenCalledWith({ kind: 'residents', userIds: ['Ivy Invited'] }, expect.anything());
+    expect(exportMock).toHaveBeenCalledWith(
+      { kind: 'residents', userIds: ['Ivy Invited'], occupantIds: [] },
+      expect.anything(),
+    );
+  });
+});
+
+describe('DirectoryPageClient — household members (no portal login)', () => {
+  const KIM = {
+    id: 5,
+    communityId: 42,
+    unitId: 1,
+    fullName: 'Kim Kid',
+    email: null,
+    phone: null,
+    isOwnerHousehold: true,
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+  };
+
+  beforeEach(() => useOccupantsMock.mockReturnValue(ok([KIM])));
+
+  it('lists them as "No login" beside members, and leaves them out of portal adoption', async () => {
+    searchState.value = 'tab=residents';
+    const user = userEvent.setup();
+    renderClient();
+    const table = screen.getByRole('table', { name: 'Residents' });
+    expect(within(table).getByText('Kim Kid')).toBeInTheDocument();
+    expect(within(table).getByText('No login')).toBeInTheDocument();
+    // Olive is active and Ivy invited: 1 of 2 people with a login, Kim not counted.
+    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText(/1 not yet/)).toBeInTheDocument();
+
+    await user.click(within(table).getByRole('button', { name: /kim kid/i }));
+    const drawer = await screen.findByRole('dialog', { name: 'Kim Kid' });
+    expect(within(drawer).getByText('Household member — no portal login')).toBeInTheDocument();
+    expect(within(drawer).queryByRole('button', { name: /invite|send documents/i })).not.toBeInTheDocument();
+    expect(within(drawer).queryByText(/board designations/i)).not.toBeInTheDocument();
+  });
+
+  it('bulk resend and send documents skip them, and say so', async () => {
+    searchState.value = 'tab=residents';
+    batchInviteMock.mockResolvedValue([{ userId: 'Ivy Invited', status: 'sent' }]);
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    expect(screen.getByText('3 selected')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Resend invites' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Send 1 invitation?' });
+    expect(within(confirm).getByText(/1 resident already signed in and will be skipped/)).toBeInTheDocument();
+    expect(within(confirm).getByText(/1 household member with no portal login will be skipped/)).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Send invitations' }));
+    expect(batchInviteMock).toHaveBeenCalledWith(['Ivy Invited']);
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith(
+        '1 invitation sent, 1 skipped (already active), 1 skipped (no portal login).',
+      ),
+    );
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    await user.click(screen.getByRole('button', { name: 'Send documents' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send documents' });
+    expect(within(dialog).getByText('To 2 residents')).toBeInTheDocument();
+  });
+
+  it('selecting only household members explains why there is nothing to send', async () => {
+    searchState.value = 'tab=residents&q=Kim';
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    await user.click(screen.getByRole('button', { name: 'Resend invites' }));
+    expect(toastMock.info).toHaveBeenCalledWith('Household members have no portal login, so there is no invitation to send.');
+    expect(batchInviteMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Send documents' }));
+    expect(toastMock.info).toHaveBeenCalledWith(
+      'Household members have no portal login, so documents can’t be sent to them.',
+    );
+    expect(screen.queryByRole('dialog', { name: 'Send documents' })).not.toBeInTheDocument();
+  });
+
+  it('exports their rows by occupant id, separate from member user ids', async () => {
+    searchState.value = 'tab=residents';
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+    expect(exportMock).toHaveBeenCalledWith(
+      { kind: 'residents', userIds: expect.arrayContaining(['Olive Owner', 'Ivy Invited']), occupantIds: [5] },
+      expect.anything(),
+    );
+  });
+
+  it('removing one goes to the occupants API with household wording', async () => {
+    searchState.value = 'tab=residents';
+    removeOccupantMock.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: /kim kid/i }));
+    await user.click(await screen.findByRole('button', { name: 'Remove from household' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Remove Kim Kid?' });
+    expect(within(confirm).getByText(/no portal access to lose/)).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Remove household member' }));
+    expect(removeOccupantMock).toHaveBeenCalledWith({ id: 5 });
+    expect(removeResidentMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Household member removed.'));
+  });
+
+  it('adding a household member creates an occupant with no invitation', async () => {
+    searchState.value = 'tab=residents';
+    createOccupantMock.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: 'Add resident' }));
+    const dialog = await screen.findByRole('dialog', { name: /add resident/i });
+    await user.type(within(dialog).getByLabelText('Full name'), 'Gran Smith');
+    await user.click(within(dialog).getByRole('checkbox', { name: /household member/i }));
+    expect(within(dialog).getByLabelText('Email (optional)')).not.toBeRequired();
+    expect(within(dialog).queryByRole('checkbox', { name: /send invitation/i })).not.toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: /unit/i }), '1');
+    await user.click(within(dialog).getByRole('button', { name: /save resident/i }));
+    expect(createOccupantMock).toHaveBeenCalledWith({
+      unitId: 1,
+      fullName: 'Gran Smith',
+      email: null,
+      phone: null,
+      isOwnerHousehold: true,
+    });
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Household member added.'));
+  });
+
+  it('non-admins never fetch them', () => {
+    renderClient({ isAdmin: false, canSeeBalances: false });
+    expect(useOccupantsMock).toHaveBeenCalledWith(42, { enabled: false });
   });
 });

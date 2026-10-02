@@ -93,7 +93,10 @@ BEGIN
     -- do not re-create, and these come back readable by anon while production
     -- has them revoked. Here that would expose which operator watches what and
     -- the endpoint+keys needed to push to their device.
-    'platform_admin_preferences', 'platform_admin_push_subscriptions'
+    'platform_admin_preferences', 'platform_admin_push_subscriptions',
+    -- Revoked by migration 0085, which creates it: household members' names,
+    -- emails and phones. Sequence handled in the block below.
+    'unit_occupants'
   ]
   LOOP
     IF EXISTS (
@@ -150,7 +153,9 @@ BEGIN
     -- 0073's push table. Its sibling, platform_admin_preferences, is keyed on
     -- user_id and has NO sequence — the asymmetry is the schema's, not an
     -- omission here.
-    'platform_admin_push_subscriptions_id_seq'
+    'platform_admin_push_subscriptions_id_seq',
+    -- 0085's household-members table.
+    'unit_occupants_id_seq'
   ]
   LOOP
     IF EXISTS (

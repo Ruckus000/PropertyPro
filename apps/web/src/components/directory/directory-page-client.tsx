@@ -35,6 +35,7 @@ import {
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { useDirectoryExport, type DirectoryExportInput } from '@/hooks/use-directory-export';
+import { occupantIdOf, occupantToResident, useCreateOccupant, useOccupants, useRemoveOccupant } from '@/hooks/use-occupants';
 import { ConfirmDialog } from '@/components/pm/site-editor-v3/ConfirmDialog';
 import { AddResidentDialog } from '@/components/residents/add-resident-dialog';
 import { DirectorySheet } from './directory-sheet';
@@ -48,6 +49,8 @@ import {
   NO_BUILDING_KEY,
   buildDirectoryUnits,
   buildResidentRows,
+  canBeInvited,
+  isHouseholdMember,
   buildingLabelOf,
   computeOverview,
   describeRule,
@@ -98,7 +101,7 @@ type Panel = { kind: 'unit'; id: number } | { kind: 'resident'; id: string } | n
 type Confirm =
   | { kind: 'delete-unit'; unitId: number }
   | { kind: 'remove-resident'; userId: string }
-  | { kind: 'bulk-invite'; userIds: string[]; skippedActive: number }
+  | { kind: 'bulk-invite'; userIds: string[]; skippedActive: number; skippedHousehold: number }
   | null;
 
 const VIEW_STORAGE_KEY = 'propertypro:directory:units-view';
@@ -235,6 +238,7 @@ export function DirectoryPageClient({
   /* ── Data ── */
   const unitsQ = useUnits(communityId);
   const residentsQ = useResidentsList(communityId, { enabled: isAdmin });
+  const occupantsQ = useOccupants(communityId, { enabled: isAdmin });
   const delinquencyQ = useDelinquency(communityId, { enabled: canSeeBalances });
   const ruleQ = usePastDueRule(communityId, { enabled: canSeeBalances });
   const requestsQ = useQuery({ ...accessRequestsQueryOptions(communityId), enabled: isAdmin });
@@ -255,7 +259,15 @@ export function DirectoryPageClient({
   // hide-on-failure applies to it.
   const balancesVisible = canSeeBalances && delinquencyQ.isSuccess && ruleQ.isSuccess;
   const rule = ruleQ.data ?? ANY_OVERDUE_RULE;
-  const residents = isAdmin ? residentsQ.data ?? null : null;
+  // Members with a login, plus household members (no login) folded in as
+  // `no_login` rows — one list, so every count and consistency check sees both.
+  const residents = useMemo(
+    () =>
+      isAdmin && residentsQ.data
+        ? [...residentsQ.data, ...(occupantsQ.data ?? []).map(occupantToResident)]
+        : null,
+    [isAdmin, residentsQ.data, occupantsQ.data],
+  );
 
   const dirUnits = useMemo(
     () =>
@@ -373,9 +385,27 @@ export function DirectoryPageClient({
   );
 
   const inviteResident = useInviteResident(communityId);
+  const createOccupant = useCreateOccupant(communityId);
   const handleAddResident = useCallback(
     async (values: ResidentFormSubmitValues) => {
       setInviteWarning(null);
+      if (values.household) {
+        if (values.unitId === null) return; // The form requires a unit.
+        try {
+          await createOccupant.mutateAsync({
+            unitId: values.unitId,
+            fullName: values.fullName,
+            email: values.email.trim() || null,
+            phone: values.phone.trim() || null,
+            isOwnerHousehold: values.isUnitOwner,
+          });
+        } catch {
+          return; // Shown in the dialog via createOccupant.error.
+        }
+        toast.success('Household member added.');
+        setAddResident({ open: false, unitId: null });
+        return;
+      }
       let result;
       try {
         result = await inviteResident.mutateAsync({ values, sendInvitation });
@@ -390,18 +420,25 @@ export function DirectoryPageClient({
       }
       setAddResident({ open: false, unitId: null });
     },
-    [inviteResident, sendInvitation, queryClient, communityId],
+    [inviteResident, createOccupant, sendInvitation, queryClient, communityId],
   );
 
   const openAddResident = useCallback((unitId: number | null) => {
     inviteResident.reset();
+    createOccupant.reset();
     setAddResident({ open: true, unitId });
-  }, [inviteResident]);
+  }, [inviteResident, createOccupant]);
 
-  const openSendDocs = useCallback(
-    (userIds: string[], label: string) => setSendDocs({ userIds, label, nonce: Date.now() }),
-    [],
-  );
+  // Documents go to people who can sign in to open them: household members are
+  // dropped here, the one place every send starts from.
+  const openSendDocs = useCallback((userIds: string[], label: string) => {
+    const members = userIds.filter((id) => occupantIdOf(id) === null);
+    if (members.length === 0) {
+      toast.info('Household members have no portal login, so documents can’t be sent to them.');
+      return;
+    }
+    setSendDocs({ userIds: members, label: members.length === userIds.length ? label : plural(members.length, 'resident'), nonce: Date.now() });
+  }, []);
 
   const openUnit = useCallback((id: number) => setPanel({ kind: 'unit', id }), []);
   const openResident = useCallback((id: string) => setPanel({ kind: 'resident', id }), []);
@@ -413,6 +450,7 @@ export function DirectoryPageClient({
 
   const deleteUnit = useDeleteUnit(communityId);
   const removeResident = useRemoveResident(communityId);
+  const removeOccupant = useRemoveOccupant(communityId);
   const batchInvite = useBatchInvite(communityId);
 
   const runConfirm = useCallback(async () => {
@@ -423,9 +461,11 @@ export function DirectoryPageClient({
         setPanel(null);
         toast.success('Unit deleted.');
       } else if (confirm.kind === 'remove-resident') {
-        await removeResident.mutateAsync(confirm.userId);
+        const target = residentRows.find((x) => x.userId === confirm.userId);
+        if (target?.occupantId !== undefined) await removeOccupant.mutateAsync({ id: target.occupantId });
+        else await removeResident.mutateAsync(confirm.userId);
         setPanel((p) => (p?.kind === 'resident' ? null : p));
-        toast.success('Resident removed.');
+        toast.success(target?.occupantId !== undefined ? 'Household member removed.' : 'Resident removed.');
       } else {
         const results = await batchInvite.mutateAsync(confirm.userIds);
         const sent = results.filter((r) => r.status === 'sent').length;
@@ -433,6 +473,7 @@ export function DirectoryPageClient({
         const parts = [`${plural(sent, 'invitation')} sent`];
         if (failed) parts.push(`${failed} failed`);
         if (confirm.skippedActive) parts.push(`${confirm.skippedActive} skipped (already active)`);
+        if (confirm.skippedHousehold) parts.push(`${confirm.skippedHousehold} skipped (no portal login)`);
         (failed ? toast.warning : toast.success)(withLimitReason(`${parts.join(', ')}.`, results));
         setSelection(new Set());
       }
@@ -440,7 +481,7 @@ export function DirectoryPageClient({
       // The server's message says why (e.g. "its ledger balance is not zero").
       toast.error(err instanceof Error ? err.message : 'That did not work. Please try again.');
     }
-  }, [confirm, deleteUnit, removeResident, batchInvite]);
+  }, [confirm, deleteUnit, removeResident, removeOccupant, batchInvite, residentRows]);
 
   const toggleSelected = useCallback((userId: string) => {
     setSelection((prev) => {
@@ -509,6 +550,14 @@ export function DirectoryPageClient({
       const r = residentRows.find((x) => x.userId === confirm.userId);
       const lastOwner =
         hasOwnerRole && r?.isUnitOwner && r.unit !== null && r.unit.owners.length === 1;
+      if (r && isHouseholdMember(r)) {
+        return {
+          title: `Remove ${r.displayName}?`,
+          description: `They are taken off Unit ${r.unit?.unitNumber ?? ''}'s household. They have no portal access to lose.`,
+          confirmLabel: 'Remove household member',
+          destructive: true,
+        };
+      }
       return {
         title: `Remove ${r?.displayName ?? 'this resident'}?`,
         description: `They lose portal access to this community.${
@@ -523,6 +572,10 @@ export function DirectoryPageClient({
         title: `Send ${plural(confirm.userIds.length, 'invitation')}?`,
         description: `Each person gets an email with a link to set up portal access.${
           confirm.skippedActive ? ` ${plural(confirm.skippedActive, 'resident')} already signed in and will be skipped.` : ''
+        }${
+          confirm.skippedHousehold
+            ? ` ${plural(confirm.skippedHousehold, 'household member')} with no portal login will be skipped.`
+            : ''
         }`,
         confirmLabel: 'Send invitations',
         destructive: false,
@@ -533,7 +586,7 @@ export function DirectoryPageClient({
 
   /* ── Render ── */
   const unitsLoading = unitsQ.isLoading;
-  const residentsLoading = isAdmin && residentsQ.isLoading;
+  const residentsLoading = isAdmin && (residentsQ.isLoading || occupantsQ.isLoading);
   const primaryLabel = tab === 'units' ? 'Add unit' : 'Add resident';
   const showPrimary =
     tab === 'units' ? canWrite && (unitsQ.data?.length ?? 0) > 0 : tab === 'residents' ? residentRows.length > 0 : false;
@@ -727,7 +780,7 @@ export function DirectoryPageClient({
             />
           ) : (
             <>
-              {isAdmin && residentsQ.isError ? (
+              {isAdmin && (residentsQ.isError || occupantsQ.isError) ? (
                 <AlertBanner
                   status="warning"
                   title="Residents didn't load"
@@ -735,7 +788,10 @@ export function DirectoryPageClient({
                   action={
                     <button
                       type="button"
-                      onClick={() => void residentsQ.refetch()}
+                      onClick={() => {
+                      void residentsQ.refetch();
+                      void occupantsQ.refetch();
+                    }}
                       className={cn('h-10 rounded-md border border-edge bg-surface-card px-3.5 text-sm font-medium text-content', FOCUS)}
                     >
                       Retry
@@ -812,7 +868,7 @@ export function DirectoryPageClient({
           <TabsContent value="residents" className="mt-0 flex flex-col gap-4">
             {residentsLoading ? (
               <ListSkeleton />
-            ) : residentsQ.isError ? (
+            ) : (residentsQ.isError || occupantsQ.isError) ? (
               <AlertBanner
                 status="danger"
                 title="We couldn't load residents"
@@ -820,7 +876,10 @@ export function DirectoryPageClient({
                 action={
                   <button
                     type="button"
-                    onClick={() => void residentsQ.refetch()}
+                    onClick={() => {
+                      void residentsQ.refetch();
+                      void occupantsQ.refetch();
+                    }}
                     className={cn('h-10 rounded-md bg-interactive px-4 text-sm font-medium text-content-inverse hover:bg-interactive-hover', FOCUS)}
                   >
                     Retry
@@ -881,15 +940,21 @@ export function DirectoryPageClient({
                         <button
                           type="button"
                           onClick={() => {
-                            const toInvite = visibleSelection.filter((r) => r.portalStatus !== 'active');
+                            const toInvite = visibleSelection.filter(canBeInvited);
+                            const household = visibleSelection.filter(isHouseholdMember).length;
                             if (toInvite.length === 0) {
-                              toast.info('Everyone selected has already signed in.');
+                              toast.info(
+                                household === visibleSelection.length
+                                  ? 'Household members have no portal login, so there is no invitation to send.'
+                                  : 'Everyone selected has already signed in.',
+                              );
                               return;
                             }
                             askConfirm({
                               kind: 'bulk-invite',
                               userIds: toInvite.map((r) => r.userId),
-                              skippedActive: visibleSelection.length - toInvite.length,
+                              skippedActive: visibleSelection.length - toInvite.length - household,
+                              skippedHousehold: household,
                             });
                           }}
                           className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover md:h-9', FOCUS)}
@@ -914,7 +979,13 @@ export function DirectoryPageClient({
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => runExport({ kind: 'residents', userIds: visibleSelection.map((r) => r.userId) })}
+                          onClick={() =>
+                            runExport({
+                              kind: 'residents',
+                              userIds: visibleSelection.filter((r) => !isHouseholdMember(r)).map((r) => r.userId),
+                              occupantIds: visibleSelection.flatMap((r) => (r.occupantId !== undefined ? [r.occupantId] : [])),
+                            })
+                          }
                           disabled={exporter.isPending}
                           className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover disabled:opacity-60 md:h-9', FOCUS)}
                         >
@@ -983,7 +1054,9 @@ export function DirectoryPageClient({
             onEdit={() => setEditResidentId(panelResident.userId)}
             onRemove={() => askConfirm({ kind: 'remove-resident', userId: panelResident.userId })}
             onSendDocuments={
-              canSendDocuments ? () => openSendDocs([panelResident.userId], panelResident.displayName) : undefined
+              canSendDocuments && !isHouseholdMember(panelResident)
+                ? () => openSendDocs([panelResident.userId], panelResident.displayName)
+                : undefined
             }
             inSheet
           />
@@ -1069,9 +1142,10 @@ export function DirectoryPageClient({
           open={addResident.open}
           onOpenChange={(open) => setAddResident((prev) => ({ ...prev, open }))}
           communityType={communityType}
-          submitting={inviteResident.isPending}
+          submitting={inviteResident.isPending || createOccupant.isPending}
           onSubmit={handleAddResident}
-          error={inviteResident.error instanceof Error ? inviteResident.error.message : null}
+          error={(inviteResident.error ?? createOccupant.error)?.message ?? null}
+          allowHousehold
           sendInvitation={sendInvitation}
           onSendInvitationChange={setSendInvitation}
           unitOptions={unitOptions}
