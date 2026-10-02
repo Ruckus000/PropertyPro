@@ -105,7 +105,7 @@ const {
       amountCents: col('rent_obligations', 'amountCents'),
     },
     rentPaymentsTable: { id: col('rent_payments', 'id') },
-    unitsTable: { id: col('units', 'id'), unitNumber: col('units', 'unitNumber') },
+    unitsTable: { id: col('units', 'id'), unitNumber: col('units', 'unitNumber'), building: col('units', 'building') },
     communitiesTable: {
       id: col('communities', 'id'),
       deletedAt: col('communities', 'deletedAt'),
@@ -1024,8 +1024,9 @@ describe('5. delinquency (listDelinquentUnits)', () => {
     // Unit 1's pending item due today (id 2) is not late yet, so it is not summed.
     const result = await listDelinquentUnits(11, 30);
     expect(result).toEqual([
-      { unitId: 1, overdueAmountCents: 32500, daysOverdue: 30, lineItemCount: 1, lienEligible: true },
-      { unitId: 2, overdueAmountCents: 10000, daysOverdue: 29, lineItemCount: 1, lienEligible: false },
+      // No units are seeded here, so the label falls back to the id.
+      { unitId: 1, unitLabel: 'Unit #1', overdueAmountCents: 32500, daysOverdue: 30, lineItemCount: 1, lienEligible: true },
+      { unitId: 2, unitLabel: 'Unit #2', overdueAmountCents: 10000, daysOverdue: 29, lineItemCount: 1, lienEligible: false },
     ]);
   });
 
@@ -1049,7 +1050,7 @@ describe('5. delinquency (listDelinquentUnits)', () => {
       lineItem({ id: 10, unitId: 6, status: 'pending', dueDate: '2026-03-09', amountCents: 20000 }),
     ]);
     expect(await listDelinquentUnits(11, 1)).toEqual([
-      { unitId: 6, overdueAmountCents: 20000, daysOverdue: 1, lineItemCount: 1, lienEligible: true },
+      { unitId: 6, unitLabel: 'Unit #6', overdueAmountCents: 20000, daysOverdue: 1, lineItemCount: 1, lienEligible: true },
     ]);
   });
 
@@ -1081,7 +1082,8 @@ describe('5. delinquency (listDelinquentUnits)', () => {
       ]);
       setNow('2026-03-11T03:30:00.000Z');
       expect(await listDelinquentUnits(11, 2)).toEqual([
-        { unitId: 5, overdueAmountCents: 30000, daysOverdue: 1, lineItemCount: 1, lienEligible: false },
+        // No units are seeded here, so the label falls back to the id.
+        { unitId: 5, unitLabel: 'Unit #5', overdueAmountCents: 30000, daysOverdue: 1, lineItemCount: 1, lienEligible: false },
       ]);
     });
   });
@@ -1303,6 +1305,21 @@ describe('6. statements', () => {
         [22, '103', 0],
       ]);
       expect(statement.summary).toEqual({ totalDueCents: 30000 + 32500 + 160000, overdueCount: 0, outstandingCount: 3 });
+    });
+
+    it('labels each line item by unit number (building when set), falling back to the id for an unknown unit', async () => {
+      seed(unitsTable, [
+        { id: 1, unitNumber: '101', building: null },
+        { id: 2, unitNumber: '102', building: 'Bldg A' },
+        { id: 3, unitNumber: '103', building: null },
+      ]);
+      const statement = await buildCommunityStatement(11, '2026-01-01', '2026-03-31');
+      expect(statement.lineItems.map((row) => [row.id, row.unitLabel])).toEqual([
+        [20, 'Unit #404'],
+        [21, 'Unit 101'],
+        [600, 'Bldg A • Unit 102'],
+        [22, 'Unit 103'],
+      ]);
     });
 
     it('more than 200 outstanding items is flagged and reported once; summary stays exact', async () => {

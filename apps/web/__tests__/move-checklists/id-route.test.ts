@@ -51,6 +51,19 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
+vi.mock('@propertypro/db', () => ({
+  createScopedClient: (communityId: number) => ({ communityId }),
+}));
+
+// Unit labelling has its own tests (src/lib/units/__tests__/unit-labels.test.ts);
+// here a stand-in label proves the GET attaches one.
+vi.mock('@/lib/units/unit-labels', () => ({
+  withUnitLabel: async (_scoped: unknown, row: { unitId: number }) => ({
+    ...row,
+    unitLabel: `Unit label for ${row.unitId}`,
+  }),
+}));
+
 vi.mock('@/lib/services/move-checklist-service', () => ({
   getMoveChecklist: getMoveChecklistMock,
   completeChecklist: completeChecklistMock,
@@ -131,6 +144,8 @@ describe('GET /api/v1/move-checklists/[id]', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as DataEnvelope;
     expect(json.data).toBeDefined();
+    // The detail header prints the unit's label, not its row id.
+    expect(json.data).toMatchObject({ unitId: 200, unitLabel: 'Unit label for 200' });
     // checklistId + communityId arrive coerced from the path/query strings.
     expect(getMoveChecklistMock).toHaveBeenCalledWith(42, 7);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'admin-1');

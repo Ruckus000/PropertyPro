@@ -230,4 +230,41 @@ describe('AssessmentManager', () => {
       expect(bodyText).toContain('Annual');
     }, { timeout: 10000 });
   });
+
+  it('names each line item\'s unit by its number, not its database id', async () => {
+    mockAssessmentsSuccess([makeAssessment({ id: 1, title: 'Monthly Maintenance' })]);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        data: [
+          {
+            id: 10,
+            assessmentId: 1,
+            unitId: 2,
+            unitLabel: 'Unit 1B',
+            amountCents: 35000,
+            dueDate: '2026-09-01',
+            status: 'pending',
+            lateFeeCents: 0,
+            paidAt: null,
+          },
+        ],
+      }),
+    });
+
+    const AssessmentManager = await importAssessmentManager();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(await screen.findByText('Monthly Maintenance', {}, { timeout: 10000 }));
+
+    expect(await screen.findByText('Unit 1B', {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(screen.queryByText('Unit #2')).not.toBeInTheDocument();
+    expect(mockFetch.mock.calls[1]![0]).toContain('/api/v1/assessments/1/line-items?communityId=42');
+  });
 });

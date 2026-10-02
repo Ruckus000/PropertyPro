@@ -16,6 +16,7 @@ import {
   users,
 } from '@propertypro/db';
 import { ValidationError } from '@/lib/api/errors';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 
 // ─── Types ───
 
@@ -126,7 +127,7 @@ export async function getMoveChecklist(
 export async function listMoveChecklists(
   communityId: number,
   filters: { leaseId?: number; unitId?: number; type?: MoveChecklistType; completed?: boolean } = {},
-): Promise<MoveChecklist[]> {
+): Promise<Array<MoveChecklist & { unitLabel: string }>> {
   const scoped = createScopedClient(communityId);
   const conditions = [isNull(moveChecklists.deletedAt)];
 
@@ -145,7 +146,8 @@ export async function listMoveChecklists(
     and(...conditions),
   );
 
-  return rows;
+  // List cards show "Unit 1B", not the unit's row id.
+  return withUnitLabels(scoped, rows);
 }
 
 export async function updateChecklistStep(

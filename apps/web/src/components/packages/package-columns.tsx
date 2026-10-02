@@ -64,7 +64,7 @@ export function getPackageColumns(
     {
       accessorKey: 'unitId',
       header: 'Unit',
-      cell: ({ row }) => `Unit ${row.original.unitId}`,
+      cell: ({ row }) => row.original.unitLabel ?? `Unit #${row.original.unitId}`,
     },
     {
       accessorKey: 'carrier',

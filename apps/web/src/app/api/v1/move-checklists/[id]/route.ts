@@ -36,6 +36,7 @@
  * in its grace period now gets 403 `DEMO_GRACE_READ_ONLY` before membership.
  */
 import { runRoute } from '@/lib/api/run-route';
+import { createScopedClient } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -44,6 +45,7 @@ import { isAdminRole } from '@propertypro/shared';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getMoveChecklist, completeChecklist } from '@/lib/services/move-checklist-service';
+import { withUnitLabel } from '@/lib/units/unit-labels';
 import { getMoveChecklistContract, completeMoveChecklistContract } from './contract';
 
 export const GET = withErrorHandler(
@@ -63,7 +65,8 @@ export const GET = withErrorHandler(
       throw new NotFoundError('Checklist not found');
     }
 
-    return checklist;
+    // Labelled here, not in getMoveChecklist: the step writes call that getter.
+    return withUnitLabel(createScopedClient(communityId), checklist);
   }),
 );
 
