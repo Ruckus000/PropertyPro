@@ -72,6 +72,8 @@ vi.mock('@/lib/services/invitations-service', () => ({
 
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { PATCH, POST } from '../../src/app/api/v1/invitations/route';
+import { resetGlobalRateLimiter } from '../../src/lib/middleware/rate-limiter';
+import { consumeEmailBudget } from '../../src/lib/api/email-budget';
 
 // requirePermission (from @/lib/db/access-control) is NOT mocked — it runs for
 // real against the static RBAC matrix — so the mocked membership must be a
@@ -93,6 +95,23 @@ describe('p1-20 invitation auth flow', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('inviter-uuid');
     requireCommunityMembershipMock.mockResolvedValue(adminMembership);
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
+    resetGlobalRateLimiter();
+  });
+
+  it('POST is refused (429) and sends nothing once the manager used their 100 emails this minute', async () => {
+    getCommunityNameForInvitationMock.mockResolvedValueOnce({ id: 99, name: 'Sunset Condos' });
+    await consumeEmailBudget('inviter-uuid', 100);
+    const res = await POST(
+      new NextRequest('http://localhost:3000/api/v1/invitations', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 99, userId: 'user-1' }),
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect((await res.json()).error.message).toMatch(/^Email limit reached/);
+    expect(createInvitationMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('POST sends invitation email with correct link and community name', async () => {

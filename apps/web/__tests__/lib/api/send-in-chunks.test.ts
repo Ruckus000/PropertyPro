@@ -4,7 +4,8 @@
  * server's cap.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { RECIPIENTS_PER_REQUEST, sendInChunks } from '../../../src/lib/api/send-in-chunks';
+import { RECIPIENTS_PER_REQUEST, limitMessageOf, sendInChunks } from '../../../src/lib/api/send-in-chunks';
+import { ApiRequestError } from '../../../src/lib/api/request-json';
 import { BATCH_INVITE_MAX } from '../../../src/app/api/v1/invitations/batch/contract';
 import { SEND_DOCUMENTS_MAX_RECIPIENTS } from '../../../src/app/api/v1/documents/send/contract';
 
@@ -37,5 +38,14 @@ describe('sendInChunks', () => {
     expect(results.filter((r) => r.status === 'sent')).toHaveLength(150);
     expect(results.filter((r) => r.status === 'failed').map((r) => r.userId)).toEqual(ids(200).slice(100));
     expect(results.find((r) => r.userId === 'u150')).toMatchObject({ error: 'rate limited' });
+  });
+});
+
+describe('limitMessageOf', () => {
+  it('carries the server message only for a 429 (the email cap)', () => {
+    const limited = new ApiRequestError('Email limit reached: 100 emails per minute. Try again in 42 seconds.', { status: 429 });
+    expect(limitMessageOf(limited)).toEqual({ limitMessage: limited.message });
+    expect(limitMessageOf(new ApiRequestError('Forbidden', { status: 403 }))).toEqual({});
+    expect(limitMessageOf(new Error('network'))).toEqual({});
   });
 });

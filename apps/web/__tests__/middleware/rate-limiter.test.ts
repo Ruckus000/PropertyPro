@@ -765,3 +765,19 @@ describe('rateLimitedResponse content negotiation', () => {
     expect(body).not.toContain('alert(1)');
   });
 });
+
+describe('SlidingWindowRateLimiter — weighted checks (email cap)', () => {
+  it('admits a weighted call only if all of it fits, and a refusal consumes nothing', () => {
+    const limiter = new SlidingWindowRateLimiter();
+    expect(limiter.check('k', 100, 60_000, 60)).toMatchObject({ allowed: true, remaining: 40 });
+    expect(limiter.check('k', 100, 60_000, 50).allowed).toBe(false);
+    expect(limiter.check('k', 100, 60_000, 40)).toMatchObject({ allowed: true, remaining: 0 });
+    expect(limiter.check('k', 100, 60_000, 1).allowed).toBe(false);
+  });
+
+  it('weight 1 behaves exactly like the unweighted call', () => {
+    const limiter = new SlidingWindowRateLimiter();
+    for (let i = 0; i < 3; i += 1) expect(limiter.check('w', 3, 60_000).allowed).toBe(true);
+    expect(limiter.check('w', 3, 60_000, 1).allowed).toBe(false);
+  });
+});

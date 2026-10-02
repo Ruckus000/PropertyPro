@@ -97,12 +97,15 @@ export async function checkDistributedRateLimit(
   key: string,
   limit: number,
   windowMs: number,
+  /** Units this call consumes (default 1), e.g. one per email recipient. */
+  rate = 1,
 ): Promise<RateLimitResult | null> {
   const limiter = getLimiter(limit, windowMs);
   if (!limiter) return null;
 
   try {
-    const { success, remaining, reset } = await limiter.limit(key);
+    const { success, remaining, reset } =
+      rate === 1 ? await limiter.limit(key) : await limiter.limit(key, { rate });
     const retryAfterMs = reset - Date.now();
     return {
       allowed: success,

@@ -61,8 +61,7 @@ function* walk(dir: string, exts: RegExp): Generator<string> {
 // by REF_RE — only literal `var(--x)` references count.
 const REF_RE = /var\(\s*(--[a-zA-Z0-9-]+)/g;
 // Optional closing quote/backtick before the colon so quoted-key inline-style
-// definitions count too (`style={{ '--my-var': x }}` — e.g.
-// apps/web/src/components/pm/BrandingPreview.tsx). Known blind spot: the
+// definitions count too (`style={{ '--my-var': x }}`). Known blind spot: the
 // definition scan is deliberately generous — any `--x:`-looking string
 // anywhere under apps/+packages/ counts as defined, including test fixtures
 // (false-defined = missed detection, an acceptable trade-off for this guard).

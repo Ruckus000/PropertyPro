@@ -13,6 +13,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { runRoute } from '@/lib/api/run-route';
 import { requirePermission } from '@/lib/db/access-control';
+import { consumeEmailBudget } from '@/lib/api/email-budget';
 import { inviterNameFrom, sendCommunityInvitation } from '@/lib/invitations/send-community-invitation';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { getCommunityNameForInvitation } from '@/lib/services/invitations-service';
@@ -30,11 +31,16 @@ export const POST = withErrorHandler(
       throw new NotFoundError(`Community ${communityId} not found`);
     }
 
+    const userIds = [...new Set(body.userIds)];
+    // One email per recipient against the manager's per-minute email budget;
+    // refused whole, before anything is sent.
+    await consumeEmailBudget(actorUserId, userIds.length);
+
     const inviterName = inviterNameFrom(req);
     const results: Array<{ userId: string; status: 'sent' | 'failed'; error?: string }> = [];
     // ponytail: serial sends, ~100 max per request; fan out only if a batch
     // this size is measured as too slow (the email provider rate-limits too).
-    for (const userId of [...new Set(body.userIds)]) {
+    for (const userId of userIds) {
       try {
         await sendCommunityInvitation({
           communityId,
