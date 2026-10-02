@@ -15,11 +15,14 @@
 # toLocale*. This machine is America/New_York. Without these, date assertions do
 # not fail loudly; they quietly assert something else.
 
+# Every step sources scripts/localci-node.sh first: `sh -c` inherits the parent
+# shell's Node, which was v20 here while .nvmrc pins 24. See that file.
+
 # Blocks `git push`. ~17s.
 gate:
-  - pnpm lint
-  - pnpm typecheck
-  - ./scripts/verify-css-var-migration.sh
+  - . scripts/localci-node.sh && pnpm lint
+  - . scripts/localci-node.sh && pnpm typecheck
+  - . scripts/localci-node.sh && ./scripts/verify-css-var-migration.sh
 
   # Migration numbering has to block the PUSH, not the PR.
   #
@@ -38,12 +41,12 @@ gate:
   # the tree.
   #
   # Cost is ~0.4s: it reads JSON files plus one `git show`.
-  - MIGRATION_BASELINE_REQUIRED=1 pnpm exec tsx scripts/verify-migration-ordering.ts
+  - . scripts/localci-node.sh && MIGRATION_BASELINE_REQUIRED=1 pnpm exec tsx scripts/verify-migration-ordering.ts
 
 suite:
   # Structural, seconds, and fails on shape rather than behaviour — no reason to
   # spend minutes before hearing about it.
-  - pnpm exec tsx scripts/verify-no-mocks-in-integration.ts
+  - . scripts/localci-node.sh && pnpm exec tsx scripts/verify-no-mocks-in-integration.ts
 
   # Resolve-only. Nightly Demo Reset was broken for ~4 months without this.
   #
@@ -52,20 +55,22 @@ suite:
   # invisibly; here each step is its own process and has to say so. Missing it
   # the first time failed at packages/db/src/drizzle.ts:19, which throws at
   # import time -- nothing here connects, it just has to construct.
-  - TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub PROPERTYPRO_SEED_RESOLVE_ONLY=1 pnpm reset:demo
-  - TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub PROPERTYPRO_SEED_RESOLVE_ONLY=1 pnpm seed:demo
+  - . scripts/localci-node.sh && TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub PROPERTYPRO_SEED_RESOLVE_ONLY=1 pnpm reset:demo
+  - . scripts/localci-node.sh && TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub PROPERTYPRO_SEED_RESOLVE_ONLY=1 pnpm seed:demo
 
-  - TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' --filter '@propertypro/api-contract' build
+  - . scripts/localci-node.sh && TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' --filter '@propertypro/api-contract' build
 
   # DATABASE_URL is a stub so @propertypro/db can load at import time. These
   # tests never connect -- they mock createScopedClient or call pure functions.
   - |
     set -e
+    . scripts/localci-node.sh
     export TZ=UTC LANG=C.UTF-8
     export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
     cd apps/web && pnpm exec vitest run --coverage
   - |
     set -e
+    . scripts/localci-node.sh
     export TZ=UTC LANG=C.UTF-8
     export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
     pnpm --filter '@propertypro/shared' --filter '@propertypro/ui' --filter '@propertypro/email' --filter '@propertypro/theme' --filter '@propertypro/db' --filter '@propertypro/api-contract' --filter '@propertypro/tokens' test
@@ -80,6 +85,7 @@ suite:
   # at build time.
   - |
     set -e
+    . scripts/localci-node.sh
     export TZ=UTC LANG=C.UTF-8
     export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
     export DIRECT_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
