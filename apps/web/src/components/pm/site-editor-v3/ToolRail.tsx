@@ -22,6 +22,11 @@ export interface ToolRailProps {
   proToolAccess: ProToolAccess;
   /** Id of the panel the open tool's button controls. */
   panelId: string;
+  /**
+   * A count to show on a tool — how many things there need attention (the
+   * Documents tool's records groups). Absent or 0 shows nothing.
+   */
+  badges?: Partial<Record<EditorToolId, number>>;
 }
 
 /**
@@ -38,7 +43,7 @@ export interface ToolRailProps {
  * mount a panel (and fetch its code-split chunk) for every tile an arrow key
  * passes over.
  */
-export function ToolRail({ active, onSelect, proToolAccess, panelId }: ToolRailProps) {
+export function ToolRail({ active, onSelect, proToolAccess, panelId, badges }: ToolRailProps) {
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeIndex = active === null ? -1 : EDITOR_TOOLS.findIndex((t) => t.id === active);
   // The roving tab stop. Follows the open tool when there is one, otherwise the
@@ -81,6 +86,12 @@ export function ToolRail({ active, onSelect, proToolAccess, panelId }: ToolRailP
           tool.id in TOOL_PLAN_FEATURE && !proToolAccess[tool.id as ProToolId];
         const isAdd = tool.id === 'add';
         const Icon = tool.icon;
+        const badge = badges?.[tool.id] ?? 0;
+        const label = isProLocked
+          ? `${tool.label} (Professional feature)`
+          : badge > 0
+            ? `${tool.label} (${badge} need${badge === 1 ? 's' : ''} attention)`
+            : undefined;
 
         return (
           <button
@@ -93,7 +104,7 @@ export function ToolRail({ active, onSelect, proToolAccess, panelId }: ToolRailP
             aria-expanded={isOpen}
             // A locked Pro tool is labelled, not disabled: its panel explains
             // the plan and offers the upgrade.
-            aria-label={isProLocked ? `${tool.label} (Professional feature)` : undefined}
+            aria-label={label}
             aria-controls={isOpen ? panelId : undefined}
             tabIndex={index === tabStop ? 0 : -1}
             onClick={() => onSelect(isOpen ? null : tool.id)}
@@ -109,7 +120,7 @@ export function ToolRail({ active, onSelect, proToolAccess, panelId }: ToolRailP
           >
             <span
               className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)]',
+                'relative flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)]',
                 // Add is the one filled tile: it is the action the rail exists
                 // to make obvious, and the design gives it the brand fill.
                 isAdd && 'bg-interactive text-content-inverse',
@@ -118,6 +129,14 @@ export function ToolRail({ active, onSelect, proToolAccess, panelId }: ToolRailP
               )}
             >
               <Icon className="h-5 w-5" aria-hidden="true" />
+              {badge > 0 ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-status-danger px-1 text-xs font-semibold leading-none text-content-inverse"
+                >
+                  {badge}
+                </span>
+              ) : null}
             </span>
             <span>{tool.label}</span>
           </button>

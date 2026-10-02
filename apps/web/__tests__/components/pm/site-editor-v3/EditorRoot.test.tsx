@@ -336,6 +336,16 @@ vi.mock('@/hooks/use-site-design', () => ({
   useSaveSiteDesign: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// The records checklist behind the Documents tool and its rail count. Tests
+// that need records set `records.value`; everyone else sees an empty checklist.
+const records = vi.hoisted(() => ({ value: [] as unknown[], calls: [] as unknown[][] }));
+vi.mock('@/hooks/use-compliance-checklist', () => ({
+  useComplianceChecklist: (...args: unknown[]) => {
+    records.calls.push(args);
+    return { data: records.value, isError: false, refetch: vi.fn() };
+  },
+}));
+
 vi.mock('@/hooks/use-site-pages', () => ({
   sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
   applyPageOrder: (pages: unknown) => pages,
@@ -555,12 +565,40 @@ describe('EditorRoot — tool panels', () => {
     renderRoot();
 
     const tiles = screen.getAllByTestId(/^site-editor-tool-/);
-    expect(tiles).toHaveLength(8);
+    expect(tiles).toHaveLength(9);
     for (const tile of tiles) {
       await userEvent.click(tile);
       expect(tile).toHaveAttribute('aria-expanded', 'true');
       expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
     }
+  });
+});
+
+describe('EditorRoot — the Documents tool', () => {
+  beforeEach(() => {
+    records.value = [];
+    records.calls = [];
+  });
+
+  it('counts the records groups that need attention on the rail', () => {
+    records.value = [
+      { id: 1, templateKey: 'a', title: 'Bylaws', category: 'governing_documents', status: 'unsatisfied', documentId: null, documentState: null },
+      { id: 2, templateKey: 'b', title: 'Budget', category: 'financial_records', status: 'unsatisfied', documentId: 9, documentState: 'draft' },
+      { id: 3, templateKey: 'c', title: 'Policy', category: 'insurance', status: 'satisfied', documentId: 7, documentState: 'posted' },
+    ];
+    renderRoot();
+    expect(screen.getByTestId('site-editor-tool-documents')).toHaveAccessibleName(
+      'Documents (2 need attention)',
+    );
+    expect(records.calls[0]).toEqual([42, { enabled: true }]);
+  });
+
+  it('shows no count when every group is up to date', () => {
+    records.value = [
+      { id: 3, templateKey: 'c', title: 'Policy', category: 'insurance', status: 'satisfied', documentId: 7, documentState: 'posted' },
+    ];
+    renderRoot();
+    expect(screen.getByTestId('site-editor-tool-documents')).toHaveAccessibleName('Documents');
   });
 });
 

@@ -19,6 +19,8 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   pageName?: string;
   publicSiteUrl: string | null;
   proToolAccess: ProToolAccess;
+  /** Counts shown on rail tools; see `ToolRailProps.badges`. */
+  toolBadges?: Partial<Record<EditorToolId, number>>;
   /**
    * Phone-gate urgent-notice fast path. Threaded through the shell rather than
    * rendered by the caller because the shell owns the decision to show the gate
@@ -99,6 +101,7 @@ export function EditorShell({
   pageName,
   publicSiteUrl,
   proToolAccess,
+  toolBadges,
   communityId,
   hasPublishedSite,
   initialNotice,
@@ -189,6 +192,7 @@ export function EditorShell({
           onSelect={setActiveTool}
           proToolAccess={proToolAccess}
           panelId={PANEL_ID}
+          badges={toolBadges}
         />
 
         {activeTool !== null ? (

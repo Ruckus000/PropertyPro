@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useDeleteDocument } from '@/hooks/use-documents';
 import type { ReplaceFileResult } from '@/hooks/use-document-upload';
-import type { ChecklistRow, DocumentRow, DocumentState } from '@/lib/documents/document-state';
+import { isDraft, type ChecklistRow, type DocumentRow, type DocumentState } from '@/lib/documents/document-state';
 import dynamic from 'next/dynamic';
 import { DocumentPostingControl } from './document-posting-control';
 import { DocumentReplaceFile } from './document-replace-file';
@@ -37,6 +37,24 @@ const DocumentVersionHistory = dynamic(
 );
 
 type InspectorMode = 'viewer' | 'versions';
+
+/**
+ * The confirmation shown before a delete. When the file is the record for a
+ * statutory requirement, says so: the link survives a delete (so a restore
+ * puts it back), but until then the requirement reads as missing — on the
+ * Compliance page and in the website editor's Documents tool.
+ */
+export function deleteConfirmation(document: DocumentRow, requirement: ChecklistRow | null): string {
+  const parts = [`Are you sure you want to delete “${document.title}”?`];
+  // A draft never satisfied the requirement (nor does a not-applicable one
+  // count), so deleting it changes nothing there.
+  if (requirement && requirement.isApplicable !== false && !isDraft(document)) {
+    parts.push(
+      `It is the record for “${requirement.title}”. That requirement will show as missing until you restore it or link another document.`,
+    );
+  }
+  return parts.join(' ');
+}
 
 interface DocumentInspectorProps {
   communityId: number;
@@ -94,7 +112,7 @@ export function DocumentInspector({
   const handleDelete = useCallback(async () => {
     if (!document || !canManage) return;
     // Native confirm() preserves the prior behaviour of the row-level verb.
-    if (typeof window !== 'undefined' && !window.confirm(`Are you sure you want to delete "${document.title}"?`)) {
+    if (typeof window !== 'undefined' && !window.confirm(deleteConfirmation(document, requirement))) {
       return;
     }
     try {
@@ -104,7 +122,7 @@ export function DocumentInspector({
     } catch {
       // Surfaced below via the mutation's error state.
     }
-  }, [canManage, deleteMutation, document, onDeleted]);
+  }, [canManage, deleteMutation, document, onDeleted, requirement]);
 
   const isPublic = state === 'public';
 

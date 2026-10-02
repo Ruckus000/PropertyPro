@@ -8,6 +8,8 @@ import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { applyDesignToCanvas } from '@/lib/site-editor/canvas-design';
 import { useSiteDesign } from '@/hooks/use-site-design';
+import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
+import { recordsNeedingAttention, summarizeRecords } from '@/lib/site-editor/records-status';
 import type { PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
@@ -75,6 +77,10 @@ const DomainPanel = dynamic(
 const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
   loading: () => null,
 });
+const DocumentsPanel = dynamic(
+  () => import('./panels/DocumentsPanel').then((m) => m.DocumentsPanel),
+  { loading: () => null },
+);
 
 // Phase 11b-3. Same reasoning as every panel above — only the ACTIVE tool's
 // panel is rendered, so the pages list and its query only arrive on the tab
@@ -255,6 +261,16 @@ export function EditorRoot({
   initialPages,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
+  // The Documents tool's count. Same query key as the panel and the Compliance
+  // page, so opening the panel costs no second request. Apartments have no
+  // records checklist (the route refuses them), so they never ask.
+  const { data: checklist } = useComplianceChecklist(communityId, {
+    enabled: siteIdentity.communityType !== 'apartment',
+  });
+  const recordsAttention = useMemo(
+    () => (checklist ? recordsNeedingAttention(summarizeRecords(checklist)) : 0),
+    [checklist],
+  );
   // The canvas, preview and publish-sheet contrast check all show the DRAFT
   // look (website builder v4), which changes as the Design panel saves. The
   // server context carries the live look; this re-derives theme and layout
@@ -864,6 +880,7 @@ export function EditorRoot({
         }
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
+        toolBadges={recordsAttention > 0 ? { documents: recordsAttention } : undefined}
         communityId={communityId}
         hasPublishedSite={hasPublishedSite}
         initialNotice={initialNotice}
@@ -1010,6 +1027,14 @@ export function EditorRoot({
                 onFocusRestored={handleFocusRestored}
                 onSelectPage={handleSelectPage}
                 onPageRemoved={handlePageRemoved}
+              />
+            );
+          }
+          if (tool === 'documents') {
+            return (
+              <DocumentsPanel
+                communityId={communityId}
+                communityType={siteIdentity.communityType}
               />
             );
           }

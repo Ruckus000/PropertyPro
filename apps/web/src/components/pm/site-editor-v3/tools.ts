@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Building2,
+  FileText,
   Files,
   Layers,
   Plus,
@@ -30,6 +31,7 @@ export const EDITOR_TOOLS = [
   { id: 'pages', label: 'Pages', icon: Files },
   { id: 'sections', label: 'Sections', icon: Layers },
   { id: 'design', label: 'Design', icon: Palette },
+  { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'notice', label: 'Notice', icon: TriangleAlert },
   { id: 'site', label: 'Site', icon: Building2 },
   { id: 'domain', label: 'Address', icon: Globe },
@@ -46,6 +48,7 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
   sections: 'Sections',
   add: 'Add a section',
   design: 'Design',
+  documents: 'Documents',
   domain: 'Web address',
   help: 'Help',
 };
