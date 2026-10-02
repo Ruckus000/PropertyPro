@@ -39,13 +39,17 @@ export const FINING_COMMITTEE_MIN_MEMBERS = 3;
  * version and text are written to the audit log with who accepted and when, so
  * change the version whenever the text changes.
  */
-export const SMALL_COMMITTEE_DISCLAIMER_VERSION = '2026-10-02';
+export const SMALL_COMMITTEE_DISCLAIMER_VERSION = '2026-10-02.2';
+// States the requirement and the shortfall, and predicts no legal outcome:
+// PropertyPro gives no legal advice (florida-compliance.md), and this text is
+// kept in the append-only audit log, so it must not claim consequences the
+// statute does not state.
 export const SMALL_COMMITTEE_DISCLAIMER =
-  'Florida law requires a fine to be approved by a committee of at least three owners who are not '
-  + 'officers, directors or employees (Fla. Stat. §718.303(3) / §720.305(2)). This committee has fewer. '
-  + 'I understand the fine may be unenforceable, that the association may have to refund it, and that '
-  + 'the association could be liable for the owner’s legal fees if the fine is challenged. I accept '
-  + 'this risk on the association’s behalf.';
+  'Florida law requires a fine to be approved by a committee of at least three members who are not '
+  + 'officers, directors or employees of the association, or their relatives (Fla. Stat. §718.303(3) / '
+  + '§720.305(2)). This committee has fewer than three. PropertyPro does not give legal advice and cannot '
+  + 'say how a fine approved this way would be treated if challenged; the association’s attorney can. '
+  + 'I am going ahead on the association’s behalf.';
 
 /**
  * Whether a committee of `size` needs the disclaimer, or is refused outright.
