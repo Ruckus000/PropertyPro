@@ -37,6 +37,7 @@ vi.mock('@/lib/invitations/send-community-invitation', () => ({
 vi.mock('@sentry/nextjs', () => ({ captureException: captureExceptionMock }));
 
 import { POST } from '../../src/app/api/v1/invitations/batch/route';
+import { resetGlobalRateLimiter } from '../../src/lib/middleware/rate-limiter';
 
 const post = (userIds: unknown) =>
   POST(
@@ -56,6 +57,19 @@ describe('POST /api/v1/invitations/batch', () => {
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     getCommunityNameMock.mockResolvedValue({ name: 'Sunset Condos' });
     sendInvitationMock.mockResolvedValue(undefined);
+    resetGlobalRateLimiter();
+  });
+
+  it('is refused whole (429) when it would take the manager past 100 emails a minute', async () => {
+    const ids = (from: number, n: number) => Array.from({ length: n }, (_, i) => `u${from + i}`);
+    expect((await post(ids(0, 60))).status).toBe(200);
+    expect(sendInvitationMock).toHaveBeenCalledTimes(60);
+    const refused = await post(ids(100, 41));
+    expect(refused.status).toBe(429);
+    expect(sendInvitationMock).toHaveBeenCalledTimes(60); // nothing more sent
+    // A different manager has their own budget.
+    requireAuthenticatedUserIdMock.mockResolvedValue('actor-2');
+    expect((await post(ids(200, 41))).status).toBe(200);
   });
 
   it('sends each user through the shared sender and reports every result', async () => {

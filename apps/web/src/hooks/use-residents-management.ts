@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { requestJson } from '@/lib/api/request-json';
-import { sendInChunks } from '@/lib/api/send-in-chunks';
+import { limitMessageOf, sendInChunks } from '@/lib/api/send-in-chunks';
 
 export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
 
@@ -159,6 +159,8 @@ export interface BatchInviteResult {
   userId: string;
   status: 'sent' | 'failed';
   error?: string;
+  /** Set when this recipient's chunk was refused by the email cap. */
+  limitMessage?: string;
 }
 
 /** One request for many invites: the per-user write limit is 30/min. */
@@ -180,6 +182,7 @@ export function useBatchInvite(communityId: number) {
           userId,
           status: 'failed',
           error: error instanceof Error ? error.message : 'Could not send the invitation',
+          ...limitMessageOf(error),
         }),
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['residents', communityId] }),

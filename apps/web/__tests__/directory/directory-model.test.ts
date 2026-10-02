@@ -3,6 +3,7 @@ import type { Unit } from '../../src/hooks/use-units';
 import type { ResidentRecord } from '../../src/hooks/use-residents-management';
 import {
   describeSendResults,
+  withLimitReason,
   NO_BUILDING_KEY,
   buildDirectoryUnits,
   buildResidentRows,
@@ -369,5 +370,20 @@ describe('describeSendResults', () => {
     });
     expect(describeSendResults(r('failed')).tone).toBe('warning');
     expect(describeSendResults(r('not_member')).message).toBe('1 no longer in this community.');
+  });
+});
+
+describe('email-cap reason in bulk toasts', () => {
+  const reason = 'Email limit reached: 100 emails per minute. Try again in 42 seconds.';
+  it('appends the reason when any batch was refused by the cap', () => {
+    expect(
+      describeSendResults([{ status: 'emailed' }, { status: 'failed', limitMessage: reason }]).message,
+    ).toBe(`1 emailed, 1 failed. ${reason}`);
+    expect(withLimitReason('100 invitations sent, 50 failed.', [{}, { limitMessage: reason }])).toBe(
+      `100 invitations sent, 50 failed. ${reason}`,
+    );
+  });
+  it('adds nothing otherwise', () => {
+    expect(withLimitReason('2 invitations sent.', [{}, {}])).toBe('2 invitations sent.');
   });
 });
