@@ -235,3 +235,32 @@ Deferred, with its trigger:
   changes on the server.
 - A server-side insert-at operation replacing the client append-then-move (see the
   `ponytail:` marker in `editor-context.tsx`).
+
+### Phase 6 (thin), as built
+The thin Phase 6 decided on 2026-10-02 (see the Phase 6 revision):
+- **A Documents tool on the editor rail** (`panels/DocumentsPanel.tsx`) shows one row
+  per records group. Each row's status is read from the compliance checklist by
+  `summarizeRecords` (`lib/site-editor/records-status.ts`), so nothing about
+  "required" is computed a second time:
+  - **Nothing posted:** no record, or the record was deleted.
+  - **Saved, not posted:** a draft is linked; the row links to it with `?doc=<id>`.
+  - **Out of date:** posted, but older than the item's rolling window.
+  - **Up to date:** otherwise. A file posted after its deadline is still on the
+    website, so it counts as up to date here, even though Compliance shows it as
+    overdue.
+- **The rail shows a count** of groups that are not up to date.
+- **Below the size threshold** the tool uses the builder's "recommended" wording.
+  Apartments get a link to the library only, and no checklist request (the route
+  refuses them).
+- **`GET /api/v1/compliance` rows carry `documentState`** (`posted | draft | deleted |
+  null`). `status` alone reads a draft and a deleted file the same way, but one
+  needs posting and the other a new upload.
+- **The last-document guard is in the library.** Deleting the posted record of an
+  applicable requirement says that the requirement will show as missing until the
+  file is restored or another is linked. Taking a document off the site already said
+  so (`unpostConfirmation`).
+
+Deferred, each with its trigger:
+- **The PATCH response's `documentState` is always `null`.** It derives without the
+  linked-file lookup, the same as its stale deadline (see Phase 2b). Trigger: a
+  client that reads the PATCH response.

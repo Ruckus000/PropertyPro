@@ -68,6 +68,29 @@ describe('ToolRail — structure', () => {
   });
 });
 
+describe('ToolRail — attention badges', () => {
+  it('shows a count on the tool and says it in the accessible name', () => {
+    renderRail({ badges: { documents: 2 } });
+    const documents = screen.getByTestId('site-editor-tool-documents');
+    expect(documents).toHaveAccessibleName('Documents (2 need attention)');
+    expect(documents).toHaveTextContent('2');
+  });
+
+  it('uses the singular for one', () => {
+    renderRail({ badges: { documents: 1 } });
+    expect(screen.getByTestId('site-editor-tool-documents')).toHaveAccessibleName(
+      'Documents (1 needs attention)',
+    );
+  });
+
+  it('shows nothing for zero', () => {
+    renderRail({ badges: { documents: 0 } });
+    const documents = screen.getByTestId('site-editor-tool-documents');
+    expect(documents).toHaveAccessibleName('Documents');
+    expect(documents.textContent).toBe('Documents');
+  });
+});
+
 describe('ToolRail — clicking', () => {
   it('opens a closed tool', async () => {
     renderRail();
