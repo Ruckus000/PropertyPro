@@ -21,6 +21,10 @@ const createResidentBodySchema = z.object({
   fullName: z.string().min(1, 'Full name is required'),
   phone: z.string().nullable().optional(),
   role: z.enum(COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<CommunityRole>,
+  // Optional here, unlike /residents/invite: this route also receives manager
+  // roles, which must be refused with 403 (manager-tier lockdown), not a 400
+  // for a missing unit. Residents without a unit are refused by the role
+  // validator.
   unitId: z.number().int().positive().nullable().optional(),
   isUnitOwner: z.boolean().optional().default(false),
 });
@@ -33,6 +37,11 @@ const updateResidentBodySchema = z.object({
   role: (z.enum(COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<CommunityRole>).optional(),
   unitId: z.number().int().positive().nullable().optional(),
   isUnitOwner: z.boolean().optional(),
+  /**
+   * Optimistic concurrency: the resident's `updatedAt` from the list. When
+   * sent, the save is refused with 409 if anyone changed them since.
+   */
+  expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
 });
 
 const deleteResidentBodySchema = z.object({

@@ -12,7 +12,9 @@ const user = { email: 'ops@getpropertypro.com', initial: 'O' };
 describe('AdminRail', () => {
   it('marks the active item and exposes counts as accessible badges', () => {
     render(<AdminRail activeId="inbox" counts={counts} pinned onPinnedChange={() => {}} user={user} />);
-    const inbox = screen.getByRole('link', { name: 'Inbox' });
+    // The count is part of the link's accessible name, not just its text:
+    // the explicit aria-label would otherwise hide it from screen readers.
+    const inbox = screen.getByRole('link', { name: 'Inbox, 7' });
     expect(inbox.getAttribute('aria-current')).toBe('page');
     expect(inbox.textContent).toContain('7');
   });
@@ -74,7 +76,7 @@ describe('AdminRail', () => {
       const nav = container.querySelector('nav[aria-label="Main navigation"]')!;
       // Open immediately — no mouseEnter, no prior pin — breaking the closed loop.
       expect(nav.className).toContain('w-[260px]');
-      expect(screen.getByRole('link', { name: 'Inbox' })).toBeTruthy();
+      expect(screen.getByRole('link', { name: /^Inbox\b/ })).toBeTruthy();
     } finally {
       window.matchMedia = originalMatchMedia;
     }

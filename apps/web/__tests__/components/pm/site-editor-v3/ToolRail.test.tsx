@@ -19,7 +19,7 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof ToolRail>> = 
     <ToolRail
       active={null}
       onSelect={onSelect}
-      proToolAccess={{ styling: true, domain: true }}
+      proToolAccess={{ domain: true }}
       panelId="panel-1"
       {...overrides}
     />,
@@ -61,10 +61,10 @@ describe('ToolRail — structure', () => {
   });
 
   it('labels a locked Pro tool for screen readers without disabling it', () => {
-    renderRail({ proToolAccess: { styling: false, domain: true } });
-    const colours = screen.getByRole('button', { name: /Colours/ });
-    expect(colours).toHaveAccessibleName('Colours (Professional feature)');
-    expect(colours).toBeEnabled();
+    renderRail({ proToolAccess: { domain: false } });
+    const address = screen.getByRole('button', { name: /Address/ });
+    expect(address).toHaveAccessibleName('Address (Professional feature)');
+    expect(address).toBeEnabled();
   });
 });
 

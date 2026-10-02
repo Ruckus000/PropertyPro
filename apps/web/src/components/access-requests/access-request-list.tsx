@@ -5,44 +5,14 @@ import { CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { ApproveDialog } from '@/components/access-requests/approve-dialog';
+import { ApproveDialog, type UnitOption } from '@/components/access-requests/approve-dialog';
 import { DenyDialog } from '@/components/access-requests/deny-dialog';
-import { walkPaginated } from '@/lib/api/walk-paginated';
+import { accessRequestsQueryOptions, type AccessRequest } from '@/hooks/use-access-requests';
 import { cn } from '@/lib/utils';
+import { Avatar } from '@/components/directory/directory-badges';
+import { initialsFor } from '@/components/directory/directory-model';
 
-/* ─────── Types ─────── */
-
-export interface AccessRequest {
-  id: number;
-  communityId: number;
-  fullName: string;
-  email: string;
-  claimedUnitIdentifier: string | null;
-  claimedUnitId: number | null;
-  isUnitOwner: boolean;
-  status: 'pending' | 'approved' | 'denied';
-  createdAt: string;
-}
-
-/* ─────── API helper ─────── */
-
-/**
- * The admin review surface needs the full pending-request list to render.
- * Walks the cursor-based pagination contract via the canonical
- * `walkPaginated()` helper (Plan B3) until `hasMore` is false. The TanStack
- * Query `signal` is forwarded so a stale request is cancelled at the network
- * layer if the query is invalidated mid-walk.
- */
-async function fetchAccessRequests(
-  communityId: number,
-  signal?: AbortSignal,
-): Promise<AccessRequest[]> {
-  return walkPaginated<AccessRequest>(
-    '/api/v1/access-requests',
-    { communityId: String(communityId) },
-    { signal },
-  );
-}
+export type { AccessRequest } from '@/hooks/use-access-requests';
 
 /* ─────── Helpers ─────── */
 
@@ -101,9 +71,21 @@ function UnitMatchIndicator({
 
 interface AccessRequestListProps {
   communityId: number;
+  /**
+   * `stacked` forces the card layout at every width — for narrow containers
+   * such as a side sheet, where the viewport-based `md:` table would not fit.
+   */
+  layout?: 'responsive' | 'stacked';
+  /** Passed to ApproveDialog: pick (and require) a unit from this list. */
+  unitOptions?: readonly UnitOption[];
 }
 
-export function AccessRequestList({ communityId }: AccessRequestListProps) {
+export function AccessRequestList({
+  communityId,
+  layout = 'responsive',
+  unitOptions,
+}: AccessRequestListProps) {
+  const stacked = layout === 'stacked';
   const queryClient = useQueryClient();
 
   const {
@@ -112,10 +94,7 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
     isError,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['access-requests', communityId],
-    queryFn: ({ signal }) => fetchAccessRequests(communityId, signal),
-  });
+  } = useQuery(accessRequestsQueryOptions(communityId));
 
   const handleActionSuccess = () => {
     void queryClient.invalidateQueries({ queryKey: ['access-requests', communityId] });
@@ -171,7 +150,12 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
   return (
     <div className="overflow-hidden rounded-md border border-edge">
       {/* Table header */}
-      <div className="hidden grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 border-b border-edge bg-surface-muted px-4 py-3 md:grid">
+      <div
+        className={cn(
+          'hidden grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 border-b border-edge bg-surface-muted px-4 py-3',
+          !stacked && 'md:grid',
+        )}
+      >
         <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Name</span>
         <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Email</span>
         <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Claimed Unit</span>
@@ -185,11 +169,14 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
         {requests.map((request) => (
           <li key={request.id} className="px-4 py-4">
             {/* Mobile layout */}
-            <div className="flex flex-col gap-3 md:hidden">
+            <div className={cn('flex flex-col gap-3', !stacked && 'md:hidden')}>
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium text-content">{request.fullName}</p>
-                  <p className="text-sm text-content-secondary">{request.email}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar initials={initialsFor(request.fullName)} tone={request.isUnitOwner ? 'owner' : 'tenant'} size="md" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-content">{request.fullName}</p>
+                    <p className="truncate text-sm text-content-secondary">{request.email}</p>
+                  </div>
                 </div>
                 <RoleBadge role={request.isUnitOwner ? 'owner' : 'tenant'} />
               </div>
@@ -211,6 +198,9 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
                   requestId={request.id}
                   requestName={request.fullName}
                   onSuccess={handleActionSuccess}
+                  unitOptions={unitOptions}
+                  claimedUnitId={request.claimedUnitId}
+                  claimedUnitIdentifier={request.claimedUnitIdentifier}
                 />
                 <DenyDialog
                   requestId={request.id}
@@ -221,8 +211,16 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
             </div>
 
             {/* Desktop layout */}
-            <div className="hidden grid-cols-[1fr_1fr_auto_auto_auto_auto] items-center gap-4 md:grid">
-              <span className="truncate text-sm font-medium text-content">{request.fullName}</span>
+            <div
+              className={cn(
+                'hidden grid-cols-[1fr_1fr_auto_auto_auto_auto] items-center gap-4',
+                !stacked && 'md:grid',
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <Avatar initials={initialsFor(request.fullName)} tone={request.isUnitOwner ? 'owner' : 'tenant'} size="md" />
+                <span className="truncate text-sm font-medium text-content">{request.fullName}</span>
+              </span>
               <span className="truncate text-sm text-content-secondary">{request.email}</span>
               <div className="flex flex-col gap-1">
                 <span className="text-sm text-content">
@@ -240,6 +238,9 @@ export function AccessRequestList({ communityId }: AccessRequestListProps) {
                   requestId={request.id}
                   requestName={request.fullName}
                   onSuccess={handleActionSuccess}
+                  unitOptions={unitOptions}
+                  claimedUnitId={request.claimedUnitId}
+                  claimedUnitIdentifier={request.claimedUnitIdentifier}
                 />
                 <DenyDialog
                   requestId={request.id}

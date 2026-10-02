@@ -42,7 +42,11 @@ const MATRIX_ROLE_INPUT: Record<
   { role: CommunityRole; opts?: DocumentAccessOpts }
 > = {
   owner: { role: 'resident', opts: { isUnitOwner: true } },
-  tenant: { role: 'resident', opts: { isUnitOwner: false } },
+  // The frozen snapshot predates the tenant inspection-reports opt-in: back
+  // then every condo/HOA tenant read `inspection_reports`. Opting in reproduces
+  // that exactly, so parity still holds; the default-OFF behaviour is a
+  // deliberate later policy change, covered in __tests__/access-policies.test.ts.
+  tenant: { role: 'resident', opts: { isUnitOwner: false, tenantsCanViewInspectionReports: true } },
   manager: { role: 'property_manager' },
 };
 

@@ -6,6 +6,7 @@ import {
   isElevatedRole,
   isRestrictedRole,
   normalizeCategoryName,
+  readTenantsCanViewInspectionReports,
 } from '../src/access-policies';
 
 // role-v3 (ADR-006): the document-access policy is keyed by the 3 MatrixRole
@@ -14,6 +15,7 @@ import {
 // uniformly-elevated management tier.
 const OWNER = { isUnitOwner: true } as const;
 const TENANT = { isUnitOwner: false } as const;
+const TENANT_OPTED_IN = { isUnitOwner: false, tenantsCanViewInspectionReports: true } as const;
 
 describe('access-policies strict matrix', () => {
   it('normalizes aliases and returns unknown for unmapped values', () => {
@@ -96,15 +98,74 @@ describe('access-policies strict matrix', () => {
   const condoOrHoa: CommunityType[] = ['condo_718', 'hoa_720'];
 
   for (const communityType of condoOrHoa) {
-    it(`permits condo/HOA tenant only declaration/rules/inspection (${communityType})`, () => {
+    it(`permits condo/HOA tenant only declaration/rules by default (${communityType})`, () => {
       expect(canAccessCategory('resident', communityType, 'declaration', TENANT)).toBe(true);
       expect(canAccessCategory('resident', communityType, 'rules', TENANT)).toBe(true);
-      expect(canAccessCategory('resident', communityType, 'inspection_reports', TENANT)).toBe(true);
+      expect(canAccessCategory('resident', communityType, 'inspection_reports', TENANT)).toBe(false);
       expect(canAccessCategory('resident', communityType, 'meeting_minutes', TENANT)).toBe(false);
       expect(canAccessCategory('resident', communityType, 'announcements', TENANT)).toBe(false);
       expect(canAccessCategory('resident', communityType, 'unknown', TENANT)).toBe(false);
     });
   }
+
+  describe('tenantsCanViewInspectionReports (community opt-in, default off)', () => {
+    for (const communityType of condoOrHoa) {
+      it(`denies a ${communityType} tenant inspection_reports when absent or false`, () => {
+        expect(canAccessCategory('resident', communityType, 'inspection_reports', TENANT)).toBe(false);
+        expect(
+          canAccessCategory('resident', communityType, 'inspection_reports', {
+            isUnitOwner: false,
+            tenantsCanViewInspectionReports: false,
+          }),
+        ).toBe(false);
+        expect(getAccessibleKnownCategories('resident', communityType, TENANT)).not.toContain(
+          'inspection_reports',
+        );
+      });
+
+      it(`grants a ${communityType} tenant inspection_reports — and nothing else — when true`, () => {
+        expect(
+          canAccessCategory('resident', communityType, 'inspection_reports', TENANT_OPTED_IN),
+        ).toBe(true);
+        expect(getAccessibleKnownCategories('resident', communityType, TENANT_OPTED_IN)).toEqual([
+          'declaration',
+          'rules',
+          'inspection_reports',
+        ]);
+        expect(canAccessCategory('resident', communityType, 'meeting_minutes', TENANT_OPTED_IN)).toBe(false);
+        expect(canAccessCategory('resident', communityType, 'financial_records', TENANT_OPTED_IN)).toBe(false);
+        expect(canAccessCategory('resident', communityType, 'unknown', TENANT_OPTED_IN)).toBe(false);
+      });
+
+      it(`leaves ${communityType} owners and managers able to read inspection_reports either way`, () => {
+        for (const flag of [undefined, false, true]) {
+          const extra = flag === undefined ? {} : { tenantsCanViewInspectionReports: flag };
+          expect(
+            canAccessCategory('resident', communityType, 'inspection_reports', { ...OWNER, ...extra }),
+          ).toBe(true);
+          expect(canAccessCategory('property_manager', communityType, 'inspection_reports', extra)).toBe(true);
+          expect(canAccessCategory('root_manager', communityType, 'inspection_reports', extra)).toBe(true);
+        }
+      });
+    }
+
+    it('does not change apartment tenants (the flag adds nothing there)', () => {
+      expect(getAccessibleKnownCategories('resident', 'apartment', TENANT_OPTED_IN)).toEqual(
+        getAccessibleKnownCategories('resident', 'apartment', TENANT),
+      );
+      expect(canAccessCategory('resident', 'apartment', 'inspection_reports', TENANT_OPTED_IN)).toBe(false);
+    });
+
+    it('reads the raw settings blob strictly (only boolean true counts)', () => {
+      expect(readTenantsCanViewInspectionReports({ tenantsCanViewInspectionReports: true })).toBe(true);
+      expect(readTenantsCanViewInspectionReports({ tenantsCanViewInspectionReports: 'true' })).toBe(false);
+      expect(readTenantsCanViewInspectionReports({ tenantsCanViewInspectionReports: 1 })).toBe(false);
+      expect(readTenantsCanViewInspectionReports({ tenantsCanViewInspectionReports: false })).toBe(false);
+      expect(readTenantsCanViewInspectionReports({})).toBe(false);
+      expect(readTenantsCanViewInspectionReports(null)).toBe(false);
+      expect(readTenantsCanViewInspectionReports(undefined)).toBe(false);
+    });
+  });
 
   it('permits apartment tenant categories only', () => {
     expect(canAccessCategory('resident', 'apartment', 'lease_docs', TENANT)).toBe(true);
@@ -137,7 +198,6 @@ describe('access-policies strict matrix', () => {
     expect(getAccessibleKnownCategories('resident', 'condo_718', TENANT)).toEqual([
       'declaration',
       'rules',
-      'inspection_reports',
     ]);
     expect(getAccessibleKnownCategories('resident', 'apartment', TENANT)).toEqual([
       'lease_docs',

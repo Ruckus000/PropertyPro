@@ -89,8 +89,12 @@ $$;
 CREATE TABLE IF NOT EXISTS auth.users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text,
-  raw_user_meta_data jsonb DEFAULT '{}'::jsonb
+  raw_user_meta_data jsonb DEFAULT '{}'::jsonb,
+  -- Real Supabase column; read by findCommunityResidentPortalActivity.
+  last_sign_in_at timestamptz
 );
+-- Databases stubbed before the column was added.
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS last_sign_in_at timestamptz;
 
 -- Extension required by trigram-index migrations.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;

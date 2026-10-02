@@ -8,24 +8,21 @@
  * `./contract.ts` for schemas and auth-chain rationale.
  */
 import { runRoute } from '@propertypro/api-contract';
-import { createElement } from 'react';
 import { logAuditEvent } from '@propertypro/db';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
-import { InvitationEmail, sendEmail } from '@propertypro/email';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
+import { consumeEmailBudget } from '@/lib/api/email-budget';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
-  createInvitation,
   createSupabaseAuthUserFromInvitation,
   findInvitationByToken,
   getCommunityNameForInvitation,
   getUserForInvitation,
-  getUserRoleForInvitation,
   markInvitationConsumed,
   recordTermsAcceptance,
 } from '@/lib/services/invitations-service';
@@ -33,14 +30,9 @@ import {
   acceptInvitationContract,
   createInvitationContract,
 } from './contract';
-import { getBaseUrl } from '@/lib/utils/url';
+import { inviterNameFrom, sendCommunityInvitation } from '@/lib/invitations/send-community-invitation';
 
 
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d;
-}
 
 export const POST = withErrorHandler(
   runRoute(createInvitationContract, async ({ body, req }) => {
@@ -58,72 +50,17 @@ export const POST = withErrorHandler(
     if (!community) {
       throw new NotFoundError(`Community ${communityId} not found`);
     }
+    // One email against the manager's per-minute email budget (shared with
+    // the batch route and document sends).
+    await consumeEmailBudget(actorUserId, 1);
 
-    const user = await getUserForInvitation(communityId, userId);
-    if (!user) {
-      throw new NotFoundError(`User ${userId} not found`);
-    }
-
-    // Membership is asserted here, not assumed.
-    //
-    // `getUserForInvitation` reads the `users` table, which has NO
-    // `community_id` — the scoped client does not isolate it, so the lookup
-    // above resolves ANY user on the platform. This role lookup DOES scope
-    // (`user_roles` carries `community_id`), so it is the only thing standing
-    // between an arbitrary user id and an invitation email branded with this
-    // community's name. It previously defaulted a non-member to 'resident' and
-    // mailed them anyway.
-    //
-    // Every path that legitimately reaches here creates the role row first
-    // (residents POST, residents/invite, the onboarding wizard), so requiring
-    // one costs nothing real.
-    const role = await getUserRoleForInvitation(communityId, userId);
-    if (!role) {
-      throw new NotFoundError(`User ${userId} is not a member of community ${communityId}`);
-    }
-
-    const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-    const expiresAt = addDays(new Date(), ttlDays ?? 7);
-
-    await createInvitation({
+    await sendCommunityInvitation({
       communityId,
+      communityName: community.name,
       userId,
-      invitedBy: actorUserId,
-      token,
-      expiresAt,
-    });
-
-    const inviteUrl = `${getBaseUrl()}/auth/accept-invite?token=${encodeURIComponent(token)}&communityId=${communityId}`;
-
-    await sendEmail({
-      to: user.email,
-      subject: `You're invited to ${community.name} on PropertyPro`,
-      category: 'transactional',
-      react: createElement(InvitationEmail, {
-        branding: { communityName: community.name },
-        inviteeName: user.fullName ?? 'there',
-        inviterName:
-          req.headers.get('x-user-full-name') ||
-          req.headers.get('x-user-email') ||
-          'Your administrator',
-        role,
-        inviteUrl,
-        expiresInDays: ttlDays ?? 7,
-      }),
-    });
-
-    // resourceId is the INVITED USER, never the token. compliance_audit_log is
-    // readable by board members and managers via GET /api/v1/audit-trail, and a
-    // live token is enough to complete the accept flow and set that user's
-    // password. The table is append-only by trigger, so anything logged here is
-    // permanent.
-    await logAuditEvent({
-      userId: actorUserId,
-      action: 'user_invited',
-      resourceType: 'invitation',
-      resourceId: userId,
-      communityId,
-      newValues: { userId, expiresAt: expiresAt.toISOString() },
+      actorUserId,
+      inviterName: inviterNameFrom(req),
+      ttlDays,
     });
 
     return { success: true as const };

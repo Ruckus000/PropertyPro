@@ -142,6 +142,7 @@ const MEMBERSHIP = {
   displayTitle: 'Board President',
   communityType: 'condo_718' as const,
   designation: 'board_president' as const,
+  tenantsCanViewInspectionReports: false,
 };
 
 const DOCUMENT_ROW = {
@@ -221,6 +222,7 @@ describe('GET /api/v1/documents', () => {
           role: 'property_manager',
           communityType: 'condo_718',
           isUnitOwner: false,
+          tenantsCanViewInspectionReports: false,
         },
         categoryId: null,
         cursor: undefined,
@@ -230,6 +232,31 @@ describe('GET /api/v1/documents', () => {
     // B2: owner/tenant checklists carry `access_document` — fire it on list load
     // so residents can reach 100% (fires unconditionally; a no-op for other roles).
     expect(tryAutoCompleteMock).toHaveBeenCalledWith(42, 'user-admin', 'access_document');
+  });
+
+  it("passes the community's tenant inspection-reports setting into the access filter", async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      ...MEMBERSHIP,
+      role: 'resident',
+      isAdmin: false,
+      isUnitOwner: false,
+      designation: null,
+      tenantsCanViewInspectionReports: true,
+    });
+
+    await GET(getReq('http://localhost:3000/api/v1/documents?communityId=42'));
+
+    expect(paginateAccessibleDocumentsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: {
+          communityId: 42,
+          role: 'resident',
+          communityType: 'condo_718',
+          isUnitOwner: false,
+          tenantsCanViewInspectionReports: true,
+        },
+      }),
+    );
   });
 
   it('forwards cursor, pageSize, and categoryId filter', async () => {
@@ -254,6 +281,7 @@ describe('GET /api/v1/documents', () => {
           role: 'property_manager',
           communityType: 'condo_718',
           isUnitOwner: false,
+          tenantsCanViewInspectionReports: false,
         },
         documentId: 77,
         pageSize: 1,

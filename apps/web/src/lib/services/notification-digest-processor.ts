@@ -61,6 +61,15 @@ const SOURCE_DELETED_REASON: Record<SoftDeleteSourceType, string> = {
 
 const SOURCE_DRAFT_REASON = 'Source document is a draft';
 
+/**
+ * The record id a digest row points at: `sourceId` is `<id>` or, for rows that
+ * must not dedupe against each other (a document shared twice), `<id>:<key>`.
+ */
+function sourceRecordId(sourceId: string): number {
+  const match = /^(\d+)(?::|$)/.exec(sourceId);
+  return match ? Number(match[1]) : Number.NaN;
+}
+
 function isSoftDeleteSourceType(value: string): value is SoftDeleteSourceType {
   return value in SOFT_DELETE_SOURCE_TABLES;
 }
@@ -141,6 +150,9 @@ function mapEventTypeToKind(eventType: string): NotificationKind | null {
   if (eventType === 'announcement') return 'announcement';
   if (eventType === 'meeting_notice') return 'meeting';
   if (eventType === 'document_posted') return 'document';
+  // A manager sent it from the Directory (document-share-service): same
+  // preference as a posted document. Unmapped, every share was discarded.
+  if (eventType === 'document_shared') return 'document';
   if (eventType === 'maintenance_update') return 'maintenance';
   if (eventType === 'compliance_alert') return 'meeting';
   return null;
@@ -398,7 +410,7 @@ export async function processNotificationDigests(
       const claimedIds = new Set<number>();
       for (const row of claimedRows) {
         if (row.sourceType !== sourceType) continue;
-        const id = Number(row.sourceId);
+        const id = sourceRecordId(row.sourceId);
         if (Number.isInteger(id)) claimedIds.add(id);
       }
       if (claimedIds.size === 0) continue;
@@ -423,7 +435,7 @@ export async function processNotificationDigests(
     for (const row of claimedRows) {
       if (isSoftDeleteSourceType(row.sourceType)) {
         const deletedIds = deletedIdsByType.get(row.sourceType);
-        const rid = Number(row.sourceId);
+        const rid = sourceRecordId(row.sourceId);
         if (deletedIds && Number.isInteger(rid) && deletedIds.has(rid)) {
           await markRowDiscarded(row, SOURCE_DELETED_REASON[row.sourceType], now);
           summary.rowsDiscarded += 1;

@@ -171,7 +171,8 @@ export async function getSiteSettings(communityId: number): Promise<SiteSettings
   return { ...resolveFields(branding), storage };
 }
 
-type BrandingKey = 'siteSettings' | 'siteFooter';
+/** Object-valued keys of `communities.branding` this merge may write. `draftLook` is the website builder's unpublished look (`site-design-service`). */
+type BrandingKey = 'siteSettings' | 'siteFooter' | 'draftLook';
 
 /**
  * Apply one or both patches in a SINGLE UPDATE.
@@ -191,7 +192,7 @@ type BrandingKey = 'siteSettings' | 'siteFooter';
  * are there because Postgres cannot infer a parameter's type from `->` or
  * `ARRAY[…]` on its own.
  */
-async function mergeBranding(
+export async function mergeBranding(
   communityId: number,
   patches: Partial<Record<BrandingKey, object>>,
 ): Promise<void> {

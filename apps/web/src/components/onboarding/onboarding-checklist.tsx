@@ -7,6 +7,7 @@ import { ChecklistCelebration } from './checklist-celebration';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 type ChecklistAction = {
   label: string;
@@ -16,8 +17,8 @@ type ChecklistAction = {
 export const ACTION_ROUTES: Record<string, ChecklistAction> = {
   upload_first_document: { label: 'Upload',    href: (cid) => `/communities/${cid}/documents` },
   upload_community_rules: { label: 'Upload',   href: (cid) => `/communities/${cid}/documents` },
-  add_units:             { label: 'Add',       href: (cid) => `/dashboard/units?communityId=${cid}` },
-  invite_first_member:   { label: 'Add',       href: (cid) => `/dashboard/residents?communityId=${cid}` },
+  add_units:             { label: 'Add',       href: (cid) => directoryHref('units', { communityId: cid }) },
+  invite_first_member:   { label: 'Add',       href: (cid) => directoryHref('residents', { communityId: cid }) },
   review_compliance:     { label: 'View',      href: (cid) => `/communities/${cid}/compliance` },
   post_announcement:     { label: 'Create',    href: (cid) => `/announcements/new?communityId=${cid}` },
   customize_portal:      { label: 'Customize', href: (cid) => `/pm/website-editor?communityId=${cid}` },

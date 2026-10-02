@@ -203,6 +203,10 @@ export function CommunitySettingsEditor({ community: initial, openDeletionReques
         zip_code: form.zip_code || null,
         timezone: form.timezone,
         transparency_enabled: form.transparency_enabled,
+        // ponytail: sends every console key as loaded, so a second operator's
+        // stale form reverts a key the first one changed (the route's
+        // compare-and-swap only protects keys owned elsewhere). Send just the
+        // changed keys once a second platform admin has write access.
         community_settings: form.community_settings,
       };
 

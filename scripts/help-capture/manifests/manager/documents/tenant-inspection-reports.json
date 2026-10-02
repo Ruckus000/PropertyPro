@@ -1,0 +1,30 @@
+{
+  "section": "manager",
+  "category": "documents",
+  "slug": "tenant-inspection-reports",
+  "shots": [
+    {
+      "name": "tia-card",
+      "kind": "still",
+      "route": "/settings?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=switch[name=\"Tenants can view inspection reports\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "text=Tenant access"
+        }
+      ],
+      "clipTo": [
+        "text=Tenant access",
+        "text=has decided to share them"
+      ],
+      "highlight": "role=switch[name=\"Tenants can view inspection reports\"]",
+      "step": 1
+    }
+  ]
+}

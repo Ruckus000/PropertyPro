@@ -1,63 +1,19 @@
 /**
- * Residents Page — manage community residents and role assignments.
+ * /dashboard/residents — permanently moved to the Directory (Residents tab).
  *
- * Route: /residents?communityId=X
- * Auth: membership.isAdmin — the v3 admin tier (property_manager or root_manager).
- * Board designation grants no access (ADR-006).
+ * 308 so browsers and bookmarks update. Every query parameter is carried over
+ * (communityId, q, …) and the Directory resolves the community itself,
+ * tenant subdomain included, so this page needs no auth or lookup of its own.
+ * Internal links point straight at the Directory; this only catches old
+ * bookmarks and emails.
  */
-import { headers } from 'next/headers';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
-import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { ResidentsPageClient } from '@/components/residents/residents-page-client';
-import { PageHeader } from '@/components/shared/page-header';
+import { permanentRedirect } from 'next/navigation';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function ResidentsPage({ searchParams }: PageProps) {
-  const [resolvedSearchParams, requestHeaders] = await Promise.all([
-    searchParams,
-    headers(),
-  ]);
-
-  const context = resolveCommunityContext({
-    searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
-  });
-
-  if (!context.communityId) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Residents" />
-        <p className="mt-2 text-sm text-content-secondary">
-          Add a valid <code className="rounded bg-surface-muted px-1">communityId</code> query parameter to view residents.
-        </p>
-      </div>
-    );
-  }
-
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(context.communityId, userId);
-
-  // Only admins can manage residents
-  if (!membership.isAdmin) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Residents" />
-        <p className="mt-2 text-sm text-content-secondary">
-          You do not have permission to manage residents.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <ResidentsPageClient
-      communityId={context.communityId}
-      communityType={membership.communityType}
-    />
-  );
+  permanentRedirect(directoryHref('residents', await searchParams));
 }

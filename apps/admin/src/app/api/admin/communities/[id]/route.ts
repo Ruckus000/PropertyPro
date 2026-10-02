@@ -143,25 +143,53 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
       updates[key] = value;
     }
   }
+  // NOT NULL DEFAULT '{}' (0000), so there is always a blob to merge into and guard on.
+  const storedSettings = (existing as Record<string, unknown>).community_settings as Record<
+    string,
+    unknown
+  >;
   if (community_settings !== undefined) {
     // MERGE into the stored blob, never replace it. patchSchema only lists the
     // keys this console edits and zod strips the rest, so a straight assignment
     // erased every key owned elsewhere — paymentFeePolicy (web finance),
     // allowResidentVisitorRevoke (web packages) — on each admin save.
-    updates.community_settings = {
-      ...(((existing as Record<string, unknown>).community_settings ?? {}) as Record<string, unknown>),
-      ...community_settings,
-    };
+    updates.community_settings = { ...storedSettings, ...community_settings };
   }
 
-  const { data: updated, error } = await db
-    .from('communities')
-    .update(updates as never)
-    .eq('id', communityId)
+  let write = db.from('communities').update(updates as never).eq('id', communityId);
+  if (community_settings !== undefined) {
+    // Compare-and-swap: write only if the blob is still the one merged above.
+    // The web app merges its own keys in SQL at any moment (fee policy, past-due
+    // rule), and without this guard a write landing between our read and this
+    // update was erased. Postgres compares jsonb by value, so key order in the
+    // stored blob does not matter. It also makes the audit's old values exact.
+    write = write.eq('community_settings', JSON.stringify(storedSettings));
+  }
+  const { data: updated, error } = await write
     .select('id, name, slug, community_type, timezone, address_line1, city, state, zip_code, subscription_plan, subscription_status, transparency_enabled, community_settings, created_at, updated_at')
-    .single();
+    .maybeSingle();
 
   assertNoDbError(error, 'Failed to update community');
+
+  if (!updated) {
+    // With the guard, no row means the blob changed under us; nothing was
+    // written, so nothing is audited. Without settings in the body the row was
+    // deleted after the read above.
+    return community_settings !== undefined
+      ? NextResponse.json(
+          {
+            error: {
+              code: 'CONFLICT',
+              message: 'Settings changed while you were saving. Reload and try again.',
+            },
+          },
+          { status: 409 },
+        )
+      : NextResponse.json(
+          { error: { code: 'NOT_FOUND', message: 'Community not found' } },
+          { status: 404 },
+        );
+  }
 
   // Audit every legal-readiness gate with its own settings_changed event.
   //

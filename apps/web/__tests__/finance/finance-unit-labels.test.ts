@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { tables, createScopedClientMock, listLedgerEntriesMock } = vi.hoisted(() => ({
   tables: {
+    // listDelinquentUnits reads the community's time zone (#1285); no row here
+    // means the default zone, which is all this file needs.
+    communities: { name: 'communities', id: 'communities.id', timezone: 'communities.timezone' },
     units: { name: 'units', id: 'units.id', unitNumber: 'units.unitNumber', building: 'units.building' },
     assessmentLineItems: {
       name: 'assessment_line_items',
@@ -34,6 +37,7 @@ const { tables, createScopedClientMock, listLedgerEntriesMock } = vi.hoisted(() 
 }));
 
 vi.mock('@propertypro/db', () => ({
+  communities: tables.communities,
   units: tables.units,
   assessmentLineItems: tables.assessmentLineItems,
   rentObligations: tables.rentObligations,

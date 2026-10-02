@@ -17,6 +17,8 @@ const {
   logAuditEventMock,
   enqueueDigestItemsMock,
   insertNotificationsMock,
+  getDocumentAccessCommunitySettingsMock,
+  getDocumentWithAccessCheckMock,
   tables,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
@@ -24,6 +26,8 @@ const {
   logAuditEventMock: vi.fn(),
   enqueueDigestItemsMock: vi.fn().mockResolvedValue({ enqueued: 0, duplicates: 0 }),
   insertNotificationsMock: vi.fn(),
+  getDocumentAccessCommunitySettingsMock: vi.fn(),
+  getDocumentWithAccessCheckMock: vi.fn(),
   tables: {
     userRoles: Symbol('user_roles'),
     // A real column identity, so a lookup's predicate can be asserted.
@@ -37,6 +41,8 @@ vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
   insertNotifications: insertNotificationsMock,
+  getDocumentAccessCommunitySettings: getDocumentAccessCommunitySettingsMock,
+  getDocumentWithAccessCheck: getDocumentWithAccessCheckMock,
   userRoles: tables.userRoles,
   users: tables.users,
   notificationPreferences: tables.notificationPreferences,
@@ -65,6 +71,7 @@ vi.mock('@/lib/services/notification-digest-queue', () => ({
   enqueueDigestItems: enqueueDigestItemsMock,
 }));
 
+import { canAccessCategory, type CommunityRole, type CommunityType } from '@propertypro/shared';
 import {
   createNotificationsForEvent,
   sendNotification,
@@ -780,6 +787,124 @@ describe('notification-service', () => {
       expect(userLookups(selectFrom)).toEqual([
         { _type: 'inArray', col: tables.users.id, vals: ['u-submitter'] },
       ]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // document_readers — announce a document only to members who can open it
+  // -------------------------------------------------------------------------
+
+  describe('document_readers filter', () => {
+    const DOC_ID = 42;
+    const readerRoleRows = [
+      { userId: 'u-owner', role: 'resident', isUnitOwner: true },
+      { userId: 'u-tenant', role: 'resident', isUnitOwner: false },
+      { userId: 'u-tenant-2', role: 'resident', isUnitOwner: false },
+      { userId: 'u-pm', role: 'property_manager', isUnitOwner: false },
+    ];
+    const readerUserRows = readerRoleRows.map((r) => ({
+      id: r.userId,
+      email: `${r.userId}@example.com`,
+      fullName: r.userId,
+      deletedAt: null,
+    }));
+
+    // Stand-in for the real read gate: an Inspection Reports document, judged
+    // by the real shared policy with whatever context the service passes.
+    function inspectionReportGate() {
+      getDocumentWithAccessCheckMock.mockImplementation(
+        async (ctx: {
+          role: CommunityRole;
+          communityType: CommunityType;
+          isUnitOwner?: boolean;
+          tenantsCanViewInspectionReports: boolean;
+        }) =>
+          canAccessCategory(ctx.role, ctx.communityType, 'inspection_reports', ctx)
+            ? { id: DOC_ID }
+            : null,
+      );
+    }
+
+    const postedEvent: DocumentPostedEvent = {
+      type: 'document_posted',
+      documentTitle: 'Milestone Inspection',
+      uploadedByName: 'Community Team',
+      documentId: String(DOC_ID),
+    };
+
+    it('does not email condo tenants about an inspection report by default', async () => {
+      setupMock(readerRoleRows, readerUserRows);
+      getDocumentAccessCommunitySettingsMock.mockResolvedValue({
+        communityType: 'condo_718',
+        tenantsCanViewInspectionReports: false,
+      });
+      inspectionReportGate();
+
+      const count = await sendNotification(
+        COMMUNITY_ID,
+        postedEvent,
+        { type: 'document_readers', documentId: DOC_ID },
+      );
+
+      expect(count).toBe(2);
+      const recipients = sendEmailMock.mock.calls.map(([args]) => (args as { to: string }).to).sort();
+      expect(recipients).toEqual(['u-owner@example.com', 'u-pm@example.com']);
+      // One probe per distinct (role, isUnitOwner) pair, not per user.
+      expect(getDocumentWithAccessCheckMock).toHaveBeenCalledTimes(3);
+      expect(getDocumentWithAccessCheckMock).toHaveBeenCalledWith(
+        expect.objectContaining({ communityId: COMMUNITY_ID, tenantsCanViewInspectionReports: false }),
+        DOC_ID,
+      );
+    });
+
+    it('emails tenants too once the community opts in', async () => {
+      setupMock(readerRoleRows, readerUserRows);
+      getDocumentAccessCommunitySettingsMock.mockResolvedValue({
+        communityType: 'hoa_720',
+        tenantsCanViewInspectionReports: true,
+      });
+      inspectionReportGate();
+
+      const count = await sendNotification(
+        COMMUNITY_ID,
+        postedEvent,
+        { type: 'document_readers', documentId: DOC_ID },
+      );
+      expect(count).toBe(4);
+    });
+
+    it('creates in-app notifications only for readers', async () => {
+      insertNotificationsMock.mockImplementation(async (rows: unknown[]) => ({ created: rows.length }));
+      setupMock(readerRoleRows, readerUserRows);
+      getDocumentAccessCommunitySettingsMock.mockResolvedValue({
+        communityType: 'condo_718',
+        tenantsCanViewInspectionReports: false,
+      });
+      inspectionReportGate();
+
+      const result = await createNotificationsForEvent(
+        COMMUNITY_ID,
+        { category: 'document', title: 'New Document', sourceType: 'document', sourceId: String(DOC_ID) },
+        { type: 'document_readers', documentId: DOC_ID },
+      );
+
+      expect(result).toEqual({ created: 2, skipped: 0 });
+      const rows = insertNotificationsMock.mock.calls[0]![0] as Array<{ userId: string }>;
+      expect(rows.map((r) => r.userId).sort()).toEqual(['u-owner', 'u-pm']);
+    });
+
+    it('notifies nobody when the community cannot be read (fails closed)', async () => {
+      setupMock(readerRoleRows, readerUserRows);
+      getDocumentAccessCommunitySettingsMock.mockResolvedValue(null);
+
+      const count = await sendNotification(
+        COMMUNITY_ID,
+        postedEvent,
+        { type: 'document_readers', documentId: DOC_ID },
+      );
+      expect(count).toBe(0);
+      expect(sendEmailMock).not.toHaveBeenCalled();
+      expect(getDocumentWithAccessCheckMock).not.toHaveBeenCalled();
     });
   });
 });

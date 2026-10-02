@@ -11,13 +11,23 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { eq, inArray, sql } from '@propertypro/db/filters';
+import { and, eq, inArray, sql } from '@propertypro/db/filters';
+// AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
+import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
 import { expandTransitionRoleFilter } from '@propertypro/shared';
 
 type RoleFilter = {
   role?: string;
   roles?: string[];
 };
+
+/**
+ * - `active`: has signed in to the portal at least once.
+ * - `invited`: sent an invitation (or approved via access request, which emails
+ *   a login link) but has never signed in.
+ * - `not_invited`: on file, never invited, never signed in.
+ */
+export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
 
 export interface ResidentListRow {
   userId: string;
@@ -28,7 +38,39 @@ export interface ResidentListRow {
   email: string | null;
   fullName: string | null;
   phone: string | null;
+  /** Owner vs tenant; only meaningful when role = 'resident'. */
+  isUnitOwner: boolean;
+  /** Board designation — display only here; statutory gates read it elsewhere. */
+  designation: 'board_president' | 'board_member' | null;
+  /**
+   * Portal activity — managers only (`includePortalActivity`). Absent for
+   * everyone else: a neighbour's sign-in history is not theirs to see.
+   */
+  portalStatus?: ResidentPortalStatus;
+  lastSignInAt?: string | null;
+  lastInvitedAt?: string | null;
   createdAt: unknown;
+  /**
+   * Version of this membership for optimistic concurrency: the `user_roles`
+   * row's `updatedAt`. PATCH /api/v1/residents bumps it on every edit made
+   * there (name and phone included), so two managers editing the same person
+   * cannot silently overwrite each other.
+   */
+  updatedAt: unknown;
+}
+
+export function derivePortalStatus(activity: {
+  lastSignInAt: Date | null;
+  lastInvitedAt: Date | null;
+  accessApprovedAt: Date | null;
+} | undefined): ResidentPortalStatus {
+  if (activity?.lastSignInAt) return 'active';
+  if (activity?.lastInvitedAt || activity?.accessApprovedAt) return 'invited';
+  return 'not_invited';
+}
+
+function toDesignation(value: unknown): ResidentListRow['designation'] {
+  return value === 'board_president' || value === 'board_member' ? value : null;
 }
 
 export interface ResidentUserRow {
@@ -71,10 +113,13 @@ export async function getResidentCommunityTypeValue(
  * profile fields.
  *
  * AUTHZ: caller MUST have verified `requirePermission('residents', 'read')`.
+ * `includePortalActivity` (sign-in / invitation history, read from
+ * `auth.users`) is for management only: residents hold `residents:read` too.
  */
 export async function listResidentsForCommunity(
   communityId: number,
   filter: RoleFilter = {},
+  { includePortalActivity = false }: { includePortalActivity?: boolean } = {},
 ): Promise<ResidentListRow[]> {
   const scoped = createScopedClient(communityId);
 
@@ -133,9 +178,14 @@ export async function listResidentsForCommunity(
     }
   }
 
+  const activityByUser = includePortalActivity
+    ? await findCommunityResidentPortalActivity(communityId)
+    : null;
+
   return roleRows.map((roleRow) => {
     const userId = roleRow['userId'] as string;
     const userRow = userMap.get(userId);
+    const activity = activityByUser?.get(userId);
 
     return {
       userId,
@@ -146,7 +196,21 @@ export async function listResidentsForCommunity(
       email: (userRow?.['email'] as string | undefined) ?? null,
       fullName: (userRow?.['fullName'] as string | undefined) ?? null,
       phone: (userRow?.['phone'] as string | undefined) ?? null,
+      isUnitOwner: roleRow['isUnitOwner'] === true,
+      designation: toDesignation(roleRow['designation']),
+      ...(activityByUser
+        ? {
+            portalStatus: derivePortalStatus(activity),
+            lastSignInAt: activity?.lastSignInAt?.toISOString() ?? null,
+            lastInvitedAt:
+              [activity?.lastInvitedAt, activity?.accessApprovedAt]
+                .filter((d): d is Date => d instanceof Date)
+                .sort((a, b) => b.getTime() - a.getTime())[0]
+                ?.toISOString() ?? null,
+          }
+        : {}),
       createdAt: roleRow['createdAt'],
+      updatedAt: roleRow['updatedAt'],
     };
   });
 }
@@ -276,15 +340,29 @@ export async function updateResidentUser(
 }
 
 /**
- * Update a community role row.
+ * Update a community role row. `updatedAt` is always bumped (scoped update).
+ *
+ * With `expectedUpdatedAt` (optimistic concurrency) the write applies only if
+ * the row is unchanged since the caller read it, compared at millisecond
+ * precision (what JSON carries; `defaultNow()` stores microseconds). Returns
+ * false when someone else saved in between.
  */
 export async function updateResidentRole(
   communityId: number,
   userId: string,
   values: Record<string, unknown>,
-): Promise<void> {
+  expectedUpdatedAt?: string,
+): Promise<boolean> {
   const scoped = createScopedClient(communityId);
-  await scoped.update(userRoles, values, eq(userRoles.userId, userId));
+  const where =
+    expectedUpdatedAt === undefined
+      ? eq(userRoles.userId, userId)
+      : and(
+          eq(userRoles.userId, userId),
+          sql`date_trunc('milliseconds', ${userRoles.updatedAt}) = date_trunc('milliseconds', ${expectedUpdatedAt}::timestamptz)`,
+        );
+  const rows = await scoped.update(userRoles, values, where);
+  return expectedUpdatedAt === undefined || (rows as unknown[]).length > 0;
 }
 
 /**

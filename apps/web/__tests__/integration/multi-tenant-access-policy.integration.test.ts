@@ -18,6 +18,7 @@
  * Uses sentinel searchText in forbidden-category docs to verify no leakage.
  */
 import { NextRequest } from 'next/server';
+import { eq } from '@propertypro/db/filters';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
@@ -289,19 +290,42 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
   // Condo tenant (communityA, condo_718)
   // =========================================================================
 
-  it('tenant in condo_718 sees only declaration, rules, inspection_reports', async () => {
+  it('tenant in condo_718 sees only declaration, rules (no inspection_reports by default)', async () => {
     const { titles } = await getDocumentCategoryNames('tenantA', 'communityA');
     const suffix = requireState().runSuffix;
 
     // Should see
     expect(titles).toContain(`declaration Doc ${suffix}`);
     expect(titles).toContain(`rules Doc ${suffix}`);
-    expect(titles).toContain(`inspection_reports Doc ${suffix}`);
 
-    // Should NOT see
+    // Should NOT see — inspection reports are owner-only unless the community opts in
+    expect(titles).not.toContain(`inspection_reports Doc ${suffix}`);
     expect(titles).not.toContain(`meeting_minutes Doc ${suffix}`);
     expect(titles).not.toContain(`announcements Doc ${suffix}`);
     expect(titles).not.toContain(`Uncategorized Doc A ${suffix}`);
+  });
+
+  it('tenant in condo_718 sees inspection_reports once the community opts in', async () => {
+    const kit = requireState();
+    const communityA = requireCommunity(kit, 'communityA');
+    const scoped = kit.dbModule.createScopedClient(communityA.id);
+    const where = eq(kit.dbModule.communities.id, communityA.id);
+    const rows = await scoped.selectFrom<Record<string, unknown>>(kit.dbModule.communities, {}, where);
+    const original = (rows[0]?.communitySettings as Record<string, unknown> | undefined) ?? {};
+
+    await scoped.update(
+      kit.dbModule.communities,
+      { communitySettings: { ...original, tenantsCanViewInspectionReports: true } },
+      where,
+    );
+    try {
+      const { titles } = await getDocumentCategoryNames('tenantA', 'communityA');
+      const suffix = kit.runSuffix;
+      expect(titles).toContain(`inspection_reports Doc ${suffix}`);
+      expect(titles).not.toContain(`meeting_minutes Doc ${suffix}`);
+    } finally {
+      await scoped.update(kit.dbModule.communities, { communitySettings: original }, where);
+    }
   });
 
   // =========================================================================
@@ -442,8 +466,10 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
       .map((d) => d['searchText'] as string | null)
       .filter(Boolean) as string[];
 
-    // Forbidden sentinels for tenant in condo_718: meeting_minutes, announcements, uncategorized
+    // Forbidden sentinels for tenant in condo_718: inspection_reports (default
+    // off), meeting_minutes, announcements, uncategorized
     for (const text of searchTexts) {
+      expect(text).not.toContain(`${SENTINEL_PREFIX}inspection_reports`);
       expect(text).not.toContain(`${SENTINEL_PREFIX}meeting_minutes`);
       expect(text).not.toContain(`${SENTINEL_PREFIX}announcements`);
       expect(text).not.toContain(`${SENTINEL_PREFIX}uncategorized`);

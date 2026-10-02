@@ -51,7 +51,20 @@ export const communities = pgTable('communities', {
       leasesWriteLevel?: 'all_members' | 'admin_only';
       documentCategoriesWriteLevel?: 'all_members' | 'admin_only';
       paymentFeePolicy?: 'owner_pays' | 'association_absorbs';
+      /** Directory: a unit is "past due" when overdue > pastDueMinCents AND oldest charge > pastDueMinDays. */
+      pastDueMinCents?: number;
+      pastDueMinDays?: number;
       allowResidentVisitorRevoke?: boolean;
+      /**
+       * Condo/HOA only: let TENANTS read the "Inspection Reports" document
+       * category (milestone inspections, SIRS). Absent / anything but `true`
+       * = tenants cannot read it (owners and managers always can). Default
+       * OFF because §718.111(12)(g) protects that records section for "unit
+       * owners and association employees". Read strictly into
+       * `CommunityMembership.tenantsCanViewInspectionReports`; enforced by
+       * `@propertypro/shared` access-policies via `DocumentAccessContext`.
+       */
+      tenantsCanViewInspectionReports?: boolean;
       // ── Legal gates ────────────────────────────────────────────────────────
       //
       // Per-community kill switches for features that carry statutory or

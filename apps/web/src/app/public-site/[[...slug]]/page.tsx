@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
 import type { Metadata } from 'next';
-import type { CommunityType } from '@propertypro/shared';
+import { effectiveLook, type CommunityType } from '@propertypro/shared';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 import {
   getBrandingForCommunity,
@@ -245,7 +245,13 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   // pattern (lib/auth/resolve-auth-page-branding.ts:64-78): presign the
   // download URL first, then hand resolveTheme a branding object with the
   // populated logoUrl field.
-  const rawBranding = await getBrandingForCommunity(community.id);
+  //
+  // A preview request shows the DRAFT look as well as the draft sections
+  // (website builder v4); every other request gets the published look.
+  const savedBranding = await getBrandingForCommunity(community.id);
+  const rawBranding = savedBranding
+    ? effectiveLook(savedBranding, { includeDraft: isPreview })
+    : null;
   let logoUrl: string | null = null;
   if (rawBranding?.logoPath) {
     try {

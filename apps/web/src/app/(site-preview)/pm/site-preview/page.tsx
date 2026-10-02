@@ -40,7 +40,7 @@ import {
   toFontLinks,
   customCssOverridesToCssVars,
 } from '@propertypro/theme';
-import type { CommunityType } from '@propertypro/shared';
+import { effectiveLook, type CommunityType } from '@propertypro/shared';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
@@ -96,7 +96,10 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   }
   const communityType = community!.communityType as CommunityType;
 
-  const rawBranding = await getBrandingForCommunity(community!.id);
+  // The DRAFT look (website builder v4): this route is the editor's preview,
+  // so it shows the template and colours as they will look after Publish.
+  const savedBranding = await getBrandingForCommunity(community!.id);
+  const rawBranding = savedBranding ? effectiveLook(savedBranding, { includeDraft: true }) : null;
 
   // Apply the selected preset's tokens over the saved branding (preview only).
   const presetSlug = asString(params['preset']);

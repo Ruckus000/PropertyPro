@@ -33,6 +33,8 @@ import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
 import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
 import type { AssessmentFrequency } from '@/lib/services/finance-service';
 import { getBaseUrl } from '@/lib/utils/url';
+import { resolveTimezone } from '@/lib/utils/timezone';
+import { calendarDaysBetween, dateOnlyInTimeZone } from '@/lib/utils/zoned-datetime';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Overdue status transitions
@@ -66,11 +68,10 @@ export async function processOverdueTransitions(
   scope: CronScope = {},
 ): Promise<OverdueTransitionSummary> {
   const db = createUnscopedClient();
-  const today = format(now, 'yyyy-MM-dd');
 
   const activeCommunities = (
     await db
-      .select({ id: communities.id })
+      .select({ id: communities.id, timezone: communities.timezone })
       .from(communities)
       .where(isNull(communities.deletedAt))
   ).filter((community) => inCronScope(community.id, scope));
@@ -83,6 +84,10 @@ export async function processOverdueTransitions(
 
   for (const community of activeCommunities) {
     try {
+      // Past due means before the community's today, not the server's: at 9pm
+      // in Florida the UTC date is already tomorrow, which flipped an
+      // installment to overdue on its own due date.
+      const today = dateOnlyInTimeZone(now, resolveTimezone(community.timezone));
       const scoped = createScopedClient(community.id);
       const pendingOverdue = await scoped.selectFrom<{
         id: number;
@@ -154,11 +159,10 @@ export async function processLateFees(
   scope: CronScope = {},
 ): Promise<LateFeeSummary> {
   const db = createUnscopedClient();
-  const today = format(now, 'yyyy-MM-dd');
 
   const activeCommunities = (
     await db
-      .select({ id: communities.id, communitySettings: communities.communitySettings })
+      .select({ id: communities.id, communitySettings: communities.communitySettings, timezone: communities.timezone })
       .from(communities)
       .where(isNull(communities.deletedAt))
   ).filter((community) => inCronScope(community.id, scope));
@@ -192,6 +196,7 @@ export async function processLateFees(
       }
 
       const scoped = createScopedClient(community.id);
+      const communityToday = dateOnlyInTimeZone(now, resolveTimezone(community.timezone));
 
       // Get overdue items that don't have a late fee yet
       const overdueItems = await scoped.selectFrom<{
@@ -237,11 +242,9 @@ export async function processLateFees(
         const assessment = assessmentMap.get(item.assessmentId);
         if (!assessment || assessment.lateFeeAmountCents <= 0) continue;
 
-        // Check grace period
-        const dueDate = new Date(`${item.dueDate}T00:00:00.000Z`);
-        const daysOverdue = Math.floor(
-          (now.getTime() - dueDate.getTime()) / 86_400_000,
-        );
+        // Check grace period, in calendar days of the community's own date
+        // (the UTC clock charged a fee up to a day early in the evening).
+        const daysOverdue = calendarDaysBetween(item.dueDate, communityToday);
         if (daysOverdue <= assessment.lateFeeDaysGrace) continue;
 
         // Apply late fee — conditionally. The SELECT above is not a lock: two

@@ -133,6 +133,14 @@ describe('POST /api/v1/residents/invite', () => {
     expect(createOnboardingInvitationMock).toHaveBeenCalled();
   });
 
+  it('a resident needs a unit: missing → 400 naming the field, before anything is written', async () => {
+    const { unitId: _omit, ...noUnit } = BASE_BODY;
+    const res = await POST(inviteRequest(noUnit));
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain('Choose the unit this resident lives in');
+    expect(createOnboardingResidentMock).not.toHaveBeenCalled();
+  });
+
   it('NEVER returns the invitation token to the caller', async () => {
     // A live token completes the accept flow and sets that user's password.
     // `users` carries no `community_id`, so the scoped client does not isolate

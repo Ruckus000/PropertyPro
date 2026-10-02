@@ -27,11 +27,20 @@ import type { ChecklistItemData } from './compliance-checklist-item';
 // only the internal value is v3-neutral so it carries no legacy-role vocabulary.
 type ViewMode = 'manager' | 'board';
 
+/** Set when the association is below the website-posting rule's size threshold. */
+export interface BelowPostingThreshold {
+  unitCount: number;
+  minUnits: number;
+  unitNoun: string;
+  statute: string;
+}
+
 export interface ComplianceCommandCenterProps {
   communityId: number;
   isAdmin: boolean;
   designation: BoardDesignation | null;
   canWrite: boolean;
+  belowPostingThreshold?: BelowPostingThreshold | null;
 }
 
 function defaultView(designation: BoardDesignation | null): ViewMode {
@@ -47,6 +56,7 @@ export function ComplianceCommandCenter({
   isAdmin,
   designation,
   canWrite,
+  belowPostingThreshold = null,
 }: ComplianceCommandCenterProps) {
   const storageKey = `compliance.audienceView.${communityId}`;
 
@@ -175,7 +185,16 @@ export function ComplianceCommandCenter({
         actions={actions}
       />
 
-      {summary.attentionCount > 0 && (
+      {belowPostingThreshold && (
+        <AlertBanner
+          status="info"
+          variant="subtle"
+          title="Website posting is recommended for this association, not required"
+          description={`Florida's website-posting rule (${belowPostingThreshold.statute}) applies to associations with ${belowPostingThreshold.minUnits} or more ${belowPostingThreshold.unitNoun}; this one has ${belowPostingThreshold.unitCount}. These items carry no posting deadline and can't become overdue. Official records must still be kept.`}
+        />
+      )}
+
+      {!belowPostingThreshold && summary.attentionCount > 0 && (
         <section
           aria-labelledby="compliance-banner-title"
           className="flex items-center justify-between gap-4 rounded-[var(--radius-md)] border-l-4 border-[var(--status-warning)] bg-[var(--status-warning-bg)] px-4 py-3"

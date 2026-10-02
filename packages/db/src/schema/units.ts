@@ -2,7 +2,8 @@
  * Units table — individual units/lots within a community.
  * P2-38: Extended with apartment-specific metadata (bedrooms, bathrooms, sqft, rentAmount).
  */
-import { bigint, bigserial, integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigint, bigserial, check, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { users } from './users';
 
@@ -39,7 +40,33 @@ export const units = pgTable('units', {
    * rent at creation time outside lease derivation.
    */
   rentAmount: numeric('rent_amount', { precision: 10, scale: 2 }),
+  /**
+   * Directory: 'owner_occupied' | 'rented' | 'vacant', set by the community's
+   * manager (it is a judgment call — a seasonal owner who is away stays
+   * owner-occupied). Null = never recorded. Apartments never use
+   * 'owner_occupied'; the route layer enforces that, the CHECK only the vocabulary.
+   */
+  occupancy: text('occupancy'),
+  /**
+   * When a manager last confirmed `occupancy`. Null while the value is a
+   * best-guess backfill (migration `unit_occupancy`) — the UI labels those "Unconfirmed"
+   * so day one never presents an inferred value as fact.
+   */
+  occupancyConfirmedAt: timestamp('occupancy_confirmed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => [
+  check(
+    'units_occupancy_check',
+    sql`${table.occupancy} IS NULL OR ${table.occupancy} IN ('owner_occupied', 'rented', 'vacant')`,
+  ),
+  // One live unit per number per community, case-insensitively ("1a" = "1A"),
+  // matching how resident CSV import resolves unit numbers. The route checks
+  // first for a friendly message; this is the arbiter for concurrent writes.
+  // Per community, not per building: import, packages, visitors and finance
+  // labels all resolve a unit by its number alone.
+  uniqueIndex('units_community_unit_number_unique')
+    .on(table.communityId, sql`lower(${table.unitNumber})`)
+    .where(sql`${table.deletedAt} IS NULL`),
+]);

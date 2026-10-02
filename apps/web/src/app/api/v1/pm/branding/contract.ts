@@ -41,8 +41,8 @@ import { ALLOWED_FONTS } from '@propertypro/theme';
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const allowedFontsArray = ALLOWED_FONTS as readonly string[];
 
-const hexColor = z.string().regex(HEX_RE, 'Must be a 6-digit hex color');
-const allowedFont = z
+export const hexColor = z.string().regex(HEX_RE, 'Must be a 6-digit hex color');
+export const allowedFont = z
   .string()
   .refine((v) => allowedFontsArray.includes(v), { message: 'Must be an allowed font family' });
 

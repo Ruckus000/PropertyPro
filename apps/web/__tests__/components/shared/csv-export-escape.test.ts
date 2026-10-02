@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escapeCell } from '../../../src/components/shared/csv-export-button';
+import { escapeCSVField as escapeCell } from '@/lib/utils/csv-cell';
 
 describe('escapeCell — CSV formula injection', () => {
   it.each([

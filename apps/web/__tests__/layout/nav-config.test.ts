@@ -328,6 +328,20 @@ describe('getActiveItemId', () => {
     expect(getActiveItemId(PM_NAV_ITEMS, '/pm/settings/branding')).toBe('branding');
   });
 
+  it('one Directory item covers the Directory, its old routes and resident import — not Dashboard', () => {
+    for (const path of ['/dashboard/directory', '/dashboard/units', '/dashboard/residents', '/dashboard/import-residents']) {
+      expect(getActiveItemId(NAV_ITEMS, path)).toBe('directory');
+    }
+    expect(NAV_ITEMS.some((i) => i.id === 'residents' || i.id === 'units')).toBe(false);
+  });
+
+  it('the Directory carries the pending-access-request badge signal and stays manager-only', () => {
+    const directory = NAV_ITEMS.find((i) => i.id === 'directory');
+    expect(directory?.badgeSignal).toBe('pendingAccessRequests');
+    expect(directory?.visibility).toBe('admin');
+    expect(directory?.href(9)).toBe('/dashboard/directory?communityId=9');
+  });
+
   it('returns null for unmatched paths', () => {
     expect(getActiveItemId(NAV_ITEMS, '/unknown')).toBeNull();
   });

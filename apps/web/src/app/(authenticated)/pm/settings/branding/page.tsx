@@ -1,7 +1,7 @@
 // breadcrumbs:exempt — redirect-only page
 /**
  * Permanent redirect from the retired branding-only page into the website
- * editor's Colours tool.
+ * editor's Design tool.
  *
  * The standalone /pm/settings/branding route was the multi-community
  * BrandingForm + BrandingTable page from Phase 2. Its controls now live in the
@@ -15,7 +15,7 @@
  * chain, once cached, is expensive to unwind. One hop to the real destination.
  *
  * The old `#branding` fragment is dropped: the editor is tabbed, so there is no
- * anchor to scroll to. The Colours tool is the equivalent surface, but it is
+ * anchor to scroll to. The Design tool is the equivalent surface, but it is
  * selected by the editor's own tab state rather than by URL, so this lands on
  * the editor and the PM picks the tool.
  *

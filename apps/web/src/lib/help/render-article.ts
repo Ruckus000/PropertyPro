@@ -81,6 +81,7 @@ export async function getCompiledHelpArticleHtml(
     metadata.slug,
     metadata.contentHash,
     reader.communityType,
+    reader.boardSeat,
   );
   return unstable_cache(
     async (): Promise<CompiledHelpArticleHtml> => {

@@ -1,11 +1,9 @@
 /**
  * Crop-coordinate scaling, shared by every surface that crops an upload.
  *
- * Lives here rather than beside one of its callers because there are three of
- * them across two editors: the legacy `ImageBlockForm`, `SiteLogoField`, and
- * the onboarding wizard's `HeroImageField`. It previously hung off
- * `ImageBlockForm`, which made a v2-only-looking component load-bearing for two
- * surfaces that outlive it.
+ * Its one remaining caller is the onboarding wizard's `HeroImageField`. It
+ * previously hung off the v2 `ImageBlockForm`; `SiteLogoField`, the other
+ * former caller, was deleted with the retired branding form.
  */
 
 /** The four fields read off a `react-image-crop` `Crop`. */

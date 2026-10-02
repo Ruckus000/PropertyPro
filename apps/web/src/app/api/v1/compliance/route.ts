@@ -22,6 +22,7 @@ import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
+  postingClockApplies,
   type CommunityType,
 } from '@propertypro/shared';
 import { runRoute } from '@propertypro/api-contract';
@@ -39,6 +40,7 @@ import {
 } from '@/lib/utils/compliance-calculator';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
 import {
   getLinkedDocumentStatesByIds,
@@ -71,11 +73,17 @@ function requireCondoCommunity(communityType: CommunityType): void {
  * `documentStateById` maps a linked document id to whether it is deleted or a
  * draft. Neither may keep the item satisfied, so both are threaded into the
  * calculator.
+ *
+ * Below the website rule's size threshold (`postingClockApplies` false) the row
+ * goes out without its posting clock — no deadline, no rolling window — so it
+ * can be posted or not, but never overdue or "due soon" anywhere it is shown.
  */
 function withDerivedStatus(
-  row: Record<string, unknown>,
+  storedRow: Record<string, unknown>,
   documentStateById: Map<number, LinkedDocumentState> = new Map(),
+  clockApplies = true,
 ): Record<string, unknown> {
+  const row = clockApplies ? storedRow : { ...storedRow, deadline: null, rollingWindow: null };
   const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
   const documentPostedAt = row['documentPostedAt']
     ? new Date(row['documentPostedAt'] as string)
@@ -130,7 +138,11 @@ export const GET = withErrorHandler(
       linkedDocumentIds,
     );
 
-    const data = rows.map((row) => withDerivedStatus(row, documentStateById));
+    const clockApplies = postingClockApplies({
+      communityType: membership.communityType,
+      unitCount: await getCommunityUnitCount(communityId),
+    });
+    const data = rows.map((row) => withDerivedStatus(row, documentStateById, clockApplies));
 
     if (data.length > 0) {
       void tryAutoComplete(communityId, userId, 'review_compliance');

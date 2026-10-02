@@ -37,6 +37,8 @@ export async function resolveUnitIdByLabel(
   );
 
   if (rows.length === 0) return { kind: 'not_found' };
+  // ponytail: unreachable for live units since migration `unit_number_unique`
+  // (one live number per community, any case); kept as a cheap guard.
   if (rows.length > 1) return { kind: 'ambiguous' };
   const [only] = rows;
   if (!only) return { kind: 'not_found' };

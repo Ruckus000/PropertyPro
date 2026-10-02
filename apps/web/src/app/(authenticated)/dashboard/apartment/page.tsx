@@ -14,7 +14,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { loadApartmentMetrics } from '@/lib/queries/apartment-metrics';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
@@ -30,9 +30,9 @@ export default async function ApartmentDashboardPage({
 }: ApartmentDashboardPageProps) {
   const [resolvedSearchParams, requestHeaders] = await Promise.all([searchParams, headers()]);
 
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

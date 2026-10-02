@@ -1,6 +1,8 @@
 import type { createScopedClient } from '@propertypro/db';
-import { units, userRoles } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { getUnitLedgerBalance, units, userRoles, violations } from '@propertypro/db';
+import { and, eq, notInArray, sql } from '@propertypro/db/filters';
+import { ConflictError } from '@/lib/api/errors';
+import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 
 type ScopedClient = ReturnType<typeof createScopedClient>;
 
@@ -31,9 +33,10 @@ export async function getUnitById(
 }
 
 /**
- * Fetch a unit by unit number inside the caller's scoped community. Used for
- * duplicate checks; caller decides whether a match conflicts with the current
- * operation.
+ * Fetch a unit by unit number inside the caller's scoped community,
+ * case-insensitively — the same rule as the `units_community_unit_number_unique`
+ * index and the resident CSV import's lookup. Used for duplicate checks; caller
+ * decides whether a match conflicts with the current operation.
  */
 export async function getUnitByNumber(
   scoped: ScopedClient,
@@ -42,33 +45,65 @@ export async function getUnitByNumber(
   const rows = await scoped.selectFrom(
     units,
     {},
-    eq(units.unitNumber, unitNumber),
+    sql`lower(${units.unitNumber}) = lower(${unitNumber})`,
   );
   return ((rows as unknown as UnitRouteRow[])[0]) ?? null;
 }
 
+const UNIT_NUMBER_UNIQUE = 'units_community_unit_number_unique';
+
+/** A live unit already has this number (any letter case). */
+export function unitNumberTaken(unitNumber: string): ConflictError {
+  return new ConflictError(`Unit number "${unitNumber}" already exists in this community`);
+}
+
+/** The unique index is the arbiter when two writes race past the pre-check. */
+async function withUnitNumberConflict<T>(unitNumber: unknown, write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    if (isNamedUniqueViolation(error, UNIT_NUMBER_UNIQUE)) throw unitNumberTaken(String(unitNumber));
+    throw error;
+  }
+}
+
 /**
  * Insert a unit in the caller's scoped community. Caller MUST verify units:write
- * authorization and duplicate unit-number policy before calling.
+ * authorization. A duplicate number is a 409 (`unitNumberTaken`).
  */
 export async function createUnitForCommunity(
   scoped: ScopedClient,
   values: Record<string, unknown>,
 ): Promise<UnitRouteRow | undefined> {
-  const rows = await scoped.insert(units, values);
+  const rows = await withUnitNumberConflict(values['unitNumber'], () => scoped.insert(units, values));
   return (rows as unknown as UnitRouteRow[])[0];
 }
 
 /**
  * Update a unit by id inside the caller's scoped community. Caller MUST verify
  * units:write authorization and build a validated update payload.
+ *
+ * `expectedUpdatedAt` (optimistic concurrency): the `updatedAt` the caller last
+ * read. The write applies only if the row is unchanged since; returns null
+ * when it is not (someone else saved in between). Compared at millisecond
+ * precision — what JSON carries — since `defaultNow()` stores microseconds.
+ * Returns the updated row otherwise.
  */
 export async function updateUnitById(
   scoped: ScopedClient,
   unitId: number,
   values: Record<string, unknown>,
-): Promise<void> {
-  await scoped.update(units, values, eq(units.id, unitId));
+  expectedUpdatedAt?: string,
+): Promise<UnitRouteRow | null> {
+  const where =
+    expectedUpdatedAt === undefined
+      ? eq(units.id, unitId)
+      : and(
+          eq(units.id, unitId),
+          sql`date_trunc('milliseconds', ${units.updatedAt}) = date_trunc('milliseconds', ${expectedUpdatedAt}::timestamptz)`,
+        );
+  const rows = await withUnitNumberConflict(values['unitNumber'], () => scoped.update(units, values, where));
+  return ((rows as unknown as UnitRouteRow[])[0]) ?? null;
 }
 
 /**
@@ -85,6 +120,25 @@ export async function listResidentRolesForUnit(
     eq(userRoles.unitId, unitId),
   );
   return rows as unknown as UnitRouteRow[];
+}
+
+/**
+ * Unit ledger balance in cents (charges minus payments). Non-zero either way —
+ * owed or in credit — blocks unit deletion: soft-deleting the unit would
+ * orphan money the association still has to collect or refund.
+ */
+export async function getUnitBalanceCents(scoped: ScopedClient, unitId: number): Promise<number> {
+  return getUnitLedgerBalance(scoped, unitId);
+}
+
+/** Violations on the unit that are still in progress (not resolved/dismissed). */
+export async function countOpenViolationsForUnit(scoped: ScopedClient, unitId: number): Promise<number> {
+  const rows = await scoped.selectFrom(
+    violations,
+    { id: violations.id },
+    and(eq(violations.unitId, unitId), notInArray(violations.status, ['resolved', 'dismissed'])),
+  );
+  return rows.length;
 }
 
 /**

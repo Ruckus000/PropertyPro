@@ -382,14 +382,21 @@ describe('processComplianceAlerts', () => {
   });
 
   function setupUnscopedMock(
-    communityRows: Array<{ id: number; communityType: string; timezone: string }>,
+    communityRows: Array<{
+      id: number;
+      communityType: string;
+      timezone: string;
+      unitCount?: number | null;
+    }>,
     visitorRows: Array<Record<string, unknown>> = [],
   ) {
+    // The real select returns `unit_count`; NULL (unknown size) unless a test says otherwise.
+    const rows = communityRows.map((row) => ({ unitCount: null, ...row }));
     createUnscopedClientMock.mockReturnValue({
       select: vi.fn(() => ({
         from: vi.fn((table) => ({
           where: vi.fn().mockResolvedValue(
-            table === tables.communities ? communityRows : visitorRows,
+            table === tables.communities ? rows : visitorRows,
           ),
         })),
       })),
@@ -415,6 +422,28 @@ describe('processComplianceAlerts', () => {
     expect(createScopedClientMock).toHaveBeenCalledWith(1);
     expect(createScopedClientMock).toHaveBeenCalledWith(2);
     expect(createScopedClientMock).not.toHaveBeenCalledWith(3);
+  });
+
+  it('sends no overdue digest below the website rule’s size threshold', async () => {
+    // A 12-unit condo and a 60-parcel HOA: §718.111(12)(g) / §720.303(4)'s
+    // posting clock does not run, so an "overdue" email would be false.
+    setupUnscopedMock([
+      { id: 1, communityType: 'condo_718', timezone: 'America/New_York', unitCount: 12 },
+      { id: 2, communityType: 'hoa_720', timezone: 'America/Chicago', unitCount: 60 },
+      { id: 3, communityType: 'condo_718', timezone: 'America/New_York', unitCount: 40 },
+    ]);
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn(async () => [
+        { id: 7, title: 'Bylaws', statuteReference: '§718.111(12)(g)(2)(b)', deadline: '2026-01-01T00:00:00.000Z', documentId: null, isApplicable: true },
+      ]),
+    });
+
+    const summary = await processComplianceAlerts(NOW);
+    expect(summary.communitiesProcessed).toBe(3);
+    expect(createScopedClientMock).not.toHaveBeenCalledWith(1);
+    expect(createScopedClientMock).not.toHaveBeenCalledWith(2);
+    expect(createScopedClientMock).toHaveBeenCalledWith(3);
+    expect(summary.totalOverdue).toBe(1);
   });
 
   it('limits processing to the requested community ids when provided', async () => {

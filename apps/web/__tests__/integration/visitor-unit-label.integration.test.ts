@@ -28,7 +28,6 @@ describeDb('visitor registration by unit label (db-backed integration)', () => {
   let routes: VisitorsRouteModule | null = null;
   let communityId: number;
   let unitLabel: string;
-  let dupeLabel: string;
   let otherLabel: string;
 
   beforeAll(async () => {
@@ -44,14 +43,11 @@ describeDb('visitor registration by unit label (db-backed integration)', () => {
 
     const scoped = state.dbModule.createScopedClient(communityId);
     unitLabel = `101A-${state.runSuffix}`;
-    dupeLabel = `DUP-${state.runSuffix}`;
     otherLabel = `OTH-${state.runSuffix}`;
 
     const [primaryUnit] = await scoped.insert(state.dbModule.units, { unitNumber: unitLabel });
     const primaryUnitId = readNumberField(primaryUnit!, 'id');
 
-    await scoped.insert(state.dbModule.units, { unitNumber: dupeLabel });
-    await scoped.insert(state.dbModule.units, { unitNumber: dupeLabel });
     await scoped.insert(state.dbModule.units, { unitNumber: otherLabel });
 
     const neededUsers: MultiTenantUserKey[] = ['actorA', 'tenantA'];
@@ -116,23 +112,8 @@ describeDb('visitor registration by unit label (db-backed integration)', () => {
     expect(body.error?.details?.fields?.hostUnitLabel).toMatch(/not found/i);
   });
 
-  it('rejects an ambiguous label with a clear ValidationError', async () => {
-    if (!state || !routes) return;
-    setActor(state, 'actorA');
-
-    const res = await routes.POST(
-      jsonRequest(apiUrl('/api/v1/visitors'), 'POST', {
-        communityId,
-        visitorName: 'Guest C',
-        purpose: 'Visit',
-        hostUnitLabel: dupeLabel,
-        expectedArrival: '2026-06-21T18:00:00.000Z',
-      }),
-    );
-    expect(res.status).toBe(400);
-    const body = await parseJson<{ error: { details?: { fields?: Record<string, string> } } }>(res);
-    expect(body.error?.details?.fields?.hostUnitLabel).toMatch(/multiple|ambiguous|duplicate/i);
-  });
+  // No "ambiguous label" case: migration `unit_number_unique` makes two live
+  // units with the same label (any case) impossible — see units-lookup.
 
   it('resident receives generic error when label does not match their own unit', async () => {
     if (!state || !routes) return;

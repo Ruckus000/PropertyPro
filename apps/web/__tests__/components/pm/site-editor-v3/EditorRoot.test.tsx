@@ -321,6 +321,21 @@ vi.mock('@/hooks/use-community-unit-count', () => ({
   useUpdateCommunityUnitCount: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// The drafted site look (website builder v4). Tests that need a pending
+// design change set `designDraft.value`; everyone else sees none.
+const designDraft = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
+vi.mock('@/hooks/use-site-design', () => ({
+  siteDesignQueryKey: (communityId: number) => ['pm', 'site', 'design', communityId],
+  useSiteDesign: () => ({
+    data: { live: {}, draft: designDraft.value },
+    isPending: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useSaveSiteDesign: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock('@/hooks/use-site-pages', () => ({
   sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
   applyPageOrder: (pages: unknown) => pages,
@@ -348,6 +363,19 @@ const seededHome: StubPage = {
   deleteStagedAt: null,
 };
 
+
+/**
+ * A canvas context with the shape the editor reads (`applyDesignToCanvas`
+ * derives theme and layout from it). Its block-view tree stays out of these
+ * tests the same way `null` keeps it out: the canvas itself is stubbed.
+ */
+const STUB_CANVAS = {
+  community: { id: 42, slug: 'sunset-condos', name: 'Sunset Condos', logoUrl: null, communityType: 'condo_718', city: null, state: null, timezone: 'America/New_York' },
+  theme: { primaryColor: '#111111', secondaryColor: '#222222', accentColor: '#333333', headingFont: 'Inter', bodyFont: 'Inter' },
+  layout: 'tidewater',
+  preview: { announcements: [], documents: [], meetings: [], contact: null },
+};
+
 interface RootOptions {
   initialPages?: StubPage[];
   showWizardBanner?: boolean;
@@ -369,7 +397,7 @@ function rootElement({
       communityId={42}
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
-      proToolAccess={{ styling: true, domain: true }}
+      proToolAccess={{ domain: true }}
       hasPolishBlocks
       // Null on purpose by default: takes the degraded-canvas branch, so the
       // whole block-view tree stays out of this test.
@@ -386,7 +414,8 @@ function rootElement({
       }}
       tagline={null}
       initialSiteSettings={undefined}
-      initialCustomCss={null}
+      presets={[]}
+      hasSiteCustomCss={false}
       showWizardBanner={showWizardBanner}
       // The server seed. Its only job here is to supply the home page id before
       // the Pages panel has ever been opened — that id is what every block
@@ -495,7 +524,7 @@ describe('EditorRoot — tool panels', () => {
   it.each([
     // Exact: `/Add/` also matches the "Address" tab.
     ['Add', 'Add'],
-    ['Colours', /Colours/],
+    ['Design', /Design/],
     ['Address', /Address/],
     ['Help', /Help/],
   ])('renders a real panel, not a placeholder, on the %s tab', async (_name, accessibleName) => {
@@ -1123,7 +1152,7 @@ describe('EditorRoot — the preview is titled after the page it renders', () =>
       },
     ];
     // Non-null so the dialog branch is reachable at all; the stub ignores it.
-    renderRoot({ canvasContext: {} });
+    renderRoot({ canvasContext: STUB_CANVAS });
 
     await openTool('Pages');
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
@@ -1512,7 +1541,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     // `<EditorShell>` in `EditorRoot.tsx`.
     queries.isError = true;
     queries.pages = [];
-    renderRoot({ initialPages: [], canvasContext: {} });
+    renderRoot({ initialPages: [], canvasContext: STUB_CANVAS });
 
     const preview = screen.getByRole('button', { name: 'Preview' });
     expect(preview).toBeDisabled();
@@ -1531,7 +1560,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      * button case above green.
      */
     queries.pages = [seededHome];
-    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: STUB_CANVAS });
     // Open it while a page IS known…
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByText(/previewing/)).toBeInTheDocument();
@@ -1540,7 +1569,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.isError = true;
     queries.pages = [];
     await act(async () => {
-      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+      rerender(rootElement({ initialPages: [], canvasContext: STUB_CANVAS }));
     });
 
     expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
@@ -1581,7 +1610,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      * stay green without it — neither reaches the recovery leg.
      */
     queries.pages = [seededHome];
-    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: STUB_CANVAS });
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByText(/previewing/)).toBeInTheDocument();
 
@@ -1589,7 +1618,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.isError = true;
     queries.pages = [];
     await act(async () => {
-      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+      rerender(rootElement({ initialPages: [], canvasContext: STUB_CANVAS }));
     });
     expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
 
@@ -1597,7 +1626,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.isError = false;
     queries.pages = [seededHome];
     await act(async () => {
-      rerender(rootElement({ initialPages: [seededHome], canvasContext: {} }));
+      rerender(rootElement({ initialPages: [seededHome], canvasContext: STUB_CANVAS }));
     });
 
     expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
@@ -1615,7 +1644,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      */
     queries.isError = true;
     queries.pages = [];
-    renderRoot({ initialPages: [], canvasContext: {} });
+    renderRoot({ initialPages: [], canvasContext: STUB_CANVAS });
 
     expect(await screen.findByRole('button', { name: /Try again/ })).not.toHaveFocus();
   });
@@ -1634,13 +1663,13 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      * entry-leg case below stays green without it.
      */
     queries.pages = [seededHome];
-    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: STUB_CANVAS });
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
     queries.isError = true;
     queries.pages = [];
     await act(async () => {
-      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+      rerender(rootElement({ initialPages: [], canvasContext: STUB_CANVAS }));
     });
     expect(await screen.findByRole('button', { name: /Try again/ })).toHaveFocus();
 
@@ -1648,7 +1677,7 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.isError = false;
     queries.pages = [seededHome];
     await act(async () => {
-      rerender(rootElement({ initialPages: [seededHome], canvasContext: {} }));
+      rerender(rootElement({ initialPages: [seededHome], canvasContext: STUB_CANVAS }));
     });
 
     expect(await screen.findByRole('button', { name: 'Preview' })).toHaveFocus();
@@ -1691,14 +1720,14 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
      * effect. The state-only cases above stay green without it.
      */
     queries.pages = [seededHome];
-    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: STUB_CANVAS });
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.getByText(/previewing/)).toBeInTheDocument();
 
     queries.isError = true;
     queries.pages = [];
     await act(async () => {
-      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+      rerender(rootElement({ initialPages: [], canvasContext: STUB_CANVAS }));
     });
 
     expect(await screen.findByRole('button', { name: /Try again/ })).toHaveFocus();

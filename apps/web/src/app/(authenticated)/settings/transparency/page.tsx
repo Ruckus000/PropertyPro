@@ -8,7 +8,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -20,9 +20,9 @@ export default async function TransparencySettingsPage({ searchParams }: Props) 
     headers(),
   ]);
 
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

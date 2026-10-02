@@ -34,6 +34,7 @@ import {
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
+import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { listSitePages, type SitePageRecord } from '@/lib/services/site-pages-service';
 import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 import { loadSiteQuotaBytes } from '@/lib/services/site-settings-service';
@@ -132,6 +133,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     onboardingCompletedAt,
     siteQuotaBytes,
     unitCount,
+    presets,
   ] = await Promise.all([
     getEffectiveFeaturesForPage(communityId, membership.communityType),
     // Only for the signed-in user's display name. Everything community-scoped
@@ -161,6 +163,8 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // v4 Phase 2b: decides whether Florida's website rules apply at all.
     // `null` = unknown (pre-0081 rows the backfill could not recover).
     getCommunityUnitCount(communityId),
+    // v4 Phase 4: the Design panel's colour sets — the wizard's catalog.
+    listThemePresetsForWizard(),
   ]);
 
   if (!features.hasSiteEditor) {
@@ -227,9 +231,9 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         communityName={membership.communityName}
         publicSiteUrl={communityInfo ? buildCommunityUrl(communityInfo.slug, '/') : null}
         proToolAccess={{
-          styling: features.hasSiteCustomCss,
           domain: features.hasSiteCustomDomain,
         }}
+        hasSiteCustomCss={features.hasSiteCustomCss}
         // Separate from `proToolAccess` on purpose: that map gates whole TOOLS
         // and would lock the Add tab. This gates three rows inside it.
         hasPolishBlocks={features.hasSitePolishBlocks}
@@ -269,12 +273,10 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
             quotaBytes: siteQuotaBytes,
           },
         }}
-        // From the same free `branding` read as the settings above, so the
-        // Colours panel opens on the community's real overrides. The Address
-        // panel gets no equivalent on purpose — its state lives at the domain
-        // provider, and seeding it here would put that round-trip on every
-        // editor load for a tab most PMs never open.
-        initialCustomCss={branding?.customCssOverrides ?? null}
+        // The Design panel's colour sets. The look itself is read client-side
+        // (`useSiteDesign`), because it is drafted and changes while the editor
+        // is open.
+        presets={presets}
         showWizardBanner={onboardingCompletedAt === null}
         initialPages={initialPages}
       />

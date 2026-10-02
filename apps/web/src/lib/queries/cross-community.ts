@@ -207,6 +207,7 @@ export async function getActivityFeed(
                   role: membership.role,
                   communityType: membership.communityType,
                   isUnitOwner: membership.isUnitOwner,
+                  tenantsCanViewInspectionReports: membership.tenantsCanViewInspectionReports,
                 },
                 gte(documents.createdAt, cutoff),
               );

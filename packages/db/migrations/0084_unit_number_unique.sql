@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "units_community_unit_number_unique" ON "units" USING btree ("community_id",lower("unit_number")) WHERE "units"."deleted_at" IS NULL;
