@@ -74,6 +74,8 @@ interface ViolationsAdminInboxProps {
   userRole: CommunityRole;
   /** Per-community `violationFinesEnabled` legal gate. */
   finesEnabled: boolean;
+  /** Start narrowed to one unit (`?unitId=`, the Directory's unit panel). */
+  initialUnitId?: number;
 }
 
 export function ViolationsAdminInbox({
@@ -81,7 +83,9 @@ export function ViolationsAdminInbox({
   userId,
   userRole,
   finesEnabled,
+  initialUnitId,
 }: ViolationsAdminInboxProps) {
+  const [unitId, setUnitId] = useState<number | undefined>(initialUnitId);
   const [violations, setViolations] = useState<ViolationItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -100,6 +104,7 @@ export function ViolationsAdminInbox({
       const res = await listViolations(
         communityId,
         {
+          unitId,
           status: selectedStatus || undefined,
           severity: selectedSeverity || undefined,
           createdAfter: createdAfter || undefined,
@@ -124,7 +129,7 @@ export function ViolationsAdminInbox({
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [communityId, selectedStatus, selectedSeverity, createdAfter, createdBefore, page]);
+  }, [communityId, unitId, selectedStatus, selectedSeverity, createdAfter, createdBefore, page]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -162,6 +167,21 @@ export function ViolationsAdminInbox({
 
       {/* Filter bar */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
+        {unitId !== undefined ? (
+          <span className="inline-flex items-center gap-2 rounded-md border border-edge bg-surface-subtle px-3 py-2 text-sm text-content">
+            {(violations[0]?.unitId === unitId && violations[0]?.unitLabel) || 'One unit'} only
+            <button
+              type="button"
+              onClick={() => {
+                setUnitId(undefined);
+                setPage(1);
+              }}
+              className="font-medium text-content-link underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Show all units
+            </button>
+          </span>
+        ) : null}
         <select
           value={selectedStatus}
           onChange={(e) => handleFilterChange(setSelectedStatus as (val: string) => void, e.target.value)}

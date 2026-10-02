@@ -90,7 +90,7 @@ export function ChecklistDetailView({ communityId, checklistId, onBack }: Props)
         </div>
 
         <p className="mt-1 text-sm text-content-tertiary">
-          Unit {checklist.unitId} — Lease #{checklist.leaseId} —{' '}
+          {checklist.unitLabel ?? `Unit #${checklist.unitId}`} — Lease #{checklist.leaseId} —{' '}
           {completedCount}/{stepKeys.length} steps complete
         </p>
 

@@ -14,6 +14,8 @@ export interface ChecklistItemData {
   statuteReference?: string | null;
   documentId?: number | null;
   documentPostedAt?: string | null; // ISO string
+  /** The linked file's state; see `withDerivedStatus` in the compliance route. */
+  documentState?: 'posted' | 'draft' | 'deleted' | null;
   deadline?: string | null; // ISO string
   rollingWindow?: { months: number } | null;
   isConditional?: boolean;

@@ -17,6 +17,7 @@ import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
 import { getUnitLabelMap } from '@/lib/services/units-lookup';
 import { listUnitResidentUserIds } from '@/lib/units/actor-units';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 import {
   deriveVisitorStatus,
   filterDeniedVisitorMatches,
@@ -840,12 +841,14 @@ export async function paginatePackageLog(params: {
     allowedUnitIds: params.allowedUnitIds,
   });
   const scoped = createScopedClient(params.communityId);
-  return await paginate(
+  const result = await paginate<PackageLogRow>(
     scoped,
     packageLog,
     { cursor: params.cursor, pageSize: params.pageSize },
     { where },
   );
+  // The staff table shows "Unit 1B", not the unit's row id.
+  return { data: await withUnitLabels(scoped, result.data), pagination: result.pagination };
 }
 
 export type { PackageLogStatus };

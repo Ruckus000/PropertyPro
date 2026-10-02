@@ -52,11 +52,26 @@ describe('RecentPayments', () => {
 
     render(<RecentPayments communityId={3} />);
 
+    // No unitLabel on these rows: the id fallback.
     expect(screen.getByText('Unit #12')).toBeInTheDocument();
     expect(screen.getByText('Unit #7')).toBeInTheDocument();
     expect(screen.getAllByText('$485.00')).toHaveLength(2);
     expect(screen.getByText('$25.00')).toBeInTheDocument();
     // Row 2: no paidAt and no late fee — one dash for each.
     expect(screen.getAllByText('-')).toHaveLength(2);
+  });
+
+  it('names each unit by the label the history read attaches, not its database id', () => {
+    useRecentPaymentsMock.mockReturnValue({
+      data: [
+        { id: 1, unitId: 2, unitLabel: 'Unit 1B', amountCents: 48500, lateFeeCents: 0, dueDate: '2026-09-01', paidAt: null },
+      ],
+      isLoading: false,
+    });
+
+    render(<RecentPayments communityId={3} />);
+
+    expect(screen.getByText('Unit 1B')).toBeInTheDocument();
+    expect(screen.queryByText('Unit #2')).not.toBeInTheDocument();
   });
 });

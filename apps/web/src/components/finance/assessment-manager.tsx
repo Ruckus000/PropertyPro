@@ -278,7 +278,7 @@ function LineItemsPanel({
               <tbody className="divide-y divide-edge-subtle">
                 {lineItems?.map((li) => (
                   <tr key={li.id} className="hover:bg-surface-hover">
-                    <td className="whitespace-nowrap px-3 py-2 text-sm text-content">Unit #{li.unitId}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-sm text-content">{li.unitLabel ?? `Unit #${li.unitId}`}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-content-secondary">{formatDate(li.dueDate)}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[li.status] || ''}`}>

@@ -132,6 +132,7 @@ vi.mock('@/hooks/use-packages', () => ({
         id: 1,
         recipientName: 'Ada Fisher',
         unitId: 12,
+        unitLabel: 'Unit 4C',
         carrier: 'UPS',
         trackingNumber: '1Z999',
         createdAt: '2026-03-01T00:00:00.000Z',
@@ -255,6 +256,9 @@ describe('finance', () => {
   it('renders a ledger row', () => {
     render(<LedgerTable communityId={1} />);
     expect(screen.getByText('March assessment')).toBeDefined();
+    // The unit column shows the unit's label, not its database id.
+    expect(screen.getByText('7A')).toBeDefined();
+    expect(screen.queryByText('Unit #7')).toBeNull();
   });
 });
 
@@ -277,6 +281,9 @@ describe('governance and operations', () => {
   it('renders a package row', () => {
     render(<PackageStaffView communityId={1} />);
     expect(screen.getByText('Ada Fisher')).toBeDefined();
+    // The unit column shows the unit's number, not its database id.
+    expect(screen.getByText('Unit 4C')).toBeDefined();
+    expect(screen.queryByText(/Unit #?12\b/)).toBeNull();
   });
 
   it('renders a visitor row, including the accessor-only Purpose column', () => {

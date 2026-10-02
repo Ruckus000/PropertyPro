@@ -214,6 +214,34 @@ describe('GET /api/v1/compliance', () => {
     expect(tryAutoCompleteMock).toHaveBeenCalledWith(55, USER_ID, 'check_compliance');
   });
 
+  it('says whether each linked file is posted, a draft, or deleted', async () => {
+    // The website editor's Documents tool needs this: `status` reads a draft
+    // and a deleted file alike as "not linked", but one is "post it" and the
+    // other "upload again".
+    listComplianceChecklistItemsMock.mockResolvedValueOnce([
+      { id: 1, templateKey: 'a', documentId: 10, documentPostedAt: null, deadline: null, rollingWindow: null },
+      { id: 2, templateKey: 'b', documentId: 11, documentPostedAt: null, deadline: null, rollingWindow: null },
+      { id: 3, templateKey: 'c', documentId: 12, documentPostedAt: null, deadline: null, rollingWindow: null },
+      { id: 4, templateKey: 'd', documentId: null, documentPostedAt: null, deadline: null, rollingWindow: null },
+    ]);
+    const queryWhere = vi.fn().mockResolvedValueOnce([
+      { id: 10, deletedAt: null, postedAt: '2026-09-01T00:00:00.000Z' },
+      { id: 11, deletedAt: null, postedAt: null },
+      { id: 12, deletedAt: '2026-09-05T00:00:00.000Z', postedAt: '2026-09-01T00:00:00.000Z' },
+    ]);
+    createScopedClientMock.mockReturnValue({ queryById: scopedQueryByIdMock, queryWhere });
+
+    const res = await GET(getReq('55'), undefined);
+
+    const json = (await res.json()) as { data: Array<{ id: number; documentState: unknown }> };
+    expect(json.data.map((r) => [r.id, r.documentState])).toEqual([
+      [1, 'posted'],
+      [2, 'draft'],
+      [3, 'deleted'],
+      [4, null],
+    ]);
+  });
+
   it('drops the posting clock below the website rule’s size threshold', async () => {
     // A 12-unit condo: §718.111(12)(g) does not apply, so no deadline or
     // rolling window reaches the calculator or the client.

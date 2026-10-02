@@ -59,7 +59,7 @@ export function RecentPayments({ communityId }: { communityId: number }) {
         <tbody className="divide-y divide-edge-subtle">
           {items.slice(0, 25).map((item) => (
             <tr key={item.id} className="hover:bg-surface-hover">
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-content">Unit #{item.unitId}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-content">{item.unitLabel ?? `Unit #${item.unitId}`}</td>
               <td className="whitespace-nowrap px-4 py-3 text-sm text-content-secondary">
                 {item.paidAt ? formatDateTime(item.paidAt) : '-'}
               </td>

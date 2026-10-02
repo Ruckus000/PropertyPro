@@ -40,6 +40,8 @@ import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
 import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
 import { listActorUnitIds } from '@/lib/units/actor-units';
+import { formatUnitLabel } from '@/lib/units/format-unit-label';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 import {
   generateCommunityFinanceStatementPdf,
   generateFinanceStatementPdf,
@@ -667,7 +669,7 @@ export async function listAssessmentLineItemsForCommunity(
   communityId: number,
   assessmentId: number,
   unitId?: number,
-): Promise<AssessmentLineItemRecord[]> {
+): Promise<Array<AssessmentLineItemRecord & { unitLabel: string }>> {
   const scoped = createScopedClient(communityId);
   const whereClause = unitId !== undefined
     ? and(eq(assessmentLineItems.assessmentId, assessmentId), eq(assessmentLineItems.unitId, unitId))
@@ -677,10 +679,14 @@ export async function listAssessmentLineItemsForCommunity(
     .selectFrom<AssessmentLineItemRecord>(assessmentLineItems, {}, whereClause)
     .orderBy(asc(assessmentLineItems.dueDate), asc(assessmentLineItems.id));
 
-  return rows.map((row) => ({
-    ...row,
-    status: assertLineItemStatus(row.status),
-  }));
+  // The assessment's line-item table shows "Unit 1B", not the unit's row id.
+  return withUnitLabels(
+    scoped,
+    rows.map((row) => ({
+      ...row,
+      status: assertLineItemStatus(row.status),
+    })),
+  );
 }
 
 export async function generateAssessmentLineItemsForCommunity(
@@ -1249,7 +1255,7 @@ export async function createPaymentIntentForLineItem(
 export async function listPaymentHistoryForCommunity(
   communityId: number,
   unitId?: number,
-): Promise<PaymentHistoryRecord[]> {
+): Promise<Array<PaymentHistoryRecord & { unitLabel: string }>> {
   const scoped = createScopedClient(communityId);
   const assessmentWhereClause = unitId !== undefined
     ? and(eq(assessmentLineItems.unitId, unitId), eq(assessmentLineItems.status, 'paid'))
@@ -1302,11 +1308,13 @@ export async function listPaymentHistoryForCommunity(
     lateFeeCents: 0,
   }));
 
-  return [...assessmentHistory, ...rentHistory].sort((a, b) => {
+  const history = [...assessmentHistory, ...rentHistory].sort((a, b) => {
     const aTime = a.paidAt ? a.paidAt.getTime() : 0;
     const bTime = b.paidAt ? b.paidAt.getTime() : 0;
     return bTime - aTime;
   });
+  // Recent payments shows "Unit 1B", not the unit's row id.
+  return withUnitLabels(scoped, history);
 }
 
 export interface StatementLineItem {
@@ -1568,6 +1576,8 @@ export async function buildUnitStatement(
 
 export interface CommunityStatementLineItem extends StatementLineItem {
   unitNumber: string;
+  /** "Unit 1B" / "Bldg A • Unit 1B"; `Unit #<id>` when the unit is gone. */
+  unitLabel: string;
 }
 
 export interface CommunityStatement {
@@ -1603,19 +1613,20 @@ export async function buildCommunityStatement(
   const scoped = createScopedClient(communityId);
   const limit = options.limit ?? STATEMENT_LINE_ITEM_LIMIT;
 
-  // Unit lookup — used to hydrate unitNumber on every line item.
+  // Unit lookup — used to hydrate unitNumber and unitLabel on every line item.
   interface UnitLookupRow {
     [key: string]: unknown;
     id: number;
     unitNumber: string;
+    building: string | null;
   }
   const unitRows = await scoped.selectFrom<UnitLookupRow>(
     units,
-    { id: units.id, unitNumber: units.unitNumber },
+    { id: units.id, unitNumber: units.unitNumber, building: units.building },
   );
-  const unitNumberById = new Map<number, string>();
+  const unitById = new Map<number, UnitLookupRow>();
   for (const row of unitRows) {
-    unitNumberById.set(row.id, row.unitNumber);
+    unitById.set(row.id, row);
   }
 
   const read = await readStatementLineItems(scoped, { startDate, endDate, limit });
@@ -1649,10 +1660,14 @@ export async function buildCommunityStatement(
   return {
     balanceCents,
     ledgerEntries: ledgerEntriesForCommunity,
-    lineItems: [...read.outstanding, ...read.history].map((item) => ({
-      ...item,
-      unitNumber: unitNumberById.get(item.unitId) ?? '',
-    })),
+    lineItems: [...read.outstanding, ...read.history].map((item) => {
+      const unit = unitById.get(item.unitId);
+      return {
+        ...item,
+        unitNumber: unit?.unitNumber ?? '',
+        unitLabel: unit ? formatUnitLabel(unit) : `Unit #${item.unitId}`,
+      };
+    }),
     summary: read.summary,
     truncated: read.truncated,
   };
@@ -1663,6 +1678,7 @@ export async function listDelinquentUnits(
   lienThresholdDays: number,
 ): Promise<Array<{
   unitId: number;
+  unitLabel: string;
   overdueAmountCents: number;
   daysOverdue: number;
   lineItemCount: number;
@@ -1703,15 +1719,19 @@ export async function listDelinquentUnits(
     bucket.set(item.unitId, current);
   }
 
-  return [...bucket.entries()]
-    .map(([unitId, value]) => ({
-      unitId,
-      overdueAmountCents: value.overdueAmountCents,
-      daysOverdue: value.daysOverdue,
-      lineItemCount: value.lineItemCount,
-      lienEligible: value.daysOverdue >= lienThresholdDays,
-    }))
-    .sort((a, b) => b.overdueAmountCents - a.overdueAmountCents);
+  // The delinquency table shows "Unit 1B", not the unit's row id.
+  return withUnitLabels(
+    scoped,
+    [...bucket.entries()]
+      .map(([unitId, value]) => ({
+        unitId,
+        overdueAmountCents: value.overdueAmountCents,
+        daysOverdue: value.daysOverdue,
+        lineItemCount: value.lineItemCount,
+        lienEligible: value.daysOverdue >= lienThresholdDays,
+      }))
+      .sort((a, b) => b.overdueAmountCents - a.overdueAmountCents),
+  );
 }
 
 export async function waiveLateFeesForUnit(
@@ -2777,7 +2797,17 @@ export async function listLedgerForCommunity(
   },
 ) {
   const scoped = createScopedClient(communityId);
-  return listLedgerEntries(scoped, params);
+  const entries = await listLedgerEntries(scoped, params);
+  // The ledger table shows "Unit 1B", not the unit's row id. Community-level
+  // entries (no unit) pass through unlabelled.
+  const labelled = await withUnitLabels(
+    scoped,
+    entries.flatMap((entry) => (entry.unitId === null ? [] : [{ unitId: entry.unitId }])),
+  );
+  const labelByUnitId = new Map(labelled.map((row) => [row.unitId, row.unitLabel]));
+  return entries.map((entry) =>
+    entry.unitId === null ? entry : { ...entry, unitLabel: labelByUnitId.get(entry.unitId) },
+  );
 }
 
 export async function getLedgerBalanceForUnit(

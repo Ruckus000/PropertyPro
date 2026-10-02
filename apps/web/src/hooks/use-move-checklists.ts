@@ -8,6 +8,8 @@ export interface MoveChecklistRow {
   communityId: number;
   leaseId: number;
   unitId: number;
+  /** "Unit 1B"; set by the list and detail GETs (withUnitLabels), absent on writes. */
+  unitLabel?: string;
   residentId: string;
   type: 'move_in' | 'move_out';
   checklistData: Record<string, {

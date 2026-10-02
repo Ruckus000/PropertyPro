@@ -29,6 +29,8 @@ interface UnitLineItem {
 
 interface CommunityLineItem extends UnitLineItem {
   unitNumber: string;
+  /** "Unit 1B" / "Bldg A • Unit 1B"; set by buildCommunityStatement. */
+  unitLabel?: string;
 }
 
 export interface StatementSummaryData {

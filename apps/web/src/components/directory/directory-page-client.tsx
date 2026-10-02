@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, DollarSign, MoreHorizontal, Plus, Upload } from 'lucide-react';
+import { AlertTriangle, DollarSign, Download, MoreHorizontal, Plus, Upload } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageHeaderHelpButton } from '@/components/shared/page-header-help-button';
@@ -34,7 +34,7 @@ import {
 } from '@/hooks/use-residents-management';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
-import { CsvExportButton } from '@/components/shared/csv-export-button';
+import { useDirectoryExport, type DirectoryExportInput } from '@/hooks/use-directory-export';
 import { ConfirmDialog } from '@/components/pm/site-editor-v3/ConfirmDialog';
 import { AddResidentDialog } from '@/components/residents/add-resident-dialog';
 import { DirectorySheet } from './directory-sheet';
@@ -239,6 +239,15 @@ export function DirectoryPageClient({
   const ruleQ = usePastDueRule(communityId, { enabled: canSeeBalances });
   const requestsQ = useQuery({ ...accessRequestsQueryOptions(communityId), enabled: isAdmin });
   const pendingRequests = requestsQ.data?.length ?? 0;
+  const exporter = useDirectoryExport(communityId);
+  const runExport = useCallback(
+    (input: DirectoryExportInput) =>
+      exporter.mutate(input, {
+        onSuccess: ({ rowCount }) => toast.success(`Exported ${plural(rowCount, input.kind === 'units' ? 'unit' : 'resident')}.`),
+        onError: (error) => toast.error(error.message || 'Export failed.'),
+      }),
+    [exporter],
+  );
 
   // A refused or failed delinquency read hides finance UI rather than showing
   // every unit as "nothing overdue".
@@ -469,6 +478,8 @@ export function DirectoryPageClient({
     hasOwnerRole,
     isAdmin,
     canSeeBalances: balancesVisible,
+    // The API sends counts (not null) only to managers with violations on.
+    canSeeViolations: (unitsQ.data ?? []).some((u) => u.openViolations != null),
     onOpenResident: openResident,
     onAddResident: (unitId: number) => openAddResident(unitId),
     onSendInvite: sendInvite,
@@ -577,7 +588,7 @@ export function DirectoryPageClient({
             <span />
           )}
           <div className="flex shrink-0 items-center gap-2">
-            {tab === 'residents' || (tab === 'units' && balancesVisible) ? (
+            {tab === 'residents' || tab === 'units' ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -599,12 +610,20 @@ export function DirectoryPageClient({
                         Import from CSV
                       </Link>
                     </DropdownMenuItem>
-                  ) : (
+                  ) : null}
+                  <DropdownMenuItem
+                    disabled={exporter.isPending}
+                    onSelect={() => runExport({ kind: tab === 'residents' ? 'residents' : 'units' })}
+                  >
+                    <Download size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+                    {tab === 'residents' ? 'Export residents (CSV)' : 'Export units (CSV)'}
+                  </DropdownMenuItem>
+                  {tab === 'units' && balancesVisible ? (
                     <DropdownMenuItem onSelect={() => setRuleOpen(true)}>
                       <DollarSign size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
                       Past-due rule
                     </DropdownMenuItem>
-                  )}
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
@@ -886,21 +905,15 @@ export function DirectoryPageClient({
                             Send documents
                           </button>
                         ) : null}
-                        <CsvExportButton
-                          headers={['Name', 'Email', 'Phone', 'Unit', 'Building', 'Type', 'Board', 'Portal']}
-                          rows={visibleSelection.map((r) => ({
-                            Name: r.displayName,
-                            Email: r.email ?? '',
-                            Phone: r.phone ?? '',
-                            Unit: r.unit?.unitNumber ?? '',
-                            Building: r.unit?.buildingLabel ?? '',
-                            Type: hasOwnerRole && r.isUnitOwner ? 'Owner' : 'Tenant',
-                            Board: r.designation === 'board_president' ? 'President' : r.designation === 'board_member' ? 'Member' : '',
-                            Portal: r.portalStatus === 'active' ? 'Active' : r.portalStatus === 'invited' ? 'Invited' : 'Not invited',
-                          }))}
-                          filename="residents"
-                          className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover md:h-9', FOCUS)}
-                        />
+                        <button
+                          type="button"
+                          onClick={() => runExport({ kind: 'residents', userIds: visibleSelection.map((r) => r.userId) })}
+                          disabled={exporter.isPending}
+                          className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover disabled:opacity-60 md:h-9', FOCUS)}
+                        >
+                          <Download size={14} aria-hidden="true" />
+                          Export CSV
+                        </button>
                         <button
                           type="button"
                           onClick={() => setSelection(new Set())}

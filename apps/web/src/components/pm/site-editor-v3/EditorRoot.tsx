@@ -75,6 +75,14 @@ const DomainPanel = dynamic(
 const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
   loading: () => null,
 });
+const RecordsAttention = dynamic(
+  () => import('./RecordsAttention').then((m) => m.RecordsAttention),
+  { ssr: false, loading: () => null },
+);
+const DocumentsPanel = dynamic(
+  () => import('./panels/DocumentsPanel').then((m) => m.DocumentsPanel),
+  { loading: () => null },
+);
 
 // Phase 11b-3. Same reasoning as every panel above — only the ACTIVE tool's
 // panel is rendered, so the pages list and its query only arrive on the tab
@@ -255,6 +263,8 @@ export function EditorRoot({
   initialPages,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
+  // The Documents tool's count, reported by the code-split `RecordsAttention`.
+  const [recordsAttention, setRecordsAttention] = useState(0);
   // The canvas, preview and publish-sheet contrast check all show the DRAFT
   // look (website builder v4), which changes as the Design panel saves. The
   // server context carries the live look; this re-derives theme and layout
@@ -847,6 +857,11 @@ export function EditorRoot({
         onSlotSelected={handleSlotSelected}
       >
       <AutosaveStatusProvider>
+      {/* Apartments have no records checklist (the route refuses them), so
+          they never ask. */}
+      {siteIdentity.communityType !== 'apartment' ? (
+        <RecordsAttention communityId={communityId} onCount={setRecordsAttention} />
+      ) : null}
       <EditorShell
         communityName={communityName}
         // The only thing on screen naming the page while the Sections tool is
@@ -864,6 +879,7 @@ export function EditorRoot({
         }
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
+        toolBadges={recordsAttention > 0 ? { documents: recordsAttention } : undefined}
         communityId={communityId}
         hasPublishedSite={hasPublishedSite}
         initialNotice={initialNotice}
@@ -1010,6 +1026,14 @@ export function EditorRoot({
                 onFocusRestored={handleFocusRestored}
                 onSelectPage={handleSelectPage}
                 onPageRemoved={handlePageRemoved}
+              />
+            );
+          }
+          if (tool === 'documents') {
+            return (
+              <DocumentsPanel
+                communityId={communityId}
+                communityType={siteIdentity.communityType}
               />
             );
           }

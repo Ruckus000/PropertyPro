@@ -98,6 +98,11 @@ function withDerivedStatus(
 
   return {
     ...row,
+    // What the linked file is now, for callers that must tell a saved draft
+    // (open it and post it) from a deleted one (upload again) — `status` alone
+    // reads both as "not linked". `null` = nothing linked, or the row is gone.
+    documentState:
+      linked === undefined ? null : linked.deletedAt != null ? 'deleted' : linked.isDraft ? 'draft' : 'posted',
     status: calculateComplianceStatus({
       isApplicable: row['isApplicable'] as boolean | undefined,
       documentId,

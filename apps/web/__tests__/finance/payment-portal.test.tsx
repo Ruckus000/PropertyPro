@@ -456,6 +456,43 @@ describe('PaymentPortal', () => {
       expect(screen.getByText('Unit 202')).toBeInTheDocument();
     });
 
+    it('names each row by the statement\'s unit label (building + number), not the unit id', async () => {
+      mockBothFetches(
+        {
+          balanceCents: 40000,
+          ledgerEntries: [],
+          lineItems: [
+            {
+              id: 801,
+              assessmentId: 31,
+              unitId: 2,
+              unitNumber: '1B',
+              unitLabel: 'Bldg A • Unit 1B',
+              amountCents: 40000,
+              lateFeeCents: 0,
+              status: 'pending',
+              dueDate: '2026-05-01',
+              paidAt: null,
+              paymentIntentId: null,
+            },
+          ],
+        },
+        { mode: 'community' },
+      );
+
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="pm_admin" mode="community" paymentsEnabled={false} />
+        </Wrapper>,
+      );
+
+      expect(await screen.findByText('Bldg A • Unit 1B')).toBeInTheDocument();
+      expect(screen.queryByText('Unit #2')).not.toBeInTheDocument();
+    });
+
     it('hides Pay Now in community mode EVEN WHEN payments are enabled', async () => {
       /*
        * `paymentsEnabled` is deliberately TRUE here, and must not be "tidied" to
