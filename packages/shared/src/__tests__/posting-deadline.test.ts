@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculatePostingDeadline,
   DEFAULT_POSTING_WINDOW_DAYS,
+  postingClockApplies,
 } from '../compliance/posting-deadline';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -39,5 +40,19 @@ describe('calculatePostingDeadline', () => {
   it('honours a non-default window length', () => {
     const source = new Date('2026-08-12T18:00:00.000Z');
     expect(calculatePostingDeadline(source, 14).getTime() - source.getTime()).toBe(14 * DAY_MS);
+  });
+});
+
+describe('postingClockApplies', () => {
+  it('stops the clock below the website rule’s size threshold', () => {
+    expect(postingClockApplies({ communityType: 'condo_718', unitCount: 24 })).toBe(false);
+    expect(postingClockApplies({ communityType: 'hoa_720', unitCount: 99 })).toBe(false);
+  });
+
+  it('runs it at the threshold, above it, and when the size is unknown', () => {
+    expect(postingClockApplies({ communityType: 'condo_718', unitCount: 25 })).toBe(true);
+    expect(postingClockApplies({ communityType: 'hoa_720', unitCount: 100 })).toBe(true);
+    expect(postingClockApplies({ communityType: 'condo_718', unitCount: null })).toBe(true);
+    expect(postingClockApplies({ communityType: 'hoa_720', unitCount: null })).toBe(true);
   });
 });

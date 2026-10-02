@@ -54,6 +54,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // row per scheduled job — so it cannot be reached through a scoped client.
   // Addresses a single row by primary key; reads and writes no tenant data.
   resolve(repoRoot, 'apps/web/src/lib/services/cron-run-service.ts'),
+  // Directory portal status: reads auth.users.last_sign_in_at (outside the
+  // tenant schema) via findCommunityResidentPortalActivity, which is anchored on
+  // user_roles.community_id so it returns only that community's own members.
+  // Called only from listResidentsForCommunity, behind residents:read.
+  resolve(repoRoot, 'apps/web/src/lib/services/resident-service.ts'),
   // Dev-only: reset onboarding wizard state for E2E testing (gated by NODE_ENV)
   resolve(repoRoot, 'apps/web/src/app/dev/reset-onboarding/route.ts'),
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),

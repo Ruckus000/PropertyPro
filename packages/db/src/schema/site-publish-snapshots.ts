@@ -85,6 +85,12 @@ export interface SitePublishSnapshotPayloadV2 {
   version: 2;
   pages: SitePublishSnapshotPage[];
   blocks: (SitePublishSnapshotBlockV1 & { pageId: number })[];
+  /**
+   * The site's look as published (website builder v4: the `SITE_LOOK_FIELDS`
+   * of `communities.branding`). Absent on rows written before the look had a
+   * draft — a revert of one of those leaves the look alone.
+   */
+  look?: Record<string, unknown>;
 }
 
 export type SitePublishSnapshotPayload =

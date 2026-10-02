@@ -6,7 +6,9 @@
  * Board designation grants no access (ADR-006).
  */
 import { headers } from 'next/headers';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { redirect } from 'next/navigation';
+import { isDirectoryEnabledForCommunity } from '@/lib/directory/directory-flag';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
@@ -23,9 +25,9 @@ export default async function ResidentsPage({ searchParams }: PageProps) {
     headers(),
   ]);
 
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {
@@ -37,6 +39,13 @@ export default async function ResidentsPage({ searchParams }: PageProps) {
         </p>
       </div>
     );
+  }
+
+  // Directory pilot: flagged communities use the Directory, so every existing
+  // link (nav, palette, checklist, emails) lands there. 307, so turning the
+  // flag off is the rollback. The Directory does its own auth and permissions.
+  if (isDirectoryEnabledForCommunity(context.communityId)) {
+    redirect(`/dashboard/directory?communityId=${context.communityId}&tab=residents`);
   }
 
   const userId = await requireAuthenticatedUserId();

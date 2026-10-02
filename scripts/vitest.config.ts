@@ -7,6 +7,12 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['__tests__/**/*.test.ts'],
+    // Several verify-*.test.ts cases run their guard over the WHOLE repo. Alone
+    // they take ~1s, but inside the full local suite on a loaded laptop one hit
+    // the 5s default (verify-call-ceilings, 2026-10-02) and turned localci red
+    // with nothing wrong. This is a ceiling, not a target: a guard that truly
+    // hangs still fails.
+    testTimeout: 30_000,
   },
   resolve: {
     // Scripts are not a workspace package, so `@propertypro/*` specifiers have

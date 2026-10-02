@@ -33,6 +33,10 @@ P1
 - Cache logo URLs appropriately
 
 ## Files Expected
+
+> The page is now a redirect into the website editor. `BrandingForm.tsx` and
+> `BrandingPreview.tsx` were deleted as unused in #1274 (2026-10-02).
+
 - `apps/web/src/app/(pm)/settings/branding/page.tsx`
 - `apps/web/src/components/pm/BrandingForm.tsx`
 - `apps/web/src/components/pm/BrandingPreview.tsx`

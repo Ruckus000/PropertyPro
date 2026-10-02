@@ -8,6 +8,10 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
+/** Mirrors the `units_occupancy_check` CHECK constraint (migration `unit_occupancy`). */
+export const UNIT_OCCUPANCY_VALUES = ['owner_occupied', 'rented', 'vacant'] as const;
+const occupancySchema = z.enum(UNIT_OCCUPANCY_VALUES);
+
 const createUnitBodySchema = z.object({
   communityId: z.number().int().positive(),
   unitNumber: z.string().min(1, 'Unit number is required'),
@@ -17,6 +21,7 @@ const createUnitBodySchema = z.object({
   bathrooms: z.number().int().min(0).nullable().optional(),
   sqft: z.number().int().min(0).nullable().optional(),
   rentAmount: z.string().nullable().optional(),
+  occupancy: occupancySchema.nullable().optional(),
 });
 
 const updateUnitBodySchema = z.object({
@@ -29,6 +34,7 @@ const updateUnitBodySchema = z.object({
   bathrooms: z.number().int().min(0).nullable().optional(),
   sqft: z.number().int().min(0).nullable().optional(),
   rentAmount: z.string().nullable().optional(),
+  occupancy: occupancySchema.nullable().optional(),
 });
 
 const deleteUnitBodySchema = z.object({

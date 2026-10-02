@@ -112,6 +112,28 @@ describe('checkDistributedRateLimit', () => {
   });
 });
 
+describe('checkDistributedRateLimit — weighted (email cap)', () => {
+  it('passes the weight to Upstash as `rate`, and nothing extra for weight 1', async () => {
+    setUpstashEnv();
+    const calls: unknown[][] = [];
+    vi.doMock('@upstash/ratelimit', () => ({
+      Ratelimit: class {
+        static slidingWindow() {
+          return {};
+        }
+        limit(...args: unknown[]) {
+          calls.push(args);
+          return Promise.resolve({ success: true, remaining: 40, reset: Date.now() });
+        }
+      },
+    }));
+    const mod = await import('../../src/lib/middleware/distributed-rate-limiter');
+    await mod.checkDistributedRateLimit('k', 100, 60_000, 60);
+    await mod.checkDistributedRateLimit('k', 100, 60_000);
+    expect(calls).toEqual([['k', { rate: 60 }], ['k']]);
+  });
+});
+
 describe('checkRateLimit degradation', () => {
   it('still enforces the auth tier in-memory when Redis is unavailable', async () => {
     clearUpstashEnv();

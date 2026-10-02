@@ -67,9 +67,11 @@ const {
   setPageSelectRows,
   setRedirectSelectRows,
   resetPageSelectRows,
+  setCommunityBranding,
 } = vi.hoisted(() => {
   const paginateMock = vi.fn();
-  const txExecuteMock = vi.fn().mockResolvedValue(undefined);
+  // An empty row list, like postgres-js — `discardSiteDrafts` reads RETURNING rows.
+  const txExecuteMock = vi.fn().mockResolvedValue([]);
   const txAuditValuesMock = vi.fn().mockResolvedValue(undefined);
   const txSnapshotValuesMock = vi.fn().mockResolvedValue(undefined);
   // publishCommunitySite now inserts into TWO tables inside its transaction
@@ -101,6 +103,7 @@ const {
   ];
   let pageSelectRows: unknown[] = DEFAULT_PAGE_ROWS;
   let redirectSelectRows: unknown[] = [];
+  let communitySelectRows: unknown[] = [{ branding: {} }];
   const txSelectMock = vi.fn(() => {
     const chain: Record<string, unknown> = {};
     // Resolved on `.from(table)`, so the positional queue only advances for the
@@ -113,6 +116,9 @@ const {
     chain.from = (table: unknown) => {
       const name = String(table);
       if (name.includes('sitePageRedirects')) rows = redirectSelectRows;
+      // The drafted site look (`branding.draftLook`, website builder v4) —
+      // read by publish. Off the positional queue, like pages.
+      else if (name.includes('communities')) rows = communitySelectRows;
       else if (name.includes('sitePages')) rows = pageSelectRows;
       return chain;
     };
@@ -185,7 +191,8 @@ const {
     // Module-level, so it survives vi.clearAllMocks() — every describe that
     // touches it has to restore the default or it leaks into later tests as
     // phantom pending pages.
-    resetPageSelectRows: () => { pageSelectRows = DEFAULT_PAGE_ROWS; redirectSelectRows = []; },
+    resetPageSelectRows: () => { pageSelectRows = DEFAULT_PAGE_ROWS; redirectSelectRows = []; communitySelectRows = [{ branding: {} }]; },
+    setCommunityBranding: (branding: unknown) => { communitySelectRows = [{ branding }]; },
     setUpdateReturnQueue: (q: unknown[][]) => { updateReturnQueue = q; updateIdx = 0; },
     getUpdateCalls: () => updateCalls,
     resetUpdateCalls: () => { updateCalls.length = 0; },
@@ -1387,6 +1394,20 @@ describe('discardSiteDrafts', () => {
     expect(updateCalls[0]!.set).toHaveProperty('deletedAt');
   });
 
+  it('drops the drafted site look and audits it', async () => {
+    // Discard means "back to what the public sees" — colours included.
+    setUpdateReturnQueue([[], [], []]);
+    txExecuteMock.mockResolvedValueOnce(undefined).mockResolvedValueOnce([{ id: 42 }]);
+
+    await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
+
+    const sqlText = (txExecuteMock.mock.calls[1]![0] as { __sql: { strings: string[] } }).__sql.strings.join('');
+    expect(sqlText).toContain("- 'draftLook'");
+    expect(txAuditValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ discardedDesign: true }) }),
+    );
+  });
+
   it('drops never-published pages and cancels staged page removals', async () => {
     setUpdateReturnQueue([[], [{ id: 7 }], [{ id: 8 }]]);
 
@@ -1425,7 +1446,7 @@ describe('discardSiteDrafts', () => {
         action: 'delete',
         resourceType: 'community_site_drafts',
         resourceId: '42',
-        metadata: { discardedCount: 2, discardedPageCount: 0 },
+        metadata: { discardedCount: 2, discardedPageCount: 0, discardedDesign: false },
       }),
     );
   });
@@ -1766,6 +1787,45 @@ describe('publishCommunitySite × captureSnapshot', () => {
     ]);
   });
 
+  it('publishes a design-only change: promotes the drafted look and records it', async () => {
+    // Website builder v4: the look is drafted in `branding.draftLook`. With no
+    // section or page drafts, a pending look alone is something to publish.
+    setSelectQueue([[]]);
+    setCommunityBranding({ primaryColor: '#111111', draftLook: { primaryColor: '#222222' } });
+    try {
+      const result = await publishCommunitySite({
+        communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null,
+      });
+
+      expect(result.published).toBe(true);
+      const promote = txExecuteMock.mock.calls
+        .map((c) => (c[0] as { __sql: { strings: string[]; values: unknown[] } }).__sql)
+        .find((q) => q.strings.join('').includes("- 'draftLook'"));
+      expect(promote?.values).toContain(JSON.stringify({ primaryColor: '#222222' }));
+      const row = txSnapshotValuesMock.mock.calls[0]![0] as {
+        changeLabels: string[];
+        snapshot: { look?: Record<string, unknown> };
+      };
+      expect(row.changeLabels).toContain('Changed the site design');
+      expect(row.snapshot.look).toEqual({ primaryColor: '#222222' });
+    } finally {
+      resetPageSelectRows();
+    }
+  });
+
+  it('treats a draft look equal to the live look as nothing to publish', async () => {
+    setSelectQueue([[]]);
+    setCommunityBranding({ primaryColor: '#111111', draftLook: { primaryColor: '#111111' } });
+    try {
+      const result = await publishCommunitySite({
+        communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null,
+      });
+      expect(result).toEqual({ published: false, reason: 'nothing-to-publish' });
+    } finally {
+      resetPageSelectRows();
+    }
+  });
+
   it('writes NO history row when there is nothing to publish', async () => {
     setSelectQueue([[]]);
     const result = await publishCommunitySite({
@@ -2103,10 +2163,28 @@ describe('revertToSnapshot', () => {
 
     await revertToSnapshot({ communityId: 42, actorUserId: 'user-1', snapshotId: 7 });
 
-    expect(txExecuteMock).toHaveBeenCalledTimes(1);
+    // First statement is the lock; the only other one is the look (STEP 4).
+    expect(txExecuteMock).toHaveBeenCalledTimes(2);
     const sqlArg = txExecuteMock.mock.calls[0]![0] as { __sql: { strings: string[]; values: unknown[] } };
     expect(sqlArg.__sql.strings.join('')).toContain('FOR UPDATE');
     expect(sqlArg.__sql.values).toContain(42);
+  });
+
+  it('puts a recorded look back as the draft look', async () => {
+    // Website builder v4: a v2 snapshot carries the look it published. Revert
+    // restores it as a draft, like the sections, for the next Publish.
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([
+      [snapshotRow({ snapshot: { version: 2, pages: [], blocks: [], look: { layoutId: 'sable' } } })],
+      [],
+    ]);
+
+    await revertToSnapshot({ communityId: 42, actorUserId: 'user-1', snapshotId: 7 });
+
+    const look = txExecuteMock.mock.calls[1]![0] as { __sql: { strings: string[]; values: unknown[] } };
+    expect(look.__sql.strings.join('')).toContain('{draftLook}');
+    expect(look.__sql.values).toContain(JSON.stringify({ layoutId: 'sable' }));
   });
 
   it('writes an inline audit row recording the revert', async () => {

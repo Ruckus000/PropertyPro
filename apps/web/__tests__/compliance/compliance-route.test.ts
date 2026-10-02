@@ -41,6 +41,7 @@ const {
   updateComplianceChecklistItemMock,
   createScopedClientMock,
   scopedQueryByIdMock,
+  getCommunityUnitCountMock,
   documentsTable,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -59,6 +60,7 @@ const {
   updateComplianceChecklistItemMock: vi.fn(),
   createScopedClientMock: vi.fn(),
   scopedQueryByIdMock: vi.fn(),
+  getCommunityUnitCountMock: vi.fn(),
   documentsTable: Symbol('documents'),
 }));
 
@@ -108,6 +110,10 @@ vi.mock('@/lib/utils/compliance-calculator', () => ({
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
+}));
+
+vi.mock('@/lib/services/community-profile-service', () => ({
+  getCommunityUnitCount: getCommunityUnitCountMock,
 }));
 
 vi.mock('@/lib/services/compliance-service', () => ({
@@ -160,6 +166,7 @@ beforeEach(() => {
   createScopedClientMock.mockReturnValue({ queryById: scopedQueryByIdMock });
   getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true });
   calculateComplianceStatusMock.mockReturnValue('overdue');
+  getCommunityUnitCountMock.mockResolvedValue(null);
   calculatePostingDeadlineMock.mockReturnValue(new Date('2026-01-01T00:00:00Z'));
   tryAutoCompleteMock.mockResolvedValue(undefined);
   logAuditEventMock.mockResolvedValue(undefined);
@@ -205,6 +212,51 @@ describe('GET /api/v1/compliance', () => {
     // B2: board/owner/tenant checklists carry `check_compliance` — fire it on read
     // so those roles can actually reach 100%.
     expect(tryAutoCompleteMock).toHaveBeenCalledWith(55, USER_ID, 'check_compliance');
+  });
+
+  it('drops the posting clock below the website rule’s size threshold', async () => {
+    // A 12-unit condo: §718.111(12)(g) does not apply, so no deadline or
+    // rolling window reaches the calculator or the client.
+    getCommunityUnitCountMock.mockResolvedValueOnce(12);
+    listComplianceChecklistItemsMock.mockResolvedValueOnce([
+      {
+        id: 1,
+        templateKey: '718_bylaws',
+        documentId: null,
+        documentPostedAt: null,
+        deadline: '2026-01-01T00:00:00.000Z',
+        rollingWindow: { months: 12 },
+      },
+    ]);
+    calculateComplianceStatusMock.mockReturnValueOnce('unsatisfied');
+
+    const res = await GET(getReq('55'), undefined);
+
+    expect(getCommunityUnitCountMock).toHaveBeenCalledWith(55);
+    expect(calculateComplianceStatusMock).toHaveBeenCalledWith(
+      expect.objectContaining({ deadline: null, rollingWindowMonths: null }),
+    );
+    const json = (await res.json()) as { data: Array<Record<string, unknown>> };
+    expect(json.data[0]).toMatchObject({ deadline: null, rollingWindow: null, status: 'unsatisfied' });
+  });
+
+  it('keeps the posting clock when the size is unknown', async () => {
+    listComplianceChecklistItemsMock.mockResolvedValueOnce([
+      {
+        id: 1,
+        templateKey: '718_bylaws',
+        documentId: null,
+        documentPostedAt: null,
+        deadline: '2026-01-01T00:00:00.000Z',
+        rollingWindow: null,
+      },
+    ]);
+
+    await GET(getReq('55'), undefined);
+
+    expect(calculateComplianceStatusMock).toHaveBeenCalledWith(
+      expect.objectContaining({ deadline: new Date('2026-01-01T00:00:00.000Z') }),
+    );
   });
 
   it('does not fire auto-complete when there are zero rows', async () => {

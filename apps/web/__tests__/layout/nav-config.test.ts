@@ -328,6 +328,11 @@ describe('getActiveItemId', () => {
     expect(getActiveItemId(PM_NAV_ITEMS, '/pm/settings/branding')).toBe('branding');
   });
 
+  it('highlights Residents on the Directory (pilot), not Dashboard', () => {
+    expect(getActiveItemId(NAV_ITEMS, '/dashboard/directory')).toBe('residents');
+    expect(getActiveItemId(NAV_ITEMS, '/dashboard/units')).toBe('units');
+  });
+
   it('returns null for unmatched paths', () => {
     expect(getActiveItemId(NAV_ITEMS, '/unknown')).toBeNull();
   });

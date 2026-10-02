@@ -5,12 +5,11 @@
  * and the focused mutation that writes them.
  *
  * `useSaveCustomCss` PATCHes ONLY customCssOverrides on /api/v1/pm/branding so it
- * never clobbers the other branding fields (colors/fonts/logo) the full
- * BrandingForm owns. The branding route validates + plan-gates
- * (hasSiteCustomCss) server-side.
+ * never clobbers the other branding fields (colors/fonts/logo) on the same
+ * route. The branding route validates + plan-gates (hasSiteCustomCss)
+ * server-side.
  *
- * Raw fetch (not requestJson) to render the thrown `.message` verbatim, matching
- * use-branding-form.ts.
+ * Raw fetch (not requestJson) to render the thrown `.message` verbatim.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CustomCssOverrides } from '@propertypro/shared';

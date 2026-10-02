@@ -12,7 +12,11 @@ import { communities } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 // AUTHZ: Integration test fixture — creates and reads its own community row.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { mergeCommunitySettings } from '../../src/lib/services/community-settings-service';
+import {
+  getPastDueRule,
+  mergeCommunitySettings,
+  setPastDueRule,
+} from '../../src/lib/services/community-settings-service';
 import { getDescribeDb, requireDatabaseUrlInCI } from './helpers/multi-tenant-test-kit';
 
 requireDatabaseUrlInCI('community-settings-merge');
@@ -54,6 +58,19 @@ describeDb('community_settings merge (integration)', () => {
       allowResidentVisitorRevoke: true,
       paymentFeePolicy: 'association_absorbs',
       announcementsWriteLevel: 'admin_only',
+    });
+  });
+
+  it('past-due rule: defaults, round-trips, and leaves other keys alone', async () => {
+    expect(await getPastDueRule(communityId)).toEqual({ minCents: 0, minDays: 0 });
+    const previous = await setPastDueRule(communityId, { minCents: 50_000, minDays: 30 });
+    expect(previous).toEqual({ minCents: 0, minDays: 0 });
+    expect(await getPastDueRule(communityId)).toEqual({ minCents: 50_000, minDays: 30 });
+    expect(await settings()).toMatchObject({
+      allowResidentVisitorRevoke: true,
+      paymentFeePolicy: 'association_absorbs',
+      pastDueMinCents: 50_000,
+      pastDueMinDays: 30,
     });
   });
 });

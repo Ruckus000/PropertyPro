@@ -80,6 +80,9 @@ export type AuditAction =
   // is a marketing choice, while the footer's opt-in statutory records line is
   // one an association's counsel may need to account for.
   | 'site_settings_updated' | 'site_footer_updated'
+  // Website builder v4 — the site's look (template, colours, fonts) saved as a
+  // draft. Publishing it is recorded on the publish audit row.
+  | 'site_design_draft_saved'
   // Portfolio template audit actions
   | 'portfolio_template_created' | 'portfolio_template_renamed' | 'portfolio_template_deleted'
   | 'portfolio_template_applied'

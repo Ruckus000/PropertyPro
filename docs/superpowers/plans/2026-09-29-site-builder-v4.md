@@ -78,11 +78,26 @@ count and dropped it before the insert.
 - Signup and "Add community" no longer pre-fill the count with 1. Since 0081, that default
   would have marked an association exempt without anyone answering the question.
 
+Follow-up: Compliance now agrees with the builder. Every "overdue" the checklist derives is
+the website-posting clock (the 30-day deadline in `calculatePostingDeadline` and the rolling
+posting windows). So `postingClockApplies(subject)` in `packages/shared` is false exactly when
+`requirementLevel` is `recommended`, and the clock is switched off in the three places it
+reaches people:
+- the Compliance API, whose rows go out with no deadline or rolling window, so they are never
+  overdue or "due soon";
+- the daily overdue email, which is not sent;
+- the public transparency page, where an unposted item reads "Not required".
+
+The Compliance page says why in one banner. Rows and scores are unchanged: the duty to keep
+official records still applies, and scores count satisfied ÷ applicable.
+
 Deferred, each with its trigger:
-- **The compliance module still treats every condo and HOA as covered** (`hasCompliance` by
-  type), so a 12-unit condo's Compliance page lists §718.111(12)(g)(2) website items that
-  the builder calls "recommended". This predates 2b; 2b only makes it visible. Trigger: a
-  small-association customer, or the next change to the compliance checklist.
+- **PM portfolio "urgent / critical" counts** (`lib/queries/cross-community.ts`,
+  `packages/db/src/queries/pm-portfolio.ts`) and the admin console's per-item status still read
+  raw deadlines. Only staff and PMs see them; none are public, and none send email. Trigger: a
+  PM or admin managing a sub-threshold association.
+- **The PATCH response from `/api/v1/compliance`** still carries the stored deadline. The client
+  discards it and refetches. Trigger: a client that reads it.
 - **The 25 / 100 thresholds also appear in marketing prose** (`compliance-checker.tsx`,
   `faq-section.tsx`, `who-section.tsx`). Trigger: the statute's threshold changes.
 - **Draft-wins merge has four hand-written copies** (see the `ponytail:` comment in
@@ -103,13 +118,62 @@ Deferred, each with its trigger:
   published as MDX tagged `/pm/website-editor`, so the existing HelpPanel and the help
   center show it too.
 
-### Phase 4: Design panel
-- Template cards and the colour and font preset grid reuse the wizard's
-  `LayoutChooser` and `PresetChooser`, with the hook's values passed in as props, and
-  save through the existing endpoint. The Essentials lock uses the plan feature.
-- The template-switch dialog offers "Change the look only" and "Use the template's
-  pages too". The second option needs a server operation that stages the template's
-  page set as drafts, reusing `site_starter_packs`. Nothing goes live until publish.
+### Phase 4: Design panel (decided 2026-10-01)
+These decisions were made against what the product actually has. The design assumed
+more than exists.
+
+**Decisions:**
+- **Design changes are drafts.** The look sits in `communities.branding`, outside
+  `site_blocks`, so it used to go live on save. The design says "Nothing goes live
+  until you publish", so the look now has a draft layer.
+- **Six templates, look only.** The design's templates each bring a page set, and the
+  product has none. Even the design never decided pages for the HOA and apartment
+  templates. So the six templates are named layout + colour-set pairs, and "Use the
+  template's pages too" is deferred.
+- **No Essentials lock.** Essentials users can already pick any colour set in the
+  wizard, and a lock would take that away.
+- **The Pro "Colours" panel merges into Design.** Its custom colours override any
+  colour set, so as a separate panel a colour-set pick could silently do nothing.
+
+**Built in 4a (server):**
+- `branding.draftLook` holds only `SITE_LOOK_FIELDS`. It needs no migration, because
+  live readers read named fields only and never see it.
+- `site-design-service` and `/api/v1/pm/site/design` write the draft with one
+  `jsonb_set`.
+- Choosing a colour set writes its colours and fonts. This fixes the wizard bug where
+  the choice never reached the live site, because only the slug was saved and
+  `resolveTheme` ignores it.
+- Publish promotes the draft in its transaction, counts a design-only change,
+  records the look in the history snapshot and labels it.
+- Discard drops the draft. Revert restores a recorded look as the draft.
+- The diff has one `style` change.
+- `/pm/site-preview` and preview requests show the draft look; live pages never do.
+- The wizard's look fields go to the draft and go live on its final Publish.
+
+**4b (UI):** the Design panel, replacing the "Colours" tool. The canvas restyles from
+the draft.
+
+Deferred, each with its trigger:
+- **"Use the template's pages too".** Trigger: page sets exist for every community type.
+- **Other branding writers still change the look live:** `/pm/settings/branding`,
+  copy-branding, the admin app and portfolio templates. Trigger: a manager reports a
+  settings change bypassing Publish.
+- **The public header background ignores custom colours** (`PublicSiteHeader.tsx`,
+  inline `theme.primaryColor`). This predates Phase 4. Trigger: the next public-header
+  change.
+- **The publish concurrency token is `MAX(site_blocks.published_at)`**, so a
+  design-only publish doesn't advance it. That is the same benign limitation as a
+  removal-only publish (see `publishCommunitySite`). Trigger: two managers report
+  overwriting each other's design.
+- **Only the design PATCH refuses a demo in its grace window.** `/api/v1/pm/site/design`
+  calls `assertNotDemoGrace`, as `/api/v1/pm/branding` did for the look. The other
+  `pm/site/*` writes (blocks, pages, settings, drafts, publish, revert, schedule, hero,
+  urgent notice) and the onboarding wizard's PATCH never have, and nothing checks it
+  centrally. Trigger: a decision that grace-window demos are read-only for the whole
+  site, then one check in the shared access helper.
+- **Colour sets' fonts are not checked against `ALLOWED_FONTS`.** They come from the
+  platform catalog, and `resolveTheme` drops unknown fonts at render. Trigger: the
+  catalog becomes editable by anyone but platform admins.
 
 ### Phase 5: Settings view (top-bar view switch: Website · Documents · Settings)
 - **General:** site name and favicon. These exist in SitePanel; move them here.

@@ -76,6 +76,7 @@
 
 import { useCallback, useMemo } from 'react';
 import {
+  diffDesign,
   diffPages,
   diffSite,
   isLazyDraftHome,
@@ -93,6 +94,7 @@ import {
 } from '@propertypro/shared';
 import { useContentBlocks, usePublishedBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
+import { useSiteDesign } from '@/hooks/use-site-design';
 import { warnEmptyPage } from '@/lib/site-editor/describe-page-state';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
@@ -195,6 +197,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
   const draftQuery = useContentBlocks(communityId);
   const publishedQuery = usePublishedBlocks(communityId);
   const pagesQuery = useSitePages(communityId);
+  const designQuery = useSiteDesign(communityId);
 
   const next: SiteSnapshot = useMemo(() => toSnapshot(draftQuery.data), [draftQuery.data]);
 
@@ -408,7 +411,9 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     const pageChanges = diffPages(publishedPageBaseline(pageRows), pendingPageRows);
     // Page changes first so "Contact page — Added" heads its own group rather
     // than trailing the sections it brought with it.
-    const changes = [...pageChanges, ...sectionChanges];
+    // The drafted look heads the list: it changes every page at once.
+    const designChanges = diffDesign(designQuery.data?.draft ?? {}, SITE_CHANGE_GROUP);
+    const changes = [...designChanges, ...pageChanges, ...sectionChanges];
     return {
       schemaVersion: SITE_DIFF_SCHEMA_VERSION,
       changes,
@@ -425,7 +430,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
        */
       firstPublish: publishedRows.length === 0,
     };
-  }, [draftQuery.data, publishedQuery.data, pageRows]);
+  }, [draftQuery.data, publishedQuery.data, pageRows, designQuery.data]);
 
   /*
    * The page-set gate, stated BEFORE the button rather than after the click.
@@ -490,7 +495,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     [pageSetIssues, emptyPageWarnings],
   );
 
-  // Depends on the three `refetch` FUNCTIONS, which TanStack keeps stable — not
+  // Depends on the four `refetch` FUNCTIONS, which TanStack keeps stable — not
   // on the query objects, which v5 rebuilds on every render, so those deps never
   // compared equal and this `useCallback` memoised nothing. Harmless while the
   // only consumer is an `onClick`, and an infinite loop the first time someone
@@ -499,7 +504,8 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     void draftQuery.refetch();
     void publishedQuery.refetch();
     void pagesQuery.refetch();
-  }, [draftQuery.refetch, publishedQuery.refetch, pagesQuery.refetch]);
+    void designQuery.refetch();
+  }, [draftQuery.refetch, publishedQuery.refetch, pagesQuery.refetch, designQuery.refetch]);
 
   return {
     diff,
@@ -512,9 +518,12 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     // sheet rendered while the page list is missing would omit an entire class
     // of pending change — a staged page removal shows up nowhere else — and
     // "reviewed and published" is not a state a PM can take back.
-    isPending: draftQuery.isPending || publishedQuery.isPending || pagesQuery.isPending,
-    isError: draftQuery.isError || publishedQuery.isError || pagesQuery.isError,
-    error: draftQuery.error ?? publishedQuery.error ?? pagesQuery.error ?? null,
+    // The design query joins the gate for the same reason: a drafted look shows
+    // up nowhere else, so a sheet without it would under-report.
+    isPending:
+      draftQuery.isPending || publishedQuery.isPending || pagesQuery.isPending || designQuery.isPending,
+    isError: draftQuery.isError || publishedQuery.isError || pagesQuery.isError || designQuery.isError,
+    error: draftQuery.error ?? publishedQuery.error ?? pagesQuery.error ?? designQuery.error ?? null,
     refetch,
   };
 }

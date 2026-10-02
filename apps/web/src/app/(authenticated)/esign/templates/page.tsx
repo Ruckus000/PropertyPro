@@ -11,7 +11,7 @@
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 
 interface PageProps {
@@ -26,9 +26,9 @@ export default async function EsignTemplatesPage({ searchParams }: PageProps) {
 
   // Kept rather than reading the query directly, so a tenant subdomain that
   // carries no `?communityId=` still resolves to the right community.
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

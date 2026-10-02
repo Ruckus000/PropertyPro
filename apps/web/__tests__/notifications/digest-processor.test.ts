@@ -488,6 +488,20 @@ describe('notification digest processor', () => {
         attemptCount: 0,
       },
       {
+        // A Directory share of the same document: per-send key `<id>:<sendId>`.
+        id: 14,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'document',
+        sourceId: '700:7b5c0e2a-1d3f-4c55-9a77-0c6f1e2d3b4a',
+        eventType: 'document_shared',
+        eventTitle: 'Retracted doc',
+        eventSummary: 'Sent by Pat Manager',
+        actionUrl: 'https://app.local/documents/700',
+        attemptCount: 0,
+      },
+      {
         id: 13,
         communityId: 101,
         userId: 'u-1',
@@ -536,7 +550,8 @@ describe('notification digest processor', () => {
       now: new Date('2026-02-18T13:30:00.000Z'),
     });
 
-    expect(summary.rowsDiscarded).toBe(3);
+    // The shared row (`700:<sendId>`) is dropped with its deleted document too.
+    expect(summary.rowsDiscarded).toBe(4);
     expect(summary.rowsSent).toBe(1);
     expect(summary.emailsSent).toBe(1);
 
@@ -553,6 +568,14 @@ describe('notification digest processor', () => {
       ]),
     );
 
+    // The share of the deleted document is dropped as DELETED — not merely
+    // for some other reason (an unmapped event type also discards).
+    expect(
+      updateMock.mock.calls.filter(
+        (call) => (call[1] as Record<string, unknown>)['errorMessage'] === 'Source document was deleted',
+      ),
+    ).toHaveLength(2);
+
     // Only the live meeting survives to the email
     const sendCall = sendEmailMock.mock.calls[0]?.[0] as
       | { react: { props: { items: Array<{ title: string }> } } }
@@ -561,6 +584,54 @@ describe('notification digest processor', () => {
 
     // Non-announcement discards must NOT call the announcement-status side effect
     expect(updateQueuedDigestAnnouncementStatusMock).not.toHaveBeenCalled();
+  });
+
+  it('delivers a document a manager shared from the Directory (document_shared, per-send key)', async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [{ id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
+      preferences: [{ userId: 'u-1', emailFrequency: 'daily_digest', inAppEnabled: true }],
+    });
+    claimDigestQueueRowsMock.mockResolvedValue([
+      {
+        id: 20,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'document',
+        sourceId: '701:7b5c0e2a-1d3f-4c55-9a77-0c6f1e2d3b4a',
+        eventType: 'document_shared',
+        eventTitle: 'Rules 2026',
+        eventSummary: 'Sent by Pat Manager',
+        actionUrl: 'https://app.local/documents/701?communityId=101',
+        attemptCount: 0,
+      },
+    ]);
+    createScopedClientMock.mockImplementation((communityId: number) => ({
+      query: vi.fn(async (table: unknown) => {
+        const state = queryState.get(communityId);
+        if (!state) return [];
+        if (table === tables.communities) return state.communities;
+        if (table === tables.notificationPreferences) return state.preferences;
+        return [];
+      }),
+      queryIncludingDeleted: vi.fn(async (table: unknown) =>
+        table === tables.documents ? [{ id: 701, deletedAt: null, postedAt: new Date('2026-02-01T00:00:00Z') }] : [],
+      ),
+      selectFrom: selectUsersFor(communityId),
+      update: updateMock,
+    }));
+
+    const summary = await processNotificationDigests({ now: new Date('2026-02-18T13:30:00.000Z') });
+
+    expect(summary.rowsDiscarded).toBe(0);
+    expect(summary.rowsSent).toBe(1);
+    const sendCall = sendEmailMock.mock.calls[0]?.[0] as
+      | { react: { props: { items: Array<{ title: string }> } } }
+      | undefined;
+    expect(sendCall?.react.props.items.map((item) => item.title)).toEqual(['Rules 2026']);
   });
 
   it('drops a queued document notice whose document went back to a draft', async () => {

@@ -568,6 +568,13 @@
       "when": 1790863911179,
       "tag": "0082_violations_hearing_location",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1790867503025,
+      "tag": "0083_unit_occupancy",
+      "breakpoints": true
     }
   ]
 }

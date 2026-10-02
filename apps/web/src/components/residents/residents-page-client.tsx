@@ -14,17 +14,11 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AccessRequestList } from '@/components/access-requests/access-request-list';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import {
   useInviteResident,
   useResendInvitation,
   useResidentsList,
 } from '@/hooks/use-residents-management';
+import { AddResidentDialog } from './add-resident-dialog';
 
 /* ─────── Types ─────── */
 
@@ -245,68 +239,5 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
         onSendInvitationChange={setSendInvitation}
       />
     </div>
-  );
-}
-
-/* ─────── Add Resident Dialog ─────── */
-
-interface AddResidentDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  communityType: CommunityType;
-  submitting: boolean;
-  onSubmit: (values: ResidentFormSubmitValues) => Promise<void>;
-  error: string | null;
-  sendInvitation: boolean;
-  onSendInvitationChange: (value: boolean) => void;
-}
-
-function AddResidentDialog({
-  open,
-  onOpenChange,
-  communityType,
-  submitting,
-  onSubmit,
-  error,
-  sendInvitation,
-  onSendInvitationChange,
-}: AddResidentDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md" resizable>
-        <DialogHeader>
-          <DialogTitle>Add Resident</DialogTitle>
-          <DialogDescription>
-            Add a new resident to the community. They will receive portal access.
-          </DialogDescription>
-        </DialogHeader>
-
-        {error && (
-          <AlertBanner
-            status="danger"
-            title="Failed to add resident"
-            description={error}
-          />
-        )}
-
-        <ResidentForm
-          communityType={communityType}
-          submitting={submitting}
-          onSubmit={onSubmit}
-        />
-
-        <label className="flex items-center gap-2 pt-2">
-          <input
-            type="checkbox"
-            checked={sendInvitation}
-            onChange={(e) => onSendInvitationChange(e.target.checked)}
-            className="h-4 w-4 rounded border-edge-strong"
-          />
-          <span className="text-sm text-content-secondary">
-            Send invitation email
-          </span>
-        </label>
-      </DialogContent>
-    </Dialog>
   );
 }
