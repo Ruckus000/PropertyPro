@@ -10,7 +10,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { canActAsBoard, checkPermissionV2 } from '@/lib/db/access-control';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { getAuthorizedCommunityIds } from '@/lib/queries/cross-community';
 import { getSupportScope } from '@/lib/support/support-scope';
@@ -44,9 +44,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     searchParams,
     headers(),
   ]);
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   const userId = await requireAuthenticatedUserId();

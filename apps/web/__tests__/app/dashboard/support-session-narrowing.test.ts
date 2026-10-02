@@ -34,6 +34,7 @@ vi.mock('@/lib/request/page-community-context', () => ({
 }));
 vi.mock('@/lib/tenant/resolve-community-context', () => ({
   resolveCommunityContext: vi.fn(() => ({ communityId: null })),
+  resolvePageCommunityContext: vi.fn(() => ({ communityId: null })),
 }));
 vi.mock('@/lib/tenant/community-resolution', () => ({
   toUrlSearchParams: vi.fn(() => new URLSearchParams()),

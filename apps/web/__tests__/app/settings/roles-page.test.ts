@@ -48,6 +48,7 @@ vi.mock('@/lib/request/page-community-context', () => ({
 
 vi.mock('@/lib/tenant/resolve-community-context', () => ({
   resolveCommunityContext: resolveCommunityContextMock,
+  resolvePageCommunityContext: resolveCommunityContextMock,
 }));
 
 vi.mock('@/lib/tenant/community-resolution', () => ({

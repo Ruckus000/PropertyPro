@@ -19,7 +19,7 @@ import { createBillingPortalSession } from '@/lib/services/stripe-service';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { ReauthRequiredError } from '@/lib/api/errors';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { hasRole } from '@/lib/api/role-guard';
@@ -40,11 +40,11 @@ export const GET = async (req: NextRequest): Promise<never> => {
 
   // 2. Resolve community from subdomain / querystring
   const requestHeaders = await headers();
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(
       Object.fromEntries(req.nextUrl.searchParams.entries()),
     ),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

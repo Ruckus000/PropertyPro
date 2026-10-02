@@ -9,7 +9,7 @@ import {
   getVisibleAnnouncementById,
 } from '@/lib/announcements/read-visibility';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
@@ -35,9 +35,9 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
     headers(),
   ]);
 
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

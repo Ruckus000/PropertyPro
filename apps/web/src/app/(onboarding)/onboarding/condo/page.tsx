@@ -4,7 +4,7 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { loadWizardState } from '@/lib/queries/wizard-state';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { CondoWizard } from '@/components/onboarding/condo-wizard';
 import type { CondoWizardStatePayload } from '@/lib/onboarding/condo-wizard-types';
@@ -16,9 +16,9 @@ interface OnboardingPageProps {
 export default async function CondoOnboardingPage({ searchParams }: OnboardingPageProps) {
     const [resolvedSearchParams, requestHeaders] = await Promise.all([searchParams, headers()]);
 
-    const context = resolveCommunityContext({
-        searchParams: toUrlSearchParams(resolvedSearchParams),
-        host: requestHeaders.get('host'),
+    const context = resolvePageCommunityContext({
+      searchParams: toUrlSearchParams(resolvedSearchParams),
+      headers: requestHeaders,
     });
 
     if (!context.communityId) {
