@@ -3,6 +3,8 @@ import { NextRequest } from 'next/server';
 import { AppError } from '@/lib/api/errors/AppError';
 
 const {
+  saveDraftDesignMock,
+  getBrandingMock,
   updateBrandingMock,
   updateCommunityNameMock,
   requireAuthMock,
@@ -10,6 +12,8 @@ const {
   resolveEffectiveCommunityIdMock,
   requirePlanFeatureMock,
 } = vi.hoisted(() => ({
+  saveDraftDesignMock: vi.fn(),
+  getBrandingMock: vi.fn(),
   updateBrandingMock: vi.fn(),
   updateCommunityNameMock: vi.fn(),
   requireAuthMock: vi.fn(),
@@ -19,7 +23,15 @@ const {
 }));
 
 vi.mock('@/lib/api/branding', () => ({
+  getBrandingForCommunity: getBrandingMock,
   updateBrandingForCommunity: updateBrandingMock,
+}));
+
+// Layout, colour set, colours and fonts are the site's DRAFTED look (website
+// builder v4) and go through the design service; only the tagline is a live
+// branding write.
+vi.mock('@/lib/services/site-design-service', () => ({
+  saveDraftDesign: saveDraftDesignMock,
 }));
 
 vi.mock('@/lib/services/community-profile-service', () => ({
@@ -60,6 +72,11 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
     updateCommunityNameMock.mockResolvedValue({ name: 'Sunset Condos', changed: true });
+    getBrandingMock.mockResolvedValue({});
+    saveDraftDesignMock.mockResolvedValue({
+      live: { layoutId: 'tidewater', primaryColor: '#0e3338' },
+      draft: {},
+    });
     updateBrandingMock.mockResolvedValue({
       layoutId: 'tidewater',
       themePresetSlug: null,
@@ -80,19 +97,30 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
       layoutId: 'tidewater',
       themePresetSlug: null,
     });
-    expect(updateBrandingMock).toHaveBeenCalledWith(42, { layoutId: 'tidewater' });
+    expect(saveDraftDesignMock).toHaveBeenCalledWith(42, { layoutId: 'tidewater' }, {
+      actorUserId: 'user-1',
+    });
+    expect(updateBrandingMock).not.toHaveBeenCalled();
   });
 
-  it('forwards multi-field patches as a single merge call', async () => {
+  it('saves the look as a draft and the tagline live', async () => {
+    // The colour set goes to the draft (which also writes its colours, so it
+    // reaches the live site on publish); the tagline is live-immediate.
     await PATCH(makeRequest({
       communityId: 42,
       themePresetSlug: 'bay-light',
       tagline: 'Coastal living',
     }));
-    expect(updateBrandingMock).toHaveBeenCalledWith(42, {
-      themePresetSlug: 'bay-light',
-      tagline: 'Coastal living',
+    expect(saveDraftDesignMock).toHaveBeenCalledWith(42, { themePresetSlug: 'bay-light' }, {
+      actorUserId: 'user-1',
     });
+    expect(updateBrandingMock).toHaveBeenCalledWith(42, { tagline: 'Coastal living' });
+  });
+
+  it('400s on a font outside the allowlist', async () => {
+    const res = await PATCH(makeRequest({ communityId: 42, fontBody: 'Comic Sans MS' }));
+    expect(res.status).toBe(400);
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 
   it('writes the community name (with actor) and keeps it out of the branding patch', async () => {
@@ -106,7 +134,9 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
       actorUserId: 'user-1',
     });
     // `name` must NOT leak into the branding jsonb merge.
-    expect(updateBrandingMock).toHaveBeenCalledWith(42, { layoutId: 'tidewater' });
+    expect(saveDraftDesignMock).toHaveBeenCalledWith(42, { layoutId: 'tidewater' }, {
+      actorUserId: 'user-1',
+    });
   });
 
   it('does not touch the name when the patch omits it', async () => {
@@ -125,24 +155,28 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
     expect(res.status).toBe(400);
     expect(updateCommunityNameMock).not.toHaveBeenCalled();
     expect(updateBrandingMock).not.toHaveBeenCalled();
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 
   it('400s when no wizard fields are supplied', async () => {
     const res = await PATCH(makeRequest({ communityId: 42 }));
     expect(res.status).toBe(400);
     expect(updateBrandingMock).not.toHaveBeenCalled();
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 
   it('400s on invalid hex color', async () => {
     const res = await PATCH(makeRequest({ communityId: 42, primaryColor: 'red' }));
     expect(res.status).toBe(400);
     expect(updateBrandingMock).not.toHaveBeenCalled();
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 
   it('400s when communityId is missing', async () => {
     const res = await PATCH(makeRequest({ layoutId: 'tidewater' }));
     expect(res.status).toBe(400);
     expect(updateBrandingMock).not.toHaveBeenCalled();
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 
   it('401s when unauthenticated', async () => {
@@ -152,6 +186,7 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
     const res = await PATCH(makeRequest({ communityId: 42, layoutId: 'tidewater' }));
     expect(res.status).toBe(401);
     expect(updateBrandingMock).not.toHaveBeenCalled();
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 
   it('403s when membership role is not pm_admin/cam', async () => {
@@ -159,13 +194,14 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
     const res = await PATCH(makeRequest({ communityId: 42, layoutId: 'tidewater' }));
     expect(res.status).toBe(403);
     expect(updateBrandingMock).not.toHaveBeenCalled();
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 
   it('allows CAM managers to write through the wizard', async () => {
     requireMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 42 });
     const res = await PATCH(makeRequest({ communityId: 42, layoutId: 'tidewater' }));
     expect(res.status).toBe(200);
-    expect(updateBrandingMock).toHaveBeenCalled();
+    expect(saveDraftDesignMock).toHaveBeenCalled();
   });
 
   it('403s when the plan does not include hasSiteEditor', async () => {
@@ -175,5 +211,6 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
     const res = await PATCH(makeRequest({ communityId: 42, layoutId: 'tidewater' }));
     expect(res.status).toBe(403);
     expect(updateBrandingMock).not.toHaveBeenCalled();
+    expect(saveDraftDesignMock).not.toHaveBeenCalled();
   });
 });

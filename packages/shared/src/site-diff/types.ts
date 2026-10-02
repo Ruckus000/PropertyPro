@@ -40,15 +40,9 @@ export interface SiteSnapshot {
   /** Slots staged for deletion (tombstone drafts). Meaningful on `next` only. */
   tombstonedSlots?: number[];
   /**
-   * `communities.branding`, unparsed. Always equal on both sides today.
-   *
-   * Branding is unstaged: it has no draft layer, so every field on it — the
-   * colours, the tagline, and the Phase 8 site settings and footer — reaches
-   * the live public site immediately and there is nothing to diff. Phase 8 was
-   * once expected to change that and did not; giving branding a draft side
-   * means draft storage, promotion inside `publishCommunitySite`'s transaction,
-   * and inclusion in `site_publish_snapshots` so revert covers it. That work is
-   * still unbuilt and unassigned to a phase.
+   * `communities.branding`, unparsed. Always equal on both sides; nothing
+   * reads it. The look's draft is diffed by `diffDesign` instead, from
+   * `pendingLook` — see `CommunityBranding.draftLook`.
    */
   branding?: unknown;
 }
@@ -83,12 +77,9 @@ export type SectionRef = `p${number}` | `d${number}`;
  * reorder writes `site_pages.sort_order` immediately and is live the moment it
  * is saved, so it is never pending publication and has nothing to report here.
  *
- * `style` is declared but has no producer: branding is unstaged, so both sides
- * of the diff always carry the same value. Phase 8 was expected to turn it on
- * and did not — it shipped site settings and the footer as live-immediate
- * fields on `communities.branding`, which is the same unstaged storage. The key
- * stays declared so the grouping code is written once, and so turning it on
- * later is not a breaking change.
+ * `style` is the drafted site look (`diffDesign`, website builder v4): layout,
+ * colours and fonts held in `communities.branding.draftLook` until Publish.
+ * Site settings and the footer remain live-immediate and are never diffed.
  */
 export type ChangeKey =
   | 'hero'

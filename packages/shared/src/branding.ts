@@ -73,6 +73,74 @@ export interface CommunityBranding {
   siteSettings?: SiteSettingsBranding | null;
   /** Website editor v3, Phase 8 — PM-authored public-site footer. */
   siteFooter?: SiteFooterBranding | null;
+  /**
+   * Website builder v4 — the site's look as edited but not yet published:
+   * only the changed `SITE_LOOK_FIELDS`. Publish promotes it onto the live
+   * fields above and removes it; discard removes it. Live renderers read
+   * named fields only, so they never see it; previews read it through
+   * `effectiveLook`.
+   */
+  draftLook?: SiteLook | null;
+}
+
+/**
+ * The fields that make up the public site's look — the ones the website
+ * editor holds as a draft until Publish. Logos, tagline, footer, SEO and
+ * email settings are not here: they stay live-immediate.
+ */
+export const SITE_LOOK_FIELDS = [
+  'layoutId',
+  'themePresetSlug',
+  'primaryColor',
+  'secondaryColor',
+  'accentColor',
+  'fontHeading',
+  'fontBody',
+  'customCssOverrides',
+] as const;
+
+export type SiteLookField = (typeof SITE_LOOK_FIELDS)[number];
+export type SiteLook = Pick<CommunityBranding, SiteLookField>;
+
+/** The look fields of `branding`, live values only. */
+export function liveLook(branding: CommunityBranding | null | undefined): SiteLook {
+  const look: SiteLook = {};
+  for (const field of SITE_LOOK_FIELDS) {
+    if (branding?.[field] !== undefined) (look as Record<string, unknown>)[field] = branding[field];
+  }
+  return look;
+}
+
+/**
+ * The draft fields that differ from live — empty when there is nothing to
+ * publish. Compared by value, so a draft that was changed back to the live
+ * look counts as no change.
+ */
+export function pendingLook(branding: CommunityBranding | null | undefined): SiteLook {
+  const draft = branding?.draftLook ?? {};
+  const pending: SiteLook = {};
+  for (const field of SITE_LOOK_FIELDS) {
+    if (!(field in draft)) continue;
+    const next = draft[field] ?? null;
+    const current = branding?.[field] ?? null;
+    if (JSON.stringify(next) !== JSON.stringify(current)) {
+      (pending as Record<string, unknown>)[field] = draft[field];
+    }
+  }
+  return pending;
+}
+
+/**
+ * Branding as a renderer should see it. Previews pass `includeDraft` to show
+ * the unpublished look; live pages never do. `draftLook` itself is always
+ * dropped, so no renderer can come to depend on it.
+ */
+export function effectiveLook(
+  branding: CommunityBranding,
+  { includeDraft }: { includeDraft: boolean },
+): CommunityBranding {
+  const { draftLook, ...rest } = branding;
+  return includeDraft && draftLook ? { ...rest, ...draftLook } : rest;
 }
 
 /** Persisted SEO overrides. Every field optional; absent means "derive it". */

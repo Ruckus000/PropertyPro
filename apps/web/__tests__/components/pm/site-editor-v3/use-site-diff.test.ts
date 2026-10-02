@@ -112,6 +112,21 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// The drafted site look (website builder v4). Tests that need a pending
+// design change set `designDraft.value`; everyone else sees none.
+const designDraft = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
+vi.mock('@/hooks/use-site-design', () => ({
+  siteDesignQueryKey: (communityId: number) => ['pm', 'site', 'design', communityId],
+  useSiteDesign: () => ({
+    data: { live: {}, draft: designDraft.value },
+    isPending: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useSaveSiteDesign: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock('@/hooks/use-site-pages', () => ({
   sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
   applyPageOrder: (pages: unknown) => pages,
@@ -140,6 +155,7 @@ beforeEach(() => {
   queries.pagesPending = false;
   queries.pagesError = false;
   queries.pagesErrorValue = null;
+  designDraft.value = {};
 });
 
 describe('useSiteDiff — never-published sites', () => {
@@ -194,6 +210,19 @@ describe('useSiteDiff — change detection', () => {
     const { result } = renderHook(() => useSiteDiff(42));
 
     expect(result.current.diff.changes).toHaveLength(0);
+  });
+
+  it('lists a drafted site design as one change, first', () => {
+    // A template switch moves layout, colours and fonts together; the PM
+    // chose it as one thing, so Publish counts it once.
+    queries.published = [hero()];
+    queries.draft = [hero()];
+    designDraft.value = { layoutId: 'boulevard', primaryColor: '#123456' };
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    expect(result.current.diff.changes).toHaveLength(1);
+    expect(result.current.diff.changes[0]).toMatchObject({ key: 'style', group: 'site' });
   });
 });
 

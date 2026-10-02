@@ -145,6 +145,21 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 const unstageAsync = vi.hoisted(() => vi.fn());
 const unstageState = vi.hoisted(() => ({ isPending: false }));
 
+// The drafted site look (website builder v4). Tests that need a pending
+// design change set `designDraft.value`; everyone else sees none.
+const designDraft = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
+vi.mock('@/hooks/use-site-design', () => ({
+  siteDesignQueryKey: (communityId: number) => ['pm', 'site', 'design', communityId],
+  useSiteDesign: () => ({
+    data: { live: {}, draft: designDraft.value },
+    isPending: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useSaveSiteDesign: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock('@/hooks/use-site-pages', () => ({
   sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
   applyPageOrder: (pages: unknown) => pages,

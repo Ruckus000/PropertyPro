@@ -42,9 +42,12 @@ import { cancelPendingScheduleInTx } from './site-publish-schedule-store';
 import {
   TOMBSTONE_BLOCK_TYPE,
   isLazyDraftHome,
+  liveLook,
   pageIssues,
+  pendingLook,
   publishBlocked,
   siteIssues,
+  type CommunityBranding,
   type HeroBlockContent,
   type SiteSnapshot,
 } from '@propertypro/shared';
@@ -257,10 +260,12 @@ export function readSnapshotPayload(
   version: 1 | 2;
   pages: SitePublishSnapshotPayloadV2['pages'];
   blocks: SitePublishSnapshotPayloadV2['blocks'];
+  look?: SitePublishSnapshotPayloadV2['look'];
 } {
   if (payload.version === 2) {
     return {
       version: 2,
+      look: payload.look,
       pages: payload.pages ?? [],
       // A v2 block missing its pageId is malformed; home is the only safe guess
       // and matches how v1 is read.
@@ -322,6 +327,8 @@ export interface CaptureSnapshotInput {
    * `SitePublishSnapshotPage`.
    */
   pages: SitePublishSnapshotPayloadV2['pages'];
+  /** The site's look after this publish — see `SitePublishSnapshotPayloadV2.look`. */
+  look: SitePublishSnapshotPayloadV2['look'];
   /** Human labels for the history list — see `summarizePublishChanges`. */
   changeLabels: string[];
 }
@@ -340,9 +347,9 @@ export interface CaptureSnapshotInput {
  */
 export async function captureSnapshot(
   tx: SnapshotInsertExecutor,
-  { communityId, actorUserId, publishedAt, blocks, pages, changeLabels }: CaptureSnapshotInput,
+  { communityId, actorUserId, publishedAt, blocks, pages, look, changeLabels }: CaptureSnapshotInput,
 ): Promise<void> {
-  const payload: SitePublishSnapshotPayloadV2 = { version: 2, pages, blocks };
+  const payload: SitePublishSnapshotPayloadV2 = { version: 2, pages, blocks, look };
   await tx.insert(sitePublishSnapshots).values({
     communityId,
     publishedAt,
@@ -665,7 +672,18 @@ export async function publishCommunitySite({
     // Nothing pending at all → nothing to publish. Roll back BEFORE any mutation
     // so the prior published rows are never touched. Drizzle's transaction
     // wrapper undoes the (no-op) tx and the outer .catch converts the sentinel.
-    if (draftPairs.length === 0 && pendingPages.length === 0) {
+    // The site's look (layout, colours, fonts) is drafted in
+    // `communities.branding.draftLook` (`site-design-service`). A design-only
+    // change is something to publish too.
+    const brandingRows = await tx
+      .select({ branding: communities.branding })
+      .from(communities)
+      .where(eq(communities.id, communityId));
+    const branding = (brandingRows[0]?.branding ?? {}) as CommunityBranding;
+    const designChange = pendingLook(branding);
+    const designPending = Object.keys(designChange).length > 0;
+
+    if (draftPairs.length === 0 && pendingPages.length === 0 && !designPending) {
       throw new NothingToPublishRollback();
     }
 
@@ -988,6 +1006,19 @@ export async function publishCommunitySite({
       if (survivorStamp) effectivePublishedAt = survivorStamp;
     }
 
+    // Step 5a: make the drafted look live and drop the draft, in one UPDATE
+    // under this transaction's community lock. `||` replaces whole top-level
+    // keys, which is the intent: a drafted `customCssOverrides` is the complete
+    // new set, and a drafted `null` clears it.
+    if (branding.draftLook !== undefined) {
+      await tx.execute(
+        sql`UPDATE communities
+            SET branding = (COALESCE(branding, '{}'::jsonb) || ${JSON.stringify(designChange)}::jsonb) - 'draftLook'
+            WHERE id = ${communityId}`,
+      );
+    }
+    const publishedLook = liveLook({ ...branding, ...designChange });
+
     // Step 5b (Phase 6): record the publish in the history log — same tx, same
     // community lock, AFTER the promote, so the row describes what actually
     // shipped and a rollback takes the history entry with it.
@@ -1025,7 +1056,9 @@ export async function publishCommunitySite({
           sortOrder: p.sortOrder,
           isHome: p.isHome,
         })),
+      look: publishedLook,
       changeLabels: [
+        ...(designPending ? ['Changed the site design'] : []),
         ...summarizePublishChanges(liveRows, draftPairs, pageNames),
         // Page-level changes are not slot events, so they cannot come out of the
         // draft-slot set — see `summarizePageChanges`. `promotedPages` is read
@@ -1075,6 +1108,7 @@ export async function publishCommunitySite({
         promotedPageCount,
         removedPageIds,
         publishedAt: effectivePublishedAt.toISOString(),
+        ...(designPending ? { design: designChange } : {}),
       },
     });
 
@@ -1612,14 +1646,23 @@ export async function discardSiteDrafts({
 
     const discardedPageCount = droppedPages.length + unstagedPages.length;
 
-    if (discardedCount > 0 || discardedPageCount > 0) {
+    // The drafted look (`site-design-service`) goes too: discard means "back to
+    // what the public sees", and that includes the colours.
+    const designRows = (await tx.execute(
+      sql`UPDATE communities SET branding = branding - 'draftLook'
+          WHERE id = ${communityId} AND branding ? 'draftLook'
+          RETURNING id`,
+    )) as unknown as { id: number }[];
+    const discardedDesign = designRows.length > 0;
+
+    if (discardedCount > 0 || discardedPageCount > 0 || discardedDesign) {
       await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
         userId: actorUserId,
         communityId,
         action: 'delete',
         resourceType: 'community_site_drafts',
         resourceId: String(communityId),
-        metadata: { discardedCount, discardedPageCount },
+        metadata: { discardedCount, discardedPageCount, discardedDesign },
       });
     }
 
@@ -1927,6 +1970,19 @@ export async function revertToSnapshot({
         content: {},
       });
     }
+
+    // STEP 4 — the look. A revert replaces the whole draft layer, so any
+    // drafted look is replaced too: by the look the snapshot recorded, as a
+    // draft published on the next Publish like the restored sections, or — for
+    // a row written before the look was recorded — by nothing, which leaves the
+    // live look as it is.
+    await tx.execute(
+      payload.look
+        ? sql`UPDATE communities
+              SET branding = jsonb_set(COALESCE(branding, '{}'::jsonb), '{draftLook}', ${JSON.stringify(payload.look)}::jsonb, true)
+              WHERE id = ${communityId}`
+        : sql`UPDATE communities SET branding = branding - 'draftLook' WHERE id = ${communityId}`,
+    );
 
     await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
       userId: actorUserId,
