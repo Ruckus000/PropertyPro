@@ -40,6 +40,7 @@ vi.mock('@/lib/services/stripe-service', () => ({
 }));
 vi.mock('@/lib/tenant/resolve-community-context', () => ({
   resolveCommunityContext: () => ({ communityId: 42 }),
+  resolvePageCommunityContext: () => ({ communityId: 42 }),
 }));
 vi.mock('@/lib/tenant/community-resolution', () => ({ toUrlSearchParams: () => new URLSearchParams() }));
 vi.mock('@propertypro/db/unsafe', () => ({
