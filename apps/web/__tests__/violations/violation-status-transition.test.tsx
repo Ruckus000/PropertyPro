@@ -190,14 +190,38 @@ describe('ViolationStatusTransition — fining committee', () => {
     expect(screen.getByLabelText('Olivia Owner')).toBeTruthy();
   });
 
-  it('cannot submit until a member is picked and the approval is confirmed', () => {
+  it('with fewer than three eligible owners, cannot submit until the approval and the disclaimer are accepted', () => {
     renderFineForm();
     fireEvent.change(screen.getByLabelText('Fine Amount ($)'), { target: { value: '50' } });
     const submit = screen.getByRole('button', { name: 'Impose Fine' }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     fireEvent.click(screen.getByLabelText('Olivia Owner'));
-    expect(submit.disabled).toBe(true);
     fireEvent.click(screen.getByLabelText('The fining committee approved this fine'));
+    expect(screen.getByRole('alert').textContent).toMatch(/Fewer than 3 committee members/);
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('I accept this disclaimer'));
+    expect(submit.disabled).toBe(false);
+  });
+
+  it('with three eligible owners, requires three and shows no disclaimer', () => {
+    committeeMock.mockReturnValue({
+      isLoading: false,
+      data: [
+        { userId: 'u-olivia', name: 'Olivia Owner' },
+        { userId: 'u-pat', name: 'Pat Owner' },
+        { userId: 'u-sam', name: 'Sam Owner' },
+      ],
+    });
+    renderFineForm();
+    fireEvent.change(screen.getByLabelText('Fine Amount ($)'), { target: { value: '50' } });
+    fireEvent.click(screen.getByLabelText('The fining committee approved this fine'));
+    fireEvent.click(screen.getByLabelText('Olivia Owner'));
+    const submit = screen.getByRole('button', { name: 'Impose Fine' }) as HTMLButtonElement;
+    expect(screen.getByText(/Select\s+2 more/)).toBeTruthy();
+    expect(screen.queryByLabelText('I accept this disclaimer')).toBeNull();
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('Pat Owner'));
+    fireEvent.click(screen.getByLabelText('Sam Owner'));
     expect(submit.disabled).toBe(false);
   });
 
@@ -206,6 +230,7 @@ describe('ViolationStatusTransition — fining committee', () => {
     fireEvent.change(screen.getByLabelText('Fine Amount ($)'), { target: { value: '50' } });
     fireEvent.click(screen.getByLabelText('Sam Owner'));
     fireEvent.click(screen.getByLabelText('The fining committee approved this fine'));
+    fireEvent.click(screen.getByLabelText('I accept this disclaimer'));
     fireEvent.click(screen.getByRole('button', { name: 'Impose Fine' }));
 
     await waitFor(() => expect(imposeFineMock).toHaveBeenCalled());
@@ -213,6 +238,7 @@ describe('ViolationStatusTransition — fining committee', () => {
       amountCents: 5000,
       approvedByCommittee: true,
       committeeMembers: [{ userId: 'u-sam', name: 'Sam Owner' }],
+      smallCommitteeAcknowledged: true,
     });
   });
 });

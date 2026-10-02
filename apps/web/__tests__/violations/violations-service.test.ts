@@ -143,6 +143,15 @@ function createViolationFineRow(overrides: Partial<Record<string, unknown>> = {}
   };
 }
 
+// Three eligible owners: the statutory minimum (§718.303(3) / §720.305(2)).
+const COMMITTEE = [
+  { name: 'Ann Lee', userId: 'u-a' },
+  { name: 'Ben Ortiz', userId: 'u-b' },
+  { name: 'Cy Park', userId: 'u-c' },
+];
+const COMMITTEE_ROLES = COMMITTEE.map((m) => ({ userId: m.userId, role: 'resident', isUnitOwner: true, designation: null }));
+const APPROVED = { approvedByCommittee: true, committeeMembers: COMMITTEE };
+
 describe('violations-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -360,9 +369,11 @@ describe('violations-service', () => {
 
   it('soft-deletes the fine and ledger entry if line-item creation fails', async () => {
     const lineItemError = new Error('line item insert failed');
-    const selectFrom = vi.fn().mockResolvedValue([
-      createViolationRow({ status: 'noticed' }),
-    ]);
+    const selectFrom = vi
+      .fn()
+      .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
       .mockResolvedValueOnce([createViolationFineRow()])
@@ -378,7 +389,7 @@ describe('violations-service', () => {
     postLedgerEntryMock.mockResolvedValue({ id: 77 });
 
     await expect(
-      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2500 }),
+      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2500, ...APPROVED }),
     ).rejects.toThrow('line item insert failed');
 
     expect(update).toHaveBeenNthCalledWith(
@@ -426,9 +437,10 @@ describe('violations-service', () => {
   it('honours a community override above the statutory floor', async () => {
     const selectFrom = vi
       .fn()
-      // violation lookup, then the existing-fines scan
+      // violation lookup, the existing-fines scan, then the committee's roles
       .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
       .mockResolvedValueOnce([createViolationFineRow({ amountCents: 15_000 })])
@@ -443,6 +455,7 @@ describe('violations-service', () => {
     await expect(
       imposeViolationFineForCommunity(42, 10, 'actor-1', {
         amountCents: 15_000,
+        ...APPROVED,
         caps: { perFineCents: 250_00, aggregateCents: 1_000_00 },
       }),
     ).resolves.toBeDefined();
@@ -476,7 +489,8 @@ describe('violations-service', () => {
       .mockResolvedValueOnce([
         { amountCents: 99_000, status: 'waived' },
         { amountCents: 1_000, status: 'pending' },
-      ]);
+      ])
+      .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
       .mockResolvedValueOnce([createViolationFineRow()])
@@ -489,7 +503,7 @@ describe('violations-service', () => {
     postLedgerEntryMock.mockResolvedValue({ id: 77 });
 
     await expect(
-      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2_500 }),
+      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2_500, ...APPROVED }),
     ).resolves.toBeDefined();
   });
 
@@ -498,7 +512,7 @@ describe('violations-service', () => {
       .fn()
       .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ userId: 'u-dana', role: 'resident', isUnitOwner: true, designation: null }]);
+      .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
       .mockResolvedValueOnce([createViolationFineRow()])
@@ -512,8 +526,7 @@ describe('violations-service', () => {
 
     await imposeViolationFineForCommunity(42, 10, 'actor-1', {
       amountCents: 2_500,
-      approvedByCommittee: true,
-      committeeMembers: [{ name: 'Dana Reyes', userId: 'u-dana' }],
+      ...APPROVED,
     });
 
     // A SNAPSHOT, not a join: committee membership turns over, and the question
@@ -522,7 +535,7 @@ describe('violations-service', () => {
       tables.violationFines,
       expect.objectContaining({
         approvedByCommittee: true,
-        committeeMembers: [{ name: 'Dana Reyes', userId: 'u-dana' }],
+        committeeMembers: COMMITTEE,
         committeeApprovedAt: expect.any(Date),
       }),
     );
@@ -567,6 +580,88 @@ describe('violations-service', () => {
         ]),
       ).rejects.toThrow(
         /Me is the person imposing the fine; Stranger is not a member of this community; Ann again is listed more than once/,
+      );
+    });
+  });
+  describe('fining committee size (at least three, §718.303(3) / §720.305(2))', () => {
+    const DANA = { name: 'Dana Reyes', userId: 'u-dana' };
+    const owner = (userId: string) => ({ userId, role: 'resident', isUnitOwner: true, designation: null });
+    function scoped(communityResidents: unknown[]) {
+      const selectFrom = vi
+        .fn()
+        .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([owner('u-dana')]) // the committee's roles
+        .mockResolvedValueOnce(communityResidents); // every resident, to count eligible owners
+      const insert = vi
+        .fn()
+        .mockResolvedValueOnce([createViolationFineRow()])
+        .mockResolvedValueOnce([{ id: 5 }]);
+      createScopedClientMock.mockReturnValue({
+        selectFrom,
+        insert,
+        update: vi.fn().mockResolvedValue([createViolationRow({ status: 'fined' })]),
+      });
+      postLedgerEntryMock.mockResolvedValue({ id: 77 });
+      return { insert };
+    }
+    const fineWith = (ack?: true) =>
+      imposeViolationFineForCommunity(42, 10, 'actor-1', {
+        amountCents: 2_500,
+        approvedByCommittee: true,
+        committeeMembers: [DANA],
+        smallCommitteeAcknowledged: ack,
+      });
+
+    it('refuses fewer than three while three eligible owners exist, even with the disclaimer', async () => {
+      const { insert } = scoped([owner('u-dana'), owner('u-e'), owner('u-f'), { ...owner('u-g'), designation: 'board_member' }]);
+      await expect(fineWith(true)).rejects.toThrow(/at least 3 members.*3 eligible owners/);
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('refuses fewer than three without the disclaimer when the community lacks three eligible owners', async () => {
+      const { insert } = scoped([owner('u-dana'), owner('u-e'), owner('actor-1')]);
+      await expect(fineWith()).rejects.toThrow(/Accept the small-committee disclaimer/);
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('records who accepted the disclaimer, when, and its exact text', async () => {
+      scoped([owner('u-dana'), owner('actor-1')]);
+      await expect(fineWith(true)).resolves.toBeDefined();
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'actor-1',
+          action: 'fining_committee_disclaimer_accepted',
+          resourceType: 'violation_fine',
+          resourceId: '88',
+          communityId: 42,
+          newValues: expect.objectContaining({
+            committeeSize: 1,
+            committeeMembers: [DANA],
+            disclaimerVersion: expect.any(String),
+            disclaimerText: expect.stringContaining('at least three'),
+            acceptedAt: expect.any(String),
+          }),
+        }),
+      );
+    });
+
+    it('logs no disclaimer for a full committee', async () => {
+      const selectFrom = vi
+        .fn()
+        .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(COMMITTEE_ROLES);
+      const insert = vi.fn().mockResolvedValueOnce([createViolationFineRow()]).mockResolvedValueOnce([{ id: 5 }]);
+      createScopedClientMock.mockReturnValue({
+        selectFrom,
+        insert,
+        update: vi.fn().mockResolvedValue([createViolationRow({ status: 'fined' })]),
+      });
+      postLedgerEntryMock.mockResolvedValue({ id: 77 });
+      await imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2_500, ...APPROVED });
+      expect(logAuditEventMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'fining_committee_disclaimer_accepted' }),
       );
     });
   });

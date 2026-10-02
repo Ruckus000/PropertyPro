@@ -20,10 +20,15 @@ export function useFiningCommitteeCandidates(communityId: number, actorUserId: s
       const rows = await requestJson<
         Array<{ userId: string; fullName: string | null; role: string; isUnitOwner: boolean | null; designation: string | null }>
       >(`/api/v1/residents?communityId=${communityId}&roles=resident`, { signal });
-      return rows
-        .filter((row) => isFiningCommitteeEligible(row, actorUserId))
-        .map((row) => ({ userId: row.userId, name: row.fullName ?? 'Unknown owner' }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      // One entry per person: an owner of two units has two role rows. The
+      // count matters — it decides whether fewer than three members is allowed.
+      const byUser = new Map<string, FiningCommitteeOption>();
+      for (const row of rows) {
+        if (isFiningCommitteeEligible(row, actorUserId) && !byUser.has(row.userId)) {
+          byUser.set(row.userId, { userId: row.userId, name: row.fullName ?? 'Unknown owner' });
+        }
+      }
+      return [...byUser.values()].sort((a, b) => a.name.localeCompare(b.name));
     },
     enabled: communityId > 0 && enabled,
   });

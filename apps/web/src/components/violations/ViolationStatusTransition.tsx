@@ -47,6 +47,11 @@ import {
   HEARING_NOTICE_DAYS,
 } from '@/lib/violations/hearing-notice-warning';
 import { useFiningCommitteeCandidates } from '@/hooks/use-fining-committee';
+import {
+  FINING_COMMITTEE_MIN_MEMBERS,
+  SMALL_COMMITTEE_DISCLAIMER,
+  smallCommitteeRule,
+} from '@/lib/violations/fining-committee';
 
 type ActionType = 'notice' | 'hearing' | 'fine' | 'resolve' | 'dismiss';
 
@@ -108,7 +113,15 @@ export function ViolationStatusTransition({
   );
   const [committeeIds, setCommitteeIds] = useState<string[]>([]);
   const [committeeApproved, setCommitteeApproved] = useState(false);
+  const [smallCommitteeAccepted, setSmallCommitteeAccepted] = useState(false);
   const committee = useFiningCommitteeCandidates(communityId, actorUserId, action === 'fine');
+  // Below three: refused while three eligible owners exist, else allowed once
+  // the disclaimer is accepted. The fine service applies the same rule.
+  const committeeRule = smallCommitteeRule(committeeIds.length, (committee.data ?? []).length);
+  const committeeReady =
+    committeeIds.length > 0
+    && committeeApproved
+    && (committeeRule === 'ok' || (committeeRule === 'needs_disclaimer' && smallCommitteeAccepted));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -150,8 +163,12 @@ export function ViolationStatusTransition({
           setError('Fine amount must be a positive number.');
           return;
         }
-        if (committeeIds.length === 0 || !committeeApproved) {
-          setError('Select the fining committee members and confirm they approved this fine.');
+        if (!committeeReady) {
+          setError(
+            committeeRule === 'pick_more'
+              ? `Select at least ${FINING_COMMITTEE_MIN_MEMBERS} fining committee members.`
+              : 'Select the fining committee members, confirm they approved this fine, and accept the disclaimer if shown.',
+          );
           return;
         }
       }
@@ -200,6 +217,7 @@ export function ViolationStatusTransition({
               dueDate: fineDueDate,
               notes: notes.trim() || null,
               approvedByCommittee: true,
+              ...(committeeRule === 'needs_disclaimer' ? { smallCommitteeAcknowledged: true as const } : {}),
               committeeMembers: (committee.data ?? [])
                 .filter((member) => committeeIds.includes(member.userId))
                 .map((member) => ({ userId: member.userId, name: member.name })),
@@ -222,7 +240,7 @@ export function ViolationStatusTransition({
         setSubmitting(false);
       }
     },
-    [action, violation.id, communityId, notes, hearingDate, hearingLocation, fineAmountDollars, fineDueDate, committeeIds, committeeApproved, committee.data, config, onComplete],
+    [action, violation.id, communityId, notes, hearingDate, hearingLocation, fineAmountDollars, fineDueDate, committeeIds, committeeApproved, committeeReady, committeeRule, committee.data, config, onComplete],
   );
 
   return (
@@ -345,6 +363,31 @@ export function ViolationStatusTransition({
               />
               The fining committee approved this fine
             </label>
+            {committeeIds.length > 0 && committeeRule === 'pick_more' && (
+              <p className="mt-2 text-sm text-status-danger">
+                Florida law requires at least {FINING_COMMITTEE_MIN_MEMBERS} committee members. Select{' '}
+                {FINING_COMMITTEE_MIN_MEMBERS - committeeIds.length} more.
+              </p>
+            )}
+            {committeeIds.length > 0 && committeeRule === 'needs_disclaimer' && (
+              <div role="alert" className="mt-2 rounded-md border border-status-warning-border bg-status-warning-bg p-3">
+                <p className="text-sm font-medium text-status-warning">
+                  Fewer than {FINING_COMMITTEE_MIN_MEMBERS} committee members
+                </p>
+                <p className="mt-1 text-sm text-content-secondary">{SMALL_COMMITTEE_DISCLAIMER}</p>
+                <label className="mt-2 flex items-center gap-2 text-sm text-content-secondary">
+                  <input
+                    type="checkbox"
+                    checked={smallCommitteeAccepted}
+                    onChange={(e) => setSmallCommitteeAccepted(e.target.checked)}
+                  />
+                  I accept this disclaimer
+                </label>
+                <p className="mt-1 text-xs text-content-tertiary">
+                  Your name and the time you accept are recorded in the audit log.
+                </p>
+              </div>
+            )}
           </fieldset>
         </>
       )}
@@ -365,7 +408,7 @@ export function ViolationStatusTransition({
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={submitting || (action === 'fine' && (committeeIds.length === 0 || !committeeApproved))}
+          disabled={submitting || (action === 'fine' && !committeeReady)}
           className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover disabled:opacity-50"
         >
           {submitting ? 'Processing...' : config.title}

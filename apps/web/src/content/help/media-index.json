@@ -671,28 +671,28 @@
   ],
   "manager/violations/review-violations/vi-fine": [
     1106,
-    378,
-    "2026-10-01"
+    590,
+    "2026-10-02"
   ],
   "manager/violations/review-violations/vi-hear": [
     1106,
     323,
-    "2026-10-01"
+    "2026-10-02"
   ],
   "manager/violations/review-violations/vi-inbox": [
     1140,
     334,
-    "2026-10-01"
+    "2026-10-02"
   ],
   "manager/violations/review-violations/vi-new": [
     1140,
     100,
-    "2026-10-01"
+    "2026-10-02"
   ],
   "manager/violations/review-violations/vi-notice": [
     1140,
     294,
-    "2026-10-01"
+    "2026-10-02"
   ],
   "manager/website/audit-trail/au-export": [
     1140,

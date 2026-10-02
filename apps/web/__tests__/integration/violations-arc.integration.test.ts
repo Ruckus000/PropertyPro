@@ -53,21 +53,21 @@ let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 let unitAId: number;
 
-// The fining committee must be owners with no board seat who are not imposing
-// the fine (§718.303(3) / §720.305(2)). The shared fixtures carry no such owner.
-const COMMITTEE_OWNER_KEY = 'committeeOwnerA' as MultiTenantUserKey;
-const COMMITTEE_OWNER_FIXTURE: MultiTenantUserFixture = {
-  key: COMMITTEE_OWNER_KEY,
+// The fining committee must be at least three owners with no board seat who
+// are not imposing the fine (§718.303(3) / §720.305(2)). The shared fixtures
+// carry no such owners.
+const COMMITTEE_OWNER_FIXTURES: MultiTenantUserFixture[] = (['A', 'B', 'C'] as const).map((letter) => ({
+  key: `committeeOwner${letter}` as MultiTenantUserKey,
   communityKey: 'communityA',
   role: 'resident',
   isUnitOwner: true,
   displayTitle: 'Owner',
-  emailPrefix: 'violations-committee-owner-a',
-  fullName: 'Violations Committee Owner A',
-};
+  emailPrefix: `violations-committee-owner-${letter.toLowerCase()}`,
+  fullName: `Violations Committee Owner ${letter}`,
+}));
 
 function committee(kit: TestKitState) {
-  return [{ name: COMMITTEE_OWNER_FIXTURE.fullName, userId: requireUser(kit, COMMITTEE_OWNER_KEY).id }];
+  return COMMITTEE_OWNER_FIXTURES.map((f) => ({ name: f.fullName, userId: requireUser(kit, f.key).id }));
 }
 let unitBId: number;
 
@@ -154,7 +154,7 @@ async function enableCommunityGate(
 
     await seedUsers(
       state,
-      [...MULTI_TENANT_USERS.filter((user) => neededUsers.includes(user.key)), COMMITTEE_OWNER_FIXTURE],
+      [...MULTI_TENANT_USERS.filter((user) => neededUsers.includes(user.key)), ...COMMITTEE_OWNER_FIXTURES],
       unitMap,
     );
 

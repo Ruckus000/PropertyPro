@@ -68,6 +68,7 @@ export const POST = withErrorHandler(
         notes: body.notes ?? null,
         approvedByCommittee: body.approvedByCommittee,
         committeeMembers: body.committeeMembers,
+        smallCommitteeAcknowledged: body.smallCommitteeAcknowledged,
         // Caps are resolved onto the membership at hydration, so enforcing them
         // costs no extra query.
         caps: membership.fineCaps,

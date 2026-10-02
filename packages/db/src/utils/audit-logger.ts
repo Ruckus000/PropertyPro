@@ -49,6 +49,10 @@ export type AuditAction =
   // being folded into 'document_accessed'. "Who downloaded the whole
   // association, and when" must be answerable on its own.
   | 'community_export_downloaded'
+  // A fine imposed by a fining committee smaller than the statutory three,
+  // after the person imposing it accepted the risk disclaimer. Its own action
+  // so "who accepted it, and when" is one filter away in a dispute.
+  | 'fining_committee_disclaimer_accepted'
   // Community purge — the terminal, irreversible step of the deletion
   // lifecycle. Its own action for the same reason as the export above: the
   // audit UI filters on a free-text `action` box, and a board asking "when was

@@ -33,7 +33,14 @@ import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
 import { listUnitResidentUserIds } from '@/lib/units/actor-units';
 import { withUnitLabels } from '@/lib/units/unit-labels';
-import { finingCommitteeIneligibility, type FiningCommitteeIneligibility } from '@/lib/violations/fining-committee';
+import {
+  FINING_COMMITTEE_MIN_MEMBERS,
+  SMALL_COMMITTEE_DISCLAIMER,
+  SMALL_COMMITTEE_DISCLAIMER_VERSION,
+  finingCommitteeIneligibility,
+  smallCommitteeRule,
+  type FiningCommitteeIneligibility,
+} from '@/lib/violations/fining-committee';
 
 export interface ViolationRecord {
   [key: string]: unknown;
@@ -124,6 +131,8 @@ export interface CreateViolationFineInput {
   /** §718.303(3): required `true` at the contract layer. */
   approvedByCommittee?: boolean;
   committeeMembers?: FiningCommitteeMember[];
+  /** Accepted SMALL_COMMITTEE_DISCLAIMER; required below three members. */
+  smallCommitteeAcknowledged?: boolean;
   /** Resolved ceilings. Omitted only by legacy callers; see the enforcement. */
   caps?: { perFineCents: number; aggregateCents: number };
 }
@@ -684,6 +693,43 @@ async function assertFiningCommitteeEligible(
   }
 }
 
+/**
+ * The statute asks for at least three members. Fewer is allowed only when the
+ * community does not have three eligible owners, and only once the person
+ * imposing the fine accepts SMALL_COMMITTEE_DISCLAIMER. Returns whether the
+ * disclaimer applies, for the audit entry.
+ */
+async function assertFiningCommitteeSize(
+  scoped: ReturnType<typeof createScopedClient>,
+  actorUserId: string,
+  size: number,
+  acknowledged: boolean,
+): Promise<boolean> {
+  if (size >= FINING_COMMITTEE_MIN_MEMBERS) return false;
+  const roles = await scoped.selectFrom<{ userId: string; role: string; isUnitOwner: boolean; designation: string | null }>(
+    userRoles,
+    { userId: userRoles.userId, role: userRoles.role, isUnitOwner: userRoles.isUnitOwner, designation: userRoles.designation },
+    eq(userRoles.role, 'resident'),
+  );
+  const eligible = new Set(
+    roles.filter((r) => finingCommitteeIneligibility(r, actorUserId) === null).map((r) => r.userId),
+  );
+  const rule = smallCommitteeRule(size, eligible.size);
+  if (rule === 'pick_more') {
+    throw new UnprocessableEntityError(
+      `Florida law requires a fining committee of at least ${FINING_COMMITTEE_MIN_MEMBERS} members `
+        + `(Fla. Stat. §718.303(3) / §720.305(2)). Your community has ${eligible.size} eligible owners; select at least ${FINING_COMMITTEE_MIN_MEMBERS}.`,
+    );
+  }
+  if (!acknowledged) {
+    throw new UnprocessableEntityError(
+      `This fining committee has fewer than ${FINING_COMMITTEE_MIN_MEMBERS} members. `
+        + 'Accept the small-committee disclaimer to impose the fine anyway.',
+    );
+  }
+  return true;
+}
+
 export async function imposeViolationFineForCommunity(
   communityId: number,
   violationId: number,
@@ -744,6 +790,12 @@ export async function imposeViolationFineForCommunity(
   }
 
   await assertFiningCommitteeEligible(scoped, actorUserId, input.committeeMembers ?? []);
+  const smallCommittee = await assertFiningCommitteeSize(
+    scoped,
+    actorUserId,
+    (input.committeeMembers ?? []).length,
+    input.smallCommitteeAcknowledged === true,
+  );
 
   const dueDate = input.dueDate
     ? parseDateOnly(input.dueDate, 'dueDate')
@@ -851,9 +903,31 @@ export async function imposeViolationFineForCommunity(
       ledgerEntryId,
       lineItemId,
       dueDate,
+      committeeSize: (input.committeeMembers ?? []).length,
     },
     metadata: { requestId: requestId ?? null },
   });
+
+  // Who accepted the small-committee disclaimer, and when (the row's
+  // created_at), with the exact text they accepted.
+  if (smallCommittee) {
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'fining_committee_disclaimer_accepted',
+      resourceType: 'violation_fine',
+      resourceId: String(fine.id),
+      communityId,
+      newValues: {
+        violationId,
+        committeeSize: (input.committeeMembers ?? []).length,
+        committeeMembers: input.committeeMembers ?? [],
+        disclaimerVersion: SMALL_COMMITTEE_DISCLAIMER_VERSION,
+        disclaimerText: SMALL_COMMITTEE_DISCLAIMER,
+        acceptedAt: new Date().toISOString(),
+      },
+      metadata: { requestId: requestId ?? null },
+    });
+  }
 
   return {
     fine,
