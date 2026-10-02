@@ -1,4 +1,4 @@
-import { getDocumentWithAccessCheck } from '@propertypro/db';
+import { getDocumentAccessCommunitySettings, getDocumentWithAccessCheck } from '@propertypro/db';
 import {
   resolveAccessibleCommunity,
   type AccessibleCommunity,
@@ -31,15 +31,23 @@ export async function resolveDocumentCommunity({
 }: ResolveDocumentCommunityInput): Promise<DocumentCommunity | null> {
   return resolveAccessibleCommunity({
     ...input,
-    canOpenIn: async (membership) =>
-      (await getDocumentWithAccessCheck(
-        {
-          communityId: membership.communityId,
-          role: membership.role,
-          communityType: membership.communityType,
-          isUnitOwner: membership.isUnitOwner,
-        },
-        documentId,
-      )) !== null,
+    canOpenIn: async (membership) => {
+      // The membership row carries no community settings, so the
+      // tenant inspection-reports opt-in is read per probed community.
+      const settings = await getDocumentAccessCommunitySettings(membership.communityId);
+      if (!settings) return false;
+      return (
+        (await getDocumentWithAccessCheck(
+          {
+            communityId: membership.communityId,
+            role: membership.role,
+            communityType: membership.communityType,
+            isUnitOwner: membership.isUnitOwner,
+            tenantsCanViewInspectionReports: settings.tenantsCanViewInspectionReports,
+          },
+          documentId,
+        )) !== null
+      );
+    },
   });
 }

@@ -64,6 +64,7 @@ export const GET = withErrorHandler(
       role: membership.role,
       communityType: membership.communityType,
       isUnitOwner: membership.isUnitOwner,
+      tenantsCanViewInspectionReports: membership.tenantsCanViewInspectionReports,
     };
 
     const referenceDoc = await getDocumentWithAccessCheck(accessContext, documentId);

@@ -69,6 +69,7 @@ async function executeSearchGroup(
             role: membership.role,
             communityType: membership.communityType,
             isUnitOwner: membership.isUnitOwner,
+            tenantsCanViewInspectionReports: membership.tenantsCanViewInspectionReports,
           },
           query,
           limit,

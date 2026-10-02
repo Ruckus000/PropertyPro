@@ -77,6 +77,8 @@ describe('requireCommunityMembership', () => {
       assessmentPaymentsEnabled: false,
       smsDispatchEnabled: false,
       noticePdfGenerationEnabled: false,
+      // Absent key = condo/HOA tenants cannot read Inspection Reports.
+      tenantsCanViewInspectionReports: false,
     });
   });
 
@@ -146,6 +148,21 @@ describe('requireCommunityMembership', () => {
           expect(membership[gate], `${gate} with settings=${JSON.stringify(settings)}`).toBe(false);
         }
       }
+    });
+
+    it('hydrates tenantsCanViewInspectionReports strictly (only boolean true)', async () => {
+      expect(
+        (await membershipWithSettings({ tenantsCanViewInspectionReports: true }))
+          .tenantsCanViewInspectionReports,
+      ).toBe(true);
+      for (const value of ['true', 1, {}, null, false]) {
+        expect(
+          (await membershipWithSettings({ tenantsCanViewInspectionReports: value }))
+            .tenantsCanViewInspectionReports,
+          JSON.stringify(value),
+        ).toBe(false);
+      }
+      expect((await membershipWithSettings({})).tenantsCanViewInspectionReports).toBe(false);
     });
 
     it('resolves each gate independently', async () => {

@@ -36,6 +36,7 @@ export default async function MobileDocumentsPage({ searchParams }: PageProps) {
     role: membership!.role,
     communityType: membership!.communityType,
     isUnitOwner: membership!.isUnitOwner,
+    tenantsCanViewInspectionReports: membership!.tenantsCanViewInspectionReports,
   });
 
   const serialized = (docs as Record<string, unknown>[]).map((doc) => ({

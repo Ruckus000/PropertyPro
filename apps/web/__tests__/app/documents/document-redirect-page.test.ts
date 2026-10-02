@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   getOptionalPageCommunityId: vi.fn(),
   listCommunitiesForUser: vi.fn(),
   getDocumentWithAccessCheck: vi.fn(),
+  getDocumentAccessCommunitySettings: vi.fn(),
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
@@ -42,6 +43,7 @@ vi.mock('@/lib/api/user-communities', () => ({
 }));
 vi.mock('@propertypro/db', () => ({
   getDocumentWithAccessCheck: mocks.getDocumentWithAccessCheck,
+  getDocumentAccessCommunitySettings: mocks.getDocumentAccessCommunitySettings,
 }));
 
 import DocumentRedirectPage from '../../../src/app/(authenticated)/documents/[id]/page';
@@ -87,6 +89,10 @@ describe('/documents/[id]', () => {
     mocks.requireAuthenticatedUserId.mockResolvedValue('user-1');
     mocks.getOptionalPageCommunityId.mockResolvedValue(null);
     mocks.listCommunitiesForUser.mockResolvedValue([membership(5), membership(6)]);
+    mocks.getDocumentAccessCommunitySettings.mockResolvedValue({
+      communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
+    });
   });
 
   it("redirects into the request's community library with the document selected", async () => {
@@ -107,9 +113,42 @@ describe('/documents/[id]', () => {
     await visit('77');
 
     expect(mocks.getDocumentWithAccessCheck).toHaveBeenCalledWith(
-      { communityId: 5, role: 'resident', communityType: 'hoa_720', isUnitOwner: false },
+      {
+        communityId: 5,
+        role: 'resident',
+        communityType: 'hoa_720',
+        isUnitOwner: false,
+        tenantsCanViewInspectionReports: false,
+      },
       77,
     );
+  });
+
+  it("passes that community's tenant inspection-reports setting into the probe", async () => {
+    mocks.listCommunitiesForUser.mockResolvedValue([
+      membership(5, { role: 'resident', isUnitOwner: false, communityType: 'hoa_720' }),
+    ]);
+    mocks.getDocumentAccessCommunitySettings.mockResolvedValue({
+      communityType: 'hoa_720',
+      tenantsCanViewInspectionReports: true,
+    });
+    documentLivesIn(5);
+
+    await visit('77');
+
+    expect(mocks.getDocumentAccessCommunitySettings).toHaveBeenCalledWith(5);
+    expect(mocks.getDocumentWithAccessCheck).toHaveBeenCalledWith(
+      expect.objectContaining({ communityId: 5, tenantsCanViewInspectionReports: true }),
+      77,
+    );
+  });
+
+  it('skips a community whose settings cannot be read (fails closed)', async () => {
+    mocks.getDocumentAccessCommunitySettings.mockResolvedValue(null);
+    documentLivesIn(5);
+
+    expect(await visit('77')).toBe('NEXT_NOT_FOUND');
+    expect(mocks.getDocumentWithAccessCheck).not.toHaveBeenCalled();
   });
 
   it("falls back to the caller's other communities when the request's does not hold it", async () => {

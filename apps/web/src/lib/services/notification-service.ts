@@ -7,6 +7,8 @@ import { createElement, type ReactElement } from 'react';
 import {
   communities,
   createScopedClient,
+  getDocumentAccessCommunitySettings,
+  getDocumentWithAccessCheck,
   insertNotifications,
   logAuditEvent,
   notificationPreferences,
@@ -28,7 +30,7 @@ import {
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
 import { operationsHubHref } from '@/lib/operations/routes';
-import { ADMIN_TIER_DB_ROLES, hasBoardDesignation } from '@propertypro/shared';
+import { ADMIN_TIER_DB_ROLES, hasBoardDesignation, isCommunityRole, type CommunityRole } from '@propertypro/shared';
 // Note: ADMIN_ROLES and BOARD_ROLES from shared still use legacy role names.
 // isRoleMatch below matches user_roles.role against the bilingual tier
 // constants (both role generations) during the role-v3 transition window.
@@ -58,7 +60,15 @@ export type RecipientFilter =
   | 'tenants_only'
   | 'board_only'
   | 'community_admins'
-  | { type: 'specific_user'; userId: string };
+  | { type: 'specific_user'; userId: string }
+  /**
+   * Every member who can OPEN this document — the same read gate the library,
+   * detail and download routes apply (`getDocumentWithAccessCheck`: role x
+   * community type x category, the community's tenant inspection-reports
+   * opt-in, drafts, source type). Use for anything announcing a document, so
+   * nobody is told about a record they cannot read.
+   */
+  | { type: 'document_readers'; documentId: number };
 
 export type NotificationEvent =
   | MeetingNoticeEvent
@@ -191,7 +201,12 @@ function isInAppEnabled(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts?: { isUnitOwner?: boolean; designation?: string | null }): boolean {
+function isRoleMatch(
+  role: string,
+  filter: RecipientFilter,
+  userId: string,
+  opts?: { isUnitOwner?: boolean; designation?: string | null; canReadDocument?: boolean },
+): boolean {
   if (filter === 'all') return true;
   if (filter === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
   // Mirrors `isAudienceMatch` in announcement-delivery.ts and
@@ -208,7 +223,53 @@ function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts
     return (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
   }
   if (typeof filter === 'object' && filter.type === 'specific_user') return userId === filter.userId;
+  if (typeof filter === 'object' && filter.type === 'document_readers') return opts?.canReadDocument === true;
   return false;
+}
+
+function documentReaderKey(role: string, isUnitOwner: boolean): string {
+  return `${role}:${isUnitOwner}`;
+}
+
+/**
+ * For a `document_readers` filter: the `(role, isUnitOwner)` pairs that can
+ * open the document. Access depends only on that pair within one community, so
+ * each distinct pair is probed once (serially — at most a handful). Fails
+ * closed: an unknown community or role reads nothing. Returns null for any
+ * other filter.
+ */
+async function resolveDocumentReaderKeys(
+  communityId: number,
+  filter: RecipientFilter,
+  roleRows: Array<Record<string, unknown>>,
+): Promise<Set<string> | null> {
+  if (typeof filter !== 'object' || filter.type !== 'document_readers') return null;
+  const allowed = new Set<string>();
+  const settings = await getDocumentAccessCommunitySettings(communityId);
+  if (!settings) return allowed;
+
+  const pairs = new Map<string, { role: CommunityRole; isUnitOwner: boolean }>();
+  for (const row of roleRows) {
+    const role = row['role'];
+    if (!isCommunityRole(role)) continue;
+    const isUnitOwner = row['isUnitOwner'] === true;
+    pairs.set(documentReaderKey(role, isUnitOwner), { role, isUnitOwner });
+  }
+
+  for (const [key, pair] of pairs) {
+    const readable = await getDocumentWithAccessCheck(
+      {
+        communityId,
+        role: pair.role,
+        communityType: settings.communityType,
+        isUnitOwner: pair.isUnitOwner,
+        tenantsCanViewInspectionReports: settings.tenantsCanViewInspectionReports,
+      },
+      filter.documentId,
+    );
+    if (readable) allowed.add(key);
+  }
+  return allowed;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -324,6 +385,7 @@ async function resolveRecipientDeliveries(
     scoped.query(userRoles),
     scoped.query(notificationPreferences),
   ]);
+  const documentReaderKeys = await resolveDocumentReaderKeys(communityId, filter, roleRows);
 
   const preferencesByUserId = new Map<string, UserNotificationPreferences>();
   for (const row of preferenceRows) {
@@ -398,7 +460,8 @@ async function resolveRecipientDeliveries(
     const isUnitOwner = row['isUnitOwner'] === true;
     const designation = row['designation'] as string | null | undefined;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation })) continue;
+    const canReadDocument = documentReaderKeys?.has(documentReaderKey(role, isUnitOwner)) === true;
+    if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation, canReadDocument })) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
 
@@ -743,6 +806,7 @@ async function resolveInAppRecipients(
     scoped.query(userRoles),
     scoped.query(notificationPreferences),
   ]);
+  const documentReaderKeys = await resolveDocumentReaderKeys(communityId, filter, roleRows);
 
   const preferencesByUserId = new Map<string, UserNotificationPreferences>();
   for (const row of preferenceRows) {
@@ -802,7 +866,8 @@ async function resolveInAppRecipients(
       const isUnitOwner = row['isUnitOwner'] === true;
       const designation = row['designation'] as string | null | undefined;
       if (typeof userId !== 'string' || typeof role !== 'string') continue;
-      if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation })) continue;
+      const canReadDocument = documentReaderKeys?.has(documentReaderKey(role, isUnitOwner)) === true;
+      if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation, canReadDocument })) continue;
       matchedUserIds.push(userId);
     }
   }

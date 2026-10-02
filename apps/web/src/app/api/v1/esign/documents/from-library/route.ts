@@ -40,6 +40,7 @@ export const POST = withErrorHandler(
         role: membership.role,
         communityType: membership.communityType,
         isUnitOwner: membership.isUnitOwner,
+        tenantsCanViewInspectionReports: membership.tenantsCanViewInspectionReports,
       },
       body.documentId,
     );

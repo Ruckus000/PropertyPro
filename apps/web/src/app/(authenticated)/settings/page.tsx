@@ -7,6 +7,7 @@ import { SnowbirdDigestCard } from '@/components/settings/snowbird-digest-card';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
 import { SmsConsentCard } from '@/components/settings/sms-consent-card';
 import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
+import { AccessSettingsCard } from '@/components/settings/access-settings-card';
 import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -188,6 +189,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </Link>
           </div>
         </div>
+      )}
+      {membership.isAdmin && membership.communityType !== 'apartment' && (
+        <AccessSettingsCard communityId={context.communityId} />
       )}
       {membership.isAdmin && (
         <div>
