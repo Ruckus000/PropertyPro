@@ -49,6 +49,10 @@ export type AuditAction =
   // being folded into 'document_accessed'. "Who downloaded the whole
   // association, and when" must be answerable on its own.
   | 'community_export_downloaded'
+  // A fine imposed by a fining committee smaller than the statutory three,
+  // after the person imposing it accepted the risk disclaimer. Its own action
+  // so "who accepted it, and when" is one filter away in a dispute.
+  | 'fining_committee_disclaimer_accepted'
   // Directory CSV export (units or residents) — names, emails and phones of
   // members leave the system in a file, so it is findable by name like the
   // community export. Metadata carries counts and columns, never the rows.

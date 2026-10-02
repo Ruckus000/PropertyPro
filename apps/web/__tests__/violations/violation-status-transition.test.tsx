@@ -9,16 +9,22 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { updateViolationMock, toastWarningMock } = vi.hoisted(() => ({
+const { updateViolationMock, toastWarningMock, imposeFineMock, committeeMock } = vi.hoisted(() => ({
   updateViolationMock: vi.fn(),
   toastWarningMock: vi.fn(),
+  imposeFineMock: vi.fn(),
+  committeeMock: vi.fn(() => ({ isLoading: false, data: [] as Array<{ userId: string; name: string }> })),
 }));
 
 vi.mock('@/lib/api/violations', () => ({
   updateViolation: updateViolationMock,
-  imposeFine: vi.fn(),
+  imposeFine: imposeFineMock,
   resolveViolation: vi.fn(),
   dismissViolation: vi.fn(),
+}));
+
+vi.mock('@/hooks/use-fining-committee', () => ({
+  useFiningCommitteeCandidates: committeeMock,
 }));
 
 vi.mock('sonner', () => ({
@@ -53,6 +59,7 @@ function renderHearingForm() {
     <ViolationStatusTransition
       violation={VIOLATION}
       communityId={42}
+      actorUserId="user-cam"
       action="hearing"
       onComplete={vi.fn()}
       onCancel={vi.fn()}
@@ -148,5 +155,90 @@ describe('ViolationStatusTransition — hearing notice window', () => {
 
     await waitFor(() => expect(updateViolationMock).toHaveBeenCalled());
     expect(toastWarningMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ViolationStatusTransition — fining committee', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    imposeFineMock.mockResolvedValue({ data: {} });
+    committeeMock.mockReturnValue({
+      isLoading: false,
+      data: [
+        { userId: 'u-olivia', name: 'Olivia Owner' },
+        { userId: 'u-sam', name: 'Sam Owner' },
+      ],
+    });
+  });
+
+  function renderFineForm() {
+    return render(
+      <ViolationStatusTransition
+        violation={VIOLATION}
+        communityId={42}
+        actorUserId="user-cam"
+        action="fine"
+        onComplete={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+  }
+
+  it('asks only for eligible owners, excluding the person imposing the fine', () => {
+    renderFineForm();
+    expect(committeeMock).toHaveBeenCalledWith(42, 'user-cam', true);
+    expect(screen.getByLabelText('Olivia Owner')).toBeTruthy();
+  });
+
+  it('with fewer than three eligible owners, cannot submit until the approval and the disclaimer are accepted', () => {
+    renderFineForm();
+    fireEvent.change(screen.getByLabelText('Fine Amount ($)'), { target: { value: '50' } });
+    const submit = screen.getByRole('button', { name: 'Impose Fine' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('Olivia Owner'));
+    fireEvent.click(screen.getByLabelText('The fining committee approved this fine'));
+    expect(screen.getByRole('alert').textContent).toMatch(/Fewer than 3 committee members/);
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('I accept this disclaimer'));
+    expect(submit.disabled).toBe(false);
+  });
+
+  it('with three eligible owners, requires three and shows no disclaimer', () => {
+    committeeMock.mockReturnValue({
+      isLoading: false,
+      data: [
+        { userId: 'u-olivia', name: 'Olivia Owner' },
+        { userId: 'u-pat', name: 'Pat Owner' },
+        { userId: 'u-sam', name: 'Sam Owner' },
+      ],
+    });
+    renderFineForm();
+    fireEvent.change(screen.getByLabelText('Fine Amount ($)'), { target: { value: '50' } });
+    fireEvent.click(screen.getByLabelText('The fining committee approved this fine'));
+    fireEvent.click(screen.getByLabelText('Olivia Owner'));
+    const submit = screen.getByRole('button', { name: 'Impose Fine' }) as HTMLButtonElement;
+    expect(screen.getByText(/Select\s+2 more/)).toBeTruthy();
+    expect(screen.queryByLabelText('I accept this disclaimer')).toBeNull();
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('Pat Owner'));
+    fireEvent.click(screen.getByLabelText('Sam Owner'));
+    expect(submit.disabled).toBe(false);
+  });
+
+  it('sends the committee approval and the chosen members with the fine', async () => {
+    renderFineForm();
+    fireEvent.change(screen.getByLabelText('Fine Amount ($)'), { target: { value: '50' } });
+    fireEvent.click(screen.getByLabelText('Sam Owner'));
+    fireEvent.click(screen.getByLabelText('The fining committee approved this fine'));
+    fireEvent.click(screen.getByLabelText('I accept this disclaimer'));
+    fireEvent.click(screen.getByRole('button', { name: 'Impose Fine' }));
+
+    await waitFor(() => expect(imposeFineMock).toHaveBeenCalled());
+    expect(imposeFineMock.mock.calls[0]![1]).toMatchObject({
+      amountCents: 5000,
+      approvedByCommittee: true,
+      committeeMembers: [{ userId: 'u-sam', name: 'Sam Owner' }],
+      smallCommitteeAcknowledged: true,
+    });
   });
 });

@@ -10,6 +10,7 @@ import {
   paginate,
   postLedgerEntry,
   units,
+  userRoles,
   violationFines,
   violations,
 } from '@propertypro/db';
@@ -32,6 +33,14 @@ import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
 import { listUnitResidentUserIds } from '@/lib/units/actor-units';
 import { withUnitLabels } from '@/lib/units/unit-labels';
+import {
+  FINING_COMMITTEE_MIN_MEMBERS,
+  SMALL_COMMITTEE_DISCLAIMER,
+  SMALL_COMMITTEE_DISCLAIMER_VERSION,
+  finingCommitteeIneligibility,
+  smallCommitteeRule,
+  type FiningCommitteeIneligibility,
+} from '@/lib/violations/fining-committee';
 
 export interface ViolationRecord {
   [key: string]: unknown;
@@ -122,6 +131,8 @@ export interface CreateViolationFineInput {
   /** §718.303(3): required `true` at the contract layer. */
   approvedByCommittee?: boolean;
   committeeMembers?: FiningCommitteeMember[];
+  /** Accepted SMALL_COMMITTEE_DISCLAIMER; required below three members. */
+  smallCommitteeAcknowledged?: boolean;
   /** Resolved ceilings. Omitted only by legacy callers; see the enforcement. */
   caps?: { perFineCents: number; aggregateCents: number };
 }
@@ -635,6 +646,90 @@ export async function updateViolationForCommunity(
   return record;
 }
 
+const INELIGIBLE_REASON: Record<FiningCommitteeIneligibility | 'not_a_member' | 'listed_twice', string> = {
+  not_a_member: 'is not a member of this community',
+  not_an_owner: 'is not a unit owner',
+  board_seat: 'holds a board seat',
+  imposing_the_fine: 'is the person imposing the fine',
+  listed_twice: 'is listed more than once',
+};
+
+/**
+ * §718.303(3) / §720.305(2): the approving committee may not include officers
+ * or directors. Each member must be an owner of this community with no board
+ * seat, and not the person imposing the fine (finingCommitteeIneligibility).
+ */
+async function assertFiningCommitteeEligible(
+  scoped: ReturnType<typeof createScopedClient>,
+  actorUserId: string,
+  members: readonly FiningCommitteeMember[],
+): Promise<void> {
+  const ids = members.map((m) => m.userId).filter((id): id is string => typeof id === 'string');
+  const roles = ids.length === 0
+    ? []
+    : await scoped.selectFrom<{ userId: string; role: string; isUnitOwner: boolean; designation: string | null }>(
+        userRoles,
+        { userId: userRoles.userId, role: userRoles.role, isUnitOwner: userRoles.isUnitOwner, designation: userRoles.designation },
+        inArray(userRoles.userId, ids),
+      );
+  const byUser = new Map(roles.map((r) => [r.userId, r]));
+  const seen = new Set<string>();
+  const problems: string[] = [];
+  for (const member of members) {
+    const role = member.userId ? byUser.get(member.userId) : undefined;
+    const reason = !member.userId || !role
+      ? 'not_a_member'
+      : seen.has(member.userId)
+        ? 'listed_twice'
+        : finingCommitteeIneligibility(role, actorUserId);
+    if (member.userId) seen.add(member.userId);
+    if (reason) problems.push(`${member.name} ${INELIGIBLE_REASON[reason]}`);
+  }
+  if (problems.length > 0) {
+    throw new UnprocessableEntityError(
+      `The fining committee must be owners who are not on the board and are not imposing the fine `
+        + `(Fla. Stat. §718.303(3) / §720.305(2)): ${problems.join('; ')}.`,
+    );
+  }
+}
+
+/**
+ * The statute asks for at least three members. Fewer is allowed only when the
+ * community does not have three eligible owners, and only once the person
+ * imposing the fine accepts SMALL_COMMITTEE_DISCLAIMER. Returns whether the
+ * disclaimer applies, for the audit entry.
+ */
+async function assertFiningCommitteeSize(
+  scoped: ReturnType<typeof createScopedClient>,
+  actorUserId: string,
+  size: number,
+  acknowledged: boolean,
+): Promise<boolean> {
+  if (size >= FINING_COMMITTEE_MIN_MEMBERS) return false;
+  const roles = await scoped.selectFrom<{ userId: string; role: string; isUnitOwner: boolean; designation: string | null }>(
+    userRoles,
+    { userId: userRoles.userId, role: userRoles.role, isUnitOwner: userRoles.isUnitOwner, designation: userRoles.designation },
+    eq(userRoles.role, 'resident'),
+  );
+  const eligible = new Set(
+    roles.filter((r) => finingCommitteeIneligibility(r, actorUserId) === null).map((r) => r.userId),
+  );
+  const rule = smallCommitteeRule(size, eligible.size);
+  if (rule === 'pick_more') {
+    throw new UnprocessableEntityError(
+      `Florida law requires a fining committee of at least ${FINING_COMMITTEE_MIN_MEMBERS} members `
+        + `(Fla. Stat. §718.303(3) / §720.305(2)). Your community has ${eligible.size} eligible owners; select at least ${FINING_COMMITTEE_MIN_MEMBERS}.`,
+    );
+  }
+  if (!acknowledged) {
+    throw new UnprocessableEntityError(
+      `This fining committee has fewer than ${FINING_COMMITTEE_MIN_MEMBERS} members. `
+        + 'Accept the small-committee disclaimer to impose the fine anyway.',
+    );
+  }
+  return true;
+}
+
 export async function imposeViolationFineForCommunity(
   communityId: number,
   violationId: number,
@@ -693,6 +788,14 @@ export async function imposeViolationFineForCommunity(
         + `(Fla. Stat. §718.303(3) / §720.305(2)). ${formatCents(alreadyImposed)} has already been imposed.`,
     );
   }
+
+  await assertFiningCommitteeEligible(scoped, actorUserId, input.committeeMembers ?? []);
+  const smallCommittee = await assertFiningCommitteeSize(
+    scoped,
+    actorUserId,
+    (input.committeeMembers ?? []).length,
+    input.smallCommitteeAcknowledged === true,
+  );
 
   const dueDate = input.dueDate
     ? parseDateOnly(input.dueDate, 'dueDate')
@@ -800,9 +903,31 @@ export async function imposeViolationFineForCommunity(
       ledgerEntryId,
       lineItemId,
       dueDate,
+      committeeSize: (input.committeeMembers ?? []).length,
     },
     metadata: { requestId: requestId ?? null },
   });
+
+  // Who accepted the small-committee disclaimer, and when (the row's
+  // created_at), with the exact text they accepted.
+  if (smallCommittee) {
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'fining_committee_disclaimer_accepted',
+      resourceType: 'violation_fine',
+      resourceId: String(fine.id),
+      communityId,
+      newValues: {
+        violationId,
+        committeeSize: (input.committeeMembers ?? []).length,
+        committeeMembers: input.committeeMembers ?? [],
+        disclaimerVersion: SMALL_COMMITTEE_DISCLAIMER_VERSION,
+        disclaimerText: SMALL_COMMITTEE_DISCLAIMER,
+        acceptedAt: new Date().toISOString(),
+      },
+      metadata: { requestId: requestId ?? null },
+    });
+  }
 
   return {
     fine,

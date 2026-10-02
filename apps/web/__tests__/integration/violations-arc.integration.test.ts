@@ -2,7 +2,11 @@ import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from '@propertypro/db/filters';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
-import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
+import {
+  MULTI_TENANT_USERS,
+  type MultiTenantUserFixture,
+  type MultiTenantUserKey,
+} from '../fixtures/multi-tenant-users';
 import {
   type TestKitState,
   apiUrl,
@@ -48,6 +52,23 @@ interface RouteModules {
 let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 let unitAId: number;
+
+// The fining committee must be at least three owners with no board seat who
+// are not imposing the fine (§718.303(3) / §720.305(2)). The shared fixtures
+// carry no such owners.
+const COMMITTEE_OWNER_FIXTURES: MultiTenantUserFixture[] = (['A', 'B', 'C'] as const).map((letter) => ({
+  key: `committeeOwner${letter}` as MultiTenantUserKey,
+  communityKey: 'communityA',
+  role: 'resident',
+  isUnitOwner: true,
+  displayTitle: 'Owner',
+  emailPrefix: `violations-committee-owner-${letter.toLowerCase()}`,
+  fullName: `Violations Committee Owner ${letter}`,
+}));
+
+function committee(kit: TestKitState) {
+  return COMMITTEE_OWNER_FIXTURES.map((f) => ({ name: f.fullName, userId: requireUser(kit, f.key).id }));
+}
 let unitBId: number;
 
 function requireState(): TestKitState {
@@ -133,7 +154,7 @@ async function enableCommunityGate(
 
     await seedUsers(
       state,
-      MULTI_TENANT_USERS.filter((user) => neededUsers.includes(user.key)),
+      [...MULTI_TENANT_USERS.filter((user) => neededUsers.includes(user.key)), ...COMMITTEE_OWNER_FIXTURES],
       unitMap,
     );
 
@@ -188,7 +209,7 @@ async function enableCommunityGate(
         communityId: communityA.id,
         amountCents: 50_000, // $500, five times the ceiling
         approvedByCommittee: true,
-        committeeMembers: [{ name: 'Integration Committee Member' }],
+        committeeMembers: committee(kit),
       }),
       { params: Promise.resolve({ id: String(violationId) }) },
     );
@@ -246,7 +267,7 @@ async function enableCommunityGate(
         // z.literal(true), so a `false` is a 400 rather than a fine recorded as
         // un-approved. See docs/audits/2026-08-09-legal-risk-audit.md F-04.
         approvedByCommittee: true,
-        committeeMembers: [{ name: 'Integration Committee Member' }],
+        committeeMembers: committee(kit),
       }),
       { params: Promise.resolve({ id: String(violationId) }) },
     );

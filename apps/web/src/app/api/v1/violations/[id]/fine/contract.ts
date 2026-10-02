@@ -29,6 +29,9 @@
  *   - `notes`: string, max 1000 chars, nullable + optional
  *   - `approvedByCommittee`: literal `true` (REQUIRED — §718.303(3))
  *   - `committeeMembers`: 1–20 `{ name, userId? }` snapshots (REQUIRED)
+ *   - `smallCommitteeAcknowledged`: literal `true`, required when fewer than
+ *     three members are listed (allowed only when the community has fewer than
+ *     three eligible owners; audited with who accepted and when)
  *
  * The two committee fields are a deliberate BREAKING change to the request
  * contract, and the amount is now capped in the service against
@@ -87,17 +90,25 @@ export const violationsFineContract = defineRoute({
       approvedByCommittee: z.literal(true),
       /**
        * Snapshot of who approved. At least one member, because a "committee" of
-       * nobody is the same defect in a different shape.
+       * nobody is the same defect in a different shape. Each member is an
+       * account so the service can check eligibility (an owner with no board
+       * seat, not the person imposing the fine — lib/violations/fining-committee).
        */
       committeeMembers: z
         .array(
           z.object({
             name: z.string().min(1).max(200),
-            userId: z.string().uuid().optional(),
+            userId: z.string().uuid(),
           }),
         )
         .min(1)
         .max(20),
+      /**
+       * The person imposing the fine accepted SMALL_COMMITTEE_DISCLAIMER
+       * (lib/violations/fining-committee). Required below three members; the
+       * service decides when, since only it can count the eligible owners.
+       */
+      smallCommitteeAcknowledged: z.literal(true).optional(),
     }),
   },
   response: z.unknown(),

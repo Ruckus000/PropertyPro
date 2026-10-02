@@ -254,6 +254,7 @@ export function ViolationDetailView({
           <ViolationStatusTransition
             violation={violationItem}
             communityId={communityId}
+            actorUserId={userId}
             action={activeAction}
             onComplete={() => window.location.reload()}
             onCancel={() => setActiveAction(null)}

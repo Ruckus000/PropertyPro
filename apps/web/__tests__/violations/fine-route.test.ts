@@ -100,7 +100,7 @@ const ADMIN_MEMBERSHIP = {
  */
 const COMMITTEE = {
   approvedByCommittee: true as const,
-  committeeMembers: [{ name: 'Dana Reyes' }],
+  committeeMembers: [{ name: 'Dana Reyes', userId: '6b0c1c8e-2f7a-4c55-9d3e-0a1b2c3d4e5f' }],
 };
 
 const FINE_RESULT = {
@@ -188,7 +188,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
         graceDays: 10,
         notes: 'Late fee for repeated infractions',
         approvedByCommittee: true,
-        committeeMembers: [{ name: 'Dana Reyes' }],
+        committeeMembers: [{ name: 'Dana Reyes', userId: '6b0c1c8e-2f7a-4c55-9d3e-0a1b2c3d4e5f' }],
         caps: ADMIN_MEMBERSHIP.fineCaps,
       },
       'req-abc',
@@ -212,7 +212,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
         graceDays: undefined,
         notes: null,
         approvedByCommittee: true,
-        committeeMembers: [{ name: 'Dana Reyes' }],
+        committeeMembers: [{ name: 'Dana Reyes', userId: '6b0c1c8e-2f7a-4c55-9d3e-0a1b2c3d4e5f' }],
         caps: ADMIN_MEMBERSHIP.fineCaps,
       },
       null,
@@ -243,7 +243,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
         communityId: 42,
         amountCents: 2500,
         approvedByCommittee: false,
-        committeeMembers: [{ name: 'Dana Reyes' }],
+        committeeMembers: [{ name: 'Dana Reyes', userId: '6b0c1c8e-2f7a-4c55-9d3e-0a1b2c3d4e5f' }],
       }),
       routeCtx('99'),
     );
@@ -260,6 +260,21 @@ describe('POST /api/v1/violations/[id]/fine', () => {
         amountCents: 2500,
         approvedByCommittee: true,
         committeeMembers: [],
+      }),
+      routeCtx('99'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(imposeViolationFineForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a committee member with no account, whose eligibility cannot be checked', async () => {
+    const res = await POST(
+      jsonPost(99, {
+        communityId: 42,
+        amountCents: 2500,
+        approvedByCommittee: true,
+        committeeMembers: [{ name: 'Dana Reyes' }],
       }),
       routeCtx('99'),
     );

@@ -168,6 +168,7 @@ export function ViolationDetailPanel({
         <ViolationStatusTransition
           violation={violation}
           communityId={communityId}
+          actorUserId={userId}
           action={activeAction}
           onComplete={onActionComplete}
           onCancel={() => setActiveAction(null)}
