@@ -35,10 +35,6 @@ export interface ResidentListRow {
   roleId: number;
   role: string;
   unitId: number | null;
-  /** Owner vs tenant for a resident; null for managers. */
-  isUnitOwner: boolean | null;
-  /** Board seat, if any (ADR-006 §2a). */
-  designation: string | null;
   email: string | null;
   fullName: string | null;
   phone: string | null;
@@ -190,8 +186,6 @@ export async function listResidentsForCommunity(
       roleId: roleRow['id'] as number,
       role: roleRow['role'] as string,
       unitId: (roleRow['unitId'] as number | null) ?? null,
-      isUnitOwner: (roleRow['isUnitOwner'] as boolean | null | undefined) ?? null,
-      designation: (roleRow['designation'] as string | null | undefined) ?? null,
       email: (userRow?.['email'] as string | undefined) ?? null,
       fullName: (userRow?.['fullName'] as string | undefined) ?? null,
       phone: (userRow?.['phone'] as string | undefined) ?? null,
