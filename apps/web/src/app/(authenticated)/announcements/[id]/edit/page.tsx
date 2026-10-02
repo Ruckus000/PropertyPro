@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
@@ -24,9 +24,9 @@ export default async function EditAnnouncementPage({ params, searchParams }: Pag
     headers(),
   ]);
 
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

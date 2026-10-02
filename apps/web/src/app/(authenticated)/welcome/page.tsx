@@ -16,7 +16,7 @@ import {
 import {
   requirePageCommunityMembership,
 } from '@/lib/request/page-community-context';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import {
   hasChecklistItems,
@@ -93,9 +93,9 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
     headers(),
   ]);
 
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

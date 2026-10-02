@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { PageBody } from '@/components/shared/page-body';
 import { PageHeader } from '@/components/shared/page-header';
@@ -17,9 +17,9 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
     searchParams,
     headers(),
   ]);
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {

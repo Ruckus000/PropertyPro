@@ -28,5 +28,12 @@ test.describe('Tenant host vs communityId query', () => {
     await expect(page.getByText('Sunset Condos', { exact: false }).first()).toBeVisible({
       timeout: 60_000,
     });
+
+    // The community picker also lists "Sunset Condos", so the assertion above
+    // passed even when every app page on a tenant subdomain fell back to the
+    // picker (pages ignored middleware's forwarded community id). Pin the real
+    // outcome: the dashboard, not the picker.
+    await expect(page).not.toHaveURL(/\/select-community/);
+    await expect(page.getByRole('heading', { name: 'Select a Community' })).toHaveCount(0);
   });
 });

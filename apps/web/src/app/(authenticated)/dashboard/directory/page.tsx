@@ -13,7 +13,7 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getFeaturesForCommunity } from '@propertypro/shared';
-import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
+import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
@@ -34,9 +34,9 @@ function parseTab(value: string | string[] | undefined): DirectoryTab {
 export default async function DirectoryPage({ searchParams }: PageProps) {
   const [resolvedSearchParams, requestHeaders] = await Promise.all([searchParams, headers()]);
 
-  const context = resolveCommunityContext({
+  const context = resolvePageCommunityContext({
     searchParams: toUrlSearchParams(resolvedSearchParams),
-    host: requestHeaders.get('host'),
+    headers: requestHeaders,
   });
 
   if (!context.communityId) {
