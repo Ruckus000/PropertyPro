@@ -10,6 +10,7 @@ export * from './types';
 export { stableStringify, fingerprint, parseSectionContent, zodIssuesToFields } from './canonical';
 export type { ParsedSection, FieldIssue } from './canonical';
 export { diffSite, sectionTitle } from './diff';
+export { diffDesign } from './diff-design';
 export { diffPages, isLazyDraftHome, pageTitle, publishedPageBaseline } from './diff-pages';
 export { blockIssues, heroIssues, siteIssues, publishBlocked } from './validate';
 export type { SiteIssuesOptions } from './validate';

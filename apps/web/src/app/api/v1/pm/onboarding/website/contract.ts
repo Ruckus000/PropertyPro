@@ -2,23 +2,24 @@
  * Route contract for /api/v1/pm/onboarding/website. Plan A1.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
-
-// 6-digit hex with leading #, e.g. "#0e3338"
-const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Must be a 6-digit hex color');
+import { allowedFont, hexColor as hexColorSchema } from '@/app/api/v1/pm/branding/contract';
 
 const wizardPatchBodySchema = z
   .object({
     communityId: z.number().int().positive(),
     /** Community display name — writes communities.name with an audit entry. */
     name: z.string().trim().min(1).max(200).optional(),
+    // Checked against the renderable layouts in `site-design-service`.
     layoutId: z.string().min(1).max(80).nullable().optional(),
     themePresetSlug: z.string().min(1).max(120).nullable().optional(),
     tagline: z.string().max(80).nullable().optional(),
     primaryColor: hexColorSchema.optional(),
     secondaryColor: hexColorSchema.optional(),
     accentColor: hexColorSchema.optional(),
-    fontHeading: z.string().min(1).max(80).optional(),
-    fontBody: z.string().min(1).max(80).optional(),
+    // Same font allowlist as the design and branding routes: these now become
+    // the site's drafted look, published as-is.
+    fontHeading: allowedFont.optional(),
+    fontBody: allowedFont.optional(),
   })
   .refine(
     (b) =>
