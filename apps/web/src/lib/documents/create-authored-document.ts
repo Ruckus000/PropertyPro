@@ -140,7 +140,8 @@ export async function createAuthoredDocument(
           sourceType: 'document',
           sourceId: String(documentId),
         },
-        'all',
+        // Only members who can open it — not 'all' (see RecipientFilter).
+        { type: 'document_readers', documentId },
         input.userId,
       );
       if (notificationResult.failedCount > 0) {
@@ -166,7 +167,7 @@ export async function createAuthoredDocument(
         sourceType: 'document',
         sourceId: String(documentId),
       },
-      'all',
+      { type: 'document_readers', documentId },
       input.userId,
     ).catch((err: unknown) => {
       // eslint-disable-next-line no-console

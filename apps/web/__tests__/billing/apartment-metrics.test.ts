@@ -89,6 +89,7 @@ const DEFAULT_MEMBERSHIP: CommunityMembership = {
   trialEndsAt: null,
   demoExpiresAt: null,
   electionsAttorneyReviewed: false,
+  tenantsCanViewInspectionReports: false,
   // Required by CommunityMembership but never read on this code path; the
   // values below are what the omitted properties already behaved as.
   subscriptionPlan: null,

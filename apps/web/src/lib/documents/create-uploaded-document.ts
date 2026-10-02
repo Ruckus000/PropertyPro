@@ -273,7 +273,9 @@ export async function sendDocumentPostedNotifications(params: {
         sourceType: 'document',
         sourceId: documentId,
       },
-      'all',
+      // Only members who can open it — not 'all': a tenant must not be told
+      // about a record their library hides (see RecipientFilter).
+      { type: 'document_readers', documentId: params.documentId },
       params.actorUserId,
     );
     if (notificationResult.failedCount > 0) {
@@ -299,7 +301,7 @@ export async function sendDocumentPostedNotifications(params: {
       sourceType: 'document',
       sourceId: documentId,
     },
-    'all',
+    { type: 'document_readers', documentId: params.documentId },
     params.actorUserId,
   ).catch((err: unknown) => {
     console.error('[documents] in-app notification failed', { communityId: params.communityId, error: err instanceof Error ? err.message : String(err) });

@@ -32,6 +32,7 @@ export const POST = withErrorHandler(
     const results = await shareDocuments({
       communityId,
       communityType: membership.communityType,
+      tenantsCanViewInspectionReports: membership.tenantsCanViewInspectionReports,
       documentIds: body.documentIds,
       userIds: body.userIds,
       sendId: body.sendId,

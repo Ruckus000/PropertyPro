@@ -14,6 +14,7 @@ function membership(overrides: Partial<CommunityMembership>): CommunityMembershi
     isDemo: false, trialEndsAt: null, demoExpiresAt: null, electionsAttorneyReviewed: false,
     violationFinesEnabled: false, assessmentPaymentsEnabled: false,
     smsDispatchEnabled: false, noticePdfGenerationEnabled: false,
+    tenantsCanViewInspectionReports: false,
     fineCaps: { perFineCents: 0, aggregateCents: 0 },
     ...overrides,
   };

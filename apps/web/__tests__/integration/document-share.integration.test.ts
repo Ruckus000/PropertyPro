@@ -33,6 +33,7 @@ describeDb('shareDocuments (integration)', () => {
     shareDocuments({
       communityId,
       communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
       documentIds,
       userIds,
       sendId,

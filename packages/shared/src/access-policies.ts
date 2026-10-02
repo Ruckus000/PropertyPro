@@ -140,16 +140,20 @@ const RESTRICTED_ROLES: readonly MatrixRole[] = [
 
 // Keyed by the 3 MatrixRole rows (role-v3 collapse, R3-01). `resolveMatrixRole`
 // only ever yields owner/tenant/manager from the 3 v3 roles.
+//
+// Condo/HOA tenants do NOT get `inspection_reports` here — see
+// TENANT_INSPECTION_REPORTS_OPT_IN below; it is added only when the community
+// has opted in.
 const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<MatrixRole, CategoryAccess>> = {
   condo_718: {
     owner: 'all',
     manager: 'all',
-    tenant: ['declaration', 'rules', 'inspection_reports'],
+    tenant: ['declaration', 'rules'],
   },
   hoa_720: {
     owner: 'all',
     manager: 'all',
-    tenant: ['declaration', 'rules', 'inspection_reports'],
+    tenant: ['declaration', 'rules'],
   },
   apartment: {
     owner: 'all',
@@ -157,6 +161,39 @@ const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<MatrixRole, CategoryA
     tenant: ['lease_docs', 'rules', 'community_handbook', 'move_in_out_docs'],
   },
 };
+
+/**
+ * Community types whose tenants may be granted `inspection_reports` (milestone
+ * inspections, SIRS) by the per-community setting
+ * `community_settings.tenantsCanViewInspectionReports`. DEFAULT OFF: an absent
+ * key (every community until it opts in) means tenants cannot read them.
+ *
+ * Why opt-in rather than on: the §718.111(12)(g) website/app records section is
+ * protected for "unit owners and association employees" — not tenants. The
+ * repo's legal review already applied that reading to exclude tenants from the
+ * insurance hub (see the `insurance` row in rbac-matrix.ts). An association may
+ * still choose to share these reports with tenants, so it is a setting, not a
+ * hard ban. Owners and managers are unaffected (they read every category), and
+ * apartments are not listed because their tenant row never had the category.
+ */
+const TENANT_INSPECTION_REPORTS_OPT_IN: ReadonlySet<CommunityType> = new Set<CommunityType>([
+  'condo_718',
+  'hoa_720',
+]);
+
+/**
+ * Read `tenantsCanViewInspectionReports` out of a raw `community_settings`
+ * JSONB blob for callers that have no `CommunityMembership` (notifications,
+ * cross-community probes). Strict `=== true`, same rule as the membership's
+ * `readSettingsFlag`: a string "true", `1` or a stray object read as OFF.
+ */
+export function readTenantsCanViewInspectionReports(settings: unknown): boolean {
+  return (
+    typeof settings === 'object'
+    && settings !== null
+    && (settings as Record<string, unknown>)['tenantsCanViewInspectionReports'] === true
+  );
+}
 
 export function normalizeCategoryName(name: string | null | undefined): DocumentCategoryKey {
   if (!name) {
@@ -185,6 +222,13 @@ export function normalizeCategoryName(name: string | null | undefined): Document
 /** Options for document access functions when using a v3 CommunityRole. */
 export interface DocumentAccessOpts {
   isUnitOwner?: boolean;
+  /**
+   * The community's `community_settings.tenantsCanViewInspectionReports` flag
+   * (read strictly: only `true` counts). Absent/false = condo/HOA tenants
+   * cannot read `inspection_reports`. Ignored for owners, managers and
+   * apartment communities.
+   */
+  tenantsCanViewInspectionReports?: boolean;
 }
 
 /**
@@ -239,8 +283,18 @@ function getCategoryAccessForRole(
   opts?: DocumentAccessOpts,
 ): CategoryAccess {
   const matrixRole = resolveMatrixRole(role, opts);
-  if (matrixRole) return DOCUMENT_ACCESS_POLICY[communityType][matrixRole];
-  return [];
+  if (!matrixRole) return [];
+  const access = DOCUMENT_ACCESS_POLICY[communityType][matrixRole];
+  if (
+    matrixRole === 'tenant'
+    && access !== 'all'
+    && opts?.tenantsCanViewInspectionReports === true
+    && TENANT_INSPECTION_REPORTS_OPT_IN.has(communityType)
+    && !access.includes('inspection_reports')
+  ) {
+    return [...access, 'inspection_reports'];
+  }
+  return access;
 }
 
 export function getAccessibleKnownCategories(

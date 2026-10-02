@@ -8,6 +8,7 @@ import { documentCategories } from '../src/schema/document-categories';
 import { documents } from '../src/schema/documents';
 import {
   getAccessibleDocuments,
+  getDocumentAccessCommunitySettings,
   getDocumentWithAccessCheck,
 } from '../src/queries/document-access';
 
@@ -118,7 +119,7 @@ describeDb('document access control (integration, strict matrix)', () => {
     await sql.end();
   });
 
-  it('condo tenant sees only declaration/rules/inspection docs', async () => {
+  it('condo tenant sees only declaration/rules docs by default (no inspection reports)', async () => {
     const declarationId = await createCategory(condoId, 'Declaration');
     const rulesId = await createCategory(condoId, 'Rules & Regulations');
     const inspectionId = await createCategory(condoId, 'Inspection Reports');
@@ -127,26 +128,64 @@ describeDb('document access control (integration, strict matrix)', () => {
 
     await createDoc({ communityId: condoId, categoryId: declarationId, title: 'Decl', fileName: '__doc_access_decl__.pdf' });
     await createDoc({ communityId: condoId, categoryId: rulesId, title: 'Rules', fileName: '__doc_access_rules__.pdf' });
-    await createDoc({ communityId: condoId, categoryId: inspectionId, title: 'Inspect', fileName: '__doc_access_inspect__.pdf' });
+    const inspectDocId = await createDoc({ communityId: condoId, categoryId: inspectionId, title: 'Inspect', fileName: '__doc_access_inspect__.pdf' });
     await createDoc({ communityId: condoId, categoryId: meetingId, title: 'Minutes', fileName: '__doc_access_minutes__.pdf' });
     await createDoc({ communityId: condoId, categoryId: unknownId, title: 'Unknown', fileName: '__doc_access_unknown__.pdf' });
     await createDoc({ communityId: condoId, categoryId: null, title: 'No Category', fileName: '__doc_access_null__.pdf' });
 
-    const rows = await getAccessibleDocuments({
+    const tenantContext = {
       communityId: condoId,
-      role: 'resident', isUnitOwner: false,
-      communityType: 'condo_718',
-    });
+      role: 'resident' as const,
+      isUnitOwner: false,
+      communityType: 'condo_718' as const,
+      tenantsCanViewInspectionReports: false,
+    };
+    const rows = await getAccessibleDocuments(tenantContext);
     const names = rows.map((r) => r['fileName']);
 
     expect(names).toEqual(expect.arrayContaining([
       '__doc_access_decl__.pdf',
       '__doc_access_rules__.pdf',
-      '__doc_access_inspect__.pdf',
     ]));
+    expect(names).not.toContain('__doc_access_inspect__.pdf');
     expect(names).not.toContain('__doc_access_minutes__.pdf');
     expect(names).not.toContain('__doc_access_unknown__.pdf');
     expect(names).not.toContain('__doc_access_null__.pdf');
+    expect(await getDocumentWithAccessCheck(tenantContext, inspectDocId)).toBeNull();
+
+    // Community opt-in: the tenant now reads inspection reports, nothing more.
+    const optedIn = { ...tenantContext, tenantsCanViewInspectionReports: true };
+    const optedInNames = (await getAccessibleDocuments(optedIn)).map((r) => r['fileName']);
+    expect(optedInNames).toContain('__doc_access_inspect__.pdf');
+    expect(optedInNames).not.toContain('__doc_access_minutes__.pdf');
+    expect(await getDocumentWithAccessCheck(optedIn, inspectDocId)).not.toBeNull();
+
+    // Owners read it regardless of the setting.
+    expect(
+      await getDocumentWithAccessCheck(
+        { ...tenantContext, isUnitOwner: true, tenantsCanViewInspectionReports: false },
+        inspectDocId,
+      ),
+    ).not.toBeNull();
+  });
+
+  it('reads the tenant inspection-reports setting strictly from community_settings', async () => {
+    expect(await getDocumentAccessCommunitySettings(condoId)).toEqual({
+      communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
+    });
+    await db
+      .update(communities)
+      .set({ communitySettings: { tenantsCanViewInspectionReports: true } })
+      .where(eq(communities.id, condoId));
+    try {
+      expect(await getDocumentAccessCommunitySettings(condoId)).toEqual({
+        communityType: 'condo_718',
+        tenantsCanViewInspectionReports: true,
+      });
+    } finally {
+      await db.update(communities).set({ communitySettings: {} }).where(eq(communities.id, condoId));
+    }
   });
 
   it('apartment tenant sees lease/rules/handbook/move docs only', async () => {
