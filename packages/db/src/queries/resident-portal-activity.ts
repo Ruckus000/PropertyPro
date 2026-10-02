@@ -31,24 +31,40 @@ function toDate(value: unknown): Date | null {
 export async function findCommunityResidentPortalActivity(
   communityId: number,
 ): Promise<Map<string, ResidentPortalActivityRow>> {
+  // Each source is aggregated ONCE for the community and joined, not looked up
+  // per member: correlated subqueries rescanned `invitations` and
+  // `access_requests` for every row — O(members²), ~0.7s warm / 3.4s cold at
+  // 2,000 members against ~5ms for this form (same rows, verified with EXCEPT).
   const result = await db.execute(sql`
-    SELECT ur.user_id AS user_id,
+    WITH members AS (
+      SELECT ur.user_id, lower(u.email) AS email_key
+        FROM public.user_roles ur
+        JOIN public.users u ON u.id = ur.user_id
+       WHERE ur.community_id = ${communityId}
+    ),
+    invited AS (
+      SELECT i.user_id, max(i.created_at) AS last_invited_at
+        FROM public.invitations i
+       WHERE i.community_id = ${communityId}
+         AND i.deleted_at IS NULL
+       GROUP BY i.user_id
+    ),
+    approved AS (
+      SELECT lower(ar.email) AS email_key, max(ar.reviewed_at) AS access_approved_at
+        FROM public.access_requests ar
+       WHERE ar.community_id = ${communityId}
+         AND ar.status = 'approved'
+         AND ar.deleted_at IS NULL
+       GROUP BY lower(ar.email)
+    )
+    SELECT m.user_id AS user_id,
            au.last_sign_in_at AS last_sign_in_at,
-           (SELECT max(i.created_at)
-              FROM public.invitations i
-             WHERE i.community_id = ur.community_id
-               AND i.user_id = ur.user_id
-               AND i.deleted_at IS NULL) AS last_invited_at,
-           (SELECT max(ar.reviewed_at)
-              FROM public.access_requests ar
-             WHERE ar.community_id = ur.community_id
-               AND ar.status = 'approved'
-               AND ar.deleted_at IS NULL
-               AND lower(ar.email) = lower(u.email)) AS access_approved_at
-      FROM public.user_roles ur
-      JOIN public.users u ON u.id = ur.user_id
-      LEFT JOIN auth.users au ON au.id = ur.user_id
-     WHERE ur.community_id = ${communityId}
+           inv.last_invited_at AS last_invited_at,
+           ap.access_approved_at AS access_approved_at
+      FROM members m
+      LEFT JOIN auth.users au ON au.id = m.user_id
+      LEFT JOIN invited inv ON inv.user_id = m.user_id
+      LEFT JOIN approved ap ON ap.email_key = m.email_key
   `);
 
   // postgres-js returns a RowList (array); node-pg shape uses { rows: [] }
