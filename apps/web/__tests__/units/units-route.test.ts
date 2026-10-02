@@ -75,7 +75,9 @@ vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
 }));
 
-vi.mock('@/lib/services/unit-service', () => ({
+vi.mock('@/lib/services/unit-service', async (importOriginal) => ({
+  // Real `unitNumberTaken` (the 409 it builds is under test); data access mocked.
+  ...(await importOriginal<typeof import('../../src/lib/services/unit-service')>()),
   listUnitsForCommunity: listUnitsForCommunityMock,
   getUnitByNumber: getUnitByNumberMock,
   createUnitForCommunity: createUnitForCommunityMock,
@@ -276,9 +278,50 @@ describe('/api/v1/units', () => {
       }),
     );
 
-    expect(res.status).toBe(400);
+    // A duplicate is a conflict with existing state, not a malformed request.
+    expect(res.status).toBe(409);
     const json = await res.json();
-    expect(json.error.code).toBe('VALIDATION_ERROR');
+    expect(json.error.code).toBe('CONFLICT');
+    expect(json.error.message).toBe('Unit number "202" already exists in this community');
+  });
+
+  describe('optimistic concurrency (expectedUpdatedAt)', () => {
+    function patchUnit(body: Record<string, unknown>) {
+      return PATCH(
+        new NextRequest('http://localhost:3000/api/v1/units', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 42, unitId: 7, ...body }),
+        }),
+      );
+    }
+
+    beforeEach(() => {
+      getUnitByIdMock.mockResolvedValue({ id: 7, unitNumber: '101', floor: 1, occupancy: null });
+      getUnitByNumberMock.mockResolvedValue(null);
+    });
+
+    it('passes the token to the conditional update and returns the new updatedAt', async () => {
+      updateUnitByIdMock.mockResolvedValue({ id: 7, updatedAt: '2026-10-02T15:00:00.123Z' });
+      const res = await patchUnit({ floor: 2, expectedUpdatedAt: '2026-10-01T09:00:00.456Z' });
+      expect(res.status).toBe(200);
+      expect(updateUnitByIdMock.mock.calls[0]![3]).toBe('2026-10-01T09:00:00.456Z');
+      expect((await res.json()).data.updatedAt).toBe('2026-10-02T15:00:00.123Z');
+    });
+
+    it('a stale token (someone saved in between) is a 409 and nothing is audited', async () => {
+      updateUnitByIdMock.mockResolvedValue(null);
+      const res = await patchUnit({ floor: 2, expectedUpdatedAt: '2026-10-01T09:00:00.456Z' });
+      expect(res.status).toBe(409);
+      expect((await res.json()).error.message).toMatch(/someone else changed this unit/i);
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a token that is not a timestamp', async () => {
+      const res = await patchUnit({ floor: 2, expectedUpdatedAt: 'yesterday' });
+      expect(res.status).toBe(400);
+      expect(updateUnitByIdMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('occupancy (migration unit_occupancy)', () => {
@@ -315,7 +358,7 @@ describe('/api/v1/units', () => {
         occupancy: 'vacant',
         occupancyConfirmedAt: null,
       });
-      updateUnitByIdMock.mockResolvedValue(undefined);
+      updateUnitByIdMock.mockResolvedValue({ id: 7, updatedAt: '2026-01-02T00:00:00.000Z' });
     });
 
     it('POST with occupancy stores it as confirmed', async () => {

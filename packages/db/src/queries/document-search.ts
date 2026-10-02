@@ -18,6 +18,11 @@ export interface DocumentSearchParams {
   /** Required with role to apply strict role x community_type policy filters */
   communityType?: CommunityType;
   isUnitOwner?: boolean;
+  /**
+   * `community_settings.tenantsCanViewInspectionReports`. Absent = false
+   * (fails closed: condo/HOA tenants do not see inspection reports).
+   */
+  tenantsCanViewInspectionReports?: boolean;
 }
 
 export interface DocumentSearchItem {
@@ -91,6 +96,7 @@ export async function searchDocuments(params: DocumentSearchParams): Promise<Doc
       role: params.role,
       communityType: params.communityType,
       isUnitOwner: params.isUnitOwner,
+      tenantsCanViewInspectionReports: params.tenantsCanViewInspectionReports === true,
     });
     if (accessFilter) {
       additionalFilters.push(accessFilter);

@@ -258,7 +258,7 @@ describe('Website builder v4 chrome — axe', () => {
             device="desktop"
             onDeviceChange={() => {}}
             publicSiteUrl={null}
-            proToolAccess={{ styling: false, domain: true }}
+            proToolAccess={{ domain: true }}
             communityId={7}
             hasPublishedSite
             initialNotice={null}

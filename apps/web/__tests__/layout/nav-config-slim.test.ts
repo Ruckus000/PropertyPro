@@ -60,8 +60,7 @@ describe('buildSlimNavSections', () => {
       'announcements',
       'website',
       'compliance',
-      'residents',
-      'units',
+      'directory',
     ]);
   });
 

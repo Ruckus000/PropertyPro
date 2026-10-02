@@ -23,6 +23,7 @@ import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireCommunityType } from '@/lib/utils/community-validators';
 import { assertActorMayAttachExistingUser } from '@/lib/services/user-linking';
+import { duplicateMemberConflict, withDuplicateMemberAsConflict } from '@/lib/services/duplicate-member';
 import { getUserForInvitation } from '@/lib/services/invitations-service';
 
 /**
@@ -101,12 +102,14 @@ export async function createOnboardingResident(params: {
   }
 
   if (isNewUser) {
-    await scoped.insert(users, {
-      id: userId,
-      email: normalizedEmail,
-      fullName,
-      phone: phone ?? null,
-    });
+    await withDuplicateMemberAsConflict(() =>
+      scoped.insert(users, {
+        id: userId,
+        email: normalizedEmail,
+        fullName,
+        phone: phone ?? null,
+      }),
+    );
   }
 
   // Check for existing role
@@ -114,9 +117,7 @@ export async function createOnboardingResident(params: {
   const existingRole = existingRoles.find((row) => row['userId'] === userId);
 
   if (existingRole) {
-    throw new ValidationError(
-      `User already has role "${existingRole['role']}" in this community.`,
-    );
+    throw duplicateMemberConflict(existingRole['role']);
   }
 
   // Onboarding mints resident-tier rows only (owner/tenant). Manager-tier rows
@@ -124,14 +125,16 @@ export async function createOnboardingResident(params: {
   const isUnitOwner = role === 'resident' ? (params.isUnitOwner ?? false) : false;
   const displayTitle = resolveDisplayTitle(role, params.isUnitOwner);
 
-  await scoped.insert(userRoles, {
-    userId,
-    role,
-    unitId: unitId ?? null,
-    isUnitOwner,
-    designation: null,
-    displayTitle,
-  });
+  await withDuplicateMemberAsConflict(() =>
+    scoped.insert(userRoles, {
+      userId,
+      role,
+      unitId: unitId ?? null,
+      isUnitOwner,
+      designation: null,
+      displayTitle,
+    }),
+  );
 
   // Create notification preferences
   await scoped.insert(notificationPreferences, {

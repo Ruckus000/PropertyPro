@@ -54,13 +54,22 @@ const FREQUENCIES: readonly EmailFrequency[] = ['immediate', 'daily_digest', 'we
 export async function shareDocuments(params: {
   communityId: number;
   communityType: CommunityType;
+  /** The community's tenant inspection-reports opt-in (from the actor's membership). */
+  tenantsCanViewInspectionReports: boolean;
   documentIds: number[];
   userIds: string[];
   sendId: string;
   actorUserId: string;
   senderName: string;
 }): Promise<DocumentShareResult[]> {
-  const { communityId, communityType, sendId, actorUserId, senderName } = params;
+  const {
+    communityId,
+    communityType,
+    tenantsCanViewInspectionReports,
+    sendId,
+    actorUserId,
+    senderName,
+  } = params;
   const documentIds = [...new Set(params.documentIds)];
   const userIds = [...new Set(params.userIds)];
   const scoped = createScopedClient(communityId);
@@ -107,7 +116,7 @@ export async function shareDocuments(params: {
     if (!hit) {
       hit = isCommunityRole(role)
         ? getAccessibleDocuments(
-            { communityId, role, communityType, isUnitOwner },
+            { communityId, role, communityType, isUnitOwner, tenantsCanViewInspectionReports },
             inArray(documents.id, documentIds),
           ).then((rows) => new Set(rows.map((r) => r['id'] as number)))
         : Promise.resolve(new Set<number>());

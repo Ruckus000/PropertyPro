@@ -9,6 +9,7 @@
  */
 import { communities, createScopedClient } from '@propertypro/db';
 import { eq, sql } from '@propertypro/db/filters';
+import { readTenantsCanViewInspectionReports } from '@propertypro/shared';
 
 /**
  * AUTHZ: caller MUST have verified the actor may change these settings for
@@ -61,5 +62,33 @@ export async function getPastDueRule(communityId: number): Promise<PastDueRule> 
 export async function setPastDueRule(communityId: number, rule: PastDueRule): Promise<PastDueRule> {
   const previous = await getPastDueRule(communityId);
   await mergeCommunitySettings(communityId, { pastDueMinCents: rule.minCents, pastDueMinDays: rule.minDays });
+  return previous;
+}
+
+export interface CommunityAccessSettings {
+  tenantsCanViewInspectionReports: boolean;
+}
+
+/** AUTHZ: caller MUST have verified settings:write for `communityId`. */
+export async function getCommunityAccessSettings(communityId: number): Promise<CommunityAccessSettings> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<{ communitySettings: Record<string, unknown> | null }>(
+    communities,
+    { communitySettings: communities.communitySettings },
+    eq(communities.id, communityId),
+  );
+  return { tenantsCanViewInspectionReports: readTenantsCanViewInspectionReports(rows[0]?.communitySettings) };
+}
+
+/**
+ * AUTHZ: caller MUST have verified settings:write for `communityId`.
+ * Returns the previous settings for the audit entry.
+ */
+export async function setCommunityAccessSettings(
+  communityId: number,
+  next: CommunityAccessSettings,
+): Promise<CommunityAccessSettings> {
+  const previous = await getCommunityAccessSettings(communityId);
+  await mergeCommunitySettings(communityId, { tenantsCanViewInspectionReports: next.tenantsCanViewInspectionReports });
   return previous;
 }

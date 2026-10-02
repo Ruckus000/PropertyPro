@@ -131,6 +131,7 @@ export {
   getAccessibleDocuments,
   isDocumentAccessible,
   getDocumentWithAccessCheck,
+  getDocumentAccessCommunitySettings,
 } from './queries/document-access';
 export type { DocumentAccessContext } from './queries/document-access';
 

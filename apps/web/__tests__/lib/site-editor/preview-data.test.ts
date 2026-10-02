@@ -102,7 +102,14 @@ describe('selectMeetings', () => {
 });
 
 describe('selectDocuments', () => {
-  const all = [doc(1, 'budget'), doc(2, 'minutes'), doc(3, null), doc(4, 'rules')];
+  // Real category names, not the section's values: the two are matched by
+  // meaning (`documentMatchesSectionCategories`), as on the live site.
+  const all = [
+    doc(1, 'Financial Records'),
+    doc(2, 'Meeting Records'),
+    doc(3, null),
+    doc(4, 'Rules & Regulations'),
+  ];
 
   it('returns nothing for an empty category list', () => {
     // Matches the published site: listDocuments() returns [] when no categories
@@ -119,10 +126,10 @@ describe('selectDocuments', () => {
   });
 
   it('excludes uncategorised documents', () => {
-    // A document with no category has no name to match, so it is never
-    // selectable — the same as on the published site, where the query joins on
-    // the category name.
-    const out = selectDocuments({ limit: 20, includeCategories: ['budget'] as never }, all);
+    // A document with no category has nothing to match, so it is never
+    // selectable — not even by `other` — the same as on the published site,
+    // where the query filters by category id.
+    const out = selectDocuments({ limit: 20, includeCategories: ['budget', 'other'] as never }, all);
     expect(out.map((d) => d.id)).not.toContain(3);
   });
 

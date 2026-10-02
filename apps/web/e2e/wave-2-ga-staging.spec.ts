@@ -57,11 +57,13 @@ test.describe('Wave 2 GA staging (founding admin)', () => {
     await page.goto(`/dashboard?communityId=${communityId}`, { waitUntil: 'domcontentloaded' });
 
     const nav = page.getByRole('navigation');
-    for (const label of ['Dashboard', 'Documents', 'Compliance', 'Residents', 'Units', 'Website']) {
+    for (const label of ['Dashboard', 'Documents', 'Compliance', 'Website']) {
       await expect(nav.getByRole('link', { name: label, exact: true })).toBeVisible({
         timeout: 60_000,
       });
     }
+    // Its accessible name gains ", N pending access requests" when any are waiting.
+    await expect(nav.getByRole('link', { name: /^Directory(, \d+ pending access requests?)?$/ })).toBeVisible();
 
     await expect(nav.getByRole('button', { name: /^More$/i })).toBeVisible();
 

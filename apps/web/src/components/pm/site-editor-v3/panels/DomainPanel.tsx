@@ -23,7 +23,7 @@
  *
  * ## These writes are live-immediate
  *
- * Like the Site and Colours panels, nothing here goes through the draft layer —
+ * Like the Site panel, nothing here goes through the draft layer —
  * a connected domain is connected, not staged for Publish.
  *
  * CLIENT-SAFE: the domain hooks only. It must NOT import `custom-domain-service`,

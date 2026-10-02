@@ -678,13 +678,12 @@ describe('getPublicCommunityScopedReader', () => {
   });
 
   it('listDocuments WHERE includes the deletedAt isNull guard', async () => {
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([]).then(resolve),
-    );
+    // First query: the community's categories (matched by meaning); second: documents.
+    queueQueryResults([{ id: 3, name: 'Financial Records' }, { id: 4, name: 'Meeting Records' }, { id: 5, name: 'Rules' }]);
     const reader = getPublicCommunityScopedReader(42);
     await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
 
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    const whereCall = mockSelectChain.where.mock.calls.at(-1)![0];
     const isNullCols = whereCall.__and
       .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
       .map((c: unknown) => (c as { __isNull: string }).__isNull);
@@ -700,13 +699,16 @@ describe('getPublicCommunityScopedReader', () => {
       r.getPublicDocumentFile(7)],
     ['listPublicDocumentsForSitemap', (r: ReturnType<typeof getPublicCommunityScopedReader>) =>
       r.listPublicDocumentsForSitemap({ limit: 50 })],
-  ])('%s WHERE excludes drafts (posted_at IS NOT NULL)', async (_name, call) => {
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([]).then(resolve),
-    );
+  ])('%s WHERE excludes drafts (posted_at IS NOT NULL)', async (name, call) => {
+    // listDocuments reads the community's categories first (matched by meaning).
+    if (name === 'listDocuments') {
+      queueQueryResults([{ id: 3, name: 'Financial Records' }, { id: 4, name: 'Meeting Records' }, { id: 5, name: 'Rules' }]);
+    } else {
+      mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
+    }
     await call(getPublicCommunityScopedReader(42));
 
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    const whereCall = mockSelectChain.where.mock.calls.at(-1)![0];
     const notNullCols = whereCall.__and
       .filter((c: unknown) => (c as { __isNotNull?: string }).__isNotNull !== undefined)
       .map((c: unknown) => (c as { __isNotNull: string }).__isNotNull);
@@ -718,13 +720,11 @@ describe('getPublicCommunityScopedReader', () => {
     // public-site access boundary. Existing category-filter assertions could
     // pass even if a regression silently dropped this gate, so we explicitly
     // assert the publicAccess=true equality clause is present.
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([]).then(resolve),
-    );
+    queueQueryResults([{ id: 3, name: 'Financial Records' }, { id: 4, name: 'Meeting Records' }, { id: 5, name: 'Rules' }]);
     const reader = getPublicCommunityScopedReader(42);
     await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
 
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    const whereCall = mockSelectChain.where.mock.calls.at(-1)![0];
     const publicAccessClause = whereCall.__and.find(
       (c: unknown) =>
         (c as { __eq?: { col: string } }).__eq?.col === 'documents.publicAccess',
@@ -917,12 +917,10 @@ describe('getPublicCommunityScopedReader', () => {
       description: 'Annual budget',
       filePath: '42/documents/budget-2025.pdf',
       fileName: 'budget-2025.pdf',
-      categoryName: 'budget',
+      categoryName: 'Financial Records',
       createdAt: new Date('2026-01-15T10:00:00Z'),
     };
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([fakeRow]).then(resolve),
-    );
+    queueQueryResults([{ id: 3, name: 'Financial Records' }], [fakeRow]);
 
     const reader = getPublicCommunityScopedReader(42);
     const results = await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
@@ -934,28 +932,34 @@ describe('getPublicCommunityScopedReader', () => {
       description: 'Annual budget',
       filePath: '42/documents/budget-2025.pdf',
       fileName: 'budget-2025.pdf',
-      categoryName: 'budget',
+      categoryName: 'Financial Records',
     });
     expect(results[0]!.createdAt).toBeInstanceOf(Date);
   });
 
-  it('listDocuments issues a leftJoin against documentCategories', async () => {
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([]).then(resolve),
-    );
+  it('listDocuments filters by the ids of the categories that match by meaning', async () => {
+    // "Meeting Records" means `minutes` and "Rules" means `rules`; "Financial
+    // Records" means neither. The old string compare (`name IN ('minutes',
+    // 'rules')`) matched none of them.
+    queueQueryResults([{ id: 3, name: 'Financial Records' }, { id: 4, name: 'Meeting Records' }, { id: 5, name: 'Rules' }]);
     const reader = getPublicCommunityScopedReader(42);
     await reader.listDocuments({ limit: 5, includeCategories: ['minutes', 'rules'] });
 
-    // The query should use leftJoin
     expect(mockSelectChain.leftJoin).toHaveBeenCalledTimes(1);
-    // The WHERE predicate should include the inArray filter
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    const whereCall = mockSelectChain.where.mock.calls.at(-1)![0];
     expect(whereCall).toHaveProperty('__and');
     const inArrayClause = whereCall.__and.find(
       (c: unknown) => (c as { __inArray?: unknown }).__inArray !== undefined,
     );
     expect(inArrayClause).toBeDefined();
-    expect((inArrayClause as { __inArray: { vals: string[] } }).__inArray.vals).toEqual(['minutes', 'rules']);
+    expect((inArrayClause as { __inArray: { vals: number[] } }).__inArray.vals).toEqual([4, 5]);
+  });
+
+  it('listDocuments skips the documents query when no category matches', async () => {
+    queueQueryResults([{ id: 9, name: 'Insurance' }]);
+    const reader = getPublicCommunityScopedReader(42);
+    expect(await reader.listDocuments({ limit: 5, includeCategories: ['budget'] })).toEqual([]);
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
   });
 
   // ---------------------------------------------------------------------------

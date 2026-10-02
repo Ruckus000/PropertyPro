@@ -22,6 +22,7 @@ import {
   type DryRunResponse,
   type ImportResponse,
 } from '@/hooks/use-import-residents';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 /* ─────── Types ─────── */
 
@@ -553,7 +554,7 @@ function ResultsStep({ result, communityId, onImportMore }: ResultsStepProps) {
       {/* Actions */}
       <div className="flex items-center gap-3">
         <Link
-          href={`/dashboard/residents?communityId=${communityId}`}
+          href={directoryHref('residents', { communityId })}
           className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
         >
           View Residents

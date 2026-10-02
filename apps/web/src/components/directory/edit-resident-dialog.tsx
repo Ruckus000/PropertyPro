@@ -46,16 +46,24 @@ export function EditResidentDialog({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const nextUnitId = Number(unitId);
+    const nextName = fullName.trim();
+    const nextPhone = phone.trim() || null;
+    // Only what changed: an unchanged unit is not a move, and the server
+    // audits exactly the fields it is sent.
+    const changes = {
+      ...(nextName !== (resident.fullName ?? '') ? { fullName: nextName } : {}),
+      ...(nextPhone !== (resident.phone ?? null) ? { phone: nextPhone } : {}),
+      ...(nextUnitId !== resident.unitId ? { unitId: nextUnitId } : {}),
+      ...(hasOwnerRole && isUnitOwner !== resident.isUnitOwner ? { isUnitOwner } : {}),
+    };
+    if (Object.keys(changes).length === 0) {
+      onSaved(false);
+      return;
+    }
     try {
-      await update.mutateAsync({
-        userId: resident.userId,
-        fullName: fullName.trim(),
-        phone: phone.trim() || null,
-        unitId: nextUnitId,
-        ...(hasOwnerRole ? { isUnitOwner } : {}),
-      });
+      await update.mutateAsync({ userId: resident.userId, expectedUpdatedAt: resident.updatedAt, ...changes });
     } catch {
-      return; // Rendered from update.error.
+      return; // Rendered from update.error (a 409 also refreshes the list).
     }
     onSaved(nextUnitId !== resident.unitId);
   }

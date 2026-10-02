@@ -1,14 +1,15 @@
 'use client';
 
 /**
- * The "Colours" tool panel — per-community overrides for the three brand
- * colours and the body font.
+ * Custom colours — per-community overrides for the three brand colours and the
+ * body font. A Professional section of the Design panel (website builder v4);
+ * it was the "Colours" tool on its own until the Design panel absorbed it.
  *
- * ## These writes are live-immediate, and the copy says so
+ * ## These save as a DRAFT, and go live on Publish
  *
- * Same as the Site panel: this lands in `communities.branding`, which sits
- * outside the draft layer that Publish promotes. A save is public on the next
- * request, so the button says so rather than leaving a manager to discover it.
+ * Like the rest of the site's look, they are held in `branding.draftLook`
+ * (`site-design-service`) until Publish. They used to write straight to the
+ * live site.
  *
  * ## Why the pickers start on the community's CURRENT colours
  *
@@ -16,8 +17,8 @@
  * had drifted from the product default (tech-blue, against a coral brand), so
  * flipping a toggle on jumped the swatch to a colour the site had never used.
  * Seeding from the RESOLVED theme instead means turning an override on starts
- * from exactly what is on the site today — the change a manager makes is the
- * one they intended, not that plus an invisible reset.
+ * from exactly what the site shows — the change a manager makes is the one
+ * they intended, not that plus an invisible reset.
  */
 
 import { useCallback, useState } from 'react';
@@ -37,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { useCustomCssOverrides, useSaveCustomCss } from '@/hooks/use-custom-css';
+import { useSaveSiteDesign, useSiteDesign } from '@/hooks/use-site-design';
 
 /**
  * A worked example for the hex field's error copy. This literal is CONTENT —
@@ -58,9 +59,7 @@ export interface StylingPanelProps {
   communityId: number;
   /** Pro+ gate. When false the panel is visible-but-locked (upsell). */
   hasSiteCustomCss: boolean;
-  /** Stored overrides, from the branding row the page already reads. */
-  initial: CustomCssOverrides | null;
-  /** What the site renders today, override or not. Seeds every control. */
+  /** What the canvas shows (draft look), override or not. Seeds every control. */
   theme: StylingPanelTheme;
 }
 
@@ -139,17 +138,20 @@ function ColorField({
 export function StylingPanel({
   communityId,
   hasSiteCustomCss,
-  initial,
   theme,
 }: StylingPanelProps) {
-  const save = useSaveCustomCss();
+  const save = useSaveSiteDesign(communityId);
 
-  // NOT the `initial` prop directly. Switching tool tabs unmounts this panel,
-  // and `initial` is fixed for the life of the page — so seeding `useState`
-  // from it would show pre-save values on every remount, and the next Save
-  // would post `null` over the override just persisted. The cache is written
-  // by `useSaveCustomCss`, so a remount seeds from the last save.
-  const { data: stored } = useCustomCssOverrides(communityId, initial);
+  // From the design query, not a prop: switching tool tabs unmounts this
+  // panel, and a page-load prop would show pre-save values on every remount.
+  // The draft wins over live, so the controls show what will publish. The
+  // Design panel mounts this only once that query has data, so the `useState`
+  // seeds below never start from a not-yet-loaded record.
+  const { data: design } = useSiteDesign(communityId);
+  const stored: CustomCssOverrides | null | undefined =
+    design && 'customCssOverrides' in design.draft
+      ? design.draft.customCssOverrides
+      : design?.live.customCssOverrides;
 
   const [primaryOn, setPrimaryOn] = useState(stored?.primaryColor != null);
   const [secondaryOn, setSecondaryOn] = useState(stored?.secondaryColor != null);
@@ -192,13 +194,12 @@ export function StylingPanel({
 
       save.mutate(
         {
-          communityId,
-          // Every switch off means "use the preset again", which the route
+          // Every switch off means "use the colour set again", which the route
           // reads as null rather than an empty object.
           customCssOverrides: Object.keys(overrides).length > 0 ? overrides : null,
         },
         {
-          onSuccess: () => toast.success('Colours saved. Your website is updated.'),
+          onSuccess: () => toast.success('Colours saved. Publish to put them on your website.'),
           onError: (err) => setError(err.message),
         },
       );
@@ -206,7 +207,6 @@ export function StylingPanel({
     [
       hasInvalidColor,
       save,
-      communityId,
       primaryOn,
       primaryColor,
       secondaryOn,
@@ -233,12 +233,12 @@ export function StylingPanel({
               <PlanBadge variant="pro" />
             </span>
           }
-          description="Your plan uses the colours from your selected preset. Upgrade to Professional to set your own brand colours and body font."
+          description="Your plan uses the colours from your selected colour set. Upgrade to Professional to set your own brand colours and body font."
         />
       ) : (
         <p className="text-sm text-content-secondary">
-          These replace the colours from your selected preset. Leave a switch off to keep the
-          preset&rsquo;s colour.
+          These replace the colours from your colour set. Leave a switch off to keep the
+          set&rsquo;s colour.
         </p>
       )}
 
@@ -318,7 +318,7 @@ export function StylingPanel({
           {save.isPending ? 'Saving…' : 'Save colours'}
         </Button>
         <p className="text-sm text-content-tertiary">
-          These go live on your website right away — they aren&apos;t part of Publish.
+          These go live on your website when you publish.
         </p>
       </div>
     </form>

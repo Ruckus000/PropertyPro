@@ -35,6 +35,12 @@ const updateUnitBodySchema = z.object({
   sqft: z.number().int().min(0).nullable().optional(),
   rentAmount: z.string().nullable().optional(),
   occupancy: occupancySchema.nullable().optional(),
+  /**
+   * Optimistic concurrency: the unit's `updatedAt` as last read. When sent,
+   * the save is refused with 409 if anyone changed the unit since. Optional so
+   * callers that never read first keep last-write-wins.
+   */
+  expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
 });
 
 const deleteUnitBodySchema = z.object({

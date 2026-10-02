@@ -50,6 +50,13 @@ export interface CommunityMembership {
   smsDispatchEnabled: boolean;
   noticePdfGenerationEnabled: boolean;
   /**
+   * Community opt-in letting condo/HOA TENANTS read the "Inspection Reports"
+   * document category. Default `false` (absent key). Not a legal gate on a
+   * feature — a document-visibility setting — but read with the same strict
+   * `readSettingsFlag`. Pass it into every `DocumentAccessContext`.
+   */
+  tenantsCanViewInspectionReports: boolean;
+  /**
    * §718.303(3)/§720.305(2) fine ceilings, already resolved.
    *
    * Resolved here rather than exposing the raw `community_settings` blob, for
@@ -178,6 +185,10 @@ export async function requireCommunityMembership(
     assessmentPaymentsEnabled: readSettingsFlag(communitySettings, 'assessmentPaymentsEnabled'),
     smsDispatchEnabled: readSettingsFlag(communitySettings, 'smsDispatchEnabled'),
     noticePdfGenerationEnabled: readSettingsFlag(communitySettings, 'noticePdfGenerationEnabled'),
+    tenantsCanViewInspectionReports: readSettingsFlag(
+      communitySettings,
+      'tenantsCanViewInspectionReports',
+    ),
     fineCaps: resolveFineCaps(communitySettings),
   };
 }

@@ -7,53 +7,12 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { ApproveDialog, type UnitOption } from '@/components/access-requests/approve-dialog';
 import { DenyDialog } from '@/components/access-requests/deny-dialog';
-import { walkPaginated } from '@/lib/api/walk-paginated';
+import { accessRequestsQueryOptions, type AccessRequest } from '@/hooks/use-access-requests';
 import { cn } from '@/lib/utils';
+import { Avatar } from '@/components/directory/directory-badges';
+import { initialsFor } from '@/components/directory/directory-model';
 
-/* ─────── Types ─────── */
-
-export interface AccessRequest {
-  id: number;
-  communityId: number;
-  fullName: string;
-  email: string;
-  claimedUnitIdentifier: string | null;
-  claimedUnitId: number | null;
-  isUnitOwner: boolean;
-  status: 'pending' | 'approved' | 'denied';
-  createdAt: string;
-}
-
-/* ─────── API helper ─────── */
-
-/**
- * The admin review surface needs the full pending-request list to render.
- * Walks the cursor-based pagination contract via the canonical
- * `walkPaginated()` helper (Plan B3) until `hasMore` is false. The TanStack
- * Query `signal` is forwarded so a stale request is cancelled at the network
- * layer if the query is invalidated mid-walk.
- */
-async function fetchAccessRequests(
-  communityId: number,
-  signal?: AbortSignal,
-): Promise<AccessRequest[]> {
-  return walkPaginated<AccessRequest>(
-    '/api/v1/access-requests',
-    { communityId: String(communityId) },
-    { signal },
-  );
-}
-
-/**
- * Shared query definition, so the Directory's request count and this list read
- * one cache entry (and an approve/deny invalidation updates both).
- */
-export function accessRequestsQueryOptions(communityId: number) {
-  return {
-    queryKey: ['access-requests', communityId] as const,
-    queryFn: ({ signal }: { signal?: AbortSignal }) => fetchAccessRequests(communityId, signal),
-  };
-}
+export type { AccessRequest } from '@/hooks/use-access-requests';
 
 /* ─────── Helpers ─────── */
 
@@ -212,9 +171,12 @@ export function AccessRequestList({
             {/* Mobile layout */}
             <div className={cn('flex flex-col gap-3', !stacked && 'md:hidden')}>
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium text-content">{request.fullName}</p>
-                  <p className="text-sm text-content-secondary">{request.email}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar initials={initialsFor(request.fullName)} tone={request.isUnitOwner ? 'owner' : 'tenant'} size="md" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-content">{request.fullName}</p>
+                    <p className="truncate text-sm text-content-secondary">{request.email}</p>
+                  </div>
                 </div>
                 <RoleBadge role={request.isUnitOwner ? 'owner' : 'tenant'} />
               </div>
@@ -255,7 +217,10 @@ export function AccessRequestList({
                 !stacked && 'md:grid',
               )}
             >
-              <span className="truncate text-sm font-medium text-content">{request.fullName}</span>
+              <span className="flex min-w-0 items-center gap-3">
+                <Avatar initials={initialsFor(request.fullName)} tone={request.isUnitOwner ? 'owner' : 'tenant'} size="md" />
+                <span className="truncate text-sm font-medium text-content">{request.fullName}</span>
+              </span>
               <span className="truncate text-sm text-content-secondary">{request.email}</span>
               <div className="flex flex-col gap-1">
                 <span className="text-sm text-content">

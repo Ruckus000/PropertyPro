@@ -22,7 +22,10 @@ const createAndInviteBodySchema = z.object({
   fullName: z.string().min(1, 'Full name is required'),
   phone: z.string().nullable().optional(),
   role: z.literal('resident'),
-  unitId: z.number().int().positive().nullable().optional(),
+  // Every resident (owner or tenant, board or not) lives in a unit; the role
+  // validator already refused a missing one. Said here, the error is earlier
+  // and names the field.
+  unitId: z.number({ error: 'Choose the unit this resident lives in' }).int().positive(),
   isUnitOwner: z.boolean().optional().default(false),
   ttlDays: z.number().int().positive().default(7),
   sendInvitation: z.boolean().optional().default(true),

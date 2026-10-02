@@ -8,7 +8,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
-import { requestJson } from '@/lib/api/request-json';
+import { ApiRequestError, requestJson } from '@/lib/api/request-json';
 import { limitMessageOf, sendInChunks } from '@/lib/api/send-in-chunks';
 
 export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
@@ -25,6 +25,8 @@ export interface ResidentRecord {
   portalStatus: ResidentPortalStatus;
   lastSignInAt: string | null;
   lastInvitedAt: string | null;
+  /** Membership version; sent back as `expectedUpdatedAt` so a stale edit is refused. */
+  updatedAt: string;
 }
 
 export interface CreateResidentResult {
@@ -39,6 +41,17 @@ export interface CreateResidentResult {
 // verbatim in inline error state, and the error-body parse uses
 // `.catch(() => null)` (returns null instead of {}) which `requestJson`
 // does not replicate. Raw fetch preserves both behaviors byte-for-byte.
+
+/**
+ * The server's reason from an error body, or the fallback. API errors are
+ * `{ error: { message } }` (AppError.toJSON); these hooks used to read a
+ * top-level `message` the API never sends, so every refusal — a duplicate
+ * email above all — showed only the generic fallback.
+ */
+function apiErrorMessage(body: unknown, fallback: string): string {
+  const message = (body as { error?: { message?: unknown } } | null)?.error?.message;
+  return typeof message === 'string' && message.trim() ? message : fallback;
+}
 
 export function useResidentsList(
   communityId: number,
@@ -69,10 +82,7 @@ export function useResendInvitation(
         body: JSON.stringify({ communityId, userId }),
       });
       if (!response.ok) {
-        const errorBody = (await response.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(errorBody?.message ?? 'Failed to send invitation');
+        throw new Error(apiErrorMessage(await response.json().catch(() => null), 'Failed to send invitation'));
       }
     },
   });
@@ -108,10 +118,7 @@ export function useInviteResident(
         }),
       });
       if (!response.ok) {
-        const errorBody = (await response.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(errorBody?.message ?? 'Failed to add resident');
+        throw new Error(apiErrorMessage(await response.json().catch(() => null), 'Failed to add resident'));
       }
       const json = (await response.json()) as { data: CreateResidentResult };
       return json.data;
@@ -127,6 +134,8 @@ export interface UpdateResidentInput {
   /** Changing it is the Directory's "Move to another unit". */
   unitId?: number | null;
   isUnitOwner?: boolean;
+  /** The resident's `updatedAt` as shown: a save over someone else's change is refused (409). */
+  expectedUpdatedAt?: string;
 }
 
 export function useUpdateResident(communityId: number) {
@@ -139,6 +148,13 @@ export function useUpdateResident(communityId: number) {
         body: JSON.stringify({ communityId, ...input }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['residents', communityId] }),
+    // Someone else saved first: fetch their version, so what is on screen —
+    // and the token the next save sends — is current.
+    onError: (error) => {
+      if (error instanceof ApiRequestError && error.status === 409) {
+        void qc.invalidateQueries({ queryKey: ['residents', communityId] });
+      }
+    },
   });
 }
 

@@ -45,7 +45,7 @@ describe('getEntityListPath', () => {
         isAdmin: true,
         query: 'smith',
       }),
-    ).toBe('/dashboard/residents?communityId=9&q=smith');
+    ).toBe('/dashboard/directory?communityId=9&q=smith&tab=residents');
   });
 
   it('routes violations search hits to inbox vs resident report paths', () => {

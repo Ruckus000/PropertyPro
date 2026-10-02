@@ -512,7 +512,7 @@ describe('access-request-service', () => {
       expect(adminSend!.react.props['recordCheck']).toEqual({ label: 'Email verified', tone: 'green' });
       // The "Review request" link names the community, or it opens an error page.
       expect(adminSend!.react.props['dashboardUrl']).toMatch(
-        new RegExp(`/dashboard/residents\\?communityId=${COMMUNITY_ID}$`),
+        new RegExp(`/dashboard/directory\\?communityId=${COMMUNITY_ID}&tab=requests$`),
       );
     });
 
@@ -564,7 +564,7 @@ describe('access-request-service', () => {
         ]);
       });
 
-      it('notifies a resident-role row designated board_president', async () => {
+      it('does NOT notify a resident-role board_president — they cannot open or approve requests', async () => {
         const emails = await notifiedEmails(
           [
             {
@@ -576,7 +576,7 @@ describe('access-request-service', () => {
           [{ id: 'pres-1', email: 'president@example.com', fullName: 'President' }],
         );
 
-        expect(emails).toEqual(['president@example.com']);
+        expect(emails).toEqual([]);
       });
 
       it('does NOT notify a board_member designation on a non-PM-scope role', async () => {

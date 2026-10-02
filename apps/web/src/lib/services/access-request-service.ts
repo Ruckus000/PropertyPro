@@ -26,11 +26,12 @@ import {
   AccessRequestDeniedEmail,
   sendEmail,
 } from '@propertypro/email';
-import { PM_SCOPE_DB_ROLES, isBoardPresident } from '@propertypro/shared';
+import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { createAuthUserBoundTo, rollBackAuthUser } from '@/lib/services/auth-user-binding';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 import { getBaseUrl } from '@/lib/utils/url';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -274,16 +275,14 @@ export async function verifyOtp(params: {
   const community = communityRows[0];
   const communityName = (community?.['name'] as string) ?? 'PropertyPro';
 
-  // Find admin users to notify
+  // Notify the people who can act on it: approving needs residents:write
+  // (GET/POST /api/v1/access-requests*), which is exactly the manager tier.
+  // A resident-role board president used to be emailed too, but could not
+  // open the request list or approve, so the email's button was a dead end.
   const roleRows = await scoped.query(userRoles);
-  // Phase 3.2 (§3.2): the president arm sources from designation; the dead
-  // cam-preset arm is dropped (those rows are property_manager → role arm).
-  const adminRoles = roleRows.filter((r) => {
-    return (
-      (PM_SCOPE_DB_ROLES as readonly string[]).includes(r['role'] as string) ||
-      isBoardPresident(r['designation'])
-    );
-  });
+  const adminRoles = roleRows.filter((r) =>
+    (PM_SCOPE_DB_ROLES as readonly string[]).includes(r['role'] as string),
+  );
 
   const userRows = await scoped.selectFrom<{ id: string; email: string; fullName: string }>(
     users,
@@ -292,7 +291,7 @@ export async function verifyOtp(params: {
   );
   // Must carry the community: on the app's root host nothing else names it,
   // and without it the page can only say "Add a valid communityId".
-  const dashboardUrl = `${getBaseUrl()}/dashboard/residents?communityId=${communityId}`;
+  const dashboardUrl = `${getBaseUrl()}${directoryHref('requests', { communityId })}`;
 
   for (const adminRole of adminRoles) {
     const adminUser = userRows.find((u) => u.id === adminRole['userId']);

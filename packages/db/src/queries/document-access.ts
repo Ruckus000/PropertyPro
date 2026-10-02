@@ -10,11 +10,14 @@ import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import {
   getAccessibleKnownCategories,
   isAdminRole,
+  isCommunityType,
   isElevatedRole,
   normalizeCategoryName,
+  readTenantsCanViewInspectionReports,
   type KnownDocumentCategoryKey,
 } from '@propertypro/shared';
 import { createScopedClient } from '../scoped-client';
+import { communities } from '../schema/communities';
 import { documentCategories } from '../schema/document-categories';
 import { documents } from '../schema/documents';
 
@@ -47,6 +50,39 @@ export interface DocumentAccessContext {
   role: CommunityRole;
   communityType: CommunityType;
   isUnitOwner?: boolean;
+  /**
+   * `community_settings.tenantsCanViewInspectionReports` for this community
+   * (strict `=== true` read; absent = false). Required, not optional, so the
+   * compiler makes every caller source it from the community — an omission
+   * would silently hide inspection reports from tenants of a community that
+   * opted in. Only affects condo/HOA tenants; see
+   * TENANT_INSPECTION_REPORTS_OPT_IN in @propertypro/shared access-policies.
+   */
+  tenantsCanViewInspectionReports: boolean;
+}
+
+/**
+ * The community-level half of a {@link DocumentAccessContext} — for callers
+ * that build contexts for users other than the caller (notification
+ * recipients, cross-community link probes) and therefore have no
+ * `CommunityMembership` to read the setting from. Null when the community is
+ * missing/soft-deleted or its type is unrecognised (callers fail closed).
+ */
+export async function getDocumentAccessCommunitySettings(
+  communityId: number,
+): Promise<{ communityType: CommunityType; tenantsCanViewInspectionReports: boolean } | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    communities,
+    {},
+    eq(communities.id, communityId),
+  )) as unknown as Record<string, unknown>[];
+  const row = rows[0];
+  if (!row || !isCommunityType(row['communityType'])) return null;
+  return {
+    communityType: row['communityType'],
+    tenantsCanViewInspectionReports: readTenantsCanViewInspectionReports(row['communitySettings']),
+  };
 }
 
 async function getAllowedCategoryIds(
@@ -55,6 +91,7 @@ async function getAllowedCategoryIds(
   const allowedKeys = new Set<KnownDocumentCategoryKey>(
     getAccessibleKnownCategories(context.role, context.communityType, {
       isUnitOwner: context.isUnitOwner,
+      tenantsCanViewInspectionReports: context.tenantsCanViewInspectionReports,
     }),
   );
 

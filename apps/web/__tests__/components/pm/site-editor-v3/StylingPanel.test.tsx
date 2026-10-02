@@ -1,12 +1,13 @@
 /**
- * Website editor v3 — the Colours tool panel.
+ * The Design panel's custom-colours section (website builder v4; formerly the
+ * Colours tool). Saves go to the DRAFT look (`/api/v1/pm/site/design`).
  *
  * Three things this file is really protecting:
  *
  *   1. the plan gate — a community without `hasSiteCustomCss` must see the
  *      upsell and be unable to submit, not a form that 403s on save;
- *   2. the payload shape — every switch off means `null` ("use the preset"),
- *      not `{}`, which the branding route reads differently;
+ *   2. the payload shape — every switch off means `null` ("use the colour
+ *      set"), not `{}`, which the design route reads differently;
  *   3. the pickers seed from the community's LIVE colours, not from constants.
  *      The legacy form's hard-coded hexes had drifted from the product default,
  *      so turning an override on silently changed a colour the PM never chose.
@@ -22,23 +23,27 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
-const { saveMutateMock, isPendingRef, storeRef } = vi.hoisted(() => ({
+const { saveMutateMock, isPendingRef, liveRef, storeRef } = vi.hoisted(() => ({
   saveMutateMock: vi.fn(),
   isPendingRef: { current: false },
-  // Stands in for the React Query cache the real hook reads/writes, so the
-  // remount behaviour can be exercised without a QueryClient.
+  // The live overrides (what residents see now).
+  liveRef: { current: null as unknown },
+  // Stands in for the drafted overrides in the React Query cache the real hook
+  // reads/writes, so the remount behaviour can be exercised without a client.
   storeRef: { current: undefined as unknown },
 }));
 
 // Mocked COMPLETELY — a partial factory fails at module load for whichever
 // export the tree happens to reach, which reads as an unrelated break.
-vi.mock('@/hooks/use-custom-css', () => ({
-  customCssQueryKey: (communityId: number) =>
-    ['pm', 'branding', 'custom-css', communityId] as const,
-  useCustomCssOverrides: (_communityId: number, initial: unknown) => ({
-    data: storeRef.current === undefined ? initial : storeRef.current,
+vi.mock('@/hooks/use-site-design', () => ({
+  siteDesignQueryKey: (communityId: number) => ['pm', 'site', 'design', communityId] as const,
+  useSiteDesign: () => ({
+    data: {
+      live: { customCssOverrides: liveRef.current },
+      draft: storeRef.current === undefined ? {} : { customCssOverrides: storeRef.current },
+    },
   }),
-  useSaveCustomCss: () => ({ mutate: saveMutateMock, isPending: isPendingRef.current }),
+  useSaveSiteDesign: () => ({ mutate: saveMutateMock, isPending: isPendingRef.current }),
 }));
 
 const { toastSuccessMock } = vi.hoisted(() => ({ toastSuccessMock: vi.fn() }));
@@ -64,13 +69,9 @@ function renderPanel({
   hasSiteCustomCss = true,
   initial = null as CustomCssOverrides | null,
 } = {}) {
+  liveRef.current = initial;
   return render(
-    <StylingPanel
-      communityId={42}
-      hasSiteCustomCss={hasSiteCustomCss}
-      initial={initial}
-      theme={THEME}
-    />,
+    <StylingPanel communityId={42} hasSiteCustomCss={hasSiteCustomCss} theme={THEME} />,
   );
 }
 
@@ -132,7 +133,6 @@ describe('saving', () => {
 
     expect(saveMutateMock).toHaveBeenCalledTimes(1);
     expect(saveMutateMock.mock.calls[0]![0]).toEqual({
-      communityId: 42,
       customCssOverrides: { primaryColor: '#123456' },
     });
   });
@@ -145,7 +145,6 @@ describe('saving', () => {
     await user.click(screen.getByRole('button', { name: /save colours/i }));
 
     expect(saveMutateMock.mock.calls[0]![0]).toEqual({
-      communityId: 42,
       customCssOverrides: null,
     });
   });
@@ -157,7 +156,8 @@ describe('saving', () => {
 
     await user.click(screen.getByRole('button', { name: /save colours/i }));
 
-    expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringMatching(/colours saved/i));
+    // Drafted, not live: the toast must not claim the website already changed.
+    expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringMatching(/colours saved.*publish/i));
   });
 
   it('surfaces a server error in an alert rather than a toast', async () => {
@@ -178,10 +178,10 @@ describe('saving', () => {
 
 describe('surviving a remount', () => {
   // Switching tool tabs unmounts this panel — `renderToolPanel` only renders
-  // the active tool. Seeding state from the page-load prop instead of the
-  // written-through cache made a saved colour look lost, and made the next
-  // Save post `null` over it.
-  it('seeds from the last save, not the page-load prop, after remounting', () => {
+  // the active tool. Seeding state from the live value instead of the drafted
+  // one made a saved colour look lost, and made the next Save post `null` over
+  // it.
+  it('seeds from the last save (the draft), not the live value, after remounting', () => {
     const { unmount } = renderPanel({ initial: null });
     // The save landed: the hook writes what it persisted into the cache.
     storeRef.current = { primaryColor: '#1E7A5F' } satisfies CustomCssOverrides;
@@ -203,7 +203,6 @@ describe('surviving a remount', () => {
     await user.click(screen.getByRole('button', { name: /save colours/i }));
 
     expect(saveMutateMock.mock.calls[0]![0]).toEqual({
-      communityId: 42,
       customCssOverrides: { primaryColor: '#1E7A5F' },
     });
   });

@@ -62,14 +62,16 @@ describeDb('units-lookup (db-backed integration)', () => {
     expect(result).toEqual({ kind: 'not_found' });
   });
 
-  it('returns ambiguous when duplicate labels exist in the community', async () => {
+  it('cannot become ambiguous: the database refuses a second live unit with the same label, any case', async () => {
+    // Migration `unit_number_unique`. The `ambiguous` result stays as a guard,
+    // but no live data can reach it any more.
     if (!state) return;
     const scoped = state.dbModule.createScopedClient(communityId);
     await scoped.insert(state.dbModule.units, { unitNumber: 'DUPE' });
-    await scoped.insert(state.dbModule.units, { unitNumber: 'DUPE' });
+    await expect(scoped.insert(state.dbModule.units, { unitNumber: 'dupe' })).rejects.toThrow();
 
-    const result = await resolveUnitIdByLabel(communityId, 'DUPE');
-    expect(result.kind).toBe('ambiguous');
+    const result = await resolveUnitIdByLabel(communityId, 'Dupe');
+    expect(result.kind).toBe('resolved');
   });
 
   it('treats soft-deleted units as not found', async () => {

@@ -8,7 +8,7 @@ import { runRoute } from '@propertypro/api-contract';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { isAdminRole } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -27,6 +27,7 @@ import {
   listUnitsForCommunity,
   softDeleteUnitById,
   updateUnitById,
+  unitNumberTaken,
 } from '@/lib/services/unit-service';
 import {
   unitsCreateContract,
@@ -123,7 +124,7 @@ export const POST = withErrorHandler(
 
     const duplicate = await getUnitByNumber(scoped, unitNumber);
     if (duplicate) {
-      throw new ValidationError(`Unit number "${unitNumber}" already exists in this community`);
+      throw unitNumberTaken(unitNumber);
     }
 
     const newUnit = await createUnitForCommunity(scoped, {
@@ -201,7 +202,7 @@ export const PATCH = withErrorHandler(
     if (unitNumber !== undefined) {
       const duplicate = await getUnitByNumber(scoped, unitNumber);
       if (duplicate && (duplicate['id'] as number) !== unitId) {
-        throw new ValidationError(`Unit number "${unitNumber}" already exists in this community`);
+        throw unitNumberTaken(unitNumber);
       }
     }
 
@@ -240,7 +241,10 @@ export const PATCH = withErrorHandler(
 
     updateData['updatedAt'] = new Date();
 
-    await updateUnitById(scoped, unitId, updateData);
+    const updated = await updateUnitById(scoped, unitId, updateData, body.expectedUpdatedAt);
+    if (!updated) {
+      throw new ConflictError('Someone else changed this unit since you opened it. Reload to see their changes.');
+    }
 
     await logAuditEvent({
       userId: actorUserId,
@@ -265,6 +269,7 @@ export const PATCH = withErrorHandler(
       occupancy: occupancy !== undefined ? (occupancy ?? null) : ((existing['occupancy'] as string | null) ?? null),
       occupancyConfirmed:
         occupancy !== undefined ? occupancy !== null : existing['occupancyConfirmedAt'] != null,
+      updatedAt: updated['updatedAt'] as string,
     };
   }),
 );

@@ -29,7 +29,13 @@ import { announcements, communities, documentCategories, documents, meetings, si
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from '@propertypro/db/filters';
-import { BOARD_DESIGNATIONS, TOMBSTONE_BLOCK_TYPE, isBoardPresident } from '@propertypro/shared';
+import {
+  BOARD_DESIGNATIONS,
+  TOMBSTONE_BLOCK_TYPE,
+  documentMatchesSectionCategories,
+  isBoardPresident,
+  type DocumentCategory,
+} from '@propertypro/shared';
 import { announcementNotExpiredWhere } from '@/lib/announcements/expiry';
 
 export interface PublicAnnouncement {
@@ -256,13 +262,14 @@ export interface PublicScopedReader {
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
 
   /**
-   * Documents filtered by `public_access = true` AND category name.
+   * Documents filtered by `public_access = true` AND the section's categories,
+   * matched by meaning (`documentMatchesSectionCategories`).
    *
    * Returns [] when includeCategories is empty/missing — categories narrow
    * the listing further but are no longer the sole access control (migration
    * 0007 added the publicAccess boolean as the authoritative gate).
    */
-  listDocuments(opts: { limit: number; includeCategories?: string[] }): Promise<PublicDocument[]>;
+  listDocuments(opts: { limit: number; includeCategories?: readonly DocumentCategory[] }): Promise<PublicDocument[]>;
 
   /**
    * Every public-access document for the community, oldest-stable-id-first
@@ -547,6 +554,20 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       // Returns [] when no categories are specified (preserves the existing
       // contract — a DocumentsBlock with no category selection is a no-op).
       if (!opts.includeCategories || opts.includeCategories.length === 0) return [];
+      // The section stores fixed values (`budget`, `minutes`…); the community
+      // names its categories freely ("Financial Records"). Matched by meaning
+      // here, not by `name IN (...)` — that string compare matched nothing, so
+      // every starter site's records section was empty.
+      const categoryRows = await db
+        .select({ id: documentCategories.id, name: documentCategories.name })
+        .from(documentCategories)
+        .where(
+          and(eq(documentCategories.communityId, communityId), isNull(documentCategories.deletedAt)),
+        );
+      const categoryIds = categoryRows
+        .filter((c) => documentMatchesSectionCategories(c.name, opts.includeCategories))
+        .map((c) => c.id);
+      if (categoryIds.length === 0) return [];
       const rows = await db
         .select({
           id: documents.id,
@@ -566,7 +587,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             eq(documents.publicAccess, true),
             // A draft is never public, even if the flag were set on one.
             isNotNull(documents.postedAt),
-            inArray(documentCategories.name, opts.includeCategories),
+            inArray(documents.categoryId, categoryIds),
           ),
         )
         .orderBy(desc(documents.createdAt))
