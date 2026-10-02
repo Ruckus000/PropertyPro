@@ -102,6 +102,47 @@ export const SITE_LOOK_FIELDS = [
 export type SiteLookField = (typeof SITE_LOOK_FIELDS)[number];
 export type SiteLook = Pick<CommunityBranding, SiteLookField>;
 
+/**
+ * The look fields a group-pick writes together. Picking a colour set in the
+ * Design panel drafts its slug AND its colours and fonts at once
+ * (`saveDraftDesign`), so a live write of any one of them leaves a drafted
+ * slug describing colours that are no longer the ones being published.
+ */
+const THEME_GROUP: ReadonlySet<string> = new Set([
+  'themePresetSlug',
+  'primaryColor',
+  'secondaryColor',
+  'accentColor',
+  'fontHeading',
+  'fontBody',
+]);
+
+/**
+ * Which `draftLook` keys a LIVE branding write must remove, so that the next
+ * Publish cannot put back what this write just replaced.
+ *
+ * The rule: a live write of a look field supersedes any pending draft of that
+ * field. Without it a stale draft — a colour the manager tried weeks ago —
+ * still counts as "pending" and silently reverts a template apply or an admin
+ * fix on the next Publish, manual or scheduled.
+ *
+ * Every patched look field is stripped, plus `themePresetSlug` whenever any
+ * member of the colour-set group is written (see THEME_GROUP). Keys whose
+ * value is `undefined` are not writes and strip nothing. Non-look keys (logos,
+ * tagline, footer) never touch the draft. Order follows SITE_LOOK_FIELDS.
+ */
+export function liveLookKeysToStrip(patch: Record<string, unknown>): SiteLookField[] {
+  const written = new Set(
+    Object.entries(patch)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key),
+  );
+  const touchesThemeGroup = [...written].some((key) => THEME_GROUP.has(key));
+  return SITE_LOOK_FIELDS.filter(
+    (field) => written.has(field) || (field === 'themePresetSlug' && touchesThemeGroup),
+  );
+}
+
 /** The look fields of `branding`, live values only. */
 export function liveLook(branding: CommunityBranding | null | undefined): SiteLook {
   const look: SiteLook = {};

@@ -104,6 +104,21 @@ export {
 } from './ops/root-ops';
 
 /**
+ * Live branding write — a single atomic UPDATE of `communities.branding`.
+ *
+ * **Authorization contract:** this writes any community's branding by id and
+ * checks nothing itself. Callers MUST have already authorized the write for
+ * that community: in apps/web a property-manager-tier membership (or the
+ * portfolio-template ownership check) in that community; in apps/admin a
+ * platform-admin session (`requirePlatformAdmin`). It is the only sanctioned
+ * way to write live branding keys; see the op's docblock for why.
+ */
+export {
+  applyLiveBrandingPatchUnscoped,
+  type LiveBrandingWriteResult,
+} from './ops/branding-ops';
+
+/**
  * Returns the raw Drizzle client without tenant scoping.
  * Use only for deliberate, reviewed escape-hatch flows.
  */

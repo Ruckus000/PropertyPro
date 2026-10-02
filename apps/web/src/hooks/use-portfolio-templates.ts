@@ -29,6 +29,7 @@ export interface ApplyResult {
   communityName: string;
   status: 'applied' | 'failed';
   reason?: string;
+  notes?: string[];
 }
 
 const listKey = ['pm', 'portfolio', 'templates'] as const;

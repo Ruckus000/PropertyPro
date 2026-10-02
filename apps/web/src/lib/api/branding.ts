@@ -15,8 +15,8 @@ import { cache } from 'react';
 import { communities, siteLayoutMetadata } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
-// AUTHZ: P3-47: White-label branding — communities is the root tenant table (no communityId column); getBrandingForCommunity must query by primary key directly.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+// AUTHZ: P3-47: White-label branding — communities is the root tenant table (no communityId column); getBrandingForCommunity must query by primary key directly, and updateBrandingForCommunity's callers have already verified a management role (or template ownership) in the target community.
+import { applyLiveBrandingPatchUnscoped, createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import type { CommunityBranding, CustomCssOverrides } from '@propertypro/shared';
 
@@ -173,41 +173,34 @@ export interface BrandingPatch {
   /** PR #11 — Pro+ custom CSS token overrides; null clears them. */
   customCssOverrides?: CustomCssOverrides | null;
   /**
-   * Website editor v3 Phase 8 — SEO overrides and public-site footer.
-   *
-   * Present so `updateBrandingForCommunity`'s shallow merge does not drop them
-   * when some OTHER caller (the branding PATCH, the onboarding wizard, the
-   * portfolio-template service) writes an unrelated field. The Phase 8 write
-   * path does not go through here — it merges in SQL, atomically, to avoid the
-   * lost update this shallow spread would otherwise cause. See
-   * `site-settings-service.ts`.
+   * Website editor v3 Phase 8 — SEO overrides and public-site footer. Written
+   * by `site-settings-service.ts`'s atomic `mergeBranding`, not through here.
    */
   siteSettings?: CommunityBranding['siteSettings'];
   siteFooter?: CommunityBranding['siteFooter'];
 }
 
 /**
- * Persist a branding patch.
- * Merges with existing branding so partial updates are safe.
+ * Write branding fields LIVE, atomically, and return the branding as stored.
  *
- * NOTE: Input validation is handled by the Zod schema in the API route
- * (apps/web/src/app/api/v1/pm/branding/route.ts). This function trusts
- * that its callers have already validated the patch.
+ * Delegates to `applyLiveBrandingPatchUnscoped` (packages/db), one UPDATE that
+ * merges inside Postgres. It used to read (request-cached), spread in JS and
+ * write the whole object back, which erased anything written in between,
+ * including a manager's draft. Writing a look field live also removes any
+ * pending draft of that field, so the next Publish cannot revert it.
+ *
+ * The returned object is the row as this write left it, not the cached read:
+ * a `getBrandingForCommunity` call later in the same request still returns
+ * the PRE-write value.
+ *
+ * Callers validate the patch and authorize the write; this trusts both.
  */
 export async function updateBrandingForCommunity(
   communityId: number,
   patch: BrandingPatch,
 ): Promise<CommunityBranding> {
-  const existing = await getBrandingForCommunity(communityId);
-  const updated: CommunityBranding = {
-    ...existing,
-    ...patch,
-  };
-
-  const db = createUnscopedClient();
-  await db.update(communities).set({ branding: updated }).where(eq(communities.id, communityId));
-
-  return updated;
+  const { after } = await applyLiveBrandingPatchUnscoped(communityId, patch);
+  return after ?? {};
 }
 
 /**

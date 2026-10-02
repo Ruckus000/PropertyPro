@@ -112,6 +112,39 @@ describe('PortfolioTemplatesManager', () => {
     );
   });
 
+  it('says when part of a template was left out of an applied community', () => {
+    const apply = mutation({
+      mutate: vi.fn((_vars, opts: { onSuccess: (r: unknown) => void }) =>
+        opts.onSuccess([
+          { communityId: 1, communityName: 'Sunset Condos', status: 'applied' },
+          {
+            communityId: 2,
+            communityName: 'Palm Shores',
+            status: 'applied',
+            notes: ["Custom colours skipped: this community's plan doesn't include them"],
+          },
+        ]),
+      ),
+    });
+    useApplyTemplateMock.mockReturnValue(apply);
+    render(<PortfolioTemplatesManager hasAccess communities={COMMUNITIES} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    const checkboxes = screen.getAllByRole('checkbox');
+    fireEvent.click(checkboxes[0]!);
+    fireEvent.click(checkboxes[1]!);
+    fireEvent.click(screen.getByRole('button', { name: /apply to 2 communities/i }));
+    // The confirm step warns that unpublished design changes are replaced.
+    expect(screen.getByText(/replaces any unpublished design changes/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /confirm — replace branding/i }));
+
+    const results = screen.getByTestId('apply-results');
+    expect(results).toHaveTextContent('Sunset Condos — Applied');
+    expect(results).toHaveTextContent(
+      "Palm Shores — Applied. Custom colours skipped: this community's plan doesn't include them",
+    );
+  });
+
   it('deletes a template', () => {
     const del = mutation();
     useDeleteTemplateMock.mockReturnValue(del);

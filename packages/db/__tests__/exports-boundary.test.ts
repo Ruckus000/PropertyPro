@@ -27,6 +27,7 @@ describe('db export boundaries', () => {
 
   it('exposes expected unsafe escape-hatch exports', () => {
     expect(unsafeExports).toHaveProperty('createUnscopedClient');
+    expect(unsafeExports).toHaveProperty('applyLiveBrandingPatchUnscoped');
     expect(unsafeExports).toHaveProperty('findCommunityBySlugUnscoped');
     expect(unsafeExports).toHaveProperty('findCandidateDigestCommunityIds');
     expect(unsafeExports).toHaveProperty('claimDigestQueueRows');

@@ -284,15 +284,35 @@ export interface ApplyResult {
   communityName: string;
   status: 'applied' | 'failed';
   reason?: string;
+  /** Applied, but with something left out (e.g. a feature the plan lacks). */
+  notes?: string[];
 }
+
+export const CUSTOM_COLOURS_SKIPPED_NOTE =
+  "Custom colours skipped: this community's plan doesn't include them";
 
 /**
  * Bulk-apply a template (branding tokens + wordmark logo) onto a chosen set of
  * the caller's managed communities. One-time push: each target's branding is
  * merged with the template's captured tokens (template wins) and, when the
  * template carries a logo, the asset is copied into the target's branding path.
- * Branding is live immediately. Per-community results: one failure does not
- * abort the others (`Promise.allSettled`).
+ * Per-community results: one failure does not abort the others
+ * (`Promise.allSettled`).
+ *
+ * Branding is LIVE immediately, deliberately, although since website builder
+ * v4 a manager's own look changes are drafts until Publish: this is a bulk
+ * action across up to 200 communities, and drafting it would mean one Publish
+ * per community. `updateBrandingForCommunity` also removes any pending draft
+ * of the look fields written, so a stale draft cannot revert the template on
+ * that community's next Publish.
+ *
+ * Custom colours are a plan feature (`hasSiteCustomCss`, not on Essentials),
+ * and a portfolio can mix plans. For a target whose plan lacks it the
+ * template's `customCssOverrides` is left out entirely, including a `null`
+ * (which would clear colours the community may still hold from an earlier
+ * plan), and the result says so. Entitlement is resolved for all targets in
+ * one query, failing open on an unknown plan exactly as `requirePlanFeature`
+ * does.
  */
 export async function applyTemplate(
   ownerUserId: string,
@@ -331,10 +351,38 @@ export async function applyTemplate(
 
   const templateBranding = (template.branding ?? {}) as PortfolioTemplateBranding;
 
+  const planRows =
+    communityIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: communities.id,
+            communityType: communities.communityType,
+            subscriptionPlan: communities.subscriptionPlan,
+          })
+          .from(communities)
+          .where(inArray(communities.id, communityIds));
+  const customCssAllowed = new Map(
+    planRows.map((r) => [
+      r.id,
+      getEffectiveFeatures(r.communityType as CommunityType, resolvePlanId(r.subscriptionPlan))
+        .hasSiteCustomCss,
+    ]),
+  );
+  const templateCustomCss = templateBranding.customCssOverrides;
+  const templateHasCustomCss =
+    templateCustomCss != null && Object.keys(templateCustomCss).length > 0;
+
   const settled = await Promise.allSettled(
     communityIds.map(async (communityId): Promise<ApplyResult> => {
       const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
       const patch: BrandingPatch = { ...templateBranding };
+      const notes: string[] = [];
+      // Fail open (true) when the community's row is missing, as plan-guard does.
+      if (customCssAllowed.get(communityId) === false && 'customCssOverrides' in patch) {
+        delete patch.customCssOverrides;
+        if (templateHasCustomCss) notes.push(CUSTOM_COLOURS_SKIPPED_NOTE);
+      }
       if (template.siteLogoPath) {
         const destPath = `communities/${communityId}/branding/site-logo.webp`;
         await copyStorageObject(ASSET_BUCKET, template.siteLogoPath, destPath);
@@ -347,9 +395,9 @@ export async function applyTemplate(
         resourceType: 'community',
         resourceId: String(communityId),
         communityId,
-        newValues: { templateId },
+        newValues: { templateId, ...(notes.length > 0 && { skipped: ['customCssOverrides'] }) },
       });
-      return { communityId, communityName, status: 'applied' };
+      return { communityId, communityName, status: 'applied', ...(notes.length > 0 && { notes }) };
     }),
   );
 
