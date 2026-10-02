@@ -18,6 +18,8 @@ export interface Unit {
   occupancy: UnitOccupancy | null;
   /** False while `occupancy` is a backfilled guess no manager has confirmed. */
   occupancyConfirmed: boolean;
+  /** Open violations on the unit; null when the viewer may not see them or the feature is off. */
+  openViolations?: number | null;
   createdAt: string;
   updatedAt: string;
 }

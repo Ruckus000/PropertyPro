@@ -22,6 +22,7 @@ const {
   removeResidentMock,
   batchInviteMock,
   sendDocumentsMock,
+  exportMock,
 } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   searchState: { value: '' },
@@ -38,6 +39,7 @@ const {
   removeResidentMock: vi.fn(),
   batchInviteMock: vi.fn(),
   sendDocumentsMock: vi.fn(),
+  exportMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -77,6 +79,9 @@ vi.mock('@/hooks/use-documents', () => ({
     isError: false,
   }),
   useSendDocuments: () => ({ mutateAsync: sendDocumentsMock, isPending: false, error: null }),
+}));
+vi.mock('@/hooks/use-directory-export', () => ({
+  useDirectoryExport: () => ({ mutate: exportMock, isPending: false }),
 }));
 vi.mock('@/hooks/use-access-requests', async (importOriginal) => ({
   // The real query options (they fetch through the mocked walkPaginated).
@@ -247,9 +252,10 @@ describe('DirectoryPageClient — units', () => {
 
     const drawer = await screen.findByRole('dialog', { name: /unit 103/i });
     expect(within(drawer).getByText('$1,250 past due')).toBeInTheDocument();
+    // The banner and the Records section both open THIS unit's ledger.
     expect(within(drawer).getByRole('link', { name: 'View ledger' })).toHaveAttribute(
       'href',
-      '/communities/42/payments?tab=delinquency',
+      '/communities/42/payments?tab=ledger&unitId=3',
     );
     await user.click(within(drawer).getByRole('button', { name: 'Resend invite' }));
     expect(resendMock).toHaveBeenCalledWith('Ivy Invited');
@@ -527,5 +533,52 @@ describe('DirectoryPageClient — access requests tab', () => {
     renderClient({ isAdmin: false });
     expect(screen.queryByRole('tab', { name: /access requests/i })).not.toBeInTheDocument();
     expect(walkPaginatedMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('DirectoryPageClient — violations, records and export (design gaps)', () => {
+  it('cards show open violations; the unit drawer links to that unit\'s ledger and violations', async () => {
+    useUnitsMock.mockReturnValue(ok(UNITS.map((u) => ({ ...u, openViolations: u.id === 3 ? 2 : 0 }))));
+    const user = userEvent.setup();
+    renderClient();
+    const card = screen.getByRole('button', { name: /^103/ });
+    expect(within(card).getByText('2 open violations')).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /^101/ })).queryByText(/open violation/)).not.toBeInTheDocument();
+
+    await user.click(card);
+    const drawer = await screen.findByRole('dialog', { name: /unit 103/i });
+    const records = within(drawer).getByRole('region', { name: 'Records' });
+    expect(within(records).getByRole('link', { name: /ledger/i })).toHaveAttribute('href', '/communities/42/payments?tab=ledger&unitId=3');
+    expect(within(records).getByRole('link', { name: /violations.*2 open violations/i })).toHaveAttribute(
+      'href',
+      '/violations?communityId=42&unitId=3',
+    );
+  });
+
+  it('no violations link when the API sent no counts (feature off, or not a manager)', async () => {
+    const user = userEvent.setup();
+    renderClient({ canSeeBalances: false });
+    await user.click(screen.getByRole('button', { name: /^103/ }));
+    const drawer = await screen.findByRole('dialog', { name: /unit 103/i });
+    expect(within(drawer).queryByRole('region', { name: 'Records' })).not.toBeInTheDocument();
+  });
+
+  it('exports units from the menu', async () => {
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Export units (CSV)' }));
+    expect(exportMock).toHaveBeenCalledWith({ kind: 'units' }, expect.anything());
+  });
+
+  it('the residents bulk bar exports exactly the visible selection', async () => {
+    searchState.value = 'tab=residents';
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    await user.type(screen.getByRole('searchbox', { name: /search name/i }), 'ivy');
+    await screen.findByText('1 selected');
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+    expect(exportMock).toHaveBeenCalledWith({ kind: 'residents', userIds: ['Ivy Invited'] }, expect.anything());
   });
 });

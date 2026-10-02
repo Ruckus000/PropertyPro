@@ -17,8 +17,10 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import { requireViolationsEnabled } from '@/lib/violations/common';
 import {
   countOpenViolationsForUnit,
+  countOpenViolationsByUnit,
   createUnitForCommunity,
   getUnitBalanceCents,
   getUnitById,
@@ -68,7 +70,11 @@ function assertOccupancyAllowed(occupancy: string | null | undefined, communityT
  * `occupancy` follows the same rule: which units stand vacant is not a
  * neighbour's business (it is a burglary map).
  */
-function mapUnitRow(row: Record<string, unknown>, includeManagerFields: boolean) {
+function mapUnitRow(
+  row: Record<string, unknown>,
+  includeManagerFields: boolean,
+  openViolations: ReadonlyMap<number, number> | null,
+) {
   return {
     id: row['id'] as number,
     communityId: row['communityId'] as number,
@@ -82,6 +88,8 @@ function mapUnitRow(row: Record<string, unknown>, includeManagerFields: boolean)
     ownerUserId: includeManagerFields ? ((row['ownerUserId'] as string | null) ?? null) : null,
     occupancy: includeManagerFields ? ((row['occupancy'] as string | null) ?? null) : null,
     occupancyConfirmed: includeManagerFields ? row['occupancyConfirmedAt'] != null : false,
+    /** Open violations; null when the viewer may not see them (or the feature is off). */
+    openViolations: openViolations ? (openViolations.get(row['id'] as number) ?? 0) : null,
     createdAt: row['createdAt'] as string,
     updatedAt: row['updatedAt'] as string,
   };
@@ -99,8 +107,14 @@ export const GET = withErrorHandler(
 
     const rows = await listUnitsForCommunity(scoped);
     const includeManagerFields = isAdminRole(membership.role);
+    // Violation counts: managers only (a neighbour's enforcement history is not
+    // a resident's business), and only where violations are on for the
+    // community type and plan — the same gate as /api/v1/violations.
+    const violationsOn =
+      includeManagerFields && (await requireViolationsEnabled(membership).then(() => true, () => false));
+    const openViolations = violationsOn ? await countOpenViolationsByUnit(scoped) : null;
     return (rows as Record<string, unknown>[]).map((row) =>
-      mapUnitRow(row, includeManagerFields),
+      mapUnitRow(row, includeManagerFields, openViolations),
     );
   }),
 );

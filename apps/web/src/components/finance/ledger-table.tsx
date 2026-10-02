@@ -121,9 +121,12 @@ const columns: ColumnDef<LedgerEntry, unknown>[] = [
 
 interface LedgerTableProps {
   communityId: number;
+  /** Narrow to one unit (from `?unitId=`); `onShowAllUnits` clears it. */
+  unitId?: number;
+  onShowAllUnits?: () => void;
 }
 
-export function LedgerTable({ communityId }: LedgerTableProps) {
+export function LedgerTable({ communityId, unitId, onShowAllUnits }: LedgerTableProps) {
   const [entryType, setEntryType] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -133,8 +136,9 @@ export function LedgerTable({ communityId }: LedgerTableProps) {
       entryType: entryType || undefined,
       startDate: startDate || undefined,
       endDate: endDate || undefined,
+      unitId,
     }),
-    [entryType, startDate, endDate],
+    [entryType, startDate, endDate, unitId],
   );
 
   const { data: entries, isLoading } = useLedger(communityId, filters);
@@ -156,6 +160,20 @@ export function LedgerTable({ communityId }: LedgerTableProps) {
     <div className="space-y-4">
       {/* Filters + Export */}
       <div className="flex flex-wrap items-center gap-3">
+        {unitId !== undefined ? (
+          <span className="inline-flex h-9 items-center gap-2 rounded-md border border-edge bg-surface-subtle px-3 text-sm text-content">
+            {entries?.[0]?.unitLabel ?? 'One unit'} only
+            {onShowAllUnits ? (
+              <button
+                type="button"
+                onClick={onShowAllUnits}
+                className="font-medium text-content-link underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                Show all units
+              </button>
+            ) : null}
+          </span>
+        ) : null}
         <select
           value={entryType}
           onChange={(e) => setEntryType(e.target.value)}

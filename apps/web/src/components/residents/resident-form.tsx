@@ -193,6 +193,8 @@ export function ResidentForm({
         />
       </label>
 
+      {/* One choice (apartments: tenant only) is no choice — don't ask. */}
+      {availableRoles.length > 1 ? (
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-content-secondary">Role</span>
         <select
@@ -217,6 +219,7 @@ export function ResidentForm({
           ))}
         </select>
       </label>
+      ) : null}
 
       {showUnitField && unitOptions ? (
         <label className="block">

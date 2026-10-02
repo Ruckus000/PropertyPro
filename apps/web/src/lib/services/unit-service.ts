@@ -131,14 +131,30 @@ export async function getUnitBalanceCents(scoped: ScopedClient, unitId: number):
   return getUnitLedgerBalance(scoped, unitId);
 }
 
+const openViolation = () => notInArray(violations.status, ['resolved', 'dismissed']);
+
 /** Violations on the unit that are still in progress (not resolved/dismissed). */
 export async function countOpenViolationsForUnit(scoped: ScopedClient, unitId: number): Promise<number> {
-  const rows = await scoped.selectFrom(
+  return (await countOpenViolationsByUnit(scoped, unitId)).get(unitId) ?? 0;
+}
+
+/**
+ * Open (not resolved/dismissed) violation counts per unit, for the whole
+ * community in one query — the Directory shows a count on every card, so a
+ * per-unit call would be N+1. Units with none are absent from the map.
+ */
+export async function countOpenViolationsByUnit(
+  scoped: ScopedClient,
+  onlyUnitId?: number,
+): Promise<Map<number, number>> {
+  const rows = await scoped.selectFrom<{ unitId: number }>(
     violations,
-    { id: violations.id },
-    and(eq(violations.unitId, unitId), notInArray(violations.status, ['resolved', 'dismissed'])),
+    { unitId: violations.unitId },
+    onlyUnitId === undefined ? openViolation() : and(eq(violations.unitId, onlyUnitId), openViolation()),
   );
-  return rows.length;
+  const counts = new Map<number, number>();
+  for (const { unitId } of rows) counts.set(unitId, (counts.get(unitId) ?? 0) + 1);
+  return counts;
 }
 
 /**
