@@ -17,10 +17,10 @@ import { CommunityWebsiteEditor } from '@/components/clients/CommunityWebsiteEdi
 // React 19 requires this flag in tests that use act + createRoot.
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-async function renderEditor(): Promise<string> {
+async function renderEditor(branding: Record<string, unknown> = {}): Promise<string> {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ({
     ok: true,
-    json: async () => ({ branding: {} }),
+    json: async () => ({ branding }),
   } as Response));
 
   const container = document.createElement('div');
@@ -65,5 +65,33 @@ describe('CommunityWebsiteEditor branding form', () => {
   it('renders the community slug in the live preview mockup', async () => {
     const html = await renderEditor();
     expect(html).toContain('Sunset Condos');
+  });
+
+  describe("the manager's unpublished design changes", () => {
+    it('lists them, since saving replaces the matching ones', async () => {
+      const html = await renderEditor({
+        primaryColor: '#111111',
+        fontBody: 'Inter',
+        draftLook: { primaryColor: '#222222', layoutId: 'sable', fontBody: 'Inter' },
+      });
+
+      expect(html).toContain("The community's manager has unpublished design changes");
+      // fontBody is drafted at its live value: nothing to publish, not listed.
+      expect(html).toContain('Unpublished: layout, primary color.');
+      expect(html).not.toContain('body font');
+    });
+
+    it('shows nothing when there is no draft', async () => {
+      const html = await renderEditor({ primaryColor: '#111111' });
+      expect(html).not.toContain('unpublished design changes');
+    });
+
+    it('shows nothing when every drafted value already matches live', async () => {
+      const html = await renderEditor({
+        primaryColor: '#111111',
+        draftLook: { primaryColor: '#111111' },
+      });
+      expect(html).not.toContain('unpublished design changes');
+    });
   });
 });

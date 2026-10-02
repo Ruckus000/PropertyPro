@@ -12,6 +12,12 @@ const requirePlatformAdmin = vi.fn();
 // forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
 const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 const brandingUpdate = vi.fn();
+// The live write — one atomic UPDATE in packages/db (`@propertypro/db/unsafe`).
+const applyLive = vi.fn();
+
+vi.mock('@propertypro/db/unsafe', () => ({
+  applyLiveBrandingPatchUnscoped: (...args: unknown[]) => applyLive(...args),
+}));
 
 vi.mock('@/lib/auth/platform-admin', () => ({
   requirePlatformAdmin: (...args: unknown[]) => requirePlatformAdmin(...args),
@@ -68,6 +74,11 @@ describe('community branding PATCH auditing', () => {
       data: { branding: { primaryColor: '#123456' } },
       error: null,
     });
+    applyLive.mockReset();
+    applyLive.mockResolvedValue({
+      before: { primaryColor: '#000000', draftLook: { primaryColor: '#ff0000' } },
+      after: { primaryColor: '#123456' },
+    });
   });
 
   afterEach(() => vi.resetModules());
@@ -80,14 +91,41 @@ describe('community branding PATCH auditing', () => {
     expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
       action: 'community_branding_changed',
       communityId: 7,
-      oldValues: { primaryColor: '#000000' },
+      oldValues: { primaryColor: '#000000', draftLook: { primaryColor: '#ff0000' } },
+      newValues: { primaryColor: '#123456' },
     });
+  });
+
+  it('writes through the atomic op, never a whole-object update from a read', async () => {
+    // Revert-check target: restoring the read → merge → `.update({ branding })`
+    // shape makes this fail. That shape erased the manager's draft, site
+    // settings and the asset quota whenever they were written in between.
+    const res = await callPatch({ primaryColor: '#123456', logoPath: 'communities/7/logo.webp' });
+
+    expect(res.status).toBe(200);
+    expect(applyLive).toHaveBeenCalledWith(
+      7,
+      { primaryColor: '#123456', logoPath: 'communities/7/logo.webp' },
+      { touchUpdatedAt: true },
+    );
+    expect(brandingUpdate).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ branding: { primaryColor: '#123456' } });
+  });
+
+  it('returns 404 and audits nothing when the community vanished before the write', async () => {
+    applyLive.mockResolvedValueOnce({ before: null, after: null });
+
+    const res = await callPatch({ primaryColor: '#123456' });
+
+    expect(res.status).toBe(404);
+    expect(logAdminAction).not.toHaveBeenCalled();
   });
 
   it('still enforces the shared hex-colour refinement', async () => {
     const res = await callPatch({ primaryColor: 'not-a-colour' });
 
     expect(res.status).toBe(400);
+    expect(applyLive).not.toHaveBeenCalled();
     expect(logAdminAction).not.toHaveBeenCalled();
   });
 
