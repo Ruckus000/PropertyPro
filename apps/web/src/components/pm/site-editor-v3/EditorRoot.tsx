@@ -8,8 +8,6 @@ import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { applyDesignToCanvas } from '@/lib/site-editor/canvas-design';
 import { useSiteDesign } from '@/hooks/use-site-design';
-import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
-import { recordsNeedingAttention, summarizeRecords } from '@/lib/site-editor/records-status';
 import type { PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
@@ -77,6 +75,10 @@ const DomainPanel = dynamic(
 const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
   loading: () => null,
 });
+const RecordsAttention = dynamic(
+  () => import('./RecordsAttention').then((m) => m.RecordsAttention),
+  { ssr: false, loading: () => null },
+);
 const DocumentsPanel = dynamic(
   () => import('./panels/DocumentsPanel').then((m) => m.DocumentsPanel),
   { loading: () => null },
@@ -261,16 +263,8 @@ export function EditorRoot({
   initialPages,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
-  // The Documents tool's count. Same query key as the panel and the Compliance
-  // page, so opening the panel costs no second request. Apartments have no
-  // records checklist (the route refuses them), so they never ask.
-  const { data: checklist } = useComplianceChecklist(communityId, {
-    enabled: siteIdentity.communityType !== 'apartment',
-  });
-  const recordsAttention = useMemo(
-    () => (checklist ? recordsNeedingAttention(summarizeRecords(checklist)) : 0),
-    [checklist],
-  );
+  // The Documents tool's count, reported by the code-split `RecordsAttention`.
+  const [recordsAttention, setRecordsAttention] = useState(0);
   // The canvas, preview and publish-sheet contrast check all show the DRAFT
   // look (website builder v4), which changes as the Design panel saves. The
   // server context carries the live look; this re-derives theme and layout
@@ -863,6 +857,11 @@ export function EditorRoot({
         onSlotSelected={handleSlotSelected}
       >
       <AutosaveStatusProvider>
+      {/* Apartments have no records checklist (the route refuses them), so
+          they never ask. */}
+      {siteIdentity.communityType !== 'apartment' ? (
+        <RecordsAttention communityId={communityId} onCount={setRecordsAttention} />
+      ) : null}
       <EditorShell
         communityName={communityName}
         // The only thing on screen naming the page while the Sections tool is
