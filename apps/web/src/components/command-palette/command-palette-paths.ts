@@ -1,4 +1,5 @@
 import { operationsTabHref } from '@/lib/operations/routes';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 interface EntityListPathOptions {
   communityId: number | null;
@@ -56,7 +57,7 @@ export function getEntityListPath(
         : withCommunityQuery('/violations/report', communityId, query);
     case 'residents':
       if (!communityId) return null;
-      return withCommunityQuery('/dashboard/residents', communityId, query);
+      return directoryHref('residents', { communityId, q: query?.trim() || undefined });
     default:
       return null;
   }

@@ -43,6 +43,7 @@ import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { matchesRoleVisibility, type RoleVisibility } from '@/lib/navigation/role-visibility';
 import type { RbacAction, RbacResource } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -355,11 +356,11 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
   },
   {
     id: 'page-residents',
-    label: 'Residents',
-    keywords: ['resident', 'owner', 'tenant', 'member', 'directory', 'contact', 'unit', 'who lives'],
-    description: 'Resident directory and unit assignments',
+    label: 'Directory',
+    keywords: ['resident', 'owner', 'tenant', 'member', 'directory', 'contact', 'unit', 'units', 'who lives', 'access request'],
+    description: 'Units, residents and access requests',
     icon: Building2,
-    href: '/dashboard/residents',
+    href: (cid: number) => directoryHref('residents', { communityId: cid }),
     roles: 'admin',
     audience: 'admin',
     category: 'page',
@@ -621,7 +622,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     keywords: ['add resident', 'new owner', 'new tenant', 'invite', 'onboard', 'register', 'new member', 'move in'],
     description: 'Add a new resident to the community',
     icon: UserCheck,
-    href: '/dashboard/residents',
+    href: (cid: number) => directoryHref('residents', { communityId: cid }),
     roles: 'admin',
     audience: 'admin',
     category: 'action',

@@ -1,17 +1,16 @@
 /**
- * Directory — Units and Residents on one page (rollout flag `directory_v2`).
+ * Directory — Units, Residents and Access requests on one page.
  *
- * Route: /dashboard/directory?communityId=X&tab=units|residents
+ * Route: /dashboard/directory?communityId=X&tab=units|residents|requests
  * Auth: units.read. Residents tab, overview stats and access requests are
  * admin-only (v3 admin tier); balances additionally need finances.read and a
  * plan with finance. Hiding UI is not the security boundary — each API
  * re-checks — but the page never fetches what the viewer cannot read.
  *
- * The old /dashboard/units and /dashboard/residents pages stay live until the
- * cutover phase; this page 404s for communities outside the pilot.
+ * The old /dashboard/units and /dashboard/residents pages permanently redirect
+ * here (see `directoryHref`).
  */
 import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
@@ -19,7 +18,6 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-import { isDirectoryEnabledForCommunity } from '@/lib/directory/directory-flag';
 import { DirectoryPageClient, type DirectoryTab } from '@/components/directory/directory-page-client';
 import { PageHeader } from '@/components/shared/page-header';
 
@@ -28,7 +26,7 @@ interface PageProps {
 }
 
 function parseTab(value: string | string[] | undefined): DirectoryTab {
-  return value === 'residents' ? 'residents' : 'units';
+  return value === 'residents' || value === 'requests' ? value : 'units';
 }
 
 export default async function DirectoryPage({ searchParams }: PageProps) {
@@ -48,10 +46,6 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
         </p>
       </div>
     );
-  }
-
-  if (!isDirectoryEnabledForCommunity(context.communityId)) {
-    notFound();
   }
 
   const userId = await requireAuthenticatedUserId();

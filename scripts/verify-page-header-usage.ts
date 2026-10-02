@@ -40,8 +40,7 @@ const AUTH_ROOT = resolve(repoRoot, 'apps/web/src/app/(authenticated)');
 
 /** Components under src/components that render an authenticated page's chrome. */
 const PAGE_SHELL_COMPONENTS = [
-  'apps/web/src/components/residents/residents-page-client.tsx',
-  'apps/web/src/components/units/units-page-client.tsx',
+  'apps/web/src/components/directory/directory-page-client.tsx',
   'apps/web/src/components/esign/esign-page-shell.tsx',
   'apps/web/src/components/meetings/meetings-page-shell.tsx',
   'apps/web/src/components/documents/document-library.tsx',

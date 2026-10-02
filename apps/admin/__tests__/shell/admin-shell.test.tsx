@@ -247,7 +247,7 @@ describe('AdminShell', () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/admin/shell/signals', { cache: 'no-store' });
-    expect(screen.getByRole('link', { name: 'Inbox' }).textContent).toContain('4');
+    expect(screen.getByRole('link', { name: /^Inbox\b/ }).textContent).toContain('4');
 
     const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     await act(async () => {
@@ -288,7 +288,7 @@ describe('AdminShell', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('link', { name: 'Inbox' }).textContent).toContain('7');
+    expect(screen.getByRole('link', { name: /^Inbox\b/ }).textContent).toContain('7');
     visibility.mockRestore();
   });
 
@@ -355,7 +355,7 @@ describe('AdminShell', () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
 
-    expect(screen.getByRole('link', { name: 'Inbox' }).textContent).toContain('9');
+    expect(screen.getByRole('link', { name: /^Inbox\b/ }).textContent).toContain('9');
   });
 
   it('marks every tray item read from the shell', () => {
