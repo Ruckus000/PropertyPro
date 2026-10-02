@@ -1,5 +1,5 @@
 /**
- * use-residents-management — extracted residents-page-client network helpers.
+ * use-residents-management — residents network helpers used by the Directory.
  *
  * Verifies the relocated list / resend-invitation / invite-resident hooks
  * behave byte-identically to the previous in-component form: exact

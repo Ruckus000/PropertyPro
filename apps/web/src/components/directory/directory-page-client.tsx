@@ -19,7 +19,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { AccessRequestList, accessRequestsQueryOptions } from '@/components/access-requests/access-request-list';
+import { AccessRequestList } from '@/components/access-requests/access-request-list';
+import { accessRequestsQueryOptions } from '@/hooks/use-access-requests';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { useDeleteUnit, useUnits } from '@/hooks/use-units';
 import { useDelinquency } from '@/hooks/use-finance';
@@ -68,13 +69,17 @@ import { ResidentDetailPanel } from './resident-detail-panel';
 import { ResidentsTable } from './residents-table';
 import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
+import type { DirectoryTab } from '@/lib/directory/directory-href';
 
 // ponytail: this route sits ~14 KiB under the 1220 KiB hard per-route budget
 // (perf:check). Lazy-loading the dialogs below via next/dynamic was measured
 // and made things WORSE: it reshuffled shared chunks and pushed the web
 // aggregate budget (1490 KiB, routes this page is not even in) over. Re-measure
 // both numbers before adding weight here.
-export type DirectoryTab = 'units' | 'residents';
+
+export type { DirectoryTab };
+
+const ADMIN_TABS: readonly DirectoryTab[] = ['units', 'residents', 'requests'];
 
 interface DirectoryPageClientProps {
   communityId: number;
@@ -88,7 +93,7 @@ interface DirectoryPageClientProps {
   initialTab: DirectoryTab;
 }
 
-type Panel = { kind: 'unit'; id: number } | { kind: 'resident'; id: string } | { kind: 'requests' } | null;
+type Panel = { kind: 'unit'; id: number } | { kind: 'resident'; id: string } | null;
 
 type Confirm =
   | { kind: 'delete-unit'; unitId: number }
@@ -159,11 +164,16 @@ export function DirectoryPageClient({
   const wide = useIsDesktop();
 
   const rawTab = searchParams.get('tab');
-  const tab: DirectoryTab = !isAdmin ? 'units' : rawTab === 'residents' ? 'residents' : rawTab === 'units' ? 'units' : initialTab;
+  const tab: DirectoryTab = !isAdmin
+    ? 'units'
+    : (ADMIN_TABS as readonly string[]).includes(rawTab ?? '')
+      ? (rawTab as DirectoryTab)
+      : initialTab;
 
   /* ── UI state ── */
-  const [unitQuery, setUnitQuery] = useState('');
-  const [residentQuery, setResidentQuery] = useState('');
+  // `?q=` (command palette, search results) seeds the search of the tab it opens.
+  const [unitQuery, setUnitQuery] = useState(() => (tab === 'units' ? searchParams.get('q') ?? '' : ''));
+  const [residentQuery, setResidentQuery] = useState(() => (tab === 'residents' ? searchParams.get('q') ?? '' : ''));
   const [unitStatus, setUnitStatus] = useState<UnitStatusFilter>('all');
   const [residentStatus, setResidentStatus] = useState<ResidentStatusFilter>('all');
   const [building, setBuilding] = useState<string | null>(null);
@@ -213,7 +223,8 @@ export function DirectoryPageClient({
   const setTab = useCallback(
     (next: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set('tab', next === 'residents' ? 'residents' : 'units');
+      params.set('tab', (ADMIN_TABS as readonly string[]).includes(next) ? next : 'units');
+      params.delete('q');
       setSelection(new Set());
       // `replace`, not `push`: Back should leave the page, not walk the tabs.
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -227,6 +238,7 @@ export function DirectoryPageClient({
   const delinquencyQ = useDelinquency(communityId, { enabled: canSeeBalances });
   const ruleQ = usePastDueRule(communityId, { enabled: canSeeBalances });
   const requestsQ = useQuery({ ...accessRequestsQueryOptions(communityId), enabled: isAdmin });
+  const pendingRequests = requestsQ.data?.length ?? 0;
 
   // A refused or failed delinquency read hides finance UI rather than showing
   // every unit as "nothing overdue".
@@ -442,7 +454,7 @@ export function DirectoryPageClient({
   /* ── Panel resolution (a unit deleted or a resident removed closes it) ── */
   const panelUnit = panel?.kind === 'unit' ? dirUnits.find((u) => u.id === panel.id) ?? null : null;
   const panelResident = panel?.kind === 'resident' ? residentRows.find((r) => r.userId === panel.id) ?? null : null;
-  const panelOpen = panel?.kind === 'requests' || panelUnit !== null || panelResident !== null;
+  const panelOpen = panelUnit !== null || panelResident !== null;
 
   // Split view: the pane follows the selection while it stays visible, else the
   // first visible unit, else nothing — never a unit the filters hid.
@@ -512,7 +524,8 @@ export function DirectoryPageClient({
   const unitsLoading = unitsQ.isLoading;
   const residentsLoading = isAdmin && residentsQ.isLoading;
   const primaryLabel = tab === 'units' ? 'Add unit' : 'Add resident';
-  const showPrimary = tab === 'units' ? canWrite && (unitsQ.data?.length ?? 0) > 0 : (residentRows.length > 0);
+  const showPrimary =
+    tab === 'units' ? canWrite && (unitsQ.data?.length ?? 0) > 0 : tab === 'residents' ? residentRows.length > 0 : false;
 
   return (
     <div className="flex flex-col gap-4">
@@ -521,7 +534,7 @@ export function DirectoryPageClient({
       {isAdmin && !unitsLoading && !residentsLoading && !unitsQ.isError ? (
         <OverviewStrip
           stats={stats}
-          requestCount={requestsQ.data ? requestsQ.data.length : null}
+          requestCount={requestsQ.data ? pendingRequests : null}
           canSeeBalances={balancesVisible}
           onOccupancy={() => {
             setTab('units');
@@ -535,7 +548,7 @@ export function DirectoryPageClient({
             setTab('residents');
             setResidentStatus('not_active');
           }}
-          onRequests={() => setPanel({ kind: 'requests' })}
+          onRequests={() => setTab('requests')}
         />
       ) : null}
 
@@ -551,12 +564,20 @@ export function DirectoryPageClient({
                 Residents
                 <span className="text-xs font-medium text-content-tertiary">{residentRows.length}</span>
               </TabsTrigger>
+              <TabsTrigger value="requests" className="h-full gap-2 px-3.5">
+                Access requests
+                {pendingRequests > 0 ? (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-interactive px-1.5 text-xs font-semibold text-content-inverse">
+                    {pendingRequests}
+                  </span>
+                ) : null}
+              </TabsTrigger>
             </TabsList>
           ) : (
             <span />
           )}
           <div className="flex shrink-0 items-center gap-2">
-            {tab === 'residents' || balancesVisible ? (
+            {tab === 'residents' || (tab === 'units' && balancesVisible) ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -910,6 +931,16 @@ export function DirectoryPageClient({
             )}
           </TabsContent>
         ) : null}
+
+        {/* ─────────── Access requests (admins only) ─────────── */}
+        {isAdmin ? (
+          <TabsContent value="requests" className="mt-0 flex flex-col gap-4">
+            <p className="text-sm text-content-secondary">
+              People who asked to join from the signup page. Approving gives them portal access and links them to a unit.
+            </p>
+            <AccessRequestList communityId={communityId} unitOptions={unitOptions} />
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       {/* ─────────── Drawers ─────────── */}
@@ -918,32 +949,9 @@ export function DirectoryPageClient({
         onOpenChange={(open) => {
           if (!open) setPanel(null);
         }}
-        title={
-          panel?.kind === 'requests'
-            ? 'Access requests'
-            : panelUnit
-              ? `Unit ${panelUnit.unitNumber}, ${panelUnit.locationLabel}`
-              : panelResident?.displayName ?? 'Details'
-        }
+        title={panelUnit ? `Unit ${panelUnit.unitNumber}, ${panelUnit.locationLabel}` : panelResident?.displayName ?? 'Details'}
       >
-        {panel?.kind === 'requests' ? (
-          <div className="flex h-full min-h-0 flex-col">
-            <div className="flex items-center gap-2.5 border-b border-edge bg-surface-subtle px-6 py-5 pr-14">
-              <div className="text-xl font-semibold leading-tight">Access requests</div>
-              {requestsQ.data?.length ? (
-                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-interactive px-2 text-xs font-semibold text-content-inverse">
-                  {requestsQ.data.length}
-                </span>
-              ) : null}
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5">
-              <p className="text-sm text-content-secondary">
-                People who asked to join from the signup page. Approving gives them portal access and links them to a unit.
-              </p>
-              <AccessRequestList communityId={communityId} layout="stacked" unitOptions={unitOptions} />
-            </div>
-          </div>
-        ) : panelUnit ? (
+        {panelUnit ? (
           <UnitDetailPanel unit={panelUnit} inSheet {...unitPanelProps} />
         ) : panelResident ? (
           <ResidentDetailPanel

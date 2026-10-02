@@ -68,7 +68,12 @@ export interface NavItemConfig {
   featureKeys?: readonly (keyof CommunityFeatures)[];
   /** Pathname prefixes used for active-state matching. */
   matchPrefixes: readonly string[];
+  /** Live count shown as a badge (see `NavBadgeSignal`); the sidebar resolves it. */
+  badgeSignal?: NavBadgeSignal;
 }
+
+/** Counts the sidebar can show on an item. Resolved in `AppSidebar`. */
+export type NavBadgeSignal = 'pendingAccessRequests';
 
 export interface NavSection {
   label: string | null;
@@ -222,22 +227,15 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/compliance'],
   },
   {
-    id: 'residents',
-    label: 'Residents',
+    id: 'directory',
+    label: 'Directory',
     icon: Users,
-    href: (cid) => `/dashboard/residents?communityId=${cid}`,
+    href: (cid) => `/dashboard/directory?communityId=${cid}`,
     visibility: 'admin',
-    // Directory pilot: flagged communities are redirected there; one item can
-    // win a prefix, and Residents is where managers land.
-    matchPrefixes: ['/dashboard/residents', '/dashboard/directory'],
-  },
-  {
-    id: 'units',
-    label: 'Units',
-    icon: Building2,
-    href: (cid) => `/dashboard/units?communityId=${cid}`,
-    visibility: 'admin',
-    matchPrefixes: ['/dashboard/units'],
+    badgeSignal: 'pendingAccessRequests',
+    // The old Units / Residents pages permanently redirect here; the resident
+    // import is part of the same job.
+    matchPrefixes: ['/dashboard/directory', '/dashboard/residents', '/dashboard/units', '/dashboard/import-residents'],
   },
   {
     id: 'contracts',
@@ -367,8 +365,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report']),
   navSection('Admin', [
     'compliance',
-    'residents',
-    'units',
+    'directory',
     'contracts',
     'esign',
     'violations-inbox',
@@ -745,8 +742,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   'arc-requests': { title: 'ARC Requests', subtitle: 'Review architectural submissions' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
   payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
-  residents: { title: 'Residents', subtitle: 'Manage community members' },
-  units: { title: 'Units', subtitle: 'Manage community units' },
+  directory: { title: 'Directory', subtitle: 'Units, residents and access requests' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Website', subtitle: 'Public site editor + branding' },
   website: { title: 'Website', subtitle: 'Public site editor + branding' },

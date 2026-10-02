@@ -15,6 +15,8 @@ export type NavRailSubItem = {
   href: string;
   badge?: number | null;
   badgeVariant?: StatusVariant;
+  /** Spoken with the label when the badge shows, e.g. "3 pending requests". Defaults to the count. */
+  badgeDescription?: string;
 };
 
 export type NavRailItem = {
@@ -23,6 +25,8 @@ export type NavRailItem = {
   icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
   badge?: number | null;
   badgeVariant?: StatusVariant;
+  /** Spoken with the label when the badge shows, e.g. "3 pending requests". Defaults to the count. */
+  badgeDescription?: string;
   /** Optional URL — when provided, the item renders as a link instead of a button. */
   href?: string;
   children?: NavRailSubItem[];
@@ -86,6 +90,17 @@ export interface NavRailProps {
 
 function cn(...values: Array<string | null | undefined | false>): string {
   return values.filter(Boolean).join(" ");
+}
+
+/**
+ * Accessible name for an item. The links and buttons carry an explicit
+ * aria-label, which replaces their text content for assistive tech, so a badge
+ * count must be folded in here or a screen-reader user never hears it.
+ */
+function navAccessibleName(item: { label: string; badge?: number | null; badgeDescription?: string }): string {
+  const badge = item.badge ?? null;
+  if (badge === null || badge <= 0) return item.label;
+  return `${item.label}, ${item.badgeDescription ?? badge}`;
 }
 
 const badgeDotClasses: Record<StatusVariant, string> = {
@@ -381,7 +396,7 @@ export function NavRail({
         href: child.href,
         className,
         children: content,
-        "aria-label": child.label,
+        "aria-label": navAccessibleName(child),
         ...(isActive ? { "aria-current": "page" as const } : {}),
         "data-nav-focusable": "true",
         "data-testid": "nav-sub-item",
@@ -394,7 +409,7 @@ export function NavRail({
       <a
         href={child.href}
         className={className}
-        aria-label={child.label}
+        aria-label={navAccessibleName(child)}
         aria-current={isActive ? "page" : undefined}
         data-nav-focusable="true"
         data-testid="nav-sub-item"
@@ -492,7 +507,7 @@ export function NavRail({
                         href: navItem.href,
                         className: classes,
                         children: content,
-                        "aria-label": navItem.label,
+                        "aria-label": navAccessibleName(navItem),
                         ...(isActive ? { "aria-current": "page" as const } : {}),
                         "data-nav-focusable": "true",
                         "data-testid": "nav-item",
@@ -503,7 +518,7 @@ export function NavRail({
                       <a
                         href={navItem.href}
                         className={classes}
-                        aria-label={navItem.label}
+                        aria-label={navAccessibleName(navItem)}
                         aria-current={isActive ? "page" : undefined}
                         data-nav-focusable="true"
                         data-testid="nav-item"
@@ -519,7 +534,7 @@ export function NavRail({
                         onKeyDown={(event) =>
                           handleButtonKeyDown(event, mainFocusIndex, () => onViewChange(navItem.id))
                         }
-                        aria-label={navItem.label}
+                        aria-label={navAccessibleName(navItem)}
                         aria-current={isActive ? "page" : undefined}
                         aria-haspopup={navItem.ariaHasPopup}
                         data-nav-focusable="true"

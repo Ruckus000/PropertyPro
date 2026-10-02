@@ -63,6 +63,7 @@ const NON_OPS_ALLOWLIST = new Set<string>([
   '/dashboard/leases',
   '/dashboard/move-in-out',
   '/dashboard/residents',
+  '/dashboard/directory',
 
   // Implemented: top-level pages that the walker reaches
   '/audit-trail',

@@ -78,7 +78,9 @@ vi.mock('@/hooks/use-documents', () => ({
   }),
   useSendDocuments: () => ({ mutateAsync: sendDocumentsMock, isPending: false, error: null }),
 }));
-vi.mock('@/hooks/use-access-requests', () => ({
+vi.mock('@/hooks/use-access-requests', async (importOriginal) => ({
+  // The real query options (they fetch through the mocked walkPaginated).
+  ...(await importOriginal<typeof import('../../src/hooks/use-access-requests')>()),
   useApproveAccessRequest: () => ({ mutate: vi.fn(), isPending: false, isError: false, reset: vi.fn() }),
   useDenyAccessRequest: () => ({ mutate: vi.fn(), isPending: false, isError: false, reset: vi.fn() }),
 }));
@@ -321,6 +323,15 @@ describe('DirectoryPageClient — residents', () => {
     expect(replaceMock).toHaveBeenCalledWith('/dashboard/directory?tab=residents', { scroll: false });
   });
 
+  it('?q= seeds the search of the tab it opens (command palette, search results)', () => {
+    searchState.value = 'tab=residents&q=Ivy';
+    renderClient();
+    const table = screen.getByRole('table', { name: 'Residents' });
+    expect(screen.getByRole('searchbox', { name: /search/i })).toHaveValue('Ivy');
+    expect(within(table).getByText('Ivy Invited')).toBeInTheDocument();
+    expect(within(table).queryByText('Olive Owner')).not.toBeInTheDocument();
+  });
+
   it('lists residents with portal status and opens the resident drawer', async () => {
     searchState.value = 'tab=residents';
     const user = userEvent.setup();
@@ -471,5 +482,49 @@ describe('DirectoryPageClient — send documents (phase 3)', () => {
     await user.click(screen.getByRole('button', { name: /Olive Owner/ }));
     await screen.findByRole('button', { name: 'Edit details' });
     expect(screen.queryByRole('button', { name: 'Send documents' })).not.toBeInTheDocument();
+  });
+});
+
+describe('DirectoryPageClient — access requests tab', () => {
+  const pending = {
+    id: 5,
+    communityId: 42,
+    fullName: 'Rhea Request',
+    email: 'rhea@example.com',
+    claimedUnitIdentifier: '101',
+    claimedUnitId: null,
+    isUnitOwner: true,
+    status: 'pending' as const,
+    createdAt: '2026-09-30T12:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    searchState.value = '';
+    walkPaginatedMock.mockResolvedValue([pending]);
+  });
+
+  it('is a tab with the pending count, reachable by URL (?tab=requests, the email link)', async () => {
+    searchState.value = 'tab=requests';
+    renderClient();
+    expect(await screen.findByRole('tab', { name: /access requests\s*1/i })).toHaveAttribute('aria-selected', 'true');
+    // The list renders a phone and a desktop layout; either way the request is there.
+    expect((await screen.findAllByText('Rhea Request')).length).toBeGreaterThan(0);
+    // Nothing to add on this tab.
+    expect(screen.queryByRole('button', { name: /add (unit|resident)/i })).not.toBeInTheDocument();
+  });
+
+  it('the Requests overview cell switches to the tab instead of opening a drawer', async () => {
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(await screen.findByRole('button', { name: /access requests/i }));
+    expect(replaceMock).toHaveBeenCalledWith('/dashboard/directory?tab=requests', { scroll: false });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('non-admins never see or fetch it, even with ?tab=requests', () => {
+    searchState.value = 'tab=requests';
+    renderClient({ isAdmin: false });
+    expect(screen.queryByRole('tab', { name: /access requests/i })).not.toBeInTheDocument();
+    expect(walkPaginatedMock).not.toHaveBeenCalled();
   });
 });

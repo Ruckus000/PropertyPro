@@ -25,6 +25,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 interface LeaseCreateModalProps {
   communityId: number;
@@ -128,7 +129,7 @@ export function LeaseCreateModal({
             <p className="text-xs text-content-secondary">
               Resident not listed?{' '}
               <a
-                href={`/dashboard/residents?communityId=${communityId}`}
+                href={directoryHref('residents', { communityId })}
                 className="underline hover:no-underline"
               >
                 Add them first

@@ -1,19 +1,16 @@
 /**
  * Real pages on a tenant subdomain (sunset-condos.<root>): they must resolve
  * the community from middleware's forwarded id, not fall back to "Add a valid
- * communityId". Units (flagged → Directory) and Announcements as samples.
+ * communityId". The Directory as the sample.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { redirectMock, membershipMock, headerState } = vi.hoisted(() => ({
-  redirectMock: vi.fn((url: string) => {
-    throw new Error(`NEXT_REDIRECT ${url}`);
-  }),
+const { membershipMock, headerState } = vi.hoisted(() => ({
   membershipMock: vi.fn(),
   headerState: { value: new Headers() },
 }));
 
-vi.mock('next/navigation', () => ({ redirect: redirectMock, notFound: vi.fn() }));
+vi.mock('next/navigation', () => ({ redirect: vi.fn(), notFound: vi.fn() }));
 vi.mock('next/headers', () => ({ headers: async () => headerState.value }));
 vi.mock('@/lib/tenant/community-resolution', () => ({
   toUrlSearchParams: (sp: Record<string, string | undefined>) =>
@@ -22,30 +19,20 @@ vi.mock('@/lib/tenant/community-resolution', () => ({
 vi.mock('@/lib/request/page-auth-context', () => ({ requirePageAuthenticatedUserId: async () => 'pm-1' }));
 vi.mock('@/lib/request/page-community-context', () => ({ requirePageCommunityMembership: membershipMock }));
 vi.mock('@/lib/db/access-control', () => ({ requirePermission: vi.fn(), checkPermissionV2: () => true }));
-vi.mock('@/components/units/units-page-client', () => ({ UnitsPageClient: () => null }));
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: async () => undefined }));
+vi.mock('@/components/directory/directory-page-client', () => ({ DirectoryPageClient: () => null }));
 
-import UnitsPage from '../../../src/app/(authenticated)/dashboard/units/page';
+import DirectoryPage from '../../../src/app/(authenticated)/dashboard/directory/page';
 
 describe('pages on a tenant subdomain', () => {
-  const original = process.env.DIRECTORY_V2_COMMUNITIES;
   beforeEach(() => {
     vi.clearAllMocks();
-    membershipMock.mockResolvedValue({ isAdmin: true, communityType: 'condo_718', isUnitOwner: false });
+    membershipMock.mockResolvedValue({ isAdmin: true, communityType: 'condo_718', isUnitOwner: false, role: 'property_manager' });
     headerState.value = new Headers({ host: 'sunset-condos.getpropertypro.com', 'x-community-id': '1' });
   });
-  afterEach(() => {
-    process.env.DIRECTORY_V2_COMMUNITIES = original;
-  });
 
-  it('/dashboard/units resolves the community from the subdomain (→ Directory when flagged)', async () => {
-    process.env.DIRECTORY_V2_COMMUNITIES = 'all';
-    await expect(UnitsPage({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirectMock).toHaveBeenCalledWith('/dashboard/directory?communityId=1&tab=units');
-  });
-
-  it('/dashboard/units renders for that community when not flagged — not "Add a valid communityId"', async () => {
-    process.env.DIRECTORY_V2_COMMUNITIES = '';
-    await UnitsPage({ searchParams: Promise.resolve({}) });
+  it('/dashboard/directory resolves the community from the subdomain — not "Add a valid communityId"', async () => {
+    await DirectoryPage({ searchParams: Promise.resolve({}) });
     expect(membershipMock).toHaveBeenCalledWith(1, 'pm-1');
   });
 });

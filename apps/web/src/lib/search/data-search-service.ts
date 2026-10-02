@@ -14,6 +14,7 @@ import { escapeLikePattern } from '@/lib/utils/escape-like';
 import { operationsHubHref } from '@/lib/operations/routes';
 import { SEARCH_GROUPS, type SearchGroupConfig } from './group-config';
 import type { SearchGroupResponse, SearchResultItem } from './data-search-types';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 const GENERIC_SEARCH_ERROR = 'Search is temporarily unavailable for this section.';
 
@@ -165,8 +166,9 @@ async function executeSearchGroup(
           id: row.id,
           title: row.full_name ?? row.email,
           subtitle: row.unit_number ? `Unit ${row.unit_number}` : row.role,
-          // No per-resident page exists (search is admin-only); open the residents list.
-          href: `/dashboard/residents?communityId=${communityId}`,
+          // No per-resident page exists (search is admin-only); open the
+          // Directory's residents list filtered to this person.
+          href: directoryHref('residents', { communityId, q: row.full_name ?? row.email }),
           entityType: 'resident',
           role: row.role,
           unitNumber: row.unit_number,

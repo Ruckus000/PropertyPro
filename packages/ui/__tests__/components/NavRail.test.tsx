@@ -96,7 +96,8 @@ describe("NavRail", () => {
         "Main navigation",
       );
       for (const item of defaultItems) {
-        expect(screen.getByLabelText(item.label)).toBeTruthy();
+        // A badged item's name carries its count (see the badge tests).
+        expect(screen.getByLabelText(item.badge ? `${item.label}, ${item.badge}` : item.label)).toBeTruthy();
       }
 
       const listItems = screen.getAllByRole("listitem");
@@ -286,6 +287,23 @@ describe("NavRail", () => {
   });
 
   describe("Badge behavior", () => {
+    it("speaks the badge with the label — the aria-label replaces the visible count", () => {
+      renderNavRail({
+        sections: [
+          {
+            label: null,
+            items: [
+              { id: "directory", label: "Directory", icon: TestIcon, href: "/d", badge: 3, badgeDescription: "3 pending access requests" },
+              { id: "docs", label: "Docs", icon: TestIcon, href: "/docs", badge: 0 },
+            ],
+          },
+        ],
+      });
+      expect(screen.getByRole("link", { name: "Directory, 3 pending access requests" })).toBeTruthy();
+      // No badge, no suffix.
+      expect(screen.getByRole("link", { name: "Docs" })).toBeTruthy();
+    });
+
     it("shows badge count when expanded", () => {
       renderNavRail({ expanded: true });
       expect(screen.getByText("3")).toBeTruthy();
@@ -293,7 +311,7 @@ describe("NavRail", () => {
 
     it("shows badge dot when collapsed", () => {
       renderNavRail({ expanded: false });
-      const compliance = screen.getByLabelText("Compliance");
+      const compliance = screen.getByLabelText("Compliance, 3");
       expect(compliance.querySelector(".size-2.rounded-full")).toBeTruthy();
     });
 
@@ -489,7 +507,7 @@ describe("NavRail", () => {
       renderSectionNavRail();
 
       expect(screen.getByLabelText("Dashboard")).toBeTruthy();
-      expect(screen.getByLabelText("Announcements")).toBeTruthy();
+      expect(screen.getByLabelText("Announcements, 2")).toBeTruthy();
       expect(screen.getByLabelText("Meetings")).toBeTruthy();
       expect(screen.getByLabelText("Governance")).toBeTruthy();
     });

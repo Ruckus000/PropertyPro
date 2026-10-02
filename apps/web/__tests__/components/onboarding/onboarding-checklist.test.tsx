@@ -22,8 +22,8 @@ const ROUTE_EXPECTATIONS: Array<{
 }> = [
   { itemKey: 'upload_first_document', buttonLabel: 'Upload',    expectedHref: `/communities/${CID}/documents` },
   { itemKey: 'upload_community_rules', buttonLabel: 'Upload',   expectedHref: `/communities/${CID}/documents` },
-  { itemKey: 'add_units',              buttonLabel: 'Add',       expectedHref: `/dashboard/units?communityId=${CID}` },
-  { itemKey: 'invite_first_member',    buttonLabel: 'Add',       expectedHref: `/dashboard/residents?communityId=${CID}` },
+  { itemKey: 'add_units',              buttonLabel: 'Add',       expectedHref: `/dashboard/directory?communityId=${CID}&tab=units` },
+  { itemKey: 'invite_first_member',    buttonLabel: 'Add',       expectedHref: `/dashboard/directory?communityId=${CID}&tab=residents` },
   { itemKey: 'review_compliance',      buttonLabel: 'View',      expectedHref: `/communities/${CID}/compliance` },
   { itemKey: 'post_announcement',      buttonLabel: 'Create',    expectedHref: `/announcements/new?communityId=${CID}` },
   { itemKey: 'customize_portal',       buttonLabel: 'Customize', expectedHref: `/pm/website-editor?communityId=${CID}` },

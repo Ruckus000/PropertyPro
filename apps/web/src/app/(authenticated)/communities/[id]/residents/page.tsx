@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { directoryHref } from '@/lib/directory/directory-href';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -6,5 +7,5 @@ interface PageProps {
 
 export default async function ResidentsRedirect({ params }: PageProps) {
   const { id } = await params;
-  redirect(`/dashboard/residents?communityId=${id}`);
+  redirect(directoryHref('residents', { communityId: id }));
 }
