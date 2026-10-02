@@ -165,6 +165,12 @@ Deferred, each with its trigger:
   design-only publish doesn't advance it. That is the same benign limitation as a
   removal-only publish (see `publishCommunitySite`). Trigger: two managers report
   overwriting each other's design.
+- **Only the design PATCH refuses a demo in its grace window.** `/api/v1/pm/site/design`
+  calls `assertNotDemoGrace`, as `/api/v1/pm/branding` did for the look. The other
+  `pm/site/*` writes (blocks, pages, settings, drafts, publish, revert, schedule, hero,
+  urgent notice) and the onboarding wizard's PATCH never have, and nothing checks it
+  centrally. Trigger: a decision that grace-window demos are read-only for the whole
+  site, then one check in the shared access helper.
 - **Colour sets' fonts are not checked against `ALLOWED_FONTS`.** They come from the
   platform catalog, and `resolveTheme` drops unknown fonts at render. Trigger: the
   catalog becomes editable by anyone but platform admins.
