@@ -113,6 +113,16 @@ export const sitePages = pgTable(
      * what keeps a staged-for-deletion page publicly visible until publish.
      */
     deleteStagedAt: timestamp('delete_staged_at', { withTimezone: true }),
+    /**
+     * Per-page search title and description (website builder v4, Phase 5b).
+     * NULL means "use the default": `{page} · {community}` and the site's own
+     * description. Lengths are capped in `site-pages-service` (60 / 160 code
+     * points, the site-level caps), not here — the same split as the site
+     * settings, whose caps live in code because a CHECK cannot count code points.
+     * Live on save, like a rename: metadata is not part of the draft layer.
+     */
+    seoTitle: text('seo_title'),
+    seoDescription: text('seo_description'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

@@ -57,6 +57,8 @@ function page(overrides: Partial<SitePageSummary> = {}): SitePageSummary {
     isDraft: false,
     publishedAt: '2026-07-01T00:00:00.000Z',
     deleteStagedAt: null,
+    seoTitle: null,
+    seoDescription: null,
     ...overrides,
   };
 }
@@ -590,6 +592,8 @@ describe('useSiteDiff — the blocking gate validates PER PAGE', () => {
       slug: 'contact',
       isHome: false,
       deleteStagedAt: '2026-07-30T00:00:00.000Z',
+      seoTitle: null,
+      seoDescription: null,
     });
     queries.pages = [HOME_PAGE, staged];
     queries.published = [];

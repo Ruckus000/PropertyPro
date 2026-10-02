@@ -28,8 +28,8 @@ import {
   listSitePages,
   stageSitePageDelete,
   unstageSitePageDelete,
+  toSitePageSummary,
   updateSitePage,
-  type SitePageRecord,
 } from '@/lib/services/site-pages-service';
 import {
   pagesCreateContract,
@@ -48,20 +48,6 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
   return { userId, communityId: effective, membership };
 }
 
-function toSummary(page: SitePageRecord) {
-  return {
-    id: page.id,
-    name: page.name,
-    slug: page.slug,
-    inNav: page.inNav,
-    sortOrder: page.sortOrder,
-    isHome: page.isHome,
-    isDraft: page.isDraft,
-    publishedAt: page.publishedAt ? page.publishedAt.toISOString() : null,
-    deleteStagedAt: page.deleteStagedAt ? page.deleteStagedAt.toISOString() : null,
-  };
-}
-
 export const GET = withErrorHandler(
   runRoute(pagesListContract, async ({ query, req }) => {
     const { communityId, membership } = await ensurePmAccess(req, query.communityId);
@@ -70,7 +56,7 @@ export const GET = withErrorHandler(
     // includeDrafts: this is the editor's list, so a page the PM just created has
     // to appear in it. The public site uses its own published-only read.
     const pages = await listSitePages(communityId, { includeDrafts: true });
-    return { pages: pages.map(toSummary) };
+    return { pages: pages.map(toSitePageSummary) };
   }),
 );
 
@@ -84,7 +70,7 @@ export const POST = withErrorHandler(
       slug: body.slug,
       ...(body.inNav === undefined ? {} : { inNav: body.inNav }),
     });
-    return { ok: true as const, page: toSummary(page) };
+    return { ok: true as const, page: toSitePageSummary(page) };
   }),
 );
 
@@ -98,8 +84,10 @@ export const PATCH = withErrorHandler(
       ...(body.name === undefined ? {} : { name: body.name }),
       ...(body.slug === undefined ? {} : { slug: body.slug }),
       ...(body.inNav === undefined ? {} : { inNav: body.inNav }),
+      ...(body.seoTitle === undefined ? {} : { seoTitle: body.seoTitle }),
+      ...(body.seoDescription === undefined ? {} : { seoDescription: body.seoDescription }),
     });
-    return { ok: true as const, page: toSummary(page), redirectedFrom };
+    return { ok: true as const, page: toSitePageSummary(page), redirectedFrom };
   }),
 );
 

@@ -37,6 +37,8 @@ const PAGES = [
     isDraft: false,
     publishedAt: '2026-01-01T00:00:00Z',
     deleteStagedAt: null,
+    seoTitle: null,
+    seoDescription: null,
   },
   {
     id: 2,
@@ -48,6 +50,8 @@ const PAGES = [
     isDraft: true,
     publishedAt: null,
     deleteStagedAt: null,
+    seoTitle: null,
+    seoDescription: null,
   },
 ];
 

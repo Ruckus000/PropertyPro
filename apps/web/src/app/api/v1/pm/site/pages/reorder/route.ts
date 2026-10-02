@@ -18,7 +18,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-import { reorderSitePages } from '@/lib/services/site-pages-service';
+import { reorderSitePages, toSitePageSummary } from '@/lib/services/site-pages-service';
 import { pagesReorderContract } from '../contract';
 import type { NextRequest } from 'next/server';
 
@@ -46,17 +46,7 @@ export const POST = withErrorHandler(
 
     return {
       ok: true as const,
-      pages: pages.map((page) => ({
-        id: page.id,
-        name: page.name,
-        slug: page.slug,
-        inNav: page.inNav,
-        sortOrder: page.sortOrder,
-        isHome: page.isHome,
-        isDraft: page.isDraft,
-        publishedAt: page.publishedAt ? page.publishedAt.toISOString() : null,
-        deleteStagedAt: page.deleteStagedAt ? page.deleteStagedAt.toISOString() : null,
-      })),
+      pages: pages.map(toSitePageSummary),
     };
   }),
 );

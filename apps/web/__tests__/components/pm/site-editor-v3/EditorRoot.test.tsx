@@ -288,6 +288,8 @@ interface StubPage {
   isDraft: boolean;
   publishedAt: string | null;
   deleteStagedAt: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
 }
 
 const queries = vi.hoisted(() => ({
@@ -387,6 +389,8 @@ const seededHome: StubPage = {
   isDraft: false,
   publishedAt: '2026-07-01T00:00:00.000Z',
   deleteStagedAt: null,
+  seoTitle: null,
+  seoDescription: null,
 };
 
 
@@ -999,6 +1003,8 @@ describe('EditorRoot — selection repair and the just-created page', () => {
       slug: 'amenities',
       isHome: false,
       deleteStagedAt: '2026-07-30T09:00:00.000Z',
+      seoTitle: null,
+      seoDescription: null,
     };
     queries.pages = [seededHome, stagedSecond];
 
@@ -1058,6 +1064,8 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     sortOrder: 1,
     isHome: false,
     deleteStagedAt: '2026-07-30T09:00:00.000Z',
+    seoTitle: null,
+    seoDescription: null,
   };
 
   beforeEach(() => {

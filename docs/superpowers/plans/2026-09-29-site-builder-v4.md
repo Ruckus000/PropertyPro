@@ -248,7 +248,19 @@ Settings view already existed in the rail's Site and Address panels.
   image's bytes, so a replacement releases exactly the old image's bytes, and
   only once its delete succeeds. It refuses a demo in its grace window.
 
-**5b:** per-page search title and description (columns on `site_pages`).
+**Built in 5b: per-page search title and description.**
+- **Storage.** Migration 0086 adds nullable `site_pages.seo_title` and
+  `seo_description`, with no backfill. NULL means the page keeps its default.
+- **Saving.** `updateSitePage` caps and normalises both fields with the
+  site-level rules (`normalizeSettingText`, 60 and 160 code points). They save
+  live on the existing page PATCH, like a rename, and are audited with it.
+- **Public metadata.** A sub-page uses its own title and description when set.
+  A page without overrides emits exactly what it did before, including the
+  social card.
+- **Editor.** A "Page by page" card in Search & sharing, for sub-pages only (the
+  home page's text is the site's). Its placeholders show the real defaults.
+- **One serialiser.** The pages routes and the editor's seed each had their own
+  hand-written row serialiser; they now share `toSitePageSummary`.
 
 Deferred, each with its trigger:
 - **Changing the PropertyPro address, with 90-day forwarding.** This needs a

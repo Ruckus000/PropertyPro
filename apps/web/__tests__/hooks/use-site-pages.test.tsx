@@ -28,6 +28,8 @@ function page(overrides: Partial<SitePageSummary> & { id: number }): SitePageSum
     isDraft: false,
     publishedAt: '2026-07-01T00:00:00.000Z',
     deleteStagedAt: null,
+    seoTitle: null,
+    seoDescription: null,
     ...overrides,
   };
 }

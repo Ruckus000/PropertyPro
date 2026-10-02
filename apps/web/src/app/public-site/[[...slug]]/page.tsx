@@ -175,9 +175,20 @@ export async function generateMetadata(props?: PublicSitePageProps): Promise<Met
   // keep the community-level metadata.
   if (!page || page.isHome) return base;
 
+  // v4 Phase 5b: the manager's own title and description for this page, when
+  // set; otherwise exactly what sub-pages emitted before (page name as title,
+  // the site's description and social card). The social card takes only what
+  // the manager wrote for this page, so pages without overrides are unchanged.
+  const title = page.seoTitle ?? `${page.name} · ${community.name}`;
   return {
     ...base,
-    title: `${page.name} · ${community.name}`,
+    title,
+    ...(page.seoDescription ? { description: page.seoDescription } : {}),
+    openGraph: {
+      ...base.openGraph,
+      ...(page.seoTitle ? { title: page.seoTitle } : {}),
+      ...(page.seoDescription ? { description: page.seoDescription } : {}),
+    },
     alternates: { ...base.alternates, canonical: await resolvePageCanonical(community.slug, page.slug) },
   };
 }

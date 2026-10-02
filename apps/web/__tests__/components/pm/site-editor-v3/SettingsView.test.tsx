@@ -40,6 +40,20 @@ vi.mock('@/hooks/use-site-settings', () => ({
   siteSettingsQueryKey: (communityId: number) => ['pm', 'site', 'settings', communityId] as const,
 }));
 
+// The "Page by page" card's list and save (v4 Phase 5b; its own suite is
+// PageSeoCard.test.tsx). One sub-page, so the card renders its form.
+vi.mock('@/hooks/use-site-pages', () => ({
+  useSitePages: () => ({
+    data: [
+      { id: 1, name: 'Home', slug: '', inNav: true, sortOrder: 0, isHome: true, isDraft: false,
+        publishedAt: null, deleteStagedAt: null, seoTitle: null, seoDescription: null },
+      { id: 2, name: 'About', slug: 'about', inNav: true, sortOrder: 1, isHome: false, isDraft: false,
+        publishedAt: null, deleteStagedAt: null, seoTitle: null, seoDescription: null },
+    ],
+  }),
+  useUpdateSitePage: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock('@/hooks/use-custom-domain', () => ({
   useCustomDomain: useCustomDomainMock,
   useSetDomain: () => ({ mutate: vi.fn(), isPending: false, error: null }),
@@ -93,6 +107,12 @@ describe('SettingsView — tabs', () => {
     await user.click(screen.getByRole('tab', { name: 'Search & sharing' }));
     expect(screen.getByLabelText('Page title')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Sharing image' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Page by page' })).toBeInTheDocument();
+    // The page fallback is the site description as the public page computes it.
+    expect(screen.getByLabelText('Title', { selector: '#page-seo-title' })).toHaveAttribute(
+      'placeholder',
+      'About · Sunset Condos',
+    );
   });
 
   it('moves between tabs with the arrow keys, wrapping at the ends', async () => {
