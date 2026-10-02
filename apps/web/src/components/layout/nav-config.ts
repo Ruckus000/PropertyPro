@@ -234,8 +234,8 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     visibility: 'admin',
     badgeSignal: 'pendingAccessRequests',
     // The old Units / Residents pages permanently redirect here; the resident
-    // import is part of the same job.
-    matchPrefixes: ['/dashboard/directory', '/dashboard/residents', '/dashboard/units', '/dashboard/import-residents'],
+    // and unit imports are part of the same job.
+    matchPrefixes: ['/dashboard/directory', '/dashboard/residents', '/dashboard/units', '/dashboard/import-residents', '/dashboard/import-units'],
   },
   {
     id: 'contracts',
