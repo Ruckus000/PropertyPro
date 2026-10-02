@@ -14,6 +14,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { inviterNameFrom } from '@/lib/invitations/send-community-invitation';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { consumeEmailBudget } from '@/lib/api/email-budget';
 import { shareDocuments } from '@/lib/services/document-share-service';
 import { documentsSendContract } from './contract';
 
@@ -24,6 +25,9 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'documents', 'write');
     await requireActiveSubscriptionForMutation(communityId);
+    // Counted per requested recipient (an upper bound: opted-out and digest
+    // recipients get no immediate email), refused whole before anything sends.
+    await consumeEmailBudget(actorUserId, new Set(body.userIds).size);
 
     const results = await shareDocuments({
       communityId,

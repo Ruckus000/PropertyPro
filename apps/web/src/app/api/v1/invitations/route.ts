@@ -15,6 +15,7 @@ import { AppError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
+import { consumeEmailBudget } from '@/lib/api/email-budget';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -49,6 +50,9 @@ export const POST = withErrorHandler(
     if (!community) {
       throw new NotFoundError(`Community ${communityId} not found`);
     }
+    // One email against the manager's per-minute email budget (shared with
+    // the batch route and document sends).
+    await consumeEmailBudget(actorUserId, 1);
 
     await sendCommunityInvitation({
       communityId,

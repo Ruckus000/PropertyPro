@@ -70,9 +70,11 @@ export class SlidingWindowRateLimiter {
    * @param key - Unique identifier (IP address or user ID)
    * @param limit - Maximum number of requests allowed in the window
    * @param windowMs - Window duration in milliseconds
+   * @param weight - Units this call consumes (default 1). Allowed only if all
+   *   of them fit; a refused call consumes nothing.
    * @returns Rate limit result with allowed status and metadata
    */
-  check(key: string, limit: number, windowMs: number): RateLimitResult {
+  check(key: string, limit: number, windowMs: number, weight = 1): RateLimitResult {
     const now = Date.now();
     const windowStart = now - windowMs;
     const subWindowKey = Math.floor(now / this.subWindowMs) * this.subWindowMs;
@@ -92,7 +94,7 @@ export class SlidingWindowRateLimiter {
     // Count total requests in current window
     const currentCount = bucket.entries.reduce((sum, entry) => sum + entry.count, 0);
 
-    if (currentCount >= limit) {
+    if (currentCount + weight > limit) {
       // Find the oldest entry to calculate retry-after
       const oldestEntry = bucket.entries[0];
       const retryAfterMs = oldestEntry
@@ -112,14 +114,14 @@ export class SlidingWindowRateLimiter {
       (entry) => entry.timestamp === subWindowKey,
     );
     if (existingSubWindow) {
-      existingSubWindow.count++;
+      existingSubWindow.count += weight;
     } else {
-      bucket.entries.push({ timestamp: subWindowKey, count: 1 });
+      bucket.entries.push({ timestamp: subWindowKey, count: weight });
     }
 
     return {
       allowed: true,
-      remaining: limit - currentCount - 1,
+      remaining: limit - currentCount - weight,
       limit,
       retryAfter: 0,
     };

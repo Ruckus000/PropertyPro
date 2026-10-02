@@ -51,6 +51,7 @@ import {
   computeOverview,
   describeRule,
   describeSendResults,
+  withLimitReason,
   filterResidents,
   filterUnits,
   listBuildings,
@@ -411,7 +412,7 @@ export function DirectoryPageClient({
         const parts = [`${plural(sent, 'invitation')} sent`];
         if (failed) parts.push(`${failed} failed`);
         if (confirm.skippedActive) parts.push(`${confirm.skippedActive} skipped (already active)`);
-        (failed ? toast.warning : toast.success)(`${parts.join(', ')}.`);
+        (failed ? toast.warning : toast.success)(withLimitReason(`${parts.join(', ')}.`, results));
         setSelection(new Set());
       }
     } catch (err) {

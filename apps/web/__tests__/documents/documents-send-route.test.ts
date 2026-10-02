@@ -34,6 +34,7 @@ vi.mock('@/lib/invitations/send-community-invitation', () => ({ inviterNameFrom:
 vi.mock('@/lib/services/document-share-service', () => ({ shareDocuments: shareDocumentsMock }));
 
 import { POST } from '../../src/app/api/v1/documents/send/route';
+import { resetGlobalRateLimiter } from '../../src/lib/middleware/rate-limiter';
 
 const SEND_ID = '6f1c1c3e-1b8e-4c7a-9a52-2a3f7c1d9e10';
 const post = (body: Record<string, unknown>) =>
@@ -54,6 +55,18 @@ describe('POST /api/v1/documents/send', () => {
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requireActiveSubscriptionMock.mockResolvedValue(undefined);
     shareDocumentsMock.mockResolvedValue([{ userId: 'u1', status: 'emailed', documentIds: [7] }]);
+    resetGlobalRateLimiter();
+  });
+
+  it('is refused whole (429) when it would take the manager past 100 emails a minute', async () => {
+    const ids = (from: number, n: number) => Array.from({ length: n }, (_, i) => `u${from + i}`);
+    expect((await post({ userIds: ids(0, 60) })).status).toBe(200);
+    const refused = await post({ userIds: ids(100, 41) });
+    expect(refused.status).toBe(429);
+    expect((await refused.json()).error.message).toMatch(/^Email limit reached: 100 emails per minute/);
+    expect(shareDocumentsMock).toHaveBeenCalledTimes(1);
+    // Duplicate ids count once.
+    expect((await post({ userIds: [...ids(300, 40), ...ids(300, 40)] })).status).toBe(200);
   });
 
   it('passes the request through and returns every result', async () => {

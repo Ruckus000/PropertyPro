@@ -488,12 +488,20 @@ const SEND_STATUS_PHRASE: ReadonlyArray<[DocumentSendStatus, (n: number) => stri
  * email digest, 1 turned off document emails." Opted-out is not a failure (it
  * is a courtesy copy that respects preferences), so it alone stays a success.
  */
-export function describeSendResults(results: readonly { status: DocumentSendStatus }[]): {
+export function describeSendResults(
+  results: readonly { status: DocumentSendStatus; limitMessage?: string }[],
+): {
   message: string;
   tone: 'success' | 'warning';
 } {
   const count = (s: DocumentSendStatus) => results.filter((r) => r.status === s).length;
   const parts = SEND_STATUS_PHRASE.filter(([s]) => count(s) > 0).map(([s, phrase]) => phrase(count(s)));
   const problem = count('failed') + count('no_access') + count('not_member') > 0;
-  return { message: `${parts.join(', ')}.`, tone: problem ? 'warning' : 'success' };
+  return { message: withLimitReason(`${parts.join(', ')}.`, results), tone: problem ? 'warning' : 'success' };
+}
+
+/** Appends the email-cap reason when any recipient's batch was refused by it. */
+export function withLimitReason(message: string, results: readonly { limitMessage?: string }[]): string {
+  const reason = results.find((r) => r.limitMessage)?.limitMessage;
+  return reason ? `${message} ${reason}` : message;
 }

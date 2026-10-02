@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { requestJson } from '@/lib/api/request-json';
-import { sendInChunks } from '@/lib/api/send-in-chunks';
+import { limitMessageOf, sendInChunks } from '@/lib/api/send-in-chunks';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 import type { DocumentRow } from '@/lib/documents/document-state';
 
@@ -346,6 +346,8 @@ export interface DocumentSendResult {
   userId: string;
   status: DocumentSendStatus;
   documentIds: number[];
+  /** Set when this recipient's chunk was refused by the email cap. */
+  limitMessage?: string;
 }
 
 /**
@@ -366,7 +368,7 @@ export function useSendDocuments(communityId: number) {
               body: JSON.stringify({ communityId, documentIds: payload.documentIds, userIds: chunk, sendId: payload.sendId }),
             })
           ).results,
-        (userId) => ({ userId, status: 'failed', documentIds: [] }),
+        (userId, error) => ({ userId, status: 'failed', documentIds: [], ...limitMessageOf(error) }),
       ),
   });
 }
