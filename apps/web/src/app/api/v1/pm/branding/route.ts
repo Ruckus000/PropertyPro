@@ -2,7 +2,11 @@
  * P3-47: White-label branding API for property managers.
  *
  * GET  /api/v1/pm/branding?communityId=X  — read current branding
- * PATCH /api/v1/pm/branding               — update branding (partial)
+ * PATCH /api/v1/pm/branding               — update the live-only branding
+ *                                           fields: logos and email footer.
+ *                                           The site's look is a v4 draft,
+ *                                           saved via /api/v1/pm/site/design
+ *                                           (see ./contract.ts).
  *
  * Plan A1 drain #174 — both methods migrated to `runRoute(contract, handler)`;
  * see `./contract.ts`.
@@ -28,7 +32,6 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
-import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { resizeLogo, resizeSiteLogo } from '@/lib/services/image-processor';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
@@ -112,10 +115,6 @@ export const PATCH = withErrorHandler(
       throw new ForbiddenError('Only property managers can update branding settings');
     }
 
-    if (body.customCssOverrides !== undefined) {
-      await requirePlanFeature(communityId, 'hasSiteCustomCss');
-    }
-
     let canonicalLogoPath: string | undefined;
     if (body.logoStoragePath) {
       canonicalLogoPath = await processAndStoreBrandingImage(
@@ -136,38 +135,24 @@ export const PATCH = withErrorHandler(
       );
     }
 
-    const {
-      communityId: _communityId,
-      logoStoragePath: _logoStoragePath,
-      siteLogoStoragePath: _siteLogoStoragePath,
-      primaryColor,
-      secondaryColor,
-      accentColor,
-      fontHeading,
-      fontBody,
-      customEmailFooter,
-      customCssOverrides,
-    } = body;
-
-    const updated = await updateBrandingForCommunity(communityId, {
-      ...(primaryColor !== undefined && { primaryColor }),
-      ...(secondaryColor !== undefined && { secondaryColor }),
-      ...(accentColor !== undefined && { accentColor }),
-      ...(fontHeading !== undefined && { fontHeading }),
-      ...(fontBody !== undefined && { fontBody }),
+    const patch = {
       ...(canonicalLogoPath !== undefined && { logoPath: canonicalLogoPath }),
       ...(canonicalSiteLogoPath !== undefined && { siteLogoPath: canonicalSiteLogoPath }),
-      ...(customEmailFooter !== undefined && { customEmailFooter }),
-      ...(customCssOverrides !== undefined && { customCssOverrides }),
-    });
+      ...(body.customEmailFooter !== undefined && { customEmailFooter: body.customEmailFooter }),
+    };
 
+    const updated = await updateBrandingForCommunity(communityId, patch);
+
+    // The changed fields only. The whole branding object now carries the
+    // manager's unpublished draft (`draftLook`) and site settings, none of
+    // which this request touched.
     await logAuditEvent({
       userId,
       action: 'settings_changed',
       resourceType: 'community',
       resourceId: String(communityId),
       communityId,
-      newValues: updated as Record<string, unknown>,
+      newValues: patch,
     });
 
     void tryAutoComplete(communityId, userId, 'customize_portal');
