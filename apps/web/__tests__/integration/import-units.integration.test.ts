@@ -1,29 +1,23 @@
 /**
  * POST /api/v1/import-units against a real database: preview writes nothing
  * and flags numbers already in the community (any case); import creates the
- * valid rows, audits each, and reports the rest. Auth is mocked to a manager
- * (and a resident for the refusal); everything below it is real.
+ * valid rows, audits each, and reports the rest. A real manager and a real
+ * resident, through the suite's test auth provider — nothing is mocked.
  */
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { and, eq, inArray } from '@propertypro/db/filters';
+import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { and, eq, inArray, ne } from '@propertypro/db/filters';
 import {
   getDescribeDb,
   initTestKit,
   requireDatabaseUrlInCI,
   teardownTestKit,
+  setActorById,
   trackCommunityForCleanup,
   trackUserForCleanup,
   type TestKitState,
 } from './helpers/multi-tenant-test-kit';
-
-const { membershipMock } = vi.hoisted(() => ({ membershipMock: vi.fn() }));
-vi.mock('@/lib/api/auth', () => ({ requireAuthenticatedUserId: async () => '00000000-0000-4000-8000-0000000000a1' }));
-vi.mock('@/lib/api/community-membership', () => ({ requireCommunityMembership: membershipMock }));
-vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: async () => undefined }));
-vi.mock('@/lib/middleware/subscription-guard', () => ({ requireActiveSubscriptionForMutation: async () => undefined }));
-vi.mock('@/lib/services/onboarding-checklist-service', () => ({ tryAutoComplete: async () => undefined }));
 
 requireDatabaseUrlInCI('import-units');
 const describeDb = getDescribeDb();
@@ -32,6 +26,9 @@ describeDb('POST /api/v1/import-units (integration)', () => {
   let state: TestKitState;
   let communityId = 0;
   let POST: (req: NextRequest) => Promise<Response>;
+  let residentUnitId = 0;
+  const manager = randomUUID();
+  const resident = randomUUID();
 
   const call = (csv: string, dryRun: boolean) =>
     POST(
@@ -56,12 +53,18 @@ describeDb('POST /api/v1/import-units (integration)', () => {
       .returning({ id: m.communities.id });
     communityId = community!.id;
     trackCommunityForCleanup(state, communityId);
-    const actor = '00000000-0000-4000-8000-0000000000a1';
-    trackUserForCleanup(state, actor);
-    await state.db
-      .insert(m.users)
-      .values({ id: actor, email: `import-actor+${state.runSuffix}@example.com`, fullName: 'Import Actor' })
-      .onConflictDoNothing();
+    const scoped = m.createScopedClient(communityId);
+    for (const [id, role] of [
+      [manager, 'property_manager'],
+      [resident, 'resident'],
+    ] as const) {
+      trackUserForCleanup(state, id);
+      await state.db.insert(m.users).values({ id, email: `import-${role}+${state.runSuffix}@example.com`, fullName: role });
+    }
+    await scoped.insert(m.userRoles, { userId: manager, role: 'property_manager', isUnitOwner: false, displayTitle: 'Manager' });
+    const [unit] = await scoped.insert(m.units, { unitNumber: 'R-1' });
+    residentUnitId = unit!['id'] as number;
+    await scoped.insert(m.userRoles, { userId: resident, role: 'resident', unitId: residentUnitId, isUnitOwner: true, displayTitle: 'Owner' });
     ({ POST } = await import('../../src/app/api/v1/import-units/route'));
   });
 
@@ -70,9 +73,10 @@ describeDb('POST /api/v1/import-units (integration)', () => {
   });
 
   beforeEach(async () => {
-    membershipMock.mockResolvedValue({ communityId, role: 'property_manager', isAdmin: true, isUnitOwner: false, communityType: 'condo_718' });
-    await state.db.delete(state.dbModule.units).where(eq(state.dbModule.units.communityId, communityId));
-    await state.dbModule.createScopedClient(communityId).insert(state.dbModule.units, { unitNumber: '4B' });
+    setActorById(state, manager);
+    const { units } = state.dbModule;
+    await state.db.delete(units).where(and(eq(units.communityId, communityId), ne(units.id, residentUnitId)));
+    await state.dbModule.createScopedClient(communityId).insert(units, { unitNumber: '4B' });
   });
 
   const CSV = 'unit_number,building,occupancy\n101,A,owner_occupied\n4b,A,vacant\n102,A,\n102,B,\n';
@@ -87,14 +91,14 @@ describeDb('POST /api/v1/import-units (integration)', () => {
       [3, "Unit '4b' already exists"],
     ]);
     expect(data.skippedCount).toBe(2);
-    expect(await unitNumbers()).toEqual(['4B']);
+    expect(await unitNumbers()).toEqual(['4B', 'R-1']);
   });
 
   it('import: creates the valid rows with confirmed occupancy, audits each, skips the rest', async () => {
     const res = await call(CSV, false);
     const { data } = (await res.json()) as { data: { importedCount: number; skippedCount: number } };
     expect(data).toMatchObject({ importedCount: 2, skippedCount: 2 });
-    expect(await unitNumbers()).toEqual(['101', '102', '4B']);
+    expect(await unitNumbers()).toEqual(['101', '102', '4B', 'R-1']);
 
     const m = state.dbModule;
     const [u101] = await state.db
@@ -112,9 +116,9 @@ describeDb('POST /api/v1/import-units (integration)', () => {
   });
 
   it('refuses a member without units:write', async () => {
-    membershipMock.mockResolvedValue({ communityId, role: 'resident', isAdmin: false, isUnitOwner: true, communityType: 'condo_718' });
+    setActorById(state, resident);
     const res = await call(CSV, false);
     expect(res.status).toBe(403);
-    expect(await unitNumbers()).toEqual(['4B']);
+    expect(await unitNumbers()).toEqual(['4B', 'R-1']);
   });
 });
