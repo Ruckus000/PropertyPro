@@ -1,6 +1,6 @@
 {
-  "__source": "provisional-from-source-read-2026-09-05",
-  "__note": "Shape read from forwardemail.net helpers/on-data-mx.js (the webhookBody construction), NOT from their published docs. REPLACE with a real captured request once MX is live: send a message to support@getpropertypro.com, then read support_inbox_messages.raw_payload out of Postgres (a normalization failure quarantines it there) and freeze it here with __source set to captured-<date>. Note the webhook URL passes ?raw=false&attachments=false, so a real capture will carry NEITHER a raw field NOR attachment bodies.",
+  "__source": "corrected-from-production-outcomes-2026-10-03",
+  "__note": "NOT a captured request. The shape is still reconstructed — but the AUTHENTICATION half is now derived from production outcomes rather than from reading forwardemail.net's helpers/on-data-mx.js, and the previous version of this file was WRONG about it. OBSERVED (prod rows 25/26/27, 2026-10-01 23:14Z / 10-02 06:06Z / 10-03 07:57Z, the first three inbound messages after the reader fix went live in deploy 1396 at 2026-10-01 22:56Z): spf_result='pass', dmarc_result='pass', dkim_result=NULL. Rows 24 and older, all pre-deploy, are null across the board — the cut falls exactly at the deploy. WHAT THAT PROVES: (1) the first Authentication-Results header carries a TRUSTED forwardemail.net authserv-id, because isTrustedAuthservId returns early otherwise and all three would be null; (2) that header has spf= and dmarc= but no readable dkim=; (3) the top-level spf/dkim/dmarc JSON fields this file used to carry as bare strings are absent or unreadable, because a readable string or {result} would have filled dkim too — and because the pre-fix string-only reader stored three nulls, which a bare-string payload could not have produced. So the header fallback, not the JSON field, is the path that works in production. STILL UNOBSERVED: the literal request body. The quarantine row that would capture it (normalization_status='failed' -> raw_payload) has NEVER fired — 0 such rows in prod as of 2026-10-03 — so there is no real payload to freeze anywhere. Replace this with __source: captured-<date> only from an actual raw_payload. The webhook URL passes ?raw=false&attachments=false, so a real capture will carry NEITHER a raw field NOR attachment bodies.",
   "from": {
     "value": [{ "address": "jane@example.com", "name": "Jane Doe" }],
     "text": "Jane Doe <jane@example.com>"
@@ -18,13 +18,14 @@
   "text": "Any update on this?",
   "html": "<p>Any update on this?</p>",
   "headerLines": [
+    {
+      "key": "authentication-results",
+      "line": "Authentication-Results: mx1.forwardemail.net; spf=pass smtp.mailfrom=jane@example.com; dmarc=pass header.from=example.com"
+    },
     { "key": "content-type", "line": "Content-Type: multipart/alternative; boundary=abc" },
     { "key": "message-id", "line": "Message-ID: <reply-2@mail.example.com>" }
   ],
   "recipients": ["support@getpropertypro.com"],
-  "dkim": "pass",
-  "spf": "pass",
-  "dmarc": "pass",
   "session": {
     "recipient": "support@getpropertypro.com",
     "remoteAddress": "203.0.113.10",

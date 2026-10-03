@@ -201,12 +201,22 @@ describe('mailparser falsy fields', () => {
 });
 
 describe('authentication verdicts', () => {
-  it('reads spf/dkim/dmarc from the reference payload', () => {
+  it('reads the verdicts production actually reports from the reference payload', () => {
+    // These three values are PRODUCTION OUTCOMES, not a guess: rows 25/26/27 —
+    // the first inbound messages after the reader fix deployed — all carry
+    // spf=pass, dmarc=pass and dkim=NULL. The fixture used to assert
+    // dkim='pass' from bare-string JSON fields, a shape production disproved:
+    // a readable bare string would have filled dkim too, and the pre-fix
+    // string-only reader stored three nulls, which that shape cannot produce.
+    //
+    // So this case pins the HEADER path, which is the one that runs in prod.
     const email = normalizeForwardEmailPayload(forwardEmailFixture);
 
     expect(email.spfResult).toBe('pass');
-    expect(email.dkimResult).toBe('pass');
     expect(email.dmarcResult).toBe('pass');
+    // Not a failure — the provider's header carries no readable `dkim=`, and a
+    // method it omits must NOT be filled from a later, sender-writable header.
+    expect(email.dkimResult).toBeNull();
   });
 
   it('returns null when the provider omits them', () => {
