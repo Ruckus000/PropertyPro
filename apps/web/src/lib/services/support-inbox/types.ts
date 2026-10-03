@@ -64,6 +64,23 @@ export interface InboundEmail {
   spfResult: string | null;
   dkimResult: string | null;
   dmarcResult: string | null;
+  /**
+   * A SHAPE-ONLY description of where the three verdicts above came from, set
+   * only when at least one of them could not be read.
+   *
+   * This exists because the reader has now been corrected three times by
+   * inference. The verdict columns record the OUTCOME, and two different payload
+   * shapes produce the outcome production shows, so the stored rows cannot say
+   * which one arrives — see the `readVerdict` docblock in `normalize.ts`. The
+   * only mechanism that would have captured a real payload fires on
+   * `normalization_status='failed'`, and that has never happened.
+   *
+   * It carries TYPE TAGS, KEY NAMES and ARRAY LENGTHS — never a value, never a
+   * header's contents, never a body or an address. The one exception is the
+   * authserv-id, which is the identity of the MTA that authenticated the
+   * delivery and is the whole point of reading it.
+   */
+  authShape: Record<string, unknown> | null;
 }
 
 /**
