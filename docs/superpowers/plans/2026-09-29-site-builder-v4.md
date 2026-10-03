@@ -118,6 +118,39 @@ Deferred, each with its trigger:
   published as MDX tagged `/pm/website-editor`, so the existing HelpPanel and the help
   center show it too.
 
+### Phase 3a, as built (groundwork; no editor chrome)
+Split from 3b on 2026-10-03, because #1293 and #1294 (Phase 5) rewrite the same chrome files
+(`EditorShell`, `EditorTopBar`, `tools.ts`, `ToolRail`, `EditorRoot`). 3a touches none of them.
+- **Per-user state:** `GET/PATCH /api/v1/pm/site-editor/preferences`. It stores the mode (`guided` |
+  `free`, `null` until the chooser is answered), `tourDone`, hand-ticked steps (`welcome`, `photo`) and
+  visited tools (`design`, `pages`, `phone`).
+  - It uses `user_preferences`, so no migration. `site_editor_mode` is per user;
+    `site_editor_checklist:<communityId>` is per user per community.
+  - Values are stored FLAT and written with `mergeUserPreference` (one jsonb `||` upsert). That way
+    two quick clicks can't overwrite each other.
+- **Checklist logic:** `lib/site-editor/next-steps.ts` (`buildNextSteps`) is pure. The rules group
+  comes from `RequiredSectionStatus` and `summarizeRecords` and can't be ticked by hand. It reads
+  "recommended" below the size threshold and is absent for apartments. The setup group has the
+  design's six steps.
+- **The design's "$50 per day" line is not used** (legal-copy rule). The law line is
+  `requiredSectionLaw`'s sentence.
+- **Guides:** 7 MDX articles in `content/help/manager/website/` tagged `/pm/website-editor`:
+  edit-words-and-photos, website-sections, website-pages, website-design, urgent-notice,
+  publish-website and florida-website-rules. The design's `docs` guide is the existing
+  `upload-document` article, rewritten for the upload queue, drafts and Replace file.
+- **The guides describe the product, not the design.** The design's guide text assumes typing directly
+  on the page, dragging photos onto it, a "Change the look only" prompt, a per-page menu switch and
+  an Undo button. None of these exist. Titles, grouping and order follow the design.
+
+Left for 3b, each with its reason:
+- The `around`, `domain` and `seo` guides describe the top bar and the Settings view (#1293/#1294).
+- `undo` is not written: the undo stack is deferred.
+- Screenshots are captured after the chrome settles.
+- `website-branding` (stale since 4a: it still says colours go live right away) is replaced by the
+  `domain` guide.
+- The contextual Help list is capped at 8, and `/pm/website-editor` now has exactly 8 articles. The
+  3b drawer lists by group, not through that cap.
+
 ### Phase 4: Design panel (decided 2026-10-01)
 These decisions were made against what the product actually has. The design assumed
 more than exists.
