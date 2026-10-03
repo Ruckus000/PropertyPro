@@ -14,6 +14,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ValidationError } from '@/lib/api/errors';
+import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import {
   publishCommunitySite,
   removeSiteBlock,
@@ -556,6 +557,50 @@ describeDb('multi-page site (db-backed integration)', () => {
       communityId, actorUserId, pageId: about.id, slug: 'about',
     });
     expect(reclaimed.page.slug).toBe('about');
+  });
+
+  // v4 Phase 5b. The columns exist, round-trip through the service, normalise
+  // like the site-level fields, clear to NULL, and leave a page's other fields
+  // alone. The public reader returns them for the metadata.
+  it("saves, clears and caps a page's own search title and description", async () => {
+    const communityId = await createCommunity('page-seo');
+    await ensureHomePage(communityId);
+    const about = await createSitePage({ communityId, actorUserId, name: 'About', slug: 'about' });
+    expect(about).toMatchObject({ seoTitle: null, seoDescription: null });
+
+    const saved = await updateSitePage({
+      communityId, actorUserId, pageId: about.id,
+      seoTitle: '  Who   we are  ', seoDescription: 'The board and the manager.',
+    });
+    expect(saved.page).toMatchObject({
+      name: 'About', slug: 'about',
+      seoTitle: 'Who we are', seoDescription: 'The board and the manager.',
+    });
+    expect(saved.redirectedFrom).toBeNull();
+
+    const reader = getPublicCommunityScopedReader(communityId);
+    const publicRow = await reader.getPageBySlug('about', { includeDrafts: true });
+    expect(publicRow).toMatchObject({ seoTitle: 'Who we are', seoDescription: 'The board and the manager.' });
+
+    const cleared = await updateSitePage({
+      communityId, actorUserId, pageId: about.id, seoTitle: '   ', seoDescription: null,
+    });
+    expect(cleared.page).toMatchObject({ seoTitle: null, seoDescription: null });
+
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: about.id, seoTitle: 'x'.repeat(61) }),
+    ).rejects.toThrow(ValidationError);
+
+    // The home page's text is the site's; a per-page value there would be
+    // stored but never rendered. Clearing it is still allowed.
+    const home = (await listSitePages(communityId, { includeDrafts: true })).find((p) => p.isHome)!;
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: home.id, seoTitle: 'Home' }),
+    ).rejects.toThrow(ValidationError);
+    const homeCleared = await updateSitePage({
+      communityId, actorUserId, pageId: home.id, seoDescription: null,
+    });
+    expect(homeCleared.page).toMatchObject({ seoTitle: null, seoDescription: null });
   });
 
   it('refuses a duplicate page name on the write, not on the next publish', async () => {

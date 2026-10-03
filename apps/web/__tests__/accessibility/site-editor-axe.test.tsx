@@ -176,6 +176,8 @@ const SITE_PAGES: SitePageSummary[] = [
     isDraft: false,
     publishedAt: '2026-07-01T00:00:00.000Z',
     deleteStagedAt: null,
+    seoTitle: null,
+    seoDescription: null,
   },
   {
     id: 2,
@@ -187,6 +189,8 @@ const SITE_PAGES: SitePageSummary[] = [
     isDraft: true,
     publishedAt: null,
     deleteStagedAt: null,
+    seoTitle: null,
+    seoDescription: null,
   },
   {
     id: 3,
@@ -198,6 +202,8 @@ const SITE_PAGES: SitePageSummary[] = [
     isDraft: false,
     publishedAt: '2026-07-01T00:00:00.000Z',
     deleteStagedAt: '2026-07-30T00:00:00.000Z',
+    seoTitle: null,
+    seoDescription: null,
   },
 ];
 

@@ -151,6 +151,9 @@ export interface UpdateSitePageInput {
    */
   slug?: string;
   inNav?: boolean;
+  /** Per-page search text (v4 Phase 5b). Live on save; null clears it. */
+  seoTitle?: string | null;
+  seoDescription?: string | null;
 }
 
 export interface UpdateSitePageResult {
@@ -162,7 +165,7 @@ export interface UpdateSitePageResult {
 export function useUpdateSitePage(communityId: number) {
   const qc = useQueryClient();
   return useMutation<UpdateSitePageResult, Error, UpdateSitePageInput>({
-    mutationFn: async ({ pageId, name, slug, inNav }) => {
+    mutationFn: async ({ pageId, name, slug, inNav, seoTitle, seoDescription }) => {
       const body = await requestJson<UpdateResponse>(
         PAGES_URL,
         jsonInit('PATCH', {
@@ -171,6 +174,8 @@ export function useUpdateSitePage(communityId: number) {
           ...(name === undefined ? {} : { name }),
           ...(slug === undefined ? {} : { slug }),
           ...(inNav === undefined ? {} : { inNav }),
+          ...(seoTitle === undefined ? {} : { seoTitle }),
+          ...(seoDescription === undefined ? {} : { seoDescription }),
         }),
       );
       return { page: body.page, redirectedFrom: body.redirectedFrom };

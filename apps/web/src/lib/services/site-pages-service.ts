@@ -51,6 +51,11 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
 import {
+  SEO_DESCRIPTION_MAX_LENGTH,
+  SEO_TITLE_MAX_LENGTH,
+  normalizeSettingText,
+} from '@/lib/site-editor/site-settings';
+import {
   TOMBSTONE_BLOCK_TYPE,
   requiredRemovalRefusal,
   requiredSectionTypes,
@@ -84,6 +89,31 @@ export interface SitePageRecord {
   isDraft: boolean;
   publishedAt: Date | null;
   deleteStagedAt: Date | null;
+  /** Per-page search overrides (v4 Phase 5b). Null: use the default. */
+  seoTitle: string | null;
+  seoDescription: string | null;
+}
+
+/**
+ * A page row as it goes over the wire — the pages contract's `sitePageSchema`.
+ * The ONE serialiser: the pages route, the reorder route and the editor's
+ * server-rendered seed all use it, so the three cannot disagree about a row
+ * (they were three hand-written copies until v4 Phase 5b added fields).
+ */
+export function toSitePageSummary(page: SitePageRecord) {
+  return {
+    id: page.id,
+    name: page.name,
+    slug: page.slug,
+    inNav: page.inNav,
+    sortOrder: page.sortOrder,
+    isHome: page.isHome,
+    isDraft: page.isDraft,
+    publishedAt: page.publishedAt ? page.publishedAt.toISOString() : null,
+    deleteStagedAt: page.deleteStagedAt ? page.deleteStagedAt.toISOString() : null,
+    seoTitle: page.seoTitle,
+    seoDescription: page.seoDescription,
+  };
 }
 
 type UnscopedDb = ReturnType<typeof createUnscopedClient>;
@@ -144,6 +174,8 @@ const PAGE_COLUMNS = {
   isDraft: sitePages.isDraft,
   publishedAt: sitePages.publishedAt,
   deleteStagedAt: sitePages.deleteStagedAt,
+  seoTitle: sitePages.seoTitle,
+  seoDescription: sitePages.seoDescription,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -702,6 +734,9 @@ export interface UpdateSitePageInput {
   name?: string;
   slug?: string;
   inNav?: boolean;
+  /** Absent: leave alone. Null or blank: clear back to the default. */
+  seoTitle?: string | null;
+  seoDescription?: string | null;
 }
 
 export interface UpdateSitePageResult {
@@ -728,11 +763,28 @@ export async function updateSitePage({
   name,
   slug,
   inNav,
+  seoTitle,
+  seoDescription,
 }: UpdateSitePageInput): Promise<UpdateSitePageResult> {
-  if (name === undefined && slug === undefined && inNav === undefined) {
+  if (
+    name === undefined &&
+    slug === undefined &&
+    inNav === undefined &&
+    seoTitle === undefined &&
+    seoDescription === undefined
+  ) {
     throw new ValidationError('Nothing to update.');
   }
   if (name !== undefined) assertUsableName(name);
+  // Same caps and normalisation as the site-level title and description, so a
+  // page's search text obeys the same rules as the site's.
+  const nextSeoTitle = normalizePageSeoText(seoTitle, SEO_TITLE_MAX_LENGTH, 'seoTitle', 'A page title');
+  const nextSeoDescription = normalizePageSeoText(
+    seoDescription,
+    SEO_DESCRIPTION_MAX_LENGTH,
+    'seoDescription',
+    'A page description',
+  );
 
   const db = createUnscopedClient();
 
@@ -743,6 +795,21 @@ export async function updateSitePage({
     if (current.isHome && slug !== undefined && slug !== current.slug) {
       throw new ValidationError('The home page always lives at the site root.', {
         fields: [{ field: 'slug', message: 'The home page address cannot be changed.' }],
+      });
+    }
+
+    // The home page's title and description are the site's (Settings → Search
+    // & sharing), and the public page ignores per-page values on it — so a
+    // value set here would be stored and audited but never shown. Clearing
+    // (null) stays allowed.
+    if (current.isHome && (nextSeoTitle || nextSeoDescription)) {
+      throw new ValidationError("The home page uses the site's title and description.", {
+        fields: [
+          {
+            field: nextSeoTitle ? 'seoTitle' : 'seoDescription',
+            message: 'Set the home page in the site settings instead.',
+          },
+        ],
       });
     }
 
@@ -760,6 +827,8 @@ export async function updateSitePage({
     if (name !== undefined) updates['name'] = name.trim();
     if (slugChanged) updates['slug'] = slug;
     if (inNav !== undefined) updates['inNav'] = inNav;
+    if (nextSeoTitle !== undefined) updates['seoTitle'] = nextSeoTitle;
+    if (nextSeoDescription !== undefined) updates['seoDescription'] = nextSeoDescription;
 
     const scoped = scopedFor(communityId, tx);
 
@@ -800,11 +869,39 @@ export async function updateSitePage({
       communityId,
       action: 'update',
       resourceId: String(pageId),
-      metadata: { name: page.name, slug: page.slug, inNav: page.inNav, redirectedFrom },
+      metadata: {
+        name: page.name,
+        slug: page.slug,
+        inNav: page.inNav,
+        seoTitle: page.seoTitle,
+        seoDescription: page.seoDescription,
+        redirectedFrom,
+      },
     });
 
     return { page, redirectedFrom };
   });
+}
+
+/**
+ * A page's search text: undefined when the caller did not send it, null to
+ * clear it (empty after trimming counts as clearing), otherwise the
+ * normalised value. Over-length is a field-level 400.
+ */
+function normalizePageSeoText(
+  raw: string | null | undefined,
+  maxLength: number,
+  field: string,
+  label: string,
+): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  try {
+    return normalizeSettingText(raw, maxLength, label);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Invalid value';
+    throw new ValidationError(message, { fields: [{ field, message }] });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -379,6 +379,46 @@ describe('PublicSitePage — per-page metadata [11b-2 / D17]', () => {
     expect(String(meta.alternates?.canonical)).toContain('/about');
   });
 
+  // v4 Phase 5b. A page with no overrides must emit exactly what it did before
+  // this phase: the page-name title, and the site's description and social card.
+  it('leaves a page without overrides on the site description and social card', async () => {
+    getPageBySlugMock.mockResolvedValue(ABOUT_PAGE);
+    const home = await generateMetadata({ params: Promise.resolve({}) });
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: ['about'] }) });
+    expect(meta.description).toBe(home.description);
+    expect(meta.openGraph?.title).toBe(home.openGraph?.title);
+    expect(meta.openGraph?.description).toBe(home.openGraph?.description);
+    expect((meta.openGraph as { url?: unknown } | undefined)?.url).toBe(
+      (home.openGraph as { url?: unknown } | undefined)?.url,
+    );
+    expect(meta.twitter).toEqual(home.twitter);
+  });
+
+  it("uses the page's own search title and description when the manager set them", async () => {
+    getPageBySlugMock.mockResolvedValue({
+      ...ABOUT_PAGE,
+      seoTitle: 'Who we are | Sunset Condos',
+      seoDescription: 'The board, the manager, and how to reach them.',
+    });
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: ['about'] }) });
+    expect(meta.title).toBe('Who we are | Sunset Condos');
+    expect(meta.description).toBe('The board, the manager, and how to reach them.');
+    expect(meta.openGraph).toMatchObject({
+      title: 'Who we are | Sunset Condos',
+      description: 'The board, the manager, and how to reach them.',
+    });
+    // X reads twitter:* before og:*; Facebook keys the card on og:url.
+    // Revert check: the `twitter` / `url` overrides in generateMetadata.
+    expect(meta.twitter).toMatchObject({
+      title: 'Who we are | Sunset Condos',
+      description: 'The board, the manager, and how to reach them.',
+    });
+    expect(String((meta.openGraph as { url?: unknown } | undefined)?.url)).toBe(
+      String(meta.alternates?.canonical),
+    );
+    expect(String(meta.alternates?.canonical)).toContain('/about');
+  });
+
   // The canonical must name the host the visitor used, not the community slug.
   // `sitemap.ts` advertises `https://<custom domain>/<slug>` for this very page,
   // and home emits no canonical at all — so a slug-derived canonical would tell

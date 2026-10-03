@@ -105,6 +105,8 @@ function page(overrides: Partial<SitePageSummary> & { id: number }): SitePageSum
     isDraft: false,
     publishedAt: '2026-07-01T00:00:00.000Z',
     deleteStagedAt: null,
+    seoTitle: null,
+    seoDescription: null,
     ...overrides,
   };
 }
@@ -451,6 +453,8 @@ describe('PagesPanel — row state', () => {
           inNav: false,
           isDraft: true,
           deleteStagedAt: '2026-07-30T00:00:00.000Z',
+          seoTitle: null,
+          seoDescription: null,
         }),
       ],
     });
@@ -1266,6 +1270,8 @@ describe('PagesPanel — a staged page still holds its address', () => {
     name: 'Amenities',
     slug: 'amenities',
     deleteStagedAt: '2026-07-30T00:00:00.000Z',
+    seoTitle: null,
+    seoDescription: null,
   });
 
   it('refuses the address on the add form', async () => {

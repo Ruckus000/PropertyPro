@@ -35,7 +35,7 @@ import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
-import { listSitePages, type SitePageRecord } from '@/lib/services/site-pages-service';
+import { listSitePages, toSitePageSummary } from '@/lib/services/site-pages-service';
 import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 import { loadSiteQuotaBytes } from '@/lib/services/site-settings-service';
 import { resolveAssetsBytesUsed } from '@/lib/site-assets/quota';
@@ -49,26 +49,6 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
-}
-
-/**
- * Serialises a page row for the client. Mirrors the pages route's `toSummary` —
- * the wire shape is the contract's, and diverging here would give the editor two
- * different notions of one row depending on whether it came from the seed or the
- * query.
- */
-function toPageSummary(page: SitePageRecord): SitePageSummary {
-  return {
-    id: page.id,
-    name: page.name,
-    slug: page.slug,
-    inNav: page.inNav,
-    sortOrder: page.sortOrder,
-    isHome: page.isHome,
-    isDraft: page.isDraft,
-    publishedAt: page.publishedAt ? page.publishedAt.toISOString() : null,
-    deleteStagedAt: page.deleteStagedAt ? page.deleteStagedAt.toISOString() : null,
-  };
 }
 
 /**
@@ -91,7 +71,7 @@ function toPageSummary(page: SitePageRecord): SitePageSummary {
 async function loadInitialPages(communityId: number): Promise<SitePageSummary[]> {
   try {
     const pages = await listSitePages(communityId, { includeDrafts: true });
-    return pages.map(toPageSummary);
+    return pages.map(toSitePageSummary);
   } catch (error) {
     captureMessage('site_editor_pages_seed_failure', {
       level: 'warning',

@@ -24,6 +24,8 @@ import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
 import { DomainPanel } from '../panels/DomainPanel';
 import { ShareImageField, SiteIconField, SitePanel, StorageMeter } from '../panels/SitePanel';
 import { useSiteSettings } from '@/hooks/use-site-settings';
+import { PageSeoCard } from './PageSeoCard';
+import { DEFAULT_SITE_SETTINGS, resolveSeoDescription } from '@/lib/site-editor/site-settings';
 
 export interface SettingsViewProps {
   communityId: number;
@@ -188,6 +190,19 @@ export function SettingsView({
         </Card>
         <Card>
           <ShareImageField communityId={communityId} initialSettings={initialSettings} />
+        </Card>
+        <Card>
+          <PageSeoCard
+            communityId={communityId}
+            communityName={community.name}
+            // What a page's description falls back to: the site's, as the
+            // public page computes it (its own default when none is set).
+            siteDescription={resolveSeoDescription(
+              record?.settings ?? DEFAULT_SITE_SETTINGS,
+              community,
+              tagline,
+            )}
+          />
         </Card>
       </>
     ),

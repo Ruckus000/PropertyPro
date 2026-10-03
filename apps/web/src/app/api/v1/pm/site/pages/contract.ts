@@ -29,6 +29,9 @@ const sitePageSchema = z.object({
    * the editor renders it as a pending removal with an undo rather than hiding it.
    */
   deleteStagedAt: z.string().nullable(),
+  /** Per-page search overrides (v4 Phase 5b). Null: the default is used. */
+  seoTitle: z.string().nullable(),
+  seoDescription: z.string().nullable(),
 });
 
 /**
@@ -93,11 +96,24 @@ export const pagesUpdateContract = defineRoute({
          */
         slug: slugField.optional(),
         inNav: z.boolean().optional(),
+        /**
+         * Per-page search title and description (v4 Phase 5b). Live on save,
+         * like a rename. Null clears back to the default. The cap here is
+         * loose (UTF-16 units, doubled); the service's code-point cap is the
+         * real one — same split as `/api/v1/pm/site/settings`.
+         */
+        seoTitle: z.string().max(120).nullable().optional(),
+        seoDescription: z.string().max(320).nullable().optional(),
       })
       .strict()
       .refine(
-        (b) => b.name !== undefined || b.slug !== undefined || b.inNav !== undefined,
-        { message: 'Provide at least one of name, slug or inNav.' },
+        (b) =>
+          b.name !== undefined ||
+          b.slug !== undefined ||
+          b.inNav !== undefined ||
+          b.seoTitle !== undefined ||
+          b.seoDescription !== undefined,
+        { message: 'Provide at least one field to change.' },
       ),
   },
   response: z.object({

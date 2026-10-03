@@ -99,6 +99,9 @@ export interface PublicSitePage {
   inNav: boolean;
   sortOrder: number;
   deleteStagedAt: Date | null;
+  /** Per-page search overrides (v4 Phase 5b). Null: use the default. */
+  seoTitle: string | null;
+  seoDescription: string | null;
 }
 
 /** Nav projection — the minimum the public header needs to render a link. */
@@ -457,6 +460,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           inNav: sitePages.inNav,
           sortOrder: sitePages.sortOrder,
           deleteStagedAt: sitePages.deleteStagedAt,
+          seoTitle: sitePages.seoTitle,
+          seoDescription: sitePages.seoDescription,
         })
         .from(sitePages)
         .where(and(...conditions))
