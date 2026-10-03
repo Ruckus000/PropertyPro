@@ -36,7 +36,13 @@ import {
 const COMMUNITY_ID = 42;
 
 const RECORD: SiteSettingsRecord = {
-  settings: { seoTitle: null, seoDescription: null, searchIndexing: true, favicon: null },
+  settings: {
+    seoTitle: null,
+    seoDescription: null,
+    searchIndexing: true,
+    favicon: null,
+    shareImage: null,
+  },
   footer: { associationName: null, note: null, showStatutoryLine: false },
   storage: { assetsBytesUsed: 1024, quotaBytes: 500 * 1024 * 1024 },
 };

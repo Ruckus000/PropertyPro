@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { EditorTopBar, type EditorTopBarPageProps } from './EditorTopBar';
+import { EditorTopBar, type EditorTopBarPageProps, type EditorView } from './EditorTopBar';
 import { PanelResizer } from './PanelResizer';
 import { PhoneGate } from './PhoneGate';
 import { ToolRail } from './ToolRail';
 import { X } from 'lucide-react';
 import { usePanelWidth } from './use-panel-width';
-import { TOOL_PANEL_TITLES, type EditorToolId, type ProToolAccess } from './tools';
+import { TOOL_PANEL_TITLES, type EditorToolId } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 const PANEL_ID = 'site-editor-tool-panel';
@@ -18,7 +18,6 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   /** Forwarded to the top bar; see `EditorTopBarProps.pageName` (Phase 11b-3). */
   pageName?: string;
   publicSiteUrl: string | null;
-  proToolAccess: ProToolAccess;
   /** Counts shown on rail tools; see `ToolRailProps.badges`. */
   toolBadges?: Partial<Record<EditorToolId, number>>;
   /**
@@ -60,6 +59,14 @@ export interface EditorShellProps extends EditorTopBarPageProps {
    * surface for posting an urgent notice, and setup guidance is not that.
    */
   banner?: React.ReactNode;
+  /** Which area is showing (v4 Phase 5). Forwarded to the top bar's switch. */
+  view: EditorView;
+  onViewChange: (view: EditorView) => void;
+  /**
+   * The Settings area's content, shown full width in place of the rail,
+   * panel, canvas and inspector while `view` is `'settings'`.
+   */
+  settings: React.ReactNode;
 }
 
 /**
@@ -100,7 +107,6 @@ export function EditorShell({
   communityName,
   pageName,
   publicSiteUrl,
-  proToolAccess,
   toolBadges,
   communityId,
   hasPublishedSite,
@@ -126,6 +132,9 @@ export function EditorShell({
   changeCount,
   device,
   onDeviceChange,
+  view,
+  onViewChange,
+  settings,
 }: EditorShellPropsWithTool) {
   // Closed by default: the v4 builder opens on the page itself, with the rail
   // offering the tools rather than one already covering a third of the screen.
@@ -180,73 +189,84 @@ export function EditorShell({
         changeCount={changeCount}
         device={device}
         onDeviceChange={onDeviceChange}
+        view={view}
+        onViewChange={onViewChange}
       />
 
       {banner ? (
         <div className="shrink-0 border-b border-edge px-4 py-3">{banner}</div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1">
-        <ToolRail
-          active={activeTool}
-          onSelect={setActiveTool}
-          proToolAccess={proToolAccess}
-          panelId={PANEL_ID}
-          badges={toolBadges}
-        />
-
-        {activeTool !== null ? (
-          <>
-            <aside
-              id={PANEL_ID}
-              aria-labelledby={`${PANEL_ID}-title`}
-              className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
-              style={{ width: panelWidth }}
-            >
-              <div className="flex shrink-0 items-center gap-2 px-4 pb-2.5 pt-3.5">
-                <h2 id={`${PANEL_ID}-title`} className="flex-1 text-base font-semibold text-content">
-                  {TOOL_PANEL_TITLES[activeTool]}
-                </h2>
-                <button
-                  type="button"
-                  aria-label="Close panel"
-                  onClick={() => setActiveTool(null)}
-                  className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  <X className="h-[18px] w-[18px]" aria-hidden="true" />
-                </button>
-              </div>
-              {/*
-               * `relative` is load-bearing. Panels announce through `sr-only`
-               * live regions, which are `position: absolute`; with no positioned
-               * ancestor they anchor to the PAGE at their static position — the
-               * bottom of a long panel list — and stretch the document past the
-               * viewport. The page then scrolls on the next announcement or focus
-               * move and carries the top bar out of view. Seen in the browser:
-               * document 1270px in a 768px window after an Add.
-               */}
-              <div
-                data-testid="tool-panel-scroller"
-                className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-5"
-              >
-                {renderToolPanel(activeTool)}
-              </div>
-            </aside>
-
-            <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
-          </>
-        ) : null}
-
-        {/* `relative` for the same reason as the tool panel's scroller. */}
+      {view === 'settings' ? (
+        // `relative` for the same reason as the tool panel's scroller below.
         <div
-          data-testid="canvas-scroller"
-          className="relative min-w-0 flex-1 overflow-y-auto bg-surface-page"
+          data-testid="settings-scroller"
+          className="relative min-h-0 flex-1 overflow-y-auto bg-surface-page"
         >
-          {children}
+          {settings}
         </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <ToolRail
+            active={activeTool}
+            onSelect={setActiveTool}
+            panelId={PANEL_ID}
+            badges={toolBadges}
+          />
 
-        {inspector}
-      </div>
+          {activeTool !== null ? (
+            <>
+              <aside
+                id={PANEL_ID}
+                aria-labelledby={`${PANEL_ID}-title`}
+                className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
+                style={{ width: panelWidth }}
+              >
+                <div className="flex shrink-0 items-center gap-2 px-4 pb-2.5 pt-3.5">
+                  <h2 id={`${PANEL_ID}-title`} className="flex-1 text-base font-semibold text-content">
+                    {TOOL_PANEL_TITLES[activeTool]}
+                  </h2>
+                  <button
+                    type="button"
+                    aria-label="Close panel"
+                    onClick={() => setActiveTool(null)}
+                    className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    <X className="h-[18px] w-[18px]" aria-hidden="true" />
+                  </button>
+                </div>
+                {/*
+                 * `relative` is load-bearing. Panels announce through `sr-only`
+                 * live regions, which are `position: absolute`; with no positioned
+                 * ancestor they anchor to the PAGE at their static position — the
+                 * bottom of a long panel list — and stretch the document past the
+                 * viewport. The page then scrolls on the next announcement or focus
+                 * move and carries the top bar out of view. Seen in the browser:
+                 * document 1270px in a 768px window after an Add.
+                 */}
+                <div
+                  data-testid="tool-panel-scroller"
+                  className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-5"
+                >
+                  {renderToolPanel(activeTool)}
+                </div>
+              </aside>
+
+              <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
+            </>
+          ) : null}
+
+          {/* `relative` for the same reason as the tool panel's scroller. */}
+          <div
+            data-testid="canvas-scroller"
+            className="relative min-w-0 flex-1 overflow-y-auto bg-surface-page"
+          >
+            {children}
+          </div>
+
+          {inspector}
+        </div>
+      )}
     </div>
   );
 }

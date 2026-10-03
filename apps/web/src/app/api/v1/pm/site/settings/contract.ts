@@ -41,6 +41,8 @@ const siteSettingsSchema = z.object({
   favicon: z
     .object({ icon32Path: z.string(), appleTouch180Path: z.string() })
     .nullable(),
+  // Read-only here: written only by /api/v1/site/images/finalize-share-image.
+  shareImage: z.object({ path: z.string(), bytes: z.number() }).nullable(),
 });
 
 const siteFooterSchema = z.object({

@@ -46,6 +46,18 @@ describe('buildSiteAssetPath', () => {
       /^42\/favicon\/[a-f0-9-]{36}-logo\.png$/,
     );
   });
+
+  it('accepts the share kind, and parses its processed image', () => {
+    // Builder v4, Phase 5. Same reason as the favicon case above: the purge
+    // sweeps the kinds in SITE_ASSET_KINDS, so this defends it too.
+    expect(buildSiteAssetPath(42, 'share', 'pool.jpg')).toMatch(
+      /^42\/share\/[a-f0-9-]{36}-pool\.jpg$/,
+    );
+    expect(parseSiteAssetPath('42/share/uuid-pool.jpg.1200x630.jpg')).toMatchObject({
+      communityId: 42,
+      kind: 'share',
+    });
+  });
 });
 
 describe('parseSiteAssetPath', () => {

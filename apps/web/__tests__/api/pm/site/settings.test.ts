@@ -65,6 +65,7 @@ const RECORD = {
     seoDescription: null,
     searchIndexing: true,
     favicon: null,
+    shareImage: null,
   },
   footer: { associationName: null, note: null, showStatutoryLine: false },
   storage: { assetsBytesUsed: 1024, quotaBytes: 524288000 },

@@ -58,7 +58,9 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
     <EditorShell
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
-      proToolAccess={{ domain: true }}
+      view="website"
+      onViewChange={() => {}}
+      settings={<p>settings body</p>}
       communityId={42}
       hasPublishedSite
       initialNotice={null}
@@ -196,18 +198,18 @@ describe('EditorShell — composition', () => {
   it('opens a tool, names its panel, and closes it again from the same tile', async () => {
     const user = userEvent.setup();
     renderShell();
-    const address = screen.getByRole('button', { name: /Address/ });
-    await user.click(address);
-    expect(screen.getByText('panel:domain')).toBeInTheDocument();
-    expect(address).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('complementary', { name: 'Web address' })).toHaveAttribute(
+    const notice = screen.getByRole('button', { name: /Notice/ });
+    await user.click(notice);
+    expect(screen.getByText('panel:notice')).toBeInTheDocument();
+    expect(notice).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('complementary', { name: 'Urgent notice' })).toHaveAttribute(
       'id',
-      address.getAttribute('aria-controls'),
+      notice.getAttribute('aria-controls'),
     );
 
-    await user.click(address);
-    expect(screen.queryByText('panel:domain')).not.toBeInTheDocument();
-    expect(address).toHaveAttribute('aria-expanded', 'false');
+    await user.click(notice);
+    expect(screen.queryByText('panel:notice')).not.toBeInTheDocument();
+    expect(notice).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('closes the panel from its own close button', async () => {
@@ -334,5 +336,43 @@ describe('EditorShell — scroll containers contain their sr-only regions', () =
     await user.click(screen.getByRole('button', { name: 'Add' }));
     expect(screen.getByTestId('tool-panel-scroller')).toHaveClass('relative', 'overflow-y-auto');
     expect(screen.getByTestId('canvas-scroller')).toHaveClass('relative', 'overflow-y-auto');
+  });
+});
+
+describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
+  it('marks the current area and asks to switch to the other', async () => {
+    const user = userEvent.setup();
+    const onViewChange = vi.fn();
+    renderShell({ onViewChange });
+
+    const nav = screen.getByRole('navigation', { name: 'Website areas' });
+    expect(nav).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Website' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Settings' })).not.toHaveAttribute('aria-current');
+
+    await user.click(screen.getByRole('button', { name: 'Website' }));
+    expect(onViewChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(onViewChange).toHaveBeenCalledWith('settings');
+  });
+
+  it('in Settings, shows the settings in place of the rail, canvas and page controls', () => {
+    renderShell({ view: 'settings', children: <p>canvas body</p> });
+
+    expect(screen.getByText('settings body')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-scroller')).toHaveClass('relative', 'overflow-y-auto');
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+    expect(screen.queryByText('canvas body')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Preview size' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('editing-page-name')).not.toBeInTheDocument();
+    // Publish and Preview stay: settings are live, but drafts are still waiting.
+    expect(screen.getByRole('button', { name: /Publish/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument();
+  });
+
+  it('in Website, does not render the settings', () => {
+    renderShell();
+    expect(screen.queryByText('settings body')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
   });
 });

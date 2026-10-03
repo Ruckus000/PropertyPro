@@ -87,7 +87,23 @@ describe('resolveSiteSettings', () => {
       seoDescription: 'Custom description',
       searchIndexing: false,
       favicon: { icon32Path: '1/favicon/a.png', appleTouch180Path: '1/favicon/b.png' },
+      shareImage: null,
     });
+  });
+
+  it('reads the sharing image, and drops one with no path', () => {
+    expect(
+      resolveSiteSettings({ siteSettings: { shareImage: { path: '1/share/a.jpg', bytes: 900 } } })
+        .shareImage,
+    ).toEqual({ path: '1/share/a.jpg', bytes: 900 });
+    expect(
+      resolveSiteSettings({ siteSettings: { shareImage: { bytes: 900 } } }).shareImage,
+    ).toBeNull();
+    // A missing byte count is 0, so a later replace releases nothing rather
+    // than a guess.
+    expect(
+      resolveSiteSettings({ siteSettings: { shareImage: { path: '1/share/a.jpg' } } }).shareImage,
+    ).toEqual({ path: '1/share/a.jpg', bytes: 0 });
   });
 
   it('treats blank and whitespace-only strings as unset', () => {

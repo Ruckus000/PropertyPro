@@ -27,6 +27,7 @@ const settings = {
   seoDescription: null,
   searchIndexing: true,
   favicon: null,
+  shareImage: null,
 };
 
 const footer = {

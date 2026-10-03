@@ -103,9 +103,9 @@ Deferred, each with its trigger:
 - **Draft-wins merge has four hand-written copies** (see the `ponytail:` comment in
   `site-pages-service.ts`). Trigger: a bug fixed in one copy but not the others.
 - **No regression test for the top bar's fit.** It was measured in Chromium at 768–1440px
-  (#1252), and a class-name test would be the "layout inferred from text" guess that
-  `guard:responsive-geometry` refuses. Trigger: a new control added to the top bar
-  (re-measure).
+  (#1252), and re-measured when Phase 5 added the view switch. A class-name test
+  would be the "layout inferred from text" guess that `guard:responsive-geometry`
+  refuses. Trigger: a new control added to the top bar (re-measure).
 
 ### Phase 3: guided mode, tour, help drawer
 - A first-run chooser (Guide me / Let me edit freely), plus a mode switch in the top
@@ -209,21 +209,65 @@ Deferred, each with its trigger:
   platform catalog, and `resolveTheme` drops unknown fonts at render. Trigger: the
   catalog becomes editable by anyone but platform admins.
 
-### Phase 5: Settings view (top-bar view switch: Website · Documents · Settings)
-- **General:** site name and favicon. These exist in SitePanel; move them here.
-- **Address & domain:**
-  - Subdomain change: **new**. It needs slug-change handling for cookie domains,
-    custom domains and redirects from the old address.
-  - The custom-domain flow: existing DomainPanel logic.
-- **Search & sharing:**
-  - Site SEO and the share image: existing.
-  - Per-page SEO: **new** — columns on `site_pages`, a migration, and wiring into
-    the public-site metadata.
-- **Access:**
-  - Owner-login button toggle: **new**. A branding field, read by all four layouts.
-  - Take the site offline: **new**. A community flag, plus a "temporarily
-    unavailable" gate in the public-site render path.
-- Site and Address then leave the rail.
+### Phase 5: Settings view (decided 2026-10-02)
+These decisions were made against what the product has. Most of the design's
+Settings view already existed in the rail's Site and Address panels.
+
+**Decisions:**
+- **The view switch has two areas, Website and Settings.** The design's third,
+  Documents, would be the in-editor library Phase 6 chose not to build. Documents
+  stays a rail tool.
+- **Settings stay live on save, not drafts**, exactly as the panels they replace
+  were. Every card says so.
+- **The site name is the community name, shown read-only.** There is no separate
+  site name. The web app has no page for editing the community name, so there is
+  no "Edit community profile" link.
+- **Only part of the Access tab is built.** It explains who sees what and links
+  to Documents. There is no Owner-login toggle and no offline switch.
+
+**Built in 5a:**
+- **The top bar has a `Website · Settings` switch.** In Settings, the page picker,
+  device toggle, rail, canvas and inspector give way to the code-split
+  `SettingsView`.
+- **Settings has four tabs:**
+  - **General:** the site name, the site icon, photo storage and the footer.
+  - **Address & domain:** the PropertyPro address with a Copy button, and the
+    existing custom-domain flow.
+  - **Search & sharing:** search results and the new sharing image.
+  - **Access & visibility.**
+- **The Site and Address tools left the rail.** With no Pro tool left on it,
+  `TOOL_PLAN_FEATURE` and `ProToolAccess` are gone. `hasSiteCustomDomain` is a
+  plain prop.
+- **SitePanel became two forms** (`part: 'search' | 'footer'`). Each sends only its
+  own fields and resyncs only on its own stored values.
+- **A sharing image.** It was a real defect: `buildCommunityMetadata` took a
+  `heroImageUrl` that no caller passed, so every shared link went out with no
+  image. Now `siteSettings.shareImage` is one 1200×630 JPEG (JPEG so that every
+  link preview renders it), written by `/api/v1/site/images/finalize-share-image`.
+  That route works like the favicon's: it charges the quota and records the
+  image's bytes, so a replacement releases exactly the old image's bytes, and
+  only once its delete succeeds. It refuses a demo in its grace window.
+
+**5b:** per-page search title and description (columns on `site_pages`).
+
+Deferred, each with its trigger:
+- **Changing the PropertyPro address, with 90-day forwarding.** This needs a
+  slug-history table, a middleware lookup, a hold on the old name and cache
+  invalidation. The middleware's five-minute slug cache also caches misses, so a
+  new name can be unreachable for minutes. Trigger: a manager asks to change
+  their address.
+- **Taking the site offline.** This needs a gate across the page, its metadata,
+  the sitemap and document downloads, plus a decision about the transparency page.
+  The design's "$50 per day" copy is rejected under the legal-copy rule. Trigger:
+  a manager needs the site down, for example during a dispute or a migration.
+- **The Owner-login toggle.** Hiding it makes the owner portal harder to find.
+  Trigger: a manager asks to hide it.
+- **A site name separate from the community name.** Trigger: a community wants
+  the two to differ.
+- **The home hero photo as a fallback sharing image.** It would need a block read
+  in every public page's metadata. Trigger: managers don't set a sharing image.
+- **Removing a sharing image, or a site icon.** Today they can only be replaced;
+  no favicon-removal path was ever wired either. Trigger: a manager asks.
 
 ### Phase 6: Documents view
 A Documents view inside the builder, built per the design:

@@ -56,6 +56,16 @@ export const FOOTER_NOTE_MAX_LENGTH = 300;
 export const STATUTORY_FOOTER_LINE =
   'Records maintained under Fla. Stat. §718.111(12)(g)';
 
+/**
+ * The sharing image (builder v4, Phase 5), as written by its finalize route:
+ * one 1200×630 JPEG. `bytes` is kept so replacing it releases exactly what it
+ * was charged against the storage quota.
+ */
+export interface SiteShareImage {
+  path: string;
+  bytes: number;
+}
+
 /** Processed favicon variants, as written by the favicon finalize route. */
 export interface SiteFaviconPaths {
   /** 32×32 PNG — the browser tab icon. */
@@ -77,6 +87,8 @@ export interface SiteSettings {
    */
   searchIndexing: boolean;
   favicon: SiteFaviconPaths | null;
+  /** Shown when a link to the site is shared. Null: no image is sent. */
+  shareImage: SiteShareImage | null;
 }
 
 export interface SiteFooterSettings {
@@ -107,6 +119,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   seoDescription: null,
   searchIndexing: true,
   favicon: null,
+  shareImage: null,
 };
 
 export const DEFAULT_FOOTER_SETTINGS: SiteFooterSettings = {
@@ -172,7 +185,15 @@ export function resolveSiteSettings(rawBranding: unknown): SiteSettings {
     // Only an explicit boolean false disables. See SiteSettings.searchIndexing.
     searchIndexing: raw.searchIndexing !== false,
     favicon: resolveFavicon(raw.favicon),
+    shareImage: resolveShareImage(raw.shareImage),
   };
+}
+
+function resolveShareImage(raw: unknown): SiteShareImage | null {
+  if (!isRecord(raw)) return null;
+  const path = asText(raw.path);
+  const bytes = typeof raw.bytes === 'number' && Number.isFinite(raw.bytes) ? raw.bytes : 0;
+  return path ? { path, bytes } : null;
 }
 
 /** Both variant paths must be present — a half-written favicon is no favicon. */
