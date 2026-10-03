@@ -19,6 +19,7 @@ const {
   decrementAssetsUsageMock,
   resizeShareImageMock,
   setSiteShareImageMock,
+  getSiteSettingsMock,
   createAdminClientMock,
   uploadMock,
   removeMock,
@@ -33,6 +34,7 @@ const {
   decrementAssetsUsageMock: vi.fn(),
   resizeShareImageMock: vi.fn(),
   setSiteShareImageMock: vi.fn(),
+  getSiteSettingsMock: vi.fn(),
   createAdminClientMock: vi.fn(),
   uploadMock: vi.fn(),
   removeMock: vi.fn(),
@@ -55,6 +57,7 @@ vi.mock('@/lib/site-assets/quota', () => ({
 vi.mock('@/lib/services/image-processor', () => ({ resizeShareImage: resizeShareImageMock }));
 vi.mock('@/lib/services/site-settings-service', () => ({
   setSiteShareImage: setSiteShareImageMock,
+  getSiteSettings: getSiteSettingsMock,
 }));
 vi.mock('@propertypro/db/supabase/admin', () => ({ createAdminClient: createAdminClientMock }));
 
@@ -85,7 +88,11 @@ beforeEach(() => {
   setSiteShareImageMock.mockResolvedValue({ previous: null });
   downloadMock.mockResolvedValue({ data: new Blob([new Uint8Array(10)]), error: null });
   uploadMock.mockResolvedValue({ error: null });
-  removeMock.mockResolvedValue({ error: null });
+  removeMock.mockImplementation(async (paths: string[]) => ({
+    data: paths.map((name) => ({ name })),
+    error: null,
+  }));
+  getSiteSettingsMock.mockResolvedValue({ settings: { shareImage: null } });
   createAdminClientMock.mockReturnValue({
     storage: { from: () => ({ download: downloadMock, upload: uploadMock, remove: removeMock }) },
   });
@@ -126,6 +133,53 @@ describe('authorized', () => {
     const res = await POST(request({ communityId: COMMUNITY_ID, storagePath: PATH }));
 
     expect(res.status).toBe(200);
+    expect(decrementAssetsUsageMock).not.toHaveBeenCalled();
+  });
+
+  it('releases nothing when the replaced image was already gone', async () => {
+    // Two finalizes racing to replace the same image both see it as `previous`.
+    // `remove` of a missing object succeeds with an empty list; only the call
+    // that actually deleted it may release its bytes.
+    // Revert check: the `removed.length > 0` condition in the route.
+    setSiteShareImageMock.mockResolvedValue({ previous: { path: '42/share/old.jpg', bytes: 777 } });
+    removeMock.mockImplementation(async (paths: string[]) => ({
+      data: paths[0] === '42/share/old.jpg' ? [] : paths.map((name) => ({ name })),
+      error: null,
+    }));
+    const res = await POST(request({ communityId: COMMUNITY_ID, storagePath: PATH }));
+
+    expect(res.status).toBe(200);
+    expect(decrementAssetsUsageMock).not.toHaveBeenCalled();
+  });
+
+  it('deletes and uncharges the new image when recording it fails', async () => {
+    // Revert check: the compensation block in the route's catch.
+    setSiteShareImageMock.mockRejectedValue(new Error('db down'));
+    const res = await POST(request({ communityId: COMMUNITY_ID, storagePath: PATH }));
+
+    expect(res.status).toBe(500);
+    expect(incrementAssetsUsageMock).toHaveBeenCalledWith(COMMUNITY_ID, 900);
+    expect(removeMock).toHaveBeenCalledWith([OUT]);
+    expect(decrementAssetsUsageMock).toHaveBeenCalledWith(COMMUNITY_ID, 900);
+  });
+
+  it('keeps the new image charged when it was recorded and only the audit failed', async () => {
+    setSiteShareImageMock.mockRejectedValue(new Error('audit insert failed'));
+    getSiteSettingsMock.mockResolvedValue({ settings: { shareImage: { path: OUT, bytes: 900 } } });
+    const res = await POST(request({ communityId: COMMUNITY_ID, storagePath: PATH }));
+
+    expect(res.status).toBe(500);
+    expect(removeMock).not.toHaveBeenCalledWith([OUT]);
+    expect(decrementAssetsUsageMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the new image charged when its state cannot be read back', async () => {
+    setSiteShareImageMock.mockRejectedValue(new Error('db down'));
+    getSiteSettingsMock.mockRejectedValue(new Error('still down'));
+    const res = await POST(request({ communityId: COMMUNITY_ID, storagePath: PATH }));
+
+    expect(res.status).toBe(500);
+    expect(removeMock).not.toHaveBeenCalledWith([OUT]);
     expect(decrementAssetsUsageMock).not.toHaveBeenCalled();
   });
 

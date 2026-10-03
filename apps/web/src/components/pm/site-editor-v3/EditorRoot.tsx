@@ -739,6 +739,9 @@ export function EditorRoot({
   // this one, which is the first instance whose blocks are the right page's.
   const handleSelectSlot = useCallback(
     (target: SlotTarget) => {
+      // Reachable from Settings too (requirements pill, Publish's "Fix this"),
+      // whose view hides the rail and canvas this lands on.
+      setView('website');
       setActiveTool('sections');
       const targetPageId = Number(target.pageId);
       // `SITE_CHANGE_GROUP` is a non-numeric sentinel for a slot on no page.
@@ -756,7 +759,10 @@ export function EditorRoot({
   // section; this is what makes them able to do it. Passed as a prop rather
   // than read from context because `setActiveTool` lives HERE — the provider's
   // parent — and only `useSiteEditor` is out of reach from this component.
-  const handleGoToAdd = useCallback(() => setActiveTool('add'), []);
+  const handleGoToAdd = useCallback(() => {
+    setView('website');
+    setActiveTool('add');
+  }, []);
 
   /*
    * v4 "Add section here": which section the next add goes above.
@@ -792,7 +798,10 @@ export function EditorRoot({
   const handleInsertConsumed = useCallback(() => setAddTarget(null), []);
   // The publish sheet's route out of a page-set problem — a duplicate address
   // or a missing home page has no section slot, so "Fix this" cannot reach it.
-  const handleGoToPages = useCallback(() => setActiveTool('pages'), []);
+  const handleGoToPages = useCallback(() => {
+    setView('website');
+    setActiveTool('pages');
+  }, []);
   const handleViewChange = useCallback((next: EditorView) => setView(next), []);
   // Settings → Access links to the records: back to the page, Documents open.
   const handleOpenDocuments = useCallback(() => {

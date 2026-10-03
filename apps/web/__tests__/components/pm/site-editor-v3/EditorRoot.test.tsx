@@ -1278,6 +1278,23 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     ];
   });
 
+  // Publish (and the requirements pill) stay in the top bar in Settings, so
+  // their routes into the page have to leave Settings too — otherwise the
+  // tool changes behind a view that hides it and nothing visible happens.
+  // Revert check: `setView('website')` in `handleSelectSlot` / `handleGoToPages`.
+  it.each([
+    ['Fix this', 'site-editor-tool-sections'],
+    ['Go to Pages', 'site-editor-tool-pages'],
+  ])("Publish's %s from Settings returns to the page with its tool open", async (action, tool) => {
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
+    await userEvent.click(screen.getByRole('button', { name: action }));
+
+    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    expect(screen.getByTestId(tool)).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('switches to the page the offending section is on', async () => {
     renderRoot();
     // Precondition: on home, and the offending section is not reachable here.

@@ -22,7 +22,7 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { decrementAssetsUsage, incrementAssetsUsage } from '@/lib/site-assets/quota';
 import { parseSiteAssetPath, SITE_ASSETS_BUCKET } from '@/lib/site-assets/storage-paths';
 import { resizeShareImage } from '@/lib/services/image-processor';
-import { setSiteShareImage } from '@/lib/services/site-settings-service';
+import { getSiteSettings, setSiteShareImage } from '@/lib/services/site-settings-service';
 // AUTHZ: site-assets storage, on a path parseSiteAssetPath proves belongs to this community, after the property-manager check
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { shareImageFinalizeContract } from './contract';
@@ -84,17 +84,40 @@ export const POST = withErrorHandler(
     await incrementAssetsUsage(communityId, image.byteLength);
 
     const shareImage = { path, bytes: image.byteLength };
-    const { previous } = await setSiteShareImage({ communityId, actorUserId: userId, shareImage });
+    let previous: Awaited<ReturnType<typeof setSiteShareImage>>['previous'];
+    try {
+      ({ previous } = await setSiteShareImage({ communityId, actorUserId: userId, shareImage }));
+    } catch (err) {
+      // The new image is stored and charged. If the branding write did not land,
+      // nothing references it: delete it and release its bytes. If it did land
+      // (the audit insert after it failed), the image is live and stays charged.
+      // An unreadable state is treated as "landed" — over-count, never under.
+      const recorded = await getSiteSettings(communityId)
+        .then((record) => record.settings.shareImage?.path === path)
+        .catch(() => true);
+      if (!recorded) {
+        const { data: undone, error: undoErr } = await admin.storage
+          .from(SITE_ASSETS_BUCKET)
+          .remove([path]);
+        if (!undoErr && (undone?.length ?? 0) > 0) {
+          await decrementAssetsUsage(communityId, image.byteLength);
+        }
+      }
+      throw err;
+    }
 
     if (previous && previous.path !== path) {
-      const { error: staleErr } = await admin.storage
+      // Decrement only for an object this call actually deleted. `remove` of a
+      // missing object succeeds with an empty list, so two finalizes racing to
+      // replace the same image would otherwise both release its bytes.
+      const { data: removed, error: staleErr } = await admin.storage
         .from(SITE_ASSETS_BUCKET)
         .remove([previous.path]);
       if (staleErr) {
         console.warn(
           `[site/images/finalize-share-image] failed to remove replaced image ${previous.path}: ${staleErr.message}`,
         );
-      } else if (previous.bytes > 0) {
+      } else if ((removed?.length ?? 0) > 0 && previous.bytes > 0) {
         await decrementAssetsUsage(communityId, previous.bytes);
       }
     }
