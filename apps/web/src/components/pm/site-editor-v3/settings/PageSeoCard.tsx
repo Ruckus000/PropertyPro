@@ -114,6 +114,8 @@ function PageSeoForm({
   const [title, setTitle] = useState(page.seoTitle ?? '');
   const [description, setDescription] = useState(page.seoDescription ?? '');
   const [error, setError] = useState<string | null>(null);
+  // Read-only while saving: a successful save changes this form's key, which
+  // remounts it from the saved values and would drop anything typed meanwhile.
   const overLimit =
     count(title) > SEO_TITLE_MAX_LENGTH || count(description) > SEO_DESCRIPTION_MAX_LENGTH;
 
@@ -147,6 +149,7 @@ function PageSeoForm({
           id="page-seo-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          readOnly={update.isPending}
           placeholder={defaultTitle}
         />
       </div>
@@ -159,6 +162,7 @@ function PageSeoForm({
           id="page-seo-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          readOnly={update.isPending}
           rows={2}
           placeholder={siteDescription ?? undefined}
         />

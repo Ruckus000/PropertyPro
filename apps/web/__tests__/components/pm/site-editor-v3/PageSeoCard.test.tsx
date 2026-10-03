@@ -7,14 +7,15 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
 
-const { pagesRef, mutateMock } = vi.hoisted(() => ({
+const { pagesRef, mutateMock, pendingRef } = vi.hoisted(() => ({
   pagesRef: { current: [] as SitePageSummary[] },
   mutateMock: vi.fn(),
+  pendingRef: { current: false },
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/hooks/use-site-pages', () => ({
   useSitePages: () => ({ data: pagesRef.current }),
-  useUpdateSitePage: () => ({ mutate: mutateMock, isPending: false }),
+  useUpdateSitePage: () => ({ mutate: mutateMock, isPending: pendingRef.current }),
 }));
 
 import { PageSeoCard } from '@/components/pm/site-editor-v3/settings/PageSeoCard';
@@ -42,7 +43,10 @@ function renderCard() {
   );
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  pendingRef.current = false;
+});
 
 describe('PageSeoCard', () => {
   it('leaves the home page out, and says so when it is the only page', () => {
@@ -112,6 +116,19 @@ describe('PageSeoCard', () => {
     await user.type(screen.getByLabelText('Title'), '🌀'.repeat(61));
     expect(screen.getByText('61/60')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save page settings' })).toBeDisabled();
+  });
+
+  it('refuses typing while a save is in flight, so the remount cannot drop it', async () => {
+    // Revert check: `readOnly={update.isPending}` on both fields.
+    const user = userEvent.setup();
+    pendingRef.current = true;
+    pagesRef.current = [HOME, page({ id: 2, name: 'About' })];
+    renderCard();
+    const title = screen.getByLabelText('Title');
+    expect(title).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Description')).toHaveAttribute('readonly');
+    await user.type(title, 'lost');
+    expect(title).toHaveValue('');
   });
 
   it('counts what the server stores, so stray spaces do not block a save', async () => {
