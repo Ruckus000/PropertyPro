@@ -14,8 +14,9 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
-const { toastMock } = vi.hoisted(() => ({
+const { toastMock, useCustomDomainMock } = vi.hoisted(() => ({
   toastMock: { success: vi.fn(), error: vi.fn() },
+  useCustomDomainMock: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: toastMock }));
 
@@ -40,7 +41,7 @@ vi.mock('@/hooks/use-site-settings', () => ({
 }));
 
 vi.mock('@/hooks/use-custom-domain', () => ({
-  useCustomDomain: () => ({ data: { status: 'none' }, isPending: false, isError: false }),
+  useCustomDomain: useCustomDomainMock,
   useSetDomain: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useVerifyDomain: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useRemoveDomain: () => ({ mutate: vi.fn(), isPending: false, error: null }),
@@ -70,7 +71,10 @@ function renderView() {
   );
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  useCustomDomainMock.mockReturnValue({ data: { status: 'none' }, isPending: false, isError: false });
+});
 
 describe('SettingsView — tabs', () => {
   it('opens on General: the site name, icon, storage and footer', () => {
@@ -112,6 +116,40 @@ describe('SettingsView — tabs', () => {
     const tabs = screen.getAllByRole('tab');
     expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
     expect(screen.getByRole('tabpanel')).toHaveAccessibleName('General');
+  });
+});
+
+// A panel mounts on its tab's first visit and is then hidden, not unmounted,
+// so an unsaved edit survives a look at another tab.
+// Revert check: `hidden={t.id !== tab}` → render only the selected panel.
+describe('SettingsView — panels keep their state', () => {
+  it('keeps an unsaved footer note across a tab switch', async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.type(screen.getByLabelText('Footer note'), 'Pool closes at 9');
+    await user.click(screen.getByRole('tab', { name: 'Search & sharing' }));
+    await user.click(screen.getByRole('tab', { name: 'General' }));
+
+    expect(screen.getByLabelText('Footer note')).toHaveValue('Pool closes at 9');
+  });
+
+  it("does not mount a tab's content until the tab is first opened", async () => {
+    const user = userEvent.setup();
+    renderView();
+    expect(useCustomDomainMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('tab', { name: 'Address & domain' }));
+    expect(useCustomDomainMock).toHaveBeenCalled();
+  });
+
+  it("gives every tab's aria-controls a panel that exists, and shows only one", () => {
+    renderView();
+    for (const tab of screen.getAllByRole('tab')) {
+      const panel = document.getElementById(tab.getAttribute('aria-controls') ?? '');
+      expect(panel).toHaveAttribute('role', 'tabpanel');
+      expect(panel).toHaveAttribute('aria-labelledby', tab.id);
+    }
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
   });
 });
 

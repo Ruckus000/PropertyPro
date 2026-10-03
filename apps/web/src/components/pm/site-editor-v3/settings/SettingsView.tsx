@@ -15,7 +15,7 @@
  * offline, and hiding the login button.
  */
 
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -69,7 +69,16 @@ export function SettingsView({
   hasSiteCustomDomain,
   onOpenDocuments,
 }: SettingsViewProps) {
-  const [tab, setTab] = useState<TabId>('general');
+  const [tab, setTabState] = useState<TabId>('general');
+  // Tabs opened so far. A panel mounts on its first visit and is then hidden,
+  // not unmounted, when another tab is selected — so a half-typed footer note
+  // survives a look at another tab. Mounting on first visit (not all four up
+  // front) keeps opening Settings from firing every panel's reads at once.
+  const [visited, setVisited] = useState<ReadonlySet<TabId>>(() => new Set<TabId>(['general']));
+  const setTab = (next: TabId) => {
+    setTabState(next);
+    setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+  };
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const { data: record } = useSiteSettings(communityId, initialSettings);
 
@@ -94,6 +103,113 @@ export function SettingsView({
   }
 
   const address = publicSiteUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') ?? null;
+
+
+  // Each tab's content. Built as descriptions only; nothing mounts until its
+  // panel renders it (below).
+  const panels: Record<TabId, ReactNode> = {
+    general: (
+      <>
+        <Card title="General">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-content">Site name</p>
+            <p className="text-sm text-content" data-testid="settings-site-name">
+              {community.name}
+            </p>
+            <p className="text-sm text-content-tertiary">
+              Your site uses your community&apos;s name in its header, the browser tab and
+              search results.
+            </p>
+          </div>
+          <SiteIconField communityId={communityId} initialSettings={initialSettings} />
+          {record?.storage ? <StorageMeter storage={record.storage} /> : null}
+        </Card>
+        <Card>
+          <SitePanel
+            part="footer"
+            communityId={communityId}
+            community={community}
+            tagline={tagline}
+            initialSettings={initialSettings}
+          />
+        </Card>
+      </>
+    ),
+    address: (
+      <>
+        <Card title="Your PropertyPro address">
+          <p className="text-sm text-content-secondary">
+            This address always works, even after you connect your own domain.
+          </p>
+          {address ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className="rounded-[var(--radius-md)] bg-surface-muted px-3 py-2 font-mono text-sm text-content"
+                data-testid="settings-address"
+              >
+                {address}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(publicSiteUrl ?? address)
+                    .then(() => toast.success('Copied.'))
+                    .catch(() => toast.error("Couldn't copy. Select the address and copy it."));
+                }}
+              >
+                <Copy className="h-4 w-4" aria-hidden="true" />
+                Copy
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-content-secondary">
+              Your address isn&apos;t available right now.
+            </p>
+          )}
+        </Card>
+        <Card title="Use your own domain">
+          <DomainPanel communityId={communityId} hasSiteCustomDomain={hasSiteCustomDomain} />
+        </Card>
+      </>
+    ),
+    search: (
+      <>
+        <Card>
+          <SitePanel
+            part="search"
+            communityId={communityId}
+            community={community}
+            tagline={tagline}
+            initialSettings={initialSettings}
+          />
+        </Card>
+        <Card>
+          <ShareImageField communityId={communityId} initialSettings={initialSettings} />
+        </Card>
+      </>
+    ),
+    access: (
+      <Card title="Who can see what">
+        <p className="text-sm text-content">
+          <span className="font-semibold">The pages you publish are open to everyone.</span>{' '}
+          Anyone with the address can read them.
+        </p>
+        <p className="text-sm text-content">
+          <span className="font-semibold">
+            Official records are for owners and residents who sign in.
+          </span>{' '}
+          Each document stays private until you open it to the public, one at a time, in
+          Documents.
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={onOpenDocuments}>
+          Open Documents
+        </Button>
+      </Card>
+    ),
+  };
 
   return (
     <div
@@ -141,117 +257,20 @@ export function SettingsView({
         </p>
       </div>
 
-      <div
-        role="tabpanel"
-        id={`settings-panel-${tab}`}
-        aria-labelledby={`settings-tab-${tab}`}
-        tabIndex={0}
-        className="min-w-0 flex-1 space-y-6 focus-visible:outline-none"
-      >
-        {tab === 'general' ? (
-          <>
-            <Card title="General">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-content">Site name</p>
-                <p className="text-sm text-content" data-testid="settings-site-name">
-                  {community.name}
-                </p>
-                <p className="text-sm text-content-tertiary">
-                  Your site uses your community&apos;s name in its header, the browser tab and
-                  search results.
-                </p>
-              </div>
-              <SiteIconField communityId={communityId} initialSettings={initialSettings} />
-              {record?.storage ? <StorageMeter storage={record.storage} /> : null}
-            </Card>
-            <Card>
-              <SitePanel
-                part="footer"
-                communityId={communityId}
-                community={community}
-                tagline={tagline}
-                initialSettings={initialSettings}
-              />
-            </Card>
-          </>
-        ) : null}
-
-        {tab === 'address' ? (
-          <>
-            <Card title="Your PropertyPro address">
-              <p className="text-sm text-content-secondary">
-                This address always works, even after you connect your own domain.
-              </p>
-              {address ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <span
-                    className="rounded-[var(--radius-md)] bg-surface-muted px-3 py-2 font-mono text-sm text-content"
-                    data-testid="settings-address"
-                  >
-                    {address}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      void navigator.clipboard
-                        .writeText(publicSiteUrl ?? address)
-                        .then(() => toast.success('Copied.'))
-                        .catch(() => toast.error("Couldn't copy. Select the address and copy it."));
-                    }}
-                  >
-                    <Copy className="h-4 w-4" aria-hidden="true" />
-                    Copy
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm text-content-secondary">
-                  Your address isn&apos;t available right now.
-                </p>
-              )}
-            </Card>
-            <Card title="Use your own domain">
-              <DomainPanel communityId={communityId} hasSiteCustomDomain={hasSiteCustomDomain} />
-            </Card>
-          </>
-        ) : null}
-
-        {tab === 'search' ? (
-          <>
-            <Card>
-              <SitePanel
-                part="search"
-                communityId={communityId}
-                community={community}
-                tagline={tagline}
-                initialSettings={initialSettings}
-              />
-            </Card>
-            <Card>
-              <ShareImageField communityId={communityId} initialSettings={initialSettings} />
-            </Card>
-          </>
-        ) : null}
-
-        {tab === 'access' ? (
-          <Card title="Who can see what">
-            <p className="text-sm text-content">
-              <span className="font-semibold">The pages you publish are open to everyone.</span>{' '}
-              Anyone with the address can read them.
-            </p>
-            <p className="text-sm text-content">
-              <span className="font-semibold">
-                Official records are for owners and residents who sign in.
-              </span>{' '}
-              Each document stays private until you open it to the public, one at a time, in
-              Documents.
-            </p>
-            <Button type="button" variant="outline" size="sm" onClick={onOpenDocuments}>
-              Open Documents
-            </Button>
-          </Card>
-        ) : null}
+      <div className="min-w-0 flex-1">
+        {TABS.map((t) => (
+          <div
+            key={t.id}
+            role="tabpanel"
+            id={`settings-panel-${t.id}`}
+            aria-labelledby={`settings-tab-${t.id}`}
+            tabIndex={0}
+            hidden={t.id !== tab}
+            className="space-y-6 focus-visible:outline-none"
+          >
+            {visited.has(t.id) ? panels[t.id] : null}
+          </div>
+        ))}
       </div>
     </div>
   );

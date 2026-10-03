@@ -24,13 +24,21 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
-const { useSiteSettingsMock, updateMutateMock, uploadMutateMock, shareMutateMock, recordRef } =
+const {
+  useSiteSettingsMock,
+  updateMutateMock,
+  uploadMutateMock,
+  shareMutateMock,
+  recordRef,
+  pendingRef,
+} =
   vi.hoisted(() => ({
     useSiteSettingsMock: vi.fn(),
     updateMutateMock: vi.fn(),
     uploadMutateMock: vi.fn(),
     shareMutateMock: vi.fn(),
     recordRef: { current: null as unknown },
+    pendingRef: { current: false },
   }));
 
 // Mock this module COMPLETELY. A partial factory fails only at module load,
@@ -38,7 +46,7 @@ const { useSiteSettingsMock, updateMutateMock, uploadMutateMock, shareMutateMock
 // unrelated component breaking rather than a short mock.
 vi.mock('@/hooks/use-site-settings', () => ({
   useSiteSettings: useSiteSettingsMock,
-  useUpdateSiteSettings: () => ({ mutate: updateMutateMock, isPending: false }),
+  useUpdateSiteSettings: () => ({ mutate: updateMutateMock, isPending: pendingRef.current }),
   useUploadFavicon: () => ({ mutate: uploadMutateMock, isPending: false }),
   useUploadShareImage: () => ({ mutate: shareMutateMock, isPending: false }),
   siteSettingsQueryKey: (communityId: number) =>
@@ -89,6 +97,7 @@ function renderPanel(record: unknown = EMPTY_RECORD, part: Part = 'search') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  pendingRef.current = false;
 });
 
 describe('SERP preview is decoration, not content', () => {
@@ -256,6 +265,43 @@ describe('saving', () => {
       { associationName: null, note: null, showStatutoryLine: true },
       expect.anything(),
     );
+  });
+});
+
+describe('while a save is in flight', () => {
+  // The resync replaces the form with the saved values when the save lands, so
+  // anything typed in between would be dropped. The fields refuse input for
+  // that window instead, and keep focus (read-only, not disabled).
+  // Revert check: `readOnly={update.isPending}` / `disabled={update.isPending}`.
+  it('the search fields are read-only and ignore typing, then edit again after', async () => {
+    const user = userEvent.setup();
+    pendingRef.current = true;
+    const { rerender } = renderPanel();
+
+    const title = screen.getByLabelText('Page title');
+    expect(title).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Description')).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Let search engines list this site')).toBeDisabled();
+    await user.type(title, 'lost');
+    expect(title).toHaveValue('');
+
+    pendingRef.current = false;
+    rerender(panel('search'));
+    await user.type(title, 'kept');
+    expect(title).toHaveValue('kept');
+  });
+
+  it('the footer fields are read-only and ignore typing', async () => {
+    const user = userEvent.setup();
+    pendingRef.current = true;
+    renderPanel(EMPTY_RECORD, 'footer');
+
+    const note = screen.getByLabelText('Footer note');
+    expect(screen.getByLabelText('Association name')).toHaveAttribute('readonly');
+    expect(note).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Show the records statement')).toBeDisabled();
+    await user.type(note, 'lost');
+    expect(note).toHaveValue('');
   });
 });
 

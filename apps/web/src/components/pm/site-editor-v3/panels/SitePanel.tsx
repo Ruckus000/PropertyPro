@@ -192,6 +192,10 @@ export function SitePanel({
     setError(null);
   }
 
+  // While a save is in flight the fields are read-only: the resync above
+  // replaces the form with the saved values when it lands, which would drop
+  // anything typed in between. Read-only, not disabled, so focus stays put.
+
   const overLimit =
     part === 'search'
       ? countCharacters(seoTitle) > SEO_TITLE_MAX_LENGTH ||
@@ -272,6 +276,7 @@ export function SitePanel({
               id="site-seo-title"
               value={seoTitle}
               onChange={(e) => setSeoTitle(e.target.value)}
+              readOnly={update.isPending}
               placeholder={`${community.name} — Community Portal`}
             />
             <p className="text-sm text-content-tertiary">
@@ -289,6 +294,7 @@ export function SitePanel({
               id="site-seo-description"
               value={seoDescription}
               onChange={(e) => setSeoDescription(e.target.value)}
+              readOnly={update.isPending}
               rows={3}
             />
             <p className="text-sm text-content-tertiary">
@@ -311,6 +317,7 @@ export function SitePanel({
               id="site-search-indexing"
               checked={searchIndexing}
               onCheckedChange={setSearchIndexing}
+              disabled={update.isPending}
             />
           </div>
         </section>
@@ -332,6 +339,7 @@ export function SitePanel({
               id="site-association-name"
               value={associationName}
               onChange={(e) => setAssociationName(e.target.value)}
+              readOnly={update.isPending}
               placeholder={community.name}
             />
             <p className="text-sm text-content-tertiary">
@@ -348,6 +356,7 @@ export function SitePanel({
               id="site-footer-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
+              readOnly={update.isPending}
               rows={2}
             />
             <p className="text-sm text-content-tertiary">
@@ -368,6 +377,7 @@ export function SitePanel({
                 id="site-statutory-line"
                 checked={showStatutoryLine}
                 onCheckedChange={setShowStatutoryLine}
+                disabled={update.isPending}
               />
             </div>
 
