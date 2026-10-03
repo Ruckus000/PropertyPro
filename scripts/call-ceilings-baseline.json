@@ -258,7 +258,7 @@
     "unscoped": 3
   },
   "apps/web/src/lib/services/user-preferences-service.ts": {
-    "unscoped": 2
+    "unscoped": 3
   },
   "apps/web/src/lib/services/user-profile-service.ts": {
     "unscoped": 2

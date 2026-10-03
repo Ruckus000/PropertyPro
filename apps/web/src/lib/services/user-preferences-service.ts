@@ -10,7 +10,7 @@
  * user-profile-service.ts for the `users` table.
  */
 import { userPreferences } from '@propertypro/db';
-import { and, eq } from '@propertypro/db/filters';
+import { and, eq, sql } from '@propertypro/db/filters';
 // AUTHZ: User preferences — user-scoped (no community_id); caller verifies identity.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
@@ -46,5 +46,33 @@ export async function setUserPreference(userId: string, key: string, value: unkn
     .onConflictDoUpdate({
       target: [userPreferences.userId, userPreferences.preferenceKey],
       set: { value: value as Record<string, unknown>, updatedAt: now },
+    });
+}
+
+/**
+ * Merges `patch` into the stored object for `(userId, key)` in ONE statement
+ * (jsonb `||`, a shallow top-level merge), creating the row when absent.
+ *
+ * Two concurrent merges of different keys both survive. A read-modify-write
+ * through `setUserPreference` would let the second overwrite the first.
+ * Keep the stored value FLAT for this reason: a nested object is replaced
+ * whole, not merged.
+ */
+export async function mergeUserPreference(
+  userId: string,
+  key: string,
+  patch: Record<string, string | boolean>,
+): Promise<void> {
+  const db = createUnscopedClient();
+  const now = new Date();
+  await db
+    .insert(userPreferences)
+    .values({ userId, preferenceKey: key, value: patch, createdAt: now, updatedAt: now })
+    .onConflictDoUpdate({
+      target: [userPreferences.userId, userPreferences.preferenceKey],
+      set: {
+        value: sql`${userPreferences.value} || excluded.value`,
+        updatedAt: now,
+      },
     });
 }
