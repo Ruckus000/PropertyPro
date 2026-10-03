@@ -122,13 +122,27 @@ export const supportInboxMessages = pgTable(
      */
     hasAttachments: boolean('has_attachments').notNull().default(false),
     /**
-     * The provider payload, written ONLY when `normalization_status <> 'ok'`.
+     * Provider-payload evidence. TWO distinct uses, told apart by
+     * `normalization_status`, never by this column being non-null.
      *
-     * This is the quarantine channel and the fixture-capture mechanism in one:
-     * Forward Email's payload shape is documented thinly, so the first message
-     * that fails to normalize lands here to be read out of Postgres and frozen
-     * as a test fixture. Deliberately in the database and not in logs — it
-     * holds third parties' email bodies.
+     * 1. `normalization_status = 'failed'` — the QUARANTINE channel, holding the
+     *    whole payload. Forward Email's shape is documented thinly, so the first
+     *    message that fails to normalize lands here to be read out of Postgres
+     *    and frozen as a test fixture. Deliberately in the database and not in
+     *    logs: it holds third parties' email bodies.
+     * 2. `normalization_status = 'ok'` — the authentication SHAPE PROBE, a
+     *    structural description under `spf`/`dkim`/`dmarc` plus the authserv-id,
+     *    written only while a verdict could not be read and capped at a small
+     *    number of rows. TYPE TAGS, KEY NAMES and ARRAY LENGTHS only — no value,
+     *    no header contents, no body, no address. See `describeAuthShape` in
+     *    `support-inbox/normalize.ts` for why the outcome columns alone cannot
+     *    say which payload shape arrives.
+     *
+     * The earlier version of this comment said this column is written ONLY when
+     * the status is not 'ok'. That was prose, not a constraint, and use 2 broke
+     * it deliberately rather than adding a column for a diagnostic. Anything
+     * reading this column must branch on the status — `inbox.ts` derives
+     * `unreadable` from the status for exactly that reason.
      */
     rawPayload: jsonb('raw_payload').$type<Record<string, unknown>>(),
     /** 'ok' | 'failed'. A 'failed' row is a quarantine record, not a message. */

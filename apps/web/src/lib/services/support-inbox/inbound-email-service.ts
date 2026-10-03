@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto';
 // AUTHZ: platform support inbox — tables have no community_id; no tenant data read.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { supportInboxMessages, supportInboxThreads } from '@propertypro/db';
-import { and, desc, eq, gte, inArray, ne } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, isNotNull, ne } from '@propertypro/db/filters';
 import { SUPPORT_THREAD_NO_SUBJECT } from '@propertypro/shared';
 import type { SupportThreadStatus } from '@propertypro/shared';
 
@@ -28,6 +28,7 @@ import {
   normalizeSubject,
   THREAD_FALLBACK_WINDOW_DAYS,
 } from './threading';
+import { AUTH_SHAPE_PROBE_ROW_LIMIT, authShapeToStore } from './auth-shape-probe';
 import type { InboundEmail } from './types';
 // Family 2 (top-level `code` only, no `cause` walk). The copies this replaced
 // used to disagree on signature in three different files; see the header of
@@ -125,6 +126,38 @@ async function findThreadId(db: UnscopedDb | UnscopedTx, email: InboundEmail): P
 }
 
 /**
+ * How many rows already carry the shape probe.
+ *
+ * A probe row is `raw_payload IS NOT NULL` with `normalization_status = 'ok'` —
+ * quarantine rows are the `'failed'` ones, so the two uses of that column stay
+ * distinguishable by status alone and this needs no jsonb key test.
+ *
+ * `.limit()` rather than `count(*)`: the caller only compares against a small
+ * ceiling, so reading at most that many ids is bounded by construction and
+ * cheaper than an aggregate over the table.
+ *
+ * `raw_payload` is not indexed, so while FEWER than the ceiling many probe rows
+ * exist this scans the table to prove it. That is bounded twice over and so not
+ * worth an index: the caller does not reach this at all unless a verdict was
+ * unreadable, and the cap means it can happen at most that many times in the
+ * table's life — after which the matching rows are found and the scan stops
+ * early.
+ */
+async function countAuthShapeProbeRows(tx: UnscopedTx): Promise<number> {
+  const rows = await tx
+    .select({ id: supportInboxMessages.id })
+    .from(supportInboxMessages)
+    .where(
+      and(
+        isNotNull(supportInboxMessages.rawPayload),
+        eq(supportInboxMessages.normalizationStatus, 'ok'),
+      ),
+    )
+    .limit(AUTH_SHAPE_PROBE_ROW_LIMIT);
+  return rows.length;
+}
+
+/**
  * Store one received message, creating or updating its thread.
  *
  * The message row IS the idempotency fence — there is no separate fence table.
@@ -162,6 +195,9 @@ export async function persistInboundEmail(
   try {
     return await db.transaction(async (tx) => {
       const threadId = await resolveThreadId(tx, email, occurredAt);
+      const authShape = await authShapeToStore(email.authShape, () =>
+        countAuthShapeProbeRows(tx),
+      );
 
       const [message] = await tx
         .insert(supportInboxMessages)
@@ -189,6 +225,11 @@ export async function persistInboundEmail(
           spfResult: email.spfResult,
           dkimResult: email.dkimResult,
           dmarcResult: email.dmarcResult,
+          // Shape-only, and only while a verdict is missing — see
+          // `authShapeToStore`. This is the one place `raw_payload` is written on
+          // a row that normalized FINE, which is why the status stays 'ok' and
+          // the schema docblock names both uses of the column.
+          rawPayload: authShape,
           normalizationStatus: 'ok',
         })
         .returning({ id: supportInboxMessages.id });

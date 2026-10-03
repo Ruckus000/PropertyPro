@@ -47,6 +47,12 @@ import {
 /** A verdict is a word ('pass', 'fail', 'softfail', 'none'). This is slack. */
 const MAX_VERDICT_CHARS = 64;
 
+/** Clamps on the shape probe — see `describeAuthShape`. Key names are remote input. */
+const MAX_SHAPE_KEYS = 12;
+const MAX_SHAPE_KEY_CHARS = 40;
+const MAX_SHAPE_DEPTH = 3;
+const MAX_AUTHSERV_ID_CHARS = 128;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -68,40 +74,72 @@ function readString(value: unknown): string | null {
   return null;
 }
 
-/** Tolerates a bare scalar where an array was expected — a common provider drift. */
 /**
  * An authentication verdict from the provider, clamped.
  *
- * Accepts a bare string OR one level of object nesting, because the provider
- * sends the latter — see the comment in the body. A boolean still does not
- * stringify, for the reason `readString` documents.
+ * Accepts a bare string, one level of object nesting, OR a per-signature
+ * `results` array — because which of those actually arrives is not established,
+ * and this reader must not bet on one shape a third time.
  *
- * The clamp matters either way: this is a remote party's value crossing a trust
- * boundary into an unconstrained text column, and a verdict is a word. Anything
- * longer is not a verdict, so keep a prefix — enough to recognise in a
+ * What IS established: the first real messages after the object dig shipped
+ * stored spf='pass', dmarc='pass', dkim=NULL. TWO payload shapes produce exactly
+ * that, and the stored columns cannot tell them apart:
+ *
+ *   1. mailauth's objects, forwarded verbatim. mailauth gives `spf` and `dmarc`
+ *      a `status.result`, but gives `dkim` NO singular status — only
+ *      `results: [{ status: { result } }]`, one entry per signature. A reader
+ *      without the array tier therefore drops dkim and keeps the other two,
+ *      which is the observed pattern with no header involved at all.
+ *   2. No readable JSON verdict fields, the values coming from the
+ *      `Authentication-Results` header below, whose `dkim=` our provider omits.
+ *
+ * Both also explain the three nulls from before the dig shipped, when this read
+ * strings only. So every tier is covered here and the question of which path
+ * production uses is answered by evidence — `describeAuthShape` at the bottom of
+ * this file — instead of by a comment asserting one.
+ *
+ * `results` is read LAST, so the precedence of the singular shapes is unchanged.
+ * Among entries a `pass` wins: a message is DKIM-authenticated when at least one
+ * signature verifies, which is what every MUA reports. That can show `dkim=pass`
+ * for a message whose ALIGNED signature failed — deliberately not handled, since
+ * DKIM never vouches for the visible `From` (only DMARC does) and the console's
+ * "Sender authenticated" line already requires DMARC itself to have passed.
+ *
+ * A boolean still does not stringify, for the reason `readString` documents.
+ *
+ * The clamp matters on every tier: this is a remote party's value crossing a
+ * trust boundary into an unconstrained text column, and a verdict is a word.
+ * Anything longer is not a verdict, so keep a prefix — enough to recognise in a
  * quarantine investigation — rather than storing an unbounded blob or dropping
  * the evidence entirely.
  */
 function readVerdict(value: unknown): string | null {
-  // A bare string is the shape this reader was written for. It is NOT what
-  // production sends: the first real message after this feature shipped stored
-  // three nulls. Forward Email's MX is built on mailauth, which reports a
-  // verdict as an OBJECT, so a string-only reader silently drops every one.
-  // `result` and `status` are the keys mailauth uses; dig one level through
-  // each rather than betting on a single shape.
   const direct = readString(value);
   if (direct !== null) return direct.slice(0, MAX_VERDICT_CHARS);
 
   const record = asRecord(value);
   if (record === null) return null;
 
-  const nested =
+  const singular =
     readString(record.result) ??
     readString(asRecord(record.status)?.result) ??
     readString(record.status);
-  return nested === null ? null : nested.slice(0, MAX_VERDICT_CHARS);
+  if (singular !== null) return singular.slice(0, MAX_VERDICT_CHARS);
+
+  const perSignature = readArray(record.results)
+    .map(
+      (entry) =>
+        readString(asRecord(asRecord(entry)?.status)?.result) ??
+        readString(asRecord(entry)?.result) ??
+        readString(asRecord(entry)?.status) ??
+        readString(entry),
+    )
+    .filter((entry): entry is string => entry !== null);
+  const chosen = perSignature.find((entry) => entry.toLowerCase() === 'pass') ?? perSignature[0];
+  return chosen === undefined ? null : chosen.slice(0, MAX_VERDICT_CHARS);
 }
 
+/** Tolerates a bare scalar where an array was expected — a common provider drift. */
 function readArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (value === undefined || value === null) return [];
@@ -269,13 +307,27 @@ export function detectAttachments(payload: Record<string, unknown>): boolean {
  * would let a spoofed message display `dmarc=pass`, or fill in a method the
  * provider's header left out.
  */
-function readAuthenticationResults(
-  payload: Record<string, unknown>,
-): { spf: string | null; dkim: string | null; dmarc: string | null } {
-  const out: { spf: string | null; dkim: string | null; dmarc: string | null } = {
+interface AuthenticationResults {
+  spf: string | null;
+  dkim: string | null;
+  dmarc: string | null;
+  /**
+   * The authserv-id on the FIRST such header, or null when the payload carried
+   * no `Authentication-Results` header at all. Reported for the shape probe
+   * only; the trust decision below does not depend on it being exposed.
+   */
+  authservId: string | null;
+  /** True only when `authservId` is one of our own receiving MTAs. */
+  trusted: boolean;
+}
+
+function readAuthenticationResults(payload: Record<string, unknown>): AuthenticationResults {
+  const out: AuthenticationResults = {
     spf: null,
     dkim: null,
     dmarc: null,
+    authservId: null,
+    trusted: false,
   };
 
   const first = readArray(payload.headerLines)
@@ -285,7 +337,9 @@ function readAuthenticationResults(
 
   const body = first.replace(/^authentication-results\s*:/i, '');
   const authservId = body.split(';', 1)[0]?.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? '';
+  out.authservId = authservId.slice(0, MAX_AUTHSERV_ID_CHARS);
   if (!isTrustedAuthservId(authservId)) return out;
+  out.trusted = true;
 
   // Quoted strings and comments are free text (`reason="… dmarc=pass"`) and
   // must not be read as results.
@@ -310,6 +364,70 @@ function isTrustedAuthservId(authservId: string): boolean {
   return authservId === 'forwardemail.net' || authservId.endsWith('.forwardemail.net');
 }
 
+/**
+ * A SHAPE-ONLY description of the payload's authentication fields.
+ *
+ * Why this exists: the verdict columns record an OUTCOME, and two different
+ * payload shapes produce the outcome production shows — mailauth's objects
+ * forwarded verbatim (whose `dkim` has no singular status), or no readable JSON
+ * fields with the values coming from the header. `readVerdict`'s docblock sets
+ * this out. Three rounds of correcting this reader have each had to argue from
+ * the outcome columns because the only capture mechanism —
+ * `normalization_status='failed'` writing `raw_payload` — has never fired.
+ *
+ * So record the shape, and nothing but the shape. Every leaf here is a TYPE TAG
+ * ('string', 'number', 'boolean', 'absent', 'null'), an ARRAY LENGTH, or a KEY
+ * NAME. No value is ever emitted: not a verdict, not a header's contents, not a
+ * body, not an address. The single exception is the authserv-id, which is the
+ * identity of the MTA that authenticated the delivery and is exactly what a
+ * reader of this record needs to know.
+ *
+ * Key names come from the provider, so they are clamped in both count and
+ * length — a structural description must not become an unbounded write.
+ */
+function describeShape(value: unknown, depth: number): unknown {
+  if (value === undefined) return 'absent';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+
+  if (Array.isArray(value)) {
+    // The first entry stands for the rest: mailauth's `results` is homogeneous,
+    // and describing every entry would scale with a remote party's input.
+    return depth >= MAX_SHAPE_DEPTH || value.length === 0
+      ? `array[${value.length}]`
+      : { array: value.length, entry: describeShape(value[0], depth + 1) };
+  }
+
+  const record = asRecord(value);
+  if (record === null) return typeof value;
+
+  const keys = Object.keys(record).slice(0, MAX_SHAPE_KEYS);
+  if (depth >= MAX_SHAPE_DEPTH) return keys.map((key) => key.slice(0, MAX_SHAPE_KEY_CHARS));
+
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    out[key.slice(0, MAX_SHAPE_KEY_CHARS)] = describeShape(record[key], depth + 1);
+  }
+  return out;
+}
+
+function describeAuthShape(
+  payload: Record<string, unknown>,
+  authResults: AuthenticationResults,
+): Record<string, unknown> {
+  return {
+    spf: describeShape(payload.spf, 0),
+    dkim: describeShape(payload.dkim, 0),
+    dmarc: describeShape(payload.dmarc, 0),
+    // Which of the two candidate paths was even available, in one word.
+    authenticationResultsHeader:
+      authResults.authservId === null ? 'absent' : authResults.trusted ? 'trusted' : 'untrusted',
+    authservId: authResults.authservId,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The normalizer
 // ---------------------------------------------------------------------------
@@ -329,6 +447,9 @@ export function normalizeForwardEmailPayload(payload: unknown): InboundEmail {
 
   const { mailbox, deliveredTo } = resolveMailbox(record);
   const authResults = readAuthenticationResults(record);
+  const spfResult = readVerdict(record.spf) ?? authResults.spf;
+  const dkimResult = readVerdict(record.dkim) ?? authResults.dkim;
+  const dmarcResult = readVerdict(record.dmarc) ?? authResults.dmarc;
 
   return {
     mailbox,
@@ -351,8 +472,15 @@ export function normalizeForwardEmailPayload(payload: unknown): InboundEmail {
     // Provider field first — it is their own explicit verdict — then the
     // standard header. Either may be absent; both being absent is the honest
     // null, and means this provider reports authentication nowhere we can read.
-    spfResult: readVerdict(record.spf) ?? authResults.spf,
-    dkimResult: readVerdict(record.dkim) ?? authResults.dkim,
-    dmarcResult: readVerdict(record.dmarc) ?? authResults.dmarc,
+    spfResult,
+    dkimResult,
+    dmarcResult,
+    // Only when something could not be read. A row with all three present has
+    // nothing left to explain, so it carries no probe — which is also what
+    // makes this self-limiting once the reader covers the shape that arrives.
+    authShape:
+      spfResult === null || dkimResult === null || dmarcResult === null
+        ? describeAuthShape(record, authResults)
+        : null,
   };
 }

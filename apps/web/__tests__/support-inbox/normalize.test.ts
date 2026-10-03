@@ -200,23 +200,206 @@ describe('mailparser falsy fields', () => {
   });
 });
 
+describe('authentication shape probe', () => {
+  it('is absent when all three verdicts were readable', () => {
+    // Nothing left to explain on that row, so nothing is recorded.
+    expect(normalizeForwardEmailPayload(forwardEmailFixture).authShape).toBeNull();
+  });
+
+  it('describes the shape of an unreadable field without emitting any value', () => {
+    // The privacy contract, and the reason this is acceptable to write at all.
+    // Everything here is a TYPE TAG, a KEY NAME or an ARRAY LENGTH. The only
+    // value is the authserv-id, which is the identity of the MTA that
+    // authenticated the delivery and is the whole point of reading it.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com', name: 'Jane Doe' }] },
+      recipients: ['support@getpropertypro.com'],
+      subject: 'Invoice 4417 attached',
+      text: 'Please wire the balance to the account below.',
+      html: '<p>Please wire the balance to the account below.</p>',
+      spf: { status: { result: 'pass' }, domain: 'example.com' },
+      dkim: { headerFrom: ['example.com'], results: [] },
+      headerLines: [{ line: 'Authentication-Results: mx1.forwardemail.net; spf=pass' }],
+    });
+
+    const probe = JSON.stringify(email.authShape);
+
+    // Structure is reported...
+    expect(email.authShape).toMatchObject({
+      spf: { status: { result: 'string' }, domain: 'string' },
+      // A non-empty array reports its ENTRY's shape too, which is how
+      // mailauth's `results[{ status: { result } }]` becomes legible at all.
+      dkim: { headerFrom: { array: 1, entry: 'string' }, results: 'array[0]' },
+      dmarc: 'absent',
+      authenticationResultsHeader: 'trusted',
+      authservId: 'mx1.forwardemail.net',
+    });
+
+    // ...and content is not. Not the body, not the subject, not the sender, not
+    // the verdict words, not the header's contents.
+    for (const secret of [
+      'Please wire the balance',
+      'Invoice 4417',
+      'jane@example.com',
+      'Jane Doe',
+      'example.com;',
+      'smtp.mailfrom',
+      'pass',
+    ]) {
+      expect(probe).not.toContain(secret);
+    }
+  });
+
+  it('says WHICH path was available, including when the header is untrusted', () => {
+    // This is what makes the next real message decisive rather than arguable:
+    // 'absent' and 'untrusted' both mean the header could not have supplied the
+    // verdicts, so anything non-null must have come from the JSON fields.
+    const untrusted = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      headerLines: [{ line: 'Authentication-Results: mail.attacker.example; spf=pass' }],
+    });
+
+    expect(untrusted.authShape).toMatchObject({
+      authenticationResultsHeader: 'untrusted',
+      authservId: 'mail.attacker.example',
+    });
+
+    const none = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+    });
+
+    expect(none.authShape).toMatchObject({
+      spf: 'absent',
+      dkim: 'absent',
+      dmarc: 'absent',
+      authenticationResultsHeader: 'absent',
+      authservId: null,
+    });
+  });
+});
+
 describe('authentication verdicts', () => {
-  it('reads the verdicts production actually reports from the reference payload', () => {
-    // These three values are PRODUCTION OUTCOMES, not a guess: rows 25/26/27 —
-    // the first inbound messages after the reader fix deployed — all carry
-    // spf=pass, dmarc=pass and dkim=NULL. The fixture used to assert
-    // dkim='pass' from bare-string JSON fields, a shape production disproved:
-    // a readable bare string would have filled dkim too, and the pre-fix
-    // string-only reader stored three nulls, which that shape cannot produce.
+  it('reads all three verdicts from the reference payload', () => {
+    // The fixture models what a real delivery carries: mailauth-shaped verdict
+    // objects AND a trusted forwardemail.net Authentication-Results header.
     //
-    // So this case pins the HEADER path, which is the one that runs in prod.
+    // Each value here is attributable to ONE tier, which is the point. spf and
+    // dmarc come from `status.result`. dkim comes from `results[]` and ONLY from
+    // there, because the modeled header deliberately carries no `dkim=` — so if
+    // the per-signature tier regresses, this assertion is what fails.
+    //
+    // It deliberately does NOT claim which tier production uses. Two payload
+    // shapes produce the spf=pass / dmarc=pass / dkim=NULL that rows 25/26/27
+    // show, and the stored columns cannot tell them apart; an earlier version of
+    // this case asserted one of them as fact. The reader covers both instead.
     const email = normalizeForwardEmailPayload(forwardEmailFixture);
 
     expect(email.spfResult).toBe('pass');
+    expect(email.dkimResult).toBe('pass');
     expect(email.dmarcResult).toBe('pass');
-    // Not a failure — the provider's header carries no readable `dkim=`, and a
-    // method it omits must NOT be filled from a later, sender-writable header.
+  });
+
+  it('reproduces the production outcome from the header alone, with no JSON fields', () => {
+    // The OTHER hypothesis, modeled rather than asserted. Strip the provider
+    // objects from the reference payload and its trusted header alone yields
+    // exactly what rows 25/26/27 show: spf and dmarc pass, dkim null — because
+    // the modeled header carries no `dkim=`.
+    //
+    // This is also what keeps the fixture's header load-bearing. Without this
+    // case the header would affect no assertion at all, which is the mistake the
+    // previous fixture made in reverse: carrying a shape nothing exercised.
+    const email = normalizeForwardEmailPayload({
+      ...forwardEmailFixture,
+      spf: undefined,
+      dkim: undefined,
+      dmarc: undefined,
+    });
+
+    expect(email.spfResult).toBe('pass');
+    expect(email.dmarcResult).toBe('pass');
+    // A method the provider's header omits must NOT be filled from a later,
+    // sender-writable header.
     expect(email.dkimResult).toBeNull();
+  });
+
+  it("reads mailauth's per-signature `dkim.results[]`, which has no singular status", () => {
+    // The bug this tier exists for. mailauth gives `spf` and `dmarc` a
+    // `status.result` but gives `dkim` only `results[{ status: { result } }]`,
+    // one entry per signature. A reader without this tier drops every DKIM
+    // verdict while keeping the other two — which is EXACTLY the pattern
+    // production shows, so the shape asymmetry alone explains it with no header
+    // involved. The console then printed two of three methods for every inbound
+    // message and nothing failed.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      dkim: {
+        headerFrom: ['example.com'],
+        results: [{ signingDomain: 'example.com', status: { result: 'pass' } }],
+      },
+    });
+
+    expect(email.dkimResult).toBe('pass');
+  });
+
+  it('reports a pass when any signature verifies, not whichever came first', () => {
+    // What DKIM means: a message is DKIM-authenticated when at least one
+    // signature verifies, which is what every MUA reports. Taking `results[0]`
+    // blindly would report `fail` for a correctly-signed message that also
+    // carries a stale or broken signature — common with mailing lists.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      dkim: {
+        results: [
+          { signingDomain: 'list.example', status: { result: 'fail' } },
+          { signingDomain: 'example.com', status: { result: 'pass' } },
+        ],
+      },
+    });
+
+    expect(email.dkimResult).toBe('pass');
+  });
+
+  it('keeps a failing verdict when NO signature passed', () => {
+    // Control for the case above: "prefer a pass" must not become "invent one".
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      dkim: { results: [{ status: { result: 'fail' } }, { status: { result: 'neutral' } }] },
+    });
+
+    expect(email.dkimResult).toBe('fail');
+  });
+
+  it('falls back to the trusted header when `results` is present but empty', () => {
+    // An unsigned message: mailauth still emits the `dkim` object, with nothing
+    // in it. The object existing must not shadow the header fallback.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      dkim: { headerFrom: ['example.com'], results: [] },
+      headerLines: [
+        { line: 'Authentication-Results: mx1.forwardemail.net; dkim=none; spf=pass' },
+      ],
+    });
+
+    expect(email.dkimResult).toBe('none');
+    expect(email.spfResult).toBe('pass');
+  });
+
+  it('reads a `results` entry that is a bare string', () => {
+    // Provider drift tolerance, the same principle `readArray` documents: a
+    // flattened array of verdict words is a shape worth surviving.
+    const email = normalizeForwardEmailPayload({
+      from: { value: [{ address: 'jane@example.com' }] },
+      recipients: ['support@getpropertypro.com'],
+      dkim: { results: ['fail', 'pass'] },
+    });
+
+    expect(email.dkimResult).toBe('pass');
   });
 
   it('returns null when the provider omits them', () => {

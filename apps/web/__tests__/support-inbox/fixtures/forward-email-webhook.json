@@ -1,15 +1,28 @@
 {
-  "__source": "corrected-from-production-outcomes-2026-10-03",
-  "__note": "NOT a captured request. The shape is still reconstructed — but the AUTHENTICATION half is now derived from production outcomes rather than from reading forwardemail.net's helpers/on-data-mx.js, and the previous version of this file was WRONG about it. OBSERVED (prod rows 25/26/27, 2026-10-01 23:14Z / 10-02 06:06Z / 10-03 07:57Z, the first three inbound messages after the reader fix went live in deploy 1396 at 2026-10-01 22:56Z): spf_result='pass', dmarc_result='pass', dkim_result=NULL. Rows 24 and older, all pre-deploy, are null across the board — the cut falls exactly at the deploy. WHAT THAT PROVES: (1) the first Authentication-Results header carries a TRUSTED forwardemail.net authserv-id, because isTrustedAuthservId returns early otherwise and all three would be null; (2) that header has spf= and dmarc= but no readable dkim=; (3) the top-level spf/dkim/dmarc JSON fields this file used to carry as bare strings are absent or unreadable, because a readable string or {result} would have filled dkim too — and because the pre-fix string-only reader stored three nulls, which a bare-string payload could not have produced. So the header fallback, not the JSON field, is the path that works in production. STILL UNOBSERVED: the literal request body. The quarantine row that would capture it (normalization_status='failed' -> raw_payload) has NEVER fired — 0 such rows in prod as of 2026-10-03 — so there is no real payload to freeze anywhere. Replace this with __source: captured-<date> only from an actual raw_payload. The webhook URL passes ?raw=false&attachments=false, so a real capture will carry NEITHER a raw field NOR attachment bodies.",
+  "__source": "modeled-2026-10-03",
+  "__note": "NOT a captured request, and NOT a source read. The authentication half is modeled from mailauth's DOCUMENTED result shape (postalsys/mailauth docs/dkim.md), which Forward Email's MX is built on, cross-checked against production outcomes. OBSERVED (prod rows 25/26/27, 2026-10-01 23:14Z / 10-02 06:06Z / 10-03 07:57Z, the first three inbound messages after the reader fix went live in deploy 1396 at 2026-10-01 22:56Z): spf_result='pass', dmarc_result='pass', dkim_result=NULL. Rows 24 and older, all pre-deploy, are null across the board, so the cut falls exactly at the deploy boundary. WHAT THOSE COLUMNS DO NOT SETTLE: which payload shape produced them. TWO fit. (a) mailauth's objects forwarded verbatim: mailauth gives spf and dmarc a status.result but gives dkim NO singular status, only results[{status:{result}}] per signature, so a reader lacking the array tier drops dkim and keeps the other two with no header involved at all. (b) No readable JSON verdict fields, the values coming from the Authentication-Results header, whose dkim= our provider omits. Both also explain the three nulls from before the object dig shipped, when the reader took strings only. An earlier version of this file asserted (b) as established fact; it was not, and the probes cited alongside it passed under either hypothesis. SO THIS FIXTURE CARRIES BOTH: mailauth-shaped spf/dkim/dmarc objects AND a trusted forwardemail.net Authentication-Results header, which is what a real delivery would carry, and readVerdict now covers every tier so the fixture does not have to be right about which one runs. dkim here resolves from results[] alone, because the modeled header deliberately carries no dkim= — that keeps the reference assertion attributable to one specific tier. STILL UNOBSERVED: the literal request body. The quarantine row that would capture it (normalization_status='failed' -> raw_payload) has never fired (0 rows as of 2026-10-03). The shape probe added alongside this fixture writes a structural description to raw_payload on an 'ok' row while a verdict is unreadable, so the next inbound message answers which path runs from evidence. Replace this with __source: captured-<date> only from an actual raw_payload. The webhook URL passes ?raw=false&attachments=false, so a real capture will carry NEITHER a raw field NOR attachment bodies.",
   "from": {
-    "value": [{ "address": "jane@example.com", "name": "Jane Doe" }],
+    "value": [
+      {
+        "address": "jane@example.com",
+        "name": "Jane Doe"
+      }
+    ],
     "text": "Jane Doe <jane@example.com>"
   },
   "to": {
-    "value": [{ "address": "support@getpropertypro.com", "name": "" }],
+    "value": [
+      {
+        "address": "support@getpropertypro.com",
+        "name": ""
+      }
+    ],
     "text": "support@getpropertypro.com"
   },
-  "cc": { "value": [], "text": "" },
+  "cc": {
+    "value": [],
+    "text": ""
+  },
   "subject": "Re: Question about my documents",
   "messageId": "<reply-2@mail.example.com>",
   "inReplyTo": "<original-1@mail.example.com>",
@@ -22,8 +35,14 @@
       "key": "authentication-results",
       "line": "Authentication-Results: mx1.forwardemail.net; spf=pass smtp.mailfrom=jane@example.com; dmarc=pass header.from=example.com"
     },
-    { "key": "content-type", "line": "Content-Type: multipart/alternative; boundary=abc" },
-    { "key": "message-id", "line": "Message-ID: <reply-2@mail.example.com>" }
+    {
+      "key": "content-type",
+      "line": "Content-Type: multipart/alternative; boundary=abc"
+    },
+    {
+      "key": "message-id",
+      "line": "Message-ID: <reply-2@mail.example.com>"
+    }
   ],
   "recipients": ["support@getpropertypro.com"],
   "session": {
@@ -33,5 +52,33 @@
     "sender": "jane@example.com",
     "mta": "mx1.forwardemail.net",
     "arrivalDate": "2026-09-05T10:15:02.000Z"
+  },
+  "spf": {
+    "domain": "example.com",
+    "status": {
+      "result": "pass",
+      "comment": "example.com: domain of jane@example.com designates 203.0.113.10 as permitted sender"
+    }
+  },
+  "dkim": {
+    "headerFrom": ["example.com"],
+    "envelopeFrom": "jane@example.com",
+    "results": [
+      {
+        "signingDomain": "example.com",
+        "selector": "s1",
+        "status": {
+          "result": "pass",
+          "aligned": "example.com"
+        }
+      }
+    ]
+  },
+  "dmarc": {
+    "status": {
+      "result": "pass"
+    },
+    "domain": "example.com",
+    "policy": "none"
   }
 }

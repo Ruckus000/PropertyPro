@@ -28,6 +28,7 @@ function email(overrides: Partial<InboundEmail> = {}): InboundEmail {
     spfResult: 'pass',
     dkimResult: 'pass',
     dmarcResult: 'pass',
+    authShape: null,
     ...overrides,
   };
 }
