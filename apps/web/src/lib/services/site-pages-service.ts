@@ -798,6 +798,21 @@ export async function updateSitePage({
       });
     }
 
+    // The home page's title and description are the site's (Settings → Search
+    // & sharing), and the public page ignores per-page values on it — so a
+    // value set here would be stored and audited but never shown. Clearing
+    // (null) stays allowed.
+    if (current.isHome && (nextSeoTitle || nextSeoDescription)) {
+      throw new ValidationError("The home page uses the site's title and description.", {
+        fields: [
+          {
+            field: nextSeoTitle ? 'seoTitle' : 'seoDescription',
+            message: 'Set the home page in the site settings instead.',
+          },
+        ],
+      });
+    }
+
     // Inside the lock and before the update, alongside the slug rule it mirrors.
     if (name !== undefined) {
       await assertNameAvailable(communityId, name, tx, { excludePageId: pageId });

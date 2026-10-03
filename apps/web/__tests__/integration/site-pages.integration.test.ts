@@ -590,6 +590,17 @@ describeDb('multi-page site (db-backed integration)', () => {
     await expect(
       updateSitePage({ communityId, actorUserId, pageId: about.id, seoTitle: 'x'.repeat(61) }),
     ).rejects.toThrow(ValidationError);
+
+    // The home page's text is the site's; a per-page value there would be
+    // stored but never rendered. Clearing it is still allowed.
+    const home = (await listSitePages(communityId, { includeDrafts: true })).find((p) => p.isHome)!;
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: home.id, seoTitle: 'Home' }),
+    ).rejects.toThrow(ValidationError);
+    const homeCleared = await updateSitePage({
+      communityId, actorUserId, pageId: home.id, seoDescription: null,
+    });
+    expect(homeCleared.page).toMatchObject({ seoTitle: null, seoDescription: null });
   });
 
   it('refuses a duplicate page name on the write, not on the next publish', async () => {

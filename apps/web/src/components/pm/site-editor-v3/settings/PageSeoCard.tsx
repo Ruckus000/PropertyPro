@@ -22,9 +22,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { useSitePages, useUpdateSitePage, type SitePageSummary } from '@/hooks/use-site-pages';
 import { SEO_DESCRIPTION_MAX_LENGTH, SEO_TITLE_MAX_LENGTH } from '@/lib/site-editor/site-settings';
 
-/** Code points, the unit the server enforces. */
+/**
+ * Code points of the value the server will store: it collapses whitespace runs
+ * and trims before checking the cap, so a stray double space must not count.
+ */
 function count(value: string): number {
-  return [...value].length;
+  return [...value.replace(/\s+/gu, ' ').trim()].length;
 }
 
 function Counter({ value, max }: { value: string; max: number }) {

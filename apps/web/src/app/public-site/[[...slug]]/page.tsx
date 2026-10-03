@@ -179,17 +179,25 @@ export async function generateMetadata(props?: PublicSitePageProps): Promise<Met
   // set; otherwise exactly what sub-pages emitted before (page name as title,
   // the site's description and social card). The social card takes only what
   // the manager wrote for this page, so pages without overrides are unchanged.
+  //
+  // The X card carries the same overrides (X reads `twitter:*` before `og:*`),
+  // and a page with an override names itself in `og:url` — Facebook treats
+  // that as the page's identity and would otherwise scrape the home page's
+  // card instead.
   const title = page.seoTitle ?? `${page.name} · ${community.name}`;
+  const canonical = await resolvePageCanonical(community.slug, page.slug);
+  const social = {
+    ...(page.seoTitle ? { title: page.seoTitle } : {}),
+    ...(page.seoDescription ? { description: page.seoDescription } : {}),
+  };
+  const hasOverride = Object.keys(social).length > 0;
   return {
     ...base,
     title,
     ...(page.seoDescription ? { description: page.seoDescription } : {}),
-    openGraph: {
-      ...base.openGraph,
-      ...(page.seoTitle ? { title: page.seoTitle } : {}),
-      ...(page.seoDescription ? { description: page.seoDescription } : {}),
-    },
-    alternates: { ...base.alternates, canonical: await resolvePageCanonical(community.slug, page.slug) },
+    openGraph: { ...base.openGraph, ...social, ...(hasOverride ? { url: canonical } : {}) },
+    twitter: { ...base.twitter, ...social },
+    alternates: { ...base.alternates, canonical },
   };
 }
 

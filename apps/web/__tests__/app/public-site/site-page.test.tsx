@@ -388,6 +388,10 @@ describe('PublicSitePage — per-page metadata [11b-2 / D17]', () => {
     expect(meta.description).toBe(home.description);
     expect(meta.openGraph?.title).toBe(home.openGraph?.title);
     expect(meta.openGraph?.description).toBe(home.openGraph?.description);
+    expect((meta.openGraph as { url?: unknown } | undefined)?.url).toBe(
+      (home.openGraph as { url?: unknown } | undefined)?.url,
+    );
+    expect(meta.twitter).toEqual(home.twitter);
   });
 
   it("uses the page's own search title and description when the manager set them", async () => {
@@ -403,6 +407,15 @@ describe('PublicSitePage — per-page metadata [11b-2 / D17]', () => {
       title: 'Who we are | Sunset Condos',
       description: 'The board, the manager, and how to reach them.',
     });
+    // X reads twitter:* before og:*; Facebook keys the card on og:url.
+    // Revert check: the `twitter` / `url` overrides in generateMetadata.
+    expect(meta.twitter).toMatchObject({
+      title: 'Who we are | Sunset Condos',
+      description: 'The board, the manager, and how to reach them.',
+    });
+    expect(String((meta.openGraph as { url?: unknown } | undefined)?.url)).toBe(
+      String(meta.alternates?.canonical),
+    );
     expect(String(meta.alternates?.canonical)).toContain('/about');
   });
 

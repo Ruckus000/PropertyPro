@@ -113,4 +113,15 @@ describe('PageSeoCard', () => {
     expect(screen.getByText('61/60')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save page settings' })).toBeDisabled();
   });
+
+  it('counts what the server stores, so stray spaces do not block a save', async () => {
+    // The server collapses whitespace runs and trims before its cap.
+    // Revert check: the normalisation in `count`.
+    const user = userEvent.setup();
+    pagesRef.current = [HOME, page({ id: 2, name: 'About' })];
+    renderCard();
+    await user.type(screen.getByLabelText('Title'), `  ${'a'.repeat(29)}  ${'b'.repeat(29)}  `);
+    expect(screen.getByText('59/60')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save page settings' })).toBeEnabled();
+  });
 });
