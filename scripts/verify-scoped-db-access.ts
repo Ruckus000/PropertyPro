@@ -47,6 +47,12 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   // Request-scoped audit actor (AsyncLocalStorage). No DB access of its own —
   // it only merges support-session attribution into audit-row metadata.
   '@propertypro/db/audit-actor',
+  // Optimistic-concurrency fence: builds two SQL fragments (a token comparison
+  // and the advancing `updated_at`) for a caller's own scoped update. Opens no
+  // connection and reads nothing — it is a predicate builder, the same category
+  // as `@propertypro/db/filters` above, and it exists so the comparison and the
+  // advance cannot be adopted separately.
+  '@propertypro/db/optimistic-concurrency',
 ]);
 
 const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([

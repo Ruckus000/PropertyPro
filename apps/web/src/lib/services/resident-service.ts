@@ -11,6 +11,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
+import { fence } from '@propertypro/db/optimistic-concurrency';
 import { and, eq, inArray, sql } from '@propertypro/db/filters';
 // AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
 import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
@@ -354,14 +355,15 @@ export async function updateResidentRole(
   expectedUpdatedAt?: string,
 ): Promise<boolean> {
   const scoped = createScopedClient(communityId);
+  const guard = fence(userRoles.updatedAt, expectedUpdatedAt);
   const where =
-    expectedUpdatedAt === undefined
+    guard.where === undefined
       ? eq(userRoles.userId, userId)
-      : and(
-          eq(userRoles.userId, userId),
-          sql`date_trunc('milliseconds', ${userRoles.updatedAt}) = date_trunc('milliseconds', ${expectedUpdatedAt}::timestamptz)`,
-        );
-  const rows = await scoped.update(userRoles, values, where);
+      : and(eq(userRoles.userId, userId), guard.where);
+  // `updatedAt` last so it wins over `values`. It is set even with no token:
+  // this row IS the membership version, and `residents/route.ts` bumps it with
+  // an EMPTY values object precisely so a contact-only edit still moves it.
+  const rows = await scoped.update(userRoles, { ...values, updatedAt: guard.updatedAt }, where);
   return expectedUpdatedAt === undefined || (rows as unknown[]).length > 0;
 }
 

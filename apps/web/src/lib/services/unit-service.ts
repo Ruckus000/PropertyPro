@@ -1,5 +1,6 @@
 import type { createScopedClient } from '@propertypro/db';
 import { getUnitLedgerBalance, units, userRoles, violations } from '@propertypro/db';
+import { fence } from '@propertypro/db/optimistic-concurrency';
 import { and, eq, notInArray, sql } from '@propertypro/db/filters';
 import { ConflictError } from '@/lib/api/errors';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
@@ -88,6 +89,11 @@ export async function createUnitForCommunity(
  * when it is not (someone else saved in between). Compared at millisecond
  * precision — what JSON carries — since `defaultNow()` stores microseconds.
  * Returns the updated row otherwise.
+ *
+ * Both halves of that come from `fence()`: the comparison AND the new
+ * timestamp, which has to strictly advance or a stale token keeps matching. See
+ * `optimistic-concurrency.ts` — taking one without the other is the bug it
+ * exists to prevent.
  */
 export async function updateUnitById(
   scoped: ScopedClient,
@@ -95,14 +101,13 @@ export async function updateUnitById(
   values: Record<string, unknown>,
   expectedUpdatedAt?: string,
 ): Promise<UnitRouteRow | null> {
+  const guard = fence(units.updatedAt, expectedUpdatedAt);
   const where =
-    expectedUpdatedAt === undefined
-      ? eq(units.id, unitId)
-      : and(
-          eq(units.id, unitId),
-          sql`date_trunc('milliseconds', ${units.updatedAt}) = date_trunc('milliseconds', ${expectedUpdatedAt}::timestamptz)`,
-        );
-  const rows = await withUnitNumberConflict(values['unitNumber'], () => scoped.update(units, values, where));
+    guard.where === undefined ? eq(units.id, unitId) : and(eq(units.id, unitId), guard.where);
+  // `updatedAt` last: it must win over anything the caller put in `values`.
+  const rows = await withUnitNumberConflict(values['unitNumber'], () =>
+    scoped.update(units, { ...values, updatedAt: guard.updatedAt }, where),
+  );
   return ((rows as unknown as UnitRouteRow[])[0]) ?? null;
 }
 

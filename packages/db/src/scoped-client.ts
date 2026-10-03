@@ -416,9 +416,21 @@ export function createScopedClient(
       const updateData = { ...data };
       delete updateData['communityId'];
 
-      // Auto-update updatedAt
+      // Auto-update updatedAt — but only when the caller did not supply one.
+      //
+      // This used to overwrite unconditionally, which made a caller's own value
+      // dead code (apps/web/src/app/api/v1/units/route.ts had been setting
+      // `updateData['updatedAt'] = new Date()` to no effect). The
+      // optimistic-concurrency writers pass a SQL expression that MUST survive:
+      // see `optimistic-concurrency.ts` for why their timestamp has to be
+      // computed in the database and has to strictly advance.
+      //
+      // Callers that pass nothing still get the stamp, so the contract every
+      // other service relies on — "a scoped update always bumps updatedAt",
+      // which is what makes `residents/route.ts` able to bump the membership
+      // row with an empty values object — is unchanged.
       const columns = getTableColumns(table) as ColumnRecord;
-      if (hasUpdatedAtColumn(columns)) {
+      if (hasUpdatedAtColumn(columns) && updateData['updatedAt'] === undefined) {
         updateData['updatedAt'] = new Date();
       }
 

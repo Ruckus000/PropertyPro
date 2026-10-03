@@ -254,7 +254,6 @@ export const PATCH = withErrorHandler(
       updateData['occupancyConfirmedAt'] = occupancy === null ? null : new Date();
     }
 
-    updateData['updatedAt'] = new Date();
 
     const updated = await updateUnitById(scoped, unitId, updateData, body.expectedUpdatedAt);
     if (!updated) {

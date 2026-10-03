@@ -235,6 +235,37 @@ describe('createScopedClient', () => {
       expect(setData).toBeDefined();
       expect(setData?.['updatedAt']).toBeInstanceOf(Date);
     });
+
+    it("keeps a caller's own updatedAt instead of overwriting it", async () => {
+      // The optimistic-concurrency writers pass a SQL expression here, and it
+      // has to reach the database: their timestamp must be computed by Postgres
+      // and must strictly advance, or a stale token keeps matching and a second
+      // save from the same read is silently accepted. See
+      // `src/optimistic-concurrency.ts`.
+      //
+      // This also used to make a caller's value dead code —
+      // `apps/web/.../api/v1/units/route.ts` set its own `updatedAt` to no
+      // effect for as long as it existed.
+      const client = createScopedClient(42);
+      const callerValue = { __brand: 'a SQL expression, not a Date' };
+      await client.update(units, { unitNumber: '202', updatedAt: callerValue });
+
+      const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(setData?.['updatedAt']).toBe(callerValue);
+      expect(setData?.['updatedAt']).not.toBeInstanceOf(Date);
+    });
+
+    it('still auto-stamps when the caller passes updatedAt: undefined', async () => {
+      // A spread of an optional field lands as an explicit `undefined`, and the
+      // contract every other service relies on is "a scoped update always bumps
+      // updatedAt" — `residents/route.ts` bumps the membership row with an
+      // EMPTY values object on the strength of it.
+      const client = createScopedClient(42);
+      await client.update(units, { unitNumber: '202', updatedAt: undefined });
+
+      const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+      expect(setData?.['updatedAt']).toBeInstanceOf(Date);
+    });
   });
 
   describe('softDelete', () => {

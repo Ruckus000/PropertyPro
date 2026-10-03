@@ -49,6 +49,11 @@
       "import": "./src/filters.ts",
       "default": "./src/filters.ts"
     },
+    "./optimistic-concurrency": {
+      "types": "./src/optimistic-concurrency.ts",
+      "import": "./src/optimistic-concurrency.ts",
+      "default": "./src/optimistic-concurrency.ts"
+    },
     "./audit-actor": {
       "types": "./src/audit-actor.ts",
       "import": "./src/audit-actor.ts",
