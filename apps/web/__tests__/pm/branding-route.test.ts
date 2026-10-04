@@ -93,7 +93,37 @@ describe('pm branding route', () => {
 
       expect(res.status).toBe(200);
       const json = (await res.json()) as { data: unknown };
-      expect(json.data).toEqual({ primaryColor: '#1a56db' });
+      // Only the fields this route owns: never the look, the draft or settings.
+      expect(json.data).toEqual({
+        logoPath: null,
+        logoUrl: null,
+        siteLogoPath: null,
+        siteLogoUrl: null,
+        customEmailFooter: null,
+      });
+    });
+
+    it('resolves each stored logo to a URL the editor can show', async () => {
+      getBrandingForCommunityMock.mockResolvedValueOnce({
+        logoPath: 'communities/1/branding/logo.webp',
+        siteLogoPath: '1/site/wordmark.png',
+        customEmailFooter: 'Office hours 9-5',
+        draftLook: { primaryColor: '#000000' },
+      });
+      createPresignedDownloadUrlMock.mockResolvedValueOnce('https://storage/signed-logo');
+      vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://proj.supabase.co');
+
+      const res = await GET(new NextRequest('http://localhost/api/v1/pm/branding?communityId=1'));
+
+      const json = (await res.json()) as { data: unknown };
+      expect(json.data).toEqual({
+        logoPath: 'communities/1/branding/logo.webp',
+        logoUrl: 'https://storage/signed-logo',
+        siteLogoPath: '1/site/wordmark.png',
+        siteLogoUrl: 'https://proj.supabase.co/storage/v1/object/public/community-assets/1/site/wordmark.png',
+        customEmailFooter: 'Office hours 9-5',
+      });
+      vi.unstubAllEnvs();
     });
 
     it('returns 200 with empty object when no branding set', async () => {
@@ -103,7 +133,13 @@ describe('pm branding route', () => {
 
       expect(res.status).toBe(200);
       const json = (await res.json()) as { data: unknown };
-      expect(json.data).toEqual({});
+      expect(json.data).toEqual({
+        logoPath: null,
+        logoUrl: null,
+        siteLogoPath: null,
+        siteLogoUrl: null,
+        customEmailFooter: null,
+      });
     });
 
     it('returns 403 for non-PM user', async () => {
@@ -190,7 +226,7 @@ describe('pm branding route', () => {
       expect(res.status).toBe(200);
       expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
         customEmailFooter: 'Questions? Call the office.',
-      });
+      }, { remove: [] });
       expect(logAuditEventMock).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'settings_changed',
@@ -198,6 +234,32 @@ describe('pm branding route', () => {
           newValues: { customEmailFooter: 'Questions? Call the office.' },
         }),
       );
+    });
+
+    it.each([
+      ['logoStoragePath', 'logoPath'],
+      ['siteLogoStoragePath', 'siteLogoPath'],
+    ])('removes the logo when %s is null, and audits the removal', async (field, key) => {
+      updateBrandingForCommunityMock.mockResolvedValueOnce({});
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await PATCH(
+        new NextRequest('http://localhost/api/v1/pm/branding', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 1, [field]: null }),
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {}, { remove: [key] });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ newValues: { [key]: null } }),
+      );
+      expect((await res.json()).data).toMatchObject({ [key]: null });
+      vi.unstubAllGlobals();
     });
 
     it('passes an empty customEmailFooter through to clear the stored value', async () => {
@@ -214,7 +276,7 @@ describe('pm branding route', () => {
       // spreads the patch over existing branding, so '' overwrites the old text.
       expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
         customEmailFooter: '',
-      });
+      }, { remove: [] });
     });
 
     it('returns 403 for non-PM user — demo grace runs but update does not', async () => {
@@ -326,7 +388,7 @@ describe('pm branding route', () => {
       expect(resizeLogoMock).not.toHaveBeenCalled();
       expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
         siteLogoPath: 'communities/1/branding/site-logo.webp',
-      });
+      }, { remove: [] });
 
       vi.unstubAllGlobals();
     });

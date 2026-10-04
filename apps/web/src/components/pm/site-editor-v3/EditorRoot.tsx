@@ -6,8 +6,9 @@ import { useContentBlocks } from '@/hooks/use-content-blocks';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
-import { applyDesignToCanvas } from '@/lib/site-editor/canvas-design';
+import { applyDesignToCanvas, applyLiveLogoToCanvas } from '@/lib/site-editor/canvas-design';
 import { useSiteDesign } from '@/hooks/use-site-design';
+import { useLiveBranding } from '@/hooks/use-live-branding';
 import type { PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
@@ -263,9 +264,13 @@ export function EditorRoot({
   // server context carries the live look; this re-derives theme and layout
   // from the design query, and is the server context until that query lands.
   const { data: design } = useSiteDesign(communityId);
+  // Logos are live, not drafted, and the Design panel can change them while
+  // the editor is open; the header shows the site logo, else the square one.
+  // Until the query lands the server context's logo stands.
+  const { data: liveBranding } = useLiveBranding(communityId);
   const canvasContext = useMemo(
-    () => applyDesignToCanvas(serverCanvasContext, design),
-    [serverCanvasContext, design],
+    () => applyLiveLogoToCanvas(applyDesignToCanvas(serverCanvasContext, design), liveBranding),
+    [serverCanvasContext, design, liveBranding],
   );
   // Shares the blocks query key, so this adds no request — and the publish
   // sheet calls the same hook, so the button's state and the sheet's "N changes

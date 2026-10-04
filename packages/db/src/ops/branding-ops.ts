@@ -49,19 +49,29 @@ export interface LiveBrandingWriteResult {
  * `undefined` values are dropped before binding, and a `draftLook` key in the
  * patch is ignored: drafts are written only by the editor's design save.
  *
+ * `options.remove` deletes top-level keys in the same statement (a removed
+ * logo). It is applied after the merge, so a key both patched and removed ends
+ * up removed. `draftLook` cannot be removed this way, for the same reason it
+ * cannot be patched.
+ *
  * Returns `{ before: null, after: null }` when no community has this id.
  */
 export async function applyLiveBrandingPatchUnscoped(
   communityId: number,
   patch: Partial<CommunityBranding>,
-  options: { touchUpdatedAt?: boolean } = {},
+  options: { touchUpdatedAt?: boolean; remove?: readonly (keyof CommunityBranding)[] } = {},
 ): Promise<LiveBrandingWriteResult> {
   const clean = Object.fromEntries(
     Object.entries(patch).filter(([key, value]) => value !== undefined && key !== 'draftLook'),
   );
   const strip = liveLookKeysToStrip(clean);
+  const remove = (options.remove ?? []).filter((key) => key !== 'draftLook');
 
-  const merged = sql`(COALESCE(c.branding, '{}'::jsonb) || ${JSON.stringify(clean)}::jsonb)`;
+  const patched = sql`(COALESCE(c.branding, '{}'::jsonb) || ${JSON.stringify(clean)}::jsonb)`;
+  const merged =
+    remove.length === 0
+      ? patched
+      : sql`(${patched} - ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(remove)}::jsonb)))`;
   const keys = sql`ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(strip)}::jsonb))`;
   const next =
     strip.length === 0

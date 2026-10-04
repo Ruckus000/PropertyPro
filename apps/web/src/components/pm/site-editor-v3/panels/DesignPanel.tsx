@@ -2,8 +2,9 @@
 
 /**
  * The Design tool (website builder v4, Phase 4b): template, colour set, and —
- * on Professional — custom colours. Everything here saves as a draft and goes
- * live on Publish (`site-design-service`).
+ * on Professional — custom colours, which save as a draft and go live on
+ * Publish (`site-design-service`). The logos at the bottom are the exception:
+ * they are live as soon as they save (see `LogosSection`).
  *
  * Templates are named (layout, colour set) pairs — see `design-templates.ts`
  * for why they carry no pages. The colour-set grid is the wizard's own
@@ -27,6 +28,7 @@ import {
 } from '@/components/pm/onboarding-wizard/PresetChooser';
 import { useSaveSiteDesign, useSiteDesign } from '@/hooks/use-site-design';
 import { DESIGN_TEMPLATES, LAYOUT_NAMES, type DesignTemplate } from '../design-templates';
+import { LogosSection } from './LogosSection';
 import { StylingPanel, type StylingPanelTheme } from './StylingPanel';
 
 export interface DesignPanelProps {
@@ -118,7 +120,7 @@ export function DesignPanel({
     <div className="space-y-8" data-testid="tool-panel-design">
       <p className="text-sm text-content-secondary">
         A template sets the overall look. Your words, photos, and sections stay the same when
-        you switch. Nothing goes live until you publish.
+        you switch. Template and colour changes wait until you publish.
       </p>
 
       <section aria-labelledby="design-template-heading" className="space-y-3">
@@ -227,6 +229,8 @@ export function DesignPanel({
         </h3>
         <StylingPanel communityId={communityId} hasSiteCustomCss={hasSiteCustomCss} theme={theme} />
       </section>
+
+      <LogosSection communityId={communityId} />
     </div>
   );
 }

@@ -388,8 +388,9 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'branding',
     label: 'Website',
     icon: Paintbrush,
-    // Branding settings live in the editor's Design tool; /pm/settings/branding
-    // is a permanent redirect there.
+    // Branding lives in the editor's Design tool (template, colours, logos),
+    // except the email footer, which is on the community Settings page;
+    // /pm/settings/branding is a permanent redirect to the editor.
     //
     // No communityId: this is the portfolio rail, which has no tenant in scope.
     // The editor bounces to the community picker, which is the correct landing

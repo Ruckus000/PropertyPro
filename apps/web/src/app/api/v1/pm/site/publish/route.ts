@@ -19,6 +19,7 @@ import { publishCommunitySite } from '@/lib/services/site-blocks-service';
 import { notifyResidentsOfSitePublish } from '@/lib/services/site-publish-notification';
 import { requirePermission } from '@/lib/db/access-control';
 import { markSiteOnboardingComplete } from '@/lib/api/branding';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { publishCommunitySiteContract } from './contract';
 import type { NextRequest } from 'next/server';
 
@@ -67,6 +68,13 @@ export const POST = withErrorHandler(
     // publishCommunitySite short-circuit before reaching here.
     if (body.markOnboardingComplete) {
       await markSiteOnboardingComplete(communityId);
+    }
+
+    // "Customize your portal" on the onboarding checklist is done the first
+    // time a manager publishes a change. Only here, not in the publish
+    // service: a scheduled publish has no manager to credit. Never throws.
+    if (result.published) {
+      void tryAutoComplete(communityId, userId, 'customize_portal');
     }
 
     // Only after a publish that actually changed something. `nothing-to-publish`

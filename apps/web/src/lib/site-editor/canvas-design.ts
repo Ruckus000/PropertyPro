@@ -43,3 +43,30 @@ export function applyDesignToCanvas(
     layout: resolveLayoutId(look, communityType),
   };
 }
+
+/**
+ * The canvas header logo from the LIVE branding query. Logos are not drafted
+ * and the Design panel can change them while the editor is open, so the
+ * server context's logo goes stale. Same rule as the public page: the site
+ * logo (wordmark), else the square logo.
+ *
+ * Unchanged with no query data yet, and unchanged when a stored logo came back
+ * without a URL: signing failed, which is not the same as the logo being
+ * removed, and must not blank a header the server context drew correctly.
+ */
+export function applyLiveLogoToCanvas(
+  context: CanvasContext | null,
+  live:
+    | {
+        logoPath: string | null;
+        logoUrl: string | null;
+        siteLogoPath: string | null;
+        siteLogoUrl: string | null;
+      }
+    | undefined,
+): CanvasContext | null {
+  if (!context || !live) return context;
+  const unresolved = (live.logoPath && !live.logoUrl) || (live.siteLogoPath && !live.siteLogoUrl);
+  if (unresolved) return context;
+  return { ...context, community: { ...context.community, logoUrl: live.siteLogoUrl ?? live.logoUrl } };
+}

@@ -25,6 +25,11 @@ vi.mock('@/hooks/use-site-design', () => ({
   useSaveSiteDesign: () => ({ mutate: saveMutateMock, isPending: false }),
 }));
 
+// The Logos section has its own test (LogosSection.test.tsx).
+vi.mock('@/components/pm/site-editor-v3/panels/LogosSection', () => ({
+  LogosSection: () => null,
+}));
+
 const { toastSuccessMock } = vi.hoisted(() => ({ toastSuccessMock: vi.fn() }));
 vi.mock('sonner', () => ({
   toast: { success: toastSuccessMock, error: vi.fn(), info: vi.fn(), dismiss: vi.fn() },

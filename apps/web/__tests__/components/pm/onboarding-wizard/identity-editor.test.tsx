@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+// The logo upload has its own test (site-editor-v3/LogosSection.test.tsx).
+vi.mock('@/components/pm/site-editor-v3/panels/LogosSection', () => ({
+  LogosSection: () => null,
+}));
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
