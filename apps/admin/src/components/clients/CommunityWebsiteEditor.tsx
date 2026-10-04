@@ -131,6 +131,8 @@ export function CommunityWebsiteEditor({
   // Logo preview (local object URL before upload)
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [logoPublicUrl, setLogoPublicUrl] = useState<string | null>(null);
+  // The stored logo's URL as of the last load or save, which Reset returns to.
+  const [initialLogoUrl, setInitialLogoUrl] = useState<string | null>(null);
   const logoObjectUrlRef = useRef<string | null>(null);
 
   // Cleanup object URL on unmount
@@ -150,9 +152,12 @@ export function CommunityWebsiteEditor({
         const data = await res.json();
         const branding = data.branding as CommunityBranding;
         const f = brandingToForm(branding);
+        const storedLogoUrl = typeof data.logoUrl === 'string' ? data.logoUrl : null;
         if (!cancelled) {
           setForm(f);
           setInitial(f);
+          setLogoPublicUrl(storedLogoUrl);
+          setInitialLogoUrl(storedLogoUrl);
           setPending(pendingLabels(branding ?? {}));
           setLoading(false);
         }
@@ -249,9 +254,17 @@ export function CommunityWebsiteEditor({
     setSuccess(false);
   }
 
+  // Reset undoes unsaved edits, including a picked logo, and goes back to the
+  // stored one. It used to call handleRemoveLogo, whose `logoPath: ''` was
+  // applied after `setForm(initial)`, so the next Save deleted the logo.
   function handleReset() {
+    if (logoObjectUrlRef.current) {
+      URL.revokeObjectURL(logoObjectUrlRef.current);
+      logoObjectUrlRef.current = null;
+    }
+    setLogoPreviewUrl(null);
+    setLogoPublicUrl(initialLogoUrl);
     setForm(initial);
-    handleRemoveLogo();
     setError('');
     setSuccess(false);
   }
@@ -293,6 +306,8 @@ export function CommunityWebsiteEditor({
       const f = brandingToForm(saved);
       setForm(f);
       setInitial(f);
+      // What is on screen is now what is stored.
+      setInitialLogoUrl(f.logoPath ? (logoPublicUrl ?? logoPreviewUrl) : null);
       setPending(pendingLabels(saved ?? {}));
       setSuccess(true);
     } catch {

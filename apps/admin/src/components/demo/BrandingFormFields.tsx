@@ -7,7 +7,7 @@
  * wizard (where no demoId exists yet). When communityId is omitted the logo is
  * stored as a local blob URL; the actual upload happens after the demo is created.
  */
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { Loader2, Upload, X } from 'lucide-react';
 import { ALLOWED_FONTS, THEME_PRESETS, presetToBranding } from '@propertypro/theme';
 import { Input } from '@propertypro/ui';
@@ -53,6 +53,12 @@ interface BrandingFormFieldsProps {
   communityId?: number;
   /** Lifted error setter so upload errors surface in the parent's error state. */
   onError?: (message: string) => void;
+  /**
+   * URLs for logos already in storage, by path (the stored logo, from the
+   * branding GET). A stored path is a storage key, not something an `<img>`
+   * can load, so without this an existing logo showed no image.
+   */
+  knownLogoUrls?: Readonly<Record<string, string>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,8 +70,12 @@ export function BrandingFormFields({
   onChange,
   communityId,
   onError,
+  knownLogoUrls,
 }: BrandingFormFieldsProps) {
   const logoObjectUrlRef = useRef<string | null>(null);
+  // URLs the upload route returned this session, so a fresh upload keeps
+  // showing once its blob preview is revoked.
+  const [uploadedLogoUrls, setUploadedLogoUrls] = useState<Record<string, string>>({});
 
   // Revoke object URL on unmount to prevent memory leaks
   useEffect(() => {
@@ -76,8 +86,11 @@ export function BrandingFormFields({
     };
   }, []);
 
-  // Derive the preview URL: if logoPath is a blob URL (wizard case) use it directly.
-  const logoPreviewUrl = value.logoPath.startsWith('blob:') ? value.logoPath : null;
+  // Derive the preview URL: a blob URL (wizard case, or mid-upload) directly,
+  // otherwise the URL known for that storage path.
+  const logoPreviewUrl = value.logoPath.startsWith('blob:')
+    ? value.logoPath
+    : (uploadedLogoUrls[value.logoPath] ?? knownLogoUrls?.[value.logoPath] ?? null);
   const hasLogo = Boolean(logoPreviewUrl ?? value.logoPath);
 
   function setError(msg: string) {
@@ -142,6 +155,9 @@ export function BrandingFormFields({
           // Revoke the temporary object URL now that we have a real path
           URL.revokeObjectURL(objUrl);
           logoObjectUrlRef.current = null;
+          if (typeof data.url === 'string') {
+            setUploadedLogoUrls((prev) => ({ ...prev, [data.path]: data.url }));
+          }
           onChange({ ...value, logoPath: data.path });
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Upload failed');

@@ -14,6 +14,12 @@ const markDemoCustomized = vi.fn(async (..._args: unknown[]) => {});
 const getDemoCommunityId = vi.fn(async (..._args: unknown[]): Promise<number | null> => 42);
 const applyLive = vi.fn();
 const supabaseUpdate = vi.fn();
+const storedBranding = vi.fn((): Record<string, unknown> => ({}));
+const resolveLogoPreviewUrl = vi.fn(async (..._args: unknown[]): Promise<string | null> => null);
+
+vi.mock('@/lib/branding/logo-preview-url', () => ({
+  resolveLogoPreviewUrl: (...args: unknown[]) => resolveLogoPreviewUrl(...args),
+}));
 
 vi.mock('@/lib/auth/platform-admin', () => ({
   requirePlatformAdmin: (...args: unknown[]) => requirePlatformAdmin(...args),
@@ -36,6 +42,11 @@ vi.mock('@propertypro/db/unsafe', () => ({
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => ({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({ data: { branding: storedBranding() }, error: null }),
+        }),
+      }),
       update: (payload: unknown) => {
         supabaseUpdate(payload);
         throw new Error('the PATCH must not write branding through supabase-js');
@@ -53,6 +64,32 @@ async function callPatch(body: unknown, id = '5') {
   });
   return mod.PATCH(req as never, { params: Promise.resolve({ id }) } as never);
 }
+
+describe('demo branding GET', () => {
+  beforeEach(() => {
+    requirePlatformAdmin.mockResolvedValue({ id: 'admin-1', email: 'a@b.com' });
+    getDemoCommunityId.mockResolvedValue(42);
+    resolveLogoPreviewUrl.mockReset();
+  });
+
+  afterEach(() => vi.resetModules());
+
+  it("returns a URL for the stored logo, resolved for the demo's own community", async () => {
+    storedBranding.mockReturnValueOnce({ logoPath: '42/site/abc.png', primaryColor: '#111111' });
+    resolveLogoPreviewUrl.mockResolvedValueOnce('https://cdn/abc.png');
+    const mod = await import('@/app/api/admin/demos/[id]/community/branding/route');
+
+    const res = await mod.GET(new Request('http://localhost/x') as never, {
+      params: Promise.resolve({ id: '5' }),
+    } as never);
+
+    expect(resolveLogoPreviewUrl).toHaveBeenCalledWith(42, '42/site/abc.png');
+    expect(await res.json()).toEqual({
+      branding: { logoPath: '42/site/abc.png', primaryColor: '#111111' },
+      logoUrl: 'https://cdn/abc.png',
+    });
+  });
+});
 
 describe('demo branding PATCH', () => {
   beforeEach(() => {
