@@ -259,18 +259,18 @@ describeDb('document access control (integration, strict matrix)', () => {
       role: 'resident', isUnitOwner: false,
       communityType: 'condo_718',
     });
-    const camRows = await getAccessibleDocuments({
+    const managerRows = await getAccessibleDocuments({
       communityId: condoId,
-      role: 'cam',
+      role: 'property_manager',
       communityType: 'condo_718',
     });
 
     const tenantNames = tenantRows.map((row) => row['fileName']);
-    const camNames = camRows.map((row) => row['fileName']);
+    const managerNames = managerRows.map((row) => row['fileName']);
 
     expect(tenantNames).toContain('__doc_access_governing__.pdf');
     expect(tenantNames).not.toContain('__doc_access_meeting_records__.pdf');
-    expect(camNames).toEqual(expect.arrayContaining([
+    expect(managerNames).toEqual(expect.arrayContaining([
       '__doc_access_meeting_records__.pdf',
       '__doc_access_correspondence__.pdf',
     ]));
