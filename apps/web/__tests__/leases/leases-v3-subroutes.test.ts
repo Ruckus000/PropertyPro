@@ -85,7 +85,7 @@ function seed(rows: Rows) {
       if (x === t.leases) return [{ id: 900, ...(data as object) }];
       if (x === t.leaseRenewalOffers) return [{ id: 300, ...(data as object) }];
       if (x === t.leaseDeposits) return [{ id: 400, ...(data as object) }];
-      if (x === t.unitOccupants) return [{ id: 700, ...(data as object) }];
+      if (x === t.unitOccupants) return [{ id: 700, createdAt: new Date(), updatedAt: new Date(), ...(data as object) }];
       return Array.isArray(data) ? data : [data];
     }),
     update: vi.fn(async (_x: unknown, data: unknown) => [{ id: 1, ...(data as object) }]),
@@ -151,6 +151,49 @@ describe('offers', () => {
     seed({ leases: [currentLease] });
     const late = await offers.POST(req('POST', '/api/v1/leases/offers', { communityId: 42, leaseId: 1, offerRent: '1600.00', termMonths: 12, expiresOn: '2027-01-01' }));
     expect(late.status).toBe(400);
+  });
+
+  it('a new household member on an offer goes to the Directory; the offer stores only their id', async () => {
+    const client = seed({ leases: [currentLease], units: [{ id: 10 }], communities: [{ communitySettings: { leasesAllowResidentsWithoutEmail: true } }] });
+    const res = await offers.POST(req('POST', '/api/v1/leases/offers', {
+      communityId: 42, leaseId: 1, offerRent: '1600.00', termMonths: 12, expiresOn: '2026-11-30',
+      proposedResidents: [{ userId: R1, isPrimary: true }, { newOccupant: { fullName: 'Gran', phone: '555' } }],
+    }));
+    expect(res.status).toBe(200);
+    expect(client.insert).toHaveBeenCalledWith(t.unitOccupants, expect.objectContaining({ unitId: 10, fullName: 'Gran', phone: '555' }));
+    const offerRow = client.insert.mock.calls.find(([x]) => x === t.leaseRenewalOffers)![1] as { proposedResidents: unknown };
+    expect(offerRow.proposedResidents).toEqual([{ userId: R1, isPrimary: true }, { occupantId: 700 }]);
+    expect(JSON.stringify(offerRow)).not.toContain('Gran');
+  });
+
+  it('a household member created for an offer that loses to an open offer is removed again', async () => {
+    const client = seed({
+      leases: [currentLease],
+      communities: [{ communitySettings: { leasesAllowResidentsWithoutEmail: true } }],
+      unitOccupants: [{ id: 700, unitId: 10 }],
+      units: [{ id: 10 }],
+    });
+    const insert = client.insert;
+    client.insert = vi.fn(async (x: unknown, data: unknown) => {
+      if (x === t.leaseRenewalOffers) throw Object.assign(new Error('dup'), { code: '23505' });
+      return insert(x, data);
+    }) as typeof client.insert;
+    const res = await offers.POST(req('POST', '/api/v1/leases/offers', {
+      communityId: 42, leaseId: 1, offerRent: '1600.00', termMonths: 12, expiresOn: '2026-11-30',
+      proposedResidents: [{ newOccupant: { fullName: 'Gran' } }],
+    }));
+    expect(res.status).toBe(409);
+    expect(client.hardDelete).toHaveBeenCalledWith(t.unitOccupants, expect.anything());
+  });
+
+  it('an offer naming a household member is refused while the switch is off', async () => {
+    const client = seed({ leases: [currentLease] });
+    const res = await offers.POST(req('POST', '/api/v1/leases/offers', {
+      communityId: 42, leaseId: 1, offerRent: '1600.00', termMonths: 12, expiresOn: '2026-11-30',
+      proposedResidents: [{ newOccupant: { fullName: 'Gran' } }],
+    }));
+    expect(res.status).toBe(403);
+    expect(client.insert).not.toHaveBeenCalled();
   });
 
   it('a lease ending mid-month can be renewed: the renewal starts the next day (D8 exempts renewals)', async () => {

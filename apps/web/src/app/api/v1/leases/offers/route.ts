@@ -26,10 +26,12 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 import { createLease, type LeaseResidentInput } from '@/lib/leases/create-lease';
+import { createOccupant, removeOccupant } from '@/lib/services/occupant-service';
 import { startMoveOutChecklist } from '@/lib/leases/lease-rules';
 import { addDays, termEndDate } from '@/lib/leases/lease-state';
 import { isUniqueViolation, isZeroRent } from '@/lib/leases/lease-rules';
 import {
+  getCommunityLeaseSettings,
   getLeaseById,
   getRenewalOffer,
   insertRenewalOffer,
@@ -49,6 +51,47 @@ function requireApartment(communityType: Parameters<typeof getFeaturesForCommuni
   if (!getFeaturesForCommunity(communityType).hasLeaseTracking) {
     throw new ForbiddenError('Lease tracking is only available for apartment communities');
   }
+}
+
+/**
+ * An offer stores its proposed residents as JSON until it is signed. A new
+ * household member is created in the Directory now (on the lease's unit) and
+ * the offer keeps only their id, so their details live in one place that
+ * Directory "Remove" can erase — never in the offer row.
+ */
+async function storeProposedResidents(
+  communityId: number,
+  actorUserId: string,
+  unitId: number,
+  residents: LeaseResidentInput[],
+): Promise<{ stored: LeaseResidentInput[]; createdOccupantIds: number[] }> {
+  const needsOccupants = residents.some((r) => 'occupantId' in r || 'newOccupant' in r);
+  if (needsOccupants && !(await getCommunityLeaseSettings(communityId)).allowResidentsWithoutEmail) {
+    throw new ForbiddenError('Household members with no portal login are not enabled on leases for this community');
+  }
+  const stored: LeaseResidentInput[] = [];
+  const createdOccupantIds: number[] = [];
+  try {
+    for (const r of residents) {
+      if (!('newOccupant' in r)) {
+        stored.push(r);
+        continue;
+      }
+      const occupant = await createOccupant(communityId, actorUserId, {
+        unitId,
+        fullName: r.newOccupant.fullName,
+        email: r.newOccupant.email ?? null,
+        phone: r.newOccupant.phone ?? null,
+        isOwnerHousehold: false,
+      });
+      createdOccupantIds.push(occupant.id);
+      stored.push({ occupantId: occupant.id, ...(r.isPrimary !== undefined ? { isPrimary: r.isPrimary } : {}) });
+    }
+  } catch (err) {
+    for (const id of createdOccupantIds) await removeOccupant(communityId, actorUserId, id);
+    throw err;
+  }
+  return { stored, createdOccupantIds };
 }
 
 function today(timezone: string | undefined): string {
@@ -126,6 +169,9 @@ export const POST = withErrorHandler(
       throw new ValidationError('A custom term can be at most 36 months');
     }
 
+    const proposed = body.proposedResidents
+      ? await storeProposedResidents(communityId, actorUserId, lease['unitId'] as number, body.proposedResidents)
+      : null;
     let offer;
     try {
       offer = await insertRenewalOffer(communityId, {
@@ -136,13 +182,14 @@ export const POST = withErrorHandler(
         customEndDate: body.customEndDate ?? null,
         startDate,
         depositAmount: body.depositAmount ?? null,
-        proposedResidents: body.proposedResidents ?? null,
+        proposedResidents: proposed?.stored ?? null,
         sentOn,
         expiresOn: body.expiresOn,
         idempotencyKey: body.idempotencyKey ?? null,
         createdBy: actorUserId,
       });
     } catch (err) {
+      for (const id of proposed?.createdOccupantIds ?? []) await removeOccupant(communityId, actorUserId, id);
       if (isUniqueViolation(err)) {
         throw new ConflictError('This lease already has an open offer. Withdraw or expire it before sending another.');
       }
