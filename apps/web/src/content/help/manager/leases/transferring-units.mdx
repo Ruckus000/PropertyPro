@@ -1,40 +1,19 @@
 ---
 title: "Transfer residents to another unit"
 description: "Move the residents of one unit to another unit on a new lease, with the deposit carried over."
-category: "apartment"
-slug: "transferring-units"
-roles:
-  - manager
-keywords:
-  - transfer
-  - move unit
-  - another unit
-  - relocate
-  - upgrade
-  - downgrade
-  - carry deposit
-  - new unit
-  - transferring
-  - cancel transfer
-tags:
-  - apartment
-  - admin
-  - leases
-  - florida
-statutes:
-  - "§83.49"
-updatedAt: "2026-09-29"
-lastReviewedAt: "2026-09-29"
-featureGates:
-  - hasLeaseTracking
-relatedArticles:
-  - ending-a-lease-early
-  - deposit-notice
-  - adding-a-lease
-featured: false
+section: manager
+category: leases
+slug: transferring-units
+communityTypes: [apartment]
+order: 11
+keywords: ["transfer", "move unit", "another unit", "relocate", "upgrade", "downgrade", "carry deposit", "new unit", "transferring", "cancel transfer"]
+relatedArticles: ["ending-a-lease-early", "deposit-notice", "adding-a-lease"]
 upNext: "unit-offline"
-contextPaths:
-  - /dashboard/leases
+statutes: ["§83.49"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
 ---
 
 A transfer ends the current lease on the residents' last day in their unit, and creates a new lease for everyone on it in the new unit. The deposit can move with them.
@@ -69,13 +48,13 @@ Check the summary at the bottom, then select **Record transfer**. A confirmation
 </Step>
 </StepByStep>
 
-The residents stay in the old unit until their last day. You can pre-lease the old unit now. See [Add a lease or pre-lease a unit](/help/apartment/adding-a-lease). After the last day, **Past leases** lists the old lease as **Transferred**.
+The residents stay in the old unit until their last day. You can pre-lease the old unit now. See [Add a lease or pre-lease a unit](help:adding-a-lease). After the last day, **Past leases** lists the old lease as **Transferred**.
 
 ## Cancel a transfer
 
 A transfer has no **Undo** on its confirmation. The old unit's panel says how to cancel it:
 
-1. Open the new unit and select **Cancel before move-in** under **Upcoming lease**. See [Edit or cancel an upcoming lease](/help/apartment/upcoming-lease).
+1. Open the new unit and select **Cancel before move-in** under **Upcoming lease**. See [Edit or cancel an upcoming lease](help:upcoming-lease).
 2. Open the old unit and select **Cancel move-out**. The residents stay on their current lease.
 
 If you try the second step first, it is refused with "Cancel the new lease this resident is transferring to before cancelling the move-out."

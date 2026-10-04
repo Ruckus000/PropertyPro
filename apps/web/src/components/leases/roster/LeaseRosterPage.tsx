@@ -38,6 +38,7 @@ import { PAGE_SIZE, RosterTable } from './RosterTable';
 import { UnitPanel } from './UnitPanel';
 import { AlertWindowsMenu } from './AlertWindowsMenu';
 import { RosterDialogHost } from './dialogs';
+import { LEASE_HELP_CATEGORY } from './help-slugs';
 import type { RosterDialog } from './types';
 
 const TITLES: Record<RosterFilter, string> = {
@@ -65,7 +66,7 @@ export function LeaseRosterPage({
 }) {
   const help = useHelpWidgetOptional();
   // Help links open the article in the app's help panel (Leases v3, Phase 3).
-  const onHelp = onHelpProp ?? (help ? (slug: string) => help.openArticle('apartment', slug) : undefined);
+  const onHelp = onHelpProp ?? (help ? (slug: string) => help.openArticle(LEASE_HELP_CATEGORY, slug) : undefined);
   const data = useLeaseRosterData(communityId);
   // Directory household members, only when the community lets them be lease parties.
   const occupantsQuery = useOccupants(communityId, { enabled: data.settings.allowResidentsWithoutEmail });

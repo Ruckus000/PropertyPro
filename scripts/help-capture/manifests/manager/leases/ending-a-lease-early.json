@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "ending-a-lease-early",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -25,12 +26,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -58,12 +60,13 @@
           "selector": "input[name=\"mo-reason\"][value=\"Mutual agreement\"]"
         }
       ],
-      "clipTo": "fieldset:has(legend:text-is(\"Why is the lease ending?\"))"
+      "clipTo": "fieldset:has(legend:text-is(\"Why is the lease ending?\"))",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -96,12 +99,13 @@
           "value": "2026-10-31"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"End \"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"End \"))",
+      "community": "apartment"
     },
     {
       "name": "step-4",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -138,7 +142,8 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"End \")) button[type=\"submit\"]"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"End \"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"End \"))",
+      "community": "apartment"
     }
   ]
 }

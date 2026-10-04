@@ -1,41 +1,19 @@
 ---
 title: "Take a unit offline"
 description: "Remove an empty unit from leasing and from vacancy and occupancy counts while it is damaged, being renovated, or used as a model or staff unit."
-category: "apartment"
-slug: "unit-offline"
-roles:
-  - manager
-keywords:
-  - offline
-  - take offline
-  - bring back online
-  - out of service
-  - storm damage
-  - casualty
-  - renovation
-  - repairs
-  - model unit
-  - staff unit
-  - office
-  - down unit
-tags:
-  - apartment
-  - admin
-  - leases
-statutes:
-  - "§83.63"
-updatedAt: "2026-09-29"
-lastReviewedAt: "2026-09-29"
-featureGates:
-  - hasLeaseTracking
-relatedArticles:
-  - ending-a-lease-early
-  - lease-statuses
-  - managing-units-and-buildings
-featured: false
+section: manager
+category: leases
+slug: unit-offline
+communityTypes: [apartment]
+order: 12
+keywords: ["offline", "take offline", "bring back online", "out of service", "storm damage", "casualty", "renovation", "repairs", "model unit", "staff unit", "office", "down unit"]
+relatedArticles: ["ending-a-lease-early", "lease-statuses", "units"]
 upNext: "expiry-alert-windows"
-contextPaths:
-  - /dashboard/leases
+statutes: ["§83.63"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
 ---
 
 An offline unit is not offered for new leases or transfers, and is left out of the vacancy count and the occupancy rate. Only an empty unit can go offline: one with no current or upcoming lease.
@@ -76,4 +54,4 @@ To change the expected date or the reason, bring the unit back online, then take
 
 ## If the unit is occupied
 
-A unit with a current or upcoming lease can't go offline, and its panel doesn't show **Take offline**. If damage forces a lease to end, first [end the lease early](/help/apartment/ending-a-lease-early) with the reason **Casualty damage (§83.63)**. After the last day, take the unit offline.
+A unit with a current or upcoming lease can't go offline, and its panel doesn't show **Take offline**. If damage forces a lease to end, first [end the lease early](help:ending-a-lease-early) with the reason **Casualty damage (§83.63)**. After the last day, take the unit offline.

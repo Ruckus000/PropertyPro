@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "renewing-a-lease",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -25,12 +26,13 @@
           "selector": "#roster-title:text-is(\"Renewals due\")"
         }
       ],
-      "clipTo": "section[aria-labelledby=\"roster-title\"]"
+      "clipTo": "section[aria-labelledby=\"roster-title\"]",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -46,12 +48,13 @@
           "selector": "#roster-title:text-is(\"Renewals due\")"
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -84,12 +87,13 @@
           "value": "1295"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"renewal offer\"))",
+      "community": "apartment"
     },
     {
       "name": "step-4",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -117,12 +121,13 @@
           "selector": "#of-residents"
         }
       ],
-      "clipTo": "div.space-y-2:has(> label[for=\"of-residents\"])"
+      "clipTo": "div.space-y-2:has(> label[for=\"of-residents\"])",
+      "community": "apartment"
     },
     {
       "name": "step-5",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -150,12 +155,13 @@
           "selector": "#of-expires"
         }
       ],
-      "clipTo": "div.space-y-2:has(> label[for=\"of-expires\"])"
+      "clipTo": "div.space-y-2:has(> label[for=\"of-expires\"])",
+      "community": "apartment"
     },
     {
       "name": "step-6",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -200,12 +206,13 @@
           "ms": 800
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])",
+      "community": "apartment"
     },
     {
       "name": "step-7",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -221,12 +228,13 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))",
+      "community": "apartment"
     },
     {
       "name": "step-8",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -250,12 +258,13 @@
           "selector": "#or-move-out"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record response\"))",
+      "community": "apartment"
     },
     {
       "name": "step-9",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -287,12 +296,13 @@
           "ms": 800
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 101\"])",
+      "community": "apartment"
     },
     {
       "name": "step-10",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -308,12 +318,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 105\"))",
+      "community": "apartment"
     },
     {
       "name": "step-11",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -341,12 +352,13 @@
           "selector": "input[name=\"of-term\"][value=\"12\"]"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Offer a fixed term\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Offer a fixed term\"))",
+      "community": "apartment"
     },
     {
       "name": "step-12",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -386,7 +398,8 @@
           "ms": 800
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 105\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 105\"])",
+      "community": "apartment"
     }
   ]
 }

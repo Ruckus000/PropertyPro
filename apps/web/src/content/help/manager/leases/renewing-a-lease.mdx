@@ -1,61 +1,28 @@
 ---
 title: "Send a renewal offer and record the answer"
 description: "Offer new terms with an expiry date, record whether the resident accepted or declined, and what to do for holdovers and month-to-month leases."
-category: "apartment"
-slug: "renewing-a-lease"
-roles:
-  - manager
-keywords:
-  - renew
-  - renewal
-  - renewal offer
-  - send offer
-  - resend offer
-  - offer expired
-  - record response
-  - accepted
-  - declined
-  - withdraw offer
-  - rent increase
-  - co-tenant
-  - holdover
-  - month-to-month
-  - notice deadline
-  - offer a fixed term
-  - change response
-  - convert to month-to-month
-  - resolve holdover
-tags:
-  - apartment
-  - admin
-  - leases
-  - florida
-statutes:
-  - "§83.575"
-  - "§83.57"
-  - "§83.49"
-updatedAt: "2026-09-29"
-lastReviewedAt: "2026-09-29"
-featureGates:
-  - hasLeaseTracking
-relatedArticles:
-  - recording-a-renewal
-  - move-out-and-holdovers
-  - expiry-alert-windows
-  - lease-statuses
-featured: false
+section: manager
+category: leases
+slug: renewing-a-lease
+communityTypes: [apartment]
+order: 7
+keywords: ["renew", "renewal", "renewal offer", "send offer", "resend offer", "offer expired", "record response", "accepted", "declined", "withdraw offer", "rent increase", "co-tenant", "holdover", "month-to-month", "notice deadline", "offer a fixed term", "change response", "convert to month-to-month", "resolve holdover"]
+relatedArticles: ["recording-a-renewal", "move-out-and-holdovers", "expiry-alert-windows", "lease-statuses"]
 upNext: "recording-a-renewal"
-contextPaths:
-  - /dashboard/leases
+statutes: ["§83.575", "§83.57", "§83.49"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
 ---
 
-A renewal has three steps on this page: send the offer, record the resident's answer, then [record the signed renewal](/help/apartment/recording-a-renewal). The current lease does not change until the new term starts.
+A renewal has three steps on this page: send the offer, record the resident's answer, then [record the signed renewal](help:recording-a-renewal). The current lease does not change until the new term starts.
 
 ## Send the offer
 
 <StepByStep>
 <Step title="Select Renewals due">
-The **Renewals due** tile counts leases that end within your widest [expiry alert](/help/apartment/expiry-alert-windows), plus holdovers, that still need a renewal decision. Select it. The list is sorted by **Lease end**, soonest first, with holdovers at the top.
+The **Renewals due** tile counts leases that end within your widest [expiry alert](help:expiry-alert-windows), plus holdovers, that still need a renewal decision. Select it. The list is sorted by **Lease end**, soonest first, with holdovers at the top.
 </Step>
 
 <Step title="Select Send offer">
@@ -99,7 +66,7 @@ Under **What did the resident say?**, choose **Accepted**, **Declined** or **Wit
 <Step title="Select the button at the bottom">
 The button matches your choice: **Record acceptance**, **Record decline** or **Withdraw offer**.
 
-- **Accepted:** the row shows **Accepted · not signed** and **Record renewal**. Next, [record the signed renewal](/help/apartment/recording-a-renewal).
+- **Accepted:** the row shows **Accepted · not signed** and **Record renewal**. Next, [record the signed renewal](help:recording-a-renewal).
 - **Declined:** the row shows **Declined · out** with the move-out date, and **Pre-lease**. The unit leaves **Renewals due** and is listed in the **Moving out** group under **Vacant**. If the move-out date has already passed, the lease closes right away.
 - **Withdraw offer:** the row goes back to **No offer yet** and **Send offer**, so you can send a new offer.
 </Step>
@@ -120,7 +87,7 @@ A unit shows **Holdover** when its end date has passed and nothing has been reco
 - **If the resident is staying**, select **Convert to month-to-month**. The lease keeps its terms with no end date. A confirmation says the unit is now month-to-month, and includes **Undo**. To agree a new fixed term, [offer a fixed term](#month-to-month-leases) next.
 - **If the resident is leaving or has left**, select **Record move-out**.
 
-Both are described in [Record a move-out or a holdover](/help/apartment/move-out-and-holdovers).
+Both are described in [Record a move-out or a holdover](help:move-out-and-holdovers).
 
 ## Month-to-month leases
 
@@ -138,13 +105,13 @@ Open the unit. **Offer a fixed term** is with the buttons near the top of the pa
 </Step>
 
 <Step title="Select Send offer">
-The unit panel shows the offer in the **Renewal** section, and the row shows **Offer sent today** and **Record response**. From here, [record the answer](#record-the-answer) and then [record the signed renewal](/help/apartment/recording-a-renewal). When the renewal is recorded, the month-to-month tenancy ends the day before the new term starts.
+The unit panel shows the offer in the **Renewal** section, and the row shows **Offer sent today** and **Record response**. From here, [record the answer](#record-the-answer) and then [record the signed renewal](help:recording-a-renewal). When the renewal is recorded, the month-to-month tenancy ends the day before the new term starts.
 </Step>
 </StepByStep>
 
 A renewal can also create a month-to-month lease: choose **Month-to-month** under **Term** in a renewal offer.
 
-To end a month-to-month tenancy, use **Resident gave notice** or **End early**. See [Record a move-out](/help/apartment/move-out-and-holdovers) and [End a lease early](/help/apartment/ending-a-lease-early).
+To end a month-to-month tenancy, use **Resident gave notice** or **End early**. See [Record a move-out](help:move-out-and-holdovers) and [End a lease early](help:ending-a-lease-early).
 
 <Callout type="florida-statute" title="Florida Statutes §83.575, §83.57 and §83.49(2)">
 When a fixed-term lease has a notice period, the unit panel shows the date by which the resident must give notice to move out at term end (§83.575). After that date passes with no notice recorded, it shows a warning. The **Offer expires on** warning uses the same date. For a month-to-month lease, the panel shows the 30 days' notice from §83.57. A changed deposit in the offer restarts the 30-day written deposit notice (§83.49(2)).

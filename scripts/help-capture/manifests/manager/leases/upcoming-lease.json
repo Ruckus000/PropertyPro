@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "upcoming-lease",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -59,12 +60,13 @@
           "ms": 1500
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 305\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 305\"])",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -88,12 +90,13 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -121,12 +124,13 @@
           "selector": "input[name=\"le-term\"][value=\"6\"]"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit upcoming lease\"))",
+      "community": "apartment"
     },
     {
       "name": "step-4",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -146,12 +150,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\")) button:text-is(\"Cancel before move-in\")"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 305\"))",
+      "community": "apartment"
     },
     {
       "name": "step-5",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -179,12 +184,13 @@
           "selector": "input[name=\"cl-reason\"][value=\"Applicant withdrew\"]"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Cancel upcoming lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Cancel upcoming lease\"))",
+      "community": "apartment"
     },
     {
       "name": "step-6",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -220,7 +226,8 @@
           "selector": "[data-sonner-toast]"
         }
       ],
-      "clipTo": "[data-sonner-toast]"
+      "clipTo": "[data-sonner-toast]",
+      "community": "apartment"
     }
   ]
 }

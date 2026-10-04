@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "transferring-units",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -25,12 +26,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 202\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 202\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 202\"))",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -54,12 +56,13 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -83,12 +86,13 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))"
         }
       ],
-      "clipTo": "div.space-y-2:has(> label[for=\"tr-unit\"])"
+      "clipTo": "div.space-y-2:has(> label[for=\"tr-unit\"])",
+      "community": "apartment"
     },
     {
       "name": "step-4",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -116,12 +120,13 @@
           "selector": "#tr-start"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))",
+      "community": "apartment"
     },
     {
       "name": "step-5",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -153,12 +158,13 @@
           "selector": "#tr-notice-days"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))",
+      "community": "apartment"
     },
     {
       "name": "step-6",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -186,12 +192,13 @@
           "selector": "#tr-carry"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))",
+      "community": "apartment"
     },
     {
       "name": "step-7",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -224,7 +231,8 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\")) button[type=\"submit\"]"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Transfer to another unit\"))",
+      "community": "apartment"
     }
   ]
 }

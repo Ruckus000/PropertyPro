@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "expiry-alert-windows",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "root_sunsetridge",
       "actions": [
         {
@@ -17,12 +18,13 @@
           "selector": "[aria-label=\"Filter units\"]"
         }
       ],
-      "clipTo": "section[aria-labelledby=\"roster-title\"] > div:first-child"
+      "clipTo": "section[aria-labelledby=\"roster-title\"] > div:first-child",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "root_sunsetridge",
       "actions": [
         {
@@ -38,12 +40,13 @@
           "selector": "[role=\"menu\"]"
         }
       ],
-      "clipTo": "[role=\"menu\"]"
+      "clipTo": "[role=\"menu\"]",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "root_sunsetridge",
       "actions": [
         {
@@ -71,7 +74,8 @@
           "ms": 1200
         }
       ],
-      "clipTo": "[aria-label=\"Filter units\"]"
+      "clipTo": "[aria-label=\"Filter units\"]",
+      "community": "apartment"
     }
   ]
 }

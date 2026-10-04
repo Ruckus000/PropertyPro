@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "move-out-and-holdovers",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -17,12 +18,13 @@
           "selector": "[aria-label=\"Filter units\"]"
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 102\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 102\"])",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -38,12 +40,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 102\"))",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -67,12 +70,13 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Record notice to vacate\"))",
+      "community": "apartment"
     },
     {
       "name": "step-4",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -113,12 +117,13 @@
           "ms": 800
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 102\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 102\"])",
+      "community": "apartment"
     },
     {
       "name": "step-5",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -126,12 +131,13 @@
           "selector": "[aria-label=\"Filter units\"]"
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 106\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 106\"])",
+      "community": "apartment"
     },
     {
       "name": "step-6",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -147,12 +153,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 106\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 106\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 106\"))",
+      "community": "apartment"
     },
     {
       "name": "step-7",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -193,7 +200,8 @@
           "ms": 800
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 106\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 106\"])",
+      "community": "apartment"
     }
   ]
 }

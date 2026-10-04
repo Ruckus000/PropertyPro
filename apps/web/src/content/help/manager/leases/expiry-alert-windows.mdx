@@ -1,38 +1,18 @@
 ---
 title: "Set expiry alerts"
-description: "Choose how far ahead leases count as Expiring and appear in Renewals due, and whether residents without an email address can be added to leases."
-category: "apartment"
-slug: "expiry-alert-windows"
-roles:
-  - manager
-keywords:
-  - expiry alerts
-  - alert window
-  - alert windows
-  - expiring
-  - renewals due
-  - 30 60 90 days
-  - 120 days
-  - lead time
-  - settings
-  - root manager
-  - residents without email
-  - lease settings
-tags:
-  - apartment
-  - admin
-  - leases
-updatedAt: "2026-09-29"
-lastReviewedAt: "2026-09-29"
-featureGates:
-  - hasLeaseTracking
-relatedArticles:
-  - lease-statuses
-  - renewing-a-lease
-featured: false
+description: "Choose how far ahead leases count as Expiring and appear in Renewals due, and whether leases can name household members who have no portal login."
+section: manager
+category: leases
+slug: expiry-alert-windows
+communityTypes: [apartment]
+order: 13
+keywords: ["expiry alerts", "alert window", "alert windows", "expiring", "renewals due", "30 60 90 days", "120 days", "lead time", "settings", "root manager", "residents without email", "household members", "lease settings"]
+relatedArticles: ["lease-statuses", "renewing-a-lease"]
 upNext: "managing-leases"
-contextPaths:
-  - /dashboard/leases
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
 ---
 
 The expiry alert setting decides how early a lease counts as **Expiring** and appears in **Renewals due**. The widest window is the one that counts. With **30, 60, 90 days**, a lease shows up 90 days before it ends.
@@ -59,11 +39,11 @@ The setting applies to every manager of this community.
 Other managers see the same menu with the options greyed out and the line **Only the root manager can change this.**
 </Callout>
 
-## Allow residents without email
+## Allow household members on leases
 
-The same menu has a **Lease settings** heading with one checkbox, **Allow residents without email**. It is off unless the root manager turns it on. Select it to turn it on or off. A confirmation says **Residents without an email address can now be added to leases** or **Residents without an email address are turned off**. This confirmation has no **Undo**: select the checkbox again to switch back.
+The same menu has a **Lease settings** heading with one checkbox, **Allow household members on leases**. It is off unless the root manager turns it on. Select it to turn it on or off. A confirmation says **Household members with no portal login can now be named on leases** or **Household members can no longer be added to leases**. This confirmation has no **Undo**: select the checkbox again to switch back.
 
-When it is on, **Add a person without email** appears under **Residents** in the **New lease** and renewal offer dialogs. See [Add a lease or pre-lease a unit](/help/apartment/adding-a-lease#residents-without-an-email-address).
+When it is on, the **Residents** field in the **New lease** and renewal offer dialogs lists the unit's household members from the Directory and offers **Add a household member**. Turning it off doesn't remove anyone from a lease they are already on. See [Add a lease or pre-lease a unit](help:adding-a-lease).
 
 ## Choosing a window
 

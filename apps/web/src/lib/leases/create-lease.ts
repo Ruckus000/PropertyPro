@@ -130,7 +130,7 @@ export async function createLease(
   if (needsOccupants) {
     const settings = await getCommunityLeaseSettings(communityId);
     if (!settings.allowResidentsWithoutEmail) {
-      throw new ForbiddenError('Residents without an email address are not enabled for this community');
+      throw new ForbiddenError('Household members with no portal login are not enabled on leases for this community');
     }
   }
 

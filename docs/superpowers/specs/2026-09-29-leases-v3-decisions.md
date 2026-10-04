@@ -110,18 +110,35 @@ The client hasn't decided, so the design keeps both paths open.
   `auth.users.id`, so every `users` row is a login account. A user with no
   email would affect sign-in, invitations and every notification path on the
   whole platform.
-- **Built: `resident_contacts`.** These are community-scoped people who never
-  sign in. `lease_residents` names either a user or a contact; a database CHECK
-  enforces exactly one. Notices to a contact go by mail or hand delivery, and no
-  portal invite is sent. When a contact later gets an email address, inviting
-  them creates a real user and `linked_user_id` records the link. The lease
-  history keeps pointing at the same contact row.
-- **Switch:** `communities.community_settings.leasesAllowResidentsWithoutEmail`.
-  It's read with a strict `=== true`, so it's **off by default**, and every
-  community keeps today's behaviour until someone turns it on. With the switch
-  off, the API rejects contact residents.
-- `leases.resident_id` became nullable because a contact-only *primary* resident
-  has no user id. It is always set when the primary resident is a user.
+- **Built: lease parties from `unit_occupants`.** Main added household members
+  with no portal login (Directory, migration 0085) while this project was in
+  flight, so v3 uses them instead of its own `resident_contacts` table.
+  `lease_residents` names either a user or a household member; a database
+  CHECK enforces exactly one, and a composite FK keeps both in the lease's
+  community. Notices to them go to the unit by mail or hand delivery.
+- **Switch:** `communities.community_settings.leasesAllowResidentsWithoutEmail`
+  (menu label **Allow household members on leases**). It's read with a strict
+  `=== true`, so it's **off by default**. With it off, the API refuses a lease
+  that names a household member. Turning it off later doesn't touch existing
+  leases, but a renewal or transfer that carries a household member is then
+  refused too: turn it back on to renew them.
+- `leases.resident_id` became nullable because a household-member *primary*
+  resident has no user id. It is always set when the primary resident is a user.
+
+### Erasure vs. lease records (open — needs the client and counsel)
+
+Main's Directory **Remove** hard-deletes a household member, because the audit
+log can never be erased and household members are often children (#1303). A
+lease that names someone is a record of who held the unit, so v3:
+
+- makes `lease_residents.occupant_id` **ON DELETE RESTRICT**, and
+- has Directory **Remove** answer **409** while any lease (current or past)
+  names the person.
+
+So an erasure request for someone on a lease is a manual records-retention
+decision, not a click. If the client wants erasure to win, the alternative is
+to redact the household member's name in place (keep the row, blank the PII)
+instead of deleting it. Not built.
 
 ---
 
@@ -139,6 +156,8 @@ The client hasn't decided, so the design keeps both paths open.
 | D8 | **New leases start on the 1st** (rule kept); **renewals are exempt** and start the day after the current term | Nothing prorates today, and an archived migration suggests prod may enforce the 1st at the DB — check before deploying (plan "Validate"). Requiring the 1st for renewals blocked renewing any lease ending mid-month, so it was dropped for renewals during the build. Transfers and pre-leases after a mid-month move-out still start on the next 1st | **LOW — confirm with the client**; also confirm prod has no start-date CHECK / yes |
 | D9 | A lease with unpaid obligations can't be cancelled, deleted or transferred (409 plus the list) | Safe under every billing option; avoids orphaned payable charges | High / yes |
 | D10 | `lease_alert_windows` lives in `community_settings.leaseAlertWindows`, not a new column | It's per-community config, like the other settings keys | High / yes |
+| D11 | **Apartment occupancy comes from leases.** A current lease → rented; none → vacant; an offline unit → neither (null, out of vacancy counts). The stored `units.occupancy` is not read or written for apartments; the units routes refuse a value (400) and the CSV import refuses it per row | Main added a manual occupancy (0083) while v3 made leases decide unit state, and the two could disagree. The client chose leases (2026-10-04). Condos and HOAs keep the manual value | High / yes (stored column untouched) |
+| D12 | Carried household members keep their Directory unit on a transfer | Moving them silently would change Directory behind the manager's back; the transfer dialog doesn't ask | Medium / yes |
 
 ## 4. Still open
 

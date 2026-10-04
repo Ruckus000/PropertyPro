@@ -5,15 +5,16 @@ import { LEASE_HELP_CATEGORY, LEASE_HELP_SLUGS, leaseHelpPath } from '../help-sl
 
 // The Leases page opens these articles by slug; a renamed or deleted article
 // would otherwise become a dead help link with no build error.
-const helpDir = path.resolve(__dirname, '../../../../content/help', LEASE_HELP_CATEGORY);
+const helpDir = path.resolve(__dirname, '../../../../content/help/manager', LEASE_HELP_CATEGORY);
 
 describe('LEASE_HELP_SLUGS', () => {
   it.each(Object.entries(LEASE_HELP_SLUGS))('%s → %s.mdx exists with a matching slug', (_key, slug) => {
     const file = path.join(helpDir, `${slug}.mdx`);
     expect(existsSync(file), `missing ${file}`).toBe(true);
     const source = readFileSync(file, 'utf8');
-    expect(source).toMatch(new RegExp(`^slug: "${slug}"$`, 'm'));
-    expect(source).toMatch(new RegExp(`^category: "${LEASE_HELP_CATEGORY}"$`, 'm'));
+    expect(source).toMatch(new RegExp(`^slug: "?${slug}"?$`, 'm'));
+    expect(source).toMatch(new RegExp(`^category: "?${LEASE_HELP_CATEGORY}"?$`, 'm'));
+    expect(source).toMatch(/^section: "?manager"?$/m);
   });
 
   it('has no duplicate slugs', () => {
@@ -22,6 +23,6 @@ describe('LEASE_HELP_SLUGS', () => {
   });
 
   it('builds the in-app help path', () => {
-    expect(leaseHelpPath(LEASE_HELP_SLUGS.renewingALease)).toBe('/help/apartment/renewing-a-lease');
+    expect(leaseHelpPath(LEASE_HELP_SLUGS.renewingALease)).toBe('/help/leases/renewing-a-lease');
   });
 });

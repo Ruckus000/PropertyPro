@@ -598,7 +598,7 @@ export function pickedFromPeople(people: PersonRef[]): PickedPerson[] {
   return people.flatMap((p): PickedPerson[] => {
     if (p.userId) return [{ key: `u:${p.userId}`, name: p.name, detail: p.email, pick: { userId: p.userId } }];
     if (p.occupantId != null)
-      return [{ key: `c:${p.occupantId}`, name: p.name, detail: 'No email on file', pick: { occupantId: p.occupantId } }];
+      return [{ key: `c:${p.occupantId}`, name: p.name, detail: 'Household member · no portal login', pick: { occupantId: p.occupantId } }];
     return [];
   });
 }
@@ -835,7 +835,7 @@ export function ResidentsPicker(props: {
           className="px-0"
           onClick={() => setDraftOpen({ fullName: '', phone: '', email: '' })}
         >
-          Add a person without email
+          Add a household member
         </Button>
       ) : null}
       {allowWithoutEmail && occupants.some((o) => !pickedKeys.has(`c:${o.id}`)) ? (

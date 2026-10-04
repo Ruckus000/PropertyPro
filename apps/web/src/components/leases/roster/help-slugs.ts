@@ -2,12 +2,12 @@
  * Leases help articles — the single list of slugs the Leases page links to.
  *
  * Every value is the filename of an MDX article in
- * `apps/web/src/content/help/apartment/<slug>.mdx` (category `apartment`).
+ * `apps/web/src/content/help/manager/leases/<slug>.mdx` (category `leases`).
  * UnitPanel and AlertWindowsMenu pass these constants to `onHelp`, and
  * `__tests__/help-slugs.test.ts` fails if any slug has no article, so renaming
  * an article can't leave a dead help link on the page.
  */
-export const LEASE_HELP_CATEGORY = 'apartment' as const;
+export const LEASE_HELP_CATEGORY = 'leases' as const;
 
 export const LEASE_HELP_SLUGS = {
   /** Landing article: page layout, where each task starts, undo. */

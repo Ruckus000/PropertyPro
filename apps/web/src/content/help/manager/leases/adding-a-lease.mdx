@@ -1,44 +1,19 @@
 ---
 title: "Add a lease or pre-lease a unit"
 description: "Create a lease for a vacant unit, or sign the next resident before the current one moves out."
-category: "apartment"
-slug: "adding-a-lease"
-roles:
-  - manager
-keywords:
-  - new lease
-  - create lease
-  - add lease
-  - pre-lease
-  - preleased
-  - co-tenant
-  - primary resident
-  - security deposit
-  - start date
-  - custom term
-  - zero rent
-  - staff unit
-  - no email
-tags:
-  - apartment
-  - admin
-  - leases
-  - florida
-statutes:
-  - "§83.49"
-  - "§83.575"
-updatedAt: "2026-09-29"
-lastReviewedAt: "2026-09-29"
-featureGates:
-  - hasLeaseTracking
-relatedArticles:
-  - upcoming-lease
-  - deposit-notice
-  - move-out-and-holdovers
-featured: false
+section: manager
+category: leases
+slug: adding-a-lease
+communityTypes: [apartment]
+order: 3
+keywords: ["new lease", "create lease", "add lease", "pre-lease", "preleased", "co-tenant", "primary resident", "security deposit", "start date", "custom term", "zero rent", "staff unit", "no email", "household member", "no portal login"]
+relatedArticles: ["upcoming-lease", "deposit-notice", "move-out-and-holdovers"]
 upNext: "upcoming-lease"
-contextPaths:
-  - /dashboard/leases
+statutes: ["§83.49", "§83.575"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
 ---
 
 Use **New lease** for a vacant unit, or to pre-lease a unit whose current resident has a move-out date.
@@ -82,18 +57,25 @@ Add anything else in **Notes**, then select **Create lease**. A confirmation say
 If something is missing, the dialog does not close. The field that needs attention is highlighted, with a message under it, and the cursor moves to it.
 
 <Callout type="info" title="PropertyPro records the deposit notice. It does not send it.">
-**I sent it today** and **Sent on another date** record a notice you gave the resident yourself. Choose **Not sent yet** if you haven't sent it. The unit panel then shows the notice as due until you record it. For a lease that starts later, **Deposit** is under the **Upcoming lease** section of the unit panel. See [Record a security deposit and its notice](/help/apartment/deposit-notice).
+**I sent it today** and **Sent on another date** record a notice you gave the resident yourself. Choose **Not sent yet** if you haven't sent it. The unit panel then shows the notice as due until you record it. For a lease that starts later, **Deposit** is under the **Upcoming lease** section of the unit panel. See [Record a security deposit and its notice](help:deposit-notice).
 </Callout>
 
 ## Pre-lease a unit that is moving out
 
 After a notice to vacate, a declined renewal offer, an early end or a transfer is recorded, the unit's row shows **Pre-lease**. In the unit panel, the button is **Pre-lease this unit**. The **New lease** dialog opens with that unit chosen, and **Start date** set to the 1st of the month after the resident's last day. The hint says **Occupied through** the last day. These units are also listed when you select the **Vacant** tile, in the **Moving out** group.
 
-After you create the pre-lease, the unit keeps its current status until the resident leaves. The **Renewal** column adds **· pre-leased**. The unit panel shows an **Upcoming lease** section. To change or cancel it, see [Edit or cancel an upcoming lease](/help/apartment/upcoming-lease).
+After you create the pre-lease, the unit keeps its current status until the resident leaves. The **Renewal** column adds **· pre-leased**. The unit panel shows an **Upcoming lease** section. To change or cancel it, see [Edit or cancel an upcoming lease](help:upcoming-lease).
 
-## Residents without an email address
+## Household members with no portal login
 
-If your community allows residents without an email address, **Add a person without email** appears under **Residents**. The root manager turns this on in the **Expiry alerts** menu: under **Lease settings**, select **Allow residents without email**. Enter **Full name**, and optionally **Phone** and **Mailing address**. Under **How notices are delivered**, choose **By mail** or **By hand**, then select **Add person**. This person can't use the resident portal until an email address is added. If you don't see **Add a person without email**, the setting is off.
+A lease can also name someone who has no PropertyPro login, such as a resident with no email address. These people are the unit's **household members** in the **Directory**. The root manager allows this in the **Expiry alerts** menu: under **Lease settings**, select **Allow household members on leases**. If you don't see the options below under **Residents**, the setting is off.
+
+- **Household members on file for this unit:** select **Add** and their name to put someone already in the Directory on the lease.
+- **Add a household member:** enter **Full name**, and optionally **Phone** and **Email**, then select **Add person**. They are added to the unit's household in the Directory when you create the lease.
+
+Household members can't use the resident portal, so notices to them go to the unit by mail or by hand. A lease whose primary resident is a household member gets no move-in checklist.
+
+While a lease names a household member, the Directory won't let you remove them: the lease keeps a record of who held the unit. Take them off the lease first. If they move to another unit (a transfer), they stay on file under their old unit; update their unit in the Directory.
 
 <Callout type="florida-statute" title="Florida Statutes §83.49(2) and §83.575">
 The hint under **Deposit received on** shows a date 30 days after the deposit was received. That is when the written notice of how and where the deposit is held is due under §83.49(2). The **Notice to leave at term end (days)** hint says it must match the signed lease, and that Florida caps it at 60 days (§83.575).

@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "adding-a-lease",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -17,12 +18,13 @@
           "selector": "[aria-label=\"Filter units\"]"
         }
       ],
-      "clipTo": "section[aria-labelledby=\"roster-title\"] > div:first-child"
+      "clipTo": "section[aria-labelledby=\"roster-title\"] > div:first-child",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -42,12 +44,13 @@
           "ms": 300
         }
       ],
-      "clipTo": "div.space-y-2:has(> label[for=\"lf-unit\"])"
+      "clipTo": "div.space-y-2:has(> label[for=\"lf-unit\"])",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -89,12 +92,13 @@
           "selector": "#lf-residents-list"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))",
+      "community": "apartment"
     },
     {
       "name": "step-4",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -118,12 +122,13 @@
           "selector": "input[name=\"lf-term\"][value=\"12\"]"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))",
+      "community": "apartment"
     },
     {
       "name": "step-5",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -156,12 +161,13 @@
           "selector": "#lf-zero"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))",
+      "community": "apartment"
     },
     {
       "name": "step-6",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -204,12 +210,13 @@
           "selector": "fieldset:has(legend:text-is(\"Deposit notice\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))",
+      "community": "apartment"
     },
     {
       "name": "step-7",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -233,12 +240,13 @@
           "selector": "#lf-notice-days"
         }
       ],
-      "clipTo": "div.space-y-2:has(> label[for=\"lf-notice-days\"])"
+      "clipTo": "div.space-y-2:has(> label[for=\"lf-notice-days\"])",
+      "community": "apartment"
     },
     {
       "name": "step-8",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -280,7 +288,8 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"New lease\")) button[type=\"submit\"]"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"New lease\"))",
+      "community": "apartment"
     }
   ]
 }

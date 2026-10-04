@@ -1,50 +1,22 @@
 ---
 title: "Record a move-out or a holdover"
 description: "Record a resident's notice to vacate, or the move-out of a resident still in the unit after the lease ended, and see what the page shows until they leave."
-category: "apartment"
-slug: "move-out-and-holdovers"
-roles:
-  - manager
-keywords:
-  - move-out
-  - moving out
-  - notice to vacate
-  - resident gave notice
-  - holdover
-  - past end date
-  - record move-out
-  - leaving
-  - deposit deadline
-  - month-to-month notice
-  - pre-lease
-  - cancel move-out
-  - resolve holdover
-  - convert to month-to-month
-  - move-out checklist
-tags:
-  - apartment
-  - admin
-  - leases
-  - florida
-statutes:
-  - "§83.49"
-  - "§83.57"
-updatedAt: "2026-09-29"
-lastReviewedAt: "2026-09-29"
-featureGates:
-  - hasLeaseTracking
-relatedArticles:
-  - adding-a-lease
-  - deposit-notice
-  - ending-a-lease-early
-  - renewing-a-lease
-featured: false
+section: manager
+category: leases
+slug: move-out-and-holdovers
+communityTypes: [apartment]
+order: 9
+keywords: ["move-out", "moving out", "notice to vacate", "resident gave notice", "holdover", "past end date", "record move-out", "leaving", "deposit deadline", "month-to-month notice", "pre-lease", "cancel move-out", "resolve holdover", "convert to month-to-month", "move-out checklist"]
+relatedArticles: ["adding-a-lease", "deposit-notice", "ending-a-lease-early", "renewing-a-lease"]
 upNext: "ending-a-lease-early"
-contextPaths:
-  - /dashboard/leases
+statutes: ["§83.49", "§83.57"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
 ---
 
-Use **Resident gave notice** when a resident tells you they are leaving at or before the end of the lease. For a resident who stayed after the lease ended, use **Record move-out**. A declined renewal offer also schedules a move-out. See [Send a renewal offer](/help/apartment/renewing-a-lease).
+Use **Resident gave notice** when a resident tells you they are leaving at or before the end of the lease. For a resident who stayed after the lease ended, use **Record move-out**. A declined renewal offer also schedules a move-out. See [Send a renewal offer](help:renewing-a-lease).
 
 ## Record a notice to vacate
 
@@ -66,9 +38,9 @@ Add anything useful in **Notes**, such as a forwarding address. Select **Record 
 </Step>
 </StepByStep>
 
-Recording the move-out also starts a move-out checklist on the Move In/Out page, if the primary resident has a PropertyPro account. See [Move-in and move-out checklists](/help/apartment/move-in-move-out-checklists).
+Recording the move-out also starts a move-out checklist on the Move In/Out page, if the primary resident has a PropertyPro account. See [Move-in and move-out checklists](help:move-in-out).
 
-The resident stays in the unit, and the unit counts as occupied, until the move-out date. The next day, the lease moves to **Lease history** and the unit shows **Vacant**, or **Pre-leased** if you added the next lease. To pre-lease it, see [Add a lease or pre-lease a unit](/help/apartment/adding-a-lease).
+The resident stays in the unit, and the unit counts as occupied, until the move-out date. The next day, the lease moves to **Lease history** and the unit shows **Vacant**, or **Pre-leased** if you added the next lease. To pre-lease it, see [Add a lease or pre-lease a unit](help:adding-a-lease).
 
 If the move-out date has already passed, the hint says so. The lease closes now, and the unit shows as vacant from the day after that date.
 
@@ -78,7 +50,7 @@ If the move-out date has already passed, the hint says so. The lease closes now,
 
 If the resident decides to stay, open the unit and select **Cancel move-out**. There is no dialog. A confirmation says the unit stays on its current term, and includes **Undo**. The row goes back to its earlier status. The move-out checklist, if one was started, stays on the Move In/Out page.
 
-If the unit has been pre-leased, **Cancel move-out** is not shown. Cancel the upcoming lease first with **Cancel before move-in** (see [Edit or cancel an upcoming lease](/help/apartment/upcoming-lease)), then select **Cancel move-out**.
+If the unit has been pre-leased, **Cancel move-out** is not shown. Cancel the upcoming lease first with **Cancel before move-in** (see [Edit or cancel an upcoming lease](help:upcoming-lease)), then select **Cancel move-out**.
 
 ## Month-to-month tenancies
 
@@ -94,7 +66,7 @@ A holdover's row ends with **Resolve holdover**. It opens the unit panel, which 
 </Step>
 
 <Step title="Choose what happens next">
-If the resident is staying, select **Convert to month-to-month**. There is no dialog. The lease keeps its terms with no end date, and a confirmation says the unit is now month-to-month, with **Undo**. The unit shows **Month-to-month** and leaves **Renewals due**. To agree a new fixed term later, see [Offer a fixed term](/help/apartment/renewing-a-lease#month-to-month-leases).
+If the resident is staying, select **Convert to month-to-month**. There is no dialog. The lease keeps its terms with no end date, and a confirmation says the unit is now month-to-month, with **Undo**. The unit shows **Month-to-month** and leaves **Renewals due**. To agree a new fixed term later, see [Offer a fixed term](help:renewing-a-lease).
 
 If the resident is leaving or has left, select **Record move-out**. The **Record notice to vacate** dialog opens and says when the lease ended. **Notice received on** starts at today. **Move-out date** starts empty. Enter the actual or planned last day. It can be after the old end date.
 </Step>
@@ -104,7 +76,7 @@ If the date has passed, the lease closes right away and the unit shows **Vacant*
 </Step>
 </StepByStep>
 
-After the resident leaves, record the deposit refund or claim. See [Record a security deposit and its notice](/help/apartment/deposit-notice).
+After the resident leaves, record the deposit refund or claim. See [Record a security deposit and its notice](help:deposit-notice).
 
 <Callout type="florida-statute" title="Florida Statutes §83.49(3) and §83.57">
 After you record a move-out, the unit panel shows two dates: return the deposit within 15 days of the move-out date, or send a claim notice by certified mail within 30 days (§83.49). For a month-to-month tenancy, the dialog warns when the notice is shorter than 30 days, the written notice Florida requires before the end of a monthly period (§83.57).

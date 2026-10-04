@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "unit-offline",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -25,12 +26,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -54,12 +56,13 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -98,12 +101,13 @@
           "value": "Water damage repairs, claim filed."
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Take unit offline\"))",
+      "community": "apartment"
     },
     {
       "name": "step-4",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -154,12 +158,13 @@
           "ms": 800
         }
       ],
-      "clipTo": "tr:has(button[aria-label=\"Open Unit 304\"])"
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 304\"])",
+      "community": "apartment"
     },
     {
       "name": "step-5",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -175,12 +180,13 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 304\"))",
+      "community": "apartment"
     },
     {
       "name": "step-6",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -204,7 +210,8 @@
           "selector": "[role=\"dialog\"]:has(h2:has-text(\"Bring back online\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Bring back online\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Bring back online\"))",
+      "community": "apartment"
     }
   ]
 }

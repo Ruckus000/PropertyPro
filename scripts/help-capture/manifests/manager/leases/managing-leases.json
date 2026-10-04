@@ -1,5 +1,6 @@
 {
-  "category": "apartment",
+  "section": "manager",
+  "category": "leases",
   "slug": "managing-leases",
   "viewport": {
     "width": 1440,
@@ -9,7 +10,7 @@
     {
       "name": "step-1",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -17,12 +18,13 @@
           "selector": "[aria-label=\"Filter units\"]"
         }
       ],
-      "clipTo": "[aria-label=\"Filter units\"]"
+      "clipTo": "[aria-label=\"Filter units\"]",
+      "community": "apartment"
     },
     {
       "name": "step-2",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -30,12 +32,13 @@
           "selector": "[aria-label=\"Filter units\"]"
         }
       ],
-      "clipTo": "section[aria-labelledby=\"roster-title\"] > div:first-child"
+      "clipTo": "section[aria-labelledby=\"roster-title\"] > div:first-child",
+      "community": "apartment"
     },
     {
       "name": "step-3",
       "kind": "still",
-      "route": "/dashboard/leases?communityId=3",
+      "route": "/dashboard/leases?communityId={cid}",
       "role": "site_manager",
       "actions": [
         {
@@ -51,7 +54,8 @@
           "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\"))"
         }
       ],
-      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\"))"
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 101\"))",
+      "community": "apartment"
     }
   ]
 }

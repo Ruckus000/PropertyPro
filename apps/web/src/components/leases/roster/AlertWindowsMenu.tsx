@@ -87,8 +87,8 @@ export function AlertWindowsMenu({
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="font-normal text-content-secondary">Lease settings</DropdownMenuLabel>
-        {/* Decisions §2: off by default; a community turns it on when it has
-            residents with no email address. Notices to them go by mail or hand. */}
+        {/* Decisions §2: off by default. When on, a lease can name a Directory
+            household member (no portal login); notices to them go by mail or hand. */}
         <DropdownMenuCheckboxItem
           checked={allowResidentsWithoutEmail}
           disabled={!canEdit}
@@ -96,14 +96,14 @@ export function AlertWindowsMenu({
             try {
               await actions.updateSettings.mutateAsync({ allowResidentsWithoutEmail: checked === true });
               toast.success(
-                checked ? 'Residents without an email address can now be added to leases' : 'Residents without an email address are turned off',
+                checked ? 'Household members with no portal login can now be named on leases' : 'Household members can no longer be added to leases',
               );
             } catch (err) {
               toast.error(err instanceof Error ? err.message : 'Could not change this setting');
             }
           }}
         >
-          Allow residents without email
+          Allow household members on leases
         </DropdownMenuCheckboxItem>
         {!canEdit && (
           <p className="px-2 py-1.5 text-xs text-content-secondary">Only the root manager can change this.</p>
