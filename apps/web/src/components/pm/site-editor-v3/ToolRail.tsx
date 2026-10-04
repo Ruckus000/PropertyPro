@@ -2,7 +2,9 @@
 
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
-import { EDITOR_TOOLS, type EditorToolId } from './tools';
+import { EDITOR_TOOLS, HELP_RAIL_ITEM, type EditorToolId } from './tools';
+
+const RAIL_ITEMS = [...EDITOR_TOOLS, HELP_RAIL_ITEM];
 
 export interface ToolRailProps {
   /** The open tool, or null when the panel is closed and the canvas has the room. */
@@ -19,6 +21,11 @@ export interface ToolRailProps {
    * Documents tool's records groups). Absent or 0 shows nothing.
    */
   badges?: Partial<Record<EditorToolId, number>>;
+  /** Whether the Help drawer is open; the last tile toggles it. */
+  helpOpen: boolean;
+  onHelpToggle: () => void;
+  /** Id of the Help drawer, for the Help tile's `aria-controls`. */
+  helpId: string;
 }
 
 /**
@@ -35,16 +42,24 @@ export interface ToolRailProps {
  * mount a panel (and fetch its code-split chunk) for every tile an arrow key
  * passes over.
  */
-export function ToolRail({ active, onSelect, panelId, badges }: ToolRailProps) {
+export function ToolRail({
+  active,
+  onSelect,
+  panelId,
+  badges,
+  helpOpen,
+  onHelpToggle,
+  helpId,
+}: ToolRailProps) {
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const activeIndex = active === null ? -1 : EDITOR_TOOLS.findIndex((t) => t.id === active);
+  const activeIndex = active === null ? -1 : RAIL_ITEMS.findIndex((t) => t.id === active);
   // The roving tab stop. Follows the open tool when there is one, otherwise the
   // tile the keyboard last reached — so Tab back into the rail returns there.
   const [focusIndex, setFocusIndex] = useState(0);
   const tabStop = activeIndex === -1 ? focusIndex : activeIndex;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const last = EDITOR_TOOLS.length - 1;
+    const last = RAIL_ITEMS.length - 1;
     let next: number;
     switch (event.key) {
       case 'ArrowDown':
@@ -70,13 +85,15 @@ export function ToolRail({ active, onSelect, panelId, badges }: ToolRailProps) {
   return (
     <nav
       aria-label="Website tools"
+      data-tour="tools"
       className="flex w-[84px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-edge bg-surface-card px-2 py-2.5"
     >
-      {EDITOR_TOOLS.map((tool, index) => {
-        const isOpen = tool.id === active;
+      {RAIL_ITEMS.map((tool, index) => {
+        const isHelp = tool.id === HELP_RAIL_ITEM.id;
+        const isOpen = isHelp ? helpOpen : tool.id === active;
         const isAdd = tool.id === 'add';
         const Icon = tool.icon;
-        const badge = badges?.[tool.id] ?? 0;
+        const badge = tool.id === 'help' ? 0 : (badges?.[tool.id] ?? 0);
         const label =
           badge > 0
             ? `${tool.label} (${badge} need${badge === 1 ? 's' : ''} attention)`
@@ -92,9 +109,11 @@ export function ToolRail({ active, onSelect, panelId, badges }: ToolRailProps) {
             data-testid={`site-editor-tool-${tool.id}`}
             aria-expanded={isOpen}
             aria-label={label}
-            aria-controls={isOpen ? panelId : undefined}
+            aria-controls={isOpen ? (isHelp ? helpId : panelId) : undefined}
             tabIndex={index === tabStop ? 0 : -1}
-            onClick={() => onSelect(isOpen ? null : tool.id)}
+            onClick={() =>
+              tool.id === 'help' ? onHelpToggle() : onSelect(isOpen ? null : tool.id)
+            }
             onFocus={() => setFocusIndex(index)}
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={cn(

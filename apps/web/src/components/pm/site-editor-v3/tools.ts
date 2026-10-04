@@ -31,10 +31,19 @@ export const EDITOR_TOOLS = [
   { id: 'design', label: 'Design', icon: Palette },
   { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'notice', label: 'Notice', icon: TriangleAlert },
-  { id: 'help', label: 'Help', icon: CircleHelp },
 ] as const satisfies readonly { id: string; label: string; icon: LucideIcon }[];
 
 export type EditorToolId = (typeof EDITOR_TOOLS)[number]['id'];
+
+/**
+ * The rail's last tile. Not a tool: it opens the Help drawer on the right
+ * (v4 Phase 3), which stays open beside whichever tool panel is showing, so it
+ * is not one of the panels `activeTool` chooses between.
+ */
+export const HELP_RAIL_ITEM = { id: 'help', label: 'Help', icon: CircleHelp } as const;
+
+/** The Help drawer's element id, for its openers' `aria-controls`. */
+export const HELP_DRAWER_ID = 'site-editor-help';
 
 /** Panel heading per tool — the tab label is abbreviated, this is not. */
 export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
@@ -44,5 +53,10 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
   add: 'Add a section',
   design: 'Design',
   documents: 'Documents',
-  help: 'Help',
 };
+
+/**
+ * How the PM works (v4 Phase 3): Guided keeps a checklist panel open and drops
+ * the rail; Free edit is the rail of tools.
+ */
+export type EditorMode = 'guided' | 'free';

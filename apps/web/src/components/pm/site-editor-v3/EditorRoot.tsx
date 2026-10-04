@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useContentBlocks } from '@/hooks/use-content-blocks';
+import { useContentBlocks, useSitePublishToken } from '@/hooks/use-content-blocks';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { applyDesignToCanvas, applyLiveLogoToCanvas } from '@/lib/site-editor/canvas-design';
 import { useSiteDesign } from '@/hooks/use-site-design';
 import { useLiveBranding } from '@/hooks/use-live-branding';
+import {
+  useSiteEditorPreferences,
+  useUpdateSiteEditorPreferences,
+} from '@/hooks/use-site-editor-preferences';
 import type { PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
@@ -67,9 +72,28 @@ const DesignPanel = dynamic(
   () => import('./panels/DesignPanel').then((m) => m.DesignPanel),
   { loading: () => null },
 );
-const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
+// v4 Phase 3. Mounted only while open, so its guide reader (the help modal's
+// article body, figures and lightbox) is fetched on the first Help click.
+const HelpDrawer = dynamic(() => import('./help/HelpDrawer').then((m) => m.HelpDrawer), {
   loading: () => null,
 });
+// v4 Phase 3, both rendered only when needed: the first-run chooser for a
+// manager who has not chosen, and the checklist only in Guided mode.
+const ModeChooser = dynamic(
+  () => import('./guidance/ModeChooser').then((m) => m.ModeChooser),
+  { loading: () => null },
+);
+const NextSteps = dynamic(() => import('./guidance/NextSteps').then((m) => m.NextSteps), {
+  loading: () => null,
+});
+// The four-step tour: at most once by itself, after the chooser, or from Help.
+const EditorTour = dynamic(() => import('./guidance/EditorTour').then((m) => m.EditorTour), {
+  loading: () => null,
+});
+// Type-only: erased at build, so neither chunk is pulled in.
+import type { HelpAction } from './help/guides';
+import type { EditorStepAction } from './guidance/NextSteps';
+import type { SettingsTabId } from './settings/SettingsView';
 const RecordsAttention = dynamic(
   () => import('./RecordsAttention').then((m) => m.RecordsAttention),
   { ssr: false, loading: () => null },
@@ -102,7 +126,7 @@ import { Button } from '@/components/ui/button';
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
-import type { EditorToolId } from './tools';
+import type { EditorMode, EditorToolId } from './tools';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import { UndoableRemoveProvider } from './undoable-remove-context';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
@@ -285,6 +309,12 @@ export function EditorRoot({
   const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
   // v4 Phase 5: the page being built, or the site's settings.
   const [view, setView] = useState<EditorView>('website');
+  // A Settings tab a Help guide's "Show me" asked for; see `SettingsView`.
+  const [settingsTabRequest, setSettingsTabRequest] = useState<{ tab: SettingsTabId } | null>(
+    null,
+  );
+  // v4 Phase 3: the Help drawer, open beside whichever area is showing.
+  const [helpOpen, setHelpOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
    * `previewOpen`, mirrored — read by the preview gate effect below.
@@ -742,12 +772,14 @@ export function EditorRoot({
   // it did, the `key` remount would discard the selection. So the intent is
   // parked in `pendingSelectSlot` and honoured by the provider that replaces
   // this one, which is the first instance whose blocks are the right page's.
-  const handleSelectSlot = useCallback(
+  // Takes the PM to a section, switching page if it is on another one. The
+  // checklist's "Show me" uses this without `handleSelectSlot`'s Sections
+  // panel, which would cover the checklist the PM is working through.
+  const handleGoToSlot = useCallback(
     (target: SlotTarget) => {
       // Reachable from Settings too (requirements pill, Publish's "Fix this"),
       // whose view hides the rail and canvas this lands on.
       setView('website');
-      setActiveTool('sections');
       const targetPageId = Number(target.pageId);
       // `SITE_CHANGE_GROUP` is a non-numeric sentinel for a slot on no page.
       if (!Number.isFinite(targetPageId) || targetPageId === effectivePageId) return;
@@ -758,6 +790,13 @@ export function EditorRoot({
       setPageAnnouncement('');
     },
     [effectivePageId],
+  );
+  const handleSelectSlot = useCallback(
+    (target: SlotTarget) => {
+      setActiveTool('sections');
+      handleGoToSlot(target);
+    },
+    [handleGoToSlot],
   );
   const handleSlotSelected = useCallback(() => setPendingSelectSlot(null), []);
   // The empty states in the Sections panel and on the canvas both name adding a
@@ -807,7 +846,136 @@ export function EditorRoot({
     setView('website');
     setActiveTool('pages');
   }, []);
-  const handleViewChange = useCallback((next: EditorView) => setView(next), []);
+  const handleViewChange = useCallback((next: EditorView) => {
+    setView(next);
+    // Spent: the PM's own switch opens Settings on its first tab again.
+    setSettingsTabRequest(null);
+  }, []);
+  const handleHelpToggle = useCallback(() => setHelpOpen((open) => !open), []);
+  const handleHelpClose = useCallback(() => setHelpOpen(false), []);
+  const canOpenPublish = diff.changes.length > 0 || diffFailed;
+  const handleShowMe = useCallback((action: HelpAction) => {
+    if (action.kind === 'tool') {
+      setView('website');
+      // Like a rail click: says nothing about position, so "Open Add" appends.
+      setAddTarget(null);
+      setActiveTool(action.tool);
+    } else if (action.kind === 'settings') {
+      setView('settings');
+      setSettingsTabRequest({ tab: action.tab });
+    } else {
+      setPublishOpen(true);
+    }
+  }, []);
+
+  // v4 Phase 3: the manager's own editing mode and checklist progress (#1295).
+  const preferences = useSiteEditorPreferences(communityId);
+  const { mutate: updatePreferences } = useUpdateSiteEditorPreferences(communityId);
+  // Free until the preferences have loaded (and for anyone the route refuses),
+  // so a returning manager never sees Guided, or the chooser, flash first.
+  const mode: EditorMode = preferences.data?.mode ?? 'free';
+  // Closing the chooser without choosing means Free for this visit only.
+  const [chooserDismissed, setChooserDismissed] = useState(false);
+  // A publish in THIS visit counts too. `hasPublishedSite` is a server prop and
+  // nothing refreshes it after a publish, so without the blocks query's
+  // `latestPublishedAt` (refetched by the publish's invalidation; same key as
+  // `useContentBlocks`, so no extra request) the checklist's Publish step stayed
+  // open after a first publish, with a button that then did nothing.
+  const publishToken = useSitePublishToken(communityId);
+  const everPublished = hasPublishedSite || publishToken.data != null;
+  // The shell renders only the phone gate below 768px, so the chooser must not
+  // open over it — and a choice saved there would stick on every screen.
+  const isPhone = useMediaQuery('(max-width: 767px)');
+  const showChooser =
+    preferences.data?.mode === null && !hasPublishedSite && !chooserDismissed && !isPhone;
+  const [tourOpen, setTourOpen] = useState(false);
+  /*
+   * Asked for by the first choice, opened once the chooser has GONE. Opening it
+   * in the same handler mounted the tour while the chooser — a modal whose
+   * focus trap pulls focus back — was still up; the chooser then unmounted and
+   * dropped focus on <body>, so the card never had focus and its Escape did
+   * nothing. It also showed the Free step for a frame before `mode` landed.
+   */
+  const [tourPending, setTourPending] = useState(false);
+  const tourDone = preferences.data?.tourDone ?? false;
+  const handleChooseMode = useCallback(
+    (next: EditorMode) => {
+      updatePreferences({ mode: next });
+      // The tour follows the first choice, once: never for a manager who has
+      // already been through it (or skipped it).
+      if (!tourDone) setTourPending(true);
+    },
+    [updatePreferences, tourDone],
+  );
+  useEffect(() => {
+    if (!tourPending || showChooser) return;
+    setTourPending(false);
+    setTourOpen(true);
+  }, [tourPending, showChooser]);
+  // However it ends — finished, skipped, Escape, or cut short by Publish or a
+  // switch to Settings — it is recorded, so it never starts by itself again.
+  const handleTourEnd = useCallback(() => {
+    setTourOpen(false);
+    if (!tourDone) updatePreferences({ tourDone: true });
+  }, [tourDone, updatePreferences]);
+  const handleStartTour = useCallback(() => {
+    setView('website');
+    setTourOpen(true);
+  }, []);
+  useEffect(() => {
+    if (tourOpen && (publishOpen || view !== 'website')) handleTourEnd();
+  }, [tourOpen, publishOpen, view, handleTourEnd]);
+  const handleChooserDismissed = useCallback(() => setChooserDismissed(true), []);
+  const handleModeChange = useCallback(
+    (next: EditorMode) => {
+      updatePreferences({ mode: next });
+      setAddTarget(null);
+      setActiveTool(null);
+      toast.info(
+        next === 'guided'
+          ? 'Guided mode: your checklist is on the left.'
+          : 'Free edit: all tools are on the left. Switch back any time.',
+      );
+    },
+    [updatePreferences],
+  );
+  // "Open design", "Review your pages" and "Check it on a phone" are done by
+  // doing them, in either mode — so record each the first time it happens.
+  const visited = preferences.data?.visited;
+  // Each step is sent at most once per visit. A failed write rolls the
+  // optimistic `visited` back to a NEW array without the step, which re-runs
+  // this effect — without the ref that was a PATCH loop for as long as the
+  // tool stayed open.
+  const visitsSent = useRef(new Set<string>());
+  useEffect(() => {
+    if (!visited) return;
+    const now = [
+      activeTool === 'design' ? 'design' : null,
+      activeTool === 'pages' ? 'pages' : null,
+      device === 'phone' ? 'phone' : null,
+    ] as const;
+    for (const step of now) {
+      if (step && !visited.includes(step) && !visitsSent.current.has(step)) {
+        visitsSent.current.add(step);
+        updatePreferences({ visit: step });
+      }
+    }
+  }, [activeTool, device, visited, updatePreferences]);
+  const handleStepAction = useCallback(
+    (action: EditorStepAction) => {
+      setView('website');
+      if (action.kind === 'add-section') {
+        // Appends, like the rail's Add: a stale "Add section here" target is dropped.
+        setAddTarget(null);
+        setActiveTool('add');
+      }
+      else if (action.kind === 'open-documents') setActiveTool('documents');
+      else if (action.kind === 'open-tool') setActiveTool(action.tool);
+      else if (action.kind === 'preview-phone') setDevice('phone');
+      else if (canOpenPublish) setPublishOpen(true);
+    },
+    [canOpenPublish],
+  );
   // Settings → Access links to the records: back to the page, Documents open.
   const handleOpenDocuments = useCallback(() => {
     setView('website');
@@ -905,6 +1073,45 @@ export function EditorRoot({
               publicSiteUrl={publicSiteUrl}
               hasSiteCustomDomain={hasSiteCustomDomain}
               onOpenDocuments={handleOpenDocuments}
+              tabRequest={settingsTabRequest}
+            />
+          ) : null
+        }
+        helpOpen={helpOpen}
+        onHelpToggle={handleHelpToggle}
+        help={
+          helpOpen ? (
+            <HelpDrawer
+              communityId={communityId}
+              view={view}
+              onClose={handleHelpClose}
+              onShowMe={handleShowMe}
+              canPublish={canOpenPublish}
+              mode={mode}
+              onModeChange={handleModeChange}
+              onStartTour={handleStartTour}
+            />
+          ) : null
+        }
+        mode={mode}
+        onModeChange={handleModeChange}
+        steps={
+          mode === 'guided' ? (
+            <NextSteps
+              communityId={communityId}
+              communityType={siteIdentity.communityType}
+              pageId={effectivePageId}
+              homePageId={homePageId}
+              homeHero={
+                blocks?.find((b) => b.pageId === homePageId && b.blockType === 'hero') ?? null
+              }
+              everPublished={everPublished}
+              pendingChanges={diff.changes.length}
+              preferences={preferences.data ?? { marked: [], visited: [] }}
+              onMark={(step) => updatePreferences({ mark: step })}
+              onAction={handleStepAction}
+              onGoToSlot={handleGoToSlot}
+              onWarnResidents={() => setActiveTool('notice')}
             />
           ) : null
         }
@@ -919,7 +1126,7 @@ export function EditorRoot({
         // Openable when there is something to publish — and also when the diff
         // failed to load, because the sheet is the only surface that explains
         // that failure and offers a retry.
-        canOpenPublish={diff.changes.length > 0 || diffFailed}
+        canOpenPublish={canOpenPublish}
         // Withheld for the same reason the canvas is (see the PreviewDialog
         // render below). Disabled with a reason rather than left live and
         // silently inert: a button that does nothing when pressed is the
@@ -988,8 +1195,7 @@ export function EditorRoot({
           // Nothing that writes a BLOCK is offered while the page is unknown —
           // a write with no page id defaults to the live home page, which is
           // precisely the silent wrong-page save the banner is warning about.
-          // The site/branding/domain/help tools are unaffected: they are not
-          // page-scoped.
+          // The other tools are unaffected: they are not page-scoped.
           if (pagesUnavailable && (tool === 'sections' || tool === 'add')) {
             return (
               <p className="p-4 text-sm text-content-secondary">
@@ -1048,7 +1254,6 @@ export function EditorRoot({
               />
             );
           }
-          if (tool === 'help') return <HelpPanel communityId={communityId} />;
           // Every tool in EDITOR_TOOLS now has a panel. This assignment is the
           // exhaustiveness check: adding an id to EDITOR_TOOLS without a branch
           // above fails typecheck here, instead of shipping a tab that renders
@@ -1117,6 +1322,12 @@ export function EditorRoot({
           pageIsStaged={selectedPageIsStaged}
         />
       ) : null}
+
+      {showChooser ? (
+        <ModeChooser onChoose={handleChooseMode} onDismiss={handleChooserDismissed} />
+      ) : null}
+
+      {tourOpen ? <EditorTour mode={mode} onEnd={handleTourEnd} /> : null}
 
       {publishOpen ? (
         <PublishSheetMount

@@ -21,10 +21,13 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { reorderSiteBlock } from '@/lib/services/site-blocks-service';
 import { reorderBlockContract } from './contract';
 import type { NextRequest } from 'next/server';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 async function ensurePmAccess(req: NextRequest, communityId: number) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
+  // A demo in its grace window is read-only. Before membership, per api-patterns.md.
+  await assertNotDemoGrace(effective);
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can reorder site blocks');
   await requirePlanFeature(effective, 'hasSiteEditor');

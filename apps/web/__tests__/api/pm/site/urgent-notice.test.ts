@@ -12,6 +12,13 @@
  * behaviour surfacing as thrown errors, and the pure logic has its own suite.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// A demo in its grace window is read-only; these tests run as a normal
+// community unless a case says otherwise.
+const assertNotDemoGraceMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
+}));
 import { NextRequest } from 'next/server';
 import { ConflictError, ForbiddenError, ValidationError } from '@/lib/api/errors';
 

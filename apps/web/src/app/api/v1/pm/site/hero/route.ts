@@ -29,10 +29,17 @@ import { upsertPublishedHero } from '@/lib/services/site-blocks-service';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { heroBlockGetContract, heroBlockPatchContract } from './contract';
 import type { NextRequest } from 'next/server';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
-async function ensurePmAccess(req: NextRequest, communityId: number) {
+async function ensurePmAccess(
+  req: NextRequest,
+  communityId: number,
+  { write = true }: { write?: boolean } = {},
+) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
+  // A demo in its grace window is read-only. Before membership, per api-patterns.md.
+  if (write) await assertNotDemoGrace(effective);
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can edit the community site');
   await requirePlanFeature(effective, 'hasSiteEditor');
@@ -41,7 +48,9 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
 
 export const GET = withErrorHandler(
   runRoute(heroBlockGetContract, async ({ query, req }) => {
-    const { communityId, membership } = await ensurePmAccess(req, query.communityId);
+    const { communityId, membership } = await ensurePmAccess(req, query.communityId, {
+      write: false,
+    });
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
     const reader = getPublicCommunityScopedReader(communityId);

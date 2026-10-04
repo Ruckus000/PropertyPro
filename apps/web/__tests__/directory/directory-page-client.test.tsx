@@ -695,7 +695,7 @@ describe('DirectoryPageClient — household members (no portal login)', () => {
     await user.click(screen.getByRole('button', { name: /kim kid/i }));
     await user.click(await screen.findByRole('button', { name: 'Remove from household' }));
     const confirm = await screen.findByRole('alertdialog', { name: 'Remove Kim Kid?' });
-    expect(within(confirm).getByText(/no portal access to lose/)).toBeInTheDocument();
+    expect(within(confirm).getByText(/details are permanently deleted.*no portal access to lose/)).toBeInTheDocument();
     await user.click(within(confirm).getByRole('button', { name: 'Remove household member' }));
     expect(removeOccupantMock).toHaveBeenCalledWith({ id: 5 });
     expect(removeResidentMock).not.toHaveBeenCalled();

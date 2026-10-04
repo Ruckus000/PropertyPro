@@ -25,6 +25,8 @@ import {
 } from '@/components/pm/site-editor-v3/RecordsAttention';
 import userEvent from '@testing-library/user-event';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
+import { GuidedTabs as RealGuidedTabs } from '@/components/pm/site-editor-v3/GuidedTabs';
+import { ModeSwitch as RealModeSwitch } from '@/components/pm/site-editor-v3/ModeSwitch';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 // Every code-split child (preview, publish sheet, notice/site panels,
@@ -59,13 +61,129 @@ vi.mock('next/dynamic', () => ({
     // used: its count is what the rail shows.
     String(loader).includes('RecordsAttention')
       ? (props: RecordsAttentionProps) => <RealRecordsAttention {...props} />
+      : // The Guided tabs and the top bar's mode switch are chrome this file
+        // asserts on, so the real ones render.
+        String(loader).includes('GuidedTabs')
+        ? (props: React.ComponentProps<typeof RealGuidedTabs>) => <RealGuidedTabs {...props} />
+      : String(loader).includes('ModeSwitch')
+        ? (props: React.ComponentProps<typeof RealModeSwitch>) => <RealModeSwitch {...props} />
       : // The Settings view, as a stand-in exposing the one callback EditorRoot
         // gives it. Its content has its own suite (SettingsView.test.tsx).
         String(loader).includes('SettingsView')
-        ? ({ onOpenDocuments }: { onOpenDocuments: () => void }) => (
-            <button type="button" onClick={onOpenDocuments}>
-              Settings stand-in: open Documents
-            </button>
+        ? ({
+            onOpenDocuments,
+            tabRequest,
+          }: {
+            onOpenDocuments: () => void;
+            tabRequest?: { tab: string } | null;
+          }) => (
+            <>
+              <button type="button" onClick={onOpenDocuments}>
+                Settings stand-in: open Documents
+              </button>
+              <p>Requested tab: {tabRequest?.tab ?? 'none'}</p>
+            </>
+          )
+      : // The first-run chooser and the checklist, as stand-ins exposing their
+        // callbacks (their content has its own suites).
+        String(loader).includes('ModeChooser')
+        ? ({ onChoose, onDismiss }: { onChoose: (m: string) => void; onDismiss: () => void }) => (
+            <div role="dialog" aria-label="Choose how to edit">
+              <button type="button" onClick={() => onChoose('guided')}>
+                Guide me
+              </button>
+              <button type="button" onClick={onDismiss}>
+                Dismiss chooser
+              </button>
+            </div>
+          )
+      : String(loader).includes('NextSteps')
+        ? ({
+            onAction,
+            onWarnResidents,
+            onMark,
+            everPublished,
+          }: {
+            onAction: (action: unknown) => void;
+            onWarnResidents: () => void;
+            onMark: (step: string) => void;
+            everPublished: boolean;
+          }) => (
+            <div data-testid="next-steps-stand-in">
+              <p>Ever published: {String(everPublished)}</p>
+              <button type="button" onClick={() => onAction({ kind: 'open-tool', tool: 'design' })}>
+                Step: open design
+              </button>
+              <button type="button" onClick={() => onAction({ kind: 'add-section', blockType: 'meetings' })}>
+                Step: add section
+              </button>
+              <button type="button" onClick={() => onAction({ kind: 'open-documents' })}>
+                Step: open documents
+              </button>
+              <button type="button" onClick={() => onAction({ kind: 'preview-phone' })}>
+                Step: preview phone
+              </button>
+              <button type="button" onClick={() => onMark('welcome')}>
+                Step: mark welcome
+              </button>
+              <button type="button" onClick={() => onAction({ kind: 'publish' })}>
+                Step: publish
+              </button>
+              <button type="button" onClick={onWarnResidents}>
+                Step: warn residents
+              </button>
+            </div>
+          )
+      : String(loader).includes('EditorTour')
+        ? ({ onEnd }: { onEnd: () => void }) => (
+            <div role="dialog" aria-label="Quick tour">
+              <button type="button" onClick={onEnd}>
+                End tour
+              </button>
+            </div>
+          )
+      : // The Help drawer, as a stand-in exposing its callbacks; its content
+        // has its own suite (HelpDrawer.test.tsx).
+        String(loader).includes('HelpDrawer')
+        ? ({
+            onClose,
+            onShowMe,
+            onStartTour,
+          }: {
+            onClose: () => void;
+            onShowMe: (action: unknown) => void;
+            onStartTour: () => void;
+          }) => (
+            <aside aria-label="Help">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onStartTour();
+                }}
+              >
+                Help stand-in: tour
+              </button>
+              <button type="button" onClick={onClose}>
+                Help stand-in: close
+              </button>
+              {[
+                { kind: 'tool', tool: 'design' },
+                { kind: 'settings', tab: 'search' },
+                { kind: 'publish' },
+              ].map((action) => (
+                <button
+                  key={action.kind}
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onShowMe(action);
+                  }}
+                >
+                  Show me: {action.kind}
+                </button>
+              ))}
+            </aside>
           )
       : String(loader).includes('PagesPanel')
       ? ({
@@ -238,8 +356,9 @@ vi.mock('sonner', () => ({
 
 // The shell asks `(max-width: 767px)`: false = desktop. True would render the
 // phone gate and there would be no top bar to assert on.
+const media = vi.hoisted(() => ({ narrow: false }));
 vi.mock('@/hooks/use-media-query', () => ({
-  useMediaQuery: () => false,
+  useMediaQuery: () => media.narrow,
   useIsDesktop: () => true,
 }));
 
@@ -298,6 +417,7 @@ const queries = vi.hoisted(() => ({
   // The client pages list. Selection repair and the home-page fallback are both
   // driven by this, so it has to be settable per test rather than a fixed [].
   pages: [] as unknown[],
+  latestPublishedAt: null as string | null,
   isPending: false,
   isError: false,
   error: null as Error | null,
@@ -321,7 +441,7 @@ vi.mock('@/hooks/use-content-blocks', () => ({
     ...base(),
     data: queries.isPending || queries.isError ? undefined : queries.published,
   }),
-  useSitePublishToken: () => ({ ...base(), data: null }),
+  useSitePublishToken: () => ({ ...base(), data: queries.latestPublishedAt }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
@@ -341,6 +461,19 @@ vi.mock('@/hooks/use-community-unit-count', () => ({
 
 // The drafted site look (website builder v4). Tests that need a pending
 // design change set `designDraft.value`; everyone else sees none.
+// The manager's editing mode (v4 Phase 3). Undefined = still loading, which
+// is also what a manager the route refuses sees: Free, no chooser.
+const prefs = vi.hoisted(() => ({
+  value: undefined as
+    | undefined
+    | { mode: 'guided' | 'free' | null; tourDone: boolean; marked: string[]; visited: string[] },
+  mutate: vi.fn(),
+}));
+vi.mock('@/hooks/use-site-editor-preferences', () => ({
+  useSiteEditorPreferences: () => ({ data: prefs.value }),
+  useUpdateSiteEditorPreferences: () => ({ mutate: prefs.mutate }),
+}));
+
 const designDraft = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 // Logos are live branding, read separately from the drafted look. No data
 // here, so the canvas keeps the server context's logo.
@@ -422,12 +555,14 @@ interface RootOptions {
    * `EditorRoot` gates the dialog on it being non-null.
    */
   canvasContext?: unknown;
+  hasPublishedSite?: boolean;
 }
 
 function rootElement({
   initialPages = [seededHome],
   showWizardBanner = false,
   canvasContext = null,
+  hasPublishedSite = true,
 }: RootOptions = {}) {
   return (
     <EditorRoot
@@ -439,7 +574,7 @@ function rootElement({
       // Null on purpose by default: takes the degraded-canvas branch, so the
       // whole block-view tree stays out of this test.
       canvasContext={canvasContext as never}
-      hasPublishedSite
+      hasPublishedSite={hasPublishedSite}
       initialNotice={null}
       unitCount={null}
       canEditUnitCount={false}
@@ -492,6 +627,9 @@ beforeEach(() => {
   queries.isPending = false;
   queries.isError = false;
   queries.error = null;
+  prefs.value = undefined;
+  media.narrow = false;
+  queries.latestPublishedAt = null;
 });
 
 describe('EditorRoot — Publish button wiring', () => {
@@ -561,7 +699,6 @@ describe('EditorRoot — tool panels', () => {
   it.each([
     ['Add', 'Add'],
     ['Design', /Design/],
-    ['Help', /Help/],
   ])('renders a real panel, not a placeholder, on the %s tab', async (_name, accessibleName) => {
     renderRoot();
 
@@ -622,6 +759,261 @@ describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
       'aria-expanded',
       'true',
     );
+  });
+});
+
+describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
+  function helpButtons() {
+    return screen.getAllByRole('button', { name: 'Help' });
+  }
+
+  it('opens from the top bar and closes from the rail, beside the open tool', async () => {
+    renderRoot();
+    await openTool('Pages');
+    const [topBar, rail] = helpButtons();
+    await userEvent.click(topBar!);
+    expect(screen.getByRole('complementary', { name: 'Help' })).toBeInTheDocument();
+    expect(screen.getByTestId('site-editor-tool-pages')).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(rail!);
+    expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
+  });
+
+  it('"Show me" for a tool closes the drawer and opens that tool on the page', async () => {
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(helpButtons()[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: tool' }));
+
+    expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('site-editor-tool-design')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('"Show me" for a Settings tab asks Settings for it, once', async () => {
+    renderRoot();
+    await userEvent.click(helpButtons()[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: settings' }));
+    expect(screen.getByText('Requested tab: search')).toBeInTheDocument();
+
+    // The PM's own switch afterwards opens Settings on its first tab again.
+    await userEvent.click(screen.getByRole('button', { name: 'Website' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByText('Requested tab: none')).toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — editing mode (v4 Phase 3)', () => {
+  const saved = (mode: 'guided' | 'free' | null, visited: string[] = []) => ({
+    mode,
+    tourDone: false,
+    marked: [],
+    visited,
+  });
+
+  it('is Free, with no chooser, while the preferences load', () => {
+    renderRoot({ hasPublishedSite: false });
+    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Choose how to edit' })).not.toBeInTheDocument();
+  });
+
+  it('asks a manager who has not chosen, on a never-published site, and saves the choice', async () => {
+    prefs.value = saved(null);
+    renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Guide me' }));
+    expect(prefs.mutate).toHaveBeenCalledWith({ mode: 'guided' });
+  });
+
+  it('does not ask on a site that is already published', () => {
+    prefs.value = saved(null);
+    renderRoot({ hasPublishedSite: true });
+    expect(screen.queryByRole('dialog', { name: 'Choose how to edit' })).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+  });
+
+  it('closing the chooser leaves Free for now, saving nothing', async () => {
+    prefs.value = saved(null);
+    renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss chooser' }));
+    expect(screen.queryByRole('dialog', { name: 'Choose how to edit' })).not.toBeInTheDocument();
+    expect(prefs.mutate).not.toHaveBeenCalled();
+  });
+
+  it('Guided swaps the rail for the tabbed panel with Next steps', () => {
+    prefs.value = saved('guided');
+    renderRoot();
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Next steps' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('next-steps-stand-in')).toBeInTheDocument();
+  });
+
+  it('carries out the checklist actions', async () => {
+    prefs.value = saved('guided');
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Step: open design' }));
+    expect(screen.getByRole('tab', { name: 'Design' })).toHaveAttribute('aria-selected', 'true');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Next steps' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Step: add section' }));
+    expect(screen.getByRole('heading', { name: 'Add a section' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to next steps' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Step: open documents' }));
+    expect(screen.getByRole('heading', { name: 'Documents' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to next steps' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Step: preview phone' }));
+    expect(screen.getByRole('button', { name: 'Preview on a phone' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Step: warn residents' }));
+    expect(screen.getByRole('heading', { name: 'Urgent notice' })).toBeInTheDocument();
+  });
+
+  it('opens Publish from the checklist only when there is something to publish', async () => {
+    prefs.value = saved('guided');
+    const { unmount } = renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Step: publish' }));
+    // The sheet stand-in's "Go to Pages" is what an opened sheet shows.
+    expect(screen.queryByRole('button', { name: 'Go to Pages' })).not.toBeInTheDocument();
+    unmount();
+
+    queries.draft = [hero()];
+    queries.published = [];
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Step: publish' }));
+    expect(screen.getByRole('button', { name: 'Go to Pages' })).toBeInTheDocument();
+  });
+
+  it('saves a hand-ticked step', async () => {
+    prefs.value = saved('guided');
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Step: mark welcome' }));
+    expect(prefs.mutate).toHaveBeenCalledWith({ mark: 'welcome' });
+  });
+
+  it('does not ask on a phone, where the shell shows only the bigger-screen gate', () => {
+    prefs.value = saved(null);
+    media.narrow = true;
+    renderRoot({ hasPublishedSite: false });
+    expect(screen.queryByRole('dialog', { name: 'Choose how to edit' })).not.toBeInTheDocument();
+  });
+
+  it('counts a publish made in this visit, which the server prop cannot see', () => {
+    prefs.value = saved('guided');
+    const { unmount } = renderRoot({ hasPublishedSite: false });
+    expect(screen.getByText('Ever published: false')).toBeInTheDocument();
+    unmount();
+
+    queries.latestPublishedAt = '2026-10-04T00:00:00.000Z';
+    renderRoot({ hasPublishedSite: false });
+    expect(screen.getByText('Ever published: true')).toBeInTheDocument();
+  });
+
+  it('sends a visit once, even when a failed write rolls the step back out', async () => {
+    prefs.value = saved('guided');
+    const { rerender } = renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Design' }));
+    expect(prefs.mutate).toHaveBeenCalledTimes(1);
+    // The hook's onError restores a NEW array without the step.
+    prefs.value = saved('guided', []);
+    rerender(rootElement());
+    prefs.value = saved('guided', []);
+    rerender(rootElement());
+    expect(prefs.mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('records the first visit to Design, and only the first', async () => {
+    prefs.value = saved('guided');
+    const { unmount } = renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Design' }));
+    expect(prefs.mutate).toHaveBeenCalledWith({ visit: 'design' });
+    unmount();
+
+    prefs.mutate.mockClear();
+    prefs.value = saved('guided', ['design']);
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Design' }));
+    expect(prefs.mutate).not.toHaveBeenCalled();
+  });
+
+  it('switches mode from the top bar, closes the open tool, and says where things are', async () => {
+    prefs.value = saved('free');
+    renderRoot();
+    await openTool('Pages');
+    await userEvent.click(screen.getByRole('radio', { name: 'Guided' }));
+    expect(prefs.mutate).toHaveBeenCalledWith({ mode: 'guided' });
+    expect(toastInfo).toHaveBeenCalledWith('Guided mode: your checklist is on the left.');
+    // The stub keeps the saved mode at Free, so the rail is still there to ask.
+    expect(screen.getByTestId('site-editor-tool-pages')).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('EditorRoot — the tour (v4 Phase 3)', () => {
+  const saved = (tourDone: boolean) => ({
+    mode: null,
+    tourDone,
+    marked: [],
+    visited: [],
+  });
+
+  it('starts after the first-run choice, and saves that it ran when it ends', async () => {
+    prefs.value = saved(false);
+    const { rerender } = renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Guide me' }));
+    // Not while the chooser is still up: its focus trap would keep the card
+    // from ever receiving focus.
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    // The saved choice lands and the chooser goes.
+    prefs.value = { ...saved(false), mode: 'guided' };
+    rerender(rootElement({ hasPublishedSite: false }));
+    expect(screen.queryByRole('dialog', { name: 'Choose how to edit' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Quick tour' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'End tour' }));
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    expect(prefs.mutate).toHaveBeenCalledWith({ tourDone: true });
+  });
+
+  it('does not start by itself for a manager who has been through it', async () => {
+    prefs.value = saved(true);
+    renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Guide me' }));
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+  });
+
+  it('does not start by itself for a manager who never saw the chooser', () => {
+    prefs.value = { ...saved(false), mode: 'free' };
+    renderRoot();
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+  });
+
+  it('starts from Help, and a switch to Settings ends it', async () => {
+    prefs.value = { ...saved(true), mode: 'free' };
+    renderRoot();
+    await userEvent.click(screen.getAllByRole('button', { name: 'Help' })[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Help stand-in: tour' }));
+    expect(screen.getByRole('dialog', { name: 'Quick tour' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    // Already recorded for this manager: nothing more to save.
+    expect(prefs.mutate).not.toHaveBeenCalledWith({ tourDone: true });
+  });
+
+  it('is cut short by opening Publish', async () => {
+    prefs.value = saved(false);
+    queries.draft = [hero()];
+    queries.published = [];
+    const { rerender } = renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Guide me' }));
+    prefs.value = { ...saved(false), mode: 'guided' };
+    rerender(rootElement({ hasPublishedSite: false }));
+    expect(screen.getByRole('dialog', { name: 'Quick tour' })).toBeInTheDocument();
+    await userEvent.click(publishButton());
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    expect(prefs.mutate).toHaveBeenCalledWith({ tourDone: true });
   });
 });
 

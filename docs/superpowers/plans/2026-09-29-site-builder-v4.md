@@ -151,6 +151,87 @@ Left for 3b, each with its reason:
 - The contextual Help list is capped at 8, and `/pm/website-editor` now has exactly 8 articles. The
   3b drawer lists by group, not through that cap.
 
+### Phase 3b, part 1, as built: the Help drawer
+- **The drawer.** `site-editor-v3/help/HelpDrawer.tsx` is code-split and opened from the top bar's
+  **Help** button or the rail's Help tile. It replaces the Help tool panel, which is deleted.
+  - It is not modal: focus moves in and back out, and Escape closes an enlarged figure first.
+  - A guide renders in the drawer through the help modal's `HelpArticleBody`.
+  - `help/guides.ts` holds only editor code: group, the views a guide is listed first in, and its
+    "Show me" action.
+- **The cap.** `/api/v1/help/contextual` takes an optional `limit` (1–20). The drawer asks for 20;
+  other callers keep 8.
+- **Guides.** `website-editor-overview`, `website-domain` and `website-search` are written, with no
+  screenshots yet. `upload-document` is tagged for the editor.
+- **Corrections to `website-pages` and `website-sections`.** Pages can't be dragged; rename and
+  **Show in navigation** are behind the gear; a never-published page is deleted with no undo;
+  Payments sections can't be restored.
+- **`website-branding`.** Left to #1296, which rewrites it rather than replacing it. The drawer lists
+  it under "Editing your site".
+- **The support line promises no reply time.** "Within one business day" is stated only for sales
+  enquiries.
+- **Budget.** The drawer's wiring cost 1.3 KiB of first-load JS, and the aggregate sat at 1490.0 of
+  1490. To make room, the requirements pill's popover body (the explanation, the fixes and the
+  unit-count form) is now code-split into `RequirementsDetails.tsx`, loaded on first open. Result:
+  1485.7 KiB, down from 1488.7 on `main`.
+- **Top bar.** Measured in Chromium with the production CSS and a long community name. With the Help
+  button added, Publish ran past the edge at 768px and the name shrank to nothing at 1280px. So on
+  the Website view the top-bar Help shows only from 1536px; the rail's Help tile is always there.
+  Settings has no rail but room to spare, so it shows Help at every width, icon-only below 1536px.
+
+### Phase 3b, part 2, as built: chooser, mode switch, Guided panel
+- **Mode.** The mode is `preferences.mode ?? 'free'` (#1295's hook). It reads Free while loading and for
+  anyone the route refuses, so a returning manager never sees Guided or the chooser flash.
+- **Chooser** (`guidance/ModeChooser.tsx`, code-split).
+  - Shown only when the mode is null and the site has never been published (decided 2026-10-03).
+  - Closing it without a choice means Free for this visit, with nothing saved.
+  - The design's eyebrow "Setup saved as a draft" is dropped.
+  - The title says "website", not "site": the page-state-copy guard reads "on your site" as a
+    visibility claim.
+- **Mode switch.** The Help drawer's "How you work" cards work at every width. The top-bar radio
+  group appears only from 1536px on the Website view, because the bar is full below that (measured in
+  Chromium).
+- **Guided shell.** There is no rail. The panel never closes and has real tabs (Next steps · Pages ·
+  Design), with Help as a button beside them. Add, Sections, Notice and Documents show their title and
+  "Back to next steps".
+- **Next steps** (`guidance/NextSteps.tsx`, code-split) draws `buildNextSteps`.
+  - It resolves "show a hidden section" itself (`showSection`, falling back to going to its page), and
+    "select the welcome section" (in place on the home page, otherwise via `handleGoToSlot`, which does
+    not open the Sections panel).
+  - The other actions go to `EditorRoot`. Publish opens only when something can publish.
+  - Visits to Design, Pages and the phone preview are recorded once, in either mode.
+- **Copy fix.** The welcome step no longer says "click the headline on the page and type" (there is no
+  on-page typing).
+- **Budget.** The tabs, top-bar switch and preferences code first cost 7.6 KiB and failed `perf:check`
+  at 1493.3. Fixed by code-splitting `GuidedTabs` (Guided only), `ModeSwitch` (only from 1536px) and
+  `PhoneGate` (below 768px only; desktop managers never render it). The result is 1487.8 KiB.
+
+### Phase 3b, part 3, as built: the tour
+- **What it is.** `guidance/EditorTour.tsx` (code-split) and `guidance/tour-steps.ts` (the copy, plus
+  `placeCard`, which is pure).
+  - Four steps, each pointing at a real element by `data-tour`: `steps` / `tools`, `page`, `page`,
+    `publish`.
+  - A missing element skips its step. A shell test asserts every anchor in both modes.
+- **Copy corrected to the product:**
+  - No "click any words and type".
+  - "Your page changes wait for Publish" replaces "Nothing is live until you publish" (Settings, page
+    names and urgent notices go live on save).
+  - The checks are "shown", not "checked before anything goes live" (they never block).
+  - Apartments get no Florida line.
+- **Placement, with no library.** The card goes below a small element, beside a tall narrow one, and
+  otherwise inside the page. It's kept on screen, with a ring over the element, re-measured on resize
+  and through a `ResizeObserver`. Checked in Chromium at 1024 and 1440px in both modes.
+- **Accessibility.** A non-modal dialog. Focus moves to the card and comes back afterwards; Escape,
+  "Skip tour" and "Start editing" end it.
+- **Starting and ending:**
+  - It starts by itself only right after the first-run chooser, and only when `tourDone` is false.
+  - The Help drawer has "Take the 1-minute tour".
+  - Any end saves `tourDone`, including being cut short by Publish or a switch to Settings.
+- **Budget:** 1488.4 KiB, leaving about 1.1 KiB after CI's usual +0.5. **Any new first-load code in
+  the editor now needs a matching code-split.**
+
+Still to come in 3b: screenshots for every editor guide (`scripts/help-capture`, which needs a seeded
+dev server).
+
 ### Phase 4: Design panel (decided 2026-10-01)
 These decisions were made against what the product actually has. The design assumed
 more than exists.

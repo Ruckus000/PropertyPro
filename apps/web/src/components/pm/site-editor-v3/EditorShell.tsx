@@ -4,11 +4,24 @@ import { useState } from 'react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { EditorTopBar, type EditorTopBarPageProps, type EditorView } from './EditorTopBar';
 import { PanelResizer } from './PanelResizer';
-import { PhoneGate } from './PhoneGate';
 import { ToolRail } from './ToolRail';
 import { X } from 'lucide-react';
 import { usePanelWidth } from './use-panel-width';
-import { TOOL_PANEL_TITLES, type EditorToolId } from './tools';
+import dynamic from 'next/dynamic';
+import { GUIDED_PANEL_ID } from './guided-panel-id';
+
+// Below 768px only — a desktop PM never renders it (v4 Phase 3: the editor's
+// first-load JavaScript is at its budget).
+const PhoneGate = dynamic(() => import('./PhoneGate').then((m) => m.PhoneGate), {
+  loading: () => null,
+});
+
+// Guided mode only, so Free-edit PMs never fetch it (v4 Phase 3; the editor's
+// first-load JavaScript is at its budget).
+const GuidedTabs = dynamic(() => import('./GuidedTabs').then((m) => m.GuidedTabs), {
+  loading: () => null,
+});
+import { HELP_DRAWER_ID, TOOL_PANEL_TITLES, type EditorMode, type EditorToolId } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 const PANEL_ID = 'site-editor-tool-panel';
@@ -67,6 +80,23 @@ export interface EditorShellProps extends EditorTopBarPageProps {
    * panel, canvas and inspector while `view` is `'settings'`.
    */
   settings: React.ReactNode;
+  /**
+   * The Help drawer (v4 Phase 3), or null while it is closed. It overlays the
+   * right edge of either area, so it is laid over the columns rather than
+   * being one of them: the canvas keeps its width while the PM reads.
+   */
+  help: React.ReactNode;
+  helpOpen: boolean;
+  /** Opens or closes the drawer — the rail's Help tile and the top bar's button. */
+  onHelpToggle: () => void;
+  /**
+   * Guided or Free edit (v4 Phase 3). Guided swaps the rail for a panel that
+   * never closes, with tabs on top and `steps` (the Next steps checklist)
+   * when no tool is chosen.
+   */
+  mode: EditorMode;
+  onModeChange: (mode: EditorMode) => void;
+  steps: React.ReactNode;
 }
 
 /**
@@ -135,6 +165,12 @@ export function EditorShell({
   view,
   onViewChange,
   settings,
+  help,
+  helpOpen,
+  onHelpToggle,
+  mode,
+  onModeChange,
+  steps,
 }: EditorShellPropsWithTool) {
   // Closed by default: the v4 builder opens on the page itself, with the rail
   // offering the tools rather than one already covering a third of the screen.
@@ -191,12 +227,23 @@ export function EditorShell({
         onDeviceChange={onDeviceChange}
         view={view}
         onViewChange={onViewChange}
+        helpOpen={helpOpen}
+        onHelpToggle={onHelpToggle}
+        mode={mode}
+        onModeChange={onModeChange}
       />
 
       {banner ? (
         <div className="shrink-0 border-b border-edge px-4 py-3">{banner}</div>
       ) : null}
 
+      {/*
+       * `relative` anchors the Help drawer, which overlays either area. The
+       * named group lets the drawer step left of a DOCKED inspector rather than
+       * cover it: the guides send the PM to a section's settings, so hiding
+       * them under the drawer broke the guide being followed.
+       */}
+      <div className="group/editor relative flex min-h-0 flex-1 flex-col">
       {view === 'settings' ? (
         // `relative` for the same reason as the tool panel's scroller below.
         <div
@@ -207,11 +254,42 @@ export function EditorShell({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
+          {mode === 'guided' ? (
+            <>
+              <aside
+                id={GUIDED_PANEL_ID}
+                data-tour="steps"
+                role="tabpanel"
+                aria-labelledby={`${GUIDED_PANEL_ID}-title`}
+                className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
+                style={{ width: panelWidth }}
+              >
+                <GuidedTabs
+                  activeTool={activeTool}
+                  onActiveToolChange={setActiveTool}
+                  helpOpen={helpOpen}
+                  onHelpToggle={onHelpToggle}
+                />
+                {/* `relative`: see the Free-edit panel's scroller below. */}
+                <div
+                  data-testid="tool-panel-scroller"
+                  className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-3"
+                >
+                  {activeTool === null ? steps : renderToolPanel(activeTool)}
+                </div>
+              </aside>
+              <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
+            </>
+          ) : (
+            <>
           <ToolRail
             active={activeTool}
             onSelect={setActiveTool}
             panelId={PANEL_ID}
             badges={toolBadges}
+            helpOpen={helpOpen}
+            onHelpToggle={onHelpToggle}
+            helpId={HELP_DRAWER_ID}
           />
 
           {activeTool !== null ? (
@@ -255,10 +333,13 @@ export function EditorShell({
               <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
             </>
           ) : null}
+            </>
+          )}
 
           {/* `relative` for the same reason as the tool panel's scroller. */}
           <div
             data-testid="canvas-scroller"
+            data-tour="page"
             className="relative min-w-0 flex-1 overflow-y-auto bg-surface-page"
           >
             {children}
@@ -267,6 +348,8 @@ export function EditorShell({
           {inspector}
         </div>
       )}
+      {help}
+      </div>
     </div>
   );
 }

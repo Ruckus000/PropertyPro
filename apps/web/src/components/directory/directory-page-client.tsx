@@ -553,7 +553,7 @@ export function DirectoryPageClient({
       if (r && isHouseholdMember(r)) {
         return {
           title: `Remove ${r.displayName}?`,
-          description: `They are taken off Unit ${r.unit?.unitNumber ?? ''}'s household. They have no portal access to lose.`,
+          description: `They are taken off Unit ${r.unit?.unitNumber ?? ''}'s household and their details are permanently deleted. They have no portal access to lose.`,
           confirmLabel: 'Remove household member',
           destructive: true,
         };

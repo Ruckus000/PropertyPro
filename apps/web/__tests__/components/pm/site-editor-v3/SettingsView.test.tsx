@@ -72,7 +72,7 @@ import { SettingsView } from '@/components/pm/site-editor-v3/settings/SettingsVi
 
 const onOpenDocuments = vi.fn();
 
-function renderView() {
+function renderView(props: Partial<React.ComponentProps<typeof SettingsView>> = {}) {
   return render(
     <SettingsView
       communityId={42}
@@ -81,6 +81,7 @@ function renderView() {
       publicSiteUrl="https://sunset-condos.getpropertypro.com/"
       hasSiteCustomDomain={false}
       onOpenDocuments={onOpenDocuments}
+      {...props}
     />,
   );
 }
@@ -136,6 +137,42 @@ describe('SettingsView — tabs', () => {
     const tabs = screen.getAllByRole('tab');
     expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
     expect(screen.getByRole('tabpanel')).toHaveAccessibleName('General');
+  });
+});
+
+// A Help guide's "Show me" asks for a tab (v4 Phase 3).
+describe('SettingsView — a requested tab', () => {
+  it('opens on the requested tab', () => {
+    renderView({ tabRequest: { tab: 'address' } });
+    expect(screen.getByRole('tab', { name: 'Address & domain' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(useCustomDomainMock).toHaveBeenCalled();
+    // Straight there: General is not mounted (and its reads not fired) first.
+    expect(screen.queryByLabelText('Footer note')).not.toBeInTheDocument();
+  });
+
+  it('switches back on a new request for the tab already asked for', async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderView({ tabRequest: { tab: 'search' } });
+    await user.click(screen.getByRole('tab', { name: 'General' }));
+
+    rerender(
+      <SettingsView
+        communityId={42}
+        community={{ name: 'Sunset Condos', slug: 'sunset-condos', communityType: 'condo_718' }}
+        tagline={null}
+        publicSiteUrl="https://sunset-condos.getpropertypro.com/"
+        hasSiteCustomDomain={false}
+        onOpenDocuments={onOpenDocuments}
+        tabRequest={{ tab: 'search' }}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: 'Search & sharing' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 });
 
