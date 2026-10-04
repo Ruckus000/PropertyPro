@@ -9,7 +9,7 @@
  * `lease_residents`. `resident_id` stays, dual-written with the primary
  * resident's user id, so finance, move checklists and exports keep working
  * unchanged. It became nullable because a primary resident may be a
- * contact-only person with no login (see `resident_contacts`). Dropping it is a
+ * household member with no login (`unit_occupants`). Dropping it is a
  * separate CONTRACT migration once nothing reads it.
  *
  * The CHECK constraints are added NOT VALID in the migration: they bind every

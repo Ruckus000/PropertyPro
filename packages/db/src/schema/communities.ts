@@ -72,7 +72,7 @@ export const communities = pgTable('communities', {
       leaseAlertWindows?: number[];
       /**
        * Leases v3 (E11): allow a lease to name residents who have no email and
-       * no login (stored in `resident_contacts`; notices go by mail or hand).
+       * no login (household members in `unit_occupants`; notices go by mail or hand).
        * Read with a strict `=== true`, so absent means off — a community keeps
        * today's "every resident is a user" behaviour until someone opts in.
        * The client has not decided yet; this is the switch that defers it.

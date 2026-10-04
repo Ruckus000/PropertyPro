@@ -403,13 +403,7 @@ export const RLS_TENANT_TABLES = [
     tableName: 'lease_residents',
     policyFamily: 'tenant_admin_write',
     notes:
-      'Leases v3: everyone named on a lease (user OR resident contact). SELECT carries the admin-tier bar like site_publish_schedules: the rows map neighbours to units. Residents read their own lease through the API as service_role, where the leases route derives its party filter from this table.',
-  },
-  {
-    tableName: 'resident_contacts',
-    policyFamily: 'tenant_admin_write',
-    notes:
-      'Leases v3 (E11): residents with no login. Holds home mailing addresses and phone numbers, so SELECT is admin-tier. Gated per community by community_settings.leasesAllowResidentsWithoutEmail.',
+      'Leases v3: everyone named on a lease (user OR unit occupant). SELECT carries the admin-tier bar like site_publish_schedules: the rows map neighbours to units. Residents read their own lease through the API as service_role, where the leases route derives its party filter from this table.',
   },
   {
     tableName: 'lease_deposits',
