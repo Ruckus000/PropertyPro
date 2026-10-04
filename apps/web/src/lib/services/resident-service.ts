@@ -11,7 +11,7 @@ import {
   userRoles,
   users,
 } from '@propertypro/db';
-import { fence } from '@propertypro/db/optimistic-concurrency';
+import { unchangedSince } from '@propertypro/db/optimistic-concurrency';
 import { and, eq, inArray, sql } from '@propertypro/db/filters';
 // AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
 import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
@@ -355,15 +355,16 @@ export async function updateResidentRole(
   expectedUpdatedAt?: string,
 ): Promise<boolean> {
   const scoped = createScopedClient(communityId);
-  const guard = fence(userRoles.updatedAt, expectedUpdatedAt);
+  const unchanged = unchangedSince(userRoles.updatedAt, expectedUpdatedAt);
   const where =
-    guard.where === undefined
+    unchanged === undefined
       ? eq(userRoles.userId, userId)
-      : and(eq(userRoles.userId, userId), guard.where);
-  // `updatedAt` last so it wins over `values`. It is set even with no token:
-  // this row IS the membership version, and `residents/route.ts` bumps it with
-  // an EMPTY values object precisely so a contact-only edit still moves it.
-  const rows = await scoped.update(userRoles, { ...values, updatedAt: guard.updatedAt }, where);
+      : and(eq(userRoles.userId, userId), unchanged);
+  // The scoped client advances `updatedAt` itself — `user_roles` is in its
+  // VERSIONED_TABLES set — which is what lets `residents/route.ts` move this
+  // row's version with an EMPTY values object on a contact-only edit, and what
+  // covers the ten other writers of this row that never compare the token.
+  const rows = await scoped.update(userRoles, values, where);
   return expectedUpdatedAt === undefined || (rows as unknown[]).length > 0;
 }
 

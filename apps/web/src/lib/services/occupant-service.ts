@@ -4,7 +4,7 @@
  * membership.isAdmin. Every write is audited like a resident change.
  */
 import { createScopedClient, logAuditEvent, paginate, unitOccupants } from '@propertypro/db';
-import { fence } from '@propertypro/db/optimistic-concurrency';
+import { unchangedSince } from '@propertypro/db/optimistic-concurrency';
 import { and, eq, inArray } from '@propertypro/db/filters';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
@@ -133,16 +133,12 @@ export async function updateOccupant(
   ) as Partial<OccupantInput>;
   if (Object.keys(changes).length === 0) return before;
 
-  const guard = fence(unitOccupants.updatedAt, expectedUpdatedAt);
+  const unchanged = unchangedSince(unitOccupants.updatedAt, expectedUpdatedAt);
   const where =
-    guard.where === undefined
+    unchanged === undefined
       ? eq(unitOccupants.id, id)
-      : and(eq(unitOccupants.id, id), guard.where);
-  const [row] = (await scoped.update(
-    unitOccupants,
-    { ...changes, updatedAt: guard.updatedAt },
-    where,
-  )) as Record<string, unknown>[];
+      : and(eq(unitOccupants.id, id), unchanged);
+  const [row] = (await scoped.update(unitOccupants, changes, where)) as Record<string, unknown>[];
   if (!row) {
     throw new ConflictError('Someone else changed this household member since you opened them. Reload to see their changes.');
   }

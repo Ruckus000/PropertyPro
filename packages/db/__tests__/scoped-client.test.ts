@@ -87,6 +87,8 @@ const { createScopedClient, isSoftDeleteExempt, UnscopedMutationError } = await 
 const { units } = await import('../src/schema/units');
 const { userRoles } = await import('../src/schema/user-roles');
 const { communities } = await import('../src/schema/communities');
+// A tenant table that is NOT in VERSIONED_TABLES — the control for the stamp.
+const { announcements } = await import('../src/schema/announcements');
 // Global table fixture: users has no communityId column (id is UUID PK, not community_id FK)
 const { users } = await import('../src/schema/users');
 
@@ -227,41 +229,40 @@ describe('createScopedClient', () => {
       expect(setData).toHaveProperty('unitNumber', '202');
     });
 
-    it('auto-sets updatedAt on update', async () => {
+    it('stamps a plain Date on a table that is not versioned', async () => {
       const client = createScopedClient(42);
-      await client.update(units, { unitNumber: '202' });
+      await client.update(announcements, { title: 'Pool closed' });
 
       const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(setData).toBeDefined();
       expect(setData?.['updatedAt']).toBeInstanceOf(Date);
     });
 
-    it("keeps a caller's own updatedAt instead of overwriting it", async () => {
-      // The optimistic-concurrency writers pass a SQL expression here, and it
-      // has to reach the database: their timestamp must be computed by Postgres
-      // and must strictly advance, or a stale token keeps matching and a second
-      // save from the same read is silently accepted. See
+    it('stamps a DB-computed advancing expression on a VERSIONED table', async () => {
+      // `units`, `user_roles` and `unit_occupants` carry an
+      // optimistic-concurrency token, so their `updated_at` must strictly
+      // advance — which a `new Date()` from this process cannot guarantee: an
+      // INSERT stamps microseconds from `now()` and a JS Date stamps
+      // milliseconds, so a save inside the same millisecond left the compared
+      // value unchanged and a stale token kept matching. See
       // `src/optimistic-concurrency.ts`.
-      //
-      // This also used to make a caller's value dead code —
-      // `apps/web/.../api/v1/units/route.ts` set its own `updatedAt` to no
-      // effect for as long as it existed.
       const client = createScopedClient(42);
-      const callerValue = { __brand: 'a SQL expression, not a Date' };
-      await client.update(units, { unitNumber: '202', updatedAt: callerValue });
+      await client.update(units, { unitNumber: '202' });
 
       const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-      expect(setData?.['updatedAt']).toBe(callerValue);
       expect(setData?.['updatedAt']).not.toBeInstanceOf(Date);
+      expect(setData?.['updatedAt']).toMatchObject({ queryChunks: expect.anything() });
     });
 
-    it('still auto-stamps when the caller passes updatedAt: undefined', async () => {
-      // A spread of an optional field lands as an explicit `undefined`, and the
-      // contract every other service relies on is "a scoped update always bumps
-      // updatedAt" — `residents/route.ts` bumps the membership row with an
-      // EMPTY values object on the strength of it.
+    it("overwrites a caller's own updatedAt, versioned or not", async () => {
+      // The long-standing contract: a scoped update always bumps updatedAt. It
+      // is what lets `residents/route.ts` move the membership row's version with
+      // an empty values object. An earlier attempt at the fix above relaxed this
+      // so a service could pass the expression itself — which also meant a
+      // caller-supplied `null` would reach a NOT NULL column. The expression now
+      // comes from here, so the contract can stay absolute.
       const client = createScopedClient(42);
-      await client.update(units, { unitNumber: '202', updatedAt: undefined });
+      await client.update(announcements, { title: 'x', updatedAt: null });
 
       const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(setData?.['updatedAt']).toBeInstanceOf(Date);

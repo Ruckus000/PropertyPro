@@ -1,6 +1,6 @@
 import type { createScopedClient } from '@propertypro/db';
 import { getUnitLedgerBalance, units, userRoles, violations } from '@propertypro/db';
-import { fence } from '@propertypro/db/optimistic-concurrency';
+import { unchangedSince } from '@propertypro/db/optimistic-concurrency';
 import { and, eq, notInArray, sql } from '@propertypro/db/filters';
 import { ConflictError } from '@/lib/api/errors';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
@@ -90,10 +90,10 @@ export async function createUnitForCommunity(
  * precision — what JSON carries — since `defaultNow()` stores microseconds.
  * Returns the updated row otherwise.
  *
- * Both halves of that come from `fence()`: the comparison AND the new
- * timestamp, which has to strictly advance or a stale token keeps matching. See
- * `optimistic-concurrency.ts` — taking one without the other is the bug it
- * exists to prevent.
+ * This builds only the comparison. The other half of the guarantee — that every
+ * write MOVES the value being compared, or a stale token keeps matching — is
+ * enforced by the scoped client for every table in its VERSIONED_TABLES set,
+ * not here. See `optimistic-concurrency.ts` for why it belongs there.
  */
 export async function updateUnitById(
   scoped: ScopedClient,
@@ -101,12 +101,11 @@ export async function updateUnitById(
   values: Record<string, unknown>,
   expectedUpdatedAt?: string,
 ): Promise<UnitRouteRow | null> {
-  const guard = fence(units.updatedAt, expectedUpdatedAt);
+  const unchanged = unchangedSince(units.updatedAt, expectedUpdatedAt);
   const where =
-    guard.where === undefined ? eq(units.id, unitId) : and(eq(units.id, unitId), guard.where);
-  // `updatedAt` last: it must win over anything the caller put in `values`.
+    unchanged === undefined ? eq(units.id, unitId) : and(eq(units.id, unitId), unchanged);
   const rows = await withUnitNumberConflict(values['unitNumber'], () =>
-    scoped.update(units, { ...values, updatedAt: guard.updatedAt }, where),
+    scoped.update(units, values, where),
   );
   return ((rows as unknown as UnitRouteRow[])[0]) ?? null;
 }

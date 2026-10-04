@@ -9,7 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { and, eq } from '@propertypro/db/filters';
+import { and, eq, sql } from '@propertypro/db/filters';
 import { buildDirectoryExport } from '../../src/lib/services/directory-export-service';
 import { listOccupantsForExport } from '../../src/lib/services/occupant-service';
 import {
@@ -125,6 +125,32 @@ describeDb('/api/v1/occupants (integration)', () => {
       expect((await send(routes.DELETE, 'DELETE', { communityId, id: noEmail.id })).status).toBe(200);
       const rows = await rowsOf(await list());
       expect(rows.map((r) => r.fullName)).toEqual(['Kim Kid']);
+    });
+
+    it('advances the token even when the row sits ahead of the clock', async () => {
+      // `unit_occupants` is in the scoped client's VERSIONED_TABLES set, so every
+      // write to it must STRICTLY advance `updated_at` — otherwise a save inside
+      // the same millisecond as the previous write leaves the millisecond-
+      // truncated token unmoved and a stale token keeps matching, silently
+      // accepting a second save from the same read.
+      //
+      // The sibling case below asserts the token merely CHANGED, which the clock
+      // does on its own and which passes with the fix reverted. Pinning the row an
+      // hour ahead is what discriminates: a plain `new Date()` moves the token
+      // backwards to now, while the advance must out-rank what it finds.
+      const kim = await dataOf<OccupantJson>(await create());
+      const pinned = (await state.db.execute(sql`
+        update unit_occupants set updated_at = now() + interval '1 hour'
+         where id = ${kim.id}
+        returning updated_at as v
+      `)) as unknown as Record<string, unknown>[];
+      const before = new Date(pinned[0]!['v'] as string | Date).getTime();
+
+      const saved = await dataOf<OccupantJson>(
+        await send(routes.PATCH, 'PATCH', { communityId, id: kim.id, phone: '555-0199' }),
+      );
+
+      expect(new Date(saved.updatedAt).getTime()).toBeGreaterThan(before);
     });
 
     it('a stale token is a 409 and writes nothing; a current one saves and is audited with only the change', async () => {

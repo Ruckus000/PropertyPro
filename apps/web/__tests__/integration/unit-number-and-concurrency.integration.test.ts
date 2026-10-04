@@ -4,7 +4,7 @@
  * millisecond-precision `updatedAt` comparison cannot be proven with mocks.
  */
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
-import { fence } from '@propertypro/db/optimistic-concurrency';
+import { advanceUpdatedAt } from '@propertypro/db/optimistic-concurrency';
 import { eq, inArray, sql } from '@propertypro/db/filters';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import {
@@ -122,7 +122,7 @@ describeDb('unit number uniqueness + concurrency (db-backed integration)', () =>
     const created = await createUnitForCommunity(scopedFor(communityId), { unitNumber: '404' });
     const id = created!['id'] as number;
 
-    const advance = fence(sql`pinned.old`, undefined).updatedAt;
+    const advance = advanceUpdatedAt(sql`pinned.old`);
     const result = await state!.db.execute(sql`
       with pinned as (
         update units set updated_at = date_trunc('milliseconds', now())
@@ -174,10 +174,10 @@ describeDb('unit number uniqueness + concurrency (db-backed integration)', () =>
     const id = created!['id'] as number;
     const read = (value: unknown) => new Date(value as string | Date).getTime();
 
-    // No token passed, deliberately: monotonicity has to hold for UNFENCED
-    // writes too. If it did not, a save would leave the row's `updated_at`
-    // where it was and the next reader would mint a token that is already
-    // stale, which is the same defect arriving by a different door.
+    // No token passed. This goes through `updateUnitById`, which always builds
+    // the comparison, so it does NOT prove anything about writers that never
+    // compare the token — an earlier version of this comment claimed it did.
+    // The `unfenced writer` case below is the one that covers those.
     const t0 = read(created!['updatedAt']);
     const t1 = read((await updateUnitById(scopedFor(communityId), id, { floor: 1 }))!['updatedAt']);
     const t2 = read((await updateUnitById(scopedFor(communityId), id, { floor: 2 }))!['updatedAt']);
@@ -187,6 +187,88 @@ describeDb('unit number uniqueness + concurrency (db-backed integration)', () =>
     // stale token match.
     expect(t1).toBeGreaterThan(t0);
     expect(t2).toBeGreaterThan(t1);
+  });
+
+  it('keeps tracking the wall clock, rather than creeping a millisecond per save', async () => {
+    // Covers the OTHER half of the advance. `greatest(date_trunc(now()), old +
+    // 1ms)` has two terms, and dropping the clock term leaves every test above
+    // green while `updated_at` stops meaning "last modified" and merely creeps
+    // forward 1 ms per write — monotonic, and useless as a timestamp.
+    //
+    // Pinning the row an hour into the PAST separates them: the clock term pulls
+    // the stored value to roughly now, whereas `old + 1ms` would leave it an
+    // hour ago.
+    const created = await createUnitForCommunity(scopedFor(communityId), { unitNumber: '606' });
+    const id = created!['id'] as number;
+    await state!.db.execute(sql`
+      update units set updated_at = now() - interval '1 hour' where id = ${id}
+    `);
+
+    const saved = await updateUnitById(scopedFor(communityId), id, { floor: 5 });
+    const stored = new Date(saved!['updatedAt'] as unknown as string | Date).getTime();
+
+    expect(Date.now() - stored).toBeLessThan(60_000);
+  });
+
+  it('advances the token for a writer that never compares it', async () => {
+    // The finding that moved this fix into the scoped client. `user_roles` IS the
+    // membership token, and eleven writers touch it — role promotions, root
+    // claims, root disputes, root ops — of which exactly one compares it. Any of
+    // the others could leave the token unmoved inside the collision window, so a
+    // manager holding the pre-write token would save over them silently.
+    //
+    // This is a bare scoped update with no token, the shape all ten of those
+    // writers use, and it passes only because `user_roles` is in
+    // VERSIONED_TABLES. Pinning the row AHEAD of the clock is what makes it
+    // discriminate: a plain `new Date()` would move the token BACKWARDS to now,
+    // while the advance has to out-rank whatever it finds. Asserting merely that
+    // the value changed proves nothing — the clock moves between two reads on its
+    // own, and a first version of this case passed with the fix reverted.
+    const userId = requireUser(state!, 'actorA').id;
+    const scoped = scopedFor(communityId);
+
+    const pinned = (await state!.db.execute(sql`
+      update user_roles set updated_at = now() + interval '1 hour'
+       where user_id = ${userId} and community_id = ${communityId}
+      returning updated_at as v
+    `)) as unknown as Record<string, unknown>[];
+    const before = new Date(pinned[0]!['v'] as string | Date).getTime();
+
+    await scoped.update(
+      state!.dbModule.userRoles,
+      { displayTitle: 'Board Liaison' },
+      eq(state!.dbModule.userRoles.userId, userId),
+    );
+
+    const [row] = (await scoped.selectFrom(
+      state!.dbModule.userRoles,
+      {},
+      eq(state!.dbModule.userRoles.userId, userId),
+    )) as Record<string, unknown>[];
+    expect(new Date(row!['updatedAt'] as string | Date).getTime()).toBeGreaterThan(before);
+  });
+
+  it('advances the token on a soft delete too', async () => {
+    // A delete changes the row, so it has to move the version as well — else a
+    // restore path could resurrect a row whose stale token still matches. Only
+    // `scoped.update` filters `deleted_at IS NULL`, so nothing else contains it.
+    //
+    // Pinned ahead of the clock for the same reason as the case above: asserting
+    // that the timestamp merely changed would pass with a plain `new Date()`.
+    const created = await createUnitForCommunity(scopedFor(communityId), { unitNumber: '707' });
+    const id = created!['id'] as number;
+    const pinned = (await state!.db.execute(sql`
+      update units set updated_at = now() + interval '1 hour' where id = ${id}
+      returning updated_at as v
+    `)) as unknown as Record<string, unknown>[];
+    const before = new Date(pinned[0]!['v'] as string | Date).getTime();
+
+    await scopedFor(communityId).softDelete(state!.dbModule.units, eq(state!.dbModule.units.id, id));
+
+    const [row] = (await state!.db.execute(sql`
+      select updated_at as v from units where id = ${id}
+    `)) as unknown as Record<string, unknown>[];
+    expect(new Date(row!['v'] as string | Date).getTime()).toBeGreaterThan(before);
   });
 
   it('resident membership version: the list token applies once, the second save from it is refused', async () => {
