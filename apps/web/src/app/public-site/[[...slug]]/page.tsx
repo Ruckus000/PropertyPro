@@ -4,7 +4,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
 import type { Metadata } from 'next';
 import { effectiveLook, type CommunityType } from '@propertypro/shared';
-import { createPresignedDownloadUrl } from '@propertypro/db';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import {
   getBrandingForCommunity,
   getCommunityPublicInfo,
@@ -271,26 +271,14 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const rawBranding = savedBranding
     ? effectiveLook(savedBranding, { includeDraft: isPreview })
     : null;
-  let logoUrl: string | null = null;
-  if (rawBranding?.logoPath) {
-    try {
-      logoUrl = await createPresignedDownloadUrl('documents', rawBranding.logoPath);
-    } catch {
-      // Non-fatal — render the page without a logo rather than crash.
-    }
-  }
+  // Non-fatal on failure — render the page without a logo rather than crash.
+  const logoUrl = await resolveBrandingImageUrl(community.id, rawBranding?.logoPath);
   const branding = rawBranding ? { ...rawBranding, logoUrl } : null;
   // The public-site header prefers the wordmark site logo (≤600×180, aspect
   // preserved) over the square avatar logo. resolveTheme still reads the square
   // logoUrl for non-header contexts; the header logo is threaded separately.
-  let siteLogoUrl: string | null = null;
-  if (rawBranding?.siteLogoPath) {
-    try {
-      siteLogoUrl = await createPresignedDownloadUrl('documents', rawBranding.siteLogoPath);
-    } catch {
-      // Non-fatal — fall back to the square logo / text.
-    }
-  }
+  // Null on failure — fall back to the square logo / text.
+  const siteLogoUrl = await resolveBrandingImageUrl(community.id, rawBranding?.siteLogoPath);
   const theme = resolveTheme(
     branding,
     community.name,

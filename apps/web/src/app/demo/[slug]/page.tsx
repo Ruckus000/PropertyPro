@@ -18,6 +18,7 @@ import type { DemoTheme } from '@propertypro/db';
 import type { CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { getBrandingForCommunity } from '@/lib/api/branding';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 
 interface DemoLandingPageProps {
   params: Promise<{ slug: string }>;
@@ -52,16 +53,11 @@ async function getDemoInstance(slug: string) {
   return rows[0] ?? null;
 }
 
-function buildLogoUrl(logoPath: string): string {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-  return `${supabaseUrl}/storage/v1/object/public/branding/${logoPath}`;
-}
-
 function legacyThemeFromInstance(instance: NonNullable<Awaited<ReturnType<typeof getDemoInstance>>>) {
   const theme = (instance.theme ?? {}) as DemoTheme;
   return {
     primaryColor: theme.primaryColor ?? '#2563eb', // design-tokens:exempt — theme color-picker default; feature product IS choosing a hex value
-    logoUrl: theme.logoPath ? buildLogoUrl(theme.logoPath) : null,
+    logoPath: theme.logoPath ?? null,
   };
 }
 
@@ -106,7 +102,8 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
   const theme = resolveTheme(branding, instance.communityName, typeCt);
   const cssVars = toCssVars(theme);
   const fontLinks = toFontLinks(theme);
-  const logoUrl = branding?.logoPath ? buildLogoUrl(branding.logoPath) : (legacy.logoUrl ?? theme.logoUrl);
+  const logoUrl =
+    (await resolveBrandingImageUrl(communityId, branding?.logoPath ?? legacy.logoPath)) ?? theme.logoUrl;
   const primaryColor = theme.primaryColor ?? legacy.primaryColor;
 
   // PR #9d — demo public landing no longer falls into a JSX template

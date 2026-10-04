@@ -249,6 +249,32 @@ describe('pm branding route', () => {
       expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
     });
 
+    // The copy runs with the service role, so a path the caller does not own
+    // would land a private file from another community in this one's branding.
+    it.each([
+      ['logoStoragePath', 'communities/2/documents/u1/board-minutes.png'],
+      ['siteLogoStoragePath', 'communities/2/documents/u1/board-minutes.png'],
+      ['logoStoragePath', 'communities/1/documents/../../2/documents/u1/x.png'],
+      ['logoStoragePath', 'communities/1/esign-signed/u1/x.png'],
+    ])('rejects %s %s without reading or writing storage', async (field, path) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, [field]: path }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(400);
+      expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
+    });
+
     it('returns 400 when logo storage bytes fail magic byte validation', async () => {
       createPresignedDownloadUrlMock.mockResolvedValueOnce('http://storage/raw-logo');
       vi.stubGlobal(
@@ -263,7 +289,7 @@ describe('pm branding route', () => {
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, logoStoragePath: 'uploads/raw/logo.gif' }),
+        body: JSON.stringify({ communityId: 1, logoStoragePath: 'communities/1/documents/u1/logo.gif' }),
       });
       const res = await PATCH(req);
 
@@ -291,7 +317,7 @@ describe('pm branding route', () => {
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 1, siteLogoStoragePath: 'uploads/raw/site-logo.png' }),
+        body: JSON.stringify({ communityId: 1, siteLogoStoragePath: 'communities/1/documents/u2/site-logo.png' }),
       });
       const res = await PATCH(req);
 

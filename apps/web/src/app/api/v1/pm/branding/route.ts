@@ -34,6 +34,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { resizeLogo, resizeSiteLogo } from '@/lib/services/image-processor';
+import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { getPmBrandingContract, patchPmBrandingContract } from './contract';
 
@@ -113,6 +114,21 @@ export const PATCH = withErrorHandler(
     // role-v3: this role set is v3-only — ['property_manager','root_manager'].
     if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can update branding settings');
+    }
+
+    // Both paths are caller-supplied and the copy below runs with the service
+    // role, so without this a manager of A could name B's private document and
+    // have it copied into A's branding, where A can read it.
+    if (body.logoStoragePath) {
+      assertCommunityOwnedStoragePath(body.logoStoragePath, communityId, 'documents', 'logoStoragePath');
+    }
+    if (body.siteLogoStoragePath) {
+      assertCommunityOwnedStoragePath(
+        body.siteLogoStoragePath,
+        communityId,
+        'documents',
+        'siteLogoStoragePath',
+      );
     }
 
     let canonicalLogoPath: string | undefined;

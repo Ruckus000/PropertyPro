@@ -33,6 +33,7 @@ import {
 } from '@propertypro/db';
 import { eq, isNull } from '@propertypro/db/filters';
 import { getBrandingForCommunity } from '@/lib/api/branding';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import {
   filterVisibleAnnouncements,
   getAnnouncementCommunityContext,
@@ -79,12 +80,6 @@ async function findResidentUnit(
     },
     eq(units.id, unitId),
   );
-}
-
-function resolveLogoUrl(logoPath: string | undefined): string | null {
-  if (!logoPath) return null;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-  return `${supabaseUrl}/storage/v1/object/public/branding/${logoPath}`;
 }
 
 export default async function WelcomePage({ searchParams }: WelcomePageProps) {
@@ -196,7 +191,7 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
     : 'No recent activity to display';
 
   // Logo URL
-  const logoUrl = resolveLogoUrl(branding?.logoPath);
+  const logoUrl = await resolveBrandingImageUrl(communityId, branding?.logoPath);
 
   // First name from auth context
   const firstName = user.fullName?.split(' ')[0] ?? 'there';

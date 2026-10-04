@@ -13,7 +13,7 @@
  */
 import { DOCUMENT_CATEGORIES, type CommunityType } from '@propertypro/shared';
 import { resolveTheme } from '@propertypro/theme';
-import { createPresignedDownloadUrl } from '@propertypro/db';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
@@ -41,22 +41,11 @@ export async function loadCanvasContext(communityId: number): Promise<CanvasCont
   // resolveTheme reads `branding.logoUrl`, but the stored field is `logoPath`
   // (a Storage object key). Passing raw branding yields a null logo and a
   // silently text-only header — presign first, exactly as the public page does.
-  let logoUrl: string | null = null;
-  if (rawBranding?.logoPath) {
-    try {
-      logoUrl = await createPresignedDownloadUrl('documents', rawBranding.logoPath);
-    } catch {
-      // Non-fatal — preview without a logo rather than fail the editor.
-    }
-  }
-  let siteLogoUrl: string | null = null;
-  if (rawBranding?.siteLogoPath) {
-    try {
-      siteLogoUrl = await createPresignedDownloadUrl('documents', rawBranding.siteLogoPath);
-    } catch {
-      // Non-fatal — fall back to the square logo / text.
-    }
-  }
+  // Null on failure — preview without a logo rather than fail the editor.
+  const [logoUrl, siteLogoUrl] = await Promise.all([
+    resolveBrandingImageUrl(communityId, rawBranding?.logoPath),
+    resolveBrandingImageUrl(communityId, rawBranding?.siteLogoPath),
+  ]);
 
   const branding = rawBranding ? { ...rawBranding, logoUrl } : null;
   const communityType = community.communityType as CommunityType;
