@@ -12,7 +12,7 @@
 import { headers } from 'next/headers';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import type { CommunityTheme } from '@propertypro/theme';
-import { createPresignedDownloadUrl } from '@propertypro/db';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { getCommunityPublicInfo, getBrandingForCommunity } from '@/lib/api/branding';
 
 export interface AuthPageBranding {
@@ -64,14 +64,8 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
     // Generate presigned download URL for logo.
     // logoPath is a Supabase Storage path (e.g. "communities/123/documents/uuid/logo.webp")
     // stored in the private "documents" bucket — must generate a signed URL for rendering.
-    let logoUrl: string | null = null;
-    if (branding?.logoPath) {
-      try {
-        logoUrl = await createPresignedDownloadUrl('documents', branding.logoPath);
-      } catch {
-        // Non-fatal — show branded page without logo rather than crash
-      }
-    }
+    // Null on failure — show the branded page without a logo rather than crash.
+    const logoUrl = await resolveBrandingImageUrl(communityId, branding?.logoPath);
 
     // resolveTheme expects branding.logoUrl (not logoPath) for the CommunityTheme
     const brandingForTheme = branding ? { ...branding, logoUrl } : null;

@@ -41,7 +41,7 @@ import {
   customCssOverridesToCssVars,
 } from '@propertypro/theme';
 import { effectiveLook, type CommunityType } from '@propertypro/shared';
-import { createPresignedDownloadUrl } from '@propertypro/db';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
@@ -111,26 +111,12 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   const previewBranding = applyPresetTokensToBranding(rawBranding, presetTokens);
 
   // Presign the logo (resolveTheme reads branding.logoUrl, not logoPath).
-  let logoUrl: string | null = null;
-  if (rawBranding?.logoPath) {
-    try {
-      logoUrl = await createPresignedDownloadUrl('documents', rawBranding.logoPath);
-    } catch {
-      // Non-fatal.
-    }
-  }
+  const logoUrl = await resolveBrandingImageUrl(community!.id, rawBranding?.logoPath);
   // The HEADER logo is the wordmark when the PM has uploaded one; `resolveTheme`
   // only ever reads the square avatar. Without this the preview shows the avatar
   // while the live site shows the wordmark — in the header, which is most of what
-  // the PM is judging when they pick a layout. Same non-fatal shape as above.
-  let siteLogoUrl: string | null = null;
-  if (rawBranding?.siteLogoPath) {
-    try {
-      siteLogoUrl = await createPresignedDownloadUrl('documents', rawBranding.siteLogoPath);
-    } catch {
-      // Non-fatal — fall back to the square logo / text.
-    }
-  }
+  // the PM is judging when they pick a layout. Null falls back to the square logo / text.
+  const siteLogoUrl = await resolveBrandingImageUrl(community!.id, rawBranding?.siteLogoPath);
 
   const theme = resolveTheme(
     previewBranding ? { ...previewBranding, logoUrl } : { logoUrl },
