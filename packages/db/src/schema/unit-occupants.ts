@@ -37,6 +37,11 @@ export const unitOccupants = pgTable(
     isOwnerHousehold: boolean('is_owner_household').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * ponytail: unused. Remove hard-deletes (erasure — a soft-deleted row would
+     * keep a household member's details forever); the column stays to avoid a
+     * migration for nothing, and the scoped client's filter on it is harmless.
+     */
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [index('unit_occupants_community_unit_idx').on(table.communityId, table.unitId)],

@@ -1,7 +1,13 @@
 /**
  * Household members (`unit_occupants`): people on file for a unit who have no
  * portal login. Manager-only; the routes gate on residents:write and
- * membership.isAdmin. Every write is audited like a resident change.
+ * membership.isAdmin.
+ *
+ * Every write is audited, but name, email and phone never enter the audit
+ * log: compliance_audit_log is append-only (DB trigger), so a value written
+ * there could never be erased — and household members are often children.
+ * Audit entries are built field by field, never spread from the row. Remove
+ * hard-deletes for the same reason: a soft-deleted row would keep the PII.
  */
 import { createScopedClient, logAuditEvent, paginate, unitOccupants } from '@propertypro/db';
 import { and, eq, inArray, sql } from '@propertypro/db/filters';
@@ -33,6 +39,9 @@ function toRow(r: Record<string, unknown>): OccupantRow {
     updatedAt: new Date(r['updatedAt'] as string | Date).toISOString(),
   };
 }
+
+/** Fields whose values are personal contact data: audited by name only. */
+const PII_FIELDS: ReadonlySet<Field> = new Set(['fullName', 'email', 'phone']);
 
 const clean = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
 
@@ -97,7 +106,12 @@ export async function createOccupant(
     resourceType: 'unit_occupant',
     resourceId: String(created.id),
     communityId,
-    newValues: values,
+    newValues: {
+      unitId: values.unitId,
+      isOwnerHousehold: values.isOwnerHousehold,
+      hasEmail: values.email !== null,
+      hasPhone: values.phone !== null,
+    },
   });
   return created;
 }
@@ -143,29 +157,35 @@ export async function updateOccupant(
   if (!row) {
     throw new ConflictError('Someone else changed this household member since you opened them. Reload to see their changes.');
   }
+  // ponytail: for name, email and phone the audit records who changed which
+  // field and when, not the values — the trade for being able to erase them.
+  const changedFields = Object.keys(changes) as Field[];
+  const auditable = changedFields.filter((k) => !PII_FIELDS.has(k));
   await logAuditEvent({
     userId: actorUserId,
     action: 'update',
     resourceType: 'unit_occupant',
     resourceId: String(id),
     communityId,
-    oldValues: Object.fromEntries(Object.keys(changes).map((k) => [k, before[k as Field]])),
-    newValues: changes,
+    oldValues: Object.fromEntries(auditable.map((k) => [k, before[k]])),
+    newValues: Object.fromEntries(auditable.map((k) => [k, changes[k]])),
+    metadata: { changedFields },
   });
   return toRow(row);
 }
 
+/** Erasure, not hiding: the row is hard-deleted and the audit keeps only the unit. */
 export async function removeOccupant(communityId: number, actorUserId: string, id: number): Promise<void> {
   const scoped = createScopedClient(communityId);
   const [current] = (await scoped.selectFrom(unitOccupants, {}, eq(unitOccupants.id, id))) as Record<string, unknown>[];
   if (!current) throw new NotFoundError('Household member not found');
-  await scoped.softDelete(unitOccupants, eq(unitOccupants.id, id));
+  await scoped.hardDelete(unitOccupants, eq(unitOccupants.id, id));
   await logAuditEvent({
     userId: actorUserId,
     action: 'delete',
     resourceType: 'unit_occupant',
     resourceId: String(id),
     communityId,
-    oldValues: { unitId: current['unitId'], fullName: current['fullName'] },
+    oldValues: { unitId: current['unitId'] },
   });
 }
