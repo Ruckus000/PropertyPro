@@ -2,6 +2,10 @@
   "section": "manager",
   "category": "website",
   "slug": "website-branding",
+  "viewport": {
+    "width": 1440,
+    "height": 1700
+  },
   "shots": [
     {
       "name": "wb-colors",
@@ -12,22 +16,25 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "[data-testid=\"site-editor-tool-styling\"]"
+          "selector": "[data-testid=\"site-editor-tool-design\"]"
         },
         {
           "type": "click",
-          "selector": "[data-testid=\"site-editor-tool-styling\"]"
+          "selector": "[data-testid=\"site-editor-tool-design\"]"
         },
         {
           "type": "waitFor",
           "selector": "role=button[name=/Save colours/]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "#design-custom-heading"
         }
       ],
       "clipTo": [
-        "[data-testid=\"site-editor-tool-styling\"]",
-        "role=button[name=/Save colours/]"
+        "section[aria-labelledby=\"design-custom-heading\"]"
       ],
-      "highlight": "[data-testid=\"site-editor-tool-styling\"]",
+      "highlight": "#design-custom-heading",
       "step": 1
     },
     {
@@ -39,11 +46,15 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "[data-testid=\"site-editor-tool-domain\"]"
+          "selector": "[data-testid=\"editor-view-settings\"]"
         },
         {
           "type": "click",
-          "selector": "[data-testid=\"site-editor-tool-domain\"]"
+          "selector": "[data-testid=\"editor-view-settings\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=tab[name=\"Address & domain\"]"
         },
         {
           "type": "waitFor",
@@ -51,10 +62,8 @@
         }
       ],
       "clipTo": [
-        "[data-testid=\"site-editor-tool-domain\"]",
-        "role=textbox[name=\"Your domain\"]"
+        "#settings-panel-address > div:has(> h3:text-is(\"Use your own domain\"))"
       ],
-      "pad": 48,
       "highlight": "role=textbox[name=\"Your domain\"]",
       "step": 2
     }
