@@ -223,6 +223,21 @@ export function deriveUnitState(
   };
 }
 
+/**
+ * Apartment occupancy, decided by leases (Directory shows this instead of a
+ * manual value): a current lease → `rented`; none → `vacant`, unless the unit
+ * is offline, which is neither (null) and stays out of vacancy counts. A
+ * signed lease that has not started does not make a unit rented.
+ */
+export function occupancyFromLeases(
+  unitLeases: LeaseStateInput[],
+  unit: UnitOfflineInput,
+  today: string,
+): 'rented' | 'vacant' | null {
+  if (unitLeases.some((l) => leasePhase(l, unitLeases, today) === 'current')) return 'rented';
+  return unit.offlineSince !== null ? null : 'vacant';
+}
+
 /** Occupied for occupancy maths: a current lease exists. Offline units are excluded from the denominator. */
 export function isOccupied(state: UnitState): boolean {
   return state.current !== null;

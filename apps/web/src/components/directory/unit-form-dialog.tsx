@@ -17,6 +17,8 @@ interface UnitFormDialogProps {
   hasOwnerRole: boolean;
   /** Apartments carry a rent; condos and HOAs do not. */
   showRent: boolean;
+  /** Apartments: occupancy comes from leases, so the form neither shows nor sends it. */
+  occupancyFromLeases?: boolean;
   onSaved: (unitId: number) => void;
 }
 
@@ -60,6 +62,7 @@ export function UnitFormDialog({
   communityId,
   hasOwnerRole,
   showRent,
+  occupancyFromLeases = false,
   onSaved,
 }: UnitFormDialogProps) {
   const editing = Boolean(unit);
@@ -92,12 +95,13 @@ export function UnitFormDialog({
       bedrooms: intOrNull(values.bedrooms),
       bathrooms: intOrNull(values.bathrooms),
       sqft: intOrNull(values.sqft),
-      occupancy: values.occupancy,
+      ...(occupancyFromLeases ? {} : { occupancy: values.occupancy }),
     };
     let savedId: number;
     try {
       if (unit) {
-        // Occupancy is always sent: saving the form is the manager confirming it.
+        // Occupancy is always sent (except for apartments, where leases decide
+        // it): saving the form is the manager confirming it.
         await updateUnit.mutateAsync({ unitId: unit.id, expectedUpdatedAt: unit.updatedAt, ...common });
         savedId = unit.id;
       } else {
@@ -167,6 +171,11 @@ export function UnitFormDialog({
             ) : null}
           </div>
 
+          {occupancyFromLeases ? (
+            <p className="text-xs text-content-tertiary">
+              Occupancy comes from leases: a unit with a current lease is rented. Change it on the Leases page.
+            </p>
+          ) : (
           <fieldset className="space-y-1.5">
             <legend className="text-sm font-medium text-content">Occupancy</legend>
             {/* Native radios (visually hidden) styled as a segmented control. */}
@@ -197,6 +206,7 @@ export function UnitFormDialog({
                 : 'Leave it unset if unsure.'}
             </p>
           </fieldset>
+          )}
 
           {showRent && editing ? (
             <p className="text-xs text-content-tertiary">Rent comes from the unit&apos;s active lease; change it there.</p>

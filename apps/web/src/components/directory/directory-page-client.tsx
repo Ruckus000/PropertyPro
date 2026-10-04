@@ -1087,6 +1087,7 @@ export function DirectoryPageClient({
           communityId={communityId}
           hasOwnerRole={hasOwnerRole}
           showRent={!hasOwnerRole}
+          occupancyFromLeases={communityType === 'apartment'}
           onSaved={() => {
             toast.success(unitForm.unitId === null ? 'Unit added.' : 'Unit saved.');
             setUnitForm({ open: false, unitId: null });

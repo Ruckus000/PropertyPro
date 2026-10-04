@@ -68,6 +68,8 @@ export interface DirectoryUnit {
   rentAmount: string | null;
   occupancy: UnitOccupancy | null;
   occupancyConfirmed: boolean;
+  /** 'leases' = derived from the unit's leases (apartments); not editable here. */
+  occupancySource: 'manual' | 'leases';
   residents: DirectoryResident[];
   owners: DirectoryResident[];
   tenants: DirectoryResident[];
@@ -283,6 +285,7 @@ export function buildDirectoryUnits(
         rentAmount: u.rentAmount,
         occupancy: u.occupancy ?? null,
         occupancyConfirmed: u.occupancyConfirmed ?? false,
+        occupancySource: u.occupancySource ?? 'manual',
         residents: people,
         owners,
         tenants,

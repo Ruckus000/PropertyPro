@@ -10,6 +10,7 @@ import { listResidentsForCommunity } from '@/lib/services/resident-service';
 import { countOpenViolationsByUnit, listUnitsForCommunity } from '@/lib/services/unit-service';
 import { listDelinquentUnits } from '@/lib/services/finance-service';
 import { listOccupantsForExport } from '@/lib/services/occupant-service';
+import { apartmentOccupancyByUnit } from '@/lib/leases/apartment-occupancy';
 
 export type DirectoryExportKind = 'units' | 'residents';
 
@@ -33,11 +34,13 @@ export async function buildDirectoryExport(params: {
   selection?: { userIds: readonly string[]; occupantIds: readonly number[] };
   access: DirectoryExportAccess;
   actorUserId: string;
+  /** Apartments: derive occupancy from leases (the stored column is not used). */
+  occupancyFromLeases?: { timezone: string };
 }): Promise<{ csv: string; rowCount: number }> {
   const { communityId, kind, access, actorUserId } = params;
   const { columns, rows } =
     kind === 'units'
-      ? await unitRows(communityId, access)
+      ? await unitRows(communityId, access, params.occupancyFromLeases)
       : await residentRows(communityId, params.selection);
 
   await logAuditEvent({
@@ -52,7 +55,11 @@ export async function buildDirectoryExport(params: {
   return { csv: generateCSV(columns, rows), rowCount: rows.length };
 }
 
-async function unitRows(communityId: number, access: DirectoryExportAccess) {
+async function unitRows(
+  communityId: number,
+  access: DirectoryExportAccess,
+  occupancyFromLeases: { timezone: string } | undefined,
+) {
   const scoped = createScopedClient(communityId);
   const [units, residents, delinquent, violations] = await Promise.all([
     listUnitsForCommunity(scoped),
@@ -93,6 +100,15 @@ async function unitRows(communityId: number, access: DirectoryExportAccess) {
     byUnit.set(r.unitId, entry);
   }
   const overdueByUnit = new Map(delinquent.map((d) => [d.unitId, d]));
+  const derived =
+    occupancyFromLeases && access.isAdmin
+      ? await apartmentOccupancyByUnit(communityId, units as Record<string, unknown>[], occupancyFromLeases.timezone)
+      : null;
+  const occupancyLabel = (u: Record<string, unknown>) => {
+    if (!derived) return OCCUPANCY[String(u['occupancy'])] ?? '';
+    const value = derived.get(u['id'] as number);
+    return value ? OCCUPANCY[value]! : u['offlineSince'] ? 'Offline' : '';
+  };
 
   const rows = units
     .map((u) => {
@@ -106,7 +122,7 @@ async function unitRows(communityId: number, access: DirectoryExportAccess) {
         bedrooms: u['bedrooms'] ?? '',
         bathrooms: u['bathrooms'] ?? '',
         sqft: u['sqft'] ?? '',
-        occupancy: OCCUPANCY[String(u['occupancy'])] ?? '',
+        occupancy: occupancyLabel(u),
         owners: people?.owners.join('; ') ?? '',
         residents: people?.count ?? 0,
         overdue: overdue ? (overdue.overdueAmountCents / 100).toFixed(2) : '0.00',

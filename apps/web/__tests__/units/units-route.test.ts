@@ -28,7 +28,9 @@ const {
   requireViolationsEnabledMock,
   countOccupantsForUnitMock,
   tryAutoCompleteMock,
+  listLeasesForCommunityMock,
 } = vi.hoisted(() => ({
+  listLeasesForCommunityMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
@@ -99,6 +101,10 @@ vi.mock('@/lib/services/unit-service', async (importOriginal) => ({
 vi.mock('@/lib/violations/common', () => ({ requireViolationsEnabled: requireViolationsEnabledMock }));
 
 vi.mock('@/lib/services/occupant-service', () => ({ countOccupantsForUnit: countOccupantsForUnitMock }));
+
+// Leases v3: apartment occupancy is derived from leases (the real
+// lib/leases/apartment-occupancy runs; only the lease read is stubbed).
+vi.mock('@/lib/services/lease-service', () => ({ listLeasesForCommunity: listLeasesForCommunityMock }));
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
@@ -287,8 +293,50 @@ describe('/api/v1/units', () => {
         expect(units.map((u) => u['occupancy'])).toEqual(['vacant', 'rented']);
         // Backfilled guess (confirmedAt null) vs. a manager-confirmed value.
         expect(units.map((u) => u['occupancyConfirmed'])).toEqual([false, true]);
+        expect(units.map((u) => u['occupancySource'])).toEqual(['manual', 'manual']);
+        expect(listLeasesForCommunityMock).not.toHaveBeenCalled();
       },
     );
+
+    describe('apartments: leases decide occupancy', () => {
+      const lease = (over: Record<string, unknown>) => ({
+        id: 1, unitId: 2, status: 'active', startDate: '2026-01-01', endDate: '2099-12-31',
+        previousLeaseId: null, moveOutOn: null, endVia: null, ...over,
+      });
+      async function listApartment(role: string) {
+        requireCommunityMembershipMock.mockResolvedValue({
+          ...MEMBERSHIP, communityType: 'apartment', timezone: 'America/New_York',
+          role, isUnitOwner: false, isAdmin: role === 'property_manager',
+        });
+        listUnitsForCommunityMock.mockResolvedValue(UNIT_ROWS);
+        const res = await GET(new NextRequest('http://localhost:3000/api/v1/units?communityId=42'));
+        expect(res.status).toBe(200);
+        return ((await res.json()) as { data: Array<Record<string, unknown>> }).data;
+      }
+
+      it('a current lease makes a unit rented; offline is neither; the stored column is ignored', async () => {
+        // Unit 101 is offline (stored 'vacant'); unit 102 has a current lease
+        // (stored 'rented' — but that is not why it reads rented).
+        listLeasesForCommunityMock.mockResolvedValue({ rows: [lease({})], truncated: false });
+        const units = await listApartment('property_manager');
+        expect(units.map((u) => u['occupancy'])).toEqual([null, 'rented']);
+        expect(units.map((u) => u['occupancyConfirmed'])).toEqual([true, true]);
+        expect(units.map((u) => u['occupancySource'])).toEqual(['leases', 'leases']);
+        expect(listLeasesForCommunityMock).toHaveBeenCalledWith(42, { status: 'active' });
+      });
+
+      it('a signed lease that has not started yet does not make a unit rented', async () => {
+        listLeasesForCommunityMock.mockResolvedValue({ rows: [lease({ startDate: '2099-01-01' })], truncated: false });
+        const units = await listApartment('property_manager');
+        expect(units[1]!['occupancy']).toBe('vacant');
+      });
+
+      it('a resident gets no occupancy, and no lease read happens', async () => {
+        const units = await listApartment('resident');
+        expect(units.map((u) => u['occupancy'])).toEqual([null, null]);
+        expect(listLeasesForCommunityMock).not.toHaveBeenCalled();
+      });
+    });
   });
 
   it('POST creates unit and logs audit', async () => {
@@ -438,12 +486,16 @@ describe('/api/v1/units', () => {
     });
 
     it.each([
-      ['POST', () => postUnit({ occupancy: 'owner_occupied' })],
-      ['PATCH', () => patchUnit({ occupancy: 'owner_occupied' })],
-    ] as const)('%s rejects owner_occupied in an apartment community', async (_verb, send) => {
+      ['POST', 'owner_occupied', () => postUnit({ occupancy: 'owner_occupied' })],
+      ['PATCH', 'owner_occupied', () => patchUnit({ occupancy: 'owner_occupied' })],
+      ['POST', 'vacant', () => postUnit({ occupancy: 'vacant' })],
+      ['PATCH', 'rented', () => patchUnit({ occupancy: 'rented' })],
+      ['PATCH', 'null', () => patchUnit({ occupancy: null })],
+    ] as const)('%s refuses occupancy %s in an apartment community (leases decide)', async (_verb, _value, send) => {
       requireCommunityMembershipMock.mockResolvedValue({ ...MEMBERSHIP, communityType: 'apartment' });
       const res = await send();
       expect(res.status).toBe(400);
+      expect(JSON.stringify(await res.json())).toContain('Occupancy for apartments comes from leases');
       expect(createUnitForCommunityMock).not.toHaveBeenCalled();
       expect(updateUnitByIdMock).not.toHaveBeenCalled();
     });

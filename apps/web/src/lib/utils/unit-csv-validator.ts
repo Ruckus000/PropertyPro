@@ -42,7 +42,11 @@ const KNOWN_COLUMNS = ['unit_number', 'building', 'floor', 'bedrooms', 'bathroom
 
 export function validateUnitCsv(
   input: string,
-  opts: { allowOwnerOccupied: boolean },
+  /**
+   * `occupancyFromLeases`: apartments, where a unit's occupancy is derived
+   * from its leases, so a value in the file is refused rather than stored.
+   */
+  opts: { occupancyFromLeases: boolean },
 ): CsvParseResult<UnitCsvRow> {
   const { header, records } = parseCsvWithHeader(input);
   const errors: CsvParseResult<UnitCsvRow>['errors'] = [];
@@ -100,8 +104,8 @@ export function validateUnitCsv(
       occupancy = OCCUPANCY_ALIASES[occupancyRaw] ?? null;
       if (!occupancy) {
         rowErrors.push({ column: 'occupancy', message: `Occupancy '${get('occupancy')}' must be owner_occupied, rented or vacant` });
-      } else if (occupancy === 'owner_occupied' && !opts.allowOwnerOccupied) {
-        rowErrors.push({ column: 'occupancy', message: 'Apartment units cannot be owner-occupied' });
+      } else if (opts.occupancyFromLeases) {
+        rowErrors.push({ column: 'occupancy', message: 'Occupancy for apartments comes from leases. Leave this column blank.' });
         occupancy = null;
       }
     }

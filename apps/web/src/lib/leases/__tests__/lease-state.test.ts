@@ -7,6 +7,7 @@ import {
   leasePhase,
   monthToMonthNoticeShort,
   nonRenewalNoticeDeadline,
+  occupancyFromLeases,
   termEndDate,
   termMonthsFor,
   type LeaseStateInput,
@@ -178,5 +179,23 @@ describe('Florida notice dates', () => {
   it('§83.57 month-to-month notice under 30 days is short', () => {
     expect(monthToMonthNoticeShort('2026-09-28', '2026-10-15')).toBe(true);
     expect(monthToMonthNoticeShort('2026-09-28', '2026-10-31')).toBe(false);
+  });
+});
+
+describe('occupancyFromLeases (apartments: leases decide)', () => {
+  it('a current lease → rented, including a holdover past its end date', () => {
+    expect(occupancyFromLeases([lease({ id: 1 })], ONLINE, TODAY)).toBe('rented');
+    expect(occupancyFromLeases([lease({ id: 1, endDate: '2026-08-31' })], ONLINE, TODAY)).toBe('rented');
+  });
+
+  it('no current lease → vacant: nothing on file, a future lease, or a move-out already past', () => {
+    expect(occupancyFromLeases([], ONLINE, TODAY)).toBe('vacant');
+    expect(occupancyFromLeases([lease({ id: 1, startDate: '2026-10-01' })], ONLINE, TODAY)).toBe('vacant');
+    expect(occupancyFromLeases([lease({ id: 1, moveOutOn: '2026-09-15', endVia: 'notice' })], ONLINE, TODAY)).toBe('vacant');
+    expect(occupancyFromLeases([lease({ id: 1, status: 'cancelled' })], ONLINE, TODAY)).toBe('vacant');
+  });
+
+  it('an offline unit with no current lease is neither (null), so it stays out of vacancy counts', () => {
+    expect(occupancyFromLeases([], { offlineSince: '2026-09-01' }, TODAY)).toBeNull();
   });
 });
