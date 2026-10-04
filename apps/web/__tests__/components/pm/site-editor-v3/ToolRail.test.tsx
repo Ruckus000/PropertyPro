@@ -10,9 +10,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToolRail } from '@/components/pm/site-editor-v3/ToolRail';
-import { EDITOR_TOOLS } from '@/components/pm/site-editor-v3/tools';
+import { EDITOR_TOOLS, HELP_RAIL_ITEM } from '@/components/pm/site-editor-v3/tools';
 
 const onSelect = vi.fn();
+const onHelpToggle = vi.fn();
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof ToolRail>> = {}) {
   return render(
@@ -20,6 +21,9 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof ToolRail>> = 
       active={null}
       onSelect={onSelect}
       panelId="panel-1"
+      helpOpen={false}
+      onHelpToggle={onHelpToggle}
+      helpId="help-1"
       {...overrides}
     />,
   );
@@ -35,7 +39,10 @@ describe('ToolRail — structure', () => {
   it('is one labelled landmark with a tile per tool, in rail order', () => {
     renderRail();
     expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
-    expect(tiles().map((t) => t.textContent)).toEqual(EDITOR_TOOLS.map((t) => t.label));
+    expect(tiles().map((t) => t.textContent)).toEqual([
+      ...EDITOR_TOOLS.map((t) => t.label),
+      HELP_RAIL_ITEM.label,
+    ]);
   });
 
   it('puts Add first — the action the rail exists to make obvious', () => {
@@ -103,11 +110,36 @@ describe('ToolRail — clicking', () => {
   });
 });
 
+describe('ToolRail — Help tile', () => {
+  it('toggles the Help drawer instead of choosing a tool panel', async () => {
+    renderRail({ active: 'pages' });
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
+    expect(onHelpToggle).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('reports the drawer, not the tool panel, as what it controls', () => {
+    renderRail({ active: 'pages', helpOpen: true });
+    const help = screen.getByRole('button', { name: 'Help' });
+    expect(help).toHaveAttribute('aria-expanded', 'true');
+    expect(help).toHaveAttribute('aria-controls', 'help-1');
+    // The open tool keeps its own state beside it.
+    expect(screen.getByRole('button', { name: 'Pages' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('is collapsed with no aria-controls while the drawer is closed', () => {
+    renderRail();
+    const help = screen.getByRole('button', { name: 'Help' });
+    expect(help).toHaveAttribute('aria-expanded', 'false');
+    expect(help).not.toHaveAttribute('aria-controls');
+  });
+});
+
 describe('ToolRail — keyboard', () => {
   it('has exactly one tab stop, on the open tool', () => {
-    renderRail({ active: 'help' });
+    renderRail({ active: 'notice' });
     const stops = tiles().filter((t) => t.tabIndex === 0);
-    expect(stops).toEqual([screen.getByRole('button', { name: 'Help' })]);
+    expect(stops).toEqual([screen.getByRole('button', { name: 'Notice' })]);
   });
 
   it('puts the tab stop on the first tile when nothing is open', () => {

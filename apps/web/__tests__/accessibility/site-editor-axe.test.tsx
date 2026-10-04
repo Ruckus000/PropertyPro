@@ -274,6 +274,9 @@ describe('Website builder v4 chrome — axe', () => {
             view="website"
             onViewChange={() => {}}
             settings={null}
+            help={null}
+            helpOpen={false}
+            onHelpToggle={() => {}}
             communityId={7}
             hasPublishedSite
             initialNotice={null}

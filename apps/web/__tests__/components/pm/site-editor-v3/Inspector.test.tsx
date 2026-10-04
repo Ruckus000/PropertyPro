@@ -156,6 +156,20 @@ describe('Inspector — dismissal', () => {
     expect(editorMock.clear).toHaveBeenCalled();
   });
 
+  it('leaves the selection alone when something nearer already took the Escape', () => {
+    // The Help drawer and its enlarged figure prevent the Escape they handle.
+    editorMock.selection = TEXT_SELECTION;
+    render(<Harness />);
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    event.preventDefault();
+    document.body.dispatchEvent(event);
+    expect(editorMock.clear).not.toHaveBeenCalled();
+    // …and marks itself docked, which is what moves the drawer aside.
+    expect(screen.getByRole('complementary', { name: /settings/i })).toHaveAttribute(
+      'data-docked-inspector',
+    );
+  });
+
   it('closes on Escape while overlaid', async () => {
     const user = userEvent.setup();
     isNarrowMock.value = true;

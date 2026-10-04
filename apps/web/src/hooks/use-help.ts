@@ -29,8 +29,10 @@ const CONTEXTUAL_TIMEOUT_MS = 1500;
 export const HELP_KEYS = {
   search: (query: string, communityId: number) =>
     ['help', 'search', query, communityId] as const,
-  contextual: (path: string, communityId: number) =>
-    ['help', 'contextual', path, communityId] as const,
+  contextual: (path: string, communityId: number, limit?: number) =>
+    limit === undefined
+      ? (['help', 'contextual', path, communityId] as const)
+      : (['help', 'contextual', path, communityId, limit] as const),
   readArticles: (communityId: number) => ['help', 'read', communityId] as const,
   articleFeedback: (communityId: number, articleSlug: string) =>
     ['help', 'feedback', communityId, articleSlug] as const,
@@ -178,6 +180,8 @@ export interface UseContextualHelpOptions {
    * Default false — opt in only where a fast-failure UX is intentional.
    */
   applyTimeout?: boolean;
+  /** Most articles to return (the route allows 1–20; it defaults to 8). */
+  limit?: number;
 }
 
 export function useContextualHelp(
@@ -191,14 +195,16 @@ export function useContextualHelp(
       : enabledOrOptions;
   const enabled = options.enabled ?? true;
   const applyTimeout = options.applyTimeout ?? false;
+  const { limit } = options;
 
   return useQuery<HelpArticleResult[]>({
-    queryKey: HELP_KEYS.contextual(path, communityId),
+    queryKey: HELP_KEYS.contextual(path, communityId, limit),
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
         path,
         communityId: String(communityId),
       });
+      if (limit !== undefined) params.set('limit', String(limit));
       return requestJson<HelpArticleResult[]>(
         `/api/v1/help/contextual?${params}`,
         {

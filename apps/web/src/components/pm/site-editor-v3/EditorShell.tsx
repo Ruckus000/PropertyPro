@@ -8,7 +8,7 @@ import { PhoneGate } from './PhoneGate';
 import { ToolRail } from './ToolRail';
 import { X } from 'lucide-react';
 import { usePanelWidth } from './use-panel-width';
-import { TOOL_PANEL_TITLES, type EditorToolId } from './tools';
+import { HELP_DRAWER_ID, TOOL_PANEL_TITLES, type EditorToolId } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 const PANEL_ID = 'site-editor-tool-panel';
@@ -67,6 +67,15 @@ export interface EditorShellProps extends EditorTopBarPageProps {
    * panel, canvas and inspector while `view` is `'settings'`.
    */
   settings: React.ReactNode;
+  /**
+   * The Help drawer (v4 Phase 3), or null while it is closed. It overlays the
+   * right edge of either area, so it is laid over the columns rather than
+   * being one of them: the canvas keeps its width while the PM reads.
+   */
+  help: React.ReactNode;
+  helpOpen: boolean;
+  /** Opens or closes the drawer — the rail's Help tile and the top bar's button. */
+  onHelpToggle: () => void;
 }
 
 /**
@@ -135,6 +144,9 @@ export function EditorShell({
   view,
   onViewChange,
   settings,
+  help,
+  helpOpen,
+  onHelpToggle,
 }: EditorShellPropsWithTool) {
   // Closed by default: the v4 builder opens on the page itself, with the rail
   // offering the tools rather than one already covering a third of the screen.
@@ -191,12 +203,21 @@ export function EditorShell({
         onDeviceChange={onDeviceChange}
         view={view}
         onViewChange={onViewChange}
+        helpOpen={helpOpen}
+        onHelpToggle={onHelpToggle}
       />
 
       {banner ? (
         <div className="shrink-0 border-b border-edge px-4 py-3">{banner}</div>
       ) : null}
 
+      {/*
+       * `relative` anchors the Help drawer, which overlays either area. The
+       * named group lets the drawer step left of a DOCKED inspector rather than
+       * cover it: the guides send the PM to a section's settings, so hiding
+       * them under the drawer broke the guide being followed.
+       */}
+      <div className="group/editor relative flex min-h-0 flex-1 flex-col">
       {view === 'settings' ? (
         // `relative` for the same reason as the tool panel's scroller below.
         <div
@@ -212,6 +233,9 @@ export function EditorShell({
             onSelect={setActiveTool}
             panelId={PANEL_ID}
             badges={toolBadges}
+            helpOpen={helpOpen}
+            onHelpToggle={onHelpToggle}
+            helpId={HELP_DRAWER_ID}
           />
 
           {activeTool !== null ? (
@@ -267,6 +291,8 @@ export function EditorShell({
           {inspector}
         </div>
       )}
+      {help}
+      </div>
     </div>
   );
 }

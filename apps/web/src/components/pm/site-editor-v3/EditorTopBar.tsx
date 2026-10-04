@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   ChevronDown,
+  CircleHelp,
   Eye,
   LayoutTemplate,
   Monitor,
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
+import { HELP_DRAWER_ID } from './tools';
 
 /**
  * The v4 "Editing page" picker's inputs.
@@ -93,6 +95,9 @@ export interface EditorTopBarProps extends EditorTopBarPageProps {
    */
   onPreview: () => void;
   onPublish: () => void;
+  /** The Help drawer's state (v4 Phase 3); this bar's Help button toggles it. */
+  helpOpen: boolean;
+  onHelpToggle: () => void;
   /**
    * Whether Publish opens the review sheet. Required and undefaulted on
    * purpose: this prop shipped optional with a `= 0` default (as `changeCount`)
@@ -191,6 +196,8 @@ export function EditorTopBar({
   onDeviceChange,
   view,
   onViewChange,
+  helpOpen,
+  onHelpToggle,
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3">
@@ -297,6 +304,23 @@ export function EditorTopBar({
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
         {requirements}
         {status}
+        <Button
+          variant="ghost"
+          onClick={onHelpToggle}
+          aria-expanded={helpOpen}
+          aria-controls={helpOpen ? HELP_DRAWER_ID : undefined}
+          aria-label="Help"
+          // The bar was already full. Measured in Chromium with a long name,
+          // this button pushed Publish past the edge at 768px and squeezed the
+          // community name to nothing at 1280px. On the Website view the rail's
+          // Help tile is always on screen, so this one waits for 1536px there.
+          // Settings has no rail, but also no page picker or device toggle, so
+          // the room is there at every width.
+          className={cn('px-3', view === 'website' && 'hidden 2xl:inline-flex')}
+        >
+          <CircleHelp className="h-4 w-4" aria-hidden="true" />
+          <span className="hidden 2xl:inline">Help</span>
+        </Button>
         <Button
           ref={previewButtonRef}
           variant="outline"

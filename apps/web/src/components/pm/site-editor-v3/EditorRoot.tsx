@@ -66,9 +66,14 @@ const DesignPanel = dynamic(
   () => import('./panels/DesignPanel').then((m) => m.DesignPanel),
   { loading: () => null },
 );
-const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
+// v4 Phase 3. Mounted only while open, so its guide reader (the help modal's
+// article body, figures and lightbox) is fetched on the first Help click.
+const HelpDrawer = dynamic(() => import('./help/HelpDrawer').then((m) => m.HelpDrawer), {
   loading: () => null,
 });
+// Type-only: erased at build, so neither chunk is pulled in.
+import type { HelpAction } from './help/guides';
+import type { SettingsTabId } from './settings/SettingsView';
 const RecordsAttention = dynamic(
   () => import('./RecordsAttention').then((m) => m.RecordsAttention),
   { ssr: false, loading: () => null },
@@ -280,6 +285,12 @@ export function EditorRoot({
   const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
   // v4 Phase 5: the page being built, or the site's settings.
   const [view, setView] = useState<EditorView>('website');
+  // A Settings tab a Help guide's "Show me" asked for; see `SettingsView`.
+  const [settingsTabRequest, setSettingsTabRequest] = useState<{ tab: SettingsTabId } | null>(
+    null,
+  );
+  // v4 Phase 3: the Help drawer, open beside whichever area is showing.
+  const [helpOpen, setHelpOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
    * `previewOpen`, mirrored — read by the preview gate effect below.
@@ -802,7 +813,27 @@ export function EditorRoot({
     setView('website');
     setActiveTool('pages');
   }, []);
-  const handleViewChange = useCallback((next: EditorView) => setView(next), []);
+  const handleViewChange = useCallback((next: EditorView) => {
+    setView(next);
+    // Spent: the PM's own switch opens Settings on its first tab again.
+    setSettingsTabRequest(null);
+  }, []);
+  const handleHelpToggle = useCallback(() => setHelpOpen((open) => !open), []);
+  const handleHelpClose = useCallback(() => setHelpOpen(false), []);
+  const canOpenPublish = diff.changes.length > 0 || diffFailed;
+  const handleShowMe = useCallback((action: HelpAction) => {
+    if (action.kind === 'tool') {
+      setView('website');
+      // Like a rail click: says nothing about position, so "Open Add" appends.
+      setAddTarget(null);
+      setActiveTool(action.tool);
+    } else if (action.kind === 'settings') {
+      setView('settings');
+      setSettingsTabRequest({ tab: action.tab });
+    } else {
+      setPublishOpen(true);
+    }
+  }, []);
   // Settings → Access links to the records: back to the page, Documents open.
   const handleOpenDocuments = useCallback(() => {
     setView('website');
@@ -900,6 +931,20 @@ export function EditorRoot({
               publicSiteUrl={publicSiteUrl}
               hasSiteCustomDomain={hasSiteCustomDomain}
               onOpenDocuments={handleOpenDocuments}
+              tabRequest={settingsTabRequest}
+            />
+          ) : null
+        }
+        helpOpen={helpOpen}
+        onHelpToggle={handleHelpToggle}
+        help={
+          helpOpen ? (
+            <HelpDrawer
+              communityId={communityId}
+              view={view}
+              onClose={handleHelpClose}
+              onShowMe={handleShowMe}
+              canPublish={canOpenPublish}
             />
           ) : null
         }
@@ -914,7 +959,7 @@ export function EditorRoot({
         // Openable when there is something to publish — and also when the diff
         // failed to load, because the sheet is the only surface that explains
         // that failure and offers a retry.
-        canOpenPublish={diff.changes.length > 0 || diffFailed}
+        canOpenPublish={canOpenPublish}
         // Withheld for the same reason the canvas is (see the PreviewDialog
         // render below). Disabled with a reason rather than left live and
         // silently inert: a button that does nothing when pressed is the
@@ -983,8 +1028,7 @@ export function EditorRoot({
           // Nothing that writes a BLOCK is offered while the page is unknown —
           // a write with no page id defaults to the live home page, which is
           // precisely the silent wrong-page save the banner is warning about.
-          // The site/branding/domain/help tools are unaffected: they are not
-          // page-scoped.
+          // The other tools are unaffected: they are not page-scoped.
           if (pagesUnavailable && (tool === 'sections' || tool === 'add')) {
             return (
               <p className="p-4 text-sm text-content-secondary">
@@ -1043,7 +1087,6 @@ export function EditorRoot({
               />
             );
           }
-          if (tool === 'help') return <HelpPanel communityId={communityId} />;
           // Every tool in EDITOR_TOOLS now has a panel. This assignment is the
           // exhaustiveness check: adding an id to EDITOR_TOOLS without a branch
           // above fails typecheck here, instead of shipping a tab that renders
