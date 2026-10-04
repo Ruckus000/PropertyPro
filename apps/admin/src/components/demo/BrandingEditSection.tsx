@@ -46,6 +46,8 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  // The stored logo's URL from the GET, keyed by its path for the form fields.
+  const [knownLogoUrls, setKnownLogoUrls] = useState<Record<string, string>>({});
 
   // Fetch current branding
   useEffect(() => {
@@ -60,6 +62,9 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
         if (!cancelled) {
           setForm(f);
           setInitial(f);
+          if (f.logoPath && typeof data.logoUrl === 'string') {
+            setKnownLogoUrls({ [f.logoPath]: data.logoUrl });
+          }
           setLoading(false);
         }
       } catch {
@@ -144,6 +149,7 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
         onChange={handleChange}
         communityId={communityId}
         onError={setError}
+        knownLogoUrls={knownLogoUrls}
       />
 
       {/* Actions */}
