@@ -30,6 +30,7 @@ import {
   type Unit,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+import { leasePhase, type LeaseStateInput } from '@/lib/leases/lease-state';
 import { isAdminRole } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import {
@@ -106,9 +107,20 @@ function utcDaysFromNow(days: number): number {
 }
 
 function computeLeaseMetrics(unitRows: Unit[], leaseRows: Lease[]): ApartmentLeaseMetrics {
-  // Active leases (not soft-deleted)
-  const activeLeases = leaseRows.filter(
-    (l) => l.status === 'active' && l.deletedAt == null,
+  // Leases v3: a lease's state comes from its dates, and `status` stays
+  // 'active' through a renewal and a scheduled move-out. So "current" is
+  // leasePhase's answer, not the status column: otherwise a renewed lease and
+  // its renewal both count (double rent), a resident who has moved out still
+  // occupies the unit, and a signed future lease occupies it early.
+  const today = new Date().toISOString().slice(0, 10);
+  const liveLeases = leaseRows.filter((l) => l.deletedAt == null) as unknown as LeaseStateInput[];
+  const byUnit = new Map<number, LeaseStateInput[]>();
+  for (const l of liveLeases) byUnit.set(l.unitId, [...(byUnit.get(l.unitId) ?? []), l]);
+  const activeLeases = liveLeases.filter(
+    (l) => leasePhase(l, byUnit.get(l.unitId) ?? [], today) === 'current',
+  ) as unknown as Lease[];
+  const renewed = new Set(
+    liveLeases.filter((l) => l.status === 'active' && l.previousLeaseId != null).map((l) => l.previousLeaseId),
   );
 
   // Occupancy
@@ -125,7 +137,10 @@ function computeLeaseMetrics(unitRows: Unit[], leaseRows: Lease[]): ApartmentLea
   const d90 = utcDaysFromNow(90);
   const nowMs = Date.now();
 
-  const expiringLeases = activeLeases.filter((l) => l.endDate != null);
+  // Expiring = still waiting on a decision: no renewal signed, no move-out set.
+  const expiringLeases = activeLeases.filter(
+    (l) => l.endDate != null && !renewed.has(l.id) && (l as unknown as LeaseStateInput).moveOutOn == null,
+  );
   function countExpiring(boundaryMs: number): number {
     return expiringLeases.filter((l) => {
       const end = parseUtcDate(l.endDate!);

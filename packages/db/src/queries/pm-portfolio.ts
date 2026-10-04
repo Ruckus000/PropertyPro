@@ -6,6 +6,7 @@ import { assessmentLineItems } from '../schema/assessment-line-items';
 import { communities } from '../schema/communities';
 import { complianceChecklistItems } from '../schema/compliance-checklist-items';
 import { leases } from '../schema/leases';
+import { leaseCurrentOnSql, leaseExpiringBetweenSql } from './lease-current';
 import { maintenanceRequests } from '../schema/maintenance-requests';
 import { siteBlocks } from '../schema/site-blocks';
 import { units } from '../schema/units';
@@ -185,8 +186,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
     .where(
       and(
         inArray(leases.communityId, apartmentIdsForUnion),
-        isNull(leases.deletedAt),
-        eq(leases.status, 'active'),
+        leaseCurrentOnSql(sql`CURRENT_DATE`),
       ),
     )
     .groupBy(leases.communityId);
@@ -393,13 +393,7 @@ export async function getPortfolioDashboard(
           .where(
             and(
               inArray(leases.communityId, apartmentIds),
-              isNull(leases.deletedAt),
-              eq(leases.status, 'active'),
-              lte(leases.startDate, sql`(${thirtyDaysAgo})::date`),
-              or(
-                isNull(leases.endDate),
-                gte(leases.endDate, sql`(${thirtyDaysAgo})::date`),
-              ),
+              leaseCurrentOnSql(sql`(${thirtyDaysAgo})::date`),
             ),
           )
       : Promise.resolve([{ count: 0 }]),
@@ -414,10 +408,7 @@ export async function getPortfolioDashboard(
           .where(
             and(
               inArray(leases.communityId, apartmentIds),
-              isNull(leases.deletedAt),
-              eq(leases.status, 'active'),
-              lte(leases.endDate, sql`(${sixtyDaysFromNow})::date`),
-              gte(leases.endDate, sql`CURRENT_DATE`),
+              leaseExpiringBetweenSql(sql`CURRENT_DATE`, sql`(${sixtyDaysFromNow})::date`),
             ),
           )
       : Promise.resolve([{ count: 0 }]),
@@ -944,8 +935,7 @@ export async function getOccupancyTrendsReport(
         occupied: sql<number>`count(*) FILTER (WHERE EXISTS (
           SELECT 1 FROM ${leases}
           WHERE ${leases.unitId} = ${units.id}
-            AND ${leases.status} = 'active'
-            AND ${leases.deletedAt} IS NULL
+            AND ${leaseCurrentOnSql(sql`CURRENT_DATE`)}
         ))::int`,
       })
       .from(units)
@@ -963,10 +953,7 @@ export async function getOccupancyTrendsReport(
       .where(
         and(
           inArray(leases.communityId, apartmentIds),
-          isNull(leases.deletedAt),
-          eq(leases.status, 'active'),
-          lte(leases.endDate, sql`(NOW() + INTERVAL '60 days')::date`),
-          gte(leases.endDate, sql`CURRENT_DATE`),
+          leaseExpiringBetweenSql(sql`CURRENT_DATE`, sql`(NOW() + INTERVAL '60 days')::date`),
         ),
       ),
   ]);
