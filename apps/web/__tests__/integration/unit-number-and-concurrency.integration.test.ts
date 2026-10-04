@@ -3,7 +3,7 @@
  * the partial unique index (migration `unit_number_unique`) and the
  * millisecond-precision `updatedAt` comparison cannot be proven with mocks.
  */
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, inArray } from '@propertypro/db/filters';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import {
@@ -23,6 +23,7 @@ import {
   updateUnitById,
 } from '../../src/lib/services/unit-service';
 import { listResidentsForCommunity, updateResidentRole } from '../../src/lib/services/resident-service';
+import { createOccupant, updateOccupant } from '../../src/lib/services/occupant-service';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 
 requireDatabaseUrlInCI('unit-number-and-concurrency');
@@ -108,5 +109,65 @@ describeDb('unit number uniqueness + concurrency (db-backed integration)', () =>
     const token = (JSON.parse(JSON.stringify(listed)) as { updatedAt: string }).updatedAt;
     expect(await updateResidentRole(communityId, userId, {}, token)).toBe(true);
     expect(await updateResidentRole(communityId, userId, {}, token)).toBe(false);
+  });
+
+  /**
+   * Two writes inside ONE millisecond: what run 37051841242 hit by chance, made
+   * certain by freezing the app clock. Each case takes its token AFTER a write
+   * (not from the insert, whose `defaultNow()` comes from the database clock),
+   * so the stale save is the third write in the same instant. When the app
+   * stamped `updatedAt = new Date()`, every write here stored the identical
+   * value and the stale token kept matching.
+   */
+  describe('a stale token is refused even when every write lands in the same millisecond', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date());
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const tokenOf = (row: unknown) => (JSON.parse(JSON.stringify(row)) as { updatedAt: string }).updatedAt;
+
+    it('units', async () => {
+      const created = await createUnitForCommunity(scopedFor(communityId), { unitNumber: '301' });
+      const id = created!['id'] as number;
+      const read = await updateUnitById(scopedFor(communityId), id, { floor: 1 });
+      const token = tokenOf(read);
+      expect(await updateUnitById(scopedFor(communityId), id, { floor: 2 }, token)).not.toBeNull();
+      expect(await updateUnitById(scopedFor(communityId), id, { floor: 3 }, token)).toBeNull();
+      const [row] = await scopedFor(communityId).selectFrom(state!.dbModule.units, {}, eq(state!.dbModule.units.id, id));
+      expect(row!['floor']).toBe(2);
+    });
+
+    it('resident membership', async () => {
+      const userId = requireUser(state!, 'actorA').id;
+      expect(await updateResidentRole(communityId, userId, {})).toBe(true);
+      const listed = (await listResidentsForCommunity(communityId)).find((r) => r.userId === userId)!;
+      const token = tokenOf(listed);
+      expect(await updateResidentRole(communityId, userId, {}, token)).toBe(true);
+      expect(await updateResidentRole(communityId, userId, {}, token)).toBe(false);
+    });
+
+    it('household members', async () => {
+      const actorId = requireUser(state!, 'actorA').id;
+      const unit = await createUnitForCommunity(scopedFor(communityId), { unitNumber: '302' });
+      const created = await createOccupant(communityId, actorId, {
+        unitId: unit!['id'] as number,
+        fullName: 'Kim Kid',
+        email: null,
+        phone: null,
+        isOwnerHousehold: true,
+      });
+      const read = await updateOccupant(communityId, actorId, created.id, { phone: '555-0100' });
+      const token = read.updatedAt;
+      await expect(updateOccupant(communityId, actorId, created.id, { phone: '555-0101' }, token)).resolves.toMatchObject({
+        phone: '555-0101',
+      });
+      await expect(updateOccupant(communityId, actorId, created.id, { phone: '555-0102' }, token)).rejects.toMatchObject({
+        statusCode: 409,
+      });
+    });
   });
 });
