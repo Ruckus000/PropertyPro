@@ -68,6 +68,9 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       help={null}
       helpOpen={false}
       onHelpToggle={() => {}}
+      mode="free"
+      onModeChange={() => {}}
+      steps={<p>steps body</p>}
       communityId={42}
       hasPublishedSite
       initialNotice={null}
@@ -113,42 +116,46 @@ beforeEach(() => {
 });
 
 describe('EditorShell — phone gate', () => {
-  it('renders the gate instead of the editor below the breakpoint', () => {
+  // The gate is code-split (the editor's first-load budget), so each case
+  // waits for it to arrive.
+  it('renders the gate instead of the editor below the breakpoint', async () => {
     isNarrowMock.value = true;
     renderShell();
-    expect(screen.getByRole('heading', { name: /bigger screen/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /bigger screen/i })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
   });
 
-  it('unmounts the editor entirely rather than hiding it', () => {
+  it('unmounts the editor entirely rather than hiding it', async () => {
     // A hidden editor still costs its JS, its timers and its focus stops.
     isNarrowMock.value = true;
     renderShell();
+    await screen.findByRole('heading', { name: /bigger screen/i });
     expect(screen.queryByText('canvas')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Publish/ })).not.toBeInTheDocument();
   });
 
-  it('offers the public site as the one useful phone action', () => {
+  it('offers the public site as the one useful phone action', async () => {
     isNarrowMock.value = true;
     renderShell();
-    const link = screen.getByRole('link', { name: /View the public site/i });
+    const link = await screen.findByRole('link', { name: /View the public site/i });
     expect(link).toHaveAttribute('href', 'https://sunset-condos.example.com/');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 
-  it('omits the link when the community has no public site yet', () => {
+  it('omits the link when the community has no public site yet', async () => {
     isNarrowMock.value = true;
     renderShell({ publicSiteUrl: null });
+    await screen.findByRole('heading', { name: /bigger screen/i });
     expect(screen.queryByRole('link', { name: /View the public site/i })).not.toBeInTheDocument();
   });
 
-  it('keeps the urgent-notice fast path open on a phone (Phase 7)', () => {
+  it('keeps the urgent-notice fast path open on a phone (Phase 7)', async () => {
     // Editing is turned away; posting a closure notice is not. Standing in front
     // of a flooded lobby with a phone is the case the notice exists for.
     isNarrowMock.value = true;
     renderShell();
     expect(
-      screen.getByRole('button', { name: /Post an urgent notice/i }),
+      await screen.findByRole('button', { name: /Post an urgent notice/i }),
     ).toBeInTheDocument();
   });
 
@@ -157,7 +164,7 @@ describe('EditorShell — phone gate', () => {
     isNarrowMock.value = true;
     renderShell();
 
-    await user.click(screen.getByRole('button', { name: /Post an urgent notice/i }));
+    await user.click(await screen.findByRole('button', { name: /Post an urgent notice/i }));
 
     expect(
       await screen.findByRole('heading', { name: /post an urgent notice/i }),
@@ -172,7 +179,7 @@ describe('EditorShell — phone gate', () => {
     isNarrowMock.value = true;
     renderShell();
 
-    await user.click(screen.getByRole('button', { name: /Post an urgent notice/i }));
+    await user.click(await screen.findByRole('button', { name: /Post an urgent notice/i }));
     await screen.findByRole('heading', { name: /post an urgent notice/i });
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
@@ -419,5 +426,94 @@ describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
     renderShell();
     expect(screen.queryByText('settings body')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+  });
+});
+
+describe('EditorShell — Guided mode (v4 Phase 3)', () => {
+  function renderGuided(activeTool: React.ComponentProps<typeof EditorShell>['activeTool'] = null) {
+    const onActiveToolChange = vi.fn();
+    const onHelpToggle = vi.fn();
+    renderShell({ mode: 'guided', activeTool, onActiveToolChange, onHelpToggle } as never);
+    return { onActiveToolChange, onHelpToggle };
+  }
+
+  it('has no rail, and shows Next steps when no tool is chosen', async () => {
+    renderGuided();
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+    // Code-split: the tabs arrive with their chunk.
+    expect(await screen.findByRole('tab', { name: 'Next steps' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByText('steps body')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close panel' })).not.toBeInTheDocument();
+  });
+
+  it('moves between tabs with the arrow keys, choosing as it goes', async () => {
+    const user = userEvent.setup();
+    const { onActiveToolChange } = renderGuided();
+    (await screen.findByRole('tab', { name: 'Next steps' })).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onActiveToolChange).toHaveBeenLastCalledWith('pages');
+    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveFocus();
+    await user.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(onActiveToolChange).toHaveBeenLastCalledWith('design');
+  });
+
+  it('keeps one tab in the Tab order', async () => {
+    renderGuided('design');
+    await screen.findByRole('tab', { name: 'Design' });
+    expect(screen.getAllByRole('tab').filter((t) => t.tabIndex === 0)).toEqual([
+      screen.getByRole('tab', { name: 'Design' }),
+    ]);
+  });
+
+  it("gives a tool the tabs don't name its title and a way back", async () => {
+    const user = userEvent.setup();
+    const { onActiveToolChange } = renderGuided('notice');
+    expect(await screen.findByRole('tab', { name: 'Next steps' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByRole('heading', { name: 'Urgent notice' })).toBeVisible();
+    expect(screen.getByText('panel:notice')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Back to next steps' }));
+    expect(onActiveToolChange).toHaveBeenCalledWith(null);
+  });
+
+  it('opens Help from beside the tabs, not as a tab', async () => {
+    const user = userEvent.setup();
+    const { onHelpToggle } = renderGuided();
+    await screen.findByRole('tab', { name: 'Next steps' });
+    const help = screen.getAllByRole('button', { name: 'Help' }).find((b) => b.textContent === 'Help');
+    await user.click(help!);
+    expect(onHelpToggle).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('tab', { name: 'Help' })).not.toBeInTheDocument();
+  });
+});
+
+describe('EditorShell — the top bar mode switch', () => {
+  it('is a radio group whose arrows switch mode', async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+    renderShell({ mode: 'free', onModeChange });
+    const group = await screen.findByRole('radiogroup', { name: 'Editing mode' });
+    expect(screen.getByRole('radio', { name: 'Free edit' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'Guided' })).toHaveAttribute('tabindex', '-1');
+    screen.getByRole('radio', { name: 'Free edit' }).focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(onModeChange).toHaveBeenCalledWith('guided');
+    expect(group).toBeInTheDocument();
+  });
+
+  it('is left off the Settings view', async () => {
+    // Load the code-split switch first (on the Website view), so its absence
+    // below is the view's doing, not a chunk that had not arrived yet.
+    const { unmount } = renderShell();
+    await screen.findByRole('radiogroup', { name: 'Editing mode' });
+    unmount();
+    renderShell({ view: 'settings' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole('radiogroup', { name: 'Editing mode' })).not.toBeInTheDocument();
   });
 });

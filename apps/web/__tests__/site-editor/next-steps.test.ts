@@ -147,4 +147,12 @@ describe('buildNextSteps', () => {
     const r = buildNextSteps(input({ visited: ['design'] }));
     expect(step(r, 'design')).toMatchObject({ done: true, cta: null, action: null });
   });
+
+  it('never tells the manager to type on the page, which the canvas does not do', () => {
+    const r = buildNextSteps(input());
+    for (const s of r.groups.flatMap((g) => g.steps)) {
+      expect(s.detail).not.toMatch(/on the page and type|click the headline/i);
+    }
+    expect(step(r, 'welcome').detail).toMatch(/settings on the right/);
+  });
 });

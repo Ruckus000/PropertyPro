@@ -178,8 +178,35 @@ Left for 3b, each with its reason:
   the Website view the top-bar Help shows only from 1536px; the rail's Help tile is always there.
   Settings has no rail but room to spare, so it shows Help at every width, icon-only below 1536px.
 
-Still to come in 3b: the chooser, the mode switch, the Guided panel with Next steps, and the tour.
-Then screenshots for every editor guide.
+### Phase 3b, part 2, as built: chooser, mode switch, Guided panel
+- **Mode.** The mode is `preferences.mode ?? 'free'` (#1295's hook). It reads Free while loading and for
+  anyone the route refuses, so a returning manager never sees Guided or the chooser flash.
+- **Chooser** (`guidance/ModeChooser.tsx`, code-split).
+  - Shown only when the mode is null and the site has never been published (decided 2026-10-03).
+  - Closing it without a choice means Free for this visit, with nothing saved.
+  - The design's eyebrow "Setup saved as a draft" is dropped.
+  - The title says "website", not "site": the page-state-copy guard reads "on your site" as a
+    visibility claim.
+- **Mode switch.** The Help drawer's "How you work" cards work at every width. The top-bar radio
+  group appears only from 1536px on the Website view, because the bar is full below that (measured in
+  Chromium).
+- **Guided shell.** There is no rail. The panel never closes and has real tabs (Next steps · Pages ·
+  Design), with Help as a button beside them. Add, Sections, Notice and Documents show their title and
+  "Back to next steps".
+- **Next steps** (`guidance/NextSteps.tsx`, code-split) draws `buildNextSteps`.
+  - It resolves "show a hidden section" itself (`showSection`, falling back to going to its page), and
+    "select the welcome section" (in place on the home page, otherwise via `handleGoToSlot`, which does
+    not open the Sections panel).
+  - The other actions go to `EditorRoot`. Publish opens only when something can publish.
+  - Visits to Design, Pages and the phone preview are recorded once, in either mode.
+- **Copy fix.** The welcome step no longer says "click the headline on the page and type" (there is no
+  on-page typing).
+- **Budget.** The tabs, top-bar switch and preferences code first cost 7.6 KiB and failed `perf:check`
+  at 1493.3. Fixed by code-splitting `GuidedTabs` (Guided only), `ModeSwitch` (only from 1536px) and
+  `PhoneGate` (below 768px only; desktop managers never render it). The result is 1487.8 KiB.
+
+Still to come in 3b: the tour, then screenshots for every editor guide. The tour must be code-split:
+about 2 KiB of headroom remains.
 
 ### Phase 4: Design panel (decided 2026-10-01)
 These decisions were made against what the product actually has. The design assumed

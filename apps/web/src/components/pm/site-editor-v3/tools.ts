@@ -54,3 +54,9 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
   design: 'Design',
   documents: 'Documents',
 };
+
+/**
+ * How the PM works (v4 Phase 3): Guided keeps a checklist panel open and drops
+ * the rail; Free edit is the rail of tools.
+ */
+export type EditorMode = 'guided' | 'free';
