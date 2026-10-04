@@ -65,6 +65,9 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       view="website"
       onViewChange={() => {}}
       settings={<p>settings body</p>}
+      help={null}
+      helpOpen={false}
+      onHelpToggle={() => {}}
       communityId={42}
       hasPublishedSite
       initialNotice={null}
@@ -219,9 +222,47 @@ describe('EditorShell — composition', () => {
   it('closes the panel from its own close button', async () => {
     const user = userEvent.setup();
     renderShell();
-    await user.click(screen.getByRole('button', { name: /Help/ }));
+    await user.click(screen.getByRole('button', { name: /Notice/ }));
     await user.click(screen.getByRole('button', { name: 'Close panel' }));
-    expect(screen.queryByText('panel:help')).not.toBeInTheDocument();
+    expect(screen.queryByText('panel:notice')).not.toBeInTheDocument();
+  });
+});
+
+describe('EditorShell — Help drawer', () => {
+  it('toggles the drawer from the top bar and from the rail, without opening a tool panel', async () => {
+    const user = userEvent.setup();
+    const onHelpToggle = vi.fn();
+    renderShell({ onHelpToggle });
+    const [topBar, rail] = screen.getAllByRole('button', { name: 'Help' });
+    await user.click(topBar!);
+    await user.click(rail!);
+    expect(onHelpToggle).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
+  });
+
+  it('shows the drawer over either area, and both openers say it is open', () => {
+    renderShell({
+      helpOpen: true,
+      help: <aside id="site-editor-help" aria-label="Help">guides</aside>,
+    });
+    for (const opener of screen.getAllByRole('button', { name: 'Help' })) {
+      expect(opener).toHaveAttribute('aria-expanded', 'true');
+      expect(opener).toHaveAttribute('aria-controls', 'site-editor-help');
+    }
+    expect(screen.getByText('guides')).toBeInTheDocument();
+    // The drawer's `group-has-[…]/editor` variant needs this ancestor to step
+    // left of a docked inspector.
+    expect(screen.getByText('guides').parentElement).toHaveClass('group/editor');
+  });
+
+  it('keeps the drawer when Settings is showing', () => {
+    renderShell({
+      view: 'settings',
+      helpOpen: true,
+      help: <aside aria-label="Help">guides</aside>,
+    });
+    expect(screen.getByText('settings body')).toBeInTheDocument();
+    expect(screen.getByText('guides')).toBeInTheDocument();
   });
 });
 

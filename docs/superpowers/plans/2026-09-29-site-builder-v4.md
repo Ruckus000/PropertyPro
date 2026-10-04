@@ -151,6 +151,36 @@ Left for 3b, each with its reason:
 - The contextual Help list is capped at 8, and `/pm/website-editor` now has exactly 8 articles. The
   3b drawer lists by group, not through that cap.
 
+### Phase 3b, part 1, as built: the Help drawer
+- **The drawer.** `site-editor-v3/help/HelpDrawer.tsx` is code-split and opened from the top bar's
+  **Help** button or the rail's Help tile. It replaces the Help tool panel, which is deleted.
+  - It is not modal: focus moves in and back out, and Escape closes an enlarged figure first.
+  - A guide renders in the drawer through the help modal's `HelpArticleBody`.
+  - `help/guides.ts` holds only editor code: group, the views a guide is listed first in, and its
+    "Show me" action.
+- **The cap.** `/api/v1/help/contextual` takes an optional `limit` (1–20). The drawer asks for 20;
+  other callers keep 8.
+- **Guides.** `website-editor-overview`, `website-domain` and `website-search` are written, with no
+  screenshots yet. `upload-document` is tagged for the editor.
+- **Corrections to `website-pages` and `website-sections`.** Pages can't be dragged; rename and
+  **Show in navigation** are behind the gear; a never-published page is deleted with no undo;
+  Payments sections can't be restored.
+- **`website-branding`.** Left to #1296, which rewrites it rather than replacing it. The drawer lists
+  it under "Editing your site".
+- **The support line promises no reply time.** "Within one business day" is stated only for sales
+  enquiries.
+- **Budget.** The drawer's wiring cost 1.3 KiB of first-load JS, and the aggregate sat at 1490.0 of
+  1490. To make room, the requirements pill's popover body (the explanation, the fixes and the
+  unit-count form) is now code-split into `RequirementsDetails.tsx`, loaded on first open. Result:
+  1485.7 KiB, down from 1488.7 on `main`.
+- **Top bar.** Measured in Chromium with the production CSS and a long community name. With the Help
+  button added, Publish ran past the edge at 768px and the name shrank to nothing at 1280px. So on
+  the Website view the top-bar Help shows only from 1536px; the rail's Help tile is always there.
+  Settings has no rail but room to spare, so it shows Help at every width, icon-only below 1536px.
+
+Still to come in 3b: the chooser, the mode switch, the Guided panel with Next steps, and the tour.
+Then screenshots for every editor guide.
+
 ### Phase 4: Design panel (decided 2026-10-01)
 These decisions were made against what the product actually has. The design assumed
 more than exists.

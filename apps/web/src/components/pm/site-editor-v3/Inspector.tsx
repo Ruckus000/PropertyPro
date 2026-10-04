@@ -103,7 +103,9 @@ export function Inspector({ communityId, className }: InspectorProps) {
   useEffect(() => {
     if (isNarrow || !isOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') clear();
+      // Not when something nearer already took this Escape — the Help drawer,
+      // its enlarged figure, or a dialog — or one press closes two things.
+      if (event.key === 'Escape' && !event.defaultPrevented) clear();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -137,6 +139,7 @@ export function Inspector({ communityId, className }: InspectorProps) {
     <aside
       ref={panelRef}
       aria-label={`${label} settings`}
+      data-docked-inspector=""
       className={cn(
         'flex min-h-0 w-80 shrink-0 flex-col border-l border-edge bg-surface-card',
         className,

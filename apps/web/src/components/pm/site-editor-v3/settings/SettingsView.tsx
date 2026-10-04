@@ -15,7 +15,7 @@
  * offline, and hiding the login button.
  */
 
-import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,12 @@ export interface SettingsViewProps {
   hasSiteCustomDomain: boolean;
   /** Back to the Website view with the Documents tool open. */
   onOpenDocuments: () => void;
+  /**
+   * A tab to bring forward — a Help guide's "Show me" (v4 Phase 3). A new
+   * object per request, so asking for the tab already showing after the PM has
+   * moved away still switches back.
+   */
+  tabRequest?: { tab: SettingsTabId } | null;
 }
 
 const TABS = [
@@ -51,7 +57,8 @@ const TABS = [
   { id: 'access', label: 'Access & visibility' },
 ] as const;
 
-type TabId = (typeof TABS)[number]['id'];
+export type SettingsTabId = (typeof TABS)[number]['id'];
+type TabId = SettingsTabId;
 
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
@@ -70,17 +77,24 @@ export function SettingsView({
   publicSiteUrl,
   hasSiteCustomDomain,
   onOpenDocuments,
+  tabRequest,
 }: SettingsViewProps) {
-  const [tab, setTabState] = useState<TabId>('general');
+  const initialTab = tabRequest?.tab ?? 'general';
+  const [tab, setTabState] = useState<TabId>(initialTab);
   // Tabs opened so far. A panel mounts on its first visit and is then hidden,
   // not unmounted, when another tab is selected — so a half-typed footer note
   // survives a look at another tab. Mounting on first visit (not all four up
   // front) keeps opening Settings from firing every panel's reads at once.
-  const [visited, setVisited] = useState<ReadonlySet<TabId>>(() => new Set<TabId>(['general']));
+  const [visited, setVisited] = useState<ReadonlySet<TabId>>(() => new Set<TabId>([initialTab]));
   const setTab = (next: TabId) => {
     setTabState(next);
     setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
   };
+  useEffect(() => {
+    if (!tabRequest) return;
+    setTabState(tabRequest.tab);
+    setVisited((prev) => (prev.has(tabRequest.tab) ? prev : new Set(prev).add(tabRequest.tab)));
+  }, [tabRequest]);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const { data: record } = useSiteSettings(communityId, initialSettings);
 

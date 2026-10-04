@@ -62,10 +62,51 @@ vi.mock('next/dynamic', () => ({
       : // The Settings view, as a stand-in exposing the one callback EditorRoot
         // gives it. Its content has its own suite (SettingsView.test.tsx).
         String(loader).includes('SettingsView')
-        ? ({ onOpenDocuments }: { onOpenDocuments: () => void }) => (
-            <button type="button" onClick={onOpenDocuments}>
-              Settings stand-in: open Documents
-            </button>
+        ? ({
+            onOpenDocuments,
+            tabRequest,
+          }: {
+            onOpenDocuments: () => void;
+            tabRequest?: { tab: string } | null;
+          }) => (
+            <>
+              <button type="button" onClick={onOpenDocuments}>
+                Settings stand-in: open Documents
+              </button>
+              <p>Requested tab: {tabRequest?.tab ?? 'none'}</p>
+            </>
+          )
+      : // The Help drawer, as a stand-in exposing its callbacks; its content
+        // has its own suite (HelpDrawer.test.tsx).
+        String(loader).includes('HelpDrawer')
+        ? ({
+            onClose,
+            onShowMe,
+          }: {
+            onClose: () => void;
+            onShowMe: (action: unknown) => void;
+          }) => (
+            <aside aria-label="Help">
+              <button type="button" onClick={onClose}>
+                Help stand-in: close
+              </button>
+              {[
+                { kind: 'tool', tool: 'design' },
+                { kind: 'settings', tab: 'search' },
+                { kind: 'publish' },
+              ].map((action) => (
+                <button
+                  key={action.kind}
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onShowMe(action);
+                  }}
+                >
+                  Show me: {action.kind}
+                </button>
+              ))}
+            </aside>
           )
       : String(loader).includes('PagesPanel')
       ? ({
@@ -554,7 +595,6 @@ describe('EditorRoot — tool panels', () => {
   it.each([
     ['Add', 'Add'],
     ['Design', /Design/],
-    ['Help', /Help/],
   ])('renders a real panel, not a placeholder, on the %s tab', async (_name, accessibleName) => {
     renderRoot();
 
@@ -615,6 +655,46 @@ describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
       'aria-expanded',
       'true',
     );
+  });
+});
+
+describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
+  function helpButtons() {
+    return screen.getAllByRole('button', { name: 'Help' });
+  }
+
+  it('opens from the top bar and closes from the rail, beside the open tool', async () => {
+    renderRoot();
+    await openTool('Pages');
+    const [topBar, rail] = helpButtons();
+    await userEvent.click(topBar!);
+    expect(screen.getByRole('complementary', { name: 'Help' })).toBeInTheDocument();
+    expect(screen.getByTestId('site-editor-tool-pages')).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(rail!);
+    expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
+  });
+
+  it('"Show me" for a tool closes the drawer and opens that tool on the page', async () => {
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(helpButtons()[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: tool' }));
+
+    expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('site-editor-tool-design')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('"Show me" for a Settings tab asks Settings for it, once', async () => {
+    renderRoot();
+    await userEvent.click(helpButtons()[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: settings' }));
+    expect(screen.getByText('Requested tab: search')).toBeInTheDocument();
+
+    // The PM's own switch afterwards opens Settings on its first tab again.
+    await userEvent.click(screen.getByRole('button', { name: 'Website' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByText('Requested tab: none')).toBeInTheDocument();
   });
 });
 

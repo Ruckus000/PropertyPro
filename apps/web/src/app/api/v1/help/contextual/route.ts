@@ -40,7 +40,11 @@ export const GET = withErrorHandler(
     // All contextual matches, capped defensively. The modal's search panel
     // lists everything (with show-more); 3 was an arbitrary truncation that
     // silently hid articles on over-matched routes (/documents matches 6).
-    const articles = getContextualArticles(query.path, reader, CONTEXTUAL_MATCH_CAP);
+    const articles = getContextualArticles(
+      query.path,
+      reader,
+      query.limit ?? CONTEXTUAL_MATCH_CAP,
+    );
     return articles.map((a) => ({
       title: a.title,
       description: a.description,

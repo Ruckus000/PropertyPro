@@ -119,6 +119,32 @@ describe('GET /api/v1/help/contextual', () => {
     );
   });
 
+  it('passes a requested limit through, for the editor Help drawer', async () => {
+    const res = await GET(
+      buildReq(
+        'http://localhost/api/v1/help/contextual?path=/pm/website-editor&communityId=42&limit=20',
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(getContextualArticlesMock).toHaveBeenCalledWith(
+      '/pm/website-editor',
+      expect.anything(),
+      20,
+    );
+  });
+
+  it.each(['0', '21', '2.5', 'all'])('rejects limit=%s', async (limit) => {
+    const res = await GET(
+      buildReq(
+        `http://localhost/api/v1/help/contextual?path=/pm/website-editor&communityId=42&limit=${limit}`,
+      ),
+    );
+
+    expect(res.status).toBe(400);
+    expect(getContextualArticlesMock).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 
