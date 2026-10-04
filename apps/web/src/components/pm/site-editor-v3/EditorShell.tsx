@@ -258,6 +258,7 @@ export function EditorShell({
             <>
               <aside
                 id={GUIDED_PANEL_ID}
+                data-tour="steps"
                 role="tabpanel"
                 aria-labelledby={`${GUIDED_PANEL_ID}-title`}
                 className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
@@ -338,6 +339,7 @@ export function EditorShell({
           {/* `relative` for the same reason as the tool panel's scroller. */}
           <div
             data-testid="canvas-scroller"
+            data-tour="page"
             className="relative min-w-0 flex-1 overflow-y-auto bg-surface-page"
           >
             {children}

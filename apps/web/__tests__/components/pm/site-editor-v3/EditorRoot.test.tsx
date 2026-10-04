@@ -134,17 +134,36 @@ vi.mock('next/dynamic', () => ({
               </button>
             </div>
           )
+      : String(loader).includes('EditorTour')
+        ? ({ onEnd }: { onEnd: () => void }) => (
+            <div role="dialog" aria-label="Quick tour">
+              <button type="button" onClick={onEnd}>
+                End tour
+              </button>
+            </div>
+          )
       : // The Help drawer, as a stand-in exposing its callbacks; its content
         // has its own suite (HelpDrawer.test.tsx).
         String(loader).includes('HelpDrawer')
         ? ({
             onClose,
             onShowMe,
+            onStartTour,
           }: {
             onClose: () => void;
             onShowMe: (action: unknown) => void;
+            onStartTour: () => void;
           }) => (
             <aside aria-label="Help">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onStartTour();
+                }}
+              >
+                Help stand-in: tour
+              </button>
               <button type="button" onClick={onClose}>
                 Help stand-in: close
               </button>
@@ -921,6 +940,73 @@ describe('EditorRoot — editing mode (v4 Phase 3)', () => {
     expect(toastInfo).toHaveBeenCalledWith('Guided mode: your checklist is on the left.');
     // The stub keeps the saved mode at Free, so the rail is still there to ask.
     expect(screen.getByTestId('site-editor-tool-pages')).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('EditorRoot — the tour (v4 Phase 3)', () => {
+  const saved = (tourDone: boolean) => ({
+    mode: null,
+    tourDone,
+    marked: [],
+    visited: [],
+  });
+
+  it('starts after the first-run choice, and saves that it ran when it ends', async () => {
+    prefs.value = saved(false);
+    const { rerender } = renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Guide me' }));
+    // Not while the chooser is still up: its focus trap would keep the card
+    // from ever receiving focus.
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    // The saved choice lands and the chooser goes.
+    prefs.value = { ...saved(false), mode: 'guided' };
+    rerender(rootElement({ hasPublishedSite: false }));
+    expect(screen.queryByRole('dialog', { name: 'Choose how to edit' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Quick tour' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'End tour' }));
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    expect(prefs.mutate).toHaveBeenCalledWith({ tourDone: true });
+  });
+
+  it('does not start by itself for a manager who has been through it', async () => {
+    prefs.value = saved(true);
+    renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Guide me' }));
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+  });
+
+  it('does not start by itself for a manager who never saw the chooser', () => {
+    prefs.value = { ...saved(false), mode: 'free' };
+    renderRoot();
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+  });
+
+  it('starts from Help, and a switch to Settings ends it', async () => {
+    prefs.value = { ...saved(true), mode: 'free' };
+    renderRoot();
+    await userEvent.click(screen.getAllByRole('button', { name: 'Help' })[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Help stand-in: tour' }));
+    expect(screen.getByRole('dialog', { name: 'Quick tour' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    // Already recorded for this manager: nothing more to save.
+    expect(prefs.mutate).not.toHaveBeenCalledWith({ tourDone: true });
+  });
+
+  it('is cut short by opening Publish', async () => {
+    prefs.value = saved(false);
+    queries.draft = [hero()];
+    queries.published = [];
+    const { rerender } = renderRoot({ hasPublishedSite: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Guide me' }));
+    prefs.value = { ...saved(false), mode: 'guided' };
+    rerender(rootElement({ hasPublishedSite: false }));
+    expect(screen.getByRole('dialog', { name: 'Quick tour' })).toBeInTheDocument();
+    await userEvent.click(publishButton());
+    expect(screen.queryByRole('dialog', { name: 'Quick tour' })).not.toBeInTheDocument();
+    expect(prefs.mutate).toHaveBeenCalledWith({ tourDone: true });
   });
 });
 

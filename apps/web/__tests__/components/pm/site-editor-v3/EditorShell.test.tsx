@@ -517,3 +517,21 @@ describe('EditorShell — the top bar mode switch', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Editing mode' })).not.toBeInTheDocument();
   });
 });
+
+// The tour finds its targets by `data-tour`; a renamed attribute would make
+// it skip steps silently, so every anchor is asserted in both modes.
+describe('EditorShell — tour anchors', () => {
+  it('has the Free-edit anchors', () => {
+    renderShell({ mode: 'free' });
+    for (const name of ['tools', 'page', 'publish']) {
+      expect(document.querySelector(`[data-tour="${name}"]`)).not.toBeNull();
+    }
+  });
+
+  it('has the Guided anchors', () => {
+    renderShell({ mode: 'guided' });
+    for (const name of ['steps', 'page', 'publish']) {
+      expect(document.querySelector(`[data-tour="${name}"]`)).not.toBeNull();
+    }
+  });
+});
