@@ -142,7 +142,12 @@ describeDb('/api/v1/occupants (integration)', () => {
 
       const m = state.dbModule;
       const audits = await state.db
-        .select({ action: m.complianceAuditLog.action, oldValues: m.complianceAuditLog.oldValues, newValues: m.complianceAuditLog.newValues })
+        .select({
+          action: m.complianceAuditLog.action,
+          oldValues: m.complianceAuditLog.oldValues,
+          newValues: m.complianceAuditLog.newValues,
+          metadata: m.complianceAuditLog.metadata,
+        })
         .from(m.complianceAuditLog)
         .where(
           and(
@@ -152,8 +157,55 @@ describeDb('/api/v1/occupants (integration)', () => {
           ),
         );
       const update = audits.find((a) => a.action === 'update');
-      expect(update).toMatchObject({ oldValues: { phone: null }, newValues: { phone: '555-0101' } });
+      // The field is named; its value is not (the log is append-only — see the next test).
+      expect(update).toMatchObject({ oldValues: {}, newValues: {}, metadata: { changedFields: ['phone'] } });
       expect(audits.filter((a) => a.action === 'update')).toHaveLength(1);
+    });
+
+    it('remove erases the row, and no audit entry ever held their name, email or phone', async () => {
+      const kim = await dataOf<OccupantJson>(
+        await create({ fullName: 'Zelda Quill', email: 'zelda.quill@example.com', phone: '555-0199', isOwnerHousehold: true }),
+      );
+      const renamed = await send(routes.PATCH, 'PATCH', {
+        communityId,
+        id: kim.id,
+        fullName: 'Zelda Quillon',
+        email: 'zq@example.com',
+        phone: '555-0177',
+        unitId: unitB,
+        expectedUpdatedAt: kim.updatedAt,
+      });
+      expect(renamed.status).toBe(200);
+      expect((await send(routes.DELETE, 'DELETE', { communityId, id: kim.id })).status).toBe(200);
+
+      const m = state.dbModule;
+      // Unscoped read: a soft-deleted row would still be here.
+      expect(await state.db.select({ id: m.unitOccupants.id }).from(m.unitOccupants).where(eq(m.unitOccupants.id, kim.id))).toEqual([]);
+
+      const audits = await state.db
+        .select({
+          action: m.complianceAuditLog.action,
+          oldValues: m.complianceAuditLog.oldValues,
+          newValues: m.complianceAuditLog.newValues,
+          metadata: m.complianceAuditLog.metadata,
+        })
+        .from(m.complianceAuditLog)
+        .where(
+          and(
+            eq(m.complianceAuditLog.communityId, communityId),
+            eq(m.complianceAuditLog.resourceType, 'unit_occupant'),
+            eq(m.complianceAuditLog.resourceId, String(kim.id)),
+          ),
+        );
+      expect(audits.map((a) => a.action).sort()).toEqual(['create', 'delete', 'update']);
+      const logged = JSON.stringify(audits).toLowerCase();
+      for (const pii of ['zelda', 'quill', 'zq@', '555-01']) expect(logged).not.toContain(pii);
+      // What it does keep: which fields changed, and the (non-personal) unit move.
+      expect(audits.find((a) => a.action === 'update')).toMatchObject({
+        oldValues: { unitId: unitA },
+        newValues: { unitId: unitB },
+        metadata: { changedFields: expect.arrayContaining(['fullName', 'email', 'phone', 'unitId']) },
+      });
     });
 
     it('moves between units of its own community only', async () => {
