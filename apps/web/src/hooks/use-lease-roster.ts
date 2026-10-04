@@ -16,7 +16,7 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import { useResidentList, LEASE_KEYS } from '@/hooks/use-leases';
-import type { RosterLease, RosterOffer, RosterUnit } from '@/lib/leases/roster-model';
+import { liveLeaseIds, type RosterLease, type RosterOffer, type RosterUnit } from '@/lib/leases/roster-model';
 
 export interface LeaseSettings {
   alertWindows: number[];
@@ -40,7 +40,16 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
 }
 
-export function useLeaseRosterData(communityId: number) {
+/** Ids per offers request; the server refuses more than 500. */
+const OFFER_ID_CHUNK = 200;
+
+/**
+ * @param today the community's date (YYYY-MM-DD). Offers are fetched only for
+ *   leases that are current or upcoming on it — the roster shows offers on
+ *   those alone, and ended leases stay `active` in v3, so asking for every
+ *   active lease grows without bound.
+ */
+export function useLeaseRosterData(communityId: number, today: string) {
   const leasesQuery = useQuery({
     queryKey: ROSTER_KEYS.leases(communityId),
     queryFn: () => requestJson<RosterLease[]>(`/api/v1/leases?communityId=${communityId}`),
@@ -58,21 +67,21 @@ export function useLeaseRosterData(communityId: number) {
     enabled: communityId > 0,
   });
 
-  // Offers only matter for active leases; ask for exactly those.
-  const activeIds = useMemo(
-    () =>
-      (leasesQuery.data ?? [])
-        .filter((l) => l.status === 'active')
-        .map((l) => l.id)
-        .sort((a, b) => a - b)
-        .join(','),
-    [leasesQuery.data],
-  );
+  const liveIds = useMemo(() => liveLeaseIds(leasesQuery.data ?? [], today).join(','), [leasesQuery.data, today]);
   const offersQuery = useQuery({
-    queryKey: ROSTER_KEYS.offers(communityId, activeIds),
-    queryFn: () =>
-      requestJson<RosterOffer[]>(`/api/v1/leases/offers?communityId=${communityId}&leaseIds=${activeIds}`),
-    enabled: communityId > 0 && activeIds.length > 0,
+    queryKey: ROSTER_KEYS.offers(communityId, liveIds),
+    queryFn: async () => {
+      const ids = liveIds.split(',');
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += OFFER_ID_CHUNK) chunks.push(ids.slice(i, i + OFFER_ID_CHUNK));
+      const pages = await Promise.all(
+        chunks.map((chunk) =>
+          requestJson<RosterOffer[]>(`/api/v1/leases/offers?communityId=${communityId}&leaseIds=${chunk.join(',')}`),
+        ),
+      );
+      return pages.flat();
+    },
+    enabled: communityId > 0 && liveIds.length > 0,
   });
 
   const directory = useMemo(

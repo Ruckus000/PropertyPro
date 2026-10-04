@@ -172,7 +172,9 @@ export function getExpiringLeases(
       if (lease.status !== 'active') return false;
       if (lease.endDate === null) return false;
       // Leases v3: a lease whose renewal is already signed is not expiring —
-      // the current lease stays `active` until the renewal starts.
+      // it stays `active` until the renewal starts. Checked here when the
+      // caller passes the whole chain; the leases GET excludes them in SQL
+      // (its rows hold only leases ending inside the window).
       if (allLeases.some((l) => l.previousLeaseId === lease.id && l.status === 'active')) return false;
       return isLeaseExpiringWithinDays(lease.endDate, now, daysWindow);
     })

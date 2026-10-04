@@ -15,7 +15,7 @@ import type { CommunityType } from '@propertypro/shared';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import {
   createLeaseForCommunity,
-  deleteLeaseResidentsForLease,
+  discardFailedLease,
   findLeaseByIdempotencyKey,
   getCommunityLeaseSettings,
   getLeaseById,
@@ -26,7 +26,6 @@ import {
   listLeaseResidentsForLeases,
   listLeasesForCommunity,
   listOccupantsByIds,
-  softDeleteLeaseForCommunity,
   type LeaseRow,
 } from '@/lib/services/lease-service';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
@@ -36,7 +35,7 @@ import {
   ensureRenewalContinuity,
   isUniqueViolation,
   isZeroRent,
-  residentUserIdsFor,
+  partyKeysFor,
   validateLeaseDateWindow,
   type LeaseLikeRow,
 } from './lease-rules';
@@ -210,12 +209,17 @@ export async function createLease(
     ensureRenewalContinuity(
       {
         unitId: payload.unitId,
-        residentUserIds: [...seenUsers],
+        // Users and household members alike: a lease of household members
+        // only renews like any other.
+        partyKeys: [
+          ...[...seenUsers].map((id) => `u:${id}`),
+          ...residentInputs.flatMap((r) => ('occupantId' in r ? [`o:${r.occupantId}`] : [])),
+        ],
         startDate: payload.startDate,
         previousLeaseId,
       },
       previousLease,
-      residentUserIdsFor(previousLease, residentRows),
+      partyKeysFor(previousLease, residentRows),
     );
     // Leases v3: the previous lease is deliberately NOT marked 'renewed'
     // here. It stays `active` — and current — until this renewal starts.
@@ -310,8 +314,7 @@ export async function createLease(
       });
     }
   } catch (err) {
-    await deleteLeaseResidentsForLease(communityId, leaseId);
-    await softDeleteLeaseForCommunity(communityId, leaseId);
+    await discardFailedLease(communityId, leaseId);
     await rollbackOccupants();
     throw err;
   }

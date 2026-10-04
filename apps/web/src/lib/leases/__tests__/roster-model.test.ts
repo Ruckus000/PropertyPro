@@ -4,6 +4,7 @@ import {
   buildTiles,
   defaultStartFor,
   filterAndGroup,
+  liveLeaseIds,
   matchesSearch,
   pastLeases,
   type RosterLease,
@@ -137,5 +138,22 @@ describe('pastLeases and defaults', () => {
     expect(defaultStartFor(models[0]!, TODAY)).toBe('2026-11-01');
     const vacant = roster([], [unit(2)]);
     expect(defaultStartFor(vacant[0]!, TODAY)).toBe('2026-10-01');
+  });
+});
+
+describe('liveLeaseIds (which leases the roster asks offers for)', () => {
+  it('keeps current and upcoming leases; drops a renewed-and-replaced, a moved-out and a cancelled one', () => {
+    const ids = liveLeaseIds(
+      [
+        lease(1, 1, { startDate: '2025-09-01', endDate: '2026-08-31' }),
+        lease(2, 1, { startDate: '2026-09-01', endDate: '2027-08-31', previousLeaseId: 1 }),
+        lease(3, 2, { moveOutOn: '2026-09-15', endVia: 'early' }),
+        lease(4, 3),
+        lease(5, 3, { startDate: '2027-07-01', endDate: '2028-06-30', previousLeaseId: 4 }),
+        lease(6, 4, { status: 'cancelled' }),
+      ],
+      TODAY,
+    );
+    expect(ids).toEqual([2, 4, 5]);
   });
 });

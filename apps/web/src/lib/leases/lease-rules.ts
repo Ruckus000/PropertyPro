@@ -101,9 +101,9 @@ export function ensureNoUnitLeaseOverlap(
 }
 
 export function ensureRenewalContinuity(
-  candidate: { unitId: number; residentUserIds: string[]; startDate: string; previousLeaseId: number },
+  candidate: { unitId: number; partyKeys: string[]; startDate: string; previousLeaseId: number },
   previousLease: LeaseLikeRow,
-  previousResidentUserIds: string[],
+  previousPartyKeys: string[],
 ): void {
   if (previousLease.unitId !== candidate.unitId) {
     throw new ValidationError('Renewal lease must use the same unit as the previous lease');
@@ -111,7 +111,7 @@ export function ensureRenewalContinuity(
   // Leases v3 (E3): residents may change at renewal, but at least one must
   // carry over — otherwise this is a new lease, not a renewal. With a single
   // resident on each side this is the pre-v3 "same resident" rule exactly.
-  const carriesOver = candidate.residentUserIds.some((id) => previousResidentUserIds.includes(id));
+  const carriesOver = candidate.partyKeys.some((key) => previousPartyKeys.includes(key));
   if (!carriesOver) {
     throw new ValidationError('Renewal lease must use the same resident as the previous lease');
   }
@@ -128,15 +128,20 @@ export function ensureRenewalContinuity(
 }
 
 /** User ids currently on a lease: lease_residents rows, falling back to the legacy column. */
-export function residentUserIdsFor(
+/**
+ * Everyone currently on a lease, as party keys: `u:<userId>` for a user,
+ * `o:<occupantId>` for a household member with no login. The legacy
+ * `resident_id` counts too, for leases from before lease_residents.
+ */
+export function partyKeysFor(
   lease: { id: number; residentId: string | null },
   residentRows: LeaseResidentRow[],
 ): string[] {
-  const ids = residentRows
-    .filter((r) => r.leaseId === lease.id && r.removedOn == null && r.userId)
-    .map((r) => r.userId as string);
-  if (lease.residentId && !ids.includes(lease.residentId)) ids.push(lease.residentId);
-  return ids;
+  const keys = residentRows
+    .filter((r) => r.leaseId === lease.id && r.removedOn == null)
+    .flatMap((r) => (r.userId ? [`u:${r.userId}`] : r.occupantId != null ? [`o:${r.occupantId}`] : []));
+  if (lease.residentId && !keys.includes(`u:${lease.residentId}`)) keys.push(`u:${lease.residentId}`);
+  return keys;
 }
 
 export function isZeroRent(amount: string | null | undefined): boolean {

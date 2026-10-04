@@ -97,6 +97,7 @@ import {
   updateLeaseForCommunity,
   updateLeaseIfVersion,
   updateLeaseDeposit,
+  withdrawOpenOffers,
   type LeaseDepositRow,
   type LeaseResidentRow,
   type LeaseOccupantRow,
@@ -108,7 +109,7 @@ import {
   ensureNoUnpaidObligations,
   ensureRenewalContinuity,
   isZeroRent,
-  residentUserIdsFor,
+  partyKeysFor,
   validateLeaseDateWindow,
   type LeaseLikeRow,
 } from '@/lib/leases/lease-rules';
@@ -522,7 +523,7 @@ export const PATCH = withErrorHandler(
       ensureRenewalContinuity(
         {
           unitId: renewalLease.unitId,
-          residentUserIds: residentUserIdsFor(renewalLease, residentRows),
+          partyKeys: partyKeysFor(renewalLease, residentRows),
           startDate: renewalLease.startDate,
           previousLeaseId: id,
         },
@@ -535,7 +536,7 @@ export const PATCH = withErrorHandler(
           status: (existing['status'] as string) ?? 'active',
           previousLeaseId: (existing['previousLeaseId'] as number | null) ?? null,
         },
-        residentUserIdsFor({ id, residentId: (existing['residentId'] as string | null) ?? null }, residentRows),
+        partyKeysFor({ id, residentId: (existing['residentId'] as string | null) ?? null }, residentRows),
       );
     }
 
@@ -574,6 +575,15 @@ export const PATCH = withErrorHandler(
       oldValues,
       newValues,
     });
+
+    // A lease that is cancelled, terminated, or has a move-out scheduled
+    // (notice, early end, transfer) can no longer be renewed: an open offer
+    // on it would otherwise still sign. Same rule as sending an offer.
+    const endVia = fields.endVia ?? existing['endVia'];
+    const leaving = !!fields.moveOutOn && endVia !== 'expiry' && endVia !== 'declined';
+    if (fields.status === 'cancelled' || fields.status === 'terminated' || leaving) {
+      await withdrawOpenOffers(communityId, id);
+    }
 
     // Best-effort: auto-create the move-out checklist when the lease is
     // terminated (pre-v3) or when a move-out is first scheduled (v3 never
@@ -637,6 +647,7 @@ export const DELETE = withErrorHandler(
     await ensureNoUnpaidObligations(communityId, id, 'delete this lease');
 
     await softDeleteLeaseForCommunity(communityId, id);
+    await withdrawOpenOffers(communityId, id);
 
     await logAuditEvent({
       userId: actorUserId,

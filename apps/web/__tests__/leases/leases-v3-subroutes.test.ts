@@ -253,6 +253,37 @@ describe('offers', () => {
     expect(leaseUpdates).toHaveLength(0);
   });
 
+  it.each([
+    ['the lease was cancelled', { status: 'cancelled' }],
+    ['an early end was recorded', { moveOutOn: '2026-11-15', endVia: 'early' }],
+    ['a transfer was recorded', { moveOutOn: '2026-11-15', endVia: 'transfer' }],
+  ])('signing is refused (409) once %s, and nothing is claimed or created', async (_label, change) => {
+    const offer = { id: 300, leaseId: 1, stage: 'accepted', offerRent: '1600.00', startDate: '2027-01-01', termMonths: 12, proposedResidents: null };
+    const client = seed({ leases: [{ ...currentLease, ...change }], leaseRenewalOffers: [offer], leaseResidents: [residentRow] });
+    const res = await offers.PATCH(req('PATCH', '/api/v1/leases/offers', { communityId: 42, offerId: 300, action: 'sign' }));
+    expect(res.status).toBe(409);
+    expect(client.insert).not.toHaveBeenCalled();
+    expect(client.update).not.toHaveBeenCalled();
+  });
+
+  it('accepting is refused once a renewal exists another way', async () => {
+    const offer = { id: 300, leaseId: 1, stage: 'offer_sent', offerRent: '1600.00', startDate: '2027-01-01', termMonths: 12 };
+    const client = seed({
+      leases: [currentLease, { ...currentLease, id: 2, startDate: '2027-01-01', endDate: '2027-12-31', previousLeaseId: 1 }],
+      leaseRenewalOffers: [offer],
+    });
+    const res = await offers.PATCH(req('PATCH', '/api/v1/leases/offers', { communityId: 42, offerId: 300, action: 'accept' }));
+    expect(res.status).toBe(409);
+    expect(client.update).not.toHaveBeenCalled();
+  });
+
+  it('GET refuses more than 500 lease ids instead of silently dropping some', async () => {
+    seed({});
+    const ids = Array.from({ length: 501 }, (_, i) => i + 1).join(',');
+    const res = await offers.GET(new NextRequest(`http://localhost:3000/api/v1/leases/offers?communityId=42&leaseIds=${ids}`));
+    expect(res.status).toBe(400);
+  });
+
   it('a sign that loses the race to another response is a 409 and creates nothing', async () => {
     const offer = { id: 300, leaseId: 1, stage: 'offer_sent', offerRent: '1600.00', startDate: '2027-01-01', termMonths: 12 };
     const client = seed({ leases: [currentLease], leaseRenewalOffers: [offer] });
@@ -278,6 +309,24 @@ describe('transfer', () => {
     expect(client.insert).toHaveBeenCalledWith(t.leaseDeposits, expect.objectContaining({ carriedFromDepositId: 50, amount: '1500.00', noticeSentOn: '2026-01-10' }));
     expect(client.update).toHaveBeenCalledWith(t.leases, expect.objectContaining({ moveOutOn: '2026-10-31', endVia: 'transfer' }), expect.anything());
     expect(client.update).toHaveBeenCalledWith(t.leaseDeposits, expect.objectContaining({ disposition: 'carried_to_transfer' }), expect.anything());
+  });
+
+  it('refuses while the lease has a signed renewal on the old unit (409), writing nothing', async () => {
+    const client = seed({
+      leases: [currentLease, { ...currentLease, id: 2, startDate: '2027-01-01', endDate: '2027-12-31', previousLeaseId: 1 }],
+      leaseResidents: [residentRow],
+    });
+    const res = await transfer.POST(req('POST', '/api/v1/leases/transfer', body));
+    expect(res.status).toBe(409);
+    expect(client.insert).not.toHaveBeenCalled();
+    expect(client.update).not.toHaveBeenCalled();
+  });
+
+  it('withdraws an open renewal offer on the old lease', async () => {
+    const client = seed({ leases: [currentLease], leaseResidents: [residentRow], leaseDeposits: [{ id: 50, leaseId: 1, amount: '1500.00', disposition: null }] });
+    const res = await transfer.POST(req('POST', '/api/v1/leases/transfer', body));
+    expect(res.status).toBe(200);
+    expect(client.update).toHaveBeenCalledWith(t.leaseRenewalOffers, expect.objectContaining({ stage: 'withdrawn' }), expect.anything());
   });
 
   it('a changed deposit amount restarts the §83.49 notice', async () => {

@@ -33,6 +33,7 @@ import { isUniqueViolation, isZeroRent } from '@/lib/leases/lease-rules';
 import {
   getCommunityLeaseSettings,
   getLeaseById,
+  getRenewalOfLease,
   getRenewalOffer,
   insertRenewalOffer,
   listLeaseDeposits,
@@ -94,6 +95,8 @@ async function storeProposedResidents(
   return { stored, createdOccupantIds };
 }
 
+const OFFER_LOOKUP_MAX_IDS = 500;
+
 function today(timezone: string | undefined): string {
   return utcDateToWallClockValue(new Date(), timezone ?? 'America/New_York').slice(0, 10);
 }
@@ -115,8 +118,12 @@ export const GET = withErrorHandler(
     const leaseIds = (new URL(req.url).searchParams.get('leaseIds') ?? '')
       .split(',')
       .map(Number)
-      .filter((n) => Number.isInteger(n) && n > 0)
-      .slice(0, 500);
+      .filter((n) => Number.isInteger(n) && n > 0);
+    // Refuse rather than truncate: dropping ids silently showed units with an
+    // open offer as having none. The roster asks in chunks well under this.
+    if (leaseIds.length > OFFER_LOOKUP_MAX_IDS) {
+      throw new ValidationError(`Ask for at most ${OFFER_LOOKUP_MAX_IDS} lease ids at a time`);
+    }
     return listRenewalOffers(communityId, leaseIds);
   }),
 );
@@ -227,10 +234,25 @@ export const PATCH = withErrorHandler(
     const respondedOn = body.respondedOn ?? today(membership.timezone);
     const lost = () =>
       new ConflictError('This offer changed since you opened it. Reload to see the latest version.');
+    // The lease can change while an offer is open (cancelled, an early end, a
+    // transfer, a renewal recorded another way). Accepting or signing must
+    // re-check it, with the same rule as sending an offer.
+    const assertStillRenewable = async () => {
+      if (lease['status'] !== 'active') {
+        throw new ConflictError('This lease is no longer active, so it cannot be renewed. Withdraw the offer.');
+      }
+      if (lease['moveOutOn'] && lease['endVia'] !== 'expiry') {
+        throw new ConflictError('This resident is moving out. Cancel the move-out before renewing.');
+      }
+      if (await getRenewalOfLease(communityId, offer.leaseId)) {
+        throw new ConflictError('This lease already has a renewal. Withdraw the offer.');
+      }
+    };
 
     let updated;
     switch (body.action) {
       case 'accept':
+        await assertStillRenewable();
         updated = await updateRenewalOfferFromStage(communityId, offer.id, ['offer_sent'], {
           stage: 'accepted',
           respondedOn,
@@ -275,6 +297,7 @@ export const PATCH = withErrorHandler(
       }
 
       case 'sign': {
+        await assertStillRenewable();
         // Claim the offer first so two concurrent signs cannot both create a
         // lease; roll the claim back if creating the lease fails.
         const claimed = await updateRenewalOfferFromStage(communityId, offer.id, ['offer_sent', 'accepted'], {

@@ -21,7 +21,7 @@ import { runRoute } from '@/lib/api/run-route';
 import { logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
@@ -30,12 +30,14 @@ import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 import { createLease, type LeaseResidentInput } from '@/lib/leases/create-lease';
 import { ensureNoUnpaidObligations, isZeroRent, startMoveOutChecklist } from '@/lib/leases/lease-rules';
 import {
+  discardFailedLease,
   getLeaseById,
+  getRenewalOfLease,
   listLeaseDeposits,
   listLeaseResidentsForLeases,
-  softDeleteLeaseForCommunity,
   updateLeaseDeposit,
   updateLeaseForCommunity,
+  withdrawOpenOffers,
 } from '@/lib/services/lease-service';
 import { leaseTransferPostContract } from './contract';
 
@@ -57,6 +59,14 @@ export const POST = withErrorHandler(
     }
     if (from['moveOutOn']) {
       throw new ValidationError('This resident is already moving out. Cancel that first.');
+    }
+    // A signed renewal stays on the old unit and would start after the
+    // resident has moved: they would hold two current leases.
+    const renewal = await getRenewalOfLease(communityId, body.fromLeaseId);
+    if (renewal) {
+      throw new ConflictError('This lease has a signed renewal. Cancel the renewal before transferring.', {
+        renewalLeaseId: renewal['id'],
+      });
     }
     if (from['unitId'] === body.toUnitId) {
       throw new ValidationError('Pick a different unit to transfer to');
@@ -131,7 +141,7 @@ export const POST = withErrorHandler(
         });
       }
     } catch (err) {
-      await softDeleteLeaseForCommunity(communityId, newLeaseId);
+      await discardFailedLease(communityId, newLeaseId);
       await updateLeaseForCommunity(communityId, body.fromLeaseId, {
         moveOutOn: null,
         endVia: null,
@@ -140,6 +150,7 @@ export const POST = withErrorHandler(
       throw err;
     }
 
+    await withdrawOpenOffers(communityId, body.fromLeaseId);
     await startMoveOutChecklist(communityId, from, actorUserId, membership.communityType);
 
     await logAuditEvent({

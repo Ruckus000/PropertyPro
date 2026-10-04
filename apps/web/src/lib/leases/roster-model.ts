@@ -10,6 +10,7 @@ import {
   deriveUnitState,
   daysBetween,
   addDays,
+  leasePhase,
   type LeaseStateInput,
   type UnitState,
   type UrgencyTier,
@@ -246,6 +247,24 @@ function endSortKey(s: UnitState): number {
   if (s.daysUntil !== null) return s.daysUntil;
   if (s.kind === 'month_to_month') return 99_999;
   return 999_999;
+}
+
+/**
+ * The leases whose renewal offers the roster can show: current or upcoming on
+ * `today`. In v3 a renewed or moved-out lease keeps status `active`, so
+ * "every active lease" grows with each renewal cycle; this stays at about two
+ * per unit.
+ */
+export function liveLeaseIds(leases: RosterLease[], today: string): number[] {
+  const byUnit = new Map<number, RosterLease[]>();
+  for (const l of leases) byUnit.set(l.unitId, [...(byUnit.get(l.unitId) ?? []), l]);
+  return leases
+    .filter((l) => {
+      const phase = leasePhase(l, byUnit.get(l.unitId) ?? [], today);
+      return phase === 'current' || phase === 'upcoming';
+    })
+    .map((l) => l.id)
+    .sort((a, b) => a - b);
 }
 
 export function groupKeyFor(unit: RosterUnit): string {

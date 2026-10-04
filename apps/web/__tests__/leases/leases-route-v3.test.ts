@@ -24,6 +24,7 @@ const {
   leaseResidentsTableMock,
   unitOccupantsTableMock,
   leaseDepositsTableMock,
+  leaseRenewalOffersTableMock,
   rentObligationsTableMock,
   communitiesTableMock,
   requireAuthenticatedUserIdMock,
@@ -39,6 +40,7 @@ const {
   leaseResidentsTableMock: { id: Symbol('lease_residents.id') },
   unitOccupantsTableMock: { id: Symbol('unit_occupants.id') },
   leaseDepositsTableMock: { id: Symbol('lease_deposits.id') },
+  leaseRenewalOffersTableMock: { id: Symbol('lease_renewal_offers.id') },
   rentObligationsTableMock: { id: Symbol('rent_obligations.id') },
   communitiesTableMock: { id: Symbol('communities.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -54,6 +56,7 @@ vi.mock('@propertypro/db', () => ({
   leaseResidents: leaseResidentsTableMock,
   unitOccupants: unitOccupantsTableMock,
   leaseDeposits: leaseDepositsTableMock,
+  leaseRenewalOffers: leaseRenewalOffersTableMock,
   rentObligations: rentObligationsTableMock,
   communities: communitiesTableMock,
 }));
@@ -347,6 +350,33 @@ describe('POST — residents, household members and rent rules', () => {
     expect(res.status).toBe(500);
     expect(client.softDelete).toHaveBeenCalledWith(leasesTableMock, expect.anything());
   });
+
+  it('a rolled-back create clears its idempotency key, so the retry with the same key can succeed', async () => {
+    const client = seed({});
+    client.insert = vi.fn(async (table: unknown, data: unknown) => {
+      if (table === leasesTableMock) return [{ id: 900, ...(data as object) }];
+      throw new Error('lease_residents insert failed');
+    }) as never;
+    await POST(jsonReq('POST', { ...base, residentId: ACTOR, idempotencyKey: 'k-retry-123' }));
+    // The hidden row keeps no key (the unique index ignores deleted_at) and no residents or deposits.
+    expect(client.update).toHaveBeenCalledWith(leasesTableMock, { idempotencyKey: null }, expect.anything());
+    expect(client.hardDelete).toHaveBeenCalledWith(leaseResidentsTableMock, expect.anything());
+    expect(client.hardDelete).toHaveBeenCalledWith(leaseDepositsTableMock, expect.anything());
+  });
+
+  it('a lease of household members only can be renewed (the household member carries over)', async () => {
+    const client = seed({
+      communities: [{ communitySettings: { leasesAllowResidentsWithoutEmail: true } }],
+      leases: [lease({ id: 5, residentId: null, startDate: '2025-11-01', endDate: '2026-10-31' })],
+      leaseResidents: [{ id: 1, leaseId: 5, userId: null, occupantId: 7, isPrimary: true, addedOn: '2025-11-01', removedOn: null }],
+      unitOccupants: [{ id: 7, unitId: 10, fullName: 'Paper Only', email: null, phone: null }],
+    });
+    const res = await POST(jsonReq('POST', {
+      ...base, isRenewal: true, previousLeaseId: 5, residents: [{ occupantId: 7, isPrimary: true }],
+    }));
+    expect(res.status).toBe(200);
+    expect(client.insert).toHaveBeenCalledWith(leasesTableMock, expect.objectContaining({ previousLeaseId: 5, residentId: null }));
+  });
 });
 
 describe('PATCH — concurrency, cancel and move-out', () => {
@@ -401,6 +431,8 @@ describe('PATCH — concurrency, cancel and move-out', () => {
     const [, data] = client.update.mock.calls[0]!;
     expect(data).toMatchObject({ moveOutOn: '2026-10-31', endVia: 'early' });
     expect(data).not.toHaveProperty('status');
+    // An open renewal offer can no longer be signed for a resident who is leaving.
+    expect(client.update).toHaveBeenCalledWith(leaseRenewalOffersTableMock, expect.objectContaining({ stage: 'withdrawn' }), expect.anything());
   });
 
   it('scheduling a move-out starts the move-out checklist once (not again on later edits)', async () => {

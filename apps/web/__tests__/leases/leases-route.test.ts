@@ -25,6 +25,7 @@ const {
   leaseResidentsTableMock,
   unitOccupantsTableMock,
   leaseDepositsTableMock,
+  leaseRenewalOffersTableMock,
   rentObligationsTableMock,
   communitiesTableMock,
   requireAuthenticatedUserIdMock,
@@ -47,6 +48,7 @@ const {
   leaseResidentsTableMock: { id: Symbol('lease_residents.id') },
   unitOccupantsTableMock: { id: Symbol('unit_occupants.id') },
   leaseDepositsTableMock: { id: Symbol('lease_deposits.id') },
+  leaseRenewalOffersTableMock: { id: Symbol('lease_renewal_offers.id') },
   rentObligationsTableMock: { id: Symbol('rent_obligations.id') },
   communitiesTableMock: { id: Symbol('communities.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -68,6 +70,7 @@ vi.mock('@propertypro/db', () => ({
   leaseResidents: leaseResidentsTableMock,
   unitOccupants: unitOccupantsTableMock,
   leaseDeposits: leaseDepositsTableMock,
+  leaseRenewalOffers: leaseRenewalOffersTableMock,
   rentObligations: rentObligationsTableMock,
   communities: communitiesTableMock,
 }));
@@ -80,7 +83,7 @@ type PredicateNode =
   | { op: 'eq' | 'lte'; col: string; val: unknown }
   | { op: 'isNotNull' | 'isNull'; col: string }
   | { op: 'inArray'; col: string; vals: unknown[] }
-  | { op: 'sql'; values: unknown[] }
+  | { op: 'sql'; text: string; values: unknown[] }
   | { op: 'and' | 'or'; args: PredicateNode[] };
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -89,15 +92,21 @@ vi.mock('@propertypro/db/filters', () => ({
   isNotNull: (col: string) => ({ op: 'isNotNull', col }),
   isNull: (col: string) => ({ op: 'isNull', col }),
   inArray: (col: string, vals: unknown[]) => ({ op: 'inArray', col, vals }),
-  // Leases v3: the co-tenant half of the party scope is a lease_residents
-  // subquery. No fixture here has lease_residents rows, so it matches nothing.
-  sql: (_strings: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', values }),
+  // Leases v3 raw fragments: the co-tenant half of the party scope (a
+  // lease_residents subquery — no fixture here has those rows, so it matches
+  // nothing) and the expiring list's "no signed renewal" NOT EXISTS.
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', text: strings.join('?'), values }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
   or: (...args: unknown[]) => ({ op: 'or', args }),
   desc: (col: string) => ({ dir: 'desc', col }),
+  asc: (col: string) => ({ dir: 'asc', col }),
 }));
 
-function evalPredicate(node: PredicateNode | undefined, row: Record<string, unknown>): boolean {
+function evalPredicate(
+  node: PredicateNode | undefined,
+  row: Record<string, unknown>,
+  rows: Array<Record<string, unknown>> = [],
+): boolean {
   if (!node) return true;
   switch (node.op) {
     case 'eq':
@@ -111,11 +120,14 @@ function evalPredicate(node: PredicateNode | undefined, row: Record<string, unkn
     case 'inArray':
       return node.vals.includes(row[node.col]);
     case 'sql':
+      if (node.text.includes('previous_lease_id')) {
+        return !rows.some((r) => r['previousLeaseId'] === row['id'] && r['status'] === 'active');
+      }
       return false;
     case 'and':
-      return node.args.every((arg) => evalPredicate(arg, row));
+      return node.args.every((arg) => evalPredicate(arg, row, rows));
     case 'or':
-      return node.args.some((arg) => evalPredicate(arg, row));
+      return node.args.some((arg) => evalPredicate(arg, row, rows));
   }
 }
 
@@ -172,9 +184,8 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
           return queryImpl(table)
             .then((rows: unknown[]) => {
               if (table !== leasesTableMock) return rows;
-              let out = (rows as Array<Record<string, unknown>>).filter((row) =>
-                evalPredicate(where, row),
-              );
+              const all = rows as Array<Record<string, unknown>>;
+              let out = all.filter((row) => evalPredicate(where, row, all));
               if (order !== undefined) {
                 const col = typeof order === 'string' ? order : order.col;
                 const sign = typeof order !== 'string' && order.dir === 'desc' ? -1 : 1;
@@ -1445,7 +1456,7 @@ describe('p2-37 leases route', () => {
           args: [
             { op: 'eq', col: 'residentId', val: ACTOR },
             // co-tenants: the lease_residents subquery, keyed on the same actor
-            { op: 'sql', values: ['id', 42, ACTOR] },
+            { op: 'sql', text: expect.stringContaining('lease_residents'), values: ['id', 42, ACTOR] },
           ],
         },
       ]);
@@ -1542,6 +1553,8 @@ describe('p2-37 leases route', () => {
           { op: 'eq', col: 'status', val: 'active' },
           { op: 'isNotNull', col: 'endDate' },
           { op: 'lte', col: 'endDate', val: '2026-04-09' },
+          // Leases v3: a lease whose renewal is signed is not expiring.
+          expect.objectContaining({ op: 'sql', text: expect.stringContaining('previous_lease_id') }),
         ]);
       } finally {
         vi.useRealTimers();
@@ -1649,7 +1662,7 @@ describe('p2-37 leases route', () => {
           args: [
             { op: 'eq', col: 'residentId', val: ACTOR },
             // co-tenants: the lease_residents subquery, keyed on the same actor
-            { op: 'sql', values: ['id', 42, ACTOR] },
+            { op: 'sql', text: expect.stringContaining('lease_residents'), values: ['id', 42, ACTOR] },
           ],
         },
       ]);

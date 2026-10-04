@@ -17,7 +17,7 @@ import {
   units,
   userRoles,
 } from '@propertypro/db';
-import { and, desc, eq, inArray, isNotNull, lte, or, sql, type SQL } from '@propertypro/db/filters';
+import { and, asc, desc, eq, inArray, isNotNull, lte, or, sql, type SQL } from '@propertypro/db/filters';
 
 export interface LeaseRow {
   [key: string]: unknown;
@@ -106,6 +106,14 @@ function buildLeaseListWhere(communityId: number, filters: LeaseListFilters): SQ
     clauses.push(eq(leases.status, 'active'));
     clauses.push(isNotNull(leases.endDate));
     clauses.push(lte(leases.endDate, filters.activeEndingOnOrBefore));
+    // A lease whose renewal is signed is not expiring: it stays `active`
+    // until the renewal starts, but the renewal ends a term later, so it is
+    // never in this window's rows for a JS check to find. Same rule as
+    // leaseHasActiveRenewalSql in packages/db (inline here: the route tests
+    // mock @propertypro/db).
+    clauses.push(
+      sql`NOT EXISTS (SELECT 1 FROM leases succ WHERE succ.previous_lease_id = ${leases.id} AND succ.status = 'active' AND succ.deleted_at IS NULL)`,
+    );
   }
   if (clauses.length === 0) return undefined;
   return clauses.length === 1 ? clauses[0] : and(...clauses);
@@ -232,6 +240,21 @@ export async function updateLeaseForCommunity(
 /**
  * Soft-delete one active lease row.
  */
+/**
+ * Undo a lease written earlier in a request that then failed (create's later
+ * steps, a transfer's move-out). Its residents and deposits go, so they cannot
+ * block a household member's erasure, and its idempotency key is cleared, so
+ * the client's retry with the same key creates the lease instead of colliding
+ * with this hidden row (the key's unique index ignores deleted_at).
+ */
+export async function discardFailedLease(communityId: number, leaseId: number): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.hardDelete(leaseResidents, eq(leaseResidents.leaseId, leaseId));
+  await scoped.hardDelete(leaseDeposits, eq(leaseDeposits.leaseId, leaseId));
+  await scoped.update(leases, { idempotencyKey: null }, eq(leases.id, leaseId));
+  await scoped.softDelete(leases, eq(leases.id, leaseId));
+}
+
 export async function softDeleteLeaseForCommunity(
   communityId: number,
   leaseId: number,
@@ -357,11 +380,6 @@ export async function insertLeaseResidents(
   return (await scoped.insert(leaseResidents, rows)) as unknown as LeaseResidentRow[];
 }
 
-export async function deleteLeaseResidentsForLease(communityId: number, leaseId: number): Promise<void> {
-  const scoped = createScopedClient(communityId);
-  await scoped.hardDelete(leaseResidents, eq(leaseResidents.leaseId, leaseId));
-}
-
 export async function listOccupantsByIds(communityId: number, ids: number[]): Promise<LeaseOccupantRow[]> {
   if (ids.length === 0) return [];
   const scoped = createScopedClient(communityId);
@@ -381,11 +399,11 @@ export async function listOccupantsByIds(communityId: number, ids: number[]): Pr
 export async function listLeaseDeposits(communityId: number, leaseIds: number[]): Promise<LeaseDepositRow[]> {
   if (leaseIds.length === 0) return [];
   const scoped = createScopedClient(communityId);
-  return (await scoped.selectFrom<LeaseDepositRow>(
-    leaseDeposits,
-    {},
-    inArray(leaseDeposits.leaseId, leaseIds),
-  )) as LeaseDepositRow[];
+  // Oldest first, so `.at(-1)` is the newest deposit: without an ORDER BY,
+  // Postgres returns heap order, which an UPDATE reshuffles.
+  return (await scoped
+    .selectFrom<LeaseDepositRow>(leaseDeposits, {}, inArray(leaseDeposits.leaseId, leaseIds))
+    .orderBy(asc(leaseDeposits.id))) as LeaseDepositRow[];
 }
 
 export async function insertLeaseDeposit(
@@ -531,6 +549,20 @@ export async function updateRenewalOfferFromStage(
     and(eq(leaseRenewalOffers.id, offerId), inArray(leaseRenewalOffers.stage, fromStage)),
   );
   return (rows[0] as unknown as RenewalOfferRow | undefined) ?? null;
+}
+
+/**
+ * Close any open offer on a lease that can no longer be renewed (cancelled,
+ * deleted, moving out early, transferring). Returns how many were withdrawn.
+ */
+export async function withdrawOpenOffers(communityId: number, leaseId: number): Promise<number> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.update(
+    leaseRenewalOffers,
+    { stage: 'withdrawn', updatedAt: new Date() },
+    and(eq(leaseRenewalOffers.leaseId, leaseId), inArray(leaseRenewalOffers.stage, ['offer_sent', 'accepted'])),
+  );
+  return rows.length;
 }
 
 // ── Units offline (E7) ─────────────────────────────────────────────────────

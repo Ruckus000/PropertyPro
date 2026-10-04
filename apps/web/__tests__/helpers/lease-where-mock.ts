@@ -11,7 +11,7 @@ export type LeasePred =
   | { op: 'eq' | 'ne' | 'lte' | 'lt' | 'gte' | 'gt'; col: unknown; val: unknown }
   | { op: 'isNull' | 'isNotNull'; col: unknown }
   | { op: 'inArray'; col: unknown; vals: unknown[] }
-  | { op: 'sql'; values: unknown[] }
+  | { op: 'sql'; text: string; values: unknown[] }
   | { op: 'and' | 'or'; args: Array<LeasePred | undefined> };
 
 export const LEASE_COLUMNS = {
@@ -39,7 +39,7 @@ export function leaseFiltersMock(original: object) {
     isNull: (col: unknown) => ({ op: 'isNull', col }),
     isNotNull: (col: unknown) => ({ op: 'isNotNull', col }),
     inArray: (col: unknown, vals: unknown[]) => ({ op: 'inArray', col, vals }),
-    sql: (_s: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', values }),
+    sql: (s: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', text: s.join('?'), values }),
     and: (...args: unknown[]) => ({ op: 'and', args }),
     or: (...args: unknown[]) => ({ op: 'or', args }),
     desc: (col: unknown) => ({ dir: 'desc', col }),
@@ -48,14 +48,17 @@ export function leaseFiltersMock(original: object) {
 }
 
 /**
- * Applies a WHERE to one lease row. The only raw `sql` on a lease read is the
+ * Applies a WHERE to one lease row. Raw `sql` on a lease read is either the
  * co-tenant half of the party scope (values: lease id column, community id,
- * actor id), answered from the lease_residents fixture as Postgres would.
+ * actor id), answered from the lease_residents fixture, or the expiring
+ * list's "no signed renewal" NOT EXISTS, answered from the lease rows — both
+ * as Postgres would.
  */
 export function leaseMatches(
   node: LeasePred | undefined,
   row: Record<string, unknown>,
   residents: Array<Record<string, unknown>>,
+  allLeases: Array<Record<string, unknown>> = [],
 ): boolean {
   if (!node) return true;
   const v = (col: unknown) => row[col as string];
@@ -70,11 +73,14 @@ export function leaseMatches(
     case 'isNotNull': return v(node.col) != null;
     case 'inArray': return node.vals.includes(v(node.col));
     case 'sql': {
+      if (node.text.includes('previous_lease_id')) {
+        return !allLeases.some((l) => l['previousLeaseId'] === row['id'] && l['status'] === 'active');
+      }
       const actor = node.values[2];
       return residents.some((r) => r['leaseId'] === row['id'] && r['userId'] === actor && r['removedOn'] == null);
     }
-    case 'and': return node.args.every((a) => leaseMatches(a, row, residents));
-    case 'or': return node.args.some((a) => leaseMatches(a, row, residents));
+    case 'and': return node.args.every((a) => leaseMatches(a, row, residents, allLeases));
+    case 'or': return node.args.some((a) => leaseMatches(a, row, residents, allLeases));
   }
 }
 
@@ -96,7 +102,8 @@ export function leaseSelectBuilder(
       rowsFor()
         .then((rows) => {
           if (!isLeases) return rows;
-          const out = (rows as Array<Record<string, unknown>>).filter((r) => leaseMatches(where, r, residents()));
+          const all = rows as Array<Record<string, unknown>>;
+          const out = all.filter((r) => leaseMatches(where, r, residents(), all));
           return limit === undefined ? out : out.slice(0, limit);
         })
         .then(resolve, reject),
