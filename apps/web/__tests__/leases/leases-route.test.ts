@@ -23,7 +23,7 @@ const {
   unitsTableMock,
   userRolesTableMock,
   leaseResidentsTableMock,
-  residentContactsTableMock,
+  unitOccupantsTableMock,
   leaseDepositsTableMock,
   rentObligationsTableMock,
   communitiesTableMock,
@@ -45,7 +45,7 @@ const {
   unitsTableMock: { id: Symbol('units.id') },
   userRolesTableMock: { id: Symbol('user_roles.id') },
   leaseResidentsTableMock: { id: Symbol('lease_residents.id') },
-  residentContactsTableMock: { id: Symbol('resident_contacts.id') },
+  unitOccupantsTableMock: { id: Symbol('unit_occupants.id') },
   leaseDepositsTableMock: { id: Symbol('lease_deposits.id') },
   rentObligationsTableMock: { id: Symbol('rent_obligations.id') },
   communitiesTableMock: { id: Symbol('communities.id') },
@@ -66,7 +66,7 @@ vi.mock('@propertypro/db', () => ({
   units: unitsTableMock,
   userRoles: userRolesTableMock,
   leaseResidents: leaseResidentsTableMock,
-  residentContacts: residentContactsTableMock,
+  unitOccupants: unitOccupantsTableMock,
   leaseDeposits: leaseDepositsTableMock,
   rentObligations: rentObligationsTableMock,
   communities: communitiesTableMock,
@@ -78,14 +78,22 @@ vi.mock('@propertypro/db', () => ({
 // assert on directly to pin the SQL shape.
 type PredicateNode =
   | { op: 'eq' | 'lte'; col: string; val: unknown }
-  | { op: 'isNotNull'; col: string }
-  | { op: 'and'; args: PredicateNode[] };
+  | { op: 'isNotNull' | 'isNull'; col: string }
+  | { op: 'inArray'; col: string; vals: unknown[] }
+  | { op: 'sql'; values: unknown[] }
+  | { op: 'and' | 'or'; args: PredicateNode[] };
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (col: string, val: unknown) => ({ op: 'eq', col, val }),
   lte: (col: string, val: unknown) => ({ op: 'lte', col, val }),
   isNotNull: (col: string) => ({ op: 'isNotNull', col }),
+  isNull: (col: string) => ({ op: 'isNull', col }),
+  inArray: (col: string, vals: unknown[]) => ({ op: 'inArray', col, vals }),
+  // Leases v3: the co-tenant half of the party scope is a lease_residents
+  // subquery. No fixture here has lease_residents rows, so it matches nothing.
+  sql: (_strings: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', values }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
+  or: (...args: unknown[]) => ({ op: 'or', args }),
   desc: (col: string) => ({ dir: 'desc', col }),
 }));
 
@@ -98,8 +106,16 @@ function evalPredicate(node: PredicateNode | undefined, row: Record<string, unkn
       return row[node.col] !== null && row[node.col] !== undefined && String(row[node.col]) <= String(node.val);
     case 'isNotNull':
       return row[node.col] !== null && row[node.col] !== undefined;
+    case 'isNull':
+      return row[node.col] === null || row[node.col] === undefined;
+    case 'inArray':
+      return node.vals.includes(row[node.col]);
+    case 'sql':
+      return false;
     case 'and':
       return node.args.every((arg) => evalPredicate(arg, row));
+    case 'or':
+      return node.args.some((arg) => evalPredicate(arg, row));
   }
 }
 
@@ -1413,7 +1429,7 @@ describe('p2-37 leases route', () => {
       isUnitOwner: false, displayTitle: 'Resident', communityType: 'apartment' as const,
     };
 
-    it('pushes the non-manager party scope into SQL (resident_id = actor)', async () => {
+    it('pushes the non-manager party scope into SQL (resident_id = actor, or a current lease_residents row)', async () => {
       requireAuthenticatedUserIdMock.mockResolvedValue(ACTOR);
       requireCommunityMembershipMock.mockResolvedValue(residentMembership);
       const client = seed([lease(1), lease(2, { residentId: OTHER })]);
@@ -1423,7 +1439,16 @@ describe('p2-37 leases route', () => {
 
       expect(res.status).toBe(200);
       expect(json.data.map((l) => l.id)).toEqual([1]);
-      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'residentId', val: ACTOR }]);
+      expect(leaseWheres(client)).toEqual([
+        {
+          op: 'or',
+          args: [
+            { op: 'eq', col: 'residentId', val: ACTOR },
+            // co-tenants: the lease_residents subquery, keyed on the same actor
+            { op: 'sql', values: ['id', 42, ACTOR] },
+          ],
+        },
+      ]);
     });
 
     it('applies NO party predicate for the management tier (control)', async () => {
@@ -1618,10 +1643,19 @@ describe('p2-37 leases route', () => {
         new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=2'),
       );
 
-      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'residentId', val: ACTOR }]);
+      expect(leaseWheres(client)).toEqual([
+        {
+          op: 'or',
+          args: [
+            { op: 'eq', col: 'residentId', val: ACTOR },
+            // co-tenants: the lease_residents subquery, keyed on the same actor
+            { op: 'sql', values: ['id', 42, ACTOR] },
+          ],
+        },
+      ]);
     });
 
-    it('POST reads only the candidate unit for the overlap check, and the previous lease by id', async () => {
+    it('POST reads only the candidate unit for the overlap check (the previous lease is on it)', async () => {
       const client = makeDefaultScopedClient({
         query: vi.fn().mockImplementation(async (table: unknown) => {
           if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
@@ -1655,10 +1689,9 @@ describe('p2-37 leases route', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(leaseWheres(client)).toEqual([
-        { op: 'eq', col: 'unitId', val: 10 },
-        { op: 'eq', col: 'id', val: 50 },
-      ]);
+      // Leases v3: a renewal is on the same unit, so the previous lease comes
+      // out of the unit read; it is fetched by id only when that read misses it.
+      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'unitId', val: 10 }]);
     });
 
     it('PATCH reads only the lease’s unit and its renewal child', async () => {
@@ -1684,7 +1717,15 @@ describe('p2-37 leases route', () => {
       expect(leaseWheres(client)).toEqual([
         { op: 'eq', col: 'id', val: 1 },
         { op: 'eq', col: 'unitId', val: 10 },
-        { op: 'eq', col: 'previousLeaseId', val: 1 },
+        // Leases v3: only an ACTIVE renewal binds the lease's end date; a
+        // cancelled one does not.
+        {
+          op: 'and',
+          args: [
+            { op: 'eq', col: 'previousLeaseId', val: 1 },
+            { op: 'eq', col: 'status', val: 'active' },
+          ],
+        },
       ]);
     });
 

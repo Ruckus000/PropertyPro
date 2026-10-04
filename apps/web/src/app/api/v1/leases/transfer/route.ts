@@ -73,7 +73,7 @@ export const POST = withErrorHandler(
     const residents: LeaseResidentInput[] = (await listLeaseResidentsForLeases(communityId, [body.fromLeaseId]))
       .filter((r) => r.removedOn == null)
       .map((r) =>
-        r.userId ? { userId: r.userId, isPrimary: r.isPrimary } : { contactId: r.contactId as number, isPrimary: r.isPrimary },
+        r.userId ? { userId: r.userId, isPrimary: r.isPrimary } : { occupantId: r.occupantId as number, isPrimary: r.isPrimary },
       );
     if (residents.length === 0 && from['residentId']) {
       residents.push({ userId: from['residentId'] as string, isPrimary: true });

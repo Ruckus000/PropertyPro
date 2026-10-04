@@ -38,7 +38,6 @@ import {
   leaseResidents,
   leases,
   ledgerEntries,
-  residentContacts,
   maintenanceRequests,
   meetingDocuments,
   meetings,
@@ -527,25 +526,10 @@ export const EXPORT_TABLES: ExportTableSpec[] = [
       col('id', 'ID', leaseResidents.id),
       col('leaseId', 'Lease ID', leaseResidents.leaseId),
       col('userId', 'Resident User ID', leaseResidents.userId),
-      col('contactId', 'Resident Contact ID', leaseResidents.contactId),
+      col('occupantId', 'Household Member ID', leaseResidents.occupantId),
       col('isPrimary', 'Primary', leaseResidents.isPrimary),
       col('addedOn', 'Added On', leaseResidents.addedOn),
       col('removedOn', 'Removed On', leaseResidents.removedOn),
-    ],
-  },
-  {
-    tableName: 'resident_contacts',
-    file: 'data/resident_contacts.csv',
-    table: residentContacts as PgTable,
-    // Name and delivery method only — home address and phone stay out of the
-    // export, the same line drawn for emergency_broadcast_recipients.
-    why: 'Residents without a login who are named on a lease (name and how notices reach them).',
-    columns: [
-      col('id', 'ID', residentContacts.id),
-      col('fullName', 'Full Name', residentContacts.fullName),
-      col('noticeDelivery', 'Notice Delivery', residentContacts.noticeDelivery),
-      col('linkedUserId', 'Linked User ID', residentContacts.linkedUserId),
-      ...auditColumns(residentContacts as unknown as Record<string, unknown>),
     ],
   },
   {

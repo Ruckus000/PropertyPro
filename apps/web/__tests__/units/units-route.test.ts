@@ -215,6 +215,10 @@ describe('/api/v1/units', () => {
         sqft: 900,
         rentAmount: '1850.00',
         ownerUserId: 'owner-101',
+        offlineReason: 'storm_damage',
+        offlineNote: 'Roof leak',
+        offlineSince: '2026-09-01',
+        offlineUntil: null,
         occupancy: 'vacant',
         occupancyConfirmedAt: null,
         createdAt: '2026-01-01T00:00:00.000Z',
@@ -263,6 +267,9 @@ describe('/api/v1/units', () => {
         expect(unit['ownerUserId']).toBeNull();
         expect(unit['occupancy']).toBeNull();
         expect(unit['occupancyConfirmed']).toBe(false);
+        // Leases v3: why a unit is offline is manager-internal.
+        expect(unit['offlineReason']).toBeNull();
+        expect(unit['offlineNote']).toBeNull();
       }
       // Non-sensitive fields still flow — the unit picker keeps working.
       expect(units.map((u) => u['unitNumber'])).toEqual(['101', '102']);
@@ -275,6 +282,8 @@ describe('/api/v1/units', () => {
         const units = await listAs(role, false);
         expect(units.map((u) => u['rentAmount'])).toEqual(['1850.00', '1400.00']);
         expect(units.map((u) => u['ownerUserId'])).toEqual(['owner-101', 'owner-102']);
+        expect(units.map((u) => u['offlineSince'])).toEqual(['2026-09-01', null]);
+        expect(units[0]!['offlineNote']).toBe('Roof leak');
         expect(units.map((u) => u['occupancy'])).toEqual(['vacant', 'rented']);
         // Backfilled guess (confirmedAt null) vs. a manager-confirmed value.
         expect(units.map((u) => u['occupancyConfirmed'])).toEqual([false, true]);

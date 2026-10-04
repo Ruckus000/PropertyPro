@@ -246,7 +246,7 @@ export const PATCH = withErrorHandler(
                 .map((r) =>
                   r.userId
                     ? { userId: r.userId, isPrimary: r.isPrimary }
-                    : { contactId: r.contactId as number, isPrimary: r.isPrimary },
+                    : { occupantId: r.occupantId as number, isPrimary: r.isPrimary },
                 );
         // A changed deposit is a new deposit row (it restarts the §83.49 clock).
         const deposits = await listLeaseDeposits(communityId, [offer.leaseId]);

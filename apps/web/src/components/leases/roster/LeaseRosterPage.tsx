@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useLeaseActions, useLeaseRosterData } from '@/hooks/use-lease-roster';
+import { useOccupants } from '@/hooks/use-occupants';
 import { useHelpWidgetOptional } from '@/components/help/help-widget-provider';
 import {
   buildRoster,
@@ -66,6 +67,15 @@ export function LeaseRosterPage({
   // Help links open the article in the app's help panel (Leases v3, Phase 3).
   const onHelp = onHelpProp ?? (help ? (slug: string) => help.openArticle('apartment', slug) : undefined);
   const data = useLeaseRosterData(communityId);
+  // Directory household members, only when the community lets them be lease parties.
+  const occupantsQuery = useOccupants(communityId, { enabled: data.settings.allowResidentsWithoutEmail });
+  const occupants = useMemo(
+    () =>
+      data.settings.allowResidentsWithoutEmail
+        ? (occupantsQuery.data ?? []).map((o) => ({ id: o.id, unitId: o.unitId, fullName: o.fullName, email: o.email }))
+        : [],
+    [occupantsQuery.data, data.settings.allowResidentsWithoutEmail],
+  );
   const actions = useLeaseActions(communityId);
   const [filter, setFilter] = useState<RosterFilter>('all');
   const [sort, setSort] = useState<RosterSort>('unit');
@@ -349,6 +359,7 @@ export function LeaseRosterPage({
         actions={actions}
         directory={data.directory}
         residents={data.residents}
+        occupants={occupants}
         onDone={onDone}
         onClose={() => setDialog(null)}
         onHelp={onHelp}

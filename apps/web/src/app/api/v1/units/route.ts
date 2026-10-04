@@ -89,6 +89,12 @@ function mapUnitRow(
     ownerUserId: includeManagerFields ? ((row['ownerUserId'] as string | null) ?? null) : null,
     occupancy: includeManagerFields ? ((row['occupancy'] as string | null) ?? null) : null,
     occupancyConfirmed: includeManagerFields ? row['occupancyConfirmedAt'] != null : false,
+    // Leases v3 (E7): out-of-service state. Manager-only like rent — the note
+    // can say why a unit is empty.
+    offlineReason: includeManagerFields ? ((row['offlineReason'] as string | null) ?? null) : null,
+    offlineNote: includeManagerFields ? ((row['offlineNote'] as string | null) ?? null) : null,
+    offlineSince: includeManagerFields ? ((row['offlineSince'] as string | null) ?? null) : null,
+    offlineUntil: includeManagerFields ? ((row['offlineUntil'] as string | null) ?? null) : null,
     /** Open violations; null when the viewer may not see them (or the feature is off). */
     openViolations: openViolations ? (openViolations.get(row['id'] as number) ?? 0) : null,
     createdAt: row['createdAt'] as string,

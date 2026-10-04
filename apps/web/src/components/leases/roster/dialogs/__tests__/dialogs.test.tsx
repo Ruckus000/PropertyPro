@@ -32,7 +32,7 @@ function lease(partial: Partial<RosterLease> & Pick<RosterLease, 'id' | 'unitId'
     notes: null,
     version: 3,
     residents: [
-      { userId: 'u-1', contactId: null, isPrimary: true, removedOn: null, contact: null },
+      { userId: 'u-1', occupantId: null, isPrimary: true, removedOn: null, occupant: null },
     ],
     deposits: [],
     ...partial,
@@ -111,6 +111,7 @@ function baseProps(actions: ReturnType<typeof makeActions>, overrides: Partial<R
     settings: { alertWindows: [30, 60, 90], allowResidentsWithoutEmail: false },
     actions: actions as unknown as LeaseActions,
     directory,
+    occupants: [],
     residents: [
       { id: '11111111-1111-4111-8111-111111111111', name: 'Ana Beltrán', email: 'ana@example.com' },
       { id: '22222222-2222-4222-8222-222222222222', name: 'Marcus Lee', email: 'marcus@example.com' },

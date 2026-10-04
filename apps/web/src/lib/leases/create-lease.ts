@@ -7,7 +7,7 @@
  * before calling this.
  *
  * The scoped client has no transactions, so writes compensate on failure
- * (the violations-service pattern): contacts, then the lease, then its
+ * (the violations-service pattern): new household members, then the lease, then its
  * residents and deposit — each undone if a later step fails.
  */
 import { logAuditEvent } from '@propertypro/db';
@@ -15,22 +15,22 @@ import type { CommunityType } from '@propertypro/shared';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import {
   createLeaseForCommunity,
-  createResidentContact,
   deleteLeaseResidentsForLease,
   findLeaseByIdempotencyKey,
   getCommunityLeaseSettings,
+  getLeaseById,
   getTenantRoleForLease,
   getUnitLeaseDefaults,
   insertLeaseDeposit,
   insertLeaseResidents,
   listLeaseResidentsForLeases,
   listLeasesForCommunity,
-  listResidentContactsByIds,
+  listOccupantsByIds,
   softDeleteLeaseForCommunity,
-  softDeleteResidentContact,
   type LeaseRow,
 } from '@/lib/services/lease-service';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
+import { createOccupant, removeOccupant } from '@/lib/services/occupant-service';
 import {
   ensureNoUnitLeaseOverlap,
   ensureRenewalContinuity,
@@ -43,13 +43,12 @@ import {
 
 export type LeaseResidentInput =
   | { userId: string; isPrimary?: boolean }
-  | { contactId: number; isPrimary?: boolean }
+  | { occupantId: number; isPrimary?: boolean }
   | {
-      newContact: {
+      newOccupant: {
         fullName: string;
         phone?: string | null;
-        mailingAddress?: string | null;
-        noticeDelivery?: 'mail' | 'hand';
+        email?: string | null;
       };
       isPrimary?: boolean;
     };
@@ -88,7 +87,7 @@ export interface CreateLeaseContext {
   communityType: CommunityType;
 }
 
-type ResolvedResident = { userId: string | null; contactId: number | null; isPrimary: boolean };
+type ResolvedResident = { userId: string | null; occupantId: number | null; isPrimary: boolean };
 
 export async function createLease(
   { communityId, actorUserId, communityType }: CreateLeaseContext,
@@ -127,8 +126,8 @@ export async function createLease(
   }
   const primaryIndex = Math.max(0, residentInputs.findIndex((r) => r.isPrimary === true));
 
-  const needsContacts = residentInputs.some((r) => 'contactId' in r || 'newContact' in r);
-  if (needsContacts) {
+  const needsOccupants = residentInputs.some((r) => 'occupantId' in r || 'newOccupant' in r);
+  if (needsOccupants) {
     const settings = await getCommunityLeaseSettings(communityId);
     if (!settings.allowResidentsWithoutEmail) {
       throw new ForbiddenError('Residents without an email address are not enabled for this community');
@@ -146,16 +145,29 @@ export async function createLease(
       throw new ValidationError('Resident must have a tenant role in this community');
     }
   }
-  const existingContactIds = residentInputs
-    .filter((r): r is { contactId: number; isPrimary?: boolean } => 'contactId' in r)
-    .map((r) => r.contactId);
-  if (new Set(existingContactIds).size !== existingContactIds.length) {
+  const existingOccupantIds = residentInputs
+    .filter((r): r is { occupantId: number; isPrimary?: boolean } => 'occupantId' in r)
+    .map((r) => r.occupantId);
+  if (new Set(existingOccupantIds).size !== existingOccupantIds.length) {
     throw new ValidationError('A resident is listed twice');
   }
-  if (existingContactIds.length > 0) {
-    const found = await listResidentContactsByIds(communityId, existingContactIds);
-    if (found.length !== existingContactIds.length) {
-      throw new ValidationError('Resident contact not found in this community');
+  if (existingOccupantIds.length > 0) {
+    const found = await listOccupantsByIds(communityId, existingOccupantIds);
+    if (found.length !== existingOccupantIds.length) {
+      throw new ValidationError('Household member not found in this community');
+    }
+    // A household member lives in one unit (Directory). They can be on this
+    // unit's lease — or, for a transfer, carried over from the lease they are
+    // leaving, until the manager updates their unit in the Directory.
+    const carried = payload.transferredFromLeaseId
+      ? new Set(
+          (await listLeaseResidentsForLeases(communityId, [payload.transferredFromLeaseId]))
+            .filter((r) => r.removedOn == null && r.occupantId != null)
+            .map((r) => r.occupantId as number),
+        )
+      : new Set<number>();
+    if (found.some((o) => o.unitId !== payload.unitId && !carried.has(o.id))) {
+      throw new ValidationError('A household member can only be on a lease for the unit they live in');
     }
   }
 
@@ -168,7 +180,8 @@ export async function createLease(
     throw new ValidationError('A $0 rent needs a reason (zeroRentReason)');
   }
 
-  const existingLeaseRows = await listLeasesForCommunity(communityId);
+  // Same-unit read (PAG-04): overlap only concerns this unit's leases.
+  const { rows: existingLeaseRows } = await listLeasesForCommunity(communityId, { unitId: payload.unitId });
   const existingLeases = existingLeaseRows as unknown as LeaseLikeRow[];
   ensureNoUnitLeaseOverlap(
     {
@@ -185,8 +198,11 @@ export async function createLease(
     if (!previousLeaseId) {
       throw new ValidationError('previousLeaseId is required when creating a renewal lease');
     }
-    // Verify the previous lease exists in this community
-    const previousLease = existingLeases.find((row) => row.id === previousLeaseId);
+    // Verify the previous lease exists in this community (same unit by rule,
+    // but read it directly so a wrong unit gets the precise error below).
+    const previousLease =
+      existingLeases.find((row) => row.id === previousLeaseId) ??
+      ((await getLeaseById(communityId, previousLeaseId)) as unknown as LeaseLikeRow | null);
     if (!previousLease) {
       throw new ValidationError('Previous lease not found in this community');
     }
@@ -206,27 +222,34 @@ export async function createLease(
   }
 
   // ── Writes (no transactions in the scoped client: compensate on failure) ─
-  const createdContactIds: number[] = [];
+  const createdOccupantIds: number[] = [];
+  // Undo a household member this call created. A hard delete — the same
+  // erasure Directory "Remove" does (#1303) — so a failed save leaves nothing.
+  const rollbackOccupants = async () => {
+    for (const id of createdOccupantIds) await removeOccupant(communityId, actorUserId, id);
+  };
   const resolved: ResolvedResident[] = [];
   try {
     for (const [index, r] of residentInputs.entries()) {
       const isPrimary = index === primaryIndex;
-      if ('userId' in r) resolved.push({ userId: r.userId, contactId: null, isPrimary });
-      else if ('contactId' in r) resolved.push({ userId: null, contactId: r.contactId, isPrimary });
+      if ('userId' in r) resolved.push({ userId: r.userId, occupantId: null, isPrimary });
+      else if ('occupantId' in r) resolved.push({ userId: null, occupantId: r.occupantId, isPrimary });
       else {
-        const contact = await createResidentContact(communityId, {
-          fullName: r.newContact.fullName,
-          phone: r.newContact.phone ?? null,
-          mailingAddress: r.newContact.mailingAddress ?? null,
-          noticeDelivery: r.newContact.noticeDelivery ?? 'mail',
-          createdBy: actorUserId,
+        // Created through main's occupant service: its unit check, and its
+        // audit entry that never holds the person's details.
+        const occupant = await createOccupant(communityId, actorUserId, {
+          unitId: payload.unitId,
+          fullName: r.newOccupant.fullName,
+          email: r.newOccupant.email ?? null,
+          phone: r.newOccupant.phone ?? null,
+          isOwnerHousehold: false,
         });
-        createdContactIds.push(contact.id);
-        resolved.push({ userId: null, contactId: contact.id, isPrimary });
+        createdOccupantIds.push(occupant.id);
+        resolved.push({ userId: null, occupantId: occupant.id, isPrimary });
       }
     }
   } catch (err) {
-    for (const id of createdContactIds) await softDeleteResidentContact(communityId, id);
+    await rollbackOccupants();
     throw err;
   }
   const primary = resolved.find((r) => r.isPrimary)!;
@@ -236,7 +259,7 @@ export async function createLease(
     created = await createLeaseForCommunity(communityId, {
       unitId: payload.unitId,
       // Dual-write during the expand window: the primary's user id, or null
-      // when the primary resident is a contact-only person.
+      // when the primary resident is a household member with no login.
       residentId: primary.userId,
       startDate: payload.startDate,
       endDate: payload.endDate ?? null,
@@ -254,7 +277,7 @@ export async function createLease(
       updatedBy: actorUserId,
     });
   } catch (err) {
-    for (const id of createdContactIds) await softDeleteResidentContact(communityId, id);
+    await rollbackOccupants();
     // Lost a race with an identical submission: return the winner's lease.
     if (payload.idempotencyKey && isUniqueViolation(err)) {
       const winner = await findLeaseByIdempotencyKey(communityId, payload.idempotencyKey);
@@ -264,7 +287,7 @@ export async function createLease(
   }
 
   if (!created) {
-    for (const id of createdContactIds) await softDeleteResidentContact(communityId, id);
+    await rollbackOccupants();
     throw new ValidationError('Failed to create lease');
   }
   const leaseId = created['id'] as number;
@@ -272,7 +295,7 @@ export async function createLease(
   try {
     await insertLeaseResidents(
       communityId,
-      resolved.map((r) => ({ leaseId, userId: r.userId, contactId: r.contactId, isPrimary: r.isPrimary, addedOn: payload.startDate })),
+      resolved.map((r) => ({ leaseId, userId: r.userId, occupantId: r.occupantId, isPrimary: r.isPrimary, addedOn: payload.startDate })),
     );
     if (payload.deposit) {
       await insertLeaseDeposit(communityId, {
@@ -289,7 +312,7 @@ export async function createLease(
   } catch (err) {
     await deleteLeaseResidentsForLease(communityId, leaseId);
     await softDeleteLeaseForCommunity(communityId, leaseId);
-    for (const id of createdContactIds) await softDeleteResidentContact(communityId, id);
+    await rollbackOccupants();
     throw err;
   }
 
@@ -314,9 +337,10 @@ export async function createLease(
   });
 
   // Best-effort: auto-create move-in checklist for apartment communities.
-  // The checklist is keyed to a user, so it goes to the first resident who
-  // has one; a lease of contact-only residents gets none.
-  const checklistUserId = primary.userId ?? resolved.find((r) => r.userId)?.userId ?? null;
+  // The checklist is keyed to the lease's own resident_id: createMoveChecklist
+  // refuses any other resident (lease/unit/resident integrity, main), so a
+  // co-tenant or a household member with no login gets none.
+  const checklistUserId = primary.userId;
   // A renewal's residents already live in the unit: no move-in checklist.
   const isRenewal = !!(payload.isRenewal || payload.previousLeaseId);
   if (communityType === 'apartment' && checklistUserId && !isRenewal) {
@@ -332,7 +356,7 @@ export async function createLease(
         actorUserId,
       );
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error('[leases] auto-create move-in checklist failed', {
         communityId,
         leaseId,

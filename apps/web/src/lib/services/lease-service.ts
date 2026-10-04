@@ -13,18 +13,18 @@ import {
   leaseResidents,
   leases,
   rentObligations,
-  residentContacts,
+  unitOccupants,
   units,
   userRoles,
 } from '@propertypro/db';
-import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNotNull, lte, or, sql, type SQL } from '@propertypro/db/filters';
 
 export interface LeaseRow {
   [key: string]: unknown;
   id: number;
   communityId?: number;
   unitId: number;
-  /** Primary resident's user id; null when the primary is a contact (Leases v3). */
+  /** Primary resident's user id; null when the primary is a household member with no login (Leases v3). */
   residentId: string | null;
   startDate: string;
   endDate?: string | null;
@@ -55,9 +55,100 @@ export interface TenantRoleForLease {
  *
  * AUTHZ: caller MUST have verified apartment lease access for this community.
  */
-export async function listLeasesForCommunity(communityId: number): Promise<LeaseRow[]> {
+/**
+ * Hard ceiling on one `listLeasesForCommunity` read (PAG-04).
+ *
+ * Rows are fetched NEWEST-first (`id desc`) so that, if a community ever
+ * exceeds the cap, what falls off is the oldest lease history, not the
+ * current leases the roster depends on. Callers receive ascending id order.
+ */
+export const LEASE_LIST_MAX_ROWS = 5000;
+
+export interface LeaseListFilters {
+  /**
+   * Party scope for non-manager callers (Leases v3): leases this user is a
+   * CURRENT party to — a `lease_residents` row naming them with no
+   * `removed_on`, so co-tenants qualify — or, for leases written by pre-v3
+   * code during the expand window, `resident_id = user`.
+   */
+  partyUserId?: string;
+  /** Exact status. The caller must pass a valid `lease_status` enum value. */
+  status?: string;
+  unitId?: number;
+  /** `status = 'active' AND end_date IS NOT NULL AND end_date <= <YYYY-MM-DD>`. */
+  activeEndingOnOrBefore?: string;
+}
+
+export interface LeaseListResult {
+  rows: LeaseRow[];
+  /** True when more than `LEASE_LIST_MAX_ROWS` rows matched; the oldest were dropped. */
+  truncated: boolean;
+}
+
+type LeaseStatusValue = (typeof leases.status.enumValues)[number];
+
+function buildLeaseListWhere(communityId: number, filters: LeaseListFilters): SQL | undefined {
+  const clauses: SQL[] = [];
+  if (filters.partyUserId !== undefined) {
+    // Both halves key on the authenticated user id the route passes in. The
+    // subquery repeats the community predicate: lease_residents is read here
+    // outside the scoped client's automatic filter.
+    clauses.push(
+      or(
+        eq(leases.residentId, filters.partyUserId),
+        sql`${leases.id} IN (SELECT lr.lease_id FROM lease_residents lr WHERE lr.community_id = ${communityId} AND lr.user_id = ${filters.partyUserId} AND lr.removed_on IS NULL)`,
+      )!,
+    );
+  }
+  if (filters.status !== undefined) clauses.push(eq(leases.status, filters.status as LeaseStatusValue));
+  if (filters.unitId !== undefined) clauses.push(eq(leases.unitId, filters.unitId));
+  if (filters.activeEndingOnOrBefore !== undefined) {
+    clauses.push(eq(leases.status, 'active'));
+    clauses.push(isNotNull(leases.endDate));
+    clauses.push(lte(leases.endDate, filters.activeEndingOnOrBefore));
+  }
+  if (clauses.length === 0) return undefined;
+  return clauses.length === 1 ? clauses[0] : and(...clauses);
+}
+
+/**
+ * List lease rows in the scoped community, every filter applied in SQL and
+ * at most `LEASE_LIST_MAX_ROWS` rows read.
+ *
+ * AUTHZ: caller MUST have verified apartment lease access for this community,
+ * and MUST pass `partyUserId` for a caller who is not management tier.
+ */
+export async function listLeasesForCommunity(
+  communityId: number,
+  filters: LeaseListFilters = {},
+): Promise<LeaseListResult> {
   const scoped = createScopedClient(communityId);
-  return (await scoped.query(leases)) as unknown as LeaseRow[];
+  const rows = (await scoped
+    .selectFrom<LeaseRow>(leases, {}, buildLeaseListWhere(communityId, filters))
+    .orderBy(desc(leases.id))
+    .limit(LEASE_LIST_MAX_ROWS + 1)) as LeaseRow[];
+  const truncated = rows.length > LEASE_LIST_MAX_ROWS;
+  const kept = truncated ? rows.slice(0, LEASE_LIST_MAX_ROWS) : rows;
+  return { rows: kept.reverse(), truncated };
+}
+
+/** The active lease that renews `leaseId` (its `previous_lease_id` child), if any. */
+export async function getRenewalOfLease(communityId: number, leaseId: number): Promise<LeaseRow | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<LeaseRow>(leases, {}, and(eq(leases.previousLeaseId, leaseId), eq(leases.status, 'active')))
+    .orderBy(leases.id)
+    .limit(1);
+  return (rows[0] as LeaseRow | undefined) ?? null;
+}
+
+/** The active lease a resident is transferring INTO from `leaseId` (E8), if any. */
+export async function getTransferTargetOfLease(communityId: number, leaseId: number): Promise<LeaseRow | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<LeaseRow>(leases, {}, and(eq(leases.transferredFromLeaseId, leaseId), eq(leases.status, 'active')))
+    .limit(1);
+  return (rows[0] as LeaseRow | undefined) ?? null;
 }
 
 /**
@@ -158,20 +249,20 @@ export interface LeaseResidentRow {
   id: number;
   leaseId: number;
   userId: string | null;
-  contactId: number | null;
+  occupantId: number | null;
   isPrimary: boolean;
   addedOn: string;
   removedOn: string | null;
 }
 
-export interface ResidentContactRow {
+/** A household member with no login (main's `unit_occupants`), as a lease needs it. */
+export interface LeaseOccupantRow {
   [key: string]: unknown;
   id: number;
+  unitId: number;
   fullName: string;
+  email: string | null;
   phone: string | null;
-  mailingAddress: string | null;
-  noticeDelivery: 'mail' | 'hand';
-  linkedUserId: string | null;
 }
 
 export interface LeaseDepositRow {
@@ -259,7 +350,7 @@ export async function listLeaseIdsForParty(communityId: number, userId: string):
 
 export async function insertLeaseResidents(
   communityId: number,
-  rows: Array<{ leaseId: number; userId: string | null; contactId: number | null; isPrimary: boolean; addedOn: string }>,
+  rows: Array<{ leaseId: number; userId: string | null; occupantId: number | null; isPrimary: boolean; addedOn: string }>,
 ): Promise<LeaseResidentRow[]> {
   if (rows.length === 0) return [];
   const scoped = createScopedClient(communityId);
@@ -271,47 +362,20 @@ export async function deleteLeaseResidentsForLease(communityId: number, leaseId:
   await scoped.hardDelete(leaseResidents, eq(leaseResidents.leaseId, leaseId));
 }
 
-export async function listResidentContactsByIds(
-  communityId: number,
-  ids: number[],
-): Promise<ResidentContactRow[]> {
+export async function listOccupantsByIds(communityId: number, ids: number[]): Promise<LeaseOccupantRow[]> {
   if (ids.length === 0) return [];
   const scoped = createScopedClient(communityId);
-  return (await scoped.selectFrom<ResidentContactRow>(
-    residentContacts,
-    {},
-    inArray(residentContacts.id, ids),
-  )) as ResidentContactRow[];
-}
-
-/** Contacts not yet linked to a login — the ones a lease form can pick. */
-export async function listUnlinkedResidentContacts(communityId: number): Promise<ResidentContactRow[]> {
-  const scoped = createScopedClient(communityId);
-  return (await scoped.selectFrom<ResidentContactRow>(
-    residentContacts,
-    {},
-    isNull(residentContacts.linkedUserId),
-  )) as ResidentContactRow[];
-}
-
-export async function createResidentContact(
-  communityId: number,
-  values: {
-    fullName: string;
-    phone: string | null;
-    mailingAddress: string | null;
-    noticeDelivery: 'mail' | 'hand';
-    createdBy: string;
-  },
-): Promise<ResidentContactRow> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.insert(residentContacts, values);
-  return rows[0] as unknown as ResidentContactRow;
-}
-
-export async function softDeleteResidentContact(communityId: number, contactId: number): Promise<void> {
-  const scoped = createScopedClient(communityId);
-  await scoped.softDelete(residentContacts, eq(residentContacts.id, contactId));
+  return (await scoped.selectFrom<LeaseOccupantRow>(
+    unitOccupants,
+    {
+      id: unitOccupants.id,
+      unitId: unitOccupants.unitId,
+      fullName: unitOccupants.fullName,
+      email: unitOccupants.email,
+      phone: unitOccupants.phone,
+    },
+    inArray(unitOccupants.id, ids),
+  )) as LeaseOccupantRow[];
 }
 
 export async function listLeaseDeposits(communityId: number, leaseIds: number[]): Promise<LeaseDepositRow[]> {
@@ -421,7 +485,7 @@ export interface RenewalOfferRow {
   customEndDate: string | null;
   startDate: string;
   depositAmount: string | null;
-  proposedResidents: Array<{ userId: string } | { contactId: number }> | null;
+  proposedResidents: Array<{ userId: string } | { occupantId: number }> | null;
   sentOn: string;
   expiresOn: string;
   respondedOn: string | null;

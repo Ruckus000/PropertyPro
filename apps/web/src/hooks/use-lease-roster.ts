@@ -28,7 +28,6 @@ export const ROSTER_KEYS = {
   units: (communityId: number) => [...LEASE_KEYS.all, 'roster-units', communityId] as const,
   offers: (communityId: number, ids: string) => [...LEASE_KEYS.all, 'offers', communityId, ids] as const,
   settings: (communityId: number) => [...LEASE_KEYS.all, 'settings', communityId] as const,
-  contacts: (communityId: number) => [...LEASE_KEYS.all, 'contacts', communityId] as const,
 };
 
 export function newIdempotencyKey(): string {
@@ -123,8 +122,8 @@ function useLeaseMutation<TInput extends object, TOut = unknown>(
 
 export type ResidentPick =
   | { userId: string; isPrimary?: boolean }
-  | { contactId: number; isPrimary?: boolean }
-  | { newContact: { fullName: string; phone?: string | null; mailingAddress?: string | null; noticeDelivery?: 'mail' | 'hand' }; isPrimary?: boolean };
+  | { occupantId: number; isPrimary?: boolean }
+  | { newOccupant: { fullName: string; phone?: string | null; email?: string | null }; isPrimary?: boolean };
 
 export interface DepositInput {
   amount: string;

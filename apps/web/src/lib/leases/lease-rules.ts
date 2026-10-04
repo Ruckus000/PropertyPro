@@ -164,7 +164,7 @@ export async function ensureNoUnpaidObligations(communityId: number, leaseId: nu
  * Best-effort: start the move-out checklist when a move-out is first
  * scheduled (notice, declined offer, early end, transfer). The unique index
  * on (lease_id, type) makes a repeat a no-op failure, logged and ignored.
- * Checklists are keyed to a user, so a contact-only primary gets none.
+ * Checklists are keyed to a user, so a primary with no login gets none.
  */
 export async function startMoveOutChecklist(
   communityId: number,
@@ -185,7 +185,7 @@ export async function startMoveOutChecklist(
       actorUserId,
     );
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[leases] auto-create move-out checklist failed', {
       communityId,
       leaseId: lease['id'],

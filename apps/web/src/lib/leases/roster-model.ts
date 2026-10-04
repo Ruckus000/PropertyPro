@@ -31,10 +31,10 @@ export interface RosterUnit {
 
 export interface RosterResident {
   userId: string | null;
-  contactId: number | null;
+  occupantId: number | null;
   isPrimary: boolean;
   removedOn: string | null;
-  contact: { fullName: string } | null;
+  occupant: { fullName: string; email?: string | null } | null;
 }
 
 export interface RosterLease extends LeaseStateInput {
@@ -119,7 +119,7 @@ export interface PersonRef {
   name: string;
   email: string | null;
   userId: string | null;
-  contactId: number | null;
+  occupantId: number | null;
   isPrimary: boolean;
 }
 
@@ -153,16 +153,16 @@ export function peopleOn(lease: RosterLease | null, dir: PersonDirectory): Perso
     lease.residents && lease.residents.length > 0
       ? lease.residents.filter((r) => r.removedOn == null)
       : lease.residentId
-        ? [{ userId: lease.residentId, contactId: null, isPrimary: true, removedOn: null, contact: null }]
+        ? [{ userId: lease.residentId, occupantId: null, isPrimary: true, removedOn: null, occupant: null }]
         : [];
   return rows
     .map((r) => {
       const user = r.userId ? dir.users.get(r.userId) : undefined;
       return {
-        name: r.contact?.fullName ?? user?.name ?? 'Unknown resident',
-        email: user?.email ?? null,
+        name: r.occupant?.fullName ?? user?.name ?? 'Unknown resident',
+        email: user?.email ?? r.occupant?.email ?? null,
         userId: r.userId,
-        contactId: r.contactId,
+        occupantId: r.occupantId,
         isPrimary: r.isPrimary,
       };
     })

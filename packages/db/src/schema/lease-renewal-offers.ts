@@ -31,8 +31,8 @@ import { leaseZeroRentReasonEnum, renewalOfferStageEnum } from './enums';
 import { leases } from './leases';
 import { users } from './users';
 
-/** A proposed resident: a user id or a resident-contact id. */
-export type ProposedLeaseResident = { userId: string } | { contactId: number };
+/** A proposed resident: a user id or a household member (unit_occupants) id. */
+export type ProposedLeaseResident = { userId: string } | { occupantId: number };
 
 export const leaseRenewalOffers = pgTable(
   'lease_renewal_offers',

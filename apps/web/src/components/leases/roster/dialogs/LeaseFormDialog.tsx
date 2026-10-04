@@ -270,6 +270,7 @@ function NewLeaseForm(props: LeaseFormDialogProps) {
         picked={picked}
         onChange={setPicked}
         allowWithoutEmail={settings.allowResidentsWithoutEmail}
+        occupants={props.occupants.filter((o) => String(o.unitId) === String(unitId))}
         error={errors.residents ?? (tried ? errors.draft : null) ?? null}
         show={tried}
         hint="Everyone who signs the lease. The first person added is the primary resident."

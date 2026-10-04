@@ -273,6 +273,7 @@ export function OfferDialog(props: RosterDialogProps) {
         picked={picked}
         onChange={setPicked}
         allowWithoutEmail={settings.allowResidentsWithoutEmail}
+        occupants={props.occupants.filter((o) => o.unitId === model.unit.id)}
         error={errors.residents ?? (tried ? errors.draft : null) ?? null}
         show={tried}
         hint="Everyone on the new term. Remove anyone moving out, or add a co-tenant."

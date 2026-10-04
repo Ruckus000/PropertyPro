@@ -222,6 +222,25 @@ describeDb('/api/v1/occupants (integration)', () => {
       expect((await rowsOf(await list())).map((r) => r.unitId)).toEqual([unitB]);
     });
 
+    it('someone named on a lease cannot be removed (409); off the lease, they can', async () => {
+      const kim = await dataOf<OccupantJson>(await create());
+      const m = state.dbModule;
+      const scoped = m.createScopedClient(communityId);
+      const [lease] = await scoped.insert(m.leases, { unitId: unitA, startDate: '2026-01-01', endDate: '2026-12-31', status: 'active' });
+      const leaseId = lease!['id'] as number;
+      try {
+        await scoped.insert(m.leaseResidents, { leaseId, occupantId: kim.id, isPrimary: true, addedOn: '2026-01-01' });
+        const refused = await send(routes.DELETE, 'DELETE', { communityId, id: kim.id });
+        expect(refused.status).toBe(409);
+        expect(JSON.stringify(await refused.json())).toContain('named on a lease');
+        expect((await rowsOf(await list())).map((r) => r.id)).toEqual([kim.id]);
+      } finally {
+        await state.db.delete(m.leaseResidents).where(eq(m.leaseResidents.leaseId, leaseId));
+        await state.db.delete(m.leases).where(eq(m.leases.id, leaseId));
+      }
+      expect((await send(routes.DELETE, 'DELETE', { communityId, id: kim.id })).status).toBe(200);
+    });
+
     it('a unit with a household member on file cannot be deleted', async () => {
       await create();
       const res = await send(unitsDELETE, 'DELETE', { communityId, unitId: unitA }, '/api/v1/units');

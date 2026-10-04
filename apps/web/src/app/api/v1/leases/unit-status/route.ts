@@ -41,7 +41,8 @@ export const PATCH = withErrorHandler(
         throw new ValidationError('The expected return date cannot be before the offline date');
       }
       const today = utcDateToWallClockValue(new Date(), membership.timezone ?? 'America/New_York').slice(0, 10);
-      const leases = (await listLeasesForCommunity(communityId)) as unknown as Array<{
+      const { rows: unitLeaseRows } = await listLeasesForCommunity(communityId, { unitId: body.unitId });
+      const leases = unitLeaseRows as unknown as Array<{
         id: number; unitId: number; status: string; startDate: string; endDate: string | null; moveOutOn: string | null;
       }>;
       const occupiedOrBooked = leases.find((l) => {

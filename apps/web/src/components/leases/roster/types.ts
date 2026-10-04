@@ -31,6 +31,8 @@ export interface RosterDialogProps {
   actions: LeaseActions;
   directory: PersonDirectory;
   residents: ResidentItem[];
+  /** Directory household members (no login); empty unless the community allows them on leases. */
+  occupants: Array<{ id: number; unitId: number; fullName: string; email: string | null }>;
   /** Close and confirm. `undo`, when given, is offered on the confirmation toast. */
   onDone: (message: string, undo?: () => Promise<unknown>) => void;
   onClose: () => void;

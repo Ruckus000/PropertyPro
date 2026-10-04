@@ -597,8 +597,8 @@ export interface PickedPerson {
 export function pickedFromPeople(people: PersonRef[]): PickedPerson[] {
   return people.flatMap((p): PickedPerson[] => {
     if (p.userId) return [{ key: `u:${p.userId}`, name: p.name, detail: p.email, pick: { userId: p.userId } }];
-    if (p.contactId != null)
-      return [{ key: `c:${p.contactId}`, name: p.name, detail: 'No email on file', pick: { contactId: p.contactId } }];
+    if (p.occupantId != null)
+      return [{ key: `c:${p.occupantId}`, name: p.name, detail: 'No email on file', pick: { occupantId: p.occupantId } }];
     return [];
   });
 }
@@ -608,11 +608,18 @@ export function residentPicks(picked: PickedPerson[]): ResidentPick[] {
   return picked.map((p, i) => ({ ...p.pick, isPrimary: i === 0 }));
 }
 
-export interface NewContactDraft {
+/** A new household member (main's `unit_occupants`) typed in the picker. */
+export interface NewOccupantDraft {
   fullName: string;
   phone: string;
-  mailingAddress: string;
-  noticeDelivery: 'mail' | 'hand';
+  email: string;
+}
+
+/** A household member already on file in the Directory for this unit. */
+export interface UnitOccupantOption {
+  id: number;
+  fullName: string;
+  email: string | null;
 }
 
 export function ResidentsPicker(props: {
@@ -621,20 +628,22 @@ export function ResidentsPicker(props: {
   picked: PickedPerson[];
   onChange: (next: PickedPerson[]) => void;
   allowWithoutEmail: boolean;
+  /** Household members of this unit from the Directory (shown when allowWithoutEmail). */
+  occupants?: UnitOccupantOption[];
   error: string | null;
   show: boolean;
   hint: string;
   /** Reports whether the "add a person without email" form is open (unfinished). */
   onDraftOpen?: (open: boolean) => void;
 }) {
-  const { idPrefix, residents, picked, onChange, allowWithoutEmail, error, show, hint, onDraftOpen } = props;
+  const { idPrefix, residents, picked, onChange, allowWithoutEmail, occupants = [], error, show, hint, onDraftOpen } = props;
   const inputId = `${idPrefix}-residents`;
   const listId = `${idPrefix}-residents-list`;
   const uid = useId();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [draft, setDraft] = useState<NewContactDraft | null>(null);
+  const [draft, setDraft] = useState<NewOccupantDraft | null>(null);
   const [draftTried, setDraftTried] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -657,7 +666,7 @@ export function ResidentsPicker(props: {
     inputRef.current?.focus();
   }
 
-  function setDraftOpen(next: NewContactDraft | null) {
+  function setDraftOpen(next: NewOccupantDraft | null) {
     setDraft(next);
     setDraftTried(false);
     onDraftOpen?.(next !== null);
@@ -677,13 +686,12 @@ export function ResidentsPicker(props: {
       {
         key: `n:${uid}:${picked.length}:${n}`,
         name: n,
-        detail: draft.noticeDelivery === 'hand' ? 'No email · notices by hand' : 'No email · notices by mail',
+        detail: 'Household member · no portal login',
         pick: {
-          newContact: {
+          newOccupant: {
             fullName: n,
             phone: draft.phone.trim() || null,
-            mailingAddress: draft.mailingAddress.trim() || null,
-            noticeDelivery: draft.noticeDelivery,
+            email: draft.email.trim() || null,
           },
         },
       },
@@ -825,16 +833,41 @@ export function ResidentsPicker(props: {
           variant="link"
           size="sm"
           className="px-0"
-          onClick={() => setDraftOpen({ fullName: '', phone: '', mailingAddress: '', noticeDelivery: 'mail' })}
+          onClick={() => setDraftOpen({ fullName: '', phone: '', email: '' })}
         >
           Add a person without email
         </Button>
       ) : null}
+      {allowWithoutEmail && occupants.some((o) => !pickedKeys.has(`c:${o.id}`)) ? (
+        <div className="space-y-1">
+          <p className="text-xs text-content-secondary">Household members on file for this unit:</p>
+          <div className="flex flex-wrap gap-2">
+            {occupants
+              .filter((o) => !pickedKeys.has(`c:${o.id}`))
+              .map((o) => (
+                <Button
+                  key={o.id}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    onChange([
+                      ...picked,
+                      { key: `c:${o.id}`, name: o.fullName, detail: 'Household member · no portal login', pick: { occupantId: o.id } },
+                    ])
+                  }
+                >
+                  Add {o.fullName}
+                </Button>
+              ))}
+          </div>
+        </div>
+      ) : null}
       {draft ? (
         <div className="space-y-3 rounded-md border border-edge bg-surface-muted p-3">
           <p className="text-sm text-content-secondary">
-            Notices go to the unit by mail or hand delivery. They can’t use the resident portal until an email is
-            added.
+            They are added to this unit’s household in the Directory. Notices go to the unit by mail or hand delivery,
+            and they can’t use the resident portal.
           </p>
           <Field id={`${idPrefix}-nc-name`} label="Full name" error={draftName} show={draftTried}>
             <Input
@@ -851,25 +884,14 @@ export function ResidentsPicker(props: {
               onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
             />
           </Field>
-          <Field id={`${idPrefix}-nc-address`} label="Mailing address" optional show={false}>
+          <Field id={`${idPrefix}-nc-email`} label="Email" optional show={false}>
             <Input
-              id={`${idPrefix}-nc-address`}
-              value={draft.mailingAddress}
-              onChange={(e) => setDraft({ ...draft, mailingAddress: e.target.value })}
+              id={`${idPrefix}-nc-email`}
+              type="email"
+              value={draft.email}
+              onChange={(e) => setDraft({ ...draft, email: e.target.value })}
             />
           </Field>
-          <RadioGroupField
-            name={`${idPrefix}-nc-delivery`}
-            legend="How notices are delivered"
-            options={[
-              { value: 'mail', label: 'By mail' },
-              { value: 'hand', label: 'By hand' },
-            ]}
-            value={draft.noticeDelivery}
-            onChange={(v) => setDraft({ ...draft, noticeDelivery: v })}
-            show={false}
-            inline
-          />
           <div className="flex gap-2">
             <Button type="button" size="sm" onClick={addDraft}>
               Add person

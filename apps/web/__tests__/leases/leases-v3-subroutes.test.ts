@@ -1,19 +1,21 @@
 /**
- * Leases v3 sub-routes: offers, transfer, unit-status, settings, contacts,
+ * Leases v3 sub-routes: offers, transfer, unit-status, settings,
  * deposits. Plan P1-S4. Every mutation must refuse a non-manager before any
  * write, and the lifecycle rules must hold.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { leaseSelectBuilder, type LeasePred } from '../helpers/lease-where-mock';
 
 const t = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
-  leases: { id: Symbol('leases') },
+  // Field-name column refs so the WHERE can be applied (helpers/lease-where-mock).
+  leases: { id: 'id', unitId: 'unitId', residentId: 'residentId', status: 'status', startDate: 'startDate', endDate: 'endDate', previousLeaseId: 'previousLeaseId', transferredFromLeaseId: 'transferredFromLeaseId', idempotencyKey: 'idempotencyKey', deletedAt: 'deletedAt' },
   units: { id: Symbol('units') },
   userRoles: { id: Symbol('user_roles') },
   leaseResidents: { id: Symbol('lease_residents') },
-  residentContacts: { id: Symbol('resident_contacts') },
+  unitOccupants: { id: Symbol('unit_occupants') },
   leaseDeposits: { id: Symbol('lease_deposits') },
   leaseRenewalOffers: { id: Symbol('lease_renewal_offers') },
   rentObligations: { id: Symbol('rent_obligations') },
@@ -29,12 +31,14 @@ vi.mock('@propertypro/db', () => ({
   units: t.units,
   userRoles: t.userRoles,
   leaseResidents: t.leaseResidents,
-  residentContacts: t.residentContacts,
+  unitOccupants: t.unitOccupants,
   leaseDeposits: t.leaseDeposits,
   leaseRenewalOffers: t.leaseRenewalOffers,
   rentObligations: t.rentObligations,
   communities: t.communities,
 }));
+vi.mock('@propertypro/db/filters', async (orig) =>
+  (await import('../helpers/lease-where-mock')).leaseFiltersMock(await orig()));
 vi.mock('@/lib/api/auth', () => ({ requireAuthenticatedUserId: t.requireAuthenticatedUserIdMock }));
 vi.mock('@/lib/api/community-membership', () => ({ requireCommunityMembership: t.requireCommunityMembershipMock }));
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
@@ -45,7 +49,6 @@ import * as offers from '../../src/app/api/v1/leases/offers/route';
 import * as transfer from '../../src/app/api/v1/leases/transfer/route';
 import * as unitStatus from '../../src/app/api/v1/leases/unit-status/route';
 import * as settings from '../../src/app/api/v1/leases/settings/route';
-import * as contacts from '../../src/app/api/v1/leases/contacts/route';
 import * as deposits from '../../src/app/api/v1/leases/deposits/route';
 
 const MANAGER = '00000000-0000-4000-8000-000000000001';
@@ -75,12 +78,14 @@ function seed(rows: Rows) {
   const read = vi.fn(async (x: unknown) => table(x));
   const client = {
     query: read,
-    selectFrom: vi.fn((x: unknown) => read(x)),
+    queryById: vi.fn(async (x: unknown, id: unknown) => (table(x) as Array<Record<string, unknown>>).find((r) => r['id'] === id) ?? null),
+    selectFrom: vi.fn((x: unknown, _cols?: unknown, where?: LeasePred) =>
+      leaseSelectBuilder(() => read(x), x === t.leases, where, () => table(t.leaseResidents) as Array<Record<string, unknown>>)),
     insert: vi.fn(async (x: unknown, data: unknown) => {
       if (x === t.leases) return [{ id: 900, ...(data as object) }];
       if (x === t.leaseRenewalOffers) return [{ id: 300, ...(data as object) }];
       if (x === t.leaseDeposits) return [{ id: 400, ...(data as object) }];
-      if (x === t.residentContacts) return [{ id: 700, ...(data as object) }];
+      if (x === t.unitOccupants) return [{ id: 700, ...(data as object) }];
       return Array.isArray(data) ? data : [data];
     }),
     update: vi.fn(async (_x: unknown, data: unknown) => [{ id: 1, ...(data as object) }]),
@@ -95,7 +100,7 @@ const currentLease = {
   id: 1, communityId: 42, unitId: 10, residentId: R1, startDate: '2026-01-01', endDate: '2026-12-31',
   rentAmount: '1500.00', status: 'active', previousLeaseId: null, version: 2, moveOutOn: null, endVia: null,
 };
-const residentRow = { id: 1, leaseId: 1, userId: R1, contactId: null, isPrimary: true, addedOn: '2026-01-01', removedOn: null };
+const residentRow = { id: 1, leaseId: 1, userId: R1, occupantId: null, isPrimary: true, addedOn: '2026-01-01', removedOn: null };
 
 function req(method: string, path: string, body?: unknown) {
   return new NextRequest(`http://localhost:3000${path}`, {
@@ -120,7 +125,6 @@ describe('every v3 mutation refuses a resident before writing', () => {
     ['transfer POST', () => transfer.POST(req('POST', '/api/v1/leases/transfer', { communityId: 42, fromLeaseId: 1, toUnitId: 20, moveOutOn: '2026-10-31', startDate: '2026-11-01', rentAmount: '1800.00', carryDeposit: false }))],
     ['unit-status PATCH', () => unitStatus.PATCH(req('PATCH', '/api/v1/leases/unit-status', { communityId: 42, unitId: 20, offline: null }))],
     ['settings PATCH', () => settings.PATCH(req('PATCH', '/api/v1/leases/settings', { communityId: 42, alertWindows: [30] }))],
-    ['contacts POST', () => contacts.POST(req('POST', '/api/v1/leases/contacts', { communityId: 42, fullName: 'X' }))],
     ['deposits POST', () => deposits.POST(req('POST', '/api/v1/leases/deposits', { communityId: 42, leaseId: 1, amount: '100.00' }))],
   ];
   for (const [name, call] of cases) {
@@ -299,20 +303,6 @@ describe('settings', () => {
     expect(res.status).toBe(200);
     expect(client.update).toHaveBeenCalledTimes(1);
     expect(client.update.mock.calls[0]![0]).toBe(t.communities);
-  });
-});
-
-describe('contacts', () => {
-  it('403 while the community switch is off; 200 once on', async () => {
-    let client = seed({});
-    expect((await contacts.POST(req('POST', '/api/v1/leases/contacts', { communityId: 42, fullName: 'Paper Only' }))).status).toBe(403);
-    expect(client.insert).not.toHaveBeenCalled();
-
-    client = seed({ communities: [{ communitySettings: { leasesAllowResidentsWithoutEmail: true } }] });
-    const res = await contacts.POST(req('POST', '/api/v1/leases/contacts', { communityId: 42, fullName: 'Paper Only', mailingAddress: '1 Main St' }));
-    expect(res.status).toBe(200);
-    // The audit log gets the fact, not the home address.
-    expect(JSON.stringify(t.logAuditEventMock.mock.calls)).not.toContain('1 Main St');
   });
 });
 

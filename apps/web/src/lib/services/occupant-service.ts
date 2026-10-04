@@ -9,7 +9,7 @@
  * Audit entries are built field by field, never spread from the row. Remove
  * hard-deletes for the same reason: a soft-deleted row would keep the PII.
  */
-import { createScopedClient, logAuditEvent, paginate, unitOccupants } from '@propertypro/db';
+import { createScopedClient, leaseResidents, logAuditEvent, paginate, unitOccupants } from '@propertypro/db';
 import { and, eq, inArray, sql } from '@propertypro/db/filters';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
@@ -174,11 +174,24 @@ export async function updateOccupant(
   return toRow(row);
 }
 
-/** Erasure, not hiding: the row is hard-deleted and the audit keeps only the unit. */
+/**
+ * Erasure, not hiding: the row is hard-deleted and the audit keeps only the unit.
+ *
+ * Refused (409) while a lease names this person, current or past: a lease is
+ * a record of who held the unit, and lease_residents.occupant_id is ON DELETE
+ * RESTRICT so the database would refuse anyway. An erasure request for someone
+ * on a lease is a records-retention decision for the manager, not a click.
+ */
 export async function removeOccupant(communityId: number, actorUserId: string, id: number): Promise<void> {
   const scoped = createScopedClient(communityId);
   const [current] = (await scoped.selectFrom(unitOccupants, {}, eq(unitOccupants.id, id))) as Record<string, unknown>[];
   if (!current) throw new NotFoundError('Household member not found');
+  const onLease = await scoped
+    .selectFrom<{ id: number }>(leaseResidents, { id: leaseResidents.id }, eq(leaseResidents.occupantId, id))
+    .limit(1);
+  if (onLease.length > 0) {
+    throw new ConflictError('This person is named on a lease, so they stay on file with it. Take them off the lease in Leases first.');
+  }
   await scoped.hardDelete(unitOccupants, eq(unitOccupants.id, id));
   await logAuditEvent({
     userId: actorUserId,

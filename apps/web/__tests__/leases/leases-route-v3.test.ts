@@ -13,6 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { leaseSelectBuilder, type LeasePred } from '../helpers/lease-where-mock';
 
 const {
   createScopedClientMock,
@@ -21,7 +22,7 @@ const {
   unitsTableMock,
   userRolesTableMock,
   leaseResidentsTableMock,
-  residentContactsTableMock,
+  unitOccupantsTableMock,
   leaseDepositsTableMock,
   rentObligationsTableMock,
   communitiesTableMock,
@@ -30,11 +31,13 @@ const {
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
-  leasesTableMock: { id: Symbol('leases.id') },
+  // Field-name column refs so the WHERE can be applied (helpers/lease-where-mock).
+  leasesTableMock: { id: 'id', unitId: 'unitId', residentId: 'residentId', status: 'status', startDate: 'startDate', endDate: 'endDate', previousLeaseId: 'previousLeaseId', transferredFromLeaseId: 'transferredFromLeaseId', idempotencyKey: 'idempotencyKey', deletedAt: 'deletedAt' },
+
   unitsTableMock: { id: Symbol('units.id') },
   userRolesTableMock: { id: Symbol('user_roles.id') },
   leaseResidentsTableMock: { id: Symbol('lease_residents.id') },
-  residentContactsTableMock: { id: Symbol('resident_contacts.id') },
+  unitOccupantsTableMock: { id: Symbol('unit_occupants.id') },
   leaseDepositsTableMock: { id: Symbol('lease_deposits.id') },
   rentObligationsTableMock: { id: Symbol('rent_obligations.id') },
   communitiesTableMock: { id: Symbol('communities.id') },
@@ -49,11 +52,13 @@ vi.mock('@propertypro/db', () => ({
   units: unitsTableMock,
   userRoles: userRolesTableMock,
   leaseResidents: leaseResidentsTableMock,
-  residentContacts: residentContactsTableMock,
+  unitOccupants: unitOccupantsTableMock,
   leaseDeposits: leaseDepositsTableMock,
   rentObligations: rentObligationsTableMock,
   communities: communitiesTableMock,
 }));
+vi.mock('@propertypro/db/filters', async (orig) =>
+  (await import('../helpers/lease-where-mock')).leaseFiltersMock(await orig()));
 vi.mock('@/lib/api/auth', () => ({ requireAuthenticatedUserId: requireAuthenticatedUserIdMock }));
 vi.mock('@/lib/api/community-membership', () => ({ requireCommunityMembership: requireCommunityMembershipMock }));
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
@@ -95,7 +100,7 @@ function residentMembership(userId: string) {
   };
 }
 
-type Tables = Partial<Record<'leases' | 'units' | 'userRoles' | 'leaseResidents' | 'residentContacts' | 'leaseDeposits' | 'rentObligations' | 'communities', unknown[]>>;
+type Tables = Partial<Record<'leases' | 'units' | 'userRoles' | 'leaseResidents' | 'unitOccupants' | 'leaseDeposits' | 'rentObligations' | 'communities', unknown[]>>;
 
 /** A scoped-client double whose reads return fixed rows per table. */
 function seed(tables: Tables, overrides: Record<string, unknown> = {}) {
@@ -104,7 +109,7 @@ function seed(tables: Tables, overrides: Record<string, unknown> = {}) {
     [unitsTableMock, tables.units ?? [{ id: 10, communityId: 42, rentAmount: '1500.00', offlineSince: null }]],
     [userRolesTableMock, tables.userRoles ?? [{ userId: ACTOR, role: 'resident', isUnitOwner: false }]],
     [leaseResidentsTableMock, tables.leaseResidents ?? []],
-    [residentContactsTableMock, tables.residentContacts ?? []],
+    [unitOccupantsTableMock, tables.unitOccupants ?? []],
     [leaseDepositsTableMock, tables.leaseDeposits ?? []],
     [rentObligationsTableMock, tables.rentObligations ?? []],
     [communitiesTableMock, tables.communities ?? [{ communitySettings: {} }]],
@@ -112,10 +117,14 @@ function seed(tables: Tables, overrides: Record<string, unknown> = {}) {
   const read = vi.fn(async (table: unknown) => byTable.get(table) ?? []);
   const client = {
     query: read,
-    selectFrom: vi.fn((table: unknown) => read(table)),
+    queryById: vi.fn(async (table: unknown, id: unknown) =>
+      ((byTable.get(table) ?? []) as Array<Record<string, unknown>>).find((r) => r['id'] === id) ?? null),
+    selectFrom: vi.fn((table: unknown, _cols?: unknown, where?: LeasePred) =>
+      leaseSelectBuilder(() => read(table), table === leasesTableMock, where,
+        () => (byTable.get(leaseResidentsTableMock) ?? []) as Array<Record<string, unknown>>)),
     insert: vi.fn(async (table: unknown, data: unknown) => {
       if (table === leasesTableMock) return [{ id: 900, communityId: 42, ...(data as object) }];
-      if (table === residentContactsTableMock) return [{ id: 700, ...(data as object) }];
+      if (table === unitOccupantsTableMock) return [{ id: 700, createdAt: new Date(), updatedAt: new Date(), ...(data as object) }];
       return Array.isArray(data) ? data : [data];
     }),
     update: vi.fn(async (_t: unknown, data: unknown) => [{ id: 1, ...(data as object) }]),
@@ -165,9 +174,9 @@ describe('GET — read boundary from lease_residents', () => {
     lease({ id: 2, unitId: 11, residentId: OTHER, rentAmount: '9999.99' }),
   ];
   const leaseResidents = [
-    { id: 1, leaseId: 1, userId: ACTOR, contactId: null, isPrimary: true, addedOn: '2026-01-01', removedOn: null },
-    { id: 2, leaseId: 1, userId: CO_TENANT, contactId: null, isPrimary: false, addedOn: '2026-01-01', removedOn: null },
-    { id: 3, leaseId: 2, userId: OTHER, contactId: null, isPrimary: true, addedOn: '2026-01-01', removedOn: null },
+    { id: 1, leaseId: 1, userId: ACTOR, occupantId: null, isPrimary: true, addedOn: '2026-01-01', removedOn: null },
+    { id: 2, leaseId: 1, userId: CO_TENANT, occupantId: null, isPrimary: false, addedOn: '2026-01-01', removedOn: null },
+    { id: 3, leaseId: 2, userId: OTHER, occupantId: null, isPrimary: true, addedOn: '2026-01-01', removedOn: null },
   ];
 
   it('a co-tenant (not the legacy residentId) sees the lease they are on — and nothing else', async () => {
@@ -221,37 +230,38 @@ describe('GET — read boundary from lease_residents', () => {
     expect(json.data.map((l) => l.id)).toEqual([1]);
   });
 
-  it('managers get every lease with residents, contact details and deposits', async () => {
+  it('managers get every lease with residents, household-member details and deposits', async () => {
     seed({
       leases,
       leaseResidents: [
         ...leaseResidents,
-        { id: 4, leaseId: 2, userId: null, contactId: 7, isPrimary: false, addedOn: '2026-01-01', removedOn: null },
+        { id: 4, leaseId: 2, userId: null, occupantId: 7, isPrimary: false, addedOn: '2026-01-01', removedOn: null },
       ],
-      residentContacts: [{ id: 7, fullName: 'Paper Only', phone: '555', mailingAddress: '1 Main St', noticeDelivery: 'mail', linkedUserId: null }],
+      unitOccupants: [{ id: 7, unitId: 10, fullName: 'Paper Only', phone: '555', email: null }],
       leaseDeposits: [{ id: 1, leaseId: 2, amount: '1500.00' }],
     });
 
     const res = await GET(new NextRequest('http://localhost:3000/api/v1/leases?communityId=42'));
-    const json = (await res.json()) as { data: Array<{ id: number; deposits: unknown[]; residents: Array<{ contact: { mailingAddress?: string } | null }> }> };
+    const json = (await res.json()) as { data: Array<{ id: number; deposits: unknown[]; residents: Array<{ occupant: { fullName: string; phone?: string | null } | null }> }> };
     expect(json.data).toHaveLength(2);
     const l2 = json.data.find((l) => l.id === 2)!;
     expect(l2.deposits).toHaveLength(1);
-    expect(l2.residents.find((r) => r.contact)?.contact?.mailingAddress).toBe('1 Main St');
+    expect(l2.residents.find((r) => r.occupant)?.occupant).toEqual(expect.objectContaining({ fullName: 'Paper Only', phone: '555' }));
   });
 });
 
-describe('POST — residents, contacts and rent rules', () => {
+describe('POST — residents, household members and rent rules', () => {
   const base = { communityId: 42, unitId: 10, startDate: '2026-11-01', endDate: '2027-10-31' };
 
   it('writes one lease_residents row per resident and dual-writes the primary as residentId', async () => {
     const client = seed({ userRoles: [{ userId: ACTOR, role: 'resident', isUnitOwner: false }, { userId: CO_TENANT, role: 'resident', isUnitOwner: false }] });
-    client.selectFrom = vi.fn(async (table: unknown, _cols: unknown, _where: unknown) => {
-      if (table === userRolesTableMock) return [{ userId: ACTOR, role: 'resident', isUnitOwner: false }];
-      if (table === unitsTableMock) return [{ id: 10, rentAmount: '1500.00', offlineSince: null }];
-      if (table === communitiesTableMock) return [{ communitySettings: {} }];
-      return [];
-    }) as never;
+    const original = client.selectFrom;
+    client.selectFrom = vi.fn((table: unknown, cols?: unknown, where?: LeasePred) =>
+      table === userRolesTableMock
+        // The CO_TENANT role row is only in query(); selectFrom must not
+        // be what proves they are a resident.
+        ? Promise.resolve([{ userId: ACTOR, role: 'resident', isUnitOwner: false }])
+        : original(table, cols, where)) as never;
 
     const res = await POST(jsonReq('POST', { ...base, residents: [{ userId: ACTOR }, { userId: CO_TENANT, isPrimary: true }] }));
     expect(res.status).toBe(200);
@@ -264,25 +274,26 @@ describe('POST — residents, contacts and rent rules', () => {
 
   it('refuses a resident without email while the community switch is off (the default)', async () => {
     const client = seed({});
-    const res = await POST(jsonReq('POST', { ...base, residents: [{ newContact: { fullName: 'Paper Only' } }] }));
+    const res = await POST(jsonReq('POST', { ...base, residents: [{ newOccupant: { fullName: 'Paper Only' } }] }));
     expect(res.status).toBe(403);
     expect(client.insert).not.toHaveBeenCalled();
   });
 
   it('treats the STRING "true" as off — the switch needs a real boolean', async () => {
     const client = seed({ communities: [{ communitySettings: { leasesAllowResidentsWithoutEmail: 'true' } }] });
-    const res = await POST(jsonReq('POST', { ...base, residents: [{ newContact: { fullName: 'Paper Only' } }] }));
+    const res = await POST(jsonReq('POST', { ...base, residents: [{ newOccupant: { fullName: 'Paper Only' } }] }));
     expect(res.status).toBe(403);
     expect(client.insert).not.toHaveBeenCalled();
   });
 
-  it('creates a contact-only primary resident when the switch is on; residentId stays null', async () => {
+  it('adds a household member with no login as the primary when the switch is on; residentId stays null', async () => {
     const client = seed({ communities: [{ communitySettings: { leasesAllowResidentsWithoutEmail: true } }] });
-    const res = await POST(jsonReq('POST', { ...base, residents: [{ newContact: { fullName: 'Paper Only', noticeDelivery: 'hand' } }] }));
+    const res = await POST(jsonReq('POST', { ...base, residents: [{ newOccupant: { fullName: 'Paper Only', phone: '555' } }] }));
     expect(res.status).toBe(200);
-    expect(client.insert).toHaveBeenCalledWith(residentContactsTableMock, expect.objectContaining({ fullName: 'Paper Only', noticeDelivery: 'hand' }));
+    // Created through occupant-service, so it lands in Directory on the lease's unit.
+    expect(client.insert).toHaveBeenCalledWith(unitOccupantsTableMock, expect.objectContaining({ unitId: 10, fullName: 'Paper Only', phone: '555', isOwnerHousehold: false }));
     expect(client.insert).toHaveBeenCalledWith(leasesTableMock, expect.objectContaining({ residentId: null }));
-    expect(client.insert).toHaveBeenCalledWith(leaseResidentsTableMock, [expect.objectContaining({ contactId: 700, userId: null, isPrimary: true })]);
+    expect(client.insert).toHaveBeenCalledWith(leaseResidentsTableMock, [expect.objectContaining({ occupantId: 700, userId: null, isPrimary: true })]);
   });
 
   it('requires a reason for $0 rent, and stores it when given', async () => {

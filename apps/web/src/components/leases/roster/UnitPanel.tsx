@@ -228,7 +228,7 @@ export function UnitPanel({
           <Section title="Residents">
             <ul className="space-y-2">
               {(c ? m.people : nextPeople).map((p) => (
-                <li key={`${p.userId ?? ''}${p.contactId ?? ''}`} className="flex items-center gap-3">
+                <li key={`${p.userId ?? ''}${p.occupantId ?? ''}`} className="flex items-center gap-3">
                   <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-content-secondary">
                     {initials(p.name)}
                   </span>
@@ -236,7 +236,7 @@ export function UnitPanel({
                     <div className="truncate text-sm font-medium text-content">{p.name}</div>
                     <div className="truncate text-xs text-content-secondary">
                       {p.isPrimary ? 'Primary' : 'Co-tenant'}
-                      {p.email ? ` · ${p.email}` : p.contactId ? ' · No email — notices by mail or hand' : ''}
+                      {p.email ? ` · ${p.email}` : p.occupantId ? ' · No email — notices by mail or hand' : ''}
                     </div>
                   </div>
                   {p.userId && (

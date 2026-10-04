@@ -75,7 +75,7 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
-const leaseStatusValues = ['active', 'expired', 'renewed', 'terminated', 'cancelled'] as const;
+export const LEASE_STATUS_VALUES = ['active', 'expired', 'renewed', 'terminated', 'cancelled'] as const;
 
 // --- Leases v3 shapes (all optional: the pre-v3 wire shape keeps working) ---
 
@@ -87,21 +87,23 @@ export const leaseEndViaValues = ['notice', 'declined', 'early', 'transfer', 'ex
 export const depositHeldMethodValues = ['separate_noninterest', 'separate_interest', 'surety_bond'] as const;
 
 /**
- * One resident on a lease: an existing user, an existing contact, or a new
- * contact-only person. Contacts are refused unless the community has turned on
+ * One resident on a lease: an existing user, an existing household member
+ * (`unit_occupants`), or a new household member. Members with no login are
+ * refused unless the community has turned on
  * `leasesAllowResidentsWithoutEmail` (checked in the handler, not here).
  */
 export const leaseResidentInputSchema = z.union([
   z.object({ userId: z.string().uuid(), isPrimary: z.boolean().optional() }).strict(),
-  z.object({ contactId: z.number().int().positive(), isPrimary: z.boolean().optional() }).strict(),
+  z.object({ occupantId: z.number().int().positive(), isPrimary: z.boolean().optional() }).strict(),
   z
     .object({
-      newContact: z
+      newOccupant: z
         .object({
           fullName: z.string().trim().min(1).max(200),
           phone: z.string().trim().max(40).nullable().optional(),
-          mailingAddress: z.string().trim().max(500).nullable().optional(),
-          noticeDelivery: z.enum(['mail', 'hand']).optional(),
+          // Optional, like main's occupants contract: a household member may
+          // share an email or have none.
+          email: z.string().trim().email().max(254).nullable().optional(),
         })
         .strict(),
       isPrimary: z.boolean().optional(),
@@ -139,7 +141,7 @@ const createLeaseSchema = z.object({
     .regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal number with up to 2 decimal places')
     .nullable()
     .optional(),
-  status: z.enum(leaseStatusValues).optional(),
+  status: z.enum(LEASE_STATUS_VALUES).optional(),
   previousLeaseId: z.number().int().positive().nullable().optional(),
   notes: z.string().nullable().optional(),
   /** When true, creating a renewal: sets previousLeaseId and marks old lease as 'renewed' */
@@ -157,7 +159,7 @@ const createLeaseSchema = z.object({
 const updateLeaseSchema = z.object({
   id: z.number().int().positive(),
   communityId: z.number().int().positive(),
-  status: z.enum(leaseStatusValues).optional(),
+  status: z.enum(LEASE_STATUS_VALUES).optional(),
   endDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format')
