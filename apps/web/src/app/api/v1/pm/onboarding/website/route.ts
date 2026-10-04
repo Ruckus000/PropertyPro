@@ -31,10 +31,13 @@ import { effectiveLook } from '@propertypro/shared';
 import { updateCommunityName } from '@/lib/services/community-profile-service';
 import { wizardPatchContract } from './contract';
 import type { NextRequest } from 'next/server';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
 async function ensurePmAccess(req: NextRequest, communityId: number) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
+  // A demo in its grace window is read-only. Before membership, per api-patterns.md.
+  await assertNotDemoGrace(effective);
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(
     membership,

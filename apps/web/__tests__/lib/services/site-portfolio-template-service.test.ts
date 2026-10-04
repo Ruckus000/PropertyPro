@@ -96,6 +96,7 @@ import {
   userHasPortfolioTemplatesAccess,
   applyTemplate,
   CUSTOM_COLOURS_SKIPPED_NOTE,
+  DEMO_GRACE_FAILED_REASON,
 } from '@/lib/services/site-portfolio-template-service';
 import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 
@@ -300,6 +301,64 @@ describe('applyTemplate', () => {
 
     expect(out.results[0]).toMatchObject({ communityId: 1, status: 'failed', reason: 'db down' });
     expect(out.results[1]).toMatchObject({ communityId: 2, status: 'applied' });
+  });
+
+  describe('a demo whose trial has ended is read-only', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const base = { communityType: 'condo_718', subscriptionPlan: 'professional', deletedAt: null };
+    const rows = (graceDemo: Record<string, unknown>) => [
+      { id: 1, ...base, isDemo: false, trialEndsAt: null, demoExpiresAt: null },
+      { id: 2, ...base, ...graceDemo },
+    ];
+
+    it('reports the grace-window target as failed, writes nothing to it, and still applies the other', async () => {
+      resultQueue.push([
+        { id: 5, branding: { primaryColor: '#abc' }, siteLogoPath: 'portfolio-templates/5/site-logo.webp' },
+      ]);
+      resultQueue.push(
+        rows({
+          isDemo: true,
+          trialEndsAt: new Date(Date.now() - DAY),
+          demoExpiresAt: new Date(Date.now() + DAY),
+        }),
+      );
+
+      const out = await applyTemplate('user-1', 5, [1, 2]);
+
+      expect(out.results).toEqual([
+        { communityId: 1, communityName: 'Sunset Condos', status: 'applied' },
+        {
+          communityId: 2,
+          communityName: 'Palm Shores',
+          status: 'failed',
+          reason: DEMO_GRACE_FAILED_REASON,
+        },
+      ]);
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledTimes(1);
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, expect.anything());
+      expect(copyStorageObjectMock).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'communities/2/branding/site-logo.webp',
+      );
+      expect(logAuditEventMock).not.toHaveBeenCalledWith(expect.objectContaining({ communityId: 2 }));
+    });
+
+    it('applies to a demo still in its trial', async () => {
+      resultQueue.push([{ id: 5, branding: { primaryColor: '#abc' }, siteLogoPath: null }]);
+      resultQueue.push(
+        rows({
+          isDemo: true,
+          trialEndsAt: new Date(Date.now() + DAY),
+          demoExpiresAt: new Date(Date.now() + 2 * DAY),
+        }),
+      );
+
+      const out = await applyTemplate('user-1', 5, [2]);
+
+      expect(out.results[0]).toMatchObject({ communityId: 2, status: 'applied' });
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(2, { primaryColor: '#abc' });
+    });
   });
 
   describe('custom colours follow each target community\'s plan', () => {
