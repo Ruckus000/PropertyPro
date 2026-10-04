@@ -25,13 +25,20 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { getSiteSettings, updateSiteSettings } from '@/lib/services/site-settings-service';
 import { siteSettingsGetContract, siteSettingsPatchContract } from './contract';
 import type { NextRequest } from 'next/server';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
-async function ensurePmAccess(req: NextRequest, communityId: number) {
+async function ensurePmAccess(
+  req: NextRequest,
+  communityId: number,
+  { write = true }: { write?: boolean } = {},
+) {
   const userId = await requireAuthenticatedUserId();
   // The middleware `x-community-id` header is authoritative; the id in the
   // query/body is the cross-checked redundant value. A caller who is a manager
   // of community A cannot address community B by editing the payload.
   const effective = resolveEffectiveCommunityId(req, communityId);
+  // A demo in its grace window is read-only. Before membership, per api-patterns.md.
+  if (write) await assertNotDemoGrace(effective);
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(
     membership,
@@ -44,7 +51,9 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
 
 export const GET = withErrorHandler(
   runRoute(siteSettingsGetContract, async ({ query, req }) => {
-    const { communityId, membership } = await ensurePmAccess(req, query.communityId);
+    const { communityId, membership } = await ensurePmAccess(req, query.communityId, {
+      write: false,
+    });
     // Admin reads are additionally gated on entitlement (§4.1, enforced by
     // `guard:read-entitlement`). A lapsed community's manager cannot read.
     await requireEntitledForAdminRead(communityId, membership);

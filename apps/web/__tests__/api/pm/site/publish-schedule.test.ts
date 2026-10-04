@@ -6,6 +6,13 @@
  * express — so they need covering here rather than being assumed.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// A demo in its grace window is read-only; these tests run as a normal
+// community unless a case says otherwise.
+const assertNotDemoGraceMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
+}));
 import { NextRequest } from 'next/server';
 import { AppError } from '@/lib/api/errors';
 

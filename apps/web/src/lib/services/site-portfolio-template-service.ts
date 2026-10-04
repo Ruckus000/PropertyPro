@@ -32,6 +32,7 @@ import {
 import { createUnscopedClient, findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
 import { and, desc, eq, inArray, isNull } from '@propertypro/db/filters';
 import {
+  computeDemoStatus,
   extractTemplateBranding,
   getEffectiveFeatures,
   PM_SCOPE_DB_ROLES,
@@ -288,6 +289,9 @@ export interface ApplyResult {
   notes?: string[];
 }
 
+export const DEMO_GRACE_FAILED_REASON =
+  "This community's trial has ended, so its site is read-only";
+
 export const CUSTOM_COLOURS_SKIPPED_NOTE =
   "Custom colours skipped: this community's plan doesn't include them";
 
@@ -313,6 +317,11 @@ export const CUSTOM_COLOURS_SKIPPED_NOTE =
  * plan), and the result says so. Entitlement is resolved for all targets in
  * one query, failing open on an unknown plan exactly as `requirePlanFeature`
  * does.
+ *
+ * A demo whose trial has ended is read-only until it expires (the grace
+ * window `assertNotDemoGrace` enforces on every manager write). Such a target
+ * is reported as failed and left untouched; the others still apply. Its state
+ * comes from the same batched query rather than one guard call per target.
  */
 export async function applyTemplate(
   ownerUserId: string,
@@ -359,6 +368,10 @@ export async function applyTemplate(
             id: communities.id,
             communityType: communities.communityType,
             subscriptionPlan: communities.subscriptionPlan,
+            isDemo: communities.isDemo,
+            trialEndsAt: communities.trialEndsAt,
+            demoExpiresAt: communities.demoExpiresAt,
+            deletedAt: communities.deletedAt,
           })
           .from(communities)
           .where(inArray(communities.id, communityIds));
@@ -369,6 +382,9 @@ export async function applyTemplate(
         .hasSiteCustomCss,
     ]),
   );
+  const inDemoGrace = new Set(
+    planRows.filter((r) => computeDemoStatus(r) === 'grace_period').map((r) => r.id),
+  );
   const templateCustomCss = templateBranding.customCssOverrides;
   const templateHasCustomCss =
     templateCustomCss != null && Object.keys(templateCustomCss).length > 0;
@@ -376,6 +392,9 @@ export async function applyTemplate(
   const settled = await Promise.allSettled(
     communityIds.map(async (communityId): Promise<ApplyResult> => {
       const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
+      if (inDemoGrace.has(communityId)) {
+        return { communityId, communityName, status: 'failed', reason: DEMO_GRACE_FAILED_REASON };
+      }
       const patch: BrandingPatch = { ...templateBranding };
       const notes: string[] = [];
       // Fail open (true) when the community's row is missing, as plan-guard does.

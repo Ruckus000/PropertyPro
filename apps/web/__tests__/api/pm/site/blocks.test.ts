@@ -1,4 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// A demo in its grace window is read-only; these tests run as a normal
+// community unless a case says otherwise.
+const assertNotDemoGraceMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
+}));
 import { NextRequest } from 'next/server';
 import { AppError } from '@/lib/api/errors/AppError';
 
@@ -683,6 +690,15 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     );
     const res = await PATCH(makePatchRequest(VALID_TEXT_BODY));
     expect(res.status).toBe(403);
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('403s for a demo in its grace window, before the membership check', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(new AppError('Your trial has ended. Subscribe to regain full access.', 403, 'DEMO_GRACE_READ_ONLY'));
+    const res = await PATCH(makePatchRequest(VALID_TEXT_BODY));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe('DEMO_GRACE_READ_ONLY');
+    expect(requireMembershipMock).not.toHaveBeenCalled();
     expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
   });
 

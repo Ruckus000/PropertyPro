@@ -31,10 +31,17 @@ import {
   getSitePublishScheduleContract,
 } from './contract';
 import type { NextRequest } from 'next/server';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 
-async function ensurePmAccess(req: NextRequest, communityId: number) {
+async function ensurePmAccess(
+  req: NextRequest,
+  communityId: number,
+  { write = true }: { write?: boolean } = {},
+) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
+  // A demo in its grace window is read-only. Before membership, per api-patterns.md.
+  if (write) await assertNotDemoGrace(effective);
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(
     membership,
@@ -47,7 +54,9 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
 
 export const GET = withErrorHandler(
   runRoute(getSitePublishScheduleContract, async ({ query, req }) => {
-    const { communityId, membership } = await ensurePmAccess(req, query.communityId);
+    const { communityId, membership } = await ensurePmAccess(req, query.communityId, {
+      write: false,
+    });
     // A lapsed community's managers lose admin reads; residents are unaffected.
     // Same gate every other admin GET carries.
     await requireEntitledForAdminRead(communityId, membership);

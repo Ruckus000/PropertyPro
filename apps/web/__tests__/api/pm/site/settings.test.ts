@@ -11,8 +11,15 @@
  * The service is mocked; its caps and merge behaviour have their own suite.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// A demo in its grace window is read-only; these tests run as a normal
+// community unless a case says otherwise.
+const assertNotDemoGraceMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
+}));
 import { NextRequest } from 'next/server';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { AppError, ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { SEO_TITLE_MAX_LENGTH } from '@/lib/site-editor/site-settings';
 
 const {
@@ -209,6 +216,22 @@ describe('PATCH — authorization', () => {
     const res = await PATCH(patchRequest({ communityId: COMMUNITY_ID, seoTitle: 'x' }));
     expect(res.status).toBe(403);
     expect(updateSiteSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a demo in its grace window, before the membership check', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(new AppError('Your trial has ended. Subscribe to regain full access.', 403, 'DEMO_GRACE_READ_ONLY'));
+    const res = await PATCH(patchRequest({ communityId: COMMUNITY_ID, seoTitle: 'x' }));
+    expect(res.status).toBe(403);
+    expect(requireMembershipMock).not.toHaveBeenCalled();
+    expect(updateSiteSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('lets a demo in its grace window still READ its settings', async () => {
+    assertNotDemoGraceMock.mockRejectedValue(new AppError('Your trial has ended. Subscribe to regain full access.', 403, 'DEMO_GRACE_READ_ONLY'));
+    const res = await GET(getRequest());
+    expect(res.status).toBe(200);
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
   });
 
   it('rejects a community without the site-editor plan feature', async () => {
