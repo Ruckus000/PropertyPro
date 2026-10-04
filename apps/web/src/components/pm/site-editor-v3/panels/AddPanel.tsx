@@ -202,14 +202,14 @@ export function AddPanel({
         </p>
       )}
 
-      {/* Community-wide, not per page: section positions are shared across the
-          whole site until 11c, so the 98-section ceiling is reached across all
-          pages together. Saying "this page is full" on a page holding two
-          sections would be unactionable. */}
+      {/* Per page, not community-wide: since Phase 11c (migration 0048) each
+          page owns its own 98 content slots (see add-catalog.ts), so the ceiling
+          is reached on THIS page. Matches the duplicate path's PAGE_FULL_MESSAGE
+          in editor-context.tsx. */}
       {isFull && (
         <p role="alert" className="text-sm text-status-danger">
-          Your site is full — it already has the maximum of 98 sections across all
-          pages. Remove one before adding another.
+          This page is full — it already has the maximum of 98 sections. Remove one
+          before adding another.
         </p>
       )}
 

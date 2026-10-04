@@ -221,7 +221,9 @@ describe('AddPanel', () => {
     }
     renderPanel();
     expect(screen.getByTestId('add-section-text')).toBeDisabled();
-    expect(screen.getByRole('alert')).toHaveTextContent(/full/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /this page is full — it already has the maximum of 98 sections\. remove one before adding another\./i,
+    );
   });
 
   describe('Pro gating', () => {
