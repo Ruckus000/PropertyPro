@@ -357,6 +357,7 @@ export function EditorTopBar({
         </Button>
         <Button
           onClick={onPublish}
+          data-tour="publish"
           disabled={!canOpenPublish}
           title={canOpenPublish ? undefined : 'Nothing to publish yet'}
           // The badge is a bare number; the name says what it counts.

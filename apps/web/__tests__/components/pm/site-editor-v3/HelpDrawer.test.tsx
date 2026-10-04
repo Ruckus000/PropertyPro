@@ -79,6 +79,7 @@ function idle() {
 const onClose = vi.fn();
 const onShowMe = vi.fn();
 const onModeChange = vi.fn();
+const onStartTour = vi.fn();
 
 function renderDrawer(overrides: Partial<React.ComponentProps<typeof HelpDrawer>> = {}) {
   return render(
@@ -90,6 +91,7 @@ function renderDrawer(overrides: Partial<React.ComponentProps<typeof HelpDrawer>
       canPublish
       mode="free"
       onModeChange={onModeChange}
+      onStartTour={onStartTour}
       {...overrides}
     />,
   );
@@ -248,6 +250,19 @@ describe('HelpDrawer — search', () => {
     renderDrawer();
     await user.type(screen.getByRole('searchbox', { name: 'Search help' }), 'zzz');
     expect(screen.getByText(/nothing found for/i)).toHaveTextContent('Nothing found for “zzz”');
+  });
+});
+
+describe('HelpDrawer — the tour', () => {
+  it('starts the tour after asking the drawer to close', async () => {
+    const user = userEvent.setup();
+    renderDrawer();
+    await user.click(screen.getByRole('button', { name: /take the 1-minute tour/i }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onStartTour).toHaveBeenCalledTimes(1);
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(
+      onStartTour.mock.invocationCallOrder[0]!,
+    );
   });
 });
 

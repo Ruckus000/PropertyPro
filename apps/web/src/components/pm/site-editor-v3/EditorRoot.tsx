@@ -85,6 +85,10 @@ const ModeChooser = dynamic(
 const NextSteps = dynamic(() => import('./guidance/NextSteps').then((m) => m.NextSteps), {
   loading: () => null,
 });
+// The four-step tour: at most once by itself, after the chooser, or from Help.
+const EditorTour = dynamic(() => import('./guidance/EditorTour').then((m) => m.EditorTour), {
+  loading: () => null,
+});
 // Type-only: erased at build, so neither chunk is pulled in.
 import type { HelpAction } from './help/guides';
 import type { EditorStepAction } from './guidance/NextSteps';
@@ -879,10 +883,43 @@ export function EditorRoot({
   const isPhone = useMediaQuery('(max-width: 767px)');
   const showChooser =
     preferences.data?.mode === null && !hasPublishedSite && !chooserDismissed && !isPhone;
+  const [tourOpen, setTourOpen] = useState(false);
+  /*
+   * Asked for by the first choice, opened once the chooser has GONE. Opening it
+   * in the same handler mounted the tour while the chooser — a modal whose
+   * focus trap pulls focus back — was still up; the chooser then unmounted and
+   * dropped focus on <body>, so the card never had focus and its Escape did
+   * nothing. It also showed the Free step for a frame before `mode` landed.
+   */
+  const [tourPending, setTourPending] = useState(false);
+  const tourDone = preferences.data?.tourDone ?? false;
   const handleChooseMode = useCallback(
-    (next: EditorMode) => updatePreferences({ mode: next }),
-    [updatePreferences],
+    (next: EditorMode) => {
+      updatePreferences({ mode: next });
+      // The tour follows the first choice, once: never for a manager who has
+      // already been through it (or skipped it).
+      if (!tourDone) setTourPending(true);
+    },
+    [updatePreferences, tourDone],
   );
+  useEffect(() => {
+    if (!tourPending || showChooser) return;
+    setTourPending(false);
+    setTourOpen(true);
+  }, [tourPending, showChooser]);
+  // However it ends — finished, skipped, Escape, or cut short by Publish or a
+  // switch to Settings — it is recorded, so it never starts by itself again.
+  const handleTourEnd = useCallback(() => {
+    setTourOpen(false);
+    if (!tourDone) updatePreferences({ tourDone: true });
+  }, [tourDone, updatePreferences]);
+  const handleStartTour = useCallback(() => {
+    setView('website');
+    setTourOpen(true);
+  }, []);
+  useEffect(() => {
+    if (tourOpen && (publishOpen || view !== 'website')) handleTourEnd();
+  }, [tourOpen, publishOpen, view, handleTourEnd]);
   const handleChooserDismissed = useCallback(() => setChooserDismissed(true), []);
   const handleModeChange = useCallback(
     (next: EditorMode) => {
@@ -1047,6 +1084,7 @@ export function EditorRoot({
               canPublish={canOpenPublish}
               mode={mode}
               onModeChange={handleModeChange}
+              onStartTour={handleStartTour}
             />
           ) : null
         }
@@ -1283,6 +1321,8 @@ export function EditorRoot({
       {showChooser ? (
         <ModeChooser onChoose={handleChooseMode} onDismiss={handleChooserDismissed} />
       ) : null}
+
+      {tourOpen ? <EditorTour mode={mode} onEnd={handleTourEnd} /> : null}
 
       {publishOpen ? (
         <PublishSheetMount

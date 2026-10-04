@@ -85,6 +85,7 @@ export function ToolRail({
   return (
     <nav
       aria-label="Website tools"
+      data-tour="tools"
       className="flex w-[84px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-edge bg-surface-card px-2 py-2.5"
     >
       {RAIL_ITEMS.map((tool, index) => {

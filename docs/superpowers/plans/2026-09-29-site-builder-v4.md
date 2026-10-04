@@ -205,8 +205,32 @@ Left for 3b, each with its reason:
   at 1493.3. Fixed by code-splitting `GuidedTabs` (Guided only), `ModeSwitch` (only from 1536px) and
   `PhoneGate` (below 768px only; desktop managers never render it). The result is 1487.8 KiB.
 
-Still to come in 3b: the tour, then screenshots for every editor guide. The tour must be code-split:
-about 2 KiB of headroom remains.
+### Phase 3b, part 3, as built: the tour
+- **What it is.** `guidance/EditorTour.tsx` (code-split) and `guidance/tour-steps.ts` (the copy, plus
+  `placeCard`, which is pure).
+  - Four steps, each pointing at a real element by `data-tour`: `steps` / `tools`, `page`, `page`,
+    `publish`.
+  - A missing element skips its step. A shell test asserts every anchor in both modes.
+- **Copy corrected to the product:**
+  - No "click any words and type".
+  - "Your page changes wait for Publish" replaces "Nothing is live until you publish" (Settings, page
+    names and urgent notices go live on save).
+  - The checks are "shown", not "checked before anything goes live" (they never block).
+  - Apartments get no Florida line.
+- **Placement, with no library.** The card goes below a small element, beside a tall narrow one, and
+  otherwise inside the page. It's kept on screen, with a ring over the element, re-measured on resize
+  and through a `ResizeObserver`. Checked in Chromium at 1024 and 1440px in both modes.
+- **Accessibility.** A non-modal dialog. Focus moves to the card and comes back afterwards; Escape,
+  "Skip tour" and "Start editing" end it.
+- **Starting and ending:**
+  - It starts by itself only right after the first-run chooser, and only when `tourDone` is false.
+  - The Help drawer has "Take the 1-minute tour".
+  - Any end saves `tourDone`, including being cut short by Publish or a switch to Settings.
+- **Budget:** 1488.4 KiB, leaving about 1.1 KiB after CI's usual +0.5. **Any new first-load code in
+  the editor now needs a matching code-split.**
+
+Still to come in 3b: screenshots for every editor guide (`scripts/help-capture`, which needs a seeded
+dev server).
 
 ### Phase 4: Design panel (decided 2026-10-01)
 These decisions were made against what the product actually has. The design assumed

@@ -58,6 +58,8 @@ export interface HelpDrawerProps {
   /** Guided or Free edit: "How you work" switches it, at every screen width. */
   mode: EditorMode;
   onModeChange: (mode: EditorMode) => void;
+  /** "Take the 1-minute tour". The drawer has already asked to close. */
+  onStartTour: () => void;
 }
 
 const MODE_CARDS: readonly { mode: EditorMode; title: string; body: string }[] = [
@@ -151,6 +153,7 @@ export function HelpDrawer({
   canPublish,
   mode,
   onModeChange,
+  onStartTour,
 }: HelpDrawerProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<OpenGuide | null>(null);
@@ -384,6 +387,19 @@ export function HelpDrawer({
               </section>
             ) : (
               <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onStartTour();
+                  }}
+                  className={ROW_CLASS}
+                >
+                  <span className="text-sm font-medium text-content">Take the 1-minute tour</span>
+                  <span className="text-sm text-content-secondary">
+                    We point out each part of the screen.
+                  </span>
+                </button>
                 {guidesQuery.isPending ? <ListSkeleton /> : null}
                 {/*
                   A failed list is not worth an error banner: search above and
