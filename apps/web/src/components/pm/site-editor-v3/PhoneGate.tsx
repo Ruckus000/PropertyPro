@@ -8,11 +8,10 @@ import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 // Loaded on tap, not on mount.
 //
-// PhoneGate itself is imported statically by EditorShell, so anything this file
-// imports at the top level lands in the editor's initial payload — for every
-// desktop PM, who will never see this screen. The route has ~43 KiB of headroom
-// against a 700 KiB HARD budget, so the form (and the Radix alert-dialog stack
-// behind its confirmation) is deferred behind the button.
+// EditorShell loads this screen itself on demand (v4 Phase 3), so a desktop PM
+// never fetches it; deferring the form as well keeps a phone PM who only wants
+// to view the public site from downloading the form and the Radix alert-dialog
+// stack behind its confirmation.
 const UrgentNoticeForm = dynamic(
   () => import('./panels/UrgentNoticeForm').then((m) => m.UrgentNoticeForm),
   { loading: () => <p className="text-sm text-content-secondary">Loading…</p> },

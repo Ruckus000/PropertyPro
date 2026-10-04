@@ -13,11 +13,18 @@ import {
   Tablet,
   type LucideIcon,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
-import { HELP_DRAWER_ID } from './tools';
+import { HELP_DRAWER_ID, type EditorMode } from './tools';
+
+// Shown only from 1536px, so it is fetched rather than shipped to every PM:
+// the editor's first-load JavaScript is at its budget (v4 Phase 3).
+const ModeSwitch = dynamic(() => import('./ModeSwitch').then((m) => m.ModeSwitch), {
+  loading: () => null,
+});
 
 /**
  * The v4 "Editing page" picker's inputs.
@@ -98,6 +105,9 @@ export interface EditorTopBarProps extends EditorTopBarPageProps {
   /** The Help drawer's state (v4 Phase 3); this bar's Help button toggles it. */
   helpOpen: boolean;
   onHelpToggle: () => void;
+  /** Guided or Free edit (v4 Phase 3), switched here from 1536px. */
+  mode: EditorMode;
+  onModeChange: (mode: EditorMode) => void;
   /**
    * Whether Publish opens the review sheet. Required and undefaulted on
    * purpose: this prop shipped optional with a `= 0` default (as `changeCount`)
@@ -198,6 +208,8 @@ export function EditorTopBar({
   onViewChange,
   helpOpen,
   onHelpToggle,
+  mode,
+  onModeChange,
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3">
@@ -243,6 +255,14 @@ export function EditorTopBar({
           })}
         </div>
       </nav>
+
+      {/*
+       * Only from 1536px, and only on the Website view. Measured in Chromium
+       * with a long name, the bar has no room below that (the community name
+       * is down to 51px at 1280px). Everywhere else the switch is in the Help
+       * drawer's "How you work", where the design also puts it.
+       */}
+      {view === 'website' ? <ModeSwitch mode={mode} onModeChange={onModeChange} /> : null}
 
       {/* The page picker and preview widths describe the canvas, so they go with it. */}
       {view === 'website' ? (

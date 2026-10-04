@@ -170,7 +170,9 @@ const SETUP: readonly SetupDefinition[] = [
   {
     key: 'welcome',
     title: 'Check your welcome message',
-    detail: 'Click the headline on the page and type. It saves as you go.',
+    // Not the design's "click the headline on the page and type": the canvas
+    // has no on-page typing. Words are edited in the section's settings.
+    detail: 'Select the welcome section, then change its headline in the settings on the right.',
     cta: 'Show me',
     action: { kind: 'select-hero' },
     minutes: 1,

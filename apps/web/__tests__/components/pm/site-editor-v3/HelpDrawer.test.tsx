@@ -78,6 +78,7 @@ function idle() {
 
 const onClose = vi.fn();
 const onShowMe = vi.fn();
+const onModeChange = vi.fn();
 
 function renderDrawer(overrides: Partial<React.ComponentProps<typeof HelpDrawer>> = {}) {
   return render(
@@ -87,6 +88,8 @@ function renderDrawer(overrides: Partial<React.ComponentProps<typeof HelpDrawer>
       onClose={onClose}
       onShowMe={onShowMe}
       canPublish
+      mode="free"
+      onModeChange={onModeChange}
       {...overrides}
     />,
   );
@@ -245,6 +248,27 @@ describe('HelpDrawer — search', () => {
     renderDrawer();
     await user.type(screen.getByRole('searchbox', { name: 'Search help' }), 'zzz');
     expect(screen.getByText(/nothing found for/i)).toHaveTextContent('Nothing found for “zzz”');
+  });
+});
+
+describe('HelpDrawer — How you work', () => {
+  it('shows the current mode pressed and switches to the other', async () => {
+    const user = userEvent.setup();
+    renderDrawer({ mode: 'free' });
+    const group = screen.getByRole('group', { name: 'How you work' });
+    expect(within(group).getByRole('button', { name: /free edit/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await user.click(within(group).getByRole('button', { name: /guided/i }));
+    expect(onModeChange).toHaveBeenCalledWith('guided');
+  });
+
+  it('does not re-send the mode already chosen', async () => {
+    const user = userEvent.setup();
+    renderDrawer({ mode: 'guided' });
+    await user.click(screen.getByRole('button', { name: /guided/i, pressed: true }));
+    expect(onModeChange).not.toHaveBeenCalled();
   });
 });
 

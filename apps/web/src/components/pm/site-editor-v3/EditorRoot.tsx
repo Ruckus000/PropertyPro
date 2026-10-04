@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useContentBlocks } from '@/hooks/use-content-blocks';
+import { useContentBlocks, useSitePublishToken } from '@/hooks/use-content-blocks';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { applyDesignToCanvas } from '@/lib/site-editor/canvas-design';
 import { useSiteDesign } from '@/hooks/use-site-design';
+import {
+  useSiteEditorPreferences,
+  useUpdateSiteEditorPreferences,
+} from '@/hooks/use-site-editor-preferences';
 import type { PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
@@ -71,8 +76,18 @@ const DesignPanel = dynamic(
 const HelpDrawer = dynamic(() => import('./help/HelpDrawer').then((m) => m.HelpDrawer), {
   loading: () => null,
 });
+// v4 Phase 3, both rendered only when needed: the first-run chooser for a
+// manager who has not chosen, and the checklist only in Guided mode.
+const ModeChooser = dynamic(
+  () => import('./guidance/ModeChooser').then((m) => m.ModeChooser),
+  { loading: () => null },
+);
+const NextSteps = dynamic(() => import('./guidance/NextSteps').then((m) => m.NextSteps), {
+  loading: () => null,
+});
 // Type-only: erased at build, so neither chunk is pulled in.
 import type { HelpAction } from './help/guides';
+import type { EditorStepAction } from './guidance/NextSteps';
 import type { SettingsTabId } from './settings/SettingsView';
 const RecordsAttention = dynamic(
   () => import('./RecordsAttention').then((m) => m.RecordsAttention),
@@ -106,7 +121,7 @@ import { Button } from '@/components/ui/button';
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
-import type { EditorToolId } from './tools';
+import type { EditorMode, EditorToolId } from './tools';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import { UndoableRemoveProvider } from './undoable-remove-context';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
@@ -748,12 +763,14 @@ export function EditorRoot({
   // it did, the `key` remount would discard the selection. So the intent is
   // parked in `pendingSelectSlot` and honoured by the provider that replaces
   // this one, which is the first instance whose blocks are the right page's.
-  const handleSelectSlot = useCallback(
+  // Takes the PM to a section, switching page if it is on another one. The
+  // checklist's "Show me" uses this without `handleSelectSlot`'s Sections
+  // panel, which would cover the checklist the PM is working through.
+  const handleGoToSlot = useCallback(
     (target: SlotTarget) => {
       // Reachable from Settings too (requirements pill, Publish's "Fix this"),
       // whose view hides the rail and canvas this lands on.
       setView('website');
-      setActiveTool('sections');
       const targetPageId = Number(target.pageId);
       // `SITE_CHANGE_GROUP` is a non-numeric sentinel for a slot on no page.
       if (!Number.isFinite(targetPageId) || targetPageId === effectivePageId) return;
@@ -764,6 +781,13 @@ export function EditorRoot({
       setPageAnnouncement('');
     },
     [effectivePageId],
+  );
+  const handleSelectSlot = useCallback(
+    (target: SlotTarget) => {
+      setActiveTool('sections');
+      handleGoToSlot(target);
+    },
+    [handleGoToSlot],
   );
   const handleSlotSelected = useCallback(() => setPendingSelectSlot(null), []);
   // The empty states in the Sections panel and on the canvas both name adding a
@@ -834,6 +858,82 @@ export function EditorRoot({
       setPublishOpen(true);
     }
   }, []);
+
+  // v4 Phase 3: the manager's own editing mode and checklist progress (#1295).
+  const preferences = useSiteEditorPreferences(communityId);
+  const { mutate: updatePreferences } = useUpdateSiteEditorPreferences(communityId);
+  // Free until the preferences have loaded (and for anyone the route refuses),
+  // so a returning manager never sees Guided, or the chooser, flash first.
+  const mode: EditorMode = preferences.data?.mode ?? 'free';
+  // Closing the chooser without choosing means Free for this visit only.
+  const [chooserDismissed, setChooserDismissed] = useState(false);
+  // A publish in THIS visit counts too. `hasPublishedSite` is a server prop and
+  // nothing refreshes it after a publish, so without the blocks query's
+  // `latestPublishedAt` (refetched by the publish's invalidation; same key as
+  // `useContentBlocks`, so no extra request) the checklist's Publish step stayed
+  // open after a first publish, with a button that then did nothing.
+  const publishToken = useSitePublishToken(communityId);
+  const everPublished = hasPublishedSite || publishToken.data != null;
+  // The shell renders only the phone gate below 768px, so the chooser must not
+  // open over it — and a choice saved there would stick on every screen.
+  const isPhone = useMediaQuery('(max-width: 767px)');
+  const showChooser =
+    preferences.data?.mode === null && !hasPublishedSite && !chooserDismissed && !isPhone;
+  const handleChooseMode = useCallback(
+    (next: EditorMode) => updatePreferences({ mode: next }),
+    [updatePreferences],
+  );
+  const handleChooserDismissed = useCallback(() => setChooserDismissed(true), []);
+  const handleModeChange = useCallback(
+    (next: EditorMode) => {
+      updatePreferences({ mode: next });
+      setAddTarget(null);
+      setActiveTool(null);
+      toast.info(
+        next === 'guided'
+          ? 'Guided mode: your checklist is on the left.'
+          : 'Free edit: all tools are on the left. Switch back any time.',
+      );
+    },
+    [updatePreferences],
+  );
+  // "Open design", "Review your pages" and "Check it on a phone" are done by
+  // doing them, in either mode — so record each the first time it happens.
+  const visited = preferences.data?.visited;
+  // Each step is sent at most once per visit. A failed write rolls the
+  // optimistic `visited` back to a NEW array without the step, which re-runs
+  // this effect — without the ref that was a PATCH loop for as long as the
+  // tool stayed open.
+  const visitsSent = useRef(new Set<string>());
+  useEffect(() => {
+    if (!visited) return;
+    const now = [
+      activeTool === 'design' ? 'design' : null,
+      activeTool === 'pages' ? 'pages' : null,
+      device === 'phone' ? 'phone' : null,
+    ] as const;
+    for (const step of now) {
+      if (step && !visited.includes(step) && !visitsSent.current.has(step)) {
+        visitsSent.current.add(step);
+        updatePreferences({ visit: step });
+      }
+    }
+  }, [activeTool, device, visited, updatePreferences]);
+  const handleStepAction = useCallback(
+    (action: EditorStepAction) => {
+      setView('website');
+      if (action.kind === 'add-section') {
+        // Appends, like the rail's Add: a stale "Add section here" target is dropped.
+        setAddTarget(null);
+        setActiveTool('add');
+      }
+      else if (action.kind === 'open-documents') setActiveTool('documents');
+      else if (action.kind === 'open-tool') setActiveTool(action.tool);
+      else if (action.kind === 'preview-phone') setDevice('phone');
+      else if (canOpenPublish) setPublishOpen(true);
+    },
+    [canOpenPublish],
+  );
   // Settings → Access links to the records: back to the page, Documents open.
   const handleOpenDocuments = useCallback(() => {
     setView('website');
@@ -945,6 +1045,30 @@ export function EditorRoot({
               onClose={handleHelpClose}
               onShowMe={handleShowMe}
               canPublish={canOpenPublish}
+              mode={mode}
+              onModeChange={handleModeChange}
+            />
+          ) : null
+        }
+        mode={mode}
+        onModeChange={handleModeChange}
+        steps={
+          mode === 'guided' ? (
+            <NextSteps
+              communityId={communityId}
+              communityType={siteIdentity.communityType}
+              pageId={effectivePageId}
+              homePageId={homePageId}
+              homeHero={
+                blocks?.find((b) => b.pageId === homePageId && b.blockType === 'hero') ?? null
+              }
+              everPublished={everPublished}
+              pendingChanges={diff.changes.length}
+              preferences={preferences.data ?? { marked: [], visited: [] }}
+              onMark={(step) => updatePreferences({ mark: step })}
+              onAction={handleStepAction}
+              onGoToSlot={handleGoToSlot}
+              onWarnResidents={() => setActiveTool('notice')}
             />
           ) : null
         }
@@ -1154,6 +1278,10 @@ export function EditorRoot({
           // …and must not promise a page the next publish deletes.
           pageIsStaged={selectedPageIsStaged}
         />
+      ) : null}
+
+      {showChooser ? (
+        <ModeChooser onChoose={handleChooseMode} onDismiss={handleChooserDismissed} />
       ) : null}
 
       {publishOpen ? (
