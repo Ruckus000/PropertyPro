@@ -9,7 +9,8 @@
  *   → requireCommunityMembership
  *   → requirePermission('meetings', 'read')
  *   → getMeetingDetail(communityId, meetingId) → 404 NotFoundError if missing
- *   → listMeetingDocumentLinks + listMeetingAttachedDocuments
+ *   → listMeetingDocumentLinks + listMeetingAttachedDocuments (filtered to
+ *     the categories the caller may read — the documents library's policy)
  *   → getDocumentCategoryNames
  *
  * Behavior change vs. pre-migration: 400 body for invalid `[id]` / missing
@@ -52,7 +53,16 @@ export const GET = withErrorHandler(
 
     const linkRows = await listMeetingDocumentLinks(communityId, meetingId);
     const documentIds = linkRows.map((row) => row.documentId);
-    const documentRows = await listMeetingAttachedDocuments(communityId, documentIds);
+    const documentRows = await listMeetingAttachedDocuments(
+      {
+        communityId,
+        role: membership.role,
+        communityType: membership.communityType,
+        isUnitOwner: membership.isUnitOwner,
+        tenantsCanViewInspectionReports: membership.tenantsCanViewInspectionReports,
+      },
+      documentIds,
+    );
 
     const categoryIds = [
       ...new Set(

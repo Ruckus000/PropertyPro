@@ -248,9 +248,19 @@ describeDb('document drafts are visible to managers only', () => {
   it('meeting attachments do not show a draft', async () => {
     const { listMeetingAttachedDocuments } = await import('../../src/lib/services/meeting-service');
 
-    const shown = (await listMeetingAttachedDocuments(communityId(), [ids.draft, ids.posted])).map(
-      (d) => d.id,
-    );
+    // As a MANAGER: the access policy gives managers no draft filter, so this
+    // proves the list's own `posted_at` check — residents read this list too.
+    const shown = (
+      await listMeetingAttachedDocuments(
+        {
+          communityId: communityId(),
+          role: 'property_manager',
+          communityType: 'condo_718',
+          tenantsCanViewInspectionReports: false,
+        },
+        [ids.draft, ids.posted],
+      )
+    ).map((d) => d.id);
 
     expect(shown).toEqual([ids.posted]);
   });

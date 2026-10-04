@@ -5,6 +5,13 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import {
+  getAccessibleKnownCategories,
+  isElevatedRole,
+  normalizeCategoryName,
+  type KnownDocumentCategoryKey,
+} from '@propertypro/shared';
+import type { DocumentAccessContext } from '@propertypro/db';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
@@ -57,6 +64,7 @@ const MEMBERSHIP = {
   isUnitOwner: false,
   displayTitle: 'Board Member',
   communityType: 'condo_718' as const,
+  tenantsCanViewInspectionReports: false,
 };
 
 const MEETING = { id: 11, title: 'Annual Meeting' };
@@ -138,5 +146,121 @@ describe('GET /api/v1/meetings/[id]', () => {
     getMeetingDetailMock.mockResolvedValueOnce(null);
     const res = await GET(req(), ctx());
     expect(res.status).toBe(404);
+  });
+
+  describe('attached documents are filtered by document-category access', () => {
+    const CATEGORY_NAMES = new Map<number, string>([
+      [1, 'Inspection Reports'],
+      [2, 'Rules'],
+      [3, 'Meeting Minutes'],
+    ]);
+    const LINKS = [
+      { documentId: 101, attachedAt: new Date('2026-04-01T00:00:00.000Z') },
+      { documentId: 102, attachedAt: new Date('2026-04-02T00:00:00.000Z') },
+      { documentId: 103, attachedAt: new Date('2026-04-03T00:00:00.000Z') },
+    ];
+    const ROWS = [
+      { id: 101, title: 'Milestone Inspection', fileName: 'i.pdf', fileSize: 1, mimeType: 'application/pdf', categoryId: 1 },
+      { id: 102, title: 'Pool Rules', fileName: 'r.pdf', fileSize: 1, mimeType: 'application/pdf', categoryId: 2 },
+      { id: 103, title: 'April Minutes', fileName: 'm.pdf', fileSize: 1, mimeType: 'application/pdf', categoryId: 3 },
+    ];
+
+    function membership(overrides: Record<string, unknown>) {
+      return {
+        userId: 'user-1',
+        communityId: 42,
+        role: 'resident' as const,
+        isAdmin: false,
+        isUnitOwner: false,
+        displayTitle: 'Resident',
+        communityType: 'condo_718' as const,
+        tenantsCanViewInspectionReports: false,
+        ...overrides,
+      };
+    }
+
+    async function attachedTitles(): Promise<string[]> {
+      const res = await GET(req(), ctx());
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as { data: { documents: Array<{ title: string }> } };
+      return json.data.documents.map((d) => d.title);
+    }
+
+    beforeEach(() => {
+      listMeetingDocumentLinksMock.mockResolvedValue(LINKS);
+      getDocumentCategoryNamesMock.mockResolvedValue(CATEGORY_NAMES);
+      // Stands in for the SQL filter with the same shared policy
+      // `buildDocumentAccessFilter` compiles: elevated roles see every
+      // category, everyone else only the categories their role may read.
+      // The real SQL is covered by calendar-phase2a.integration.test.ts.
+      listMeetingAttachedDocumentsMock.mockImplementation(
+        async (access: DocumentAccessContext, ids: number[]) => {
+          const opts = {
+            isUnitOwner: access.isUnitOwner,
+            tenantsCanViewInspectionReports: access.tenantsCanViewInspectionReports,
+          };
+          const allowed = new Set<string>(
+            getAccessibleKnownCategories(access.role, access.communityType, opts),
+          );
+          return ROWS.filter((row) => ids.includes(row.id)).filter(
+            (row) =>
+              isElevatedRole(access.role, opts) ||
+              allowed.has(
+                normalizeCategoryName(CATEGORY_NAMES.get(row.categoryId)) as KnownDocumentCategoryKey,
+              ),
+          );
+        },
+      );
+    });
+
+    it('a condo tenant gets no Inspection Reports attachment by default', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(membership({}));
+
+      const titles = await attachedTitles();
+
+      expect(titles).not.toContain('Milestone Inspection');
+      expect(titles).toContain('Pool Rules');
+      expect(listMeetingAttachedDocumentsMock).toHaveBeenCalledWith(
+        {
+          communityId: 42,
+          role: 'resident',
+          communityType: 'condo_718',
+          isUnitOwner: false,
+          tenantsCanViewInspectionReports: false,
+        },
+        [101, 102, 103],
+      );
+    });
+
+    it('a condo tenant gets the Inspection Reports attachment once the community opts in', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(
+        membership({ tenantsCanViewInspectionReports: true }),
+      );
+
+      const titles = await attachedTitles();
+
+      expect(titles).toContain('Milestone Inspection');
+      expect(titles).toContain('Pool Rules');
+    });
+
+    it('a unit owner always gets the Inspection Reports attachment', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(
+        membership({ isUnitOwner: true, displayTitle: 'Owner' }),
+      );
+
+      const titles = await attachedTitles();
+
+      expect(titles).toEqual(['Milestone Inspection', 'Pool Rules', 'April Minutes']);
+    });
+
+    it('a manager gets every attachment', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(
+        membership({ role: 'property_manager', isAdmin: true, displayTitle: 'Manager' }),
+      );
+
+      const titles = await attachedTitles();
+
+      expect(titles).toEqual(['Milestone Inspection', 'Pool Rules', 'April Minutes']);
+    });
   });
 });
