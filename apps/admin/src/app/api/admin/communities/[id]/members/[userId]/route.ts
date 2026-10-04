@@ -129,7 +129,6 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
   }
 
   const updates: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
   };
 
   for (const [key, value] of Object.entries(parsed.data)) {

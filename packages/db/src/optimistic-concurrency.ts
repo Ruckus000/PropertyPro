@@ -34,21 +34,21 @@
  * TRUNCATED value unchanged. The advance has to happen on the truncated value
  * itself, which is what `advance` below does.
  *
- * ── Why the advance lives in the scoped client, not here ──
+ * ── Why only the comparison lives here ──
  *
  * The invariant is PER TABLE, not per call site: for a table whose `updated_at`
  * is a token, EVERY write must advance it, not only the writes that also check
- * it. The first version of this fix got that wrong and advanced the column at
- * the three services that compare the token — and `user_roles`, which is the
- * membership token, turned out to have eleven writers. Role promotions, root
- * claims, root disputes and root ops all write it without comparing it, and any
- * of them could leave the token unmoved inside the collision window.
+ * it. Enforcing that in TypeScript was tried twice and leaked twice — first at
+ * the three services that compare the token (but `user_roles` has eleven
+ * writers and only one compares it), then at every write through
+ * `createScopedClient` (but the admin console writes `user_roles` with the
+ * supabase-js service-role client, and a lease trigger writes `units`, neither
+ * of which goes through it).
  *
- * So `advanceUpdatedAt` is applied by `scoped-client` to every write of a table
- * in its `VERSIONED_TABLES` set — the one place all of those writes pass
- * through, and the same idiom it already uses for `APPEND_ONLY_TABLES` and
- * `SOFT_DELETE_EXEMPT_TABLES`. A twelfth writer is then correct by default
- * instead of being one more thing to remember.
+ * So the ADVANCE is a database trigger — `pp_advance_updated_at`, migration
+ * 0087 — which no choice of client can bypass, and this module keeps only the
+ * COMPARISON. Read that migration for the expression and why it is shaped the
+ * way it is.
  *
  * Two things fall out of computing the timestamp in SQL rather than in JS: the
  * value now comes from the DATABASE clock, so skew between app instances no
@@ -84,31 +84,4 @@ export function unchangedSince(
 ): SQL | undefined {
   if (expectedUpdatedAt === undefined) return undefined;
   return sql`date_trunc('milliseconds', ${column}) = date_trunc('milliseconds', ${expectedUpdatedAt}::timestamptz)`;
-}
-
-/**
- * The next `updated_at` for a versioned row: strictly greater than the current
- * one at millisecond precision, whatever the clock says.
- *
- * `greatest` is what guarantees that. Normally the clock has already moved past
- * the stored millisecond and the first term wins; in the collision case the two
- * are equal, so the second term — one millisecond past the stored value — wins
- * instead. Either way the truncated value strictly increases, so a stale token
- * can never match after a write.
- *
- * Called ONLY by `scoped-client`, for the tables in its `VERSIONED_TABLES` set.
- * That is deliberate: `user_roles` alone has eleven writers, and asking each one
- * to remember is how the window stayed open after the first fix. Every write to
- * a versioned table passes through the scoped client, so the invariant belongs
- * there and nowhere else.
- *
- * It accepts a raw `SQL` fragment as well as a column so the expression can be
- * evaluated against an arbitrary value. That is what lets a test force the
- * same-millisecond collision: it cannot be reproduced from outside the database
- * (every round trip moves the clock on), but `now()` is TRANSACTION-stable, so
- * pinning a value and applying this to it inside one statement reproduces it
- * exactly.
- */
-export function advanceUpdatedAt(column: PgColumn | SQL): SQL {
-  return sql`greatest(date_trunc('milliseconds', now()), date_trunc('milliseconds', ${column}) + interval '1 millisecond')`;
 }

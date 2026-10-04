@@ -360,10 +360,11 @@ export async function updateResidentRole(
     unchanged === undefined
       ? eq(userRoles.userId, userId)
       : and(eq(userRoles.userId, userId), unchanged);
-  // The scoped client advances `updatedAt` itself — `user_roles` is in its
-  // VERSIONED_TABLES set — which is what lets `residents/route.ts` move this
-  // row's version with an EMPTY values object on a contact-only edit, and what
-  // covers the ten other writers of this row that never compare the token.
+  // The row's version advances in the DATABASE — `pp_advance_updated_at` on
+  // `user_roles`, migration 0087 — which is what lets `residents/route.ts` move
+  // it with an EMPTY values object on a contact-only edit, and what covers the
+  // ten other writers of this row that never compare the token, including the
+  // admin console's supabase-js write that no app-level rule reached.
   const rows = await scoped.update(userRoles, values, where);
   return expectedUpdatedAt === undefined || (rows as unknown[]).length > 0;
 }

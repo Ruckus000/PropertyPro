@@ -138,13 +138,24 @@ describeDb('/api/v1/occupants (integration)', () => {
       // does on its own and which passes with the fix reverted. Pinning the row an
       // hour ahead is what discriminates: a plain `new Date()` moves the token
       // backwards to now, while the advance must out-rank what it finds.
+      //
+      // Pinning requires DISABLING the trigger, because it ignores whatever a
+      // writer supplies — so a plain `UPDATE … SET updated_at` is overwritten on
+      // the way in and pins nothing. Getting that wrong leaves this green for the
+      // wrong reason.
       const kim = await dataOf<OccupantJson>(await create());
-      const pinned = (await state.db.execute(sql`
-        update unit_occupants set updated_at = now() + interval '1 hour'
-         where id = ${kim.id}
-        returning updated_at as v
-      `)) as unknown as Record<string, unknown>[];
-      const before = new Date(pinned[0]!['v'] as string | Date).getTime();
+      await state.db.execute(sql`alter table unit_occupants disable trigger pp_advance_updated_at`);
+      let before: number;
+      try {
+        const pinned = (await state.db.execute(sql`
+          update unit_occupants set updated_at = now() + interval '1 hour'
+           where id = ${kim.id}
+          returning updated_at as v
+        `)) as unknown as Record<string, unknown>[];
+        before = new Date(pinned[0]!['v'] as string | Date).getTime();
+      } finally {
+        await state.db.execute(sql`alter table unit_occupants enable trigger pp_advance_updated_at`);
+      }
 
       const saved = await dataOf<OccupantJson>(
         await send(routes.PATCH, 'PATCH', { communityId, id: kim.id, phone: '555-0199' }),

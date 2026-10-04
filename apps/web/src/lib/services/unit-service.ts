@@ -91,9 +91,10 @@ export async function createUnitForCommunity(
  * Returns the updated row otherwise.
  *
  * This builds only the comparison. The other half of the guarantee — that every
- * write MOVES the value being compared, or a stale token keeps matching — is
- * enforced by the scoped client for every table in its VERSIONED_TABLES set,
- * not here. See `optimistic-concurrency.ts` for why it belongs there.
+ * write MOVES the value being compared, or a stale token keeps matching — is a
+ * database trigger (`pp_advance_updated_at`, migration 0087), so it holds for
+ * writers that never compare the token and for clients that never touch this
+ * code. See `optimistic-concurrency.ts`.
  */
 export async function updateUnitById(
   scoped: ScopedClient,

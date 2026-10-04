@@ -30,7 +30,6 @@ import {
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core';
 import type { TenantContext } from './tenant-context';
 import type { ScopedClient, ScopedDynamicBuilder, ScopedRow } from './types/scoped-client';
-import { advanceUpdatedAt } from './optimistic-concurrency';
 import { TenantContextMissing } from './errors/TenantContextMissing';
 import { db as defaultDb } from './drizzle';
 
@@ -85,29 +84,6 @@ const APPEND_ONLY_TABLES: ReadonlySet<string> = new Set([
   'maintenance_comments',
   'esign_events',
   'help_article_views',
-]);
-
-/**
- * Tables whose `updated_at` is an optimistic-concurrency token, so EVERY write
- * must strictly advance it — not only the writes that also compare it.
- *
- * A caller reads a row, sends the `updated_at` back as `expectedUpdatedAt`, and
- * the write applies only if the row is unchanged since. That is sound only if
- * every write moves the value: an UPDATE used to stamp a JavaScript `new Date()`
- * (milliseconds) while INSERT used `now()` (microseconds), so a create and the
- * first save inside one millisecond left the truncated value identical, the
- * stale token still matched, and a second save from the same read was silently
- * ACCEPTED, clobbering the first writer.
- *
- * It is a table list and not a convention at the call sites because the first
- * fix tried the latter: `user_roles` has eleven writers — role promotions, root
- * claims, root disputes, root ops — and only one of them compares the token.
- * Here, a twelfth is correct without knowing this rule exists.
- */
-const VERSIONED_TABLES: ReadonlySet<string> = new Set([
-  'units',
-  'user_roles',
-  'unit_occupants',
 ]);
 
 /**
@@ -444,13 +420,18 @@ export function createScopedClient(
       // overwritten, which is the long-standing contract every service relies on
       // ("a scoped update always bumps updatedAt" — what lets
       // `residents/route.ts` bump the membership row with an empty values
-      // object). For a VERSIONED table the stamp must also strictly advance, so
-      // it is computed by the database rather than from this process's clock.
+      // object).
+      //
+      // On units / user_roles / unit_occupants this value is OVERRIDDEN again by
+      // the `pp_advance_updated_at` trigger (migration 0087), because their
+      // `updated_at` is an optimistic-concurrency token and has to strictly
+      // advance — which no timestamp from this process can guarantee. Enforcing
+      // that here instead was tried and leaked twice: writers reach those tables
+      // through the supabase-js admin client and through a lease trigger, neither
+      // of which passes through this function.
       const columns = getTableColumns(table) as ColumnRecord;
       if (hasUpdatedAtColumn(columns)) {
-        updateData['updatedAt'] = VERSIONED_TABLES.has(updateTableName)
-          ? advanceUpdatedAt(columns.updatedAt)
-          : new Date();
+        updateData['updatedAt'] = new Date();
       }
 
       const whereClause = combineFilters(filters);
@@ -496,14 +477,13 @@ export function createScopedClient(
         filters.push(additionalWhere);
       }
 
-      // Also bump updatedAt if available. A soft delete changes the row, so on a
-      // versioned table it has to move the token as well — otherwise a restore
-      // path could resurrect a row whose stale token still matches.
+      // Also bump updatedAt if available. On a versioned table the
+      // `pp_advance_updated_at` trigger overrides this too, so a delete moves the
+      // token — otherwise a restore path could resurrect a row whose stale token
+      // still matches.
       const setData: Record<string, unknown> = { deletedAt: new Date() };
       if (hasUpdatedAtColumn(columns)) {
-        setData['updatedAt'] = VERSIONED_TABLES.has(tableName)
-          ? advanceUpdatedAt(columns.updatedAt)
-          : new Date();
+        setData['updatedAt'] = new Date();
       }
 
       const whereClause = combineFilters(filters);
@@ -544,9 +524,7 @@ export function createScopedClient(
 
       const setData: Record<string, unknown> = { deletedAt: null };
       if (hasUpdatedAtColumn(columns)) {
-        setData['updatedAt'] = VERSIONED_TABLES.has(tableName)
-          ? advanceUpdatedAt(columns.updatedAt)
-          : new Date();
+        setData['updatedAt'] = new Date();
       }
 
       return execUpdate(database, table, setData, combineFilters(filters));

@@ -87,8 +87,6 @@ const { createScopedClient, isSoftDeleteExempt, UnscopedMutationError } = await 
 const { units } = await import('../src/schema/units');
 const { userRoles } = await import('../src/schema/user-roles');
 const { communities } = await import('../src/schema/communities');
-// A tenant table that is NOT in VERSIONED_TABLES — the control for the stamp.
-const { announcements } = await import('../src/schema/announcements');
 // Global table fixture: users has no communityId column (id is UUID PK, not community_id FK)
 const { users } = await import('../src/schema/users');
 
@@ -229,40 +227,28 @@ describe('createScopedClient', () => {
       expect(setData).toHaveProperty('unitNumber', '202');
     });
 
-    it('stamps a plain Date on a table that is not versioned', async () => {
+    it('auto-sets updatedAt on update', async () => {
       const client = createScopedClient(42);
-      await client.update(announcements, { title: 'Pool closed' });
+      await client.update(units, { unitNumber: '202' });
 
       const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(setData).toBeDefined();
       expect(setData?.['updatedAt']).toBeInstanceOf(Date);
     });
 
-    it('stamps a DB-computed advancing expression on a VERSIONED table', async () => {
-      // `units`, `user_roles` and `unit_occupants` carry an
-      // optimistic-concurrency token, so their `updated_at` must strictly
-      // advance — which a `new Date()` from this process cannot guarantee: an
-      // INSERT stamps microseconds from `now()` and a JS Date stamps
-      // milliseconds, so a save inside the same millisecond left the compared
-      // value unchanged and a stale token kept matching. See
-      // `src/optimistic-concurrency.ts`.
+    it("overwrites a caller's own updatedAt", async () => {
+      // The long-standing contract: a scoped update always bumps updatedAt. It is
+      // what lets `residents/route.ts` move the membership row's version with an
+      // empty values object, and it means a caller-supplied `null` can never reach
+      // a NOT NULL column.
+      //
+      // For units / user_roles / unit_occupants the value written here is
+      // overridden AGAIN by the `pp_advance_updated_at` trigger (migration 0087),
+      // because their `updated_at` is a concurrency token that must strictly
+      // advance. That is a database guarantee and is covered by db-backed tests,
+      // not by this mock.
       const client = createScopedClient(42);
-      await client.update(units, { unitNumber: '202' });
-
-      const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-      expect(setData?.['updatedAt']).not.toBeInstanceOf(Date);
-      expect(setData?.['updatedAt']).toMatchObject({ queryChunks: expect.anything() });
-    });
-
-    it("overwrites a caller's own updatedAt, versioned or not", async () => {
-      // The long-standing contract: a scoped update always bumps updatedAt. It
-      // is what lets `residents/route.ts` move the membership row's version with
-      // an empty values object. An earlier attempt at the fix above relaxed this
-      // so a service could pass the expression itself — which also meant a
-      // caller-supplied `null` would reach a NOT NULL column. The expression now
-      // comes from here, so the contract can stay absolute.
-      const client = createScopedClient(42);
-      await client.update(announcements, { title: 'x', updatedAt: null });
+      await client.update(units, { unitNumber: '202', updatedAt: null });
 
       const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(setData?.['updatedAt']).toBeInstanceOf(Date);
