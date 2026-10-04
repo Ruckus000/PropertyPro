@@ -46,11 +46,15 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "[data-testid=\"site-editor-tool-domain\"]"
+          "selector": "[data-testid=\"editor-view-settings\"]"
         },
         {
           "type": "click",
-          "selector": "[data-testid=\"site-editor-tool-domain\"]"
+          "selector": "[data-testid=\"editor-view-settings\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=tab[name=\"Address & domain\"]"
         },
         {
           "type": "waitFor",
@@ -58,10 +62,8 @@
         }
       ],
       "clipTo": [
-        "[data-testid=\"site-editor-tool-domain\"]",
-        "role=textbox[name=\"Your domain\"]"
+        "#settings-panel-address > div:has(> h3:text-is(\"Use your own domain\"))"
       ],
-      "pad": 48,
       "highlight": "role=textbox[name=\"Your domain\"]",
       "step": 2
     }
