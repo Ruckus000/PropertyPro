@@ -4,6 +4,7 @@
  * millisecond-precision `updatedAt` comparison cannot be proven with mocks.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { eq, inArray } from '@propertypro/db/filters';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import {
@@ -51,7 +52,9 @@ describeDb('unit number uniqueness + concurrency (db-backed integration)', () =>
 
   beforeEach(async () => {
     // Raw handle: soft-deleted rows too, which the scoped client cannot see.
-    const { units } = state!.dbModule;
+    const { leases, units } = state!.dbModule;
+    // Leases first: their unit FK is ON DELETE RESTRICT.
+    await state!.db.delete(leases).where(inArray(leases.communityId, [communityId, otherCommunityId]));
     await state!.db.delete(units).where(inArray(units.communityId, [communityId, otherCommunityId]));
   });
 
@@ -109,6 +112,52 @@ describeDb('unit number uniqueness + concurrency (db-backed integration)', () =>
     const token = (JSON.parse(JSON.stringify(listed)) as { updatedAt: string }).updatedAt;
     expect(await updateResidentRole(communityId, userId, {}, token)).toBe(true);
     expect(await updateResidentRole(communityId, userId, {}, token)).toBe(false);
+  });
+
+  /**
+   * The lease→unit rent sync (migration 0088) writes units.updated_at in SQL,
+   * outside the scoped client, so it must follow the same rule. Inside one
+   * transaction now() is constant, which forces the lease's trigger write into
+   * the very millisecond of the token: under the old `updated_at = NOW()` that
+   * truncated to the token and the stale save was accepted.
+   */
+  describe('a lease write moves the unit token like any other write (migration 0088)', () => {
+    const seedLease = (tx: Pick<TestKitState['db'], 'insert'>, unitId: number) =>
+      tx.insert(state!.dbModule.leases).values({
+        communityId,
+        unitId,
+        residentId: requireUser(state!, 'actorA').id,
+        startDate: '2020-01-01',
+        rentAmount: '1500.00',
+        status: 'active',
+      });
+
+    it('a lease written in the same millisecond as the token still invalidates it', async () => {
+      const created = await createUnitForCommunity(scopedFor(communityId), { unitNumber: '401' });
+      const id = created!['id'] as number;
+      const token = await state!.db.transaction(async (tx) => {
+        const [row] = (await tx.execute(sql`
+          update units set updated_at = date_trunc('milliseconds', now())
+          where id = ${id} returning updated_at`)) as unknown as { updated_at: string | Date }[];
+        await seedLease(tx, id);
+        return new Date(row!.updated_at).toISOString();
+      });
+      const [unit] = await scopedFor(communityId).selectFrom(state!.dbModule.units, {}, eq(state!.dbModule.units.id, id));
+      expect(unit!['rentAmount']).toBe('1500.00'); // the trigger did run
+      expect(await updateUnitById(scopedFor(communityId), id, { floor: 9 }, token)).toBeNull();
+    });
+
+    it('never moves updated_at backwards', async () => {
+      const created = await createUnitForCommunity(scopedFor(communityId), { unitNumber: '402' });
+      const id = created!['id'] as number;
+      const [ahead] = (await state!.db.execute(sql`
+        update units set updated_at = date_trunc('milliseconds', now()) + interval '1 hour'
+        where id = ${id} returning updated_at`)) as unknown as { updated_at: string | Date }[];
+      await seedLease(state!.db, id);
+      const [after] = (await state!.db.execute(sql`
+        select updated_at from units where id = ${id}`)) as unknown as { updated_at: string | Date }[];
+      expect(new Date(after!.updated_at).getTime()).toBeGreaterThan(new Date(ahead!.updated_at).getTime());
+    });
   });
 
   /**

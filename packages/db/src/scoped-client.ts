@@ -131,6 +131,8 @@ function hasUpdatedAtColumn(
  * millisecond buckets means a token can never match once anyone has written
  * after it. Truncating `now()` matters too: two microsecond stamps in one
  * millisecond would still collide once the comparison truncates them.
+ * Its SQL twin, for the one writer outside this client (the lease→unit rent
+ * sync trigger), is migration 0088. Keep the two identical.
  */
 function nextUpdatedAt(column: PgColumn): SQL {
   return sql`greatest(date_trunc('milliseconds', now()), date_trunc('milliseconds', ${column}) + interval '1 millisecond')`;
