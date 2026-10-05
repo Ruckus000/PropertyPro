@@ -16,13 +16,21 @@
  * tokens (`--surface-card`, `--text-*`, `--border-*`), never `--nav-*`.
  */
 
-import { useMemo, useState } from 'react';
-import { Building, ChevronsUpDown, Check } from 'lucide-react';
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { Building, ChevronsUpDown } from 'lucide-react';
 import { useUserCommunities } from '@/hooks/use-user-communities';
-import { buildCommunityDashboardUrl } from '@/lib/utils/community-url';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { CommunityAvatar } from './community-avatar';
+
+// The list (search, rows, avatars) loads when the popover first opens. The
+// switcher ships with every authenticated page and the web app's total-JS
+// ceiling (scripts/perf-check.ts) had under 1 KiB of headroom when community
+// avatars were added, so only the trigger is first-load.
+const SwitcherList = dynamic(
+  () => import('./sidebar-tenant-switcher-list').then((m) => m.SwitcherList),
+  { loading: () => null },
+);
 
 /**
  * Show the search box only once the list is long enough to warrant it.
@@ -39,9 +47,6 @@ interface SidebarTenantSwitcherProps {
   staticOnly?: boolean;
 }
 
-const itemClass =
-  'flex items-center gap-2 rounded-[10px] px-2 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]';
-
 export function SidebarTenantSwitcher({
   communityId,
   communityName,
@@ -49,17 +54,10 @@ export function SidebarTenantSwitcher({
   staticOnly = false,
 }: SidebarTenantSwitcherProps) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const { data } = useUserCommunities();
   const communities = data ?? [];
   const canSwitch = !staticOnly && communities.length >= 2;
   const showSearch = communities.length > SEARCH_THRESHOLD;
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return communities;
-    return communities.filter((c) => c.name.toLowerCase().includes(q));
-  }, [communities, query]);
 
   const brandMark = (
     <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--interactive-primary)]">
@@ -97,10 +95,7 @@ export function SidebarTenantSwitcher({
     <div className="h-16 shrink-0 border-b border-[var(--border-default)] px-2 py-2">
       <Popover
         open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setQuery('');
-        }}
+        onOpenChange={setOpen}
       >
         <PopoverTrigger asChild>
           <button
@@ -120,53 +115,7 @@ export function SidebarTenantSwitcher({
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-64 p-0">
-          {showSearch && (
-            <div className="border-b border-[var(--border-default)] p-2">
-              {/* eslint-disable-next-line jsx-a11y/no-autofocus -- focusing search on open is expected popover behavior */}
-              <input
-                type="text"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search communities…"
-                aria-label="Search communities"
-                autoFocus
-                className="h-9 w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-card)] px-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-placeholder)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
-              />
-            </div>
-          )}
-          <ul className="max-h-72 overflow-y-auto p-1.5">
-            <li>
-              <a href="/dashboard/overview" className={itemClass}>
-                All communities overview
-              </a>
-            </li>
-            {filtered.length > 0 && (
-              <li className="my-1 border-t border-[var(--border-subtle)]" aria-hidden="true" />
-            )}
-            {filtered.length === 0 ? (
-              <li>
-                <p className="px-2 py-3 text-sm text-[var(--text-tertiary)]">
-                  No communities found.
-                </p>
-              </li>
-            ) : (
-              filtered.map((c) => (
-                <li key={c.id}>
-                  <a href={buildCommunityDashboardUrl(c.slug)} className={itemClass}>
-                    <CommunityAvatar name={c.name} logoUrl={c.logoUrl} />
-                    <span className="flex-1 truncate">{c.name}</span>
-                    {c.id === communityId && (
-                      <Check
-                        size={16}
-                        className="ml-2 shrink-0 text-[var(--interactive-primary)]"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </a>
-                </li>
-              ))
-            )}
-          </ul>
+          <SwitcherList communities={communities} communityId={communityId} showSearch={showSearch} />
         </PopoverContent>
       </Popover>
     </div>
