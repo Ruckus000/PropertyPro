@@ -13,6 +13,7 @@ import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -69,7 +70,11 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     );
   }
 
-  const data = await loadDashboardData(communityId, userId!, membership!);
+  const [data, branding] = await Promise.all([
+    loadDashboardData(communityId, userId!, membership!),
+    getBrandingForCommunity(communityId),
+  ]);
+  const logoUrl = await resolveBrandingImageUrl(communityId, branding?.logoPath);
   const features = getFeaturesForCommunity(membership!.communityType);
   const nextMeeting = data.meetings[0] ?? null;
 
@@ -77,6 +82,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     <MobileHomeContent
       userName={data.firstName}
       communityName={data.communityName}
+      logoUrl={logoUrl}
       communityId={communityId}
       city={membership!.city}
       state={membership!.state}

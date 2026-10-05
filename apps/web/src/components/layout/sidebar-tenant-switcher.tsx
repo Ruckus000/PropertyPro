@@ -22,6 +22,7 @@ import { useUserCommunities } from '@/hooks/use-user-communities';
 import { buildCommunityDashboardUrl } from '@/lib/utils/community-url';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { CommunityAvatar } from './community-avatar';
 
 /**
  * Show the search box only once the list is long enough to warrant it.
@@ -152,6 +153,7 @@ export function SidebarTenantSwitcher({
               filtered.map((c) => (
                 <li key={c.id}>
                   <a href={buildCommunityDashboardUrl(c.slug)} className={itemClass}>
+                    <CommunityAvatar name={c.name} logoUrl={c.logoUrl} />
                     <span className="flex-1 truncate">{c.name}</span>
                     {c.id === communityId && (
                       <Check

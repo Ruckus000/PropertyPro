@@ -60,6 +60,11 @@ vi.mock('@propertypro/theme', () => ({
   toFontLinks: () => [],
 }));
 
+const resolveBrandingImageUrlMock = vi.hoisted(() => vi.fn(async (): Promise<string | null> => null));
+vi.mock('@/lib/branding/branding-image-url', () => ({
+  resolveBrandingImageUrl: resolveBrandingImageUrlMock,
+}));
+
 import MobileHomePage from '../../src/app/mobile/page';
 
 const SEARCH_PARAMS_1 = Promise.resolve({ communityId: '1' });
@@ -111,6 +116,16 @@ describe('MobileHomePage', () => {
       'user-1',
       expect.objectContaining({ communityId: 1, userId: 'user-1' }),
     );
+  });
+
+  it("passes the community's square logo to the home header, resolved for this community", async () => {
+    getBrandingForCommunityMock.mockResolvedValueOnce({ logoPath: 'communities/1/branding/logo.webp' });
+    resolveBrandingImageUrlMock.mockResolvedValueOnce('https://storage/signed-logo');
+
+    const element = (await MobileHomePage({ searchParams: SEARCH_PARAMS_1 })) as { props: { logoUrl: unknown } };
+
+    expect(resolveBrandingImageUrlMock).toHaveBeenCalledWith(1, 'communities/1/branding/logo.webp');
+    expect(element.props.logoUrl).toBe('https://storage/signed-logo');
   });
 
   describe('preview mode', () => {

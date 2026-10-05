@@ -23,6 +23,8 @@ import { MobileNavRow } from "@/components/mobile/MobileNavRow";
 interface MobileHomeContentProps {
   userName: string | null;
   communityName: string;
+  /** The community's square logo, ready to show; null when it has none. */
+  logoUrl?: string | null;
   communityId: number;
   city: string | null;
   state: string | null;
@@ -42,6 +44,7 @@ interface MobileHomeContentProps {
 export function MobileHomeContent({
   userName,
   communityName,
+  logoUrl = null,
   communityId,
   city,
   state,
@@ -67,7 +70,17 @@ export function MobileHomeContent({
         {/* ── Header ── */}
         <SlideUp>
           <div className="flex items-start justify-between px-5 pt-5">
-            <div>
+            <div className="flex min-w-0 items-start gap-3">
+              {logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={logoUrl}
+                  alt=""
+                  data-testid="mobile-home-logo"
+                  className="mt-0.5 h-10 w-10 shrink-0 rounded-lg border border-black/10 bg-white object-cover"
+                />
+              ) : null}
+              <div className="min-w-0">
               <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.5px] text-stone-900">
                 {communityName}
               </h1>
@@ -76,6 +89,7 @@ export function MobileHomeContent({
                   {location}
                 </p>
               )}
+              </div>
             </div>
             <Link
               href={`/mobile/more?communityId=${communityId}`}

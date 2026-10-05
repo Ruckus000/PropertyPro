@@ -25,6 +25,7 @@ const COMMUNITIES = [
     role: 'property_manager',
     displayTitle: null,
     communityType: 'condo_718' as const,
+    logoUrl: 'https://cdn/sunset.png' as string | null,
   },
   {
     id: 12,
@@ -33,6 +34,7 @@ const COMMUNITIES = [
     role: 'root_manager',
     displayTitle: null,
     communityType: 'hoa_720' as const,
+    logoUrl: null as string | null,
   },
 ];
 
@@ -144,5 +146,20 @@ describe('<CommunityPickerDialog>', () => {
 
     expect(screen.getByText('You are not a member of any community yet.')).toBeInTheDocument();
     expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+describe('community avatars', () => {
+  it("shows each community's logo, or its initial when it has none", () => {
+    renderDialog((id) => `/documents?communityId=${id}`);
+
+    const sunset = screen.getByRole('link', { name: /Sunset Condos/ });
+    expect(sunset.querySelector('[data-testid="community-avatar-logo"]')).toHaveAttribute(
+      'src',
+      'https://cdn/sunset.png',
+    );
+    const palm = screen.getByRole('link', { name: /Palm Shores HOA/ });
+    expect(palm.querySelector('[data-testid="community-avatar-logo"]')).toBeNull();
+    expect(palm.querySelector('[data-testid="community-avatar-initial"]')).toHaveTextContent('P');
   });
 });

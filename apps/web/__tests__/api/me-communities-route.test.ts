@@ -73,6 +73,7 @@ describe('me/communities route', () => {
         role: 'owner',
         displayTitle: 'Unit Owner',
         communityType: 'condo_718',
+        logoUrl: null,
       },
     ]);
     expect(listCommunitiesForUserMock).toHaveBeenCalledWith('user-123');
@@ -99,9 +100,41 @@ describe('me/communities route', () => {
     for (const item of json.data) {
       // No row should leak any field outside the contract.
       expect(Object.keys(item).sort()).toEqual(
-        ['communityType', 'displayTitle', 'id', 'name', 'role', 'slug'],
+        ['communityType', 'displayTitle', 'id', 'logoUrl', 'name', 'role', 'slug'],
       );
     }
+  });
+
+  describe('logoUrl, for the switcher avatar', () => {
+    const BASE = 'https://proj.supabase.co/storage/v1/object/public/community-assets';
+    const get = async (row: Record<string, unknown>) => {
+      vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://proj.supabase.co');
+      listCommunitiesForUserMock.mockResolvedValueOnce([{ ...FIXTURE_ROW, ...row }]);
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/me/communities'));
+      vi.unstubAllEnvs();
+      return ((await res.json()) as { data: Array<{ logoUrl: string | null }> }).data[0]!.logoUrl;
+    };
+
+    it("is the public email PNG of the community's square logo", async () => {
+      expect(
+        await get({ brandingEmailLogoPath: '42/email/logo-a.png', brandingLogoPath: 'communities/42/branding/logo.webp' }),
+      ).toBe(`${BASE}/42/email/logo-a.png`);
+    });
+
+    it('falls back to an admin-uploaded logo, which is public too', async () => {
+      expect(await get({ brandingEmailLogoPath: null, brandingLogoPath: '42/site/abc.png' })).toBe(
+        `${BASE}/42/site/abc.png`,
+      );
+    });
+
+    it.each([
+      ['a logo only in the private bucket (never signed here)', { brandingLogoPath: 'communities/42/branding/logo.webp' }],
+      ["another community's file", { brandingEmailLogoPath: '43/email/logo-a.png' }],
+      ['traversal out of the prefix', { brandingEmailLogoPath: '42/email/../../43/email/x.png' }],
+      ['no logo at all', {}],
+    ])('is null for %s', async (_label, row) => {
+      expect(await get({ brandingEmailLogoPath: null, brandingLogoPath: null, ...row })).toBeNull();
+    });
   });
 
   it('returns the canonical envelope with an empty array for a brand-new user', async () => {
