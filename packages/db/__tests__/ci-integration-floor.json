@@ -1,0 +1,8 @@
+{
+  "expectedExecutedCount": 272,
+  "measuredAt": "2026-10-05T02:13:06Z",
+  "note": "ARMED 2026-10-05: integration-tests.yml fails the job when a green vitest run EXECUTES fewer packages/db integration tests than expectedExecutedCount (scripts/assert-vitest-executed-floor.ts). The value is the count PRINTED by the green main run below ('Tests 272 passed | 3 skipped (275)', so executed = 272). Green main run 37253090780 (f0a9d094) printed the same. Both ran after #1313 made this step run the whole config. Never set it from a local run. Raise it only by adding tests; lower it only in the PR that removes them. Every file here gates on DATABASE_URL (describe.skip without it), which is exactly the always-skip shape this floor catches.",
+  "observedRunUrl": "https://github.com/Ruckus000/PropertyPro/actions/runs/37254325248",
+  "observedCommitSha": "56b23fad0321a01ceb5fbfb0f8e4a8da45c2d3c5",
+  "observedSkips": "3, all env-gated: seed-demo's Stripe-linkage case (no STRIPE_SECRET_KEY), one invitation-flow case, and supabase-storage (both need real Supabase). Reported as a warning, not refused."
+}
