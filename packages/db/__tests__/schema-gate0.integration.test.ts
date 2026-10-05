@@ -1,13 +1,16 @@
 /**
  * Gate 0 schema sign-off integration test.
  *
- * Executes migration SQL against a temporary schema on a live Postgres instance,
- * then validates tables, enum values, foreign-key ON DELETE actions, and package exports.
+ * Validates the Gate 0 tables, enum values, foreign-key ON DELETE actions and
+ * package exports against the live, fully migrated `public` schema — i.e. what
+ * the whole migration chain actually produces, which a later migration can
+ * break.
+ *
+ * It used to replay `migrations/0000_flashy_toro.sql` into a throwaway schema.
+ * The 2026-05-06 drizzle re-baseline (#191) moved that file to `_archive/`, so
+ * `beforeAll` threw ENOENT and the file was red for five months.
  */
 
-import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
@@ -29,7 +32,8 @@ import type {
   UserRoleRecord,
 } from '../src/index';
 
-const describeDb = process.env.DIRECT_URL ? describe : describe.skip;
+const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+const describeDb = databaseUrl ? describe : describe.skip;
 
 const expectedTables = [
   'communities',
@@ -59,11 +63,6 @@ const expectedFkOnDelete: Record<string, 'cascade' | 'set null' | 'restrict'> = 
   notification_preferences_community_id_communities_id_fk: 'cascade',
 };
 
-const migrationPath = path.resolve(
-  process.cwd(),
-  'migrations/0000_flashy_toro.sql',
-);
-
 type TypeExportSmoke = [
   Community,
   NewCommunity,
@@ -86,55 +85,37 @@ void (null as unknown as TypeExportSmoke);
 
 describeDb('Gate 0: schema sign-off', () => {
   let sql: postgres.Sql | undefined;
-  let schemaName: string | undefined;
 
-  beforeAll(async () => {
-    sql = postgres(process.env.DIRECT_URL!, { prepare: false, max: 1 });
-    schemaName = `gate0_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
-
-    await sql.unsafe(`create schema "${schemaName}"`);
-    await sql.unsafe(`set search_path to "${schemaName}"`);
-
-    const rawMigration = await readFile(migrationPath, 'utf8');
-    const statements = rawMigration
-      .split('--> statement-breakpoint')
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0)
-      .map((chunk) => chunk.replaceAll('"public".', `"${schemaName}".`));
-
-    for (const statement of statements) {
-      await sql.unsafe(statement);
-    }
+  beforeAll(() => {
+    sql = postgres(databaseUrl!, { prepare: false, max: 1 });
   });
 
   afterAll(async () => {
-    if (sql && schemaName) {
-      await sql.unsafe(`drop schema if exists "${schemaName}" cascade`);
-    }
     if (sql) {
       await sql.end();
     }
   });
 
   it('creates all expected tables', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('Gate 0 setup did not initialize SQL client and schema');
+    if (!sql) {
+      throw new Error('Gate 0 setup did not initialize SQL client');
     }
 
     const rows = await sql<{ table_name: string }[]>`
       select table_name
       from information_schema.tables
-      where table_schema = ${schemaName}
+      where table_schema = 'public'
         and table_type = 'BASE TABLE'
       order by table_name
     `;
 
-    expect(rows.map((row) => row.table_name)).toEqual([...expectedTables].sort());
+    // public holds every later table too, so assert containment.
+    expect(rows.map((row) => row.table_name)).toEqual(expect.arrayContaining([...expectedTables]));
   });
 
   it('creates enums with exact accepted labels', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('Gate 0 setup did not initialize SQL client and schema');
+    if (!sql) {
+      throw new Error('Gate 0 setup did not initialize SQL client');
     }
 
     const rows = await sql<{ enum_name: string; enum_label: string }[]>`
@@ -142,7 +123,8 @@ describeDb('Gate 0: schema sign-off', () => {
       from pg_type t
       join pg_enum e on e.enumtypid = t.oid
       join pg_namespace n on n.oid = t.typnamespace
-      where n.nspname = ${schemaName}
+      where n.nspname = 'public'
+        and t.typname = any(${Object.keys(expectedEnumLabels)})
       order by t.typname, e.enumsortorder
     `;
 
@@ -157,18 +139,18 @@ describeDb('Gate 0: schema sign-off', () => {
   });
 
   it('rejects invalid enum values', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('Gate 0 setup did not initialize SQL client and schema');
+    if (!sql) {
+      throw new Error('Gate 0 setup did not initialize SQL client');
     }
 
     await expect(
-      sql.unsafe(`select 'not_a_type'::"${schemaName}".community_type`),
+      sql.unsafe(`select 'not_a_type'::public.community_type`),
     ).rejects.toThrow();
   });
 
   it('enforces ON DELETE actions on every FK', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('Gate 0 setup did not initialize SQL client and schema');
+    if (!sql) {
+      throw new Error('Gate 0 setup did not initialize SQL client');
     }
 
     const rows = await sql<{ conname: string; definition: string }[]>`
@@ -176,7 +158,8 @@ describeDb('Gate 0: schema sign-off', () => {
       from pg_constraint c
       join pg_namespace n on n.oid = c.connamespace
       where c.contype = 'f'
-        and n.nspname = ${schemaName}
+        and n.nspname = 'public'
+        and c.conname = any(${Object.keys(expectedFkOnDelete)})
       order by c.conname
     `;
 

@@ -308,9 +308,6 @@ jobs:
         #   - seed-demo, reset-demo: import apps/web services whose `@/` alias
         #     packages/db's vitest config does not resolve
         #     (`Cannot find package '@/lib/operations/routes'`).
-        #   - schema-gate0, audit-log-append-only-db: need an environment this
-        #     job does not provide (the latter throws "DIRECT_URL or
-        #     DATABASE_URL is required" from its own gate).
         #
         # Removed from this list:
         #   - pm-portfolio-unsafe (stale fixtures, not an access bug — its
@@ -319,10 +316,11 @@ jobs:
         #   - reconcile-auth-user-id (teardown-only harness bug: `drizzle()`
         #     over a postgres.js `sql.begin` transaction, which has no
         #     `options`; every test body already passed).
+        #   - schema-gate0, audit-log-append-only-db (they replayed migration
+        #     files the #191 re-baseline moved to `_archive/`, so `beforeAll`
+        #     threw ENOENT; they now assert the live migrated schema).
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
-          --exclude '__tests__/audit-log-append-only-db.integration.test.ts'
           --exclude '__tests__/reset-demo.integration.test.ts'
-          --exclude '__tests__/schema-gate0.integration.test.ts'
           --exclude '__tests__/seed-demo.integration.test.ts'

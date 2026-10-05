@@ -1,75 +1,62 @@
+/**
+ * compliance_audit_log append-only guard, exercised against the live, fully
+ * migrated `public` schema — so a later migration that drops or weakens
+ * `compliance_audit_log_append_only_guard` turns this red.
+ *
+ * It used to replay three migration files into a throwaway schema; the
+ * 2026-05-06 drizzle re-baseline (#191) moved them to `_archive/`, so
+ * `beforeAll` threw ENOENT and the file was red for five months.
+ *
+ * Every case runs in ONE transaction that is always rolled back, and each
+ * expected rejection runs in a savepoint so the transaction survives it. No row
+ * persists and the trigger is never disabled, so this file needs no place on
+ * scripts/verify-audit-log-trigger-overrides.ts's approved list.
+ */
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
-const describeDb = process.env.DIRECT_URL || process.env.DATABASE_URL ? describe : describe.skip;
+const databaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+const describeDb = databaseUrl ? describe : describe.skip;
 
-const migrationPaths = [
-  path.resolve(process.cwd(), 'migrations/0000_flashy_toro.sql'),
-  path.resolve(process.cwd(), 'migrations/0001_condemned_mikhail_rasputin.sql'),
-  path.resolve(process.cwd(), 'migrations/0005_append_only_audit_log.sql'),
-];
+type TxSql = postgres.TransactionSql;
 
-type SqlClient = postgres.Sql;
-
-async function applyMigration(sql: SqlClient, schemaName: string, filePath: string): Promise<void> {
-  const rawMigration = await readFile(filePath, 'utf8');
-  const statements = rawMigration
-    .split('--> statement-breakpoint')
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0)
-    .map((chunk) => chunk.replaceAll('"public".', `"${schemaName}".`));
-
-  for (const statement of statements) {
-    await sql.unsafe(statement);
-  }
-}
+/** Thrown at the end of every case so `sql.begin` rolls the transaction back. */
+class RollbackSentinel extends Error {}
 
 describeDb('compliance_audit_log append-only (DB integration)', () => {
-  let sql: SqlClient | undefined;
-  let schemaName: string | undefined;
+  let sql: postgres.Sql;
 
-  beforeAll(async () => {
-    const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
-    if (!url) {
-      throw new Error('DIRECT_URL or DATABASE_URL is required for append-only DB integration test');
-    }
-
-    sql = postgres(url, { prepare: false, max: 1 });
-    schemaName = `audit_append_only_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
-
-    await sql.unsafe(`create schema "${schemaName}"`);
-    await sql.unsafe(`set search_path to "${schemaName}"`);
-
-    for (const migrationPath of migrationPaths) {
-      await applyMigration(sql, schemaName, migrationPath);
-    }
+  beforeAll(() => {
+    sql = postgres(databaseUrl!, { prepare: false, max: 1 });
   });
 
   afterAll(async () => {
-    if (sql && schemaName) {
-      await sql.unsafe(`drop schema if exists "${schemaName}" cascade`);
-    }
-    if (sql) {
-      await sql.end();
-    }
+    await sql.end();
   });
 
-  async function createAuditLogRecord(prefix: string): Promise<number> {
-    if (!sql || !schemaName) {
-      throw new Error('append-only test setup did not initialize SQL client and schema');
+  async function inRolledBackTransaction(fn: (tx: TxSql) => Promise<void>): Promise<void> {
+    try {
+      await sql.begin(async (tx) => {
+        await fn(tx);
+        throw new RollbackSentinel();
+      });
+    } catch (error) {
+      if (!(error instanceof RollbackSentinel)) {
+        throw error;
+      }
     }
+  }
 
+  async function createAuditLogRecord(tx: TxSql, prefix: string): Promise<number> {
     const slug = `${prefix}-community-${randomUUID().slice(0, 8)}`;
     const email = `${prefix}-${randomUUID().slice(0, 8)}@example.com`;
     const userId = randomUUID();
 
-    const communityRows = await sql.unsafe<{ id: string }[]>(
-      `insert into "${schemaName}"."communities" ("name", "slug", "community_type", "timezone")
+    const communityRows = await tx.unsafe<{ id: string }[]>(
+      `insert into public.communities (name, slug, community_type, timezone)
        values ($1, $2, 'condo_718', 'America/New_York')
-       returning "id"`,
+       returning id`,
       [`${prefix} Community`, slug],
     );
 
@@ -78,17 +65,17 @@ describeDb('compliance_audit_log append-only (DB integration)', () => {
       throw new Error('Failed to create test community');
     }
 
-    await sql.unsafe(
-      `insert into "${schemaName}"."users" ("id", "email", "full_name") values ($1, $2, $3)`,
+    await tx.unsafe(
+      `insert into public.users (id, email, full_name) values ($1, $2, $3)`,
       [userId, email, `${prefix} User`],
     );
 
     const resourceId = `__p1_27c_test__${prefix}__${randomUUID().slice(0, 8)}`;
-    const rows = await sql.unsafe<{ id: string }[]>(
-      `insert into "${schemaName}"."compliance_audit_log"
-        ("user_id", "community_id", "action", "resource_type", "resource_id", "old_values", "new_values", "metadata")
+    const rows = await tx.unsafe<{ id: string }[]>(
+      `insert into public.compliance_audit_log
+        (user_id, community_id, action, resource_type, resource_id, old_values, new_values, metadata)
        values ($1, $2, 'create', 'document', $3, null, '{"ok":true}'::jsonb, null)
-       returning "id"`,
+       returning id`,
       [userId, communityId, resourceId],
     );
 
@@ -100,35 +87,46 @@ describeDb('compliance_audit_log append-only (DB integration)', () => {
     return id;
   }
 
+  /** Runs `statement` in a savepoint and returns the error it raised. */
+  async function rejectionOf(tx: TxSql, statement: string, params: number[]): Promise<unknown> {
+    try {
+      await tx.savepoint((sp) => sp.unsafe(statement, params));
+    } catch (error) {
+      return error;
+    }
+    throw new Error(`expected the append-only guard to reject: ${statement}`);
+  }
+
+  function expectGuardRejection(error: unknown): void {
+    expect(error).toBeInstanceOf(postgres.PostgresError);
+    expect((error as postgres.PostgresError).message).toMatch(/append-only/i);
+    // check_violation is the ERRCODE the guard raises with — pins that the
+    // guard trigger itself fired, not some other error that mentions the term.
+    expect((error as postgres.PostgresError).code).toBe('23514');
+  }
+
   it('allows INSERT into compliance_audit_log', async () => {
-    const id = await createAuditLogRecord('insert');
-    expect(id).toBeGreaterThan(0);
+    await inRolledBackTransaction(async (tx) => {
+      const id = await createAuditLogRecord(tx, 'insert');
+      expect(id).toBeGreaterThan(0);
+    });
   });
 
   it('rejects direct UPDATE on compliance_audit_log', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('append-only test setup did not initialize SQL client and schema');
-    }
-
-    const id = await createAuditLogRecord('update');
-
-    await expect(
-      sql.unsafe(
-        `update "${schemaName}"."compliance_audit_log" set "action" = 'update' where "id" = $1`,
-        [id],
-      ),
-    ).rejects.toThrow(/append-only/i);
+    await inRolledBackTransaction(async (tx) => {
+      const id = await createAuditLogRecord(tx, 'update');
+      expectGuardRejection(
+        await rejectionOf(tx, `update public.compliance_audit_log set action = 'update' where id = $1`, [id]),
+      );
+    });
   });
 
   it('rejects direct DELETE on compliance_audit_log', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('append-only test setup did not initialize SQL client and schema');
-    }
-
-    const id = await createAuditLogRecord('delete');
-
-    await expect(
-      sql.unsafe(`delete from "${schemaName}"."compliance_audit_log" where "id" = $1`, [id]),
-    ).rejects.toThrow(/append-only/i);
+    await inRolledBackTransaction(async (tx) => {
+      const id = await createAuditLogRecord(tx, 'delete');
+      expectGuardRejection(
+        await rejectionOf(tx, `delete from public.compliance_audit_log where id = $1`, [id]),
+      );
+    });
   });
 });
