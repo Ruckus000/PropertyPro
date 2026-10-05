@@ -129,6 +129,10 @@
         {
           "type": "waitFor",
           "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "tr:has(button[aria-label=\"Open Unit 106\"])"
         }
       ],
       "clipTo": "tr:has(button[aria-label=\"Open Unit 106\"])",
