@@ -11,6 +11,7 @@ import {
   units,
 } from '../src/schema';
 import { runDemoReset } from '../../../scripts/reset-demo';
+import { startSupabaseDouble, type SupabaseHttpDouble } from './helpers/supabase-http-double';
 
 const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
 
@@ -19,20 +20,43 @@ const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments
 /**
  * Exact document counts seeded per community by seed-demo.ts.
  * Used to detect both orphaned duplicates and missing data after reset.
+ *
+ * Derived from the seeder, not observed — re-derive when it changes:
+ *   - sunset-condos: 2 base docs + the condo_718 compliance template (17 items)
+ *     minus the 3 it deliberately leaves unposted (718_conflict_contracts,
+ *     718_sirs, 718_insurance) + 10 rolling minutes = 26.
+ *   - palm-shores-hoa: the 2 base docs only. seedTransparencyDemoData is
+ *     skipped for it on purpose (#764), so staging E2E can assert the empty
+ *     transparency state.
+ *   - sunset-ridge-apartments: rules, move-in instructions, resident handbook.
  */
 const EXPECTED_DOCS_PER_SLUG: Record<string, number> = {
-  'sunset-condos': 25,          // base docs + transparency checklist + 10 rolling minutes samples
-  'palm-shores-hoa': 10,        // base docs + transparency checklist
-  'sunset-ridge-apartments': 3, // rules, move-in instructions, resident handbook
+  'sunset-condos': 26,
+  'palm-shores-hoa': 2,
+  'sunset-ridge-apartments': 3,
 };
 
 describeDb('demo reset integration', () => {
   let sql: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
+  // The seed uploads document PDFs through Supabase Storage (seedEsignData and
+  // the document seeders call createAdminClient()). Integration tests may not
+  // mock a module, so the real supabase-js client talks to an in-process double.
+  let double: SupabaseHttpDouble;
+  const savedEnv = {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    pw: process.env.DEMO_DEFAULT_PASSWORD,
+  };
 
   beforeAll(async () => {
     sql = postgres(process.env.DATABASE_URL!, { prepare: false });
     db = drizzle(sql, { schema });
+
+    double = await startSupabaseDouble();
+    process.env.NEXT_PUBLIC_SUPABASE_URL = double.url;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'reset-demo-test-service-role';
+    process.env.DEMO_DEFAULT_PASSWORD ??= 'reset-demo-test-password';
 
     await runDemoReset();
     await runDemoReset();
@@ -40,6 +64,15 @@ describeDb('demo reset integration', () => {
 
   afterAll(async () => {
     await sql.end();
+    await new Promise((resolve) => double?.server.close(resolve));
+    for (const [name, value] of [
+      ['NEXT_PUBLIC_SUPABASE_URL', savedEnv.url],
+      ['SUPABASE_SERVICE_ROLE_KEY', savedEnv.key],
+      ['DEMO_DEFAULT_PASSWORD', savedEnv.pw],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 
   it('resets and re-seeds demo data idempotently', async () => {
@@ -99,4 +132,9 @@ describeDb('demo reset integration', () => {
       expect(docs.length).toBe(expected);
     }
   }, 30_000);
+
+  // Last, so it covers every request both seed runs above made.
+  it('only used the Supabase endpoints the double implements', () => {
+    expect(double.unexpected).toEqual([]);
+  });
 });

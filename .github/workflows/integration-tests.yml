@@ -8,18 +8,17 @@
 # It runs two suites against a disposable vanilla-Postgres service container:
 #   1. `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
 #      — the apps/web integration suite (the step the floor below governs).
-#   2. the packages/db integration config, whole, minus a named denylist of
-#      known-red files — see the step comment.
+#   2. the packages/db integration config, whole — no file list, no denylist
+#      (see the step comment).
 #
-# EXECUTED-COUNT FLOOR (TST-06) — PRINT-ONLY, NOT ARMED (plan ledger D15–D17,
-# human-confirmed 2026-09-23). The "Run integration tests" step also emits a
-# vitest JSON report (/tmp/vitest-integration.json); the post-step parses it
-# and PRINTS executed / collected / skipped / todo / pending against the
-# number declared in apps/web/__tests__/integration/ci-integration-floor.json.
-# It does not fail the job. Arming (turning the print into ::error:: + exit 1)
-# is allowed ONLY after a GREEN run on the branch has printed the executed
-# count, and then the floor must be set to that CI-printed number — never a
-# local measurement and never the audit's "52", which counted FILES.
+# EXECUTED-COUNT FLOOR (TST-06) — ARMED 2026-10-05. The "Run integration
+# tests" step also emits a vitest JSON report (/tmp/vitest-integration.json);
+# the post-step counts EXECUTED tests in it and FAILS the job when that is below
+# `expectedExecutedCount` in apps/web/__tests__/integration/ci-integration-floor.json.
+# The floor is 491, the executed count PRINTED by the green main run named in
+# that file — never a local measurement, and never the audit's "52", which
+# counted FILES. Removing an integration test means lowering the floor in the
+# same PR; adding tests needs no change (it is a floor, not an equality).
 #
 # Why an EXECUTED floor exists when vitest 3.2.4 already exits 1 on zero
 # collection: the silent-green shape left is files being COLLECTED and then
@@ -192,16 +191,19 @@ jobs:
           --reporter=default --reporter=json
           --outputFile.json=/tmp/vitest-integration.json
 
-      # TST-06 — EXECUTED-count floor. PRINT-ONLY, NOT ARMED (plan ledger
-      # D15–D17, human-confirmed 2026-09-23): this step must not fail the job.
-      # Arming is a separate, evidence-gated change — see the file header and
+      # TST-06 — EXECUTED-count floor. ARMED: see the file header and
       # apps/web/__tests__/integration/ci-integration-floor.json.
       #
-      # A genuine test failure needs no re-raise here: when vitest exits
-      # non-zero the `tests` step is already red, and this step runs anyway
-      # (conclusion == 'failure' is in the gate) purely to print the buckets of
-      # the failed run for diagnosis. When the floor IS armed, the ordering
-      # rule from the plan still holds: an actual failure outranks the floor.
+      # An actual failure outranks the floor. When vitest exits non-zero the
+      # `tests` step is already red, and this step runs anyway (conclusion ==
+      # 'failure' is in the gate) only to PRINT the buckets of the failed run
+      # for diagnosis; it adds no second red X. Every refusal below applies
+      # only when vitest itself reported success, which is exactly the
+      # silent-green shape the floor exists for:
+      #   - no JSON report, or an unparseable one (the run cannot show it ran);
+      #   - the floor file unreadable, or its value not a positive integer
+      #     (an armed check that quietly reads `null` is unarmed);
+      #   - executed < floor.
       #
       # Gate mirrors the e2e workflow's lesson: `always() &&` is REQUIRED — a
       # custom `if:` without a status function gets an implicit success()
@@ -219,34 +221,50 @@ jobs:
       # fourth `flaky` stats bucket — omitting it there was required; the
       # asymmetry here is vitest-vs-Playwright, not an omission.)
       #
-      # Skips are printed by name as a warning, never refused: the suite has
-      # env-conditional self-skips at HEAD — measured locally at the
-      # implementation commit (2026-09-23): 54 files collected, 379 tests,
-      # 377 executed, 2 skipped — both in
-      # apps/web/__tests__/integration/auth/password-reset-login.integration.test.ts,
-      # which uses describe.skip without a Supabase Auth environment, exactly
-      # what CI's vanilla-Postgres service container provides. A hard
-      # skipped>0 refusal would be red on day one (the executed floor already
-      # catches the mass-skip failure this guards).
-      - name: Report integration executed-test floor (print-only)
+      # Skips are printed by name as a warning, never refused: CI's
+      # vanilla-Postgres container has no Supabase Auth, so the two
+      # password-reset-login cases self-skip on every run (2 skipped in each
+      # of the green main runs that set the floor). The executed floor already
+      # catches the mass-skip failure a skip refusal would guard.
+      - name: Assert integration executed-test floor
         if: always() && (steps.tests.conclusion == 'success' || steps.tests.conclusion == 'failure')
+        env:
+          TESTS_CONCLUSION: ${{ steps.tests.conclusion }}
         run: |
           node -e '
             const fs = require("fs");
             const REPORT = "/tmp/vitest-integration.json";
             const FLOOR_FILE = "apps/web/__tests__/integration/ci-integration-floor.json";
-            if (!fs.existsSync(REPORT)) {
-              // On arming, this becomes ::error:: + exit 1 (a run that cannot
-              // produce a report has no evidence of coverage): see e2e.yml.
-              console.error("::warning::no vitest JSON report at " + REPORT + " — the run died before the json reporter wrote one (crash/timeout). Floor is PRINT-ONLY, so not failing.");
+            // Only enforce when vitest itself said green; a red run is already red.
+            const enforce = process.env.TESTS_CONCLUSION === "success";
+            const refuse = (msg) => {
+              if (enforce) {
+                console.error("::error::" + msg);
+                process.exit(1);
+              }
+              console.error("::warning::" + msg + " (not refusing: the test step already failed, which outranks the floor)");
               process.exit(0);
+            };
+            let floor;
+            try {
+              floor = JSON.parse(fs.readFileSync(FLOOR_FILE, "utf8")).expectedExecutedCount;
+            } catch (e) {
+              // A config fault, not a test fault: refused even on a red run.
+              console.error("::error::floor file " + FLOOR_FILE + " unreadable (" + e.message + ").");
+              process.exit(1);
+            }
+            if (!Number.isInteger(floor) || floor <= 0) {
+              console.error("::error::expectedExecutedCount in " + FLOOR_FILE + " is " + JSON.stringify(floor) + "; the armed floor needs a positive integer.");
+              process.exit(1);
+            }
+            if (!fs.existsSync(REPORT)) {
+              refuse("no vitest JSON report at " + REPORT + " — the run did not get far enough to write one, so there is no evidence it executed anything.");
             }
             let report;
             try {
               report = JSON.parse(fs.readFileSync(REPORT, "utf8"));
             } catch (e) {
-              console.error("::warning::vitest JSON report unparseable (" + e.message + "). Floor is PRINT-ONLY, so not failing.");
-              process.exit(0);
+              refuse("vitest JSON report unparseable (" + e.message + ").");
             }
             const assertions = (report.testResults ?? []).flatMap((f) => f.assertionResults ?? []);
             const count = (status) => assertions.filter((a) => a.status === status).length;
@@ -257,72 +275,45 @@ jobs:
             const pending = count("pending");
             const executed = passed + failed;
             const collected = assertions.length;
-            let floor = null;
-            let floorErr = null;
-            try {
-              floor = JSON.parse(fs.readFileSync(FLOOR_FILE, "utf8")).expectedExecutedCount;
-            } catch (e) {
-              floorErr = e.message;
-            }
-            console.log("integration floor (print-only): executed=" + executed + " collected=" + collected + " passed=" + passed + " failed=" + failed + " skipped=" + skipped + " todo=" + todo + " pending=" + pending + " declaredFloor=" + (floorErr ? "UNREADABLE(" + floorErr + ")" : String(floor)));
-            if (skipped > 0) {
-              // Name them: a new skip that was not there at measurement time is
-              // the earliest visible symptom of the failure mode this guards.
+            console.log("integration floor: executed=" + executed + " collected=" + collected + " passed=" + passed + " failed=" + failed + " skipped=" + skipped + " todo=" + todo + " pending=" + pending + " floor=" + floor);
+            if (skipped + todo + pending > 0) {
+              // Name them: a new skip that was not there when the floor was set
+              // is the earliest visible symptom of the failure mode this guards.
               const names = (report.testResults ?? []).flatMap((f) =>
                 (f.assertionResults ?? []).filter((a) => a.status === "skipped" || a.status === "todo" || a.status === "pending")
                   .map((a) => String(f.name ?? "").split("/").slice(-3).join("/") + " :: " + a.fullName)
               );
-              console.error("::warning::" + skipped + " test(s) NOT executed (skipped/todo/pending): " + names.join(" ; "));
+              console.error("::warning::" + (skipped + todo + pending) + " test(s) NOT executed (skipped/todo/pending): " + names.join(" ; "));
             }
-            if (typeof floor === "number" && executed < floor) {
-              // WHEN ARMED (D16, evidence-gated): this block becomes
-              // ::error:: + process.exit(1). Until then it only announces.
-              console.error("::warning::executed=" + executed + " is BELOW the declared floor " + floor + " in " + FLOOR_FILE + " (floor is PRINT-ONLY — not failing the job; see the header of this workflow for the arming rule).");
+            if (executed < floor) {
+              refuse("executed=" + executed + " is BELOW the floor " + floor + " in " + FLOOR_FILE + ". Tests were collected but did not run (a file-scope describe.skip, an env gate flipped to always-skip), or tests were removed — in which case lower the floor in the same PR.");
             }
             process.exit(0);
           '
 
       - name: Run packages/db integration tests
-        # packages/db has its own integration config that no workflow ever
-        # invoked until the RLS suite was added here as a named-file list —
-        # and every file left off that list rotted unseen (document-access
-        # asserted on the retired `cam` role and stayed red on main). So this
-        # step now runs the WHOLE config and DENYLISTS the known-red files, the
-        # same fail-safe shape as `paths-ignore` above: a new
-        # packages/db/__tests__/*.integration.test.ts runs here by default
-        # instead of silently running nowhere. DATABASE_URL and DIRECT_URL are
-        # already set at job level, which the suite requires to not skip itself.
+        # packages/db has its own integration config. This step used to run a
+        # named-file list of it, and every file left off that list rotted unseen
+        # (document-access asserted on the retired `cam` role; six more broke
+        # on fixture and schema drift). It now runs the WHOLE config, with no
+        # file list and no denylist, so a new
+        # packages/db/__tests__/*.integration.test.ts runs here by default.
+        # Do not reintroduce an --exclude to make this green; fix the file.
+        # DATABASE_URL and DIRECT_URL are already set at job level, which the
+        # suite requires to not skip itself.
         #
         # What this covers that nothing else does: rls-policies (tenant
         # isolation at the DATABASE layer, not just the app layer),
         # pipeline-and-transactions (pins patches/postgres@3.4.8.patch, whose
-        # loss would make every db.transaction throw UNSAFE_TRANSACTION),
-        # seed-resident-units / seed-community-counts (INF-03 seed safety net),
-        # document-access / document-search / documents-tenant-isolation, the
-        # scoped client, and pagination.
+        # loss would make every db.transaction throw UNSAFE_TRANSACTION), the
+        # compliance_audit_log append-only trigger, the demo seed/reset and
+        # seed-community safety nets (Supabase Storage is an in-process HTTP
+        # double, __tests__/helpers/supabase-http-double.ts), document access,
+        # the scoped client, pagination and the PM portfolio query.
         #
-        # Excluded — each is red on this vanilla-Postgres harness for its own
-        # pre-existing reason (measured 2026-10-04 against the same stub +
-        # migrations via scripts/local-test-db.sh). Shrink this list; never
-        # grow it to hide a new failure:
-        #   - seed-demo, reset-demo: import apps/web services whose `@/` alias
-        #     packages/db's vitest config does not resolve
-        #     (`Cannot find package '@/lib/operations/routes'`).
-        #   - schema-gate0, audit-log-append-only-db: need an environment this
-        #     job does not provide (the latter throws "DIRECT_URL or
-        #     DATABASE_URL is required" from its own gate).
-        #
-        # Removed from this list:
-        #   - pm-portfolio-unsafe (stale fixtures, not an access bug — its
-        #     "no PM role" user really held property_manager, and its
-        #     site_blocks rows predated 0048's NOT NULL page_id).
-        #   - reconcile-auth-user-id (teardown-only harness bug: `drizzle()`
-        #     over a postgres.js `sql.begin` transaction, which has no
-        #     `options`; every test body already passed).
+        # Expected skips (env-gated, measured 2026-10-04): seed-demo's
+        # Stripe-linkage case (no STRIPE_SECRET_KEY), one invitation-flow case,
+        # and supabase-storage (both need real Supabase).
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
-          --exclude '__tests__/audit-log-append-only-db.integration.test.ts'
-          --exclude '__tests__/reset-demo.integration.test.ts'
-          --exclude '__tests__/schema-gate0.integration.test.ts'
-          --exclude '__tests__/seed-demo.integration.test.ts'

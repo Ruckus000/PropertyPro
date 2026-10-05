@@ -17,6 +17,7 @@ import {
   units,
 } from '../src/schema';
 import { runDemoSeed } from '../../../scripts/seed-demo';
+import { startSupabaseDouble, type SupabaseHttpDouble } from './helpers/supabase-http-double';
 
 const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
 const itWithStripe = process.env.STRIPE_SECRET_KEY ? it : it.skip;
@@ -26,10 +27,24 @@ const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments
 describeDb('demo seed integration', () => {
   let sql: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
+  // The seed uploads document PDFs through Supabase Storage (seedEsignData and
+  // the document seeders call createAdminClient()). Integration tests may not
+  // mock a module, so the real supabase-js client talks to an in-process double.
+  let double: SupabaseHttpDouble;
+  const savedEnv = {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    pw: process.env.DEMO_DEFAULT_PASSWORD,
+  };
 
   beforeAll(async () => {
     sql = postgres(process.env.DATABASE_URL!, { prepare: false });
     db = drizzle(sql, { schema });
+
+    double = await startSupabaseDouble();
+    process.env.NEXT_PUBLIC_SUPABASE_URL = double.url;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'seed-demo-test-service-role';
+    process.env.DEMO_DEFAULT_PASSWORD ??= 'seed-demo-test-password';
 
     await runDemoSeed({ syncAuthUsers: false });
     await runDemoSeed({ syncAuthUsers: false });
@@ -37,6 +52,15 @@ describeDb('demo seed integration', () => {
 
   afterAll(async () => {
     await sql.end();
+    await new Promise((resolve) => double?.server.close(resolve));
+    for (const [name, value] of [
+      ['NEXT_PUBLIC_SUPABASE_URL', savedEnv.url],
+      ['SUPABASE_SERVICE_ROLE_KEY', savedEnv.key],
+      ['DEMO_DEFAULT_PASSWORD', savedEnv.pw],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 
   it('is idempotent and seeds expected demo entities', async () => {
@@ -334,4 +358,9 @@ describeDb('demo seed integration', () => {
     expect(group.volumeTier).toBe('tier_10');
     expect(group.couponSyncStatus).toBe('synced');
   }, 60_000);
+
+  // Last, so it covers every request both seed runs above made.
+  it('only used the Supabase endpoints the double implements', () => {
+    expect(double.unexpected).toEqual([]);
+  });
 });
