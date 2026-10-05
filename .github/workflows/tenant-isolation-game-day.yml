@@ -12,8 +12,38 @@ permissions:
   packages: read
 
 jobs:
+  # The Postgres digest lives in scripts/ci/postgres-image-digest, not in this
+  # file: postgres-digest-bump.yml moves it, and GITHUB_TOKEN may push a change
+  # to that file but can never push one under .github/workflows/. A service
+  # image cannot read a file, so this job reads it and passes it on.
+  pin:
+    name: postgres-pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      digest: ${{ steps.read.outputs.digest }}
+    steps:
+      - name: Checkout the pin
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci/postgres-image-digest
+          sparse-checkout-cone-mode: false
+
+      - name: Read the pinned digest
+        id: read
+        run: |
+          set -euo pipefail
+          digest=$(tr -d '[:space:]' < scripts/ci/postgres-image-digest)
+          # Fail closed: a malformed pin would break the service pull below.
+          if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error file=scripts/ci/postgres-image-digest::Not a sha256 digest: '${digest}'"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
   tenant-isolation-game-day:
     name: tenant-isolation-game-day
+    needs: pin
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -23,7 +53,8 @@ jobs:
         # ci-image-mirror.yml and pulled authenticated — same rationale as
         # integration-tests.yml: anonymous pulls from shared runner IPs get
         # rate-limited (Docker Hub, then ECR Public on 2026-09-27).
-        image: ghcr.io/ruckus000/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+        # The digest comes from scripts/ci/postgres-image-digest via the `pin` job.
+        image: ghcr.io/ruckus000/postgres:16@${{ needs.pin.outputs.digest }}
         credentials:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}

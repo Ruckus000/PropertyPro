@@ -1,7 +1,8 @@
 name: Postgres Image Digest Bump
 
-# The Postgres service image is pinned by digest in integration-tests.yml and
-# tenant-isolation-game-day.yml. A pin with no bump process is a pin that rots:
+# The Postgres service image is pinned by digest in scripts/ci/postgres-image-digest,
+# which integration-tests.yml and tenant-isolation-game-day.yml read through a
+# `pin` job. A pin with no bump process is a pin that rots:
 # it silently freezes the Postgres patch level, including security patches, until
 # somebody happens to notice. This job is that process.
 #
@@ -11,6 +12,12 @@ name: Postgres Image Digest Bump
 # ci-image-mirror.yml) and opens a PR moving the pin. The mirror step MUST
 # precede the PR: the PR's integration-tests pulls the new digest from GHCR, and
 # a push made with GITHUB_TOKEN does not trigger ci-image-mirror.yml.
+#
+# Why the digest is NOT written in the workflow files: GITHUB_TOKEN can never be
+# granted the `workflows` permission, so GitHub rejects any push of it that
+# touches .github/workflows/. With the pin there, every run that found a new
+# digest failed at `git push` (9 Mondays in a row, 2026-08-10 → 2026-10-05) and
+# no bump PR was ever opened. A plain file outside .github/ needs no secret.
 
 on:
   schedule:
@@ -67,23 +74,17 @@ jobs:
             | tr -d '\r' \
             | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}')
 
-          # Fail closed. Writing an unvalidated string into a workflow file would
-          # be worse than not bumping at all — a malformed pin breaks every job
+          # Fail closed. Writing an unvalidated string into the pin would be
+          # worse than not bumping at all — a malformed pin breaks every job
           # that uses the image, including the production-deploy gate.
           if ! printf '%s' "$latest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
             echo "::error::Registry did not return a usable digest (got: '${latest:-<empty>}')"
             exit 1
           fi
 
-          current=$(grep -ohE 'postgres:16@sha256:[0-9a-f]{64}' .github/workflows/*.yml \
-            | sed 's/.*@//' | sort -u)
-
-          if [ -z "$current" ]; then
-            echo "::error::No pinned postgres digest found in .github/workflows — has the pin been removed or reformatted?"
-            exit 1
-          fi
-          if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
-            echo "::error::Workflows disagree on the pinned digest:"; printf '%s\n' "$current"
+          current=$(tr -d '[:space:]' < scripts/ci/postgres-image-digest)
+          if ! printf '%s' "$current" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error file=scripts/ci/postgres-image-digest::Not a sha256 digest: '${current}'"
             exit 1
           fi
 
@@ -124,17 +125,11 @@ jobs:
       - name: Open a bump PR
         if: steps.resolve.outputs.changed == 'true'
         env:
-          # A PR opened with the default GITHUB_TOKEN does NOT trigger other
-          # workflows — GitHub suppresses that to prevent recursion. This repo
-          # requires eight status checks to merge, so such a PR would sit with
-          # checks that never report and could never be merged.
-          #
-          # So: use POSTGRES_DIGEST_BUMP_TOKEN (a PAT with repo scope) when it
-          # exists, and fall back to GITHUB_TOKEN with a loud warning when it
-          # does not. The fallback still produces a correct PR; it just needs a
-          # human to nudge CI (close/reopen, or push an empty commit).
-          GH_TOKEN: ${{ secrets.POSTGRES_DIGEST_BUMP_TOKEN || github.token }}
-          HAS_PAT: ${{ secrets.POSTGRES_DIGEST_BUMP_TOKEN != '' }}
+          # GITHUB_TOKEN, deliberately — no secret to create, rotate or expire.
+          # The trade: a PR it opens does NOT trigger other workflows (GitHub
+          # suppresses that to prevent recursion), so the PR's checks never
+          # report until a human closes and reopens it. The PR body says so.
+          GH_TOKEN: ${{ github.token }}
           CURRENT: ${{ steps.resolve.outputs.current }}
           LATEST: ${{ steps.resolve.outputs.latest }}
         run: |
@@ -155,12 +150,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
 
-          # Replace the digest everywhere it appears, so the two workflows cannot
-          # drift apart.
-          grep -rlE "postgres:16@${CURRENT}" .github/workflows \
-            | xargs sed -i "s|postgres:16@${CURRENT}|postgres:16@${LATEST}|g"
-
-          git add .github/workflows
+          # The one pin both consumers read; nothing under .github/workflows/
+          # changes, which is what lets GITHUB_TOKEN push this.
+          printf '%s\n' "$LATEST" > scripts/ci/postgres-image-digest
+          git add scripts/ci/postgres-image-digest
 
           # Separate -m flags rather than one multi-line string: every line in a
           # YAML block scalar must stay indented, and a column-0 continuation
@@ -184,13 +177,9 @@ jobs:
             printf 'where the service containers pull from.\n\n'
             printf 'Merging is safe once `integration-tests` is green, since that job is\n'
             printf 'the primary consumer of this image and will pull the new digest.\n'
-            if [ "$HAS_PAT" != "true" ]; then
-              printf '\n> **CI will not start on its own.** This PR was opened with\n'
-              printf '> `GITHUB_TOKEN`, and GitHub suppresses workflow triggers for such\n'
-              printf '> PRs. Close and reopen it (or push an empty commit) to run the\n'
-              printf '> required checks. To make this automatic, add a\n'
-              printf '> `POSTGRES_DIGEST_BUMP_TOKEN` repository secret.\n'
-            fi
+            printf '\n> **CI will not start on its own.** This PR was opened with\n'
+            printf '> `GITHUB_TOKEN`, and GitHub suppresses workflow triggers for such\n'
+            printf '> PRs. Close and reopen it to run the checks.\n'
           } > /tmp/bump-body.md
 
           gh pr create \

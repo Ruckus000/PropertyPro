@@ -104,8 +104,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The Postgres digest lives in scripts/ci/postgres-image-digest, not in this
+  # file: postgres-digest-bump.yml moves it, and GITHUB_TOKEN may push a change
+  # to that file but can never push one under .github/workflows/. A service
+  # image cannot read a file, so this job reads it and passes it on.
+  pin:
+    name: postgres-pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      digest: ${{ steps.read.outputs.digest }}
+    steps:
+      - name: Checkout the pin
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci/postgres-image-digest
+          sparse-checkout-cone-mode: false
+
+      - name: Read the pinned digest
+        id: read
+        run: |
+          set -euo pipefail
+          digest=$(tr -d '[:space:]' < scripts/ci/postgres-image-digest)
+          # Fail closed: a malformed pin would break the service pull below.
+          if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error file=scripts/ci/postgres-image-digest::Not a sha256 digest: '${digest}'"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
   integration-tests:
     name: integration-tests
+    needs: pin
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -123,9 +153,10 @@ jobs:
         # exceeded` twice (runs 36317688530 on main — which held the deploy — and
         # 36343071278). Anonymous quota is per source IP and runners share IPs.
         # So: pull AUTHENTICATED, from GHCR, with GITHUB_TOKEN (`packages: read`
-        # above). To move the pin, let postgres-digest-bump.yml do it — it
-        # mirrors the new digest before proposing it.
-        image: ghcr.io/ruckus000/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+        # above). The digest comes from scripts/ci/postgres-image-digest via the
+        # `pin` job. To move it, let postgres-digest-bump.yml do it — it mirrors
+        # the new digest before proposing it.
+        image: ghcr.io/ruckus000/postgres:16@${{ needs.pin.outputs.digest }}
         credentials:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
