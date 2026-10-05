@@ -264,6 +264,10 @@ run_sandbox_command() {
 # Exits 0 only when the migration ledger exists and user_roles has a row; any
 # failure to check, an unreachable database included, reads as "not prepared".
 sandbox_db_is_prepared() {
+  # Resolve the browser BEFORE the silenced call below: resolve_pdf_browser warns
+  # once per process about a stale PUPPETEER_EXECUTABLE_PATH, and inside the
+  # redirect that one warning would go to /dev/null and never be printed.
+  resolve_pdf_browser
   run_sandbox_command "$repo_root" node --input-type=module -e '
     import postgres from "postgres";
     const sql = postgres(process.env.DIRECT_URL, { max: 1, onnotice: () => {} });
