@@ -12,10 +12,10 @@
  * household member with no login (`unit_occupants`). Dropping it is a
  * separate CONTRACT migration once nothing reads it.
  *
- * The CHECK constraints are added NOT VALID in the migration: they bind every
- * new write immediately, while existing production rows are validated in a
- * follow-up once they have been inspected. They are still declared here so
- * drizzle-kit does not emit a DROP on the next diff.
+ * The CHECK constraints were added NOT VALID by leases_v3_expand, so they bound
+ * every new write at once, and validated by leases_v3_validate_checks after
+ * production rows were inspected (0 violations). drizzle-kit does not model
+ * NOT VALID; declaring them here keeps it from emitting a DROP on the next diff.
  */
 import {
   bigint,
