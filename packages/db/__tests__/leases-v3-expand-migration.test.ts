@@ -80,7 +80,7 @@ describe('migration leases_v3_expand', () => {
     for (const [target, fk] of [
       ['"leases_id_community_uq"', 'lease_residents_lease_same_community_fk'],
       ['"unit_occupants_id_community_uq"', 'lease_residents_occupant_same_community_fk'],
-    ]) {
+    ] as const) {
       const t = MIGRATION.indexOf(target);
       const f = MIGRATION.indexOf(fk);
       expect(t).toBeGreaterThan(-1);
