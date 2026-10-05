@@ -1,0 +1,149 @@
+{
+  "section": "manager",
+  "category": "leases",
+  "slug": "ending-a-lease-early",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 201\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))",
+      "community": "apartment"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 201\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\")) button:text-is(\"End early\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"End \"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"mo-reason\"][value=\"Mutual agreement\"]"
+        }
+      ],
+      "clipTo": "fieldset:has(legend:text-is(\"Why is the lease ending?\"))",
+      "community": "apartment"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 201\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\")) button:text-is(\"End early\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"End \"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"mo-reason\"][value=\"Mutual agreement\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "#mo-move-out",
+          "value": "2026-10-31"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"End \"))",
+      "community": "apartment"
+    },
+    {
+      "name": "step-4",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 201\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 201\")) button:text-is(\"End early\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"End \"))"
+        },
+        {
+          "type": "click",
+          "selector": "input[name=\"mo-reason\"][value=\"Mutual agreement\"]"
+        },
+        {
+          "type": "fill",
+          "selector": "#mo-move-out",
+          "value": "2026-10-31"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"End \")) button[type=\"submit\"]"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"End \"))",
+      "community": "apartment"
+    }
+  ]
+}

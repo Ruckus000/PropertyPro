@@ -158,6 +158,12 @@ export function UnitDetailPanel({
           </Banner>
         ) : null}
 
+        {isAdmin && unit.occupancySource === 'leases' ? (
+          <p className="text-xs text-content-tertiary">
+            {unit.occupancy ? 'Occupancy comes from leases.' : 'No occupancy: this unit is offline (see Leases).'}
+          </p>
+        ) : null}
+
         {unit.occupancy && !unit.occupancyConfirmed ? (
           <p className="text-xs text-content-tertiary">
             &ldquo;{OCCUPANCY_LABEL[unit.occupancy]}&rdquo;

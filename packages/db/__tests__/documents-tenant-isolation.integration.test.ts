@@ -4,7 +4,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/postgres-js';
+import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/schema';
 import { communities } from '../src/schema/communities';
@@ -27,7 +27,9 @@ const TEST_FILE_NAMES = [
 
 describeDb('documents tenant isolation (integration)', () => {
   let sql: ReturnType<typeof postgres>;
-  let db: ReturnType<typeof drizzle>;
+  // Schema-typed: `ReturnType<typeof drizzle>` erases the schema generic, and
+  // createScopedClient's `dbInstance` parameter requires it.
+  let db: PostgresJsDatabase<typeof schema> & { $client: postgres.Sql };
   let communityAId: number;
   let communityBId: number;
   let createScopedClient: CreateScopedClient;

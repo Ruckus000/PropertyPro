@@ -571,3 +571,67 @@ describe('loadApartmentMetrics — lease-derived metrics are withheld from non-m
     },
   );
 });
+
+// Leases v3: status stays 'active' through a renewal and a scheduled move-out,
+// so "current" must come from the dates (leasePhase), not the status column.
+describe('loadApartmentMetrics — v3 leases decided by dates', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-04T12:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const twoUnits = [{ id: 1, deletedAt: null }, { id: 2, deletedAt: null }];
+  const lease = (o: Record<string, unknown>) =>
+    activeLease({ startDate: '2026-01-01', endDate: '2026-12-31', previousLeaseId: null, moveOutOn: null, endVia: null, ...o });
+
+  it('a lease and its signed renewal count one rent, and the old lease is not expiring', async () => {
+    buildScopedMock({
+      units: twoUnits,
+      leases: [
+        lease({ id: 1, unitId: 1, endDate: '2026-10-20', rentAmount: '1500' }),
+        lease({ id: 2, unitId: 1, startDate: '2026-10-21', endDate: '2027-10-20', previousLeaseId: 1, rentAmount: '1600' }),
+      ],
+    });
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
+    expect(metrics.totalMonthlyRevenue).toBe(1500);
+    expect(metrics.occupiedUnits).toBe(1);
+    expect(metrics.leaseExpirations?.within30Days).toBe(0);
+  });
+
+  it('after the renewal starts, only the renewal counts', async () => {
+    buildScopedMock({
+      units: twoUnits,
+      leases: [
+        lease({ id: 1, unitId: 1, endDate: '2026-09-30', rentAmount: '1500' }),
+        lease({ id: 2, unitId: 1, startDate: '2026-10-01', endDate: '2027-09-30', previousLeaseId: 1, rentAmount: '1600' }),
+      ],
+    });
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
+    expect(metrics.totalMonthlyRevenue).toBe(1600);
+  });
+
+  it('a resident who already moved out does not occupy the unit; a future lease does not yet', async () => {
+    buildScopedMock({
+      units: twoUnits,
+      leases: [
+        lease({ id: 1, unitId: 1, moveOutOn: '2026-09-15', endVia: 'early' }),
+        lease({ id: 2, unitId: 2, startDate: '2026-11-01', endDate: '2027-10-31' }),
+      ],
+    });
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
+    expect(metrics.occupiedUnits).toBe(0);
+    expect(metrics.totalMonthlyRevenue).toBe(0);
+  });
+
+  it('a lease with a move-out already scheduled is not counted as expiring', async () => {
+    buildScopedMock({
+      units: twoUnits,
+      leases: [lease({ id: 1, unitId: 1, endDate: '2026-10-20', moveOutOn: '2026-10-20', endVia: 'notice' })],
+    });
+    const metrics = await loadApartmentMetrics(COMMUNITY_ID, USER_ID, DEFAULT_MEMBERSHIP);
+    expect(metrics.occupiedUnits).toBe(1);
+    expect(metrics.leaseExpirations?.within30Days).toBe(0);
+  });
+});

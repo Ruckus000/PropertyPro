@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { UNIT_IMPORT_MAX_ROWS, validateUnitCsv } from '../../src/lib/utils/unit-csv-validator';
 
-const condo = { allowOwnerOccupied: true };
+const condo = { occupancyFromLeases: false };
 
 describe('validateUnitCsv', () => {
   it('parses every column, with friendly occupancy spellings', () => {
@@ -31,12 +31,16 @@ describe('validateUnitCsv', () => {
     expect(errors[0]).toMatchObject({ rowNumber: 3, message: "Unit '4b' is already on row 2 of this file" });
   });
 
-  it('rejects bad numbers and occupancy, and owner-occupied in apartments', () => {
+  it('rejects bad numbers and occupancy, and any occupancy in apartments', () => {
     const { errors } = validateUnitCsv('unit_number,bedrooms,sqft,occupancy\n1,-1,9.5,haunted\n', condo);
     expect(errors.map((e) => e.column)).toEqual(['occupancy', 'bedrooms', 'sqft']);
-    const apartment = validateUnitCsv('unit_number,occupancy\n1,owner_occupied\n', { allowOwnerOccupied: false });
-    expect(apartment.errors[0]?.message).toBe('Apartment units cannot be owner-occupied');
-    expect(apartment.rows).toHaveLength(0);
+    // Apartments: leases decide occupancy, so any value is refused — not just owner_occupied.
+    for (const value of ['owner_occupied', 'rented', 'vacant']) {
+      const apartment = validateUnitCsv(`unit_number,occupancy\n1,${value}\n`, { occupancyFromLeases: true });
+      expect(apartment.errors[0]?.message).toBe('Occupancy for apartments comes from leases. Leave this column blank.');
+      expect(apartment.rows).toHaveLength(0);
+    }
+    expect(validateUnitCsv('unit_number,occupancy\n1,\n', { occupancyFromLeases: true }).errors).toEqual([]);
   });
 
   it('notes unknown columns without failing rows (rent is not importable)', () => {

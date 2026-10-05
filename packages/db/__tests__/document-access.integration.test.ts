@@ -207,6 +207,7 @@ describeDb('document access control (integration, strict matrix)', () => {
       communityId: apartmentId,
       role: 'resident', isUnitOwner: false,
       communityType: 'apartment',
+      tenantsCanViewInspectionReports: false,
     });
     const names = rows.map((r) => r['fileName']);
 
@@ -233,6 +234,7 @@ describeDb('document access control (integration, strict matrix)', () => {
       communityId: condoId,
       role: 'resident', isUnitOwner: false,
       communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
     }, docId);
     expect(restricted).toBeNull();
 
@@ -240,6 +242,7 @@ describeDb('document access control (integration, strict matrix)', () => {
       communityId: condoId,
       role: 'resident', isUnitOwner: true,
       communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
     }, docId);
     expect(elevated).not.toBeNull();
     expect(elevated?.['id']).toBe(docId);
@@ -258,11 +261,13 @@ describeDb('document access control (integration, strict matrix)', () => {
       communityId: condoId,
       role: 'resident', isUnitOwner: false,
       communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
     });
     const managerRows = await getAccessibleDocuments({
       communityId: condoId,
       role: 'property_manager',
       communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
     });
 
     const tenantNames = tenantRows.map((row) => row['fileName']);
@@ -297,6 +302,7 @@ describeDb('document access control (integration, strict matrix)', () => {
       communityId: condoId,
       role: 'resident', isUnitOwner: true,
       communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
     });
 
     const foundIds = rows.map((row) => row['id']);
@@ -307,6 +313,7 @@ describeDb('document access control (integration, strict matrix)', () => {
       communityId: condoId,
       role: 'resident', isUnitOwner: true,
       communityType: 'condo_718',
+      tenantsCanViewInspectionReports: false,
     }, evidenceId);
 
     expect(hidden).toBeNull();

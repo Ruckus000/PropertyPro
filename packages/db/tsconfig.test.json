@@ -1,0 +1,33 @@
+{
+  // Type-checks packages/db's tests, which tsconfig.json (src only) never
+  // covered — errors in __tests__ went unseen. Run by this package's
+  // `typecheck` script, so turbo and CI's Typecheck job include it.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The seed tests pull in scripts/ and apps/web/src; nothing is emitted,
+    // so widen rootDir to the repo instead of ".." (packages/).
+    "rootDir": "../..",
+    // `paths` REPLACES the inherited map, so restate the root's and add `@/*`:
+    // the seed/reset tests import scripts/seed-demo.ts, which reaches apps/web
+    // services written against that alias (same as scripts/tsconfig.json).
+    "paths": {
+      "@/*": ["apps/web/src/*"],
+      "@propertypro/api-contract": ["packages/api-contract/src"],
+      "@propertypro/api-contract/*": ["packages/api-contract/src/*"],
+      "@propertypro/db": ["packages/db/src"],
+      "@propertypro/db/*": ["packages/db/src/*"],
+      "@propertypro/email": ["packages/email/src"],
+      "@propertypro/email/*": ["packages/email/src/*"],
+      "@propertypro/shared": ["packages/shared/src"],
+      "@propertypro/shared/*": ["packages/shared/src/*"],
+      "@propertypro/theme": ["packages/theme/src"],
+      "@propertypro/theme/*": ["packages/theme/src/*"],
+      "@propertypro/tokens": ["packages/tokens/src"],
+      "@propertypro/tokens/*": ["packages/tokens/src/*"],
+      "@propertypro/ui": ["packages/ui/src"],
+      "@propertypro/ui/*": ["packages/ui/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "__tests__/**/*.ts"]
+}

@@ -11,7 +11,7 @@
  * Contact details are personal data: manager-only at the API, and the RLS
  * SELECT policy is manager-tier too (see the migration).
  */
-import { bigint, bigserial, boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { units } from './units';
 
@@ -44,7 +44,12 @@ export const unitOccupants = pgTable(
      */
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  (table) => [index('unit_occupants_community_unit_idx').on(table.communityId, table.unitId)],
+  (table) => [
+    index('unit_occupants_community_unit_idx').on(table.communityId, table.unitId),
+    // Leases v3: target of lease_residents' (occupant_id, community_id) FK, so
+    // a lease can never name another community's household member.
+    uniqueIndex('unit_occupants_id_community_uq').on(table.id, table.communityId),
+  ],
 );
 
 export type UnitOccupant = typeof unitOccupants.$inferSelect;

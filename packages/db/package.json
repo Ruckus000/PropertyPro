@@ -73,7 +73,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "clean": "rm -rf dist .turbo",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",

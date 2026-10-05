@@ -411,10 +411,35 @@ jobs:
       # PRODUCTION build with an UNREACHABLE database. Passing under
       # `pnpm test:e2e` proves nothing about this job: that command runs a dev
       # server against a real database, which differs on both axes.
+      #
+      # `--reporter=list,json` keeps the readable log and adds the JSON report
+      # the floor step below reads (written where PLAYWRIGHT_JSON_OUTPUT_NAME
+      # says). A reporter flag is safe here; a spec PATH is not (see above).
       - name: Run production smoke tests (public pages + PDF.js)
+        id: prod-smoke
         env:
           PDFJS_TEST_ENABLED: '1'
-        run: pnpm --filter @propertypro/web test:e2e:prod
+          PLAYWRIGHT_JSON_OUTPUT_NAME: /tmp/playwright-prod-smoke.json
+        run: pnpm --filter @propertypro/web test:e2e:prod --reporter=list,json
+
+      # TST-06 executed-test floor for the prod smoke (shared script; semantics
+      # in its header, pinned by scripts/__tests__/assert-executed-test-floor.test.ts).
+      # A spec dropped from PROD_SAFE_SPECS, or a test that starts self-skipping
+      # (pdfjs-runtime needs PDFJS_TEST_ENABLED), would otherwise leave this
+      # REQUIRED check green while running less. Floor and provenance:
+      # apps/web/e2e/prod-smoke-floor.json. When the smoke step itself fails it
+      # only warns: the job is already red.
+      - name: Assert the prod smoke tests actually ran
+        if: always() && (steps.prod-smoke.conclusion == 'success' || steps.prod-smoke.conclusion == 'failure')
+        env:
+          TESTS_CONCLUSION: ${{ steps.prod-smoke.conclusion }}
+        run: >-
+          pnpm exec tsx scripts/assert-executed-test-floor.ts
+          --label prod-smoke
+          --format playwright
+          --refuse-skips
+          --report /tmp/playwright-prod-smoke.json
+          --floor-file apps/web/e2e/prod-smoke-floor.json
 
       - name: Run performance budget check
         run: pnpm perf:check

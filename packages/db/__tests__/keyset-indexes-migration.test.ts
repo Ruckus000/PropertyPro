@@ -53,9 +53,10 @@ const INDEX_PATTERN =
 function parseIndexes(): Map<string, { table: string; columns: string[]; partial: boolean }> {
   const found = new Map<string, { table: string; columns: string[]; partial: boolean }>();
   for (const m of SQL.matchAll(INDEX_PATTERN)) {
-    found.set(m[1], {
-      table: m[2],
-      columns: m[3]
+    // Groups 1-3 are mandatory in INDEX_PATTERN, so a match always has them.
+    found.set(m[1]!, {
+      table: m[2]!,
+      columns: m[3]!
         .split(',')
         .map((c) => c.trim().replace(/"/g, '').replace(/\s+(ASC|DESC)$/i, '').trim())
         .filter(Boolean),

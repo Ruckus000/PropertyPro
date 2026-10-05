@@ -1,0 +1,126 @@
+{
+  "section": "manager",
+  "category": "leases",
+  "slug": "editing-a-lease",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "step-1",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        }
+      ],
+      "clipTo": "tr:has(button[aria-label=\"Open Unit 104\"])",
+      "community": "apartment"
+    },
+    {
+      "name": "step-2",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 104\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 104\"))"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:text-is(\"Unit 104\"))",
+      "community": "apartment"
+    },
+    {
+      "name": "step-3",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 104\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 104\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 104\")) button:text-is(\"Edit lease\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Edit lease ·\"))"
+        },
+        {
+          "type": "fill",
+          "selector": "#le-rent",
+          "value": "1395"
+        },
+        {
+          "type": "fill",
+          "selector": "#le-notes",
+          "value": "Rent corrected to match the signed lease."
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit lease ·\"))",
+      "community": "apartment"
+    },
+    {
+      "name": "step-4",
+      "kind": "still",
+      "route": "/dashboard/leases?communityId={cid}",
+      "role": "site_manager",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[aria-label=\"Filter units\"]"
+        },
+        {
+          "type": "click",
+          "selector": "button[aria-label=\"Open Unit 104\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 104\"))"
+        },
+        {
+          "type": "click",
+          "selector": "[role=\"dialog\"]:has(h2:text-is(\"Unit 104\")) button:text-is(\"Edit lease\")"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Edit lease ·\"))"
+        },
+        {
+          "type": "fill",
+          "selector": "#le-rent",
+          "value": "1395"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "[role=\"dialog\"]:has(h2:has-text(\"Edit lease ·\")) button[type=\"submit\"]"
+        }
+      ],
+      "clipTo": "[role=\"dialog\"]:has(h2:has-text(\"Edit lease ·\"))",
+      "community": "apartment"
+    }
+  ]
+}

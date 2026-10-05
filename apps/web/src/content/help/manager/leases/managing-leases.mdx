@@ -1,132 +1,96 @@
 ---
-title: "Manage leases"
-description: "Track lease agreements for apartment communities: create, edit, renew and terminate leases."
+title: "Managing leases"
+description: "How the Leases page is laid out, where each lease task starts, and which changes you can undo."
 section: manager
 category: leases
 slug: managing-leases
 communityTypes: [apartment]
 order: 0
 featured: true
-keywords: ["lease","rental","tenant","renewal","termination","rent","lease term","month-to-month","vacant","expiring","chapter 83"]
-relatedArticles: ["move-in-out"]
-statutes: ["§83.49"]
+keywords: ["lease", "leases", "rental", "unit roster", "unit panel", "tenant", "renewal", "move-out", "undo", "past leases", "lease history", "search"]
+relatedArticles: ["lease-statuses", "adding-a-lease", "renewing-a-lease", "move-out-and-holdovers", "move-in-out"]
+upNext: "lease-statuses"
 featureGates: [hasLeaseTracking]
 contextPaths: ["/dashboard/leases"]
-updatedAt: "2026-09-30"
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
 ---
 
+The Leases page has one row per unit, not one row per lease. Each row shows who lives in the unit today, the lease status, when the lease ends, the rent, and where the renewal stands. When a unit needs something from you, its row ends with a link for that next step.
+
 <FeatureGate feature="apartment communities only">
-Lease tracking is available in communities set up as apartments. Condos and HOAs don't see **Leases**.
+Lease tracking is available in communities set up as apartments. Condos and HOAs don't see the Leases page.
 </FeatureGate>
 
-## What the Leases page shows
-
-Select **Leases** in the sidebar. The page is titled **Lease Management** and lists one row per lease record:
-
-- **Unit** and **Resident** (one resident per lease record)
-- **Start Date** and **End Date** (no end date means month-to-month)
-- **Monthly Rent**
-- **Status**: **Active**, **Expiring Soon** (ends within 60 days), **Expired** (end date has passed), **Renewed**, or **Terminated**
-
-Use the tabs above the list to filter it:
-
-- **All**: every lease record
-- **Expiring Soon**: leases that end in the next 60 days
-- **Month-to-Month**: active leases with no end date
-- **Vacant Units**: units with no active lease, each with a **Create Lease** button
-
-## Create a lease
+## Find a unit and open it
 
 <StepByStep>
-
-<Step title="Select New Lease">
-
-It is at the top right of the list.
-
+<Step title="Filter with a tile">
+The four tiles at the top are also filters: **All units**, **Renewals due**, **Vacant** and **Month-to-month**. Select one to filter the list. The list heading changes to match, for example **Renewals due** or **Vacant and moving out**. Select the same tile again to go back to **All units**.
 </Step>
 
-<Step title="Pick the unit">
-
-Choose it from **Unit**.
-
+<Step title="Search or sort the list">
+Type in **Search unit, resident or email** to narrow the list. Select **Unit** or **Lease end** to change the order. When the full list is sorted by **Unit**, it is grouped by floor, and each group heading shows how many units are occupied. Select a group heading to collapse it. A filtered or searched list shows 50 units at a time, with a **Show … more** button at the bottom.
 </Step>
 
-<Step title="Select the resident">
-
-Search for them in **Resident**. The resident must already have a tenant account in this community. If they aren't listed, select **Add them first** to open Residents.
-
+<Step title="Open the unit">
+Select the unit number, or anywhere on its row. The unit panel opens on the right with the unit as its title, for example **Unit 101**. It shows the unit's status, any dates or warnings, the buttons for what you can do now, and the sections **Residents**, **Renewal**, **Current lease**, **Upcoming lease**, **Deposit (§83.49)** and **Lease history** when they apply.
 </Step>
-
-<Step title="Enter the lease details">
-
-Fill in **Start Date**. **End Date** is optional: leave it blank for month-to-month. **Monthly Rent ($)** is optional: leave it blank to use the unit's rent on file. Add **Notes** if they help.
-
-</Step>
-
-<Step title="Select Create Lease">
-
-The lease is saved as **Active** and a move-in checklist is created on **Move In/Out**. A lease can't overlap another lease on the same unit.
-
-</Step>
-
 </StepByStep>
 
-## View or edit a lease
+In the **Residents** section, **View resident** opens the Residents page.
 
-Select the **⋯** menu at the end of a row, then **View** or **Edit**. The **Lease Details** panel shows the unit, resident, start date and status. You can change **End Date** (clear it for month-to-month), **Monthly Rent ($)** and **Notes**, then select **Save Changes**. If the lease has been renewed, **Renewal History** lists each term.
+## Where each task starts
 
-## Renew a lease
+**Start a lease**
 
-<StepByStep>
+- [Add a lease or pre-lease a unit](help:adding-a-lease): **New lease** in the list header, or **Pre-lease** on a unit that is moving out.
+- [Edit or cancel an upcoming lease](help:upcoming-lease): **Edit** or **Cancel before move-in** in the unit panel.
+- [Record a security deposit and its notice](help:deposit-notice): **Deposit** in the unit panel.
+- [Correct a lease](help:editing-a-lease): **Edit lease** in the unit panel.
 
-<Step title="Find the lease">
+**Renew**
 
-Use the **Expiring Soon** tab, or the **Lease Expirations** card on the dashboard.
+- [Send a renewal offer and record the answer](help:renewing-a-lease): **Send offer**, **Record response**, and **Offer a fixed term** for a month-to-month lease.
+- [Record a signed renewal](help:recording-a-renewal): **Record renewal**.
 
-</Step>
+**End a lease**
 
-<Step title="Select Renew">
+- [Record a move-out or a holdover](help:move-out-and-holdovers): **Resident gave notice**, or **Resolve holdover** for a lease past its end date.
+- [End a lease early](help:ending-a-lease-early): **End early**.
+- [Transfer residents to another unit](help:transferring-units): **Transfer to another unit**.
 
-Open the row's **⋯** menu and select **Renew**. It appears for **Active** and **Expiring Soon** leases that have an end date. Month-to-month leases can't be renewed.
+**Settings and reference**
 
-</Step>
+- [Take a unit offline](help:unit-offline): **Take offline** and **Bring back online**.
+- [Set expiry alerts](help:expiry-alert-windows): the **Expiry alerts** menu in the list header.
+- [Unit statuses, tiles and next steps](help:lease-statuses): what every label on the page means.
 
-<Step title="Enter the new terms">
+## Past leases
 
-**New Start Date** starts as the day after the current end date. Set **New End Date** (optional: leave blank for month-to-month) and check **Monthly Rent ($)**, which starts at the current rent.
+Leases that ended, were renewed, were transferred or were cancelled leave the main list. Select **Past leases** in the list header to see them. The button shows how many there are. Each row says how the lease ended, for example **Ended Sep 30, 2026**, **Ended early**, **Transferred** or **Cancelled before move-in**. Select a row to open that unit. Select **Back to all units** to return.
 
-</Step>
+## Undo a change
 
-<Step title="Select Renew Lease">
+After a change, a confirmation appears at the bottom of the screen for 10 seconds. Some confirmations include **Undo**:
 
-The current lease is marked **Renewed** right away and a new lease record is created for the same unit and resident, with its own move-in checklist.
+- **Renewal offer sent:** **Undo** withdraws the offer.
+- **Notice to vacate or early end recorded:** **Undo** clears the move-out date.
+- **Move-out or early end cancelled, or holdover converted to month-to-month:** **Undo** puts it back.
+- **Unit taken offline, or brought back online:** **Undo** reverses it.
+- **Deposit refund or claim recorded:** **Undo** clears it.
+- **Expiry alerts changed:** **Undo** restores the previous setting.
 
-</Step>
+After the confirmation closes, or for changes without **Undo**, use the unit panel:
 
-</StepByStep>
+- **A recorded move-out or early end:** select **Cancel move-out** or **Cancel early end**. If the unit is already pre-leased, cancel the upcoming lease first. See [Record a move-out](help:move-out-and-holdovers).
+- **A transfer:** cancel the upcoming lease on the new unit, then select **Cancel move-out** on the old unit. See [Transfer residents](help:transferring-units).
+- **A new lease or a signed renewal that has not started:** select **Cancel before move-in**. See [Edit or cancel an upcoming lease](help:upcoming-lease).
+- **An accepted offer:** select **Change response**. See [Send a renewal offer](help:renewing-a-lease).
+- **Lease details:** select **Edit lease** and change them back.
 
-## Terminate a lease
+## Who can use the Leases page
 
-Terminations record a lease ending before its end date (mutual agreement, breach, buyout).
+Property managers can see and change every lease in the community. Only the root manager can change the settings in the **Expiry alerts** menu: the alert windows and **Allow household members on leases**. Everyone else sees the current settings.
 
-1. Open the row's **⋯** menu and select **Terminate**. It appears for **Active** and **Expiring Soon** leases.
-2. Enter the **Termination Date**. It becomes the lease's end date. If you leave it blank, the end date is cleared.
-3. Add a **Reason / Notes**. It is added to the lease notes.
-4. Select **Terminate Lease**.
-
-The lease shows **Terminated** and a move-out checklist is created on **Move In/Out**. Terminating does not remove the resident's portal access. There is no undo on this page.
-
-## Who can see leases
-
-Only managers can open **Leases**. Lease data includes rent amounts, so residents and board members don't see it.
-
-## Compliance
-
-<Callout type="warning" title="Florida landlord-tenant law applies">
-Florida Statutes Chapter 83 governs residential leases. PropertyPro records the agreement but does not enforce statutory requirements (notice periods, security deposit handling, habitability). Work with your legal counsel to ensure lease terms comply with Chapter 83.
-</Callout>
-
-## Common patterns
-
-- **Month-to-month after expiration**: renew with **New End Date** blank, or edit the lease and clear **End Date**. It then appears under **Month-to-Month**.
-- **Rent increases**: set the new rent when you renew. Edit rent on a current lease only to fix a mistake.
+If some details fail to load, a banner says **Some lease details are unavailable.** Lease dates and statuses are still complete, but resident names or renewal offers may be missing. Refresh the page to try again.

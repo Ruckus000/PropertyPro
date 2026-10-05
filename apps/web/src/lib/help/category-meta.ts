@@ -75,7 +75,7 @@ export const HELP_CATEGORY_META: Record<string, HelpCategoryMeta> = {
   esign: { label: 'E-sign', icon: FileSignature, chipClass: NEUTRAL_CHIP },
   residents: { label: 'Residents and units', icon: Users, chipClass: NEUTRAL_CHIP },
   leases: { label: 'Leases', icon: ScrollText, chipClass: NEUTRAL_CHIP },
-  apartment: { label: 'Packages, visitors, and move-ins', icon: Building2, chipClass: NEUTRAL_CHIP },
+  apartment: { label: 'Packages and visitors', icon: Building2, chipClass: NEUTRAL_CHIP },
   // Umbrella, not ShieldCheck — Compliance already owns the shield, and two
   // categories sharing an icon defeats at-a-glance scanning.
   building: { label: 'Insurance, reserves, and storms', icon: Umbrella, chipClass: BRAND_CHIP },

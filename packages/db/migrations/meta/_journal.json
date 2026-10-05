@@ -603,6 +603,13 @@
       "when": 1791157887966,
       "tag": "0088_sync_unit_rent_monotonic_updated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1791164953906,
+      "tag": "0087_leases_v3_expand",
+      "breakpoints": true
     }
   ]
 }

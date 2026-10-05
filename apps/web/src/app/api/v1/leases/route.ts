@@ -47,20 +47,34 @@
  *   it, because both connections run as `service_role`. `units:write` is true
  *   on the `manager` row only (`rbac-matrix.ts`, inherited by `apartment` via
  *   `withPhase5Defaults` with no `excludedCommunityTypes`), which is exactly
- *   what the only UI entry point (`LeaseListPage`) already enforces
+ *   what the only UI entry point (the Leases page) already enforces
  *   server-side, so the gate costs no reachable workflow.
  *
  * Patterns preserved:
  * - lease-service helpers for tenant-scoped DB access (AGENTS #13)
  * - logAuditEvent on every mutation
  * - Apartment-only feature gate (AGENTS #34)
+ *
+ * Leases v3 (docs/superpowers/plans/2026-09-29-leases-v3.md):
+ * - READ BOUNDARY: a non-manager sees a lease when a current `lease_residents`
+ *   row names them — so co-tenants see it too. `residentId === actor` stays as
+ *   a fallback for leases written by pre-v3 code during the expand window.
+ * - A renewal no longer flips the current lease to 'renewed' on creation. The
+ *   current lease stays `active` until the renewal starts; phase is derived
+ *   (`@/lib/leases/lease-state`). Flipping it early hid the current lease and
+ *   blanked `units.rent_amount`, whose trigger only reads `active` leases.
+ * - Overlap uses the EFFECTIVE end (move_out_on when earlier), so a unit can be
+ *   pre-leased from the day after a scheduled move-out.
+ * - Cancel / delete refuse while the lease has unpaid rent obligations (D9).
+ * - PATCH honours `version` (409 when stale); POST honours `idempotencyKey`
+ *   (a repeat submission returns the lease the first one created).
  */
 import { captureMessage } from '@sentry/nextjs';
 import { runRoute } from '@/lib/api/run-route';
 import { logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, isAdminRole, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';
+import { ConflictError, ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
@@ -71,25 +85,44 @@ import {
   type LeaseRecord,
 } from '@/lib/services/lease-expiration-service';
 import {
-  createLeaseForCommunity,
   getLeaseById,
   getRenewalOfLease,
-  getTenantRoleForLease,
-  getUnitLeaseDefaults,
+  getTransferTargetOfLease,
+  listLeaseDeposits,
+  listLeaseIdsForParty,
+  listLeaseResidentsForLeases,
   listLeasesForCommunity,
-  markLeaseRenewed,
+  listOccupantsByIds,
   softDeleteLeaseForCommunity,
   updateLeaseForCommunity,
+  updateLeaseIfVersion,
+  updateLeaseDeposit,
+  withdrawOpenOffers,
+  type LeaseDepositRow,
+  type LeaseResidentRow,
+  type LeaseOccupantRow,
 } from '@/lib/services/lease-service';
+import { createLease } from '@/lib/leases/create-lease';
+import {
+  effectiveEndDate,
+  ensureNoUnitLeaseOverlap,
+  ensureNoUnpaidObligations,
+  ensureRenewalContinuity,
+  isZeroRent,
+  partyKeysFor,
+  validateLeaseDateWindow,
+  type LeaseLikeRow,
+} from '@/lib/leases/lease-rules';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
+import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 import {
-  LEASE_STATUS_VALUES,
   leasesGetContract,
   leasesPostContract,
   leasesPatchContract,
   leasesDeleteContract,
+  LEASE_STATUS_VALUES,
 } from './contract';
 
 // ---------------------------------------------------------------------------
@@ -107,112 +140,63 @@ function requireApartmentCommunity(communityType: CommunityType): void {
   }
 }
 
+/** Today's date (YYYY-MM-DD) in the community's timezone (AGENTS #16-17). */
+function communityToday(timezone: string | undefined): string {
+  return utcDateToWallClockValue(new Date(), timezone ?? 'America/New_York').slice(0, 10);
+}
+
 function coerceLeaseRecord(row: Record<string, unknown>): LeaseRecord {
+  const opt = <T>(key: string): T | null => (row[key] as T | null | undefined) ?? null;
   return {
     id: row['id'] as number,
     communityId: row['communityId'] as number,
     unitId: row['unitId'] as number,
-    residentId: row['residentId'] as string,
+    residentId: opt<string>('residentId'),
     startDate: row['startDate'] as string,
-    endDate: (row['endDate'] as string | null) ?? null,
-    rentAmount: (row['rentAmount'] as string | null) ?? null,
+    endDate: opt<string>('endDate'),
+    rentAmount: opt<string>('rentAmount'),
     status: row['status'] as string,
-    previousLeaseId: (row['previousLeaseId'] as number | null) ?? null,
-    notes: (row['notes'] as string | null) ?? null,
+    previousLeaseId: opt<number>('previousLeaseId'),
+    notes: opt<string>('notes'),
+    version: (row['version'] as number | undefined) ?? 1,
+    zeroRentReason: opt<string>('zeroRentReason'),
+    zeroRentNote: opt<string>('zeroRentNote'),
+    noticeDays: opt<number>('noticeDays'),
+    moveOutOn: opt<string>('moveOutOn'),
+    endVia: opt<string>('endVia'),
+    endReason: opt<string>('endReason'),
+    noticeReceivedOn: opt<string>('noticeReceivedOn'),
+    cancelledReason: opt<string>('cancelledReason'),
+    transferredFromLeaseId: opt<number>('transferredFromLeaseId'),
+    signedDocumentId: opt<number>('signedDocumentId'),
   };
 }
 
-type LeaseLikeRow = {
-  id: number;
-  unitId: number;
-  residentId: string;
-  startDate: string;
-  endDate: string | null;
-  status: string;
-  previousLeaseId: number | null;
-};
-
-function parseIsoDateOnly(value: string, fieldName: string): Date {
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new ValidationError(`${fieldName} must be a valid date in YYYY-MM-DD format`);
-  }
-  return parsed;
-}
-
-function isFirstDayOfMonth(value: string): boolean {
-  return value.endsWith('-01');
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date.getTime());
-  result.setUTCDate(result.getUTCDate() + days);
-  return result;
-}
-
-function dateRangesOverlap(
-  startA: Date,
-  endA: Date | null,
-  startB: Date,
-  endB: Date | null,
-): boolean {
-  const aEnd = endA ?? new Date('9999-12-31T00:00:00.000Z');
-  const bEnd = endB ?? new Date('9999-12-31T00:00:00.000Z');
-  return startA <= bEnd && startB <= aEnd;
-}
-
-function validateLeaseDateWindow(startDate: string, endDate: string | null): void {
-  if (!isFirstDayOfMonth(startDate)) {
-    throw new ValidationError('Lease startDate must be the first day of the month (YYYY-MM-01)');
-  }
-  const start = parseIsoDateOnly(startDate, 'startDate');
-  if (endDate) {
-    const end = parseIsoDateOnly(endDate, 'endDate');
-    if (end <= start) {
-      throw new ValidationError('endDate must be after startDate');
-    }
-  }
-}
-
-function ensureNoUnitLeaseOverlap(
-  candidate: { id?: number; unitId: number; startDate: string; endDate: string | null },
-  existingLeases: LeaseLikeRow[],
-): void {
-  const candidateStart = parseIsoDateOnly(candidate.startDate, 'startDate');
-  const candidateEnd = candidate.endDate ? parseIsoDateOnly(candidate.endDate, 'endDate') : null;
-  const overlaps = existingLeases.some((existing) => {
-    if (candidate.id !== undefined && existing.id === candidate.id) return false;
-    if (existing.unitId !== candidate.unitId) return false;
-    if (existing.status === 'terminated') return false;
-    const existingStart = parseIsoDateOnly(existing.startDate, 'startDate');
-    const existingEnd = existing.endDate ? parseIsoDateOnly(existing.endDate, 'endDate') : null;
-    return dateRangesOverlap(candidateStart, candidateEnd, existingStart, existingEnd);
-  });
-  if (overlaps) {
-    throw new ValidationError('Lease period overlaps an existing lease for this unit');
-  }
-}
-
-function ensureRenewalContinuity(
-  candidate: { unitId: number; residentId: string; startDate: string; previousLeaseId: number },
-  previousLease: LeaseLikeRow,
-): void {
-  if (previousLease.unitId !== candidate.unitId) {
-    throw new ValidationError('Renewal lease must use the same unit as the previous lease');
-  }
-  if (previousLease.residentId !== candidate.residentId) {
-    throw new ValidationError('Renewal lease must use the same resident as the previous lease');
-  }
-  if (!previousLease.endDate) {
-    throw new ValidationError('Previous lease must have an endDate before creating a renewal');
-  }
-
-  const previousEndDate = parseIsoDateOnly(previousLease.endDate, 'previousLease.endDate');
-  const expectedStartDate = addDays(previousEndDate, 1);
-  const actualStartDate = parseIsoDateOnly(candidate.startDate, 'startDate');
-  if (actualStartDate.getTime() !== expectedStartDate.getTime()) {
-    throw new ValidationError('Renewal lease startDate must be the day after the previous lease endDate');
-  }
+/** Public shape of a lease's residents; household members' details only for managers. */
+function residentsView(
+  leaseId: number,
+  residentRows: LeaseResidentRow[],
+  occupantsById: Map<number, LeaseOccupantRow>,
+  isManager: boolean,
+) {
+  return residentRows
+    .filter((r) => r.leaseId === leaseId)
+    .map((r) => {
+      const occupant = r.occupantId != null ? occupantsById.get(r.occupantId) : undefined;
+      return {
+        userId: r.userId,
+        occupantId: r.occupantId,
+        isPrimary: r.isPrimary,
+        addedOn: r.addedOn,
+        removedOn: r.removedOn,
+        occupant: occupant
+          ? {
+              fullName: occupant.fullName,
+              ...(isManager ? { email: occupant.email, phone: occupant.phone } : {}),
+            }
+          : null,
+      };
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -238,69 +222,68 @@ export const GET = withErrorHandler(
     //
     // Management-tier callers keep the whole community's leases — that is the
     // live property-manager workflow. Everyone else sees ONLY the leases they
-    // are a party to (`residentId === actorUserId`). A unit owner who is not
-    // the named party on a lease therefore sees nothing: that is the ledger's
-    // decision, not an oversight. Broadening read to owner-by-unit needs a
-    // My-Lease product decision and a units join, and this phase deliberately
-    // adds neither.
+    // are a party to. Leases v3: "party" means a current `lease_residents` row
+    // naming them (so co-tenants qualify), or — for leases written by pre-v3
+    // code during the expand window — `residentId === actorUserId`. A unit
+    // owner who is not a party therefore sees nothing: that is the ledger's
+    // decision, not an oversight.
     //
     // Fail-closed by construction — `isAdminRole` resolves only the v3
     // management roles onto the admin row, so any other value gets the filter
     // rather than the full list.
     //
+    // PAG-04: the party scope is pushed into SQL (`partyScope`), so a
+    // non-manager's read never loads a neighbour's row; the JS filter below is
+    // a second fence on the same boundary.
+    //
     // `notes` is manager-internal (product decision 2026-09-24, #1172): a party
     // sees their own lease rows, but never the notes a manager wrote on them.
-    // Redacted here so the list AND the renewal-chain path both inherit it.
-    //
-    // Since PAG-04 the party scope is ALSO pushed into SQL (`partyScope`
-    // below), so a non-manager's read never loads a neighbour's row. The JS
-    // filter here stays as a second fence on the same boundary.
+    // Deposits and occupant contact details are manager-only for the same reason.
     const seesAllLeases = isAdminRole(membership.role);
+    const partyScope = seesAllLeases ? {} : { partyUserId: actorUserId };
+    const partyLeaseIds = seesAllLeases
+      ? new Set<number>()
+      : await listLeaseIdsForParty(communityId, actorUserId);
     const visibleToActor = (records: LeaseRecord[]): LeaseRecord[] =>
       seesAllLeases
         ? records
         : records
-            .filter((l) => l.residentId === actorUserId)
+            .filter((l) => partyLeaseIds.has(l.id) || l.residentId === actorUserId)
             .map((l) => ({ ...l, notes: null }));
 
     // Optional filters — parsed manually from the URL to preserve the
     // pre-migration lenient semantics (malformed values are silently ignored,
-    // not 400-ed). See contract.ts. Every filter is applied IN SQL (PAG-04);
-    // the party scope above is pushed down as `resident_id = actor` too.
+    // not 400-ed). See contract.ts. Every filter is applied IN SQL (PAG-04).
     const { searchParams } = new URL(req.url);
-    const partyScope = seesAllLeases ? {} : { residentId: actorUserId };
+    // Log lines kept word-for-word from PAG-04 so existing log searches match.
+    const reportTruncated = (path: 'list' | 'renewal_chain', extra: Record<string, unknown> = {}) => {
+       
+      console.warn(
+        path === 'list'
+          ? '[leases] GET list hit LEASE_LIST_MAX_ROWS; oldest rows dropped'
+          : '[leases] renewal chain read hit LEASE_LIST_MAX_ROWS; an old chain may be incomplete',
+        { communityId, ...extra },
+      );
+      captureMessage('lease_list_truncated', { level: 'warning', extra: { communityId, ...extra, path } });
+    };
 
     // Renewal chain: walked over the actor-visible rows (one party-scoped read,
     // no status/unit filters), so a chain rooted at someone else's lease yields
-    // an empty array rather than that tenant's rental history. Checked first —
-    // it replaces the list response.
+    // an empty array rather than that tenant's rental history.
     const chainFor = searchParams.get('renewal_chain_for');
     if (chainFor) {
       const leaseId = Number(chainFor);
       if (Number.isInteger(leaseId) && leaseId > 0) {
-        const { rows: chainRows, truncated } = await listLeasesForCommunity(
-          communityId,
-          partyScope,
-        );
-        if (truncated) {
-          console.warn('[leases] renewal chain read hit LEASE_LIST_MAX_ROWS; an old chain may be incomplete', {
-            communityId,
-            leaseId,
-          });
-          captureMessage('lease_list_truncated', {
-            level: 'warning',
-            extra: { communityId, leaseId, path: 'renewal_chain' },
-          });
-        }
+        const { rows: chainRows, truncated } = await listLeasesForCommunity(communityId, partyScope);
+        if (truncated) reportTruncated('renewal_chain', { leaseId });
         return getRenewalChain(leaseId, visibleToActor(chainRows.map(coerceLeaseRecord)));
       }
     }
 
     const statusFilter = searchParams.get('status');
     if (statusFilter && !(LEASE_STATUS_VALUES as readonly string[]).includes(statusFilter)) {
-      // Not a lease_status value: nothing can match. Answer [] here instead
-      // of letting Postgres reject the enum cast with a 500 — the pre-pushdown
-      // JS filter returned [] for this too.
+      // Not a lease_status value: nothing can match. [] instead of a 500 from
+      // Postgres rejecting the enum cast.
       return [];
     }
 
@@ -312,15 +295,13 @@ export const GET = withErrorHandler(
     }
 
     // Expiring within N days: the window predicate is pushed into SQL;
-    // getExpiringLeases still runs over the (already-matching) rows because it
-    // owns `daysUntilExpiration` and the soonest-first sort. One reference
-    // date feeds both so they cannot disagree across a UTC midnight.
+    // getExpiringLeases still owns `daysUntilExpiration` and the sort. One
+    // reference date feeds both so they cannot disagree across a UTC midnight.
     let expiringDays: number | undefined;
     const expiringWithinDays = searchParams.get('expiring_within_days');
     if (expiringWithinDays) {
       const days = Number(expiringWithinDays);
-      // Clamped: an absurd window (1e8 days) would overflow Date/ISO and 500;
-      // 100 years already covers every lease that has an end date.
+      // Clamped: an absurd window would overflow Date/ISO and 500.
       if (Number.isInteger(days) && days > 0) expiringDays = Math.min(days, 36_500);
     }
     const referenceDate = new Date();
@@ -333,20 +314,30 @@ export const GET = withErrorHandler(
         ? { activeEndingOnOrBefore: expiringWindowEnd(referenceDate, expiringDays).toISOString().slice(0, 10) }
         : {}),
     });
-    if (truncated) {
-      console.warn('[leases] GET list hit LEASE_LIST_MAX_ROWS; oldest rows dropped', {
-        communityId,
-      });
-      captureMessage('lease_list_truncated', {
-        level: 'warning',
-        extra: { communityId, path: 'list' },
-      });
+    if (truncated) reportTruncated('list');
+
+    let leaseRecords: LeaseRecord[] = visibleToActor(rows.map(coerceLeaseRecord));
+    if (expiringDays !== undefined) leaseRecords = getExpiringLeases(leaseRecords, expiringDays, referenceDate);
+
+    // Leases v3: residents (and, for managers, deposits) ride along with each
+    // lease, fetched ONLY for the rows that survived the party filter.
+    const visibleIds = leaseRecords.map((l) => l.id);
+    const residentRows = await listLeaseResidentsForLeases(communityId, visibleIds);
+    const occupantIds = [...new Set(residentRows.map((r) => r.occupantId).filter((id): id is number => id != null))];
+    const occupants = occupantIds.length > 0 ? await listOccupantsByIds(communityId, occupantIds) : [];
+    const occupantsById = new Map(occupants.map((o) => [o.id, o]));
+    const depositsByLease = new Map<number, LeaseDepositRow[]>();
+    if (seesAllLeases && visibleIds.length > 0) {
+      for (const d of await listLeaseDeposits(communityId, visibleIds)) {
+        depositsByLease.set(d.leaseId, [...(depositsByLease.get(d.leaseId) ?? []), d]);
+      }
     }
 
-    const leaseRecords = visibleToActor(rows.map(coerceLeaseRecord));
-    return expiringDays !== undefined
-      ? getExpiringLeases(leaseRecords, expiringDays, referenceDate)
-      : leaseRecords;
+    return leaseRecords.map((l) => ({
+      ...l,
+      residents: residentsView(l.id, residentRows, occupantsById, seesAllLeases),
+      ...(seesAllLeases ? { deposits: depositsByLease.get(l.id) ?? [] } : {}),
+    }));
   }),
 );
 
@@ -367,146 +358,35 @@ export const POST = withErrorHandler(
     // any read, write or audit side effect below.
     requirePermission(membership, 'units', 'write');
 
-    // Validate unit belongs to this community
-    const unit = await getUnitLeaseDefaults(communityId, payload.unitId);
-    if (!unit) {
-      throw new ValidationError('Unit not found in this community');
-    }
-    const unitRentAmount = (unit['rentAmount'] as string | null) ?? null;
-
-    // Validate resident has a tenant (non-owner resident) role in this community
-    const residentRole = await getTenantRoleForLease(communityId, payload.residentId);
-    if (!residentRole) {
-      throw new ValidationError('Resident must have a tenant role in this community');
-    }
-
-    validateLeaseDateWindow(payload.startDate, payload.endDate ?? null);
-
-    // Overlap can only occur within the candidate's unit, so read that unit's
-    // leases rather than the whole community's (PAG-04).
-    const { rows: unitLeaseRows } = await listLeasesForCommunity(communityId, {
-      unitId: payload.unitId,
-    });
-    const existingLeases = unitLeaseRows as unknown as LeaseLikeRow[];
-    ensureNoUnitLeaseOverlap(
-      {
-        unitId: payload.unitId,
-        startDate: payload.startDate,
-        endDate: payload.endDate ?? null,
-      },
-      existingLeases,
-    );
-
-    const effectiveRentAmount = payload.rentAmount ?? unitRentAmount;
-
-    // Handle renewal logic
-    const previousLeaseId = payload.previousLeaseId ?? null;
-    if (payload.isRenewal || previousLeaseId !== null) {
-      if (!previousLeaseId) {
-        throw new ValidationError('previousLeaseId is required when creating a renewal lease');
-      }
-      // Verify the previous lease exists in this community (any unit — a
-      // different unit is rejected by ensureRenewalContinuity below).
-      const previousLease = (await getLeaseById(
-        communityId,
-        previousLeaseId,
-      )) as unknown as LeaseLikeRow | null;
-      if (!previousLease) {
-        throw new ValidationError('Previous lease not found in this community');
-      }
-      ensureRenewalContinuity(
-        {
-          unitId: payload.unitId,
-          residentId: payload.residentId,
-          startDate: payload.startDate,
-          previousLeaseId,
-        },
-        previousLease,
-      );
-
-      // Mark the previous lease as 'renewed'
-      await markLeaseRenewed(communityId, previousLeaseId);
-
-      await logAuditEvent({
-        userId: actorUserId,
-        action: 'update',
-        resourceType: 'lease',
-        resourceId: String(previousLeaseId),
-        communityId,
-        oldValues: { status: previousLease['status'] },
-        newValues: { status: 'renewed' },
-        metadata: { reason: 'renewal' },
-      });
-    }
-
-    const created = await createLeaseForCommunity(communityId, {
-      unitId: payload.unitId,
-      residentId: payload.residentId,
-      startDate: payload.startDate,
-      endDate: payload.endDate ?? null,
-      rentAmount: effectiveRentAmount,
-      status: payload.status ?? 'active',
-      previousLeaseId,
-      notes: payload.notes ?? null,
-    });
-
-    if (!created) {
-      throw new ValidationError('Failed to create lease');
-    }
-
-    await logAuditEvent({
-      userId: actorUserId,
-      action: 'create',
-      resourceType: 'lease',
-      resourceId: String(created['id']),
-      communityId,
-      newValues: {
-        unitId: payload.unitId,
-        residentId: payload.residentId,
-        startDate: payload.startDate,
-        endDate: payload.endDate ?? null,
-        rentAmount: effectiveRentAmount,
-        status: payload.status ?? 'active',
-        previousLeaseId,
-      },
-    });
-
-    // Best-effort: auto-create move-in checklist for apartment communities
-    if (membership.communityType === 'apartment') {
-      try {
-        await createMoveChecklist(
-          {
-            communityId,
-            leaseId: created['id'] as number,
-            unitId: payload.unitId,
-            residentId: payload.residentId,
-            type: 'move_in',
-          },
-          actorUserId,
-        );
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[leases] auto-create move-in checklist failed', {
-          communityId,
-          leaseId: created['id'],
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
-    return created;
+    return createLease({ communityId, actorUserId, communityType: membership.communityType }, payload);
   }),
 );
 
 // ---------------------------------------------------------------------------
-// PATCH — Update a lease (status change, rent update, etc.)
+// PATCH — Update a lease (status change, rent update, move-out, etc.)
 // ---------------------------------------------------------------------------
+
+const PATCHABLE_FIELDS = [
+  'status',
+  'endDate',
+  'rentAmount',
+  'notes',
+  'zeroRentReason',
+  'zeroRentNote',
+  'noticeDays',
+  'moveOutOn',
+  'endVia',
+  'endReason',
+  'noticeReceivedOn',
+  'cancelledReason',
+  'signedDocumentId',
+] as const;
 
 export const PATCH = withErrorHandler(
   runRoute(leasesPatchContract, async ({ body, communityId }) => {
     const actorUserId = await requireAuthenticatedUserId();
 
-    const { id, communityId: _communityId, ...fields } = body;
+    const { id, communityId: _communityId, version: expectedVersion, ...fields } = body;
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
@@ -519,76 +399,172 @@ export const PATCH = withErrorHandler(
     if (!existing) {
       throw new NotFoundError('Lease not found');
     }
+    const today = communityToday(membership.timezone);
 
     const updateData: Record<string, unknown> = {};
     const oldValues: Record<string, unknown> = {};
     const newValues: Record<string, unknown> = {};
-
-    if (fields.status !== undefined) {
-      updateData['status'] = fields.status;
-      oldValues['status'] = existing['status'];
-      newValues['status'] = fields.status;
-    }
-    if (fields.endDate !== undefined) {
-      validateLeaseDateWindow((existing['startDate'] as string) ?? '', fields.endDate);
-      updateData['endDate'] = fields.endDate;
-      oldValues['endDate'] = existing['endDate'];
-      newValues['endDate'] = fields.endDate;
-    }
-    if (fields.rentAmount !== undefined) {
-      updateData['rentAmount'] = fields.rentAmount;
-      oldValues['rentAmount'] = existing['rentAmount'];
-      newValues['rentAmount'] = fields.rentAmount;
-    }
-    if (fields.notes !== undefined) {
-      updateData['notes'] = fields.notes;
-      oldValues['notes'] = existing['notes'];
-      newValues['notes'] = fields.notes;
+    for (const key of PATCHABLE_FIELDS) {
+      if (fields[key] === undefined) continue;
+      updateData[key] = fields[key];
+      oldValues[key] = existing[key] ?? null;
+      newValues[key] = fields[key];
     }
 
     if (Object.keys(updateData).length === 0) {
       throw new ValidationError('No fields to update');
     }
 
-    // Same-unit leases only: overlap cannot cross units (PAG-04).
-    const { rows: unitLeaseRows } = await listLeasesForCommunity(communityId, {
-      unitId: existing['unitId'] as number,
-    });
-    const unitLeases = unitLeaseRows as unknown as LeaseLikeRow[];
+    if (fields.endDate !== undefined) {
+      validateLeaseDateWindow((existing['startDate'] as string) ?? '', fields.endDate, { requireFirstOfMonth: false });
+    }
+
+    // ── Cancelling a lease that never started (E1) ─────────────────────────
+    if (fields.status === 'cancelled') {
+      if ((existing['startDate'] as string) <= today) {
+        throw new ValidationError('Only a lease that has not started yet can be cancelled. End it instead.');
+      }
+      if (!fields.cancelledReason) {
+        throw new ValidationError('cancelledReason is required to cancel a lease');
+      }
+      await ensureNoUnpaidObligations(communityId, id, 'cancel this lease');
+    } else if (fields.cancelledReason !== undefined) {
+      throw new ValidationError('cancelledReason is only allowed when cancelling a lease');
+    }
+
+    // ── Scheduling or clearing a move-out ──────────────────────────────────
+    // Same-unit read (PAG-04): overlap and the pre-lease check only concern
+    // this unit's leases; the renewal and transfer links are looked up directly.
+    const { rows: unitRows } = await listLeasesForCommunity(communityId, { unitId: existing['unitId'] as number });
+    const allLeases = unitRows as unknown as LeaseLikeRow[];
+    let releaseCarriedDeposit = false;
+    if (fields.moveOutOn !== undefined) {
+      if (fields.moveOutOn === null) {
+        // Clearing a move-out. Refuse while a pre-lease (not this lease's own
+        // renewal) was booked on the strength of it — the unit would be
+        // double-booked. The prototype's "cancel the upcoming lease first".
+        const blocking = allLeases.find(
+          (l) =>
+            l.unitId === existing['unitId'] &&
+            l.id !== id &&
+            l.status === 'active' &&
+            l.previousLeaseId !== id &&
+            l.startDate > today &&
+            l.startDate > (existing['startDate'] as string) &&
+            (existing['endDate'] == null || l.startDate <= (existing['endDate'] as string)),
+        );
+        if (blocking) {
+          throw new ConflictError('Cancel the upcoming lease on this unit before cancelling the move-out.', {
+            upcomingLeaseId: blocking.id,
+          });
+        }
+        // A transfer's new lease lives on ANOTHER unit; the resident would
+        // hold two leases at once if the move-out were cleared first.
+        const transferTarget = await getTransferTargetOfLease(communityId, id);
+        if (transferTarget) {
+          throw new ConflictError('Cancel the new lease this resident is transferring to before cancelling the move-out.', {
+            upcomingLeaseId: transferTarget.id,
+          });
+        }
+        releaseCarriedDeposit = existing['endVia'] === 'transfer';
+        for (const k of ['endVia', 'endReason', 'noticeReceivedOn'] as const) {
+          if (fields[k] === undefined) {
+            updateData[k] = null;
+            oldValues[k] = existing[k] ?? null;
+            newValues[k] = null;
+          }
+        }
+      } else {
+        if (fields.moveOutOn < (existing['startDate'] as string)) {
+          throw new ValidationError('moveOutOn cannot be before the lease start date');
+        }
+        const endVia = fields.endVia ?? (existing['endVia'] as string | null);
+        if (!endVia) {
+          throw new ValidationError('endVia is required when scheduling a move-out');
+        }
+        const endDate = (fields.endDate !== undefined ? fields.endDate : existing['endDate']) as string | null;
+        if (endVia === 'early' && endDate && fields.moveOutOn > endDate) {
+          throw new ValidationError('An early end must be on or before the lease end date');
+        }
+      }
+    }
+
+    // ── Rent: $0 needs a reason ────────────────────────────────────────────
+    const nextRent = (fields.rentAmount !== undefined ? fields.rentAmount : existing['rentAmount']) as string | null;
+    const nextZeroReason =
+      fields.zeroRentReason !== undefined ? fields.zeroRentReason : (existing['zeroRentReason'] as string | null);
+    if (isZeroRent(nextRent) && !nextZeroReason) {
+      throw new ValidationError('A $0 rent needs a reason (zeroRentReason)');
+    }
+    if (!isZeroRent(nextRent) && fields.rentAmount !== undefined && existing['zeroRentReason']) {
+      updateData['zeroRentReason'] = null;
+      updateData['zeroRentNote'] = null;
+    }
+
     const candidateEndDate =
       fields.endDate !== undefined ? fields.endDate : ((existing['endDate'] as string | null) ?? null);
-    ensureNoUnitLeaseOverlap(
-      {
-        id,
-        unitId: existing['unitId'] as number,
-        startDate: existing['startDate'] as string,
-        endDate: candidateEndDate,
-      },
-      unitLeases,
-    );
+    const candidateMoveOut =
+      fields.moveOutOn !== undefined ? fields.moveOutOn : ((existing['moveOutOn'] as string | null) ?? null);
+    if (fields.status !== 'cancelled') {
+      ensureNoUnitLeaseOverlap(
+        {
+          id,
+          unitId: existing['unitId'] as number,
+          startDate: existing['startDate'] as string,
+          endDate: effectiveEndDate({ endDate: candidateEndDate, moveOutOn: candidateMoveOut }),
+        },
+        allLeases,
+      );
+    }
 
     const renewalLease = (await getRenewalOfLease(communityId, id)) as unknown as LeaseLikeRow | null;
-    if (renewalLease && candidateEndDate) {
+    if (renewalLease && candidateEndDate && fields.endDate !== undefined) {
+      const residentRows = await listLeaseResidentsForLeases(communityId, [renewalLease.id, id]);
       ensureRenewalContinuity(
         {
           unitId: renewalLease.unitId,
-          residentId: renewalLease.residentId,
+          partyKeys: partyKeysFor(renewalLease, residentRows),
           startDate: renewalLease.startDate,
           previousLeaseId: id,
         },
         {
           id,
           unitId: existing['unitId'] as number,
-          residentId: existing['residentId'] as string,
+          residentId: (existing['residentId'] as string | null) ?? null,
           startDate: existing['startDate'] as string,
           endDate: candidateEndDate,
           status: (existing['status'] as string) ?? 'active',
           previousLeaseId: (existing['previousLeaseId'] as number | null) ?? null,
         },
+        partyKeysFor({ id, residentId: (existing['residentId'] as string | null) ?? null }, residentRows),
       );
     }
 
-    const updated = await updateLeaseForCommunity(communityId, id, updateData);
+    updateData['updatedBy'] = actorUserId;
+    let updated;
+    if (expectedVersion !== undefined) {
+      updated = await updateLeaseIfVersion(communityId, id, expectedVersion, updateData);
+      if (!updated) {
+        throw new ConflictError('This lease changed since you opened it. Reload to see the latest version.', {
+          expectedVersion,
+          currentVersion: existing['version'] ?? null,
+        });
+      }
+    } else {
+      updated = await updateLeaseForCommunity(communityId, id, {
+        ...updateData,
+        version: ((existing['version'] as number | undefined) ?? 1) + 1,
+      });
+    }
+
+    // A cancelled transfer: the deposit stays with this lease after all.
+    if (releaseCarriedDeposit) {
+      for (const d of await listLeaseDeposits(communityId, [id])) {
+        if (d.disposition === 'carried_to_transfer') {
+          await updateLeaseDeposit(communityId, d.id, { disposition: null, dispositionOn: null });
+        }
+      }
+    }
 
     await logAuditEvent({
       userId: actorUserId,
@@ -600,8 +576,24 @@ export const PATCH = withErrorHandler(
       newValues,
     });
 
-    // Best-effort: auto-create move-out checklist when lease is terminated
-    if (fields.status === 'terminated' && membership.communityType === 'apartment') {
+    // A lease that is cancelled, terminated, or has a move-out scheduled
+    // (notice, early end, transfer) can no longer be renewed: an open offer
+    // on it would otherwise still sign. Same rule as sending an offer.
+    const endVia = fields.endVia ?? existing['endVia'];
+    const leaving = !!fields.moveOutOn && endVia !== 'expiry' && endVia !== 'declined';
+    if (fields.status === 'cancelled' || fields.status === 'terminated' || leaving) {
+      await withdrawOpenOffers(communityId, id);
+    }
+
+    // Best-effort: auto-create the move-out checklist when the lease is
+    // terminated (pre-v3) or when a move-out is first scheduled (v3 never
+    // flips status early, so this is where the checklist has to start).
+    const moveOutNewlyScheduled = !!fields.moveOutOn && !existing['moveOutOn'];
+    if (
+      (fields.status === 'terminated' || moveOutNewlyScheduled) &&
+      membership.communityType === 'apartment' &&
+      existing['residentId']
+    ) {
       try {
         await createMoveChecklist(
           {
@@ -614,7 +606,7 @@ export const PATCH = withErrorHandler(
           actorUserId,
         );
       } catch (err) {
-        // eslint-disable-next-line no-console
+         
         console.error('[leases] auto-create move-out checklist failed', {
           communityId,
           leaseId: id,
@@ -650,7 +642,12 @@ export const DELETE = withErrorHandler(
       throw new NotFoundError('Lease not found');
     }
 
+    // D9: deleting is for "entered by mistake" — never a way to make owed rent
+    // disappear. Refuse while charges are outstanding.
+    await ensureNoUnpaidObligations(communityId, id, 'delete this lease');
+
     await softDeleteLeaseForCommunity(communityId, id);
+    await withdrawOpenOffers(communityId, id);
 
     await logAuditEvent({
       userId: actorUserId,

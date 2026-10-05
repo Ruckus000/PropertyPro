@@ -7,28 +7,30 @@
 #
 # It runs two suites against a disposable vanilla-Postgres service container:
 #   1. `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
-#      — the apps/web integration suite (the step the floor below governs).
-#   2. the packages/db integration config, whole, minus a named denylist of
-#      known-red files — see the step comment.
+#      — the apps/web integration suite.
+#   2. the packages/db integration config, whole — no file list, no denylist
+#      (see the step comment).
 #
-# EXECUTED-COUNT FLOOR (TST-06) — PRINT-ONLY, NOT ARMED (plan ledger D15–D17,
-# human-confirmed 2026-09-23). The "Run integration tests" step also emits a
-# vitest JSON report (/tmp/vitest-integration.json); the post-step parses it
-# and PRINTS executed / collected / skipped / todo / pending against the
-# number declared in apps/web/__tests__/integration/ci-integration-floor.json.
-# It does not fail the job. Arming (turning the print into ::error:: + exit 1)
-# is allowed ONLY after a GREEN run on the branch has printed the executed
-# count, and then the floor must be set to that CI-printed number — never a
-# local measurement and never the audit's "52", which counted FILES.
+# EXECUTED-COUNT FLOORS (TST-06) — ARMED. Each suite's run step also emits a
+# vitest JSON report, and an assert step after it runs
+# scripts/assert-executed-test-floor.ts, which counts EXECUTED tests and FAILS
+# the job when that is below the suite's `expectedExecutedCount`:
+#   - apps/web:    apps/web/__tests__/integration/ci-integration-floor.json (491)
+#   - packages/db: packages/db/__tests__/ci-integration-floor.json (272)
+# Each value is the executed count PRINTED by the green main run named in its
+# file — never a local measurement, and never the audit's "52", which counted
+# FILES. Removing an integration test means lowering that suite's floor in the
+# same PR; adding tests needs no change (it is a floor, not an equality).
 #
 # Why an EXECUTED floor exists when vitest 3.2.4 already exits 1 on zero
 # collection: the silent-green shape left is files being COLLECTED and then
 # collapse to zero EXECUTED blocks (a `describe.skip` at file scope, a global
-# env gate flipped to always-skip), which reports `Test Files 54 passed` and
-# exit 0 while running nothing. Only counting executed assertions catches it.
-# The pattern is ported from the e2e workflow's spec-count assertion; the
-# bucket mapping differs because vitest's JSON report has NO separate flaky
-# bucket (see the step comment) while Playwright's does.
+# env gate flipped to always-skip — every packages/db file gates on
+# DATABASE_URL), which reports `Test Files N passed` and exit 0 while running
+# nothing. Only counting executed tests catches it. The ordering rule (a real
+# failure outranks the floor), the refusals and the vitest bucket mapping are
+# documented in the script's header and pinned by
+# scripts/__tests__/assert-executed-test-floor.test.ts.
 
 name: Integration Tests
 
@@ -192,137 +194,69 @@ jobs:
           --reporter=default --reporter=json
           --outputFile.json=/tmp/vitest-integration.json
 
-      # TST-06 — EXECUTED-count floor. PRINT-ONLY, NOT ARMED (plan ledger
-      # D15–D17, human-confirmed 2026-09-23): this step must not fail the job.
-      # Arming is a separate, evidence-gated change — see the file header and
-      # apps/web/__tests__/integration/ci-integration-floor.json.
-      #
-      # A genuine test failure needs no re-raise here: when vitest exits
-      # non-zero the `tests` step is already red, and this step runs anyway
-      # (conclusion == 'failure' is in the gate) purely to print the buckets of
-      # the failed run for diagnosis. When the floor IS armed, the ordering
-      # rule from the plan still holds: an actual failure outranks the floor.
+      # TST-06 — EXECUTED-count floor for apps/web (see the file header).
       #
       # Gate mirrors the e2e workflow's lesson: `always() &&` is REQUIRED — a
       # custom `if:` without a status function gets an implicit success()
       # ANDed on, and the conclusion check narrows it back to "vitest actually
       # ran", so an install/migrate failure does not get a misleading second
-      # red X about a missing report.
+      # red X about a missing report. TESTS_CONCLUSION is what lets the script
+      # stand down when the test step is already red.
       #
-      # Bucket mapping, VERIFIED against the vitest 3.2.4 JsonReporter source
-      # (StatusMap + logTasks), not assumed: the JSON report has NO separate
-      # flaky bucket. A test that fails and passes on retry ends in
-      # result.state "pass" and lands in `passed`, so executed = passed +
-      # failed is complete even with retries on. skipped / todo / pending are
-      # the not-executed buckets; an unknown state also falls back to
-      # "skipped". (The Playwright report the e2e step reads DOES have a
-      # fourth `flaky` stats bucket — omitting it there was required; the
-      # asymmetry here is vitest-vs-Playwright, not an omission.)
-      #
-      # Skips are printed by name as a warning, never refused: the suite has
-      # env-conditional self-skips at HEAD — measured locally at the
-      # implementation commit (2026-09-23): 54 files collected, 379 tests,
-      # 377 executed, 2 skipped — both in
-      # apps/web/__tests__/integration/auth/password-reset-login.integration.test.ts,
-      # which uses describe.skip without a Supabase Auth environment, exactly
-      # what CI's vanilla-Postgres service container provides. A hard
-      # skipped>0 refusal would be red on day one (the executed floor already
-      # catches the mass-skip failure this guards).
-      - name: Report integration executed-test floor (print-only)
+      # Expected skips (named as a warning, never refused): the two
+      # password-reset-login cases, which need Supabase Auth.
+      - name: Assert integration executed-test floor
         if: always() && (steps.tests.conclusion == 'success' || steps.tests.conclusion == 'failure')
-        run: |
-          node -e '
-            const fs = require("fs");
-            const REPORT = "/tmp/vitest-integration.json";
-            const FLOOR_FILE = "apps/web/__tests__/integration/ci-integration-floor.json";
-            if (!fs.existsSync(REPORT)) {
-              // On arming, this becomes ::error:: + exit 1 (a run that cannot
-              // produce a report has no evidence of coverage): see e2e.yml.
-              console.error("::warning::no vitest JSON report at " + REPORT + " — the run died before the json reporter wrote one (crash/timeout). Floor is PRINT-ONLY, so not failing.");
-              process.exit(0);
-            }
-            let report;
-            try {
-              report = JSON.parse(fs.readFileSync(REPORT, "utf8"));
-            } catch (e) {
-              console.error("::warning::vitest JSON report unparseable (" + e.message + "). Floor is PRINT-ONLY, so not failing.");
-              process.exit(0);
-            }
-            const assertions = (report.testResults ?? []).flatMap((f) => f.assertionResults ?? []);
-            const count = (status) => assertions.filter((a) => a.status === status).length;
-            const passed = count("passed");
-            const failed = count("failed");
-            const skipped = count("skipped");
-            const todo = count("todo");
-            const pending = count("pending");
-            const executed = passed + failed;
-            const collected = assertions.length;
-            let floor = null;
-            let floorErr = null;
-            try {
-              floor = JSON.parse(fs.readFileSync(FLOOR_FILE, "utf8")).expectedExecutedCount;
-            } catch (e) {
-              floorErr = e.message;
-            }
-            console.log("integration floor (print-only): executed=" + executed + " collected=" + collected + " passed=" + passed + " failed=" + failed + " skipped=" + skipped + " todo=" + todo + " pending=" + pending + " declaredFloor=" + (floorErr ? "UNREADABLE(" + floorErr + ")" : String(floor)));
-            if (skipped > 0) {
-              // Name them: a new skip that was not there at measurement time is
-              // the earliest visible symptom of the failure mode this guards.
-              const names = (report.testResults ?? []).flatMap((f) =>
-                (f.assertionResults ?? []).filter((a) => a.status === "skipped" || a.status === "todo" || a.status === "pending")
-                  .map((a) => String(f.name ?? "").split("/").slice(-3).join("/") + " :: " + a.fullName)
-              );
-              console.error("::warning::" + skipped + " test(s) NOT executed (skipped/todo/pending): " + names.join(" ; "));
-            }
-            if (typeof floor === "number" && executed < floor) {
-              // WHEN ARMED (D16, evidence-gated): this block becomes
-              // ::error:: + process.exit(1). Until then it only announces.
-              console.error("::warning::executed=" + executed + " is BELOW the declared floor " + floor + " in " + FLOOR_FILE + " (floor is PRINT-ONLY — not failing the job; see the header of this workflow for the arming rule).");
-            }
-            process.exit(0);
-          '
+        env:
+          TESTS_CONCLUSION: ${{ steps.tests.conclusion }}
+        run: >-
+          pnpm exec tsx scripts/assert-executed-test-floor.ts
+          --label apps/web
+          --report /tmp/vitest-integration.json
+          --floor-file apps/web/__tests__/integration/ci-integration-floor.json
 
       - name: Run packages/db integration tests
-        # packages/db has its own integration config that no workflow ever
-        # invoked until the RLS suite was added here as a named-file list —
-        # and every file left off that list rotted unseen (document-access
-        # asserted on the retired `cam` role and stayed red on main). So this
-        # step now runs the WHOLE config and DENYLISTS the known-red files, the
-        # same fail-safe shape as `paths-ignore` above: a new
-        # packages/db/__tests__/*.integration.test.ts runs here by default
-        # instead of silently running nowhere. DATABASE_URL and DIRECT_URL are
-        # already set at job level, which the suite requires to not skip itself.
+        id: db-tests
+        # packages/db has its own integration config. This step used to run a
+        # named-file list of it, and every file left off that list rotted unseen
+        # (document-access asserted on the retired `cam` role; six more broke
+        # on fixture and schema drift). It now runs the WHOLE config, with no
+        # file list and no denylist, so a new
+        # packages/db/__tests__/*.integration.test.ts runs here by default.
+        # Do not reintroduce an --exclude to make this green; fix the file.
+        # DATABASE_URL and DIRECT_URL are already set at job level, which the
+        # suite requires to not skip itself.
         #
         # What this covers that nothing else does: rls-policies (tenant
         # isolation at the DATABASE layer, not just the app layer),
         # pipeline-and-transactions (pins patches/postgres@3.4.8.patch, whose
-        # loss would make every db.transaction throw UNSAFE_TRANSACTION),
-        # seed-resident-units / seed-community-counts (INF-03 seed safety net),
-        # document-access / document-search / documents-tenant-isolation, the
-        # scoped client, and pagination.
+        # loss would make every db.transaction throw UNSAFE_TRANSACTION), the
+        # compliance_audit_log append-only trigger, the demo seed/reset and
+        # seed-community safety nets (Supabase Storage is an in-process HTTP
+        # double, __tests__/helpers/supabase-http-double.ts), document access,
+        # the scoped client, pagination and the PM portfolio query.
         #
-        # Excluded — each is red on this vanilla-Postgres harness for its own
-        # pre-existing reason (measured 2026-10-04 against the same stub +
-        # migrations via scripts/local-test-db.sh). Shrink this list; never
-        # grow it to hide a new failure:
-        #   - seed-demo, reset-demo: import apps/web services whose `@/` alias
-        #     packages/db's vitest config does not resolve
-        #     (`Cannot find package '@/lib/operations/routes'`).
-        #   - schema-gate0, audit-log-append-only-db: need an environment this
-        #     job does not provide (the latter throws "DIRECT_URL or
-        #     DATABASE_URL is required" from its own gate).
+        # Expected skips (env-gated, measured 2026-10-04): seed-demo's
+        # Stripe-linkage case (no STRIPE_SECRET_KEY), one invitation-flow case,
+        # and supabase-storage (both need real Supabase).
         #
-        # Removed from this list:
-        #   - pm-portfolio-unsafe (stale fixtures, not an access bug — its
-        #     "no PM role" user really held property_manager, and its
-        #     site_blocks rows predated 0048's NOT NULL page_id).
-        #   - reconcile-auth-user-id (teardown-only harness bug: `drizzle()`
-        #     over a postgres.js `sql.begin` transaction, which has no
-        #     `options`; every test body already passed).
+        # The JSON report feeds the floor step below. Single command, no pipes,
+        # so the step conclusion IS vitest's exit code.
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
-          --exclude '__tests__/audit-log-append-only-db.integration.test.ts'
-          --exclude '__tests__/reset-demo.integration.test.ts'
-          --exclude '__tests__/schema-gate0.integration.test.ts'
-          --exclude '__tests__/seed-demo.integration.test.ts'
+          --reporter=default --reporter=json
+          --outputFile.json=/tmp/vitest-db-integration.json
+
+      # TST-06 — EXECUTED-count floor for packages/db (see the file header).
+      # Same gate and ordering as the apps/web floor step. Expected skips: the
+      # seed-demo Stripe case, one invitation-flow case and supabase-storage.
+      - name: Assert packages/db executed-test floor
+        if: always() && (steps.db-tests.conclusion == 'success' || steps.db-tests.conclusion == 'failure')
+        env:
+          TESTS_CONCLUSION: ${{ steps.db-tests.conclusion }}
+        run: >-
+          pnpm exec tsx scripts/assert-executed-test-floor.ts
+          --label packages/db
+          --report /tmp/vitest-db-integration.json
+          --floor-file packages/db/__tests__/ci-integration-floor.json

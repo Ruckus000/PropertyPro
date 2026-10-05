@@ -1,134 +1,111 @@
+/**
+ * compliance_audit_log is append-only at the DATABASE layer: the
+ * `compliance_audit_log_append_only_guard` trigger (baseline 0000, function
+ * re-pinned in 0039) rejects every UPDATE and DELETE.
+ *
+ * Asserted against the LIVE migrated `public` table — the one production runs.
+ * This file used to replay three pre-re-baseline migration files into a scratch
+ * schema; those moved to `migrations/_archive/`, so it proved nothing about the
+ * current schema and failed on ENOENT.
+ *
+ * Every case runs inside a transaction that is always rolled back. That is the
+ * only clean way to test an append-only table: a committed row could never be
+ * deleted afterwards (and its community FK is ON DELETE restrict), so each run
+ * would leak permanently.
+ */
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
-const describeDb = process.env.DIRECT_URL || process.env.DATABASE_URL ? describe : describe.skip;
+const databaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+const describeDb = databaseUrl ? describe : describe.skip;
 
-const migrationPaths = [
-  path.resolve(process.cwd(), 'migrations/0000_flashy_toro.sql'),
-  path.resolve(process.cwd(), 'migrations/0001_condemned_mikhail_rasputin.sql'),
-  path.resolve(process.cwd(), 'migrations/0005_append_only_audit_log.sql'),
-];
+class Rollback extends Error {}
 
-type SqlClient = postgres.Sql;
-
-async function applyMigration(sql: SqlClient, schemaName: string, filePath: string): Promise<void> {
-  const rawMigration = await readFile(filePath, 'utf8');
-  const statements = rawMigration
-    .split('--> statement-breakpoint')
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0)
-    .map((chunk) => chunk.replaceAll('"public".', `"${schemaName}".`));
-
-  for (const statement of statements) {
-    await sql.unsafe(statement);
-  }
-}
+/**
+ * Narrow a transaction handle back to the callable `Sql` interface.
+ *
+ * postgres.js declares `TransactionSql` as `Omit<Sql<T>, 'begin' | 'end' | …>`,
+ * and TypeScript's `Omit` silently drops CALL SIGNATURES along with the named
+ * keys. So `` tx`select 1` `` — which is the library's own documented usage and
+ * works perfectly at runtime — does not type-check. This is a defect in the
+ * package's types, not a claim about the value, which is why the cast is
+ * isolated here with a name rather than sprinkled at each call site.
+ * (Same helper as apps/web/__tests__/integration/support-tickets-rls.)
+ */
+const tagged = (tx: postgres.TransactionSql): postgres.Sql => tx as unknown as postgres.Sql;
 
 describeDb('compliance_audit_log append-only (DB integration)', () => {
-  let sql: SqlClient | undefined;
-  let schemaName: string | undefined;
+  let sql: postgres.Sql;
 
-  beforeAll(async () => {
-    const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
-    if (!url) {
-      throw new Error('DIRECT_URL or DATABASE_URL is required for append-only DB integration test');
-    }
-
-    sql = postgres(url, { prepare: false, max: 1 });
-    schemaName = `audit_append_only_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
-
-    await sql.unsafe(`create schema "${schemaName}"`);
-    await sql.unsafe(`set search_path to "${schemaName}"`);
-
-    for (const migrationPath of migrationPaths) {
-      await applyMigration(sql, schemaName, migrationPath);
-    }
+  beforeAll(() => {
+    sql = postgres(databaseUrl!, { prepare: false, max: 1 });
   });
 
   afterAll(async () => {
-    if (sql && schemaName) {
-      await sql.unsafe(`drop schema if exists "${schemaName}" cascade`);
-    }
-    if (sql) {
-      await sql.end();
-    }
+    await sql.end();
   });
 
-  async function createAuditLogRecord(prefix: string): Promise<number> {
-    if (!sql || !schemaName) {
-      throw new Error('append-only test setup did not initialize SQL client and schema');
-    }
+  /** Runs `fn` in a transaction that is rolled back whatever happens. */
+  async function inRolledBackTransaction(
+    fn: (tx: postgres.TransactionSql) => Promise<void>,
+  ): Promise<void> {
+    await expect(
+      sql.begin(async (tx) => {
+        await fn(tx);
+        throw new Rollback();
+      }),
+    ).rejects.toBeInstanceOf(Rollback);
+  }
 
-    const slug = `${prefix}-community-${randomUUID().slice(0, 8)}`;
-    const email = `${prefix}-${randomUUID().slice(0, 8)}@example.com`;
-    const userId = randomUUID();
-
-    const communityRows = await sql.unsafe<{ id: string }[]>(
-      `insert into "${schemaName}"."communities" ("name", "slug", "community_type", "timezone")
-       values ($1, $2, 'condo_718', 'America/New_York')
-       returning "id"`,
-      [`${prefix} Community`, slug],
-    );
-
-    const communityId = Number(communityRows[0]?.id);
-    if (!Number.isFinite(communityId)) {
-      throw new Error('Failed to create test community');
-    }
-
-    await sql.unsafe(
-      `insert into "${schemaName}"."users" ("id", "email", "full_name") values ($1, $2, $3)`,
-      [userId, email, `${prefix} User`],
-    );
-
-    const resourceId = `__p1_27c_test__${prefix}__${randomUUID().slice(0, 8)}`;
-    const rows = await sql.unsafe<{ id: string }[]>(
-      `insert into "${schemaName}"."compliance_audit_log"
-        ("user_id", "community_id", "action", "resource_type", "resource_id", "old_values", "new_values", "metadata")
-       values ($1, $2, 'create', 'document', $3, null, '{"ok":true}'::jsonb, null)
-       returning "id"`,
-      [userId, communityId, resourceId],
-    );
-
-    const id = Number(rows[0]?.id);
-    if (!Number.isFinite(id)) {
-      throw new Error('Failed to create compliance_audit_log record');
-    }
-
-    return id;
+  async function insertAuditRow(tx: postgres.TransactionSql, prefix: string): Promise<number> {
+    const tag = `${prefix}-${randomUUID().slice(0, 8)}`;
+    const [community] = await tagged(tx)<{ id: string }[]>`
+      insert into communities (name, slug, community_type, timezone)
+      values (${`Audit ${tag}`}, ${`audit-append-only-${tag}`}, 'condo_718', 'America/New_York')
+      returning id`;
+    const [row] = await tagged(tx)<{ id: string }[]>`
+      insert into compliance_audit_log
+        (user_id, community_id, action, resource_type, resource_id, new_values)
+      values (null, ${community!.id}, 'create', 'document', ${tag}, ${tx.json({ ok: true })})
+      returning id`;
+    return Number(row!.id);
   }
 
   it('allows INSERT into compliance_audit_log', async () => {
-    const id = await createAuditLogRecord('insert');
-    expect(id).toBeGreaterThan(0);
+    await inRolledBackTransaction(async (tx) => {
+      const id = await insertAuditRow(tx, 'insert');
+      expect(id).toBeGreaterThan(0);
+    });
   });
 
   it('rejects direct UPDATE on compliance_audit_log', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('append-only test setup did not initialize SQL client and schema');
-    }
-
-    const id = await createAuditLogRecord('update');
-
-    await expect(
-      sql.unsafe(
-        `update "${schemaName}"."compliance_audit_log" set "action" = 'update' where "id" = $1`,
-        [id],
-      ),
-    ).rejects.toThrow(/append-only/i);
+    await inRolledBackTransaction(async (tx) => {
+      const id = await insertAuditRow(tx, 'update');
+      // A savepoint, so the rejected statement does not abort the transaction
+      // before the assertion is read.
+      await expect(
+        tx.savepoint((sp) => tagged(sp)`update compliance_audit_log set action = 'update' where id = ${id}`),
+      ).rejects.toMatchObject({
+        // 23514 (check_violation) is the ERRCODE the guard raises with: pins
+        // that the guard trigger itself fired, not some other error.
+        code: '23514',
+        message: expect.stringMatching(/append-only: UPDATE is not permitted/),
+      });
+    });
   });
 
   it('rejects direct DELETE on compliance_audit_log', async () => {
-    if (!sql || !schemaName) {
-      throw new Error('append-only test setup did not initialize SQL client and schema');
-    }
-
-    const id = await createAuditLogRecord('delete');
-
-    await expect(
-      sql.unsafe(`delete from "${schemaName}"."compliance_audit_log" where "id" = $1`, [id]),
-    ).rejects.toThrow(/append-only/i);
+    await inRolledBackTransaction(async (tx) => {
+      const id = await insertAuditRow(tx, 'delete');
+      await expect(
+        tx.savepoint((sp) => tagged(sp)`delete from compliance_audit_log where id = ${id}`),
+      ).rejects.toMatchObject({
+        // 23514 (check_violation) is the ERRCODE the guard raises with: pins
+        // that the guard trigger itself fired, not some other error.
+        code: '23514',
+        message: expect.stringMatching(/append-only: DELETE is not permitted/),
+      });
+    });
   });
 });

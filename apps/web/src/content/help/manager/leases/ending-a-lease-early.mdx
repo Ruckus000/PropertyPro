@@ -1,0 +1,55 @@
+---
+title: "End a lease early"
+description: "Record a lease ending before its end date, or end a month-to-month tenancy, and see what the page shows until the last day."
+section: manager
+category: leases
+slug: ending-a-lease-early
+communityTypes: [apartment]
+order: 10
+keywords: ["end early", "end lease early", "terminate", "termination", "break lease", "buyout", "mutual agreement", "lease violation", "casualty damage", "end tenancy", "month-to-month", "landlord gave notice", "cancel early end"]
+relatedArticles: ["move-out-and-holdovers", "transferring-units", "unit-offline", "deposit-notice"]
+upNext: "transferring-units"
+statutes: ["§83.49", "§83.63"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
+---
+
+Use **End early** when a lease ends before its end date for a reason other than the resident's notice: a buyout, a violation, mutual agreement or damage to the unit. For a month-to-month lease, it ends the tenancy. If the resident simply gave notice, use [Resident gave notice](help:move-out-and-holdovers). If they are moving to another unit here, use [Transfer to another unit](help:transferring-units).
+
+<StepByStep>
+<Step title="Open the unit and select End early">
+Select the unit's row. **End early** is with the other buttons near the top of the unit panel, between **Resident gave notice** and **Transfer to another unit**. The **End lease early** dialog opens. For a month-to-month lease it is called **End month-to-month tenancy**.
+</Step>
+
+<Step title="Choose a reason">
+Under **Why is the lease ending?**, choose **Mutual agreement**, **Resident request**, **Buyout**, **Lease violation**, **Casualty damage (§83.63)** or **Other**. For a month-to-month tenancy the choices are **Landlord gave notice**, **Mutual agreement**, **Lease violation**, **Casualty damage (§83.63)** and **Other**. The reason is saved with the lease record. With **Other**, describe it in **Details**.
+</Step>
+
+<Step title="Enter the last day">
+Enter the resident's last day in **Last day**. For a fixed-term lease, it must be on or before the lease end date. The hint says when the unit becomes available to lease. If the date has passed, the hint says the lease closes now. A note shows the deposit deadlines counted from the last day.
+</Step>
+
+<Step title="Select End lease early">
+For a month-to-month lease the button is **End tenancy**. A confirmation says the unit ends early on the last day, and that you can open the unit and choose **Cancel early end** to change your mind later. It also includes **Undo**. The unit shows **Ending**. The **Renewal** column shows **Ending early** and **Pre-lease**, and **Lease end** shows the last day with **Ends early** and how far away it is.
+</Step>
+</StepByStep>
+
+The resident stays in the unit, and the unit counts as occupied, until the last day. You can pre-lease it now. See [Add a lease or pre-lease a unit](help:adding-a-lease). The day after the last day, the lease moves to **Past leases** as **Ended early**, and the unit shows **Vacant** or **Pre-leased**.
+
+Recording the early end also starts a move-out checklist on the Move In/Out page, if the primary resident has a PropertyPro account.
+
+## Cancel an early end
+
+Until the last day, open the unit and select **Cancel early end**. There is no dialog. A confirmation says the unit stays on its current term, and includes **Undo**. If you already pre-leased the unit, **Cancel early end** is not shown: cancel the upcoming lease with **Cancel before move-in** first.
+
+**End early** is not shown once a move-out or transfer is recorded, once a renewal is signed, while the unit is pre-leased, or for a holdover.
+
+## Damage to the unit
+
+If damage forces the lease to end, choose **Casualty damage (§83.63)** as the reason. After the last day, when the unit is empty, you can [take it offline](help:unit-offline) so it isn't counted as vacant.
+
+<Callout type="florida-statute" title="Florida Statutes §83.49(3) and §83.63">
+The dialog shows the deposit deadlines from §83.49(3): refund in full within 15 days of the last day, or send a written claim within 30 days. The **Casualty damage (§83.63)** reason names the section of Chapter 83 that covers casualty damage to the unit.
+</Callout>

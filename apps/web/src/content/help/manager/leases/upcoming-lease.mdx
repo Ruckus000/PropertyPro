@@ -1,0 +1,67 @@
+---
+title: "Edit or cancel an upcoming lease"
+description: "Change a pre-lease or a signed renewal before it starts, or cancel it and keep the record."
+section: manager
+category: leases
+slug: upcoming-lease
+communityTypes: [apartment]
+order: 4
+keywords: ["upcoming lease", "pre-lease", "cancel lease", "cancel before move-in", "signed renewal", "renewal term", "applicant withdrew", "failed screening", "unit not ready", "entered by mistake", "delete lease", "unpaid rent"]
+relatedArticles: ["adding-a-lease", "recording-a-renewal", "editing-a-lease"]
+upNext: "deposit-notice"
+statutes: ["§83.49"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
+---
+
+A lease that has not started yet is an upcoming lease. It is either a pre-lease for the next resident, or a signed renewal for the current one. In the unit panel it has its own section: **Upcoming lease** for a pre-lease, or **Signed renewal** for a renewal. That section shows the term, the rent and, for a vacant unit, the residents. Its buttons are **Edit**, **Cancel before move-in** and **Deposit**. For **Deposit**, see [Record a security deposit and its notice](help:deposit-notice).
+
+## Edit an upcoming lease
+
+<StepByStep>
+<Step title="Open the unit">
+Pre-leased units show **Pre-leased**, with **Moves in** and the date under the resident's name. Renewed units show **Renewed · starts** and the date in the **Renewal** column. Select the unit's row.
+</Step>
+
+<Step title="Select Edit in the upcoming lease section">
+**Edit** is under the **Upcoming lease** or **Signed renewal** section. The dialog is called **Edit upcoming lease** or **Edit renewal term**, and says who is on the lease and when it starts.
+</Step>
+
+<Step title="Make the change and select Save changes">
+For a pre-lease you can change the **Term** (and so the end date), **Monthly rent**, **Notice to leave at term end (days)** and **Notes**. For a renewal the dates can't change, because they follow the current lease. The dialog says **Renewal dates follow the current lease.** Select **Save changes**. A confirmation says **Upcoming lease for Unit 101 updated.**
+</Step>
+</StepByStep>
+
+The start date and the residents can't be changed here. To change them, cancel the upcoming lease and create it again.
+
+## Cancel an upcoming lease
+
+<StepByStep>
+<Step title="Select Cancel before move-in">
+It is next to **Edit** under the **Upcoming lease** or **Signed renewal** section. The **Cancel upcoming lease** dialog opens.
+</Step>
+
+<Step title="Choose a reason">
+Under **Why is it cancelled?**, choose **Applicant withdrew**, **Failed screening**, **Unit not ready**, **Entered by mistake** or **Other**. With **Other**, enter the **Reason**. If a deposit was collected on this lease, a note shows the deposit amount and the §83.49(3) dates.
+</Step>
+
+<Step title="Select Cancel lease">
+A confirmation says **Upcoming lease for Unit 101 cancelled. It is kept in Lease history.** The unit's **Lease history** shows **Cancelled · was to start** with the date and reason, and **Past leases** lists it as **Cancelled before move-in**. The unit can take a new lease again. Select **Keep lease** to close the dialog without cancelling.
+</Step>
+</StepByStep>
+
+Cancelling a signed renewal leaves the current lease as it was. If the current lease ends within your alert window, the unit shows **Expiring** again and returns to **Renewals due**.
+
+<Callout type="warning" title="Entered by mistake deletes the lease">
+With **Entered by mistake**, the button changes to **Delete lease** and the lease record is deleted instead of kept. Use it only if the lease was never signed and no deposit was collected.
+</Callout>
+
+<Callout type="info" title="When a cancellation is refused">
+A lease with unpaid rent charges can't be cancelled or deleted. The dialog shows "This lease has 1 unpaid rent charge. Settle or waive it before you cancel this lease." Settle or waive the charges first, then try again.
+</Callout>
+
+<Callout type="florida-statute" title="Florida Statute §83.49(3)">
+When a deposit was collected, the cancel dialog shows two dates: 15 days from today to refund it in full, and 30 days to send a written claim. After you cancel, the lease is in **Lease history**. Select **Deposit** next to it to record the refund or claim.
+</Callout>

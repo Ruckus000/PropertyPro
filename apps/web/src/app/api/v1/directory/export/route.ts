@@ -56,6 +56,8 @@ export const GET = withErrorHandler(
       selection: userIds || occupantIds ? { userIds: userIds ?? [], occupantIds: occupantIds ?? [] } : undefined,
       access: { isAdmin: membership.isAdmin, canSeeBalances, canSeeViolations },
       actorUserId,
+      // Leases v3: apartment occupancy comes from leases, as on the page.
+      occupancyFromLeases: membership.communityType === 'apartment' ? { timezone: membership.timezone } : undefined,
     });
     return { filename: `directory-${kind}-${communityId}.csv`, csv, rowCount };
   }),

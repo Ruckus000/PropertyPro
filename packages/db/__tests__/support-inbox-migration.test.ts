@@ -83,9 +83,10 @@ describe('migration 0068 — support inbox', () => {
       const body = check![1];
 
       for (const denied of ['from_email', 'to_emails', 'rfc_message_id']) {
-        expect(body).toMatch(
+        // The message belongs on expect(), not toMatch(): toMatch takes one
+        // argument, so as a second one it was silently ignored.
+        expect(body, `kind='note' must deny ${denied}`).toMatch(
           new RegExp(`"${denied}"\\s+IS NULL`),
-          `kind='note' must deny ${denied}`,
         );
       }
       // And an email must have a sender, so the two branches are not symmetric.
