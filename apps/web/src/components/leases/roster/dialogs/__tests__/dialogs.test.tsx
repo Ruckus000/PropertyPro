@@ -113,8 +113,8 @@ function baseProps(actions: ReturnType<typeof makeActions>, overrides: Partial<R
     directory,
     occupants: [],
     residents: [
-      { id: '11111111-1111-4111-8111-111111111111', name: 'Ana Beltrán', email: 'ana@example.com' },
-      { id: '22222222-2222-4222-8222-222222222222', name: 'Marcus Lee', email: 'marcus@example.com' },
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Ana Beltrán', email: 'ana@example.com', canLease: true },
+      { id: '22222222-2222-4222-8222-222222222222', name: 'Marcus Lee', email: 'marcus@example.com', canLease: true },
     ],
     onDone: vi.fn(),
     onClose: vi.fn(),
