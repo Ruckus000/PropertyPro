@@ -35,8 +35,9 @@ import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/b
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { resizeLogo, resizeSiteLogo } from '@/lib/services/image-processor';
 import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
-import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
-import { getPmBrandingContract, patchPmBrandingContract } from './contract';
+import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
+import type { CommunityBranding } from '@propertypro/shared';
+import { getPmBrandingContract, patchPmBrandingContract, type PmBranding } from './contract';
 
 const PRESIGN_TTL_SECONDS = 60 * 60;
 const ALLOWED_LOGO_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
@@ -88,6 +89,21 @@ async function processAndStoreBrandingImage(
   return canonicalPath;
 }
 
+/** The live-only fields this route owns, with each logo resolved to a URL. */
+async function toPmBranding(communityId: number, branding: CommunityBranding): Promise<PmBranding> {
+  const [logoUrl, siteLogoUrl] = await Promise.all([
+    resolveBrandingImageUrl(communityId, branding.logoPath),
+    resolveBrandingImageUrl(communityId, branding.siteLogoPath),
+  ]);
+  return {
+    logoPath: branding.logoPath || null,
+    logoUrl,
+    siteLogoPath: branding.siteLogoPath || null,
+    siteLogoUrl,
+    customEmailFooter: branding.customEmailFooter ?? null,
+  };
+}
+
 export const GET = withErrorHandler(
   runRoute(getPmBrandingContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();
@@ -101,7 +117,7 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     const branding = await getBrandingForCommunity(communityId);
-    return branding ?? {};
+    return toPmBranding(communityId, branding ?? {});
   }),
 );
 
@@ -156,8 +172,14 @@ export const PATCH = withErrorHandler(
       ...(canonicalSiteLogoPath !== undefined && { siteLogoPath: canonicalSiteLogoPath }),
       ...(body.customEmailFooter !== undefined && { customEmailFooter: body.customEmailFooter }),
     };
+    // `null` removes a logo. The processed file at communities/{id}/branding/
+    // stays in storage; the next upload overwrites it.
+    const remove = [
+      ...(body.logoStoragePath === null ? (['logoPath'] as const) : []),
+      ...(body.siteLogoStoragePath === null ? (['siteLogoPath'] as const) : []),
+    ];
 
-    const updated = await updateBrandingForCommunity(communityId, patch);
+    const updated = await updateBrandingForCommunity(communityId, patch, { remove });
 
     // The changed fields only. The whole branding object now carries the
     // manager's unpublished draft (`draftLook`) and site settings, none of
@@ -168,11 +190,12 @@ export const PATCH = withErrorHandler(
       resourceType: 'community',
       resourceId: String(communityId),
       communityId,
-      newValues: patch,
+      newValues: {
+        ...patch,
+        ...Object.fromEntries(remove.map((key) => [key, null])),
+      },
     });
 
-    void tryAutoComplete(communityId, userId, 'customize_portal');
-
-    return updated;
+    return toPmBranding(communityId, updated);
   }),
 );

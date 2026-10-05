@@ -12,6 +12,7 @@
  */
 import { useState } from 'react';
 import { useWebsiteWizard } from '@/hooks/use-website-wizard';
+import { LogosSection } from '@/components/pm/site-editor-v3/panels/LogosSection';
 import { HeroImageField } from './HeroImageField';
 
 const TAGLINE_MAX = 80;
@@ -178,10 +179,9 @@ export function IdentityEditor({
         <HeroImageField communityId={communityId} fallbackHeadline={heroFallbackHeadline} />
       </div>
 
-      <p className="mt-4 rounded-md border border-edge bg-surface-subtle p-3 text-xs text-content-secondary">
-        <strong className="font-medium text-content">Logo:</strong> coming next. It rides on the
-        branding upload flow and lands in a follow-up update.
-      </p>
+      <div className="mt-6 border-t border-edge pt-4">
+        <LogosSection communityId={communityId} />
+      </div>
 
       <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
         <button

@@ -34,6 +34,11 @@ const {
   requirePermissionMock: vi.fn(),
 }));
 
+const tryAutoCompleteMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/services/onboarding-checklist-service', () => ({
+  tryAutoComplete: tryAutoCompleteMock,
+}));
+
 vi.mock('@/lib/services/site-blocks-service', () => ({
   publishCommunitySite: publishMock,
 }));
@@ -132,6 +137,23 @@ describe('POST /api/v1/pm/site/publish', () => {
     );
     expect(res.status).toBe(200);
     expect(publishMock.mock.calls[0]![0].expectedPublishedAt).toBeNull();
+  });
+
+  it('ticks "Customize your portal" for the manager after a publish that changed something', async () => {
+    publishMock.mockResolvedValueOnce({
+      published: true,
+      publishedAt: new Date('2026-05-15T12:00:00.000Z'),
+      promotedCount: 1,
+      retiredCount: 0,
+    });
+    await POST(makeRequest(VALID_BODY));
+    expect(tryAutoCompleteMock).toHaveBeenCalledWith(42, 'user-1', 'customize_portal');
+  });
+
+  it('does not tick it when there was nothing to publish', async () => {
+    publishMock.mockResolvedValueOnce({ published: false, reason: 'nothing-to-publish' });
+    await POST(makeRequest(VALID_BODY));
+    expect(tryAutoCompleteMock).not.toHaveBeenCalled();
   });
 
   it('returns the service result body verbatim (published path)', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDesignToCanvas } from '@/lib/site-editor/canvas-design';
+import { applyDesignToCanvas, applyLiveLogoToCanvas } from '@/lib/site-editor/canvas-design';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 
 const CONTEXT = {
@@ -35,5 +35,51 @@ describe('applyDesignToCanvas', () => {
   it('keeps the server context until the design has loaded', () => {
     expect(applyDesignToCanvas(CONTEXT, undefined)).toBe(CONTEXT);
     expect(applyDesignToCanvas(null, { live: {}, draft: {} })).toBeNull();
+  });
+});
+
+describe('applyLiveLogoToCanvas', () => {
+  const WITH_LOGO = { ...CONTEXT, community: { ...CONTEXT.community, logoUrl: 'https://server/old.webp' } };
+
+  it('shows the site logo over the square one, as the public page does', () => {
+    const out = applyLiveLogoToCanvas(WITH_LOGO, {
+      logoPath: 'communities/1/branding/logo.webp',
+      logoUrl: 'https://live/square.webp',
+      siteLogoPath: 'communities/1/branding/site-logo.webp',
+      siteLogoUrl: 'https://live/wordmark.webp',
+    });
+    expect(out?.community.logoUrl).toBe('https://live/wordmark.webp');
+  });
+
+  it('falls back to the square logo, and to none once both are removed', () => {
+    expect(
+      applyLiveLogoToCanvas(WITH_LOGO, {
+        logoPath: 'communities/1/branding/logo.webp',
+        logoUrl: 'https://live/square.webp',
+        siteLogoPath: null,
+        siteLogoUrl: null,
+      })?.community.logoUrl,
+    ).toBe('https://live/square.webp');
+    expect(
+      applyLiveLogoToCanvas(WITH_LOGO, { logoPath: null, logoUrl: null, siteLogoPath: null, siteLogoUrl: null })
+        ?.community.logoUrl,
+    ).toBeNull();
+  });
+
+  it('keeps the drawn logo when a stored logo came back unsigned, rather than blanking it', () => {
+    const out = applyLiveLogoToCanvas(WITH_LOGO, {
+      logoPath: null,
+      logoUrl: null,
+      siteLogoPath: 'communities/1/branding/site-logo.webp',
+      siteLogoUrl: null,
+    });
+    expect(out).toBe(WITH_LOGO);
+  });
+
+  it("keeps the server context's logo until the live query lands", () => {
+    expect(applyLiveLogoToCanvas(WITH_LOGO, undefined)).toBe(WITH_LOGO);
+    expect(
+      applyLiveLogoToCanvas(null, { logoPath: 'p', logoUrl: 'x', siteLogoPath: null, siteLogoUrl: null }),
+    ).toBeNull();
   });
 });
