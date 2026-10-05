@@ -33,7 +33,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'units', 'write');
 
-    const parsed = validateUnitCsv(body.csv, { allowOwnerOccupied: membership.communityType !== 'apartment' });
+    const parsed = validateUnitCsv(body.csv, { occupancyFromLeases: membership.communityType === 'apartment' });
     const errors = [...parsed.errors];
     const scoped = createScopedClient(communityId);
 

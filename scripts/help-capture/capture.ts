@@ -152,6 +152,8 @@ async function runActions(page: Page, shot: CaptureShot): Promise<void> {
     if (action.type === 'click') await page.click(action.selector);
     else if (action.type === 'fill')
       await page.fill(action.selector, action.value);
+    else if (action.type === 'select')
+      await page.selectOption(action.selector, action.value);
     else if (action.type === 'waitFor')
       await page.waitForSelector(action.selector);
     else if (action.type === 'wait') await page.waitForTimeout(action.ms);

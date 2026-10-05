@@ -67,9 +67,9 @@ function columnKey(column: ColumnDef<unknown>, index: number): string {
 /**
  * `flexRender`'s job: a slot may be a node or a function of the context.
  *
- * The zero-argument form is real — `ledger-table.tsx:101` and
- * `lease-columns.tsx:124` both write `header: () => <div…>` — so the context is
- * passed positionally and simply ignored by those.
+ * The zero-argument form is real — `ledger-table.tsx:101` writes
+ * `header: () => <div…>` — so the context is passed positionally and simply
+ * ignored by those.
  */
 function renderSlot<TContext>(
   slot: ReactNode | ((context: TContext) => ReactNode) | undefined,

@@ -18,6 +18,11 @@ export interface Unit {
   occupancy: UnitOccupancy | null;
   /** False while `occupancy` is a backfilled guess no manager has confirmed. */
   occupancyConfirmed: boolean;
+  /**
+   * Leases v3: 'leases' for apartments, where occupancy is derived from the
+   * unit's leases and cannot be set by hand (null = offline); 'manual' otherwise.
+   */
+  occupancySource?: 'manual' | 'leases';
   /** Open violations on the unit; null when the viewer may not see them or the feature is off. */
   openViolations?: number | null;
   createdAt: string;

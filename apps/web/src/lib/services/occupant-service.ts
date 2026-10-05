@@ -9,7 +9,7 @@
  * Audit entries are built field by field, never spread from the row. Remove
  * hard-deletes for the same reason: a soft-deleted row would keep the PII.
  */
-import { createScopedClient, logAuditEvent, paginate, unitOccupants } from '@propertypro/db';
+import { createScopedClient, leaseResidents, leases, logAuditEvent, paginate, unitOccupants } from '@propertypro/db';
 import { and, eq, inArray, sql } from '@propertypro/db/filters';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
@@ -175,11 +175,39 @@ export async function updateOccupant(
   return toRow(row);
 }
 
-/** Erasure, not hiding: the row is hard-deleted and the audit keeps only the unit. */
+/**
+ * Erasure, not hiding: the row is hard-deleted and the audit keeps only the unit.
+ *
+ * Refused (409) while a lease on record names this person, current or past
+ * (a deleted lease does not count, and its row is removed): a lease is
+ * a record of who held the unit, and lease_residents.occupant_id is ON DELETE
+ * RESTRICT so the database would refuse anyway. An erasure request for someone
+ * on a lease is a records-retention decision for the manager, not a click.
+ */
 export async function removeOccupant(communityId: number, actorUserId: string, id: number): Promise<void> {
   const scoped = createScopedClient(communityId);
   const [current] = (await scoped.selectFrom(unitOccupants, {}, eq(unitOccupants.id, id))) as Record<string, unknown>[];
   if (!current) throw new NotFoundError('Household member not found');
+  const leaseRows = (await scoped.selectFrom(
+    leaseResidents,
+    { leaseId: leaseResidents.leaseId },
+    eq(leaseResidents.occupantId, id),
+  )) as Array<{ leaseId: number }>;
+  if (leaseRows.length > 0) {
+    // The scoped client hides soft-deleted leases, so this finds only leases
+    // still on record (cancelled ones included — they are records too).
+    const live = await scoped.selectFrom(
+      leases,
+      { id: leases.id },
+      inArray(leases.id, [...new Set(leaseRows.map((r) => r.leaseId))]),
+    );
+    if (live.length > 0) {
+      throw new ConflictError('This person is named on a lease, so they stay on file with it. Take them off the lease in Leases first.');
+    }
+    // Only deleted leases (entered by mistake, or a rolled-back save) name
+    // them: those rows are not records, and the FK would block erasure.
+    await scoped.hardDelete(leaseResidents, eq(leaseResidents.occupantId, id));
+  }
   await scoped.hardDelete(unitOccupants, eq(unitOccupants.id, id));
   await logAuditEvent({
     userId: actorUserId,

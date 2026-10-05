@@ -1,0 +1,69 @@
+---
+title: "Record a security deposit and its notice"
+description: "Check whether the §83.49 deposit notice is recorded, record one you sent, add a deposit, and record the refund or claim after move-out."
+section: manager
+category: leases
+slug: deposit-notice
+communityTypes: [apartment]
+order: 5
+keywords: ["security deposit", "deposit notice", "written notice", "30 days", "how the deposit is held", "separate account", "interest-bearing", "surety bond", "bank", "refund", "claim", "amount kept", "late notice"]
+relatedArticles: ["adding-a-lease", "move-out-and-holdovers", "transferring-units"]
+upNext: "editing-a-lease"
+statutes: ["§83.49"]
+featureGates: [hasLeaseTracking]
+contextPaths: ["/dashboard/leases"]
+updatedAt: "2026-10-04"
+lastReviewedAt: "2026-09-29"
+---
+
+Each current lease has a deposit record: the amount, how it is held, when the written notice went out, and what happened to the deposit at move-out. PropertyPro does not send the notice. These fields record what you sent.
+
+## Record the deposit notice
+
+<StepByStep>
+<Step title="Open the unit and check the Deposit section">
+Select the unit's row. In the unit panel, **Deposit (§83.49)** shows **Amount**, **How it is held** and **Written notice**. **Written notice** says **Not sent**, or **Sent** with the date. If the notice was recorded more than 30 days after the deposit was received, it adds **(late)**. While the notice is unsent, the top of the panel says **Deposit notice is due by** and the date. Once that date has passed, it says **Deposit notice was due by**, in amber.
+</Step>
+
+<Step title="Select Deposit">
+**Deposit** is with the other buttons near the top of the panel. The **Deposit** dialog lists each deposit on the lease, with the amount, the date it was received, how it is held, and **Notice due by** or **Notice sent** with the date.
+</Step>
+
+<Step title="Choose Notice or how it is held">
+Under **What do you want to record?**, choose **Notice or how it is held**. Enter the date in **Notice sent on**. The hint shows when it was due. If the date is after the deadline, a warning says the deposit records it as sent late. You can also change **How the deposit is held** and **Bank name and Florida address** here.
+</Step>
+
+<Step title="Select Save">
+A confirmation says **Deposit details updated for Unit 101.** In the panel, **Written notice** changes to **Sent** with the date, and the due-date message goes away.
+</Step>
+</StepByStep>
+
+**Deposit** is in three places in the unit panel:
+
+- with the buttons near the top, for the lease in effect today;
+- under the **Upcoming lease** or **Signed renewal** section, for a lease that has not started;
+- next to each lease in **Lease history**, for leases that have ended or were cancelled.
+
+A renewal keeps the deposit of the lease it renews unless the offer changed the amount. The **Deposit (§83.49)** section then shows that deposit, and **Deposit** opens its record.
+
+## Record a deposit that is not on file
+
+Use this for a deposit taken before you used PropertyPro, or for a changed amount. In the **Deposit** dialog, choose **Record a deposit** (it is the only option when no deposit is on file). Enter **Amount**, **Received on** and **How the deposit is held**, and **Bank name and Florida address** unless it is a surety bond. If the notice already went out on paper or from another system, enter **Notice already sent on**. Otherwise leave it blank. Select **Record deposit**. A confirmation shows the amount, for example **$1,300.00 deposit recorded for Unit 101.**
+
+A changed amount is recorded as a new deposit, and the 30-day notice starts again from its **Received on** date.
+
+## After move-out: record the refund or claim
+
+Once the resident's last day has arrived, the **Deposit** dialog opens on **Refund or claim**. On the last day itself, use **Deposit** with the buttons near the top of the panel. After that, the lease is in **Lease history**: select **Deposit** next to it. A note in the dialog shows the two deadlines, counted from the last day. A cancelled lease's deposit also opens on **Refund or claim**.
+
+**Refund or claim** is offered only after a move-out date is recorded. For a holdover, [record the move-out](help:move-out-and-holdovers) first.
+
+1. Under **What happened to the $1,300.00 deposit?** (it shows the amount), choose **Refunded in full** or **Claim sent**.
+2. Enter **Refunded on** or **Claim sent on**. For a claim, also enter **Amount kept**. It can't be more than the deposit.
+3. Select **Record**. A confirmation says **Deposit refund recorded** or **Deposit claim recorded**, with **Undo**.
+
+When residents [transfer to another unit](help:transferring-units) and the deposit is carried over, no refund or claim is due for the old unit, and its panel says so. If the deposit was not carried over, the old unit's panel shows the refund and claim dates instead.
+
+<Callout type="florida-statute" title="Florida Statute §83.49">
+The page uses these dates from §83.49: the written notice of how and where the deposit is held is due 30 days after it is received (§83.49(2)). After move-out, the deposit is refunded in full within 15 days, or a written claim is sent by certified mail within 30 days (§83.49(3)). The hint under **How the deposit is held** in the **New lease** dialog says Florida law requires one of its three options (§83.49): a separate account that is non-interest-bearing, a separate account that is interest-bearing, or a surety bond.
+</Callout>

@@ -65,6 +65,19 @@ export const communities = pgTable('communities', {
        * `@propertypro/shared` access-policies via `DocumentAccessContext`.
        */
       tenantsCanViewInspectionReports?: boolean;
+      /**
+       * Leases v3: expiry alert windows in days, ascending (e.g. [30, 60, 90]).
+       * Absent = [30, 60, 90]. Edited by the root manager from the Leases page.
+       */
+      leaseAlertWindows?: number[];
+      /**
+       * Leases v3 (E11): allow a lease to name residents who have no email and
+       * no login (household members in `unit_occupants`; notices go by mail or hand).
+       * Read with a strict `=== true`, so absent means off — a community keeps
+       * today's "every resident is a user" behaviour until someone opts in.
+       * The client has not decided yet; this is the switch that defers it.
+       */
+      leasesAllowResidentsWithoutEmail?: boolean;
       // ── Legal gates ────────────────────────────────────────────────────────
       //
       // Per-community kill switches for features that carry statutory or

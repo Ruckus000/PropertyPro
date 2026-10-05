@@ -38,6 +38,7 @@ import {
   unitsListContract,
   unitsUpdateContract,
 } from './contract';
+import { apartmentOccupancyByUnit, type DerivedOccupancy } from '@/lib/leases/apartment-occupancy';
 
 function normalizeRentAmount(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
@@ -54,11 +55,17 @@ function requireApartmentCommunityForRent(communityType: string): void {
 }
 
 function assertOccupancyAllowed(occupancy: string | null | undefined, communityType: string): void {
-  // Apartments have no owners on file (residents POST rejects them), so an
-  // owner-occupied apartment unit is a contradiction, not a preference.
-  if (occupancy === 'owner_occupied' && communityType === 'apartment') {
-    throw new ValidationError('Apartment units cannot be owner-occupied');
+  // Leases v3: an apartment unit's occupancy is derived from its leases
+  // (lib/leases/apartment-occupancy), so a manual value — even null — is
+  // refused rather than stored and silently ignored.
+  if (occupancy !== undefined && communityType === 'apartment') {
+    throw new ValidationError('Occupancy for apartments comes from leases');
   }
+}
+
+/** Where a unit's occupancy comes from: the manager (condo, HOA) or its leases (apartment). */
+function occupancySourceFor(communityType: string): 'manual' | 'leases' {
+  return communityType === 'apartment' ? 'leases' : 'manual';
 }
 
 /**
@@ -75,7 +82,10 @@ function mapUnitRow(
   row: Record<string, unknown>,
   includeManagerFields: boolean,
   openViolations: ReadonlyMap<number, number> | null,
+  /** Apartments: occupancy derived from leases, which replaces the stored column. */
+  derivedOccupancy: ReadonlyMap<number, DerivedOccupancy> | null = null,
 ) {
+  const derived = derivedOccupancy !== null;
   return {
     id: row['id'] as number,
     communityId: row['communityId'] as number,
@@ -87,8 +97,20 @@ function mapUnitRow(
     sqft: (row['sqft'] as number | null) ?? null,
     rentAmount: includeManagerFields ? ((row['rentAmount'] as string | null) ?? null) : null,
     ownerUserId: includeManagerFields ? ((row['ownerUserId'] as string | null) ?? null) : null,
-    occupancy: includeManagerFields ? ((row['occupancy'] as string | null) ?? null) : null,
-    occupancyConfirmed: includeManagerFields ? row['occupancyConfirmedAt'] != null : false,
+    occupancy: !includeManagerFields
+      ? null
+      : derived
+        ? (derivedOccupancy.get(row['id'] as number) ?? null)
+        : ((row['occupancy'] as string | null) ?? null),
+    // A derived value needs no confirming.
+    occupancyConfirmed: includeManagerFields ? derived || row['occupancyConfirmedAt'] != null : false,
+    occupancySource: derived ? ('leases' as const) : ('manual' as const),
+    // Leases v3 (E7): out-of-service state. Manager-only like rent — the note
+    // can say why a unit is empty.
+    offlineReason: includeManagerFields ? ((row['offlineReason'] as string | null) ?? null) : null,
+    offlineNote: includeManagerFields ? ((row['offlineNote'] as string | null) ?? null) : null,
+    offlineSince: includeManagerFields ? ((row['offlineSince'] as string | null) ?? null) : null,
+    offlineUntil: includeManagerFields ? ((row['offlineUntil'] as string | null) ?? null) : null,
     /** Open violations; null when the viewer may not see them (or the feature is off). */
     openViolations: openViolations ? (openViolations.get(row['id'] as number) ?? 0) : null,
     createdAt: row['createdAt'] as string,
@@ -114,8 +136,16 @@ export const GET = withErrorHandler(
     const violationsOn =
       includeManagerFields && (await requireViolationsEnabled(membership).then(() => true, () => false));
     const openViolations = violationsOn ? await countOpenViolationsByUnit(scoped) : null;
+    // Apartments: one extra (status = active) lease read, managers only — a
+    // non-manager gets no occupancy either way.
+    const derivedOccupancy =
+      occupancySourceFor(membership.communityType) === 'leases'
+        ? includeManagerFields
+          ? await apartmentOccupancyByUnit(communityId, rows as Record<string, unknown>[], membership.timezone)
+          : new Map<number, DerivedOccupancy>()
+        : null;
     return (rows as Record<string, unknown>[]).map((row) =>
-      mapUnitRow(row, includeManagerFields, openViolations),
+      mapUnitRow(row, includeManagerFields, openViolations, derivedOccupancy),
     );
   }),
 );
@@ -180,8 +210,10 @@ export const POST = withErrorHandler(
       sqft: sqft ?? null,
       rentAmount: rentAmount ?? null,
       ownerUserId: null,
-      occupancy: occupancy ?? null,
-      occupancyConfirmed: Boolean(occupancy),
+      // A new apartment unit has no lease yet: vacant.
+      ...(occupancySourceFor(membership.communityType) === 'leases'
+        ? { occupancy: 'vacant', occupancyConfirmed: true, occupancySource: 'leases' as const }
+        : { occupancy: occupancy ?? null, occupancyConfirmed: Boolean(occupancy), occupancySource: 'manual' as const }),
       createdAt: newUnit['createdAt'] as string,
       updatedAt: newUnit['updatedAt'] as string,
     };
@@ -271,6 +303,11 @@ export const PATCH = withErrorHandler(
       newValues,
     });
 
+    const derivedOccupancy =
+      occupancySourceFor(membership.communityType) === 'leases'
+        ? (await apartmentOccupancyByUnit(communityId, [existing], membership.timezone, unitId)).get(unitId) ?? null
+        : undefined;
+
     return {
       id: unitId,
       communityId,
@@ -281,9 +318,14 @@ export const PATCH = withErrorHandler(
       bathrooms: bathrooms !== undefined ? (bathrooms ?? null) : (existing['bathrooms'] as number | null),
       sqft: sqft !== undefined ? (sqft ?? null) : (existing['sqft'] as number | null),
       rentAmount: rentAmount !== undefined ? (rentAmount ?? null) : (existing['rentAmount'] as string | null),
-      occupancy: occupancy !== undefined ? (occupancy ?? null) : ((existing['occupancy'] as string | null) ?? null),
-      occupancyConfirmed:
-        occupancy !== undefined ? occupancy !== null : existing['occupancyConfirmedAt'] != null,
+      ...(derivedOccupancy !== undefined
+        ? { occupancy: derivedOccupancy, occupancyConfirmed: true, occupancySource: 'leases' as const }
+        : {
+            occupancy: occupancy !== undefined ? (occupancy ?? null) : ((existing['occupancy'] as string | null) ?? null),
+            occupancyConfirmed:
+              occupancy !== undefined ? occupancy !== null : existing['occupancyConfirmedAt'] != null,
+            occupancySource: 'manual' as const,
+          }),
       updatedAt: updated['updatedAt'] as string,
     };
   }),

@@ -96,7 +96,10 @@ BEGIN
     'platform_admin_preferences', 'platform_admin_push_subscriptions',
     -- Revoked by migration 0085, which creates it: household members' names,
     -- emails and phones. Sequence handled in the block below.
-    'unit_occupants'
+    'unit_occupants',
+    -- Revoked by migration leases_v3_expand, which creates them: who is on
+    -- each lease, §83.49 deposit records, renewal offers. Sequences below.
+    'lease_residents', 'lease_deposits', 'lease_renewal_offers'
   ]
   LOOP
     IF EXISTS (
@@ -155,7 +158,9 @@ BEGIN
     -- omission here.
     'platform_admin_push_subscriptions_id_seq',
     -- 0085's household-members table.
-    'unit_occupants_id_seq'
+    'unit_occupants_id_seq',
+    -- leases_v3_expand's three tables.
+    'lease_residents_id_seq', 'lease_deposits_id_seq', 'lease_renewal_offers_id_seq'
   ]
   LOOP
     IF EXISTS (

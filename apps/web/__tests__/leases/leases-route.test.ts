@@ -22,6 +22,12 @@ const {
   leasesTableMock,
   unitsTableMock,
   userRolesTableMock,
+  leaseResidentsTableMock,
+  unitOccupantsTableMock,
+  leaseDepositsTableMock,
+  leaseRenewalOffersTableMock,
+  rentObligationsTableMock,
+  communitiesTableMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
@@ -39,6 +45,12 @@ const {
   },
   unitsTableMock: { id: Symbol('units.id') },
   userRolesTableMock: { id: Symbol('user_roles.id') },
+  leaseResidentsTableMock: { id: Symbol('lease_residents.id') },
+  unitOccupantsTableMock: { id: Symbol('unit_occupants.id') },
+  leaseDepositsTableMock: { id: Symbol('lease_deposits.id') },
+  leaseRenewalOffersTableMock: { id: Symbol('lease_renewal_offers.id') },
+  rentObligationsTableMock: { id: Symbol('rent_obligations.id') },
+  communitiesTableMock: { id: Symbol('communities.id') },
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
 }));
@@ -55,6 +67,12 @@ vi.mock('@propertypro/db', () => ({
   leases: leasesTableMock,
   units: unitsTableMock,
   userRoles: userRolesTableMock,
+  leaseResidents: leaseResidentsTableMock,
+  unitOccupants: unitOccupantsTableMock,
+  leaseDeposits: leaseDepositsTableMock,
+  leaseRenewalOffers: leaseRenewalOffersTableMock,
+  rentObligations: rentObligationsTableMock,
+  communities: communitiesTableMock,
 }));
 
 // PAG-04: lease filters run in SQL, so the scoped-client mock must honour the
@@ -63,18 +81,32 @@ vi.mock('@propertypro/db', () => ({
 // assert on directly to pin the SQL shape.
 type PredicateNode =
   | { op: 'eq' | 'lte'; col: string; val: unknown }
-  | { op: 'isNotNull'; col: string }
-  | { op: 'and'; args: PredicateNode[] };
+  | { op: 'isNotNull' | 'isNull'; col: string }
+  | { op: 'inArray'; col: string; vals: unknown[] }
+  | { op: 'sql'; text: string; values: unknown[] }
+  | { op: 'and' | 'or'; args: PredicateNode[] };
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (col: string, val: unknown) => ({ op: 'eq', col, val }),
   lte: (col: string, val: unknown) => ({ op: 'lte', col, val }),
   isNotNull: (col: string) => ({ op: 'isNotNull', col }),
+  isNull: (col: string) => ({ op: 'isNull', col }),
+  inArray: (col: string, vals: unknown[]) => ({ op: 'inArray', col, vals }),
+  // Leases v3 raw fragments: the co-tenant half of the party scope (a
+  // lease_residents subquery — no fixture here has those rows, so it matches
+  // nothing) and the expiring list's "no signed renewal" NOT EXISTS.
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ op: 'sql', text: strings.join('?'), values }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
+  or: (...args: unknown[]) => ({ op: 'or', args }),
   desc: (col: string) => ({ dir: 'desc', col }),
+  asc: (col: string) => ({ dir: 'asc', col }),
 }));
 
-function evalPredicate(node: PredicateNode | undefined, row: Record<string, unknown>): boolean {
+function evalPredicate(
+  node: PredicateNode | undefined,
+  row: Record<string, unknown>,
+  rows: Array<Record<string, unknown>> = [],
+): boolean {
   if (!node) return true;
   switch (node.op) {
     case 'eq':
@@ -83,8 +115,19 @@ function evalPredicate(node: PredicateNode | undefined, row: Record<string, unkn
       return row[node.col] !== null && row[node.col] !== undefined && String(row[node.col]) <= String(node.val);
     case 'isNotNull':
       return row[node.col] !== null && row[node.col] !== undefined;
+    case 'isNull':
+      return row[node.col] === null || row[node.col] === undefined;
+    case 'inArray':
+      return node.vals.includes(row[node.col]);
+    case 'sql':
+      if (node.text.includes('previous_lease_id')) {
+        return !rows.some((r) => r['previousLeaseId'] === row['id'] && r['status'] === 'active');
+      }
+      return false;
     case 'and':
-      return node.args.every((arg) => evalPredicate(arg, row));
+      return node.args.every((arg) => evalPredicate(arg, row, rows));
+    case 'or':
+      return node.args.some((arg) => evalPredicate(arg, row, rows));
   }
 }
 
@@ -141,9 +184,8 @@ function makeDefaultScopedClient(overrides: Record<string, unknown> = {}) {
           return queryImpl(table)
             .then((rows: unknown[]) => {
               if (table !== leasesTableMock) return rows;
-              let out = (rows as Array<Record<string, unknown>>).filter((row) =>
-                evalPredicate(where, row),
-              );
+              const all = rows as Array<Record<string, unknown>>;
+              let out = all.filter((row) => evalPredicate(where, row, all));
               if (order !== undefined) {
                 const col = typeof order === 'string' ? order : order.col;
                 const sign = typeof order !== 'string' && order.dir === 'desc' ? -1 : 1;
@@ -781,7 +823,7 @@ describe('p2-37 leases route', () => {
       );
     });
 
-    it('handles renewal: marks previous lease as renewed and links', async () => {
+    it('handles renewal: links to the previous lease and leaves it active until the renewal starts', async () => {
       const query = vi.fn().mockImplementation(async (table: unknown) => {
         if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
         if (table === userRolesTableMock) return [{ userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant', communityId: 42 }];
@@ -820,18 +862,20 @@ describe('p2-37 leases route', () => {
       const res = await POST(req);
       expect(res.status).toBe(200);
 
-      // Previous lease should be marked as renewed
-      expect(update).toHaveBeenCalled();
+      // Leases v3 (audit P0-2): recording a renewal must NOT flip the current
+      // lease to 'renewed'. It stays active — and current — until the renewal
+      // starts; flipping it early also blanked units.rent_amount, whose trigger
+      // only reads active leases.
+      expect(update).not.toHaveBeenCalled();
+      expect(insert).toHaveBeenCalledWith(
+        leasesTableMock,
+        expect.objectContaining({ previousLeaseId: 50, startDate: '2027-01-01' }),
+      );
 
-      // Audit should log both: renewal of previous and creation of new
-      expect(logAuditEventMock).toHaveBeenCalledTimes(2);
-      expect(logAuditEventMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'update',
-          resourceType: 'lease',
-          resourceId: '50',
-          newValues: expect.objectContaining({ status: 'renewed' }),
-        }),
+      // One audit event: the creation. There is no status change to log.
+      expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+      expect(logAuditEventMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ resourceId: '50', newValues: expect.objectContaining({ status: 'renewed' }) }),
       );
       expect(logAuditEventMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1335,7 +1379,12 @@ describe('p2-37 leases route', () => {
     });
 
     it('keeps the non-manager read party-scoped to actorUserId', () => {
-      expect(routeSource).toMatch(/=> l\.residentId === actorUserId/);
+      // Leases v3: "party" = a current lease_residents row naming the ACTOR
+      // (co-tenants included), with the legacy residentId as a fallback. Both
+      // halves must key on actorUserId — the authenticated id — and nothing
+      // the caller sends.
+      expect(routeSource).toMatch(/await listLeaseIdsForParty\(communityId, actorUserId\)/);
+      expect(routeSource).toMatch(/=> partyLeaseIds\.has\(l\.id\) \|\| l\.residentId === actorUserId\)/);
       // And the widening is driven by the resolved role, not anything the
       // caller controls.
       expect(routeSource).toMatch(/const seesAllLeases = isAdminRole\(membership\.role\);/);
@@ -1391,7 +1440,7 @@ describe('p2-37 leases route', () => {
       isUnitOwner: false, displayTitle: 'Resident', communityType: 'apartment' as const,
     };
 
-    it('pushes the non-manager party scope into SQL (resident_id = actor)', async () => {
+    it('pushes the non-manager party scope into SQL (resident_id = actor, or a current lease_residents row)', async () => {
       requireAuthenticatedUserIdMock.mockResolvedValue(ACTOR);
       requireCommunityMembershipMock.mockResolvedValue(residentMembership);
       const client = seed([lease(1), lease(2, { residentId: OTHER })]);
@@ -1401,7 +1450,16 @@ describe('p2-37 leases route', () => {
 
       expect(res.status).toBe(200);
       expect(json.data.map((l) => l.id)).toEqual([1]);
-      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'residentId', val: ACTOR }]);
+      expect(leaseWheres(client)).toEqual([
+        {
+          op: 'or',
+          args: [
+            { op: 'eq', col: 'residentId', val: ACTOR },
+            // co-tenants: the lease_residents subquery, keyed on the same actor
+            { op: 'sql', text: expect.stringContaining('lease_residents'), values: ['id', 42, ACTOR] },
+          ],
+        },
+      ]);
     });
 
     it('applies NO party predicate for the management tier (control)', async () => {
@@ -1495,6 +1553,8 @@ describe('p2-37 leases route', () => {
           { op: 'eq', col: 'status', val: 'active' },
           { op: 'isNotNull', col: 'endDate' },
           { op: 'lte', col: 'endDate', val: '2026-04-09' },
+          // Leases v3: a lease whose renewal is signed is not expiring.
+          expect.objectContaining({ op: 'sql', text: expect.stringContaining('previous_lease_id') }),
         ]);
       } finally {
         vi.useRealTimers();
@@ -1596,10 +1656,19 @@ describe('p2-37 leases route', () => {
         new NextRequest('http://localhost:3000/api/v1/leases?communityId=42&renewal_chain_for=2'),
       );
 
-      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'residentId', val: ACTOR }]);
+      expect(leaseWheres(client)).toEqual([
+        {
+          op: 'or',
+          args: [
+            { op: 'eq', col: 'residentId', val: ACTOR },
+            // co-tenants: the lease_residents subquery, keyed on the same actor
+            { op: 'sql', text: expect.stringContaining('lease_residents'), values: ['id', 42, ACTOR] },
+          ],
+        },
+      ]);
     });
 
-    it('POST reads only the candidate unit for the overlap check, and the previous lease by id', async () => {
+    it('POST reads only the candidate unit for the overlap check (the previous lease is on it)', async () => {
       const client = makeDefaultScopedClient({
         query: vi.fn().mockImplementation(async (table: unknown) => {
           if (table === unitsTableMock) return [{ id: 10, communityId: 42 }];
@@ -1633,10 +1702,9 @@ describe('p2-37 leases route', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(leaseWheres(client)).toEqual([
-        { op: 'eq', col: 'unitId', val: 10 },
-        { op: 'eq', col: 'id', val: 50 },
-      ]);
+      // Leases v3: a renewal is on the same unit, so the previous lease comes
+      // out of the unit read; it is fetched by id only when that read misses it.
+      expect(leaseWheres(client)).toEqual([{ op: 'eq', col: 'unitId', val: 10 }]);
     });
 
     it('PATCH reads only the lease’s unit and its renewal child', async () => {
@@ -1662,7 +1730,15 @@ describe('p2-37 leases route', () => {
       expect(leaseWheres(client)).toEqual([
         { op: 'eq', col: 'id', val: 1 },
         { op: 'eq', col: 'unitId', val: 10 },
-        { op: 'eq', col: 'previousLeaseId', val: 1 },
+        // Leases v3: only an ACTIVE renewal binds the lease's end date; a
+        // cancelled one does not.
+        {
+          op: 'and',
+          args: [
+            { op: 'eq', col: 'previousLeaseId', val: 1 },
+            { op: 'eq', col: 'status', val: 'active' },
+          ],
+        },
       ]);
     });
 

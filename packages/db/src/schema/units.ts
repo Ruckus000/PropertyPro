@@ -3,8 +3,9 @@
  * P2-38: Extended with apartment-specific metadata (bedrooms, bathrooms, sqft, rentAmount).
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, check, date, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
+import { unitOfflineReasonEnum } from './enums';
 import { users } from './users';
 
 export const units = pgTable('units', {
@@ -53,6 +54,16 @@ export const units = pgTable('units', {
    * so day one never presents an inferred value as fact.
    */
   occupancyConfirmedAt: timestamp('occupancy_confirmed_at', { withTimezone: true }),
+  /**
+   * Leases v3 (E7): a unit out of service (storm damage, renovation, model or
+   * staff unit). Offline = `offline_since IS NOT NULL`. An offline unit is
+   * excluded from vacancy, occupancy, New lease and Transfer. `offline_until`
+   * is the expected return date; past it, the UI shows the unit as overdue.
+   */
+  offlineReason: unitOfflineReasonEnum('offline_reason'),
+  offlineNote: text('offline_note'),
+  offlineSince: date('offline_since', { mode: 'string' }),
+  offlineUntil: date('offline_until', { mode: 'string' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -69,4 +80,12 @@ export const units = pgTable('units', {
   uniqueIndex('units_community_unit_number_unique')
     .on(table.communityId, sql`lower(${table.unitNumber})`)
     .where(sql`${table.deletedAt} IS NULL`),
+  check(
+    'units_offline_reason_with_since',
+    sql`(${table.offlineSince} IS NULL) = (${table.offlineReason} IS NULL)`,
+  ),
+  check(
+    'units_offline_until_after_since',
+    sql`${table.offlineUntil} IS NULL OR (${table.offlineSince} IS NOT NULL AND ${table.offlineUntil} >= ${table.offlineSince})`,
+  ),
 ]);

@@ -1,7 +1,8 @@
 /**
  * A smoke test for every screen that renders the shared table.
  *
- * Nine components consume `DataTable` — including the finance ledger and the
+ * Eight components consume `DataTable` (the Leases page left it for its own
+ * roster table in Leases v3) — including the finance ledger and the
  * delinquency table — and before this file not one of them had a test of any
  * kind. They are gathered here rather than split across nine files because each
  * asks the same question of a different screen: given one row, does a row of
@@ -95,36 +96,6 @@ vi.mock('@/hooks/use-denied-visitors', () => ({
   fetchDeniedMatches: async () => [],
 }));
 
-// Not a query hook: it returns a bag, and the default filter maps `leases`
-// straight to `{ kind: 'lease', lease }` rows.
-vi.mock('@/hooks/use-leases', () => ({
-  useEnrichedLeases: () => ({
-    leases: [
-      {
-        id: 1,
-        unitId: 12,
-        unitNumber: '12B',
-        residentName: 'Ada Fisher',
-        startDate: '2026-01-01',
-        endDate: '2026-12-31',
-        rentAmountCents: 210_000,
-        status: 'active',
-      },
-    ],
-    units: [],
-    isLoading: false,
-    isError: false,
-    hasEnrichmentError: false,
-  }),
-  // Reached through the lease dialogs, not the table.
-  useCreateLease: mutation,
-  useUpdateLease: mutation,
-  useLeases: () => query([]),
-  useRenewalChain: () => query([]),
-  useResidentList: () => query([]),
-  LEASE: {},
-}));
-
 vi.mock('@/hooks/use-packages', () => ({
   usePackages: () =>
     query([
@@ -177,14 +148,13 @@ import { DelinquencyTable } from '@/components/finance/delinquency-table';
 import { LedgerTable } from '@/components/finance/ledger-table';
 import { ArcSubmissionsTab } from '@/components/violations/ArcSubmissionsTab';
 import { DeniedVisitorsTab } from '@/components/visitors/DeniedVisitorsTab';
-import { LeaseListPage } from '@/components/leases/LeaseListPage';
 import { PackageStaffView } from '@/components/packages/PackageStaffView';
 import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
 
 /**
  * Every screen renders inside a QueryClientProvider. The data hooks above are
- * mocked, but some of these components still reach React Query directly — the
- * lease list calls `useQueryClient` for invalidation — and a missing provider
+ * mocked, but some of these components still reach React Query directly, and a
+ * missing provider
  * throws before a single row is rendered.
  */
 function render(ui: React.ReactElement) {
@@ -271,11 +241,6 @@ describe('governance and operations', () => {
   it('renders a denied-visitor row', () => {
     render(<DeniedVisitorsTab communityId={1} />);
     expect(screen.getByText('Chris Vaughn')).toBeDefined();
-  });
-
-  it('renders a lease row', () => {
-    render(<LeaseListPage communityId={1} />);
-    expect(screen.getByText('12B')).toBeDefined();
   });
 
   it('renders a package row', () => {

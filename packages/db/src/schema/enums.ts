@@ -34,6 +34,54 @@ export const leaseStatusEnum = pgEnum('lease_status', [
   'expired',
   'renewed',
   'terminated',
+  // Leases v3 (E1): an upcoming lease that never started. The row is kept —
+  // not soft-deleted — because a deposit may already have been collected and
+  // §83.49(3) disposition has to be traceable. Upcoming / Current / Moving out
+  // are DERIVED from dates + move_out_on and are never stored.
+  'cancelled',
+]);
+
+/** Leases v3: how a lease is ending. Drives the Moving-out copy and stepper. */
+export const leaseEndViaEnum = pgEnum('lease_end_via', [
+  'notice',
+  'declined',
+  'early',
+  'transfer',
+  'expiry',
+]);
+
+/** Leases v3: why a lease carries $0 rent. Required by a CHECK when rent is 0. */
+export const leaseZeroRentReasonEnum = pgEnum('lease_zero_rent_reason', [
+  'staff',
+  'courtesy_officer',
+  'rent_free_agreement',
+  'other',
+]);
+
+/** Leases v3: §83.49(1) — how the security deposit is held. */
+export const depositHeldMethodEnum = pgEnum('deposit_held_method', [
+  'separate_noninterest',
+  'separate_interest',
+  'surety_bond',
+]);
+
+/** Leases v3: renewal offer lifecycle. */
+export const renewalOfferStageEnum = pgEnum('renewal_offer_stage', [
+  'offer_sent',
+  'accepted',
+  'declined',
+  'expired',
+  'signed',
+  'withdrawn',
+]);
+
+/** Leases v3 (E7): why a unit is out of service. */
+export const unitOfflineReasonEnum = pgEnum('unit_offline_reason', [
+  'storm_damage',
+  'renovation',
+  'model_unit',
+  'staff_unit',
+  'other',
 ]);
 
 /** Maintenance request lifecycle status (P2-36, extended for P3-50 lifecycle). */

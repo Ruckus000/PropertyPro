@@ -97,7 +97,7 @@ Categories and their order are in `lib/help/category-meta.ts`.
 - `role` is a `/dev/agent-login` persona: `owner`, `tenant`, `board_member` (an owner with a board seat — use it for `boardOnly` shots), `board_president` (a manager), `cam`, `pm_admin`, `site_manager` (apartment), `founding_admin` (HOA root), `root_sunset`, `root_sunsetridge`.
 - Selectors are Playwright selectors (`role=button[name="Upload"]`, `text=Save`, CSS). Prefer roles and visible labels over classes.
 - `clipTo` (one selector or several; the crop is their union plus `pad`, default 16px) keeps images small: the budget is 250KB per file.
-- `actions`: `click`, `fill`, `press`, `waitFor`, `wait` (≤ 10s), `scrollTo`.
+- `actions`: `click`, `fill`, `select` (a native `<select>`), `press`, `waitFor`, `wait` (≤ 10s), `scrollTo`.
 
 Capture:
 

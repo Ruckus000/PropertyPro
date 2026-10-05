@@ -62,6 +62,7 @@ export {
   type ViolationSummaryReport,
   type DelinquencyAgingReport,
 } from './queries/pm-portfolio';
+export { leaseCurrentOnSql, leaseExpiringBetweenSql, leaseHasActiveRenewalSql } from './queries/lease-current';
 
 /**
  * Community picker — cross-community user membership query.
