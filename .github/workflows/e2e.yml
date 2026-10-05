@@ -58,6 +58,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/e2e.yml'
+      - 'scripts/assert-executed-test-floor.ts' # the floor this job asserts
   push:
     branches: [main]
   workflow_dispatch:
@@ -361,96 +362,47 @@ jobs:
       # exists to prevent. The suite's whole history is coverage that reported
       # success while running nothing, so "it exited 0" is not evidence here.
       #
-      # The floor is asserted against the count declared in ci-safe-specs.json —
+      # The floor is asserted against `expectedTestCount` in ci-safe-specs.json —
       # the same file playwright.ci.config.ts reads — so renaming a spec out of
-      # the glob fails loudly instead of quietly shrinking what CI covers.
+      # the glob fails loudly instead of quietly shrinking what CI covers. The
+      # check is the shared TST-06 floor script (also used by the integration
+      # and prod-smoke floors); its header documents the semantics and
+      # scripts/__tests__/assert-executed-test-floor.test.ts pins them:
+      #   - `warmup` tests are excluded from every count, so the warmup test
+      #     cannot make up for a missing spec;
+      #   - FLAKY is counted as executed: it is Playwright's fourth bucket, not
+      #     a subset of expected/unexpected, and with retries: 2 omitting it
+      #     would make one flake trip the floor;
+      #   - --refuse-skips: an allowlisted spec must not self-skip (esign checks
+      #     that its feature and seeded template exist), so ANY skip fails a
+      #     green run and is named;
+      #   - when the specs step already FAILED, the floor only warns. The job is
+      #     red either way, so nothing escapes the count; this just avoids a
+      #     second, misleading red X.
       #
       # Gated on the test step rather than a bare `always()`: the latter also
       # fires when install/migrate/seed failed, adding a misleading second red X
-      # ("no Playwright JSON report") on top of the real cause. It must still
-      # run when the specs FAIL — a failing run cannot escape the count check.
+      # ("no Playwright JSON report") on top of the real cause.
       #
       # `always() &&` is REQUIRED, not noise. A custom `if:` with no status
       # function gets an implicit `success()` ANDed onto it, so the condition
       # below evaluated true and the step was skipped anyway the first time this
       # ran. `always()` restores the intent, and the explicit conclusion test
       # then narrows it back to "the specs actually executed".
-      #
-      # No `working-directory:` — `require("./apps/web/...")` below resolves
-      # against the process cwd, which is the repo root. Adding one would break
-      # the path.
       - name: Assert the specs actually ran
         if: always() && (steps.specs.conclusion == 'success' || steps.specs.conclusion == 'failure')
-        run: |
-          test -f /tmp/playwright-report.json || {
-            echo "::error::no Playwright JSON report — the run did not get far enough to produce one"
-            exit 1
-          }
-          node -e '
-            const report = require("/tmp/playwright-report.json");
-            const stats = report.stats ?? {};
-            const ran = stats.expected ?? 0;
-            const skipped = stats.skipped ?? 0;
-            const failed = stats.unexpected ?? 0;
-            // `flaky` is a FOURTH bucket, not a subset of the others: a test
-            // that fails once and passes on retry lands there and in neither
-            // `expected` nor `unexpected`. With retries: 1, omitting it means a
-            // single flake trips the floor and reports a spec rename that never
-            // happened.
-            const flaky = stats.flaky ?? 0;
-            const allowlist = require("./apps/web/e2e/ci-safe-specs.json");
-            const floor = allowlist.expectedTestCount;
-            // Count from the report TREE, excluding the `warmup` project.
-            // `stats` is whole-run, so it includes the warmup test — counting it
-            // would inflate the total by one and let a genuinely missing spec
-            // hide behind it, defeating the floor.
-            const collectSpecs = (s) => [
-              ...(s.suites ?? []).flatMap(collectSpecs),
-              ...(s.specs ?? []),
-            ];
-            const realTests = (report.suites ?? [])
-              .flatMap(collectSpecs)
-              .flatMap((sp) => sp.tests ?? [])
-              .filter((t) => t.projectName !== "warmup");
-            const collected = realTests.filter((t) => t.status !== "skipped").length;
-            console.log(`expected=${ran} flaky=${flaky} unexpected=${failed} skipped=${skipped} counted(non-warmup, non-skipped)=${collected} floor=${floor}`);
-            if (skipped > 0) {
-              // Name them: an allowlisted spec can still self-skip at runtime
-              // (esign checks that the feature and its seeded template exist),
-              // and "1 skipped" alone sends you looking for a config problem
-              // when the real cause is a half-applied seed.
-              const names = (report.suites ?? []).flatMap(function walk(s) {
-                return [
-                  ...(s.suites ?? []).flatMap(walk),
-                  ...(s.specs ?? []).filter((sp) => (sp.tests ?? []).some((t) => t.status === "skipped")).map((sp) => `${s.title} › ${sp.title}`),
-                ];
-              });
-              console.error(`::error::${skipped} allowlisted test(s) SKIPPED: ${names.join("; ") || "(unnamed)"}. Allowlisted specs must not self-skip — either the stack is incomplete (seed? storage bucket?) or the spec does not belong on the list.`);
-              process.exit(1);
-            }
-            if (collected < floor) {
-              console.error(`::error::only ${collected} test(s) were collected; the allowlist declares ${floor}. A spec was probably renamed out of ci-safe-specs.json.`);
-              process.exit(1);
-            }
-          '
+        env:
+          TESTS_CONCLUSION: ${{ steps.specs.conclusion }}
+        run: >-
+          pnpm exec tsx scripts/assert-executed-test-floor.ts
+          --label e2e
+          --format playwright
+          --exclude-project warmup
+          --refuse-skips
+          --report /tmp/playwright-report.json
+          --floor-file apps/web/e2e/ci-safe-specs.json
+          --floor-key expectedTestCount
 
-      # SAFE BECAUSE THE STACK IS DISPOSABLE, NOT BECAUSE ANYTHING IS FILTERED.
-      #
-      # `::add-mask::` redacts log output only — it has NO effect on file
-      # contents. With `retries: 1` and `trace: 'on-first-retry'`, any flaky
-      # spec writes a trace zip capturing full request headers, cookies and
-      # localStorage: real session JWTs and the anon-key header. On a public
-      # repo, artifacts are world-downloadable for their retention window.
-      #
-      # That is fine here only because every value in them is scoped to a
-      # container destroyed by the last step of this job, signed by the Supabase
-      # CLI's published local-dev secret, over `127.0.0.1`, against seeded
-      # fixtures. No production credential is reachable from this job at all.
-      #
-      # So: if you ever give this job a REAL secret, you must add a redaction step
-      # before this upload, the way stripe-e2e.yml does for its live `whsec_`.
-      # There is nothing guarding this path today. (support-access, #958, did
-      # NOT need one — its secret is generated per run like the rest.)
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
