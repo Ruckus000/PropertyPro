@@ -1,6 +1,7 @@
 /**
- * The TST-06 executed-test floor (scripts/assert-vitest-executed-floor.ts),
- * which CI runs after each integration suite. Each case below is a branch the
+ * The TST-06 executed-test floor (scripts/assert-executed-test-floor.ts),
+ * which CI runs after each integration suite (vitest) and each e2e suite
+ * (Playwright). Each case below is a branch the
  * workflow depends on: a mass skip must fail a green run, a red run must not get
  * a second red X, and a floor that reads `null` must never pass as armed.
  */
@@ -10,11 +11,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { evaluateFloor, type FloorInput, type ReportInput } from '../assert-vitest-executed-floor';
+import { evaluateFloor, type FloorInput, type ReportInput } from '../assert-executed-test-floor';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
-const script = join(repoRoot, 'scripts', 'assert-vitest-executed-floor.ts');
+const script = join(repoRoot, 'scripts', 'assert-executed-test-floor.ts');
 const tsxBin = join(repoRoot, 'node_modules', '.bin', 'tsx');
 
 const FLOOR = 491;
@@ -135,6 +136,111 @@ describe('evaluateFloor — a floor that is not armed is a config fault, refused
   });
 });
 
+/** A Playwright JSON report: nested suites → specs → per-project tests. */
+function pwReport(tests: { status: string; projectName?: string; title?: string }[]): string {
+  return JSON.stringify({
+    suites: [
+      {
+        title: 'admin-shell.spec.ts',
+        file: 'admin-shell.spec.ts',
+        suites: [
+          {
+            title: 'Admin shell',
+            specs: tests.map((t, i) => ({
+              title: t.title ?? `case ${i}`,
+              file: 'admin-shell.spec.ts',
+              tests: [{ projectName: t.projectName ?? 'chromium', status: t.status }],
+            })),
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function runPw(
+  r: ReportInput,
+  conclusion: string,
+  floorValue: number,
+  opts: { excludeProjects?: string[]; refuseSkips?: boolean } = {},
+) {
+  return evaluateFloor({
+    label: 'e2e',
+    floorFile: 'ci-safe-specs.json',
+    floor: { value: floorValue },
+    reportPath: '/tmp/pw.json',
+    report: r,
+    testsConclusion: conclusion,
+    format: 'playwright',
+    floorKey: 'expectedTestCount',
+    ...opts,
+  });
+}
+
+const many = (n: number, status: string) => Array.from({ length: n }, () => ({ status }));
+
+describe('evaluateFloor — Playwright reports', () => {
+  it('counts expected + unexpected + FLAKY as executed (flaky is a separate fourth bucket)', () => {
+    const r = runPw(pwReport([...many(57, 'expected'), ...many(1, 'unexpected'), ...many(1, 'flaky')]), 'success', 59);
+    expect(r.exitCode).toBe(0);
+    expect(r.out).toEqual([
+      'e2e floor [e2e]: executed=59 collected=59 expected=57 unexpected=1 flaky=1 skipped=0 floor=59',
+    ]);
+  });
+
+  it('excludes the warmup project from every count, so it cannot hide a missing spec', () => {
+    const tests = [...many(58, 'expected'), { status: 'expected', projectName: 'warmup' }];
+    const counted = runPw(pwReport(tests), 'success', 59, { excludeProjects: ['warmup'] });
+    expect(counted.exitCode).toBe(1);
+    expect(counted.out[0]).toContain('executed=58 collected=58');
+    // Control: without the exclusion the warmup test would make up the shortfall.
+    expect(runPw(pwReport(tests), 'success', 59).exitCode).toBe(0);
+  });
+
+  it('refuses a skip with --refuse-skips, naming the spec', () => {
+    const r = runPw(pwReport([...many(59, 'expected'), { status: 'skipped', title: 'esign template' }]), 'success', 59, {
+      refuseSkips: true,
+    });
+    expect(r.exitCode).toBe(1);
+    expect(errors(r)[0]).toContain('1 test(s) NOT executed');
+    expect(errors(r)[0]).toContain('admin-shell.spec.ts :: Admin shell › esign template');
+    expect(errors(r)[0]).toContain('must not self-skip');
+  });
+
+  it('only warns about a skip without --refuse-skips', () => {
+    const r = runPw(pwReport([...many(59, 'expected'), ...many(1, 'skipped')]), 'success', 59);
+    expect(r.exitCode).toBe(0);
+    expect(warnings(r)[0]).toContain('1 test(s) NOT executed');
+  });
+
+  it('refuses below the floor (a spec renamed out of the allowlist)', () => {
+    const r = runPw(pwReport(many(56, 'expected')), 'success', 59);
+    expect(r.exitCode).toBe(1);
+    expect(errors(r)[0]).toContain('executed=56 is BELOW the floor 59 in ci-safe-specs.json');
+  });
+
+  it('stands down on a red run, even for a refused skip', () => {
+    const r = runPw(pwReport([...many(10, 'unexpected'), ...many(1, 'skipped')]), 'failure', 59, { refuseSkips: true });
+    expect(r.exitCode).toBe(0);
+    expect(errors(r)).toEqual([]);
+  });
+
+  it('names the floor key it read when the floor is not armed', () => {
+    const r = evaluateFloor({
+      label: 'e2e',
+      floorFile: 'ci-safe-specs.json',
+      floor: { value: undefined },
+      reportPath: '/tmp/pw.json',
+      report: pwReport(many(59, 'expected')),
+      testsConclusion: 'success',
+      format: 'playwright',
+      floorKey: 'expectedTestCount',
+    });
+    expect(r.exitCode).toBe(1);
+    expect(errors(r)[0]).toContain('expectedTestCount in ci-safe-specs.json is undefined');
+  });
+});
+
 describe('CLI', () => {
   let dir: string | undefined;
   afterEach(() => {
@@ -168,6 +274,30 @@ describe('CLI', () => {
     const result = cli(report(6), 6);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('executed=6');
+  });
+
+  it('reads --floor-key and Playwright options from the command line', () => {
+    dir = mkdtempSync(join(tmpdir(), 'floor-cli-'));
+    const reportPath = join(dir, 'pw.json');
+    const floorPath = join(dir, 'specs.json');
+    writeFileSync(reportPath, pwReport([...many(3, 'expected'), { status: 'expected', projectName: 'warmup' }]));
+    writeFileSync(floorPath, JSON.stringify({ expectedTestCount: 3, specs: [] }));
+    const result = spawnSync(
+      tsxBin,
+      [script, '--label', 'cli-e2e', '--format', 'playwright', '--exclude-project', 'warmup', '--refuse-skips',
+        '--floor-key', 'expectedTestCount', '--report', reportPath, '--floor-file', floorPath],
+      { encoding: 'utf8', env: { ...process.env, TESTS_CONCLUSION: 'success' } },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('e2e floor [cli-e2e]: executed=3 collected=3');
+  });
+
+  it('exits 2 on an unknown --format', () => {
+    const result = spawnSync(tsxBin, [script, '--label', 'x', '--report', 'r', '--floor-file', 'f', '--format', 'junit'], {
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--format must be vitest or playwright');
   });
 
   it('exits 2 when a required argument is missing', () => {

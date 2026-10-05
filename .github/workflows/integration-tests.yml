@@ -13,7 +13,7 @@
 #
 # EXECUTED-COUNT FLOORS (TST-06) — ARMED. Each suite's run step also emits a
 # vitest JSON report, and an assert step after it runs
-# scripts/assert-vitest-executed-floor.ts, which counts EXECUTED tests and FAILS
+# scripts/assert-executed-test-floor.ts, which counts EXECUTED tests and FAILS
 # the job when that is below the suite's `expectedExecutedCount`:
 #   - apps/web:    apps/web/__tests__/integration/ci-integration-floor.json (491)
 #   - packages/db: packages/db/__tests__/ci-integration-floor.json (272)
@@ -30,7 +30,7 @@
 # nothing. Only counting executed tests catches it. The ordering rule (a real
 # failure outranks the floor), the refusals and the vitest bucket mapping are
 # documented in the script's header and pinned by
-# scripts/__tests__/assert-vitest-executed-floor.test.ts.
+# scripts/__tests__/assert-executed-test-floor.test.ts.
 
 name: Integration Tests
 
@@ -210,7 +210,7 @@ jobs:
         env:
           TESTS_CONCLUSION: ${{ steps.tests.conclusion }}
         run: >-
-          pnpm exec tsx scripts/assert-vitest-executed-floor.ts
+          pnpm exec tsx scripts/assert-executed-test-floor.ts
           --label apps/web
           --report /tmp/vitest-integration.json
           --floor-file apps/web/__tests__/integration/ci-integration-floor.json
@@ -256,7 +256,7 @@ jobs:
         env:
           TESTS_CONCLUSION: ${{ steps.db-tests.conclusion }}
         run: >-
-          pnpm exec tsx scripts/assert-vitest-executed-floor.ts
+          pnpm exec tsx scripts/assert-executed-test-floor.ts
           --label packages/db
           --report /tmp/vitest-db-integration.json
           --floor-file packages/db/__tests__/ci-integration-floor.json

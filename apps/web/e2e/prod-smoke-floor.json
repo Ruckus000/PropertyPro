@@ -1,0 +1,8 @@
+{
+  "expectedExecutedCount": 11,
+  "measuredAt": "2026-10-05T02:10:19Z",
+  "note": "TST-06 executed-test floor for the production-build smoke in ci.yml's perf-check job (a REQUIRED check). The specs are PROD_SAFE_SPECS in apps/web/playwright.prod.config.ts. The value is the count PRINTED by the green main CI run below ('Running 11 tests using 2 workers' / '11 passed'); green main CI run 37253090818 (f0a9d094) printed the same. Asserted by scripts/assert-executed-test-floor.ts --format playwright --refuse-skips: any skip fails a green run, and executed counts expected + unexpected + flaky (retries: 2 in CI). Never set it from a local run. Raise it when specs are added to PROD_SAFE_SPECS (after a green CI run prints the new count); lower it only in the PR that removes tests.",
+  "observedRunUrl": "https://github.com/Ruckus000/PropertyPro/actions/runs/37254325227",
+  "observedCommitSha": "56b23fad0321a01ceb5fbfb0f8e4a8da45c2d3c5",
+  "observedSkips": "0"
+}
