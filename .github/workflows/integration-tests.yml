@@ -283,46 +283,28 @@ jobs:
           '
 
       - name: Run packages/db integration tests
-        # packages/db has its own integration config that no workflow ever
-        # invoked until the RLS suite was added here as a named-file list —
-        # and every file left off that list rotted unseen (document-access
-        # asserted on the retired `cam` role and stayed red on main). So this
-        # step now runs the WHOLE config and DENYLISTS the known-red files, the
-        # same fail-safe shape as `paths-ignore` above: a new
-        # packages/db/__tests__/*.integration.test.ts runs here by default
-        # instead of silently running nowhere. DATABASE_URL and DIRECT_URL are
-        # already set at job level, which the suite requires to not skip itself.
+        # packages/db has its own integration config. This step used to run a
+        # named-file list of it, and every file left off that list rotted unseen
+        # (document-access asserted on the retired `cam` role; six more broke
+        # on fixture and schema drift). It now runs the WHOLE config, with no
+        # file list and no denylist, so a new
+        # packages/db/__tests__/*.integration.test.ts runs here by default.
+        # Do not reintroduce an --exclude to make this green; fix the file.
+        # DATABASE_URL and DIRECT_URL are already set at job level, which the
+        # suite requires to not skip itself.
         #
         # What this covers that nothing else does: rls-policies (tenant
         # isolation at the DATABASE layer, not just the app layer),
         # pipeline-and-transactions (pins patches/postgres@3.4.8.patch, whose
-        # loss would make every db.transaction throw UNSAFE_TRANSACTION),
-        # seed-resident-units / seed-community-counts (INF-03 seed safety net),
-        # document-access / document-search / documents-tenant-isolation, the
-        # scoped client, and pagination.
+        # loss would make every db.transaction throw UNSAFE_TRANSACTION), the
+        # compliance_audit_log append-only trigger, the demo seed/reset and
+        # seed-community safety nets (Supabase Storage is an in-process HTTP
+        # double, __tests__/helpers/supabase-http-double.ts), document access,
+        # the scoped client, pagination and the PM portfolio query.
         #
-        # Excluded — each is red on this vanilla-Postgres harness for its own
-        # pre-existing reason (measured 2026-10-04 against the same stub +
-        # migrations via scripts/local-test-db.sh). Shrink this list; never
-        # grow it to hide a new failure:
-        #   - seed-demo, reset-demo: import apps/web services whose `@/` alias
-        #     packages/db's vitest config does not resolve
-        #     (`Cannot find package '@/lib/operations/routes'`).
-        #   - schema-gate0, audit-log-append-only-db: need an environment this
-        #     job does not provide (the latter throws "DIRECT_URL or
-        #     DATABASE_URL is required" from its own gate).
-        #
-        # Removed from this list:
-        #   - pm-portfolio-unsafe (stale fixtures, not an access bug — its
-        #     "no PM role" user really held property_manager, and its
-        #     site_blocks rows predated 0048's NOT NULL page_id).
-        #   - reconcile-auth-user-id (teardown-only harness bug: `drizzle()`
-        #     over a postgres.js `sql.begin` transaction, which has no
-        #     `options`; every test body already passed).
+        # Expected skips (env-gated, measured 2026-10-04): seed-demo's
+        # Stripe-linkage case (no STRIPE_SECRET_KEY), one invitation-flow case,
+        # and supabase-storage (both need real Supabase).
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
-          --exclude '__tests__/audit-log-append-only-db.integration.test.ts'
-          --exclude '__tests__/reset-demo.integration.test.ts'
-          --exclude '__tests__/schema-gate0.integration.test.ts'
-          --exclude '__tests__/seed-demo.integration.test.ts'
