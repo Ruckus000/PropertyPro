@@ -186,15 +186,28 @@ assert_no_app_env_files() {
 # made publishing impossible in this sandbox on macOS. Pass that ONE variable
 # through: a browser path is not a credential, so this does not weaken what
 # `env -i` exists to prevent. Sets `pdf_browser` (empty = use the bundled binary).
+#
+# An override that is set but not an executable file (a stale export after the
+# browser was uninstalled) is refused only with `--strict`, which `web` uses: it
+# is the one process that renders PDFs. Everything else that goes through
+# run_sandbox_command (`exec`, `admin`, and prepare's build/migrate/seed) warns
+# once and ignores the override instead of refusing work that never renders a PDF.
+pdf_browser_warned=''
 resolve_pdf_browser() {
   pdf_browser=''
   local requested="${PUPPETEER_EXECUTABLE_PATH:-}"
   if [[ -n "${requested//[[:space:]]/}" ]]; then
-    [[ -f "$requested" && -x "$requested" ]] || {
-      echo "PUPPETEER_EXECUTABLE_PATH is not an executable file: '$requested'" >&2; exit 64;
-    }
-    pdf_browser="$requested"
-    return 0
+    if [[ -f "$requested" && -x "$requested" ]]; then
+      pdf_browser="$requested"
+      return 0
+    fi
+    if [[ "${1:-}" == --strict ]]; then
+      echo "PUPPETEER_EXECUTABLE_PATH is not an executable file: '$requested'" >&2; exit 64
+    fi
+    if [[ -z "$pdf_browser_warned" ]]; then
+      echo "WARNING: ignoring PUPPETEER_EXECUTABLE_PATH (not an executable file: '$requested'); PDF publishing falls back to auto-detection." >&2
+      pdf_browser_warned=1
+    fi
   fi
   [[ "$(uname -s)" == Darwin ]] || return 0
   local candidate
@@ -301,7 +314,7 @@ case "${1:-}" in
   status) status ;;
   stop) stop ;;
   exec) shift; prepare >/dev/null; run_sandbox_command "$repo_root" "$@" ;;
-  web) prepare; assert_no_app_env_files "$repo_root/apps/web"; resolve_pdf_browser; report_pdf_browser; run_sandbox_command "$repo_root/apps/web" pnpm --dir "$repo_root" --filter @propertypro/web exec next dev --turbopack --port "$web_port" --hostname 127.0.0.1 ;;
+  web) resolve_pdf_browser --strict; prepare; assert_no_app_env_files "$repo_root/apps/web"; report_pdf_browser; run_sandbox_command "$repo_root/apps/web" pnpm --dir "$repo_root" --filter @propertypro/web exec next dev --turbopack --port "$web_port" --hostname 127.0.0.1 ;;
   admin) prepare; assert_no_app_env_files "$repo_root/apps/admin"; run_sandbox_command "$repo_root/apps/admin" pnpm --dir "$repo_root" --filter @propertypro/admin exec next dev --turbopack --port "$admin_port" --hostname 127.0.0.1 ;;
   *) usage >&2; exit 64 ;;
 esac
