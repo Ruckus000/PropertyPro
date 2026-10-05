@@ -1,0 +1,38 @@
+{
+  "section": "manager",
+  "category": "website",
+  "slug": "website-pages",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "pg-panel",
+      "kind": "still",
+      "route": "/pm/website-editor?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "[data-testid=\"site-editor-tool-pages\"]"
+        },
+        {
+          "type": "click",
+          "selector": "[data-testid=\"site-editor-tool-pages\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=list[name=\"Site pages\"]"
+        }
+      ],
+      "clipTo": [
+        "#site-editor-tool-panel-title",
+        "role=button[name=\"Add a page\"]"
+      ],
+      "highlight": "role=list[name=\"Site pages\"]",
+      "step": 3
+    }
+  ]
+}

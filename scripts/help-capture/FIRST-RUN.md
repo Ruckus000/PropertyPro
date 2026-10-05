@@ -56,6 +56,13 @@ thread (`fr-list`), reserve assets (`rv-list`), a storm report (`st-list`), a
 condo maintenance request (`wo-inbox`, `mr-list`) and a wind-mitigation report
 (`ins-wind`). The demo seed itself is unchanged.
 
+For the website editor shots it also adds Sunset Condos' starter sections (the
+seed builds no website, but every real new community gets them) and saves free
+edit as `cam`'s editor mode, since the never-published site would otherwise open
+the first-run chooser over every shot. Run the fixtures before anyone opens the
+editor: the first visit creates an unpublished Home page, and the starter
+sections then land on a page marked Draft.
+
 ## Date-sensitive fills
 
 - `vi-hear` fills `2026-10-08` (must be within 14 days of capture for the
