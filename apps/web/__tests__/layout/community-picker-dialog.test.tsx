@@ -154,12 +154,9 @@ describe('community avatars', () => {
     renderDialog((id) => `/documents?communityId=${id}`);
 
     const sunset = screen.getByRole('link', { name: /Sunset Condos/ });
-    expect(sunset.querySelector('[data-testid="community-avatar-logo"]')).toHaveAttribute(
-      'src',
-      'https://cdn/sunset.png',
-    );
+    expect(sunset.querySelector('img')).toHaveAttribute('src', 'https://cdn/sunset.png');
     const palm = screen.getByRole('link', { name: /Palm Shores HOA/ });
-    expect(palm.querySelector('[data-testid="community-avatar-logo"]')).toBeNull();
-    expect(palm.querySelector('[data-testid="community-avatar-initial"]')).toHaveTextContent('P');
+    expect(palm.querySelector('img')).toBeNull();
+    expect(palm.querySelector('span[aria-hidden="true"]')).toHaveTextContent('P');
   });
 });

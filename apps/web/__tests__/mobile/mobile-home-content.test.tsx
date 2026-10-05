@@ -85,12 +85,12 @@ describe('MobileHomeContent — the community logo', () => {
 
   it('shows the square logo beside the community name', () => {
     render(<MobileHomeContent {...props} logoUrl="https://storage/signed-logo" />);
-    expect(screen.getByTestId('mobile-home-logo')).toHaveAttribute('src', 'https://storage/signed-logo');
+    expect(document.querySelector('img[src="https://storage/signed-logo"]')).not.toBeNull();
     expect(screen.getByRole('heading', { name: 'Palm Gardens' })).toBeInTheDocument();
   });
 
   it('renders as before when the community has no logo', () => {
-    render(<MobileHomeContent {...props} />);
-    expect(screen.queryByTestId('mobile-home-logo')).not.toBeInTheDocument();
+    const { container } = render(<MobileHomeContent {...props} />);
+    expect(container.querySelector('img')).toBeNull();
   });
 });

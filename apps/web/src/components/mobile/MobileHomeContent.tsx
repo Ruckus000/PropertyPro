@@ -76,7 +76,6 @@ export function MobileHomeContent({
                 <img
                   src={logoUrl}
                   alt=""
-                  data-testid="mobile-home-logo"
                   className="mt-0.5 h-10 w-10 shrink-0 rounded-lg border border-black/10 bg-white object-cover"
                 />
               ) : null}
