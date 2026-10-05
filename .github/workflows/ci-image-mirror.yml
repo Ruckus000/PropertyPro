@@ -4,7 +4,8 @@ name: CI Image Mirror
 # Registry packages, so the jobs that use them pull AUTHENTICATED from GHCR
 # instead of anonymously from a shared-IP registry. Two jobs:
 #   - mirror-postgres-image  — the pinned Postgres service container
-#                              (integration-tests.yml, tenant-isolation-game-day.yml)
+#                              (integration-tests.yml, tenant-isolation-game-day.yml;
+#                              digest in scripts/ci/postgres-image-digest)
 #   - mirror-supabase-images — the local Supabase stack `supabase start` runs
 #                              (e2e.yml, stripe-e2e.yml); see the job comment.
 #
@@ -29,8 +30,8 @@ name: CI Image Mirror
 # need `packages: read` and service `credentials:` — no new secrets.
 #
 # Triggers:
-#   - push touching a file that carries a pin (the Postgres digest, or a
-#     SUPABASE_CLI_VERSION): a branch that changes a pin mirrors it before (or
+#   - push touching a file that carries a pin (scripts/ci/postgres-image-digest,
+#     or a SUPABASE_CLI_VERSION): a branch that changes a pin mirrors it before (or
 #     while) its PR's checks try to pull it. Any branch, not just main, for
 #     exactly that reason. Both jobs are idempotent.
 #   - workflow_dispatch: manual re-mirror.
@@ -40,8 +41,7 @@ name: CI Image Mirror
 on:
   push:
     paths:
-      - '.github/workflows/integration-tests.yml'
-      - '.github/workflows/tenant-isolation-game-day.yml'
+      - 'scripts/ci/postgres-image-digest'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/stripe-e2e.yml'
       - '.github/workflows/ci-image-mirror.yml'
@@ -80,12 +80,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Every pinned digest, from whichever registry the ref currently names.
-          # Same pattern postgres-digest-bump.yml keys on.
-          digests=$(grep -ohE 'postgres:16@sha256:[0-9a-f]{64}' .github/workflows/*.yml \
-            | sed 's/.*@//' | sort -u)
-          if [ -z "$digests" ]; then
-            echo "::error::No pinned postgres digest found in .github/workflows"
+          # The single pin both consumers read (via their `pin` job), and the
+          # file postgres-digest-bump.yml moves.
+          digests=$(tr -d '[:space:]' < scripts/ci/postgres-image-digest)
+          if ! printf '%s' "$digests" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error file=scripts/ci/postgres-image-digest::Not a sha256 digest: '${digests}'"
             exit 1
           fi
 
