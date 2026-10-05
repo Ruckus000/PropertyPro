@@ -84,6 +84,10 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
 
   const { before, after } = await applyLiveBrandingPatchUnscoped(communityId, parsed, {
     touchUpdatedAt: true,
+    // A new or cleared logo makes the email copy of the old one stale. The
+    // console cannot make an email copy (no image processing here), so emails
+    // fall back to the community's initial until a manager uploads one.
+    remove: parsed.logoPath !== undefined ? ['emailLogoPath'] : [],
   });
   if (after === null) {
     // resolveAndVerifyCommunity found it a moment ago; it is gone now.

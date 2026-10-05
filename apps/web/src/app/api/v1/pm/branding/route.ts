@@ -33,7 +33,9 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { resizeLogo, resizeSiteLogo } from '@/lib/services/image-processor';
+import { resizeEmailLogo, resizeLogo, resizeSiteLogo } from '@/lib/services/image-processor';
+import { COMMUNITY_ASSETS_BUCKET } from '@propertypro/db/constants';
+import { randomUUID } from 'node:crypto';
 import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import type { CommunityBranding } from '@propertypro/shared';
@@ -43,24 +45,12 @@ const PRESIGN_TTL_SECONDS = 60 * 60;
 const ALLOWED_LOGO_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 
 /**
- * Download a raw uploaded image from storage, validate its type, run it
- * through `resize`, and re-upload the processed WebP to the canonical branding
- * path `communities/{id}/branding/{canonicalName}`. Returns that canonical
- * path. Shared by the square avatar logo (resizeLogo) and the wordmark site
- * logo (resizeSiteLogo).
+ * Download a raw uploaded image from the `documents` bucket and check it is a
+ * PNG, JPEG or WebP by its bytes, not its claimed type.
  */
-async function processAndStoreBrandingImage(
-  communityId: number,
-  storagePath: string,
-  resize: (input: Buffer) => Promise<Buffer>,
-  canonicalName: string,
-): Promise<string> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+async function fetchRawBrandingImage(storagePath: string): Promise<Buffer> {
   const rawSignedUrl = await createPresignedDownloadUrl('documents', storagePath, PRESIGN_TTL_SECONDS);
-  const signedUrl = rawSignedUrl.startsWith('http')
-    ? rawSignedUrl
-    : new URL(rawSignedUrl, supabaseUrl).toString();
-  const res = await fetch(signedUrl);
+  const res = await fetch(absoluteStorageUrl(rawSignedUrl));
   if (!res.ok) {
     throw new ValidationError('Could not fetch uploaded logo from storage');
   }
@@ -71,22 +61,30 @@ async function processAndStoreBrandingImage(
   if (!detectedType || !(ALLOWED_LOGO_MIMES as readonly string[]).includes(detectedType.mime)) {
     throw new ValidationError('Invalid image file: only PNG, JPEG, and WebP are accepted');
   }
+  return rawBuffer;
+}
 
-  const processedBuffer = await resize(rawBuffer);
-  const canonicalPath = `communities/${communityId}/branding/${canonicalName}`;
-  const signedUpload = await createPresignedUploadUrl('documents', canonicalPath, { upsert: true });
-  const uploadUrl = signedUpload.signedUrl.startsWith('http')
-    ? signedUpload.signedUrl
-    : new URL(signedUpload.signedUrl, supabaseUrl).toString();
-  const uploadRes = await fetch(uploadUrl, {
+/** Upload a processed image through a presigned URL. */
+async function storeBrandingImage(
+  bucket: string,
+  path: string,
+  bytes: Buffer,
+  contentType: string,
+  { upsert }: { upsert: boolean },
+): Promise<void> {
+  const signedUpload = await createPresignedUploadUrl(bucket, path, { upsert });
+  const uploadRes = await fetch(absoluteStorageUrl(signedUpload.signedUrl), {
     method: 'PUT',
-    headers: { 'content-type': 'image/webp' },
-    body: new Uint8Array(processedBuffer),
+    headers: { 'content-type': contentType },
+    body: new Uint8Array(bytes),
   });
   if (!uploadRes.ok) {
     throw new ValidationError('Failed to save processed logo');
   }
-  return canonicalPath;
+}
+
+function absoluteStorageUrl(url: string): string {
+  return url.startsWith('http') ? url : new URL(url, process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').toString();
 }
 
 /** The live-only fields this route owns, with each logo resolved to a URL. */
@@ -147,35 +145,42 @@ export const PATCH = withErrorHandler(
       );
     }
 
+    // The square logo is stored twice: a 400x400 WebP in the private bucket
+    // for the site and sign-in pages, and a 96x96 PNG in the public bucket for
+    // email (see `emailLogoPath` in CommunityBranding for why).
     let canonicalLogoPath: string | undefined;
+    let emailLogoPath: string | undefined;
     if (body.logoStoragePath) {
-      canonicalLogoPath = await processAndStoreBrandingImage(
-        communityId,
-        body.logoStoragePath,
-        resizeLogo,
-        'logo.webp',
-      );
+      const raw = await fetchRawBrandingImage(body.logoStoragePath);
+      canonicalLogoPath = `communities/${communityId}/branding/logo.webp`;
+      await storeBrandingImage('documents', canonicalLogoPath, await resizeLogo(raw), 'image/webp', {
+        upsert: true,
+      });
+      emailLogoPath = `${communityId}/email/logo-${randomUUID()}.png`;
+      await storeBrandingImage(COMMUNITY_ASSETS_BUCKET, emailLogoPath, await resizeEmailLogo(raw), 'image/png', {
+        upsert: false,
+      });
     }
 
     let canonicalSiteLogoPath: string | undefined;
     if (body.siteLogoStoragePath) {
-      canonicalSiteLogoPath = await processAndStoreBrandingImage(
-        communityId,
-        body.siteLogoStoragePath,
-        resizeSiteLogo,
-        'site-logo.webp',
-      );
+      const raw = await fetchRawBrandingImage(body.siteLogoStoragePath);
+      canonicalSiteLogoPath = `communities/${communityId}/branding/site-logo.webp`;
+      await storeBrandingImage('documents', canonicalSiteLogoPath, await resizeSiteLogo(raw), 'image/webp', {
+        upsert: true,
+      });
     }
 
     const patch = {
       ...(canonicalLogoPath !== undefined && { logoPath: canonicalLogoPath }),
+      ...(emailLogoPath !== undefined && { emailLogoPath }),
       ...(canonicalSiteLogoPath !== undefined && { siteLogoPath: canonicalSiteLogoPath }),
       ...(body.customEmailFooter !== undefined && { customEmailFooter: body.customEmailFooter }),
     };
     // `null` removes a logo. The processed file at communities/{id}/branding/
     // stays in storage; the next upload overwrites it.
     const remove = [
-      ...(body.logoStoragePath === null ? (['logoPath'] as const) : []),
+      ...(body.logoStoragePath === null ? (['logoPath', 'emailLogoPath'] as const) : []),
       ...(body.siteLogoStoragePath === null ? (['siteLogoPath'] as const) : []),
     ];
 

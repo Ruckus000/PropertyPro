@@ -129,7 +129,8 @@ describe('community branding PATCH auditing', () => {
     expect(applyLive).toHaveBeenCalledWith(
       7,
       { primaryColor: '#123456', logoPath: 'communities/7/logo.webp' },
-      { touchUpdatedAt: true },
+      // A changed logo makes the manager's email copy of the old one stale.
+      { touchUpdatedAt: true, remove: ['emailLogoPath'] },
     );
     expect(brandingUpdate).not.toHaveBeenCalled();
     expect(await res.json()).toEqual({ branding: { primaryColor: '#123456' } });

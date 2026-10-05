@@ -83,3 +83,29 @@ describe('EmailLayout footer', () => {
     expect(html).not.toContain('Ocean Dr');
   });
 });
+
+describe("EmailLayout — the manager's logo and footer text", () => {
+  it('shows the logo and the footer text, escaped as plain text', async () => {
+    const html = await render(
+      <AnnouncementEmail
+        branding={{
+          ...bulkBranding,
+          logoUrl: 'https://proj.supabase.co/storage/v1/object/public/community-assets/7/email/logo-a.png',
+          customEmailFooter: 'Office hours <b>9-5</b>',
+        }}
+        {...base}
+      />,
+    );
+
+    expect(html).toContain('src="https://proj.supabase.co/storage/v1/object/public/community-assets/7/email/logo-a.png"');
+    expect(html).toContain('Sunset Condos logo');
+    expect(html).toContain('Office hours &lt;b&gt;9-5&lt;/b&gt;');
+  });
+
+  it('drops a logo that is not https', async () => {
+    const html = await render(
+      <AnnouncementEmail branding={{ ...bulkBranding, logoUrl: 'http://insecure/logo.png' }} {...base} />,
+    );
+    expect(html).not.toContain('http://insecure/logo.png');
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resizeLogo } from '../../src/lib/services/image-processor';
+import { resizeEmailLogo, resizeLogo } from '../../src/lib/services/image-processor';
 
 /**
  * Integration-style tests for the image processor service.
@@ -40,5 +40,20 @@ describe('resizeLogo', () => {
     const meta = await sharp.default(result).metadata();
     expect(meta.width).toBe(400);
     expect(meta.height).toBe(400);
+  });
+});
+
+describe('resizeEmailLogo', () => {
+  it('is a 96x96 PNG, since Outlook desktop does not render WebP', async () => {
+    const sharp = await import('sharp');
+    const input = await sharp
+      .default({ create: { width: 300, height: 120, channels: 3, background: { r: 0, g: 0, b: 255 } } })
+      .png()
+      .toBuffer();
+
+    const meta = await sharp.default(await resizeEmailLogo(input)).metadata();
+
+    expect(meta.format).toBe('png');
+    expect([meta.width, meta.height]).toEqual([96, 96]);
   });
 });

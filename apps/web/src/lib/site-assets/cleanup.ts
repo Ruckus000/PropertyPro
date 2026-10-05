@@ -109,8 +109,11 @@ export async function purgeCommunitySiteAssets(
 }
 
 /**
- * Delete every object in `community-assets` for this community — the logos and
- * site imagery uploaded through the admin console, at `{id}/site/{uuid}.{ext}`.
+ * Delete every object in `community-assets` for this community: the logos and
+ * site imagery uploaded through the admin console (`{id}/site/{uuid}.{ext}`),
+ * and the email copies of the manager's logo (`{id}/email/logo-{uuid}.png`),
+ * which are kept, one per upload, while the community exists so sent emails
+ * keep their logo.
  *
  * Note the bucket names: `community-assets` is NOT `community-site-assets`.
  * They differ by one word and hold different uploads from different surfaces,
@@ -124,5 +127,5 @@ export async function purgeCommunitySiteAssets(
 export async function purgeCommunityAdminAssets(
   communityId: number,
 ): Promise<{ deletedCount: number }> {
-  return purgePrefixes(COMMUNITY_ASSETS_BUCKET, [`${communityId}/site`]);
+  return purgePrefixes(COMMUNITY_ASSETS_BUCKET, [`${communityId}/site`, `${communityId}/email`]);
 }

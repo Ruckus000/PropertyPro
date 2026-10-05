@@ -48,9 +48,11 @@ vi.mock('@propertypro/db', () => ({
   createPresignedUploadUrl: createPresignedUploadUrlMock,
   logAuditEvent: logAuditEventMock,
 }));
+const resizeEmailLogoMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/services/image-processor', () => ({
   resizeLogo: resizeLogoMock,
   resizeSiteLogo: resizeSiteLogoMock,
+  resizeEmailLogo: resizeEmailLogoMock,
 }));
 vi.mock('file-type', () => ({
   fileTypeFromBuffer: fileTypeFromBufferMock,
@@ -237,9 +239,10 @@ describe('pm branding route', () => {
     });
 
     it.each([
-      ['logoStoragePath', 'logoPath'],
-      ['siteLogoStoragePath', 'siteLogoPath'],
-    ])('removes the logo when %s is null, and audits the removal', async (field, key) => {
+      ['logoStoragePath', ['logoPath', 'emailLogoPath']],
+      ['siteLogoStoragePath', ['siteLogoPath']],
+    ])('removes the logo when %s is null, and audits the removal', async (field, keys) => {
+      const key = keys[0]!;
       updateBrandingForCommunityMock.mockResolvedValueOnce({});
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
@@ -253,10 +256,11 @@ describe('pm branding route', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {}, { remove: [key] });
+      // Removing the square logo removes its email copy too.
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {}, { remove: keys });
       expect(fetchMock).not.toHaveBeenCalled();
       expect(logAuditEventMock).toHaveBeenCalledWith(
-        expect.objectContaining({ newValues: { [key]: null } }),
+        expect.objectContaining({ newValues: Object.fromEntries(keys.map((k) => [k, null])) }),
       );
       expect((await res.json()).data).toMatchObject({ [key]: null });
       vi.unstubAllGlobals();
@@ -359,6 +363,51 @@ describe('pm branding route', () => {
       expect(resizeLogoMock).not.toHaveBeenCalled();
       expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
 
+      vi.unstubAllGlobals();
+    });
+
+    it('stores the square logo twice: a WebP for the site and a public PNG for email', async () => {
+      createPresignedDownloadUrlMock.mockResolvedValueOnce('http://storage/raw-logo');
+      createPresignedUploadUrlMock
+        .mockResolvedValueOnce({ signedUrl: 'http://storage/put-logo' })
+        .mockResolvedValueOnce({ signedUrl: 'http://storage/put-email-logo' });
+      resizeLogoMock.mockResolvedValueOnce(Buffer.from('webp'));
+      resizeEmailLogoMock.mockResolvedValueOnce(Buffer.from('png'));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
+        .mockResolvedValue({ ok: true });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await PATCH(
+        new NextRequest('http://localhost/api/v1/pm/branding', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 1, logoStoragePath: 'communities/1/documents/u1/logo.png' }),
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(createPresignedUploadUrlMock).toHaveBeenCalledWith(
+        'documents',
+        'communities/1/branding/logo.webp',
+        { upsert: true },
+      );
+      // A new public name every time, so a mail client's cached copy of the
+      // old logo is never shown for the new one.
+      const [bucket, emailPath, opts] = createPresignedUploadUrlMock.mock.calls[1]!;
+      expect(bucket).toBe('community-assets');
+      expect(emailPath).toMatch(/^1\/email\/logo-[0-9a-f-]{36}\.png$/);
+      expect(opts).toEqual({ upsert: false });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://storage/put-email-logo',
+        expect.objectContaining({ headers: { 'content-type': 'image/png' } }),
+      );
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(
+        1,
+        { logoPath: 'communities/1/branding/logo.webp', emailLogoPath: emailPath },
+        { remove: [] },
+      );
       vi.unstubAllGlobals();
     });
 
