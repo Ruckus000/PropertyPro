@@ -311,17 +311,18 @@ jobs:
         #   - schema-gate0, audit-log-append-only-db: need an environment this
         #     job does not provide (the latter throws "DIRECT_URL or
         #     DATABASE_URL is required" from its own gate).
-        #   - reconcile-auth-user-id: hook fails with
-        #     `Cannot read properties of undefined (reading 'parsers')`.
         #
-        # Removed from this list: pm-portfolio-unsafe (stale fixtures, not an
-        # access bug — its "no PM role" user really held property_manager, and
-        # its site_blocks rows predated 0048's NOT NULL page_id).
+        # Removed from this list:
+        #   - pm-portfolio-unsafe (stale fixtures, not an access bug — its
+        #     "no PM role" user really held property_manager, and its
+        #     site_blocks rows predated 0048's NOT NULL page_id).
+        #   - reconcile-auth-user-id (teardown-only harness bug: `drizzle()`
+        #     over a postgres.js `sql.begin` transaction, which has no
+        #     `options`; every test body already passed).
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
           --exclude '__tests__/audit-log-append-only-db.integration.test.ts'
-          --exclude '__tests__/reconcile-auth-user-id.integration.test.ts'
           --exclude '__tests__/reset-demo.integration.test.ts'
           --exclude '__tests__/schema-gate0.integration.test.ts'
           --exclude '__tests__/seed-demo.integration.test.ts'
