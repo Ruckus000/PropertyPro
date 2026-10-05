@@ -52,6 +52,16 @@
  * Cold-start can run 10–18 seconds on Vercel; subsequent calls within the
  * function's warm window are fast. Callers must surface a clear loading
  * state to the user.
+ *
+ * LOCAL DEVELOPMENT: the package ships ONE binary, Linux x64. On macOS (or any
+ * other OS, or arm64) it cannot run at all — the launch dies with `spawn ENOEXEC` —
+ * so PUPPETEER_EXECUTABLE_PATH is mandatory there, not a preference. Without
+ * it, renderHtmlToPdf refuses up front with a message that says so. That
+ * override launches the developer's own Chrome with `desktopChromeArgs()`, not
+ * the Lambda flags: those force `--single-process` and a second, conflicting
+ * `--headless='shell'` onto a browser that was never built for them. The agent
+ * sandbox (scripts/agent-env.sh) passes the variable through and detects
+ * Chrome on macOS.
  */
 import 'server-only';
 
@@ -132,6 +142,26 @@ export function hardenChromiumArgs(args: readonly string[]): string[] {
   return args.filter((arg) => !EXCLUDED_CHROMIUM_ARGS.has(arg));
 }
 
+/**
+ * Launch args for a developer's own Chrome (PUPPETEER_EXECUTABLE_PATH set).
+ *
+ * The Lambda set from @sparticuz/chromium is wrong here. Measured on Chromium
+ * 141: it adds `--headless='shell'` AFTER puppeteer's `--headless=new`, so the
+ * `headless: true` below was silently overridden, and `--single-process`
+ * collapsed the browser to one process (0 children vs 3). Linux tolerated
+ * that; desktop Chrome does not support single-process mode, and macOS is
+ * where this override is actually needed.
+ *
+ * A desktop Chrome also HAS a working sandbox, so keep it — except as root,
+ * where Chrome refuses to start without `--no-sandbox` (crbug.com/638180).
+ * `--font-render-hinting=none` is kept from the Lambda set for glyph parity.
+ */
+export function desktopChromeArgs(uid: number | undefined = process.getuid?.()): string[] {
+  const args = ['--font-render-hinting=none'];
+  if (uid === 0) args.push('--no-sandbox');
+  return args;
+}
+
 interface RenderHtmlToPdfOptions {
   html: string;
   /**
@@ -165,6 +195,23 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
   const deadline = Date.now() + timeoutMs;
   const remainingMs = (): number => Math.max(1_000, deadline - Date.now());
 
+  // `|| undefined`, NOT `??`. An env var that is present but EMPTY is how this
+  // breaks: dotenv assigns '' for a bare `KEY=` line, `'' ?? x` short-circuits
+  // to '', and puppeteer then launches with executablePath: '' and fails —
+  // the same shape as the outage this module was fixed for. .env.example keeps
+  // the key commented out for the same reason.
+  const explicitExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
+
+  // Refuse before inflating ~63 MB of a binary this host cannot execute. On
+  // Vercel (linux/x64) this never fires; on a Mac it replaces `spawn ENOEXEC`.
+  if (!explicitExecutablePath && (process.platform !== 'linux' || process.arch !== 'x64')) {
+    throw new Error(
+      `The bundled PDF renderer (@sparticuz/chromium) is a Linux x64 binary and cannot run on ` +
+        `${process.platform}/${process.arch}. Set PUPPETEER_EXECUTABLE_PATH to a local Chrome ` +
+        '(see .env.example); pnpm agent:live:web detects one on macOS.',
+    );
+  }
+
   // Lazy-import to keep these out of bundles that don't render PDFs. The
   // packages export their public API as the module's default; treat both
   // shapes (default-export and namespace-with-.default) safely.
@@ -177,28 +224,26 @@ export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Uin
   const chromium: ChromiumApi = chromiumMod.default ?? chromiumMod;
   const puppeteer: PuppeteerApi = puppeteerMod.default ?? puppeteerMod;
 
-  // Detect the executable. @sparticuz/chromium expands its bundled binary to
-  // /tmp and returns that path; in local dev a developer may set
-  // PUPPETEER_EXECUTABLE_PATH to use system Chrome instead.
-  //
-  // `|| undefined`, NOT `??`. An env var that is present but EMPTY is how this
-  // breaks: dotenv assigns '' for a bare `KEY=` line, `'' ?? x` short-circuits
-  // to '', and puppeteer then launches with executablePath: '' and fails —
-  // the same shape as the outage this module was fixed for. .env.example keeps
-  // the key commented out for the same reason.
-  const explicitExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
-  const executablePath: string =
-    explicitExecutablePath ?? (await chromium.executablePath());
-
-  const browser = (await puppeteer.launch({
-    args: hardenChromiumArgs(chromium.args),
-    defaultViewport: { width: 1240, height: 1754 },
-    executablePath,
-    // The bundled binary is chrome-headless-shell, which only speaks 'shell'
-    // (upstream README, v137+). A developer's system Chrome is the opposite:
-    // Chrome 132 removed the old headless mode, so it needs `true`.
-    headless: explicitExecutablePath ? true : 'shell',
-  })) as unknown as PuppeteerBrowser;
+  // Production: @sparticuz/chromium expands its bundled binary to /tmp and
+  // returns that path. Local dev: the developer's own Chrome (see header).
+  const browser = (await puppeteer.launch(
+    explicitExecutablePath
+      ? {
+          args: desktopChromeArgs(),
+          defaultViewport: { width: 1240, height: 1754 },
+          executablePath: explicitExecutablePath,
+          // Chrome 132 removed the old headless mode, so a desktop Chrome needs `true`.
+          headless: true,
+        }
+      : {
+          args: hardenChromiumArgs(chromium.args),
+          defaultViewport: { width: 1240, height: 1754 },
+          executablePath: await chromium.executablePath(),
+          // The bundled binary is chrome-headless-shell, which only speaks
+          // 'shell' (upstream README, v137+).
+          headless: 'shell',
+        },
+  )) as unknown as PuppeteerBrowser;
 
   try {
     const page = await browser.newPage();
