@@ -22,6 +22,19 @@ const describeDb = databaseUrl ? describe : describe.skip;
 
 class Rollback extends Error {}
 
+/**
+ * Narrow a transaction handle back to the callable `Sql` interface.
+ *
+ * postgres.js declares `TransactionSql` as `Omit<Sql<T>, 'begin' | 'end' | …>`,
+ * and TypeScript's `Omit` silently drops CALL SIGNATURES along with the named
+ * keys. So `` tx`select 1` `` — which is the library's own documented usage and
+ * works perfectly at runtime — does not type-check. This is a defect in the
+ * package's types, not a claim about the value, which is why the cast is
+ * isolated here with a name rather than sprinkled at each call site.
+ * (Same helper as apps/web/__tests__/integration/support-tickets-rls.)
+ */
+const tagged = (tx: postgres.TransactionSql): postgres.Sql => tx as unknown as postgres.Sql;
+
 describeDb('compliance_audit_log append-only (DB integration)', () => {
   let sql: postgres.Sql;
 
@@ -47,11 +60,11 @@ describeDb('compliance_audit_log append-only (DB integration)', () => {
 
   async function insertAuditRow(tx: postgres.TransactionSql, prefix: string): Promise<number> {
     const tag = `${prefix}-${randomUUID().slice(0, 8)}`;
-    const [community] = await tx<{ id: string }[]>`
+    const [community] = await tagged(tx)<{ id: string }[]>`
       insert into communities (name, slug, community_type, timezone)
       values (${`Audit ${tag}`}, ${`audit-append-only-${tag}`}, 'condo_718', 'America/New_York')
       returning id`;
-    const [row] = await tx<{ id: string }[]>`
+    const [row] = await tagged(tx)<{ id: string }[]>`
       insert into compliance_audit_log
         (user_id, community_id, action, resource_type, resource_id, new_values)
       values (null, ${community!.id}, 'create', 'document', ${tag}, ${tx.json({ ok: true })})
@@ -72,7 +85,7 @@ describeDb('compliance_audit_log append-only (DB integration)', () => {
       // A savepoint, so the rejected statement does not abort the transaction
       // before the assertion is read.
       await expect(
-        tx.savepoint((sp) => sp`update compliance_audit_log set action = 'update' where id = ${id}`),
+        tx.savepoint((sp) => tagged(sp)`update compliance_audit_log set action = 'update' where id = ${id}`),
       ).rejects.toMatchObject({
         // 23514 (check_violation) is the ERRCODE the guard raises with: pins
         // that the guard trigger itself fired, not some other error.
@@ -86,7 +99,7 @@ describeDb('compliance_audit_log append-only (DB integration)', () => {
     await inRolledBackTransaction(async (tx) => {
       const id = await insertAuditRow(tx, 'delete');
       await expect(
-        tx.savepoint((sp) => sp`delete from compliance_audit_log where id = ${id}`),
+        tx.savepoint((sp) => tagged(sp)`delete from compliance_audit_log where id = ${id}`),
       ).rejects.toMatchObject({
         // 23514 (check_violation) is the ERRCODE the guard raises with: pins
         // that the guard trigger itself fired, not some other error.
