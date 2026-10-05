@@ -67,6 +67,64 @@ describe('CommunityWebsiteEditor branding form', () => {
     expect(html).toContain('Sunset Condos');
   });
 
+  describe('the stored logo', () => {
+    const STORED = { logoPath: '42/site/abc.png', primaryColor: '#111111' };
+    const URL_FROM_GET = 'https://proj.supabase.co/storage/v1/object/public/community-assets/42/site/abc.png';
+
+    async function mountWithLogo() {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+        if (init?.method === 'PATCH') {
+          return { ok: true, json: async () => ({ branding: STORED }) } as Response;
+        }
+        return { ok: true, json: async () => ({ branding: STORED, logoUrl: URL_FROM_GET }) } as Response;
+      });
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      await act(async () => {
+        root.render(<CommunityWebsiteEditor communityId={42} communitySlug="sunset-condos" />);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const click = async (el: Element | null | undefined) => {
+        await act(async () => {
+          (el as HTMLElement).click();
+        });
+      };
+      const button = (text: string) =>
+        [...container.querySelectorAll('button')].find((b) => b.textContent?.trim().endsWith(text));
+      const cleanup = async () => {
+        await act(async () => root.unmount());
+        container.remove();
+      };
+      return { container, fetchMock, click, button, cleanup };
+    }
+
+    it('shows it on load, from the URL the GET returns', async () => {
+      const { container, cleanup } = await mountWithLogo();
+      expect(container.querySelector('img[alt="Logo"]')?.getAttribute('src')).toBe(URL_FROM_GET);
+      await cleanup();
+    });
+
+    it('Reset brings back a removed logo, and the next Save does not delete it', async () => {
+      const { container, fetchMock, click, button, cleanup } = await mountWithLogo();
+
+      await click(button('Remove'));
+      expect(container.querySelector('img[alt="Logo"]')).toBeNull();
+      await click(button('Reset'));
+      expect(container.querySelector('img[alt="Logo"]')?.getAttribute('src')).toBe(URL_FROM_GET);
+
+      await click(button('Save Branding'));
+      const patches = fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH');
+      // Nothing changed, so nothing is sent; above all, never `logoPath: ''`.
+      for (const [, init] of patches) {
+        expect(JSON.parse(String(init?.body))).not.toHaveProperty('logoPath');
+      }
+      await cleanup();
+    });
+  });
+
   describe("the manager's unpublished design changes", () => {
     it('lists them, since saving replaces the matching ones', async () => {
       const html = await renderEditor({

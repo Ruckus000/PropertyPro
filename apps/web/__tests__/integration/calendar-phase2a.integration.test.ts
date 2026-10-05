@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
+import { eq } from '@propertypro/db/filters';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
@@ -69,6 +70,8 @@ let ownerUnitLabel = '';
 let inRangeMeetingId = 0;
 let outOfRangeMeetingId = 0;
 let apartmentMeetingId = 0;
+let inspectionTitle = '';
+let rulesTitle = '';
 let assessmentTitle = '';
 let settledAssessmentTitle = '';
 
@@ -238,6 +241,31 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
       documentId: Number(documentRow?.id),
     });
 
+    // Attachments on a SECOND meeting in categories a condo tenant may and may
+    // not read. `Inspection Reports` is owner-only unless the community opts in.
+    inspectionTitle = `Milestone Inspection ${state.runSuffix}`;
+    rulesTitle = `Pool Rules ${state.runSuffix}`;
+    for (const [categoryName, title] of [
+      ['Inspection Reports', inspectionTitle],
+      ['Rules', rulesTitle],
+    ] as const) {
+      const [restrictedCategoryRow] = await scopedA.insert(state.dbModule.documentCategories, {
+        name: categoryName,
+      });
+      const [attachedRow] = await scopedA.insert(state.dbModule.documents, {
+        categoryId: Number(restrictedCategoryRow?.id),
+        title,
+        filePath: `communities/${communityA.id}/${categoryName}-${state.runSuffix}.pdf`,
+        fileName: `${categoryName}-${state.runSuffix}.pdf`,
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+      });
+      await scopedA.insert(state.dbModule.meetingDocuments, {
+        meetingId: outOfRangeMeetingId,
+        documentId: Number(attachedRow?.id),
+      });
+    }
+
     routes = {
       meetings: await import('../../src/app/api/v1/meetings/route'),
       meetingDetail: await import('../../src/app/api/v1/meetings/[id]/route'),
@@ -294,6 +322,48 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
       { params: Promise.resolve({ id: String(inRangeMeetingId) }) },
     );
     expect(crossTenantResponse.status).toBe(404);
+  });
+
+  it('GET /api/v1/meetings/[id] lists only the attachments the viewer\'s categories allow', async () => {
+    const testState = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(testState, 'communityA');
+
+    async function attachedTitles(): Promise<string[]> {
+      const response = await routeModules.meetingDetail.GET(
+        new NextRequest(apiUrl(`/api/v1/meetings/${outOfRangeMeetingId}?communityId=${communityA.id}`)),
+        { params: Promise.resolve({ id: String(outOfRangeMeetingId) }) },
+      );
+      expect(response.status).toBe(200);
+      const json = await parseJson<{ data: { documents: Array<{ title: string }> } }>(response);
+      return json.data.documents.map((document) => document.title);
+    }
+
+    setActor(testState, 'tenantA');
+    const tenantDefault = await attachedTitles();
+    expect(tenantDefault).toContain(rulesTitle);
+    expect(tenantDefault).not.toContain(inspectionTitle);
+
+    const scoped = testState.dbModule.createScopedClient(communityA.id);
+    const where = eq(testState.dbModule.communities.id, communityA.id);
+    const rows = await scoped.selectFrom<Record<string, unknown>>(testState.dbModule.communities, {}, where);
+    const original = (rows[0]?.communitySettings as Record<string, unknown> | undefined) ?? {};
+    await scoped.update(
+      testState.dbModule.communities,
+      { communitySettings: { ...original, tenantsCanViewInspectionReports: true } },
+      where,
+    );
+    try {
+      expect(await attachedTitles()).toEqual(expect.arrayContaining([inspectionTitle, rulesTitle]));
+    } finally {
+      await scoped.update(testState.dbModule.communities, { communitySettings: original }, where);
+    }
+
+    setActorById(testState, ownerResidentUserId);
+    expect(await attachedTitles()).toEqual(expect.arrayContaining([inspectionTitle, rulesTitle]));
+
+    setActor(testState, 'actorA');
+    expect(await attachedTitles()).toEqual(expect.arrayContaining([inspectionTitle, rulesTitle]));
   });
 
   it('GET /api/v1/calendar/events returns admin aggregate, owner-specific, tenant-none, and omits assessments without finances.read', async () => {

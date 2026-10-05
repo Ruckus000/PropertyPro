@@ -1,7 +1,8 @@
 /**
  * Branding API for the admin platform.
  *
- * GET  /api/admin/communities/:id/branding — fetch current branding
+ * GET  /api/admin/communities/:id/branding — fetch current branding, plus
+ *      `logoUrl`, a URL for the stored logo (signed when the file is private)
  * PATCH /api/admin/communities/:id/branding — update branding fields
  *
  * ## PATCH writes LIVE, and replaces the manager's draft of what it writes
@@ -29,6 +30,7 @@ import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { parseAdminBody } from '@/lib/api/parse-body';
 import { brandingSchema } from '@/lib/validation/branding';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
+import { resolveLogoPreviewUrl } from '@/lib/branding/logo-preview-url';
 
 const patchSchema = brandingSchema
   .extend({ logoPath: z.string().max(500).optional() })
@@ -61,7 +63,10 @@ export const GET = withAdminErrorHandler(async (_request: NextRequest, context: 
     );
   }
 
-  return NextResponse.json({ branding: (data as Record<string, unknown>).branding ?? {} });
+  const branding = ((data as Record<string, unknown>).branding ?? {}) as { logoPath?: string };
+  // The stored logo is a storage key; the editor needs something it can show.
+  const logoUrl = await resolveLogoPreviewUrl(communityId, branding.logoPath);
+  return NextResponse.json({ branding, logoUrl });
 });
 
 export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
@@ -79,6 +84,10 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
 
   const { before, after } = await applyLiveBrandingPatchUnscoped(communityId, parsed, {
     touchUpdatedAt: true,
+    // A new or cleared logo makes the email copy of the old one stale. The
+    // console cannot make an email copy (no image processing here), so emails
+    // fall back to the community's initial until a manager uploads one.
+    remove: parsed.logoPath !== undefined ? ['emailLogoPath'] : [],
   });
   if (after === null) {
     // resolveAndVerifyCommunity found it a moment ago; it is gone now.

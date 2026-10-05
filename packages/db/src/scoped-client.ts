@@ -26,6 +26,7 @@ import {
   and,
   getTableColumns,
   getTableName,
+  sql,
 } from 'drizzle-orm';
 import type { PgColumn, PgTable, TableConfig } from 'drizzle-orm/pg-core';
 import type { TenantContext } from './tenant-context';
@@ -115,6 +116,26 @@ function hasUpdatedAtColumn(
   columns: ColumnRecord,
 ): columns is ColumnRecord & { updatedAt: PgColumn } {
   return 'updatedAt' in columns;
+}
+
+/**
+ * The value every scoped write stamps into `updated_at`: the database clock at
+ * millisecond precision, but always at least 1ms past the row's previous value.
+ *
+ * `updated_at` is the optimistic-concurrency token (units, resident roles,
+ * occupants): clients read it through JSON — millisecond precision — and the
+ * write applies only while the row's value still truncates to that millisecond.
+ * A stamp from the app clock (`new Date()`) gave two writes inside one
+ * millisecond the SAME value, so a save from a stale read matched and was
+ * accepted (Integration Tests run 37051841242). Strictly increasing per row in
+ * millisecond buckets means a token can never match once anyone has written
+ * after it. Truncating `now()` matters too: two microsecond stamps in one
+ * millisecond would still collide once the comparison truncates them.
+ * Its SQL twin, for the one writer outside this client (the lease→unit rent
+ * sync trigger), is migration 0088. Keep the two identical.
+ */
+function nextUpdatedAt(column: PgColumn): SQL {
+  return sql`greatest(date_trunc('milliseconds', now()), date_trunc('milliseconds', ${column}) + interval '1 millisecond')`;
 }
 
 function hasIdColumn(
@@ -419,7 +440,7 @@ export function createScopedClient(
       // Auto-update updatedAt
       const columns = getTableColumns(table) as ColumnRecord;
       if (hasUpdatedAtColumn(columns)) {
-        updateData['updatedAt'] = new Date();
+        updateData['updatedAt'] = nextUpdatedAt(columns.updatedAt);
       }
 
       const whereClause = combineFilters(filters);
@@ -468,7 +489,7 @@ export function createScopedClient(
       // Also bump updatedAt if available
       const setData: Record<string, unknown> = { deletedAt: new Date() };
       if (hasUpdatedAtColumn(columns)) {
-        setData['updatedAt'] = new Date();
+        setData['updatedAt'] = nextUpdatedAt(columns.updatedAt);
       }
 
       const whereClause = combineFilters(filters);
@@ -509,7 +530,7 @@ export function createScopedClient(
 
       const setData: Record<string, unknown> = { deletedAt: null };
       if (hasUpdatedAtColumn(columns)) {
-        setData['updatedAt'] = new Date();
+        setData['updatedAt'] = nextUpdatedAt(columns.updatedAt);
       }
 
       return execUpdate(database, table, setData, combineFilters(filters));

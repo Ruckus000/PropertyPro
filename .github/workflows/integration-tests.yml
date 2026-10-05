@@ -8,9 +8,8 @@
 # It runs two suites against a disposable vanilla-Postgres service container:
 #   1. `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
 #      — the apps/web integration suite (the step the floor below governs).
-#   2. the packages/db RLS pair (rls-policies + pipeline-and-transactions) and
-#      seed-resident-units + seed-community-counts, scoped to named files on
-#      purpose — see the step comment.
+#   2. the packages/db integration config, whole, minus a named denylist of
+#      known-red files — see the step comment.
 #
 # EXECUTED-COUNT FLOOR (TST-06) — PRINT-ONLY, NOT ARMED (plan ledger D15–D17,
 # human-confirmed 2026-09-23). The "Run integration tests" step also emits a
@@ -283,39 +282,47 @@ jobs:
             process.exit(0);
           '
 
-      - name: Run database RLS policy tests
+      - name: Run packages/db integration tests
         # packages/db has its own integration config that no workflow ever
-        # invoked, so this suite — the only end-to-end proof that tenant
-        # isolation holds at the DATABASE layer rather than just the app layer —
-        # ran nowhere. DATABASE_URL and DIRECT_URL are already set at job level,
-        # which the suite requires to not skip itself.
+        # invoked until the RLS suite was added here as a named-file list —
+        # and every file left off that list rotted unseen (document-access
+        # asserted on the retired `cam` role and stayed red on main). So this
+        # step now runs the WHOLE config and DENYLISTS the known-red files, the
+        # same fail-safe shape as `paths-ignore` above: a new
+        # packages/db/__tests__/*.integration.test.ts runs here by default
+        # instead of silently running nowhere. DATABASE_URL and DIRECT_URL are
+        # already set at job level, which the suite requires to not skip itself.
         #
-        # Scoped to this ONE file on purpose. The rest of packages/db's
-        # integration config has pre-existing failures unrelated to RLS
-        # (seed-demo / reset-demo / schema-gate0 need seeded demo data;
-        # document-access, pm-portfolio-unsafe, reconcile-auth-user-id and
-        # audit-log-append-only-db fail on this vanilla-Postgres harness).
-        # Enabling all of it here would land CI red on day one and get this step
-        # reverted, taking the RLS coverage with it. Widening the glob is its own
-        # task, tracked separately.
+        # What this covers that nothing else does: rls-policies (tenant
+        # isolation at the DATABASE layer, not just the app layer),
+        # pipeline-and-transactions (pins patches/postgres@3.4.8.patch, whose
+        # loss would make every db.transaction throw UNSAFE_TRANSACTION),
+        # seed-resident-units / seed-community-counts (INF-03 seed safety net),
+        # document-access / document-search / documents-tenant-isolation, the
+        # scoped client, and pagination.
         #
-        # pipeline-and-transactions rides along: it needs only a bare Postgres
-        # and pins the patched postgres.js (patches/postgres@3.4.8.patch), whose
-        # loss would make every db.transaction throw UNSAFE_TRANSACTION.
+        # Excluded — each is red on this vanilla-Postgres harness for its own
+        # pre-existing reason (measured 2026-10-04 against the same stub +
+        # migrations via scripts/local-test-db.sh). Shrink this list; never
+        # grow it to hide a new failure:
+        #   - seed-demo, reset-demo: import apps/web services whose `@/` alias
+        #     packages/db's vitest config does not resolve
+        #     (`Cannot find package '@/lib/operations/routes'`).
+        #   - schema-gate0, audit-log-append-only-db: need an environment this
+        #     job does not provide (the latter throws "DIRECT_URL or
+        #     DATABASE_URL is required" from its own gate).
         #
-        # seed-resident-units rides along too: it needs only a bare Postgres
-        # (Supabase auth/storage go to an in-process HTTP double) and pins that
-        # every seeded demo resident — including each admin-console sales demo's
-        # persona — gets a unit, and that a reseed never wipes it.
-        #
-        # seed-community-counts rides along on the same harness: a per-domain
-        # row-count snapshot of what seedCommunity writes for each community
-        # type and seedHints branch, plus a reseed-idempotency check (INF-03 —
-        # the safety net for splitting seed-community.ts at its seams).
+        # Removed from this list:
+        #   - pm-portfolio-unsafe (stale fixtures, not an access bug — its
+        #     "no PM role" user really held property_manager, and its
+        #     site_blocks rows predated 0048's NOT NULL page_id).
+        #   - reconcile-auth-user-id (teardown-only harness bug: `drizzle()`
+        #     over a postgres.js `sql.begin` transaction, which has no
+        #     `options`; every test body already passed).
         run: >-
           pnpm --filter @propertypro/db exec vitest run
           --config vitest.integration.config.ts
-          __tests__/rls-policies.integration.test.ts
-          __tests__/pipeline-and-transactions.integration.test.ts
-          __tests__/seed-resident-units.integration.test.ts
-          __tests__/seed-community-counts.integration.test.ts
+          --exclude '__tests__/audit-log-append-only-db.integration.test.ts'
+          --exclude '__tests__/reset-demo.integration.test.ts'
+          --exclude '__tests__/schema-gate0.integration.test.ts'
+          --exclude '__tests__/seed-demo.integration.test.ts'

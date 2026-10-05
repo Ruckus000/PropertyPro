@@ -475,6 +475,13 @@ vi.mock('@/hooks/use-site-editor-preferences', () => ({
 }));
 
 const designDraft = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
+// Logos are live branding, read separately from the drafted look. No data
+// here, so the canvas keeps the server context's logo.
+vi.mock('@/hooks/use-live-branding', () => ({
+  useLiveBranding: () => ({ data: undefined, isError: false }),
+  useSaveLiveBranding: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock('@/hooks/use-site-design', () => ({
   siteDesignQueryKey: (communityId: number) => ['pm', 'site', 'design', communityId],
   useSiteDesign: () => ({

@@ -11,7 +11,8 @@
  * Step → fields:
  *   1. Layout            → layoutId
  *   2. Theme preset      → themePresetSlug
- *   3. Identity          → primaryColor/secondaryColor/accentColor/fontHeading/fontBody/tagline/logoPath
+ *   3. Identity          → primaryColor/secondaryColor/accentColor/fontHeading/fontBody/tagline
+ *                          (its logo upload saves through /api/v1/pm/branding)
  *   4. Welcome message   → (handled by /api/v1/pm/site/hero — not this endpoint)
  *   5. Confirm + publish → (handled by /api/v1/pm/site/publish — not this endpoint)
  *

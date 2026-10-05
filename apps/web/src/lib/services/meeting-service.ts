@@ -7,7 +7,15 @@
  * file to cover the collection route's list/create/update/delete and
  * document attachment flows.
  */
-import { communities, createScopedClient, documents, meetingDocuments, meetings } from '@propertypro/db';
+import {
+  buildDocumentAccessFilter,
+  communities,
+  createScopedClient,
+  documents,
+  meetingDocuments,
+  meetings,
+  type DocumentAccessContext,
+} from '@propertypro/db';
 import { and, asc, eq, gte, inArray, isNotNull, lt } from '@propertypro/db/filters';
 import type { MeetingResponseRecord } from '@/lib/meetings/meeting-response';
 
@@ -349,13 +357,20 @@ export interface MeetingAttachedDocument {
 /**
  * Bulk-fetch the documents linked to a meeting in the order returned by
  * `listMeetingDocumentLinks`. Empty input → empty array (no DB round-trip).
+ *
+ * Filtered to the categories `access` may read, by the same policy as the
+ * documents library (`buildDocumentAccessFilter`). Without it a meeting
+ * listed the title of every attached document — e.g. an Inspection Report to
+ * a condo tenant whose community has not opted in — even though downloading
+ * it was refused. Managers and unit owners get no category filter.
  */
 export async function listMeetingAttachedDocuments(
-  communityId: number,
+  access: DocumentAccessContext,
   documentIds: number[],
 ): Promise<MeetingAttachedDocument[]> {
   if (documentIds.length === 0) return [];
-  const scoped = createScopedClient(communityId);
+  const accessFilter = await buildDocumentAccessFilter(access);
+  const scoped = createScopedClient(access.communityId);
   return scoped.selectFrom<MeetingAttachedDocument>(
     documents,
     {
@@ -368,6 +383,6 @@ export async function listMeetingAttachedDocuments(
     },
     // A document taken back to a draft after it was attached stays linked
     // but is not shown — residents read this list.
-    and(inArray(documents.id, documentIds), isNotNull(documents.postedAt)),
+    and(inArray(documents.id, documentIds), isNotNull(documents.postedAt), accessFilter),
   );
 }

@@ -1,7 +1,8 @@
 /**
  * Demo branding API — read/update the seeded community's branding.
  *
- * GET  /api/admin/demos/:id/community/branding — fetch current branding
+ * GET  /api/admin/demos/:id/community/branding — fetch current branding, plus
+ *      `logoUrl` for the stored logo
  * PATCH /api/admin/demos/:id/community/branding — update colors, fonts, logo
  *
  * PATCH writes live through `applyLiveBrandingPatchUnscoped`, the same atomic
@@ -21,6 +22,7 @@ import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { brandingSchema } from '@/lib/validation/branding';
 import { parseAdminBody } from '@/lib/api/parse-body';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
+import { resolveLogoPreviewUrl } from '@/lib/branding/logo-preview-url';
 
 
 const patchSchema = z.object({
@@ -66,7 +68,9 @@ export const GET = withAdminErrorHandler(async (_request: NextRequest, context: 
     );
   }
 
-  return NextResponse.json({ branding: (data as Record<string, unknown>).branding ?? {} });
+  const branding = ((data as Record<string, unknown>).branding ?? {}) as { logoPath?: string };
+  const logoUrl = await resolveLogoPreviewUrl(communityId, branding.logoPath);
+  return NextResponse.json({ branding, logoUrl });
 });
 
 export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
@@ -94,6 +98,10 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
 
   const { before, after } = await applyLiveBrandingPatchUnscoped(communityId, parsed, {
     touchUpdatedAt: true,
+    // A new or cleared logo makes the email copy of the old one stale. The
+    // console cannot make an email copy (no image processing here), so emails
+    // fall back to the community's initial until a manager uploads one.
+    remove: parsed.logoPath !== undefined ? ['emailLogoPath'] : [],
   });
   if (after === null) {
     return NextResponse.json(

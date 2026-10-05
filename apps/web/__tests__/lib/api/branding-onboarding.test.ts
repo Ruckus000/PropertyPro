@@ -141,7 +141,7 @@ describe('seedDefaultSiteBranding', () => {
     // Written through the atomic op, never as a whole-object update().set()
     // from a read — the shape that erased concurrent writes.
     expect(mockApplyLive).toHaveBeenCalledTimes(1);
-    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: 'bay-light' });
+    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: 'bay-light' }, {});
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
@@ -154,7 +154,7 @@ describe('seedDefaultSiteBranding', () => {
     expect(mockApplyLive).toHaveBeenCalledWith(8, {
       layoutId: 'boulevard',
       themePresetSlug: 'palm-shadow',
-    });
+    }, {});
 
     vi.clearAllMocks();
     mockWhere.mockReturnValue({ limit: mockLimit });
@@ -173,7 +173,7 @@ describe('seedDefaultSiteBranding', () => {
     expect(mockApplyLive).toHaveBeenCalledWith(9, {
       layoutId: 'sable',
       themePresetSlug: 'linen-bronze',
-    });
+    }, {});
   });
 
   it('no-ops when the community already has a layoutId (never clobbers a PM choice)', async () => {
@@ -203,6 +203,6 @@ describe('seedDefaultSiteBranding', () => {
 
     await seedDefaultSiteBranding(7, 'condo_718');
 
-    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: null });
+    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: null }, {});
   });
 });

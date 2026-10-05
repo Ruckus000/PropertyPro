@@ -164,6 +164,33 @@ describeDb('live branding write — atomic, and it replaces the draft of what it
     expect(after).toEqual({ primaryColor: '#0000AA', tagline: 'Seed tagline' });
   });
 
+  it('removes a key in the same statement, leaving the draft and the other keys alone', async () => {
+    await setBranding(
+      '{"logoPath":"communities/1/branding/logo.webp","tagline":"Seed tagline","draftLook":{"layoutId":"sable"}}',
+    );
+
+    const after = await updateBrandingForCommunity(communityId, {}, { remove: ['logoPath'] });
+
+    expect(after).toEqual({ tagline: 'Seed tagline', draftLook: { layoutId: 'sable' } });
+    expect(await readBranding()).toEqual(after);
+  });
+
+  it('removes a key on a NULL branding without wiping it to NULL', async () => {
+    await setBranding(null);
+
+    await updateBrandingForCommunity(communityId, { tagline: 'New' }, { remove: ['logoPath'] });
+
+    expect(await readBranding()).toEqual({ tagline: 'New' });
+  });
+
+  it('never removes draftLook, even when asked', async () => {
+    await saveDraftDesign(communityId, { layoutId: 'sable' }, { actorUserId });
+
+    await applyLiveBrandingPatchUnscoped(communityId, {}, { remove: ['draftLook'] });
+
+    expect(await readBranding()).toMatchObject({ draftLook: { layoutId: 'sable' } });
+  });
+
   it('returns nulls for a community id that does not exist', async () => {
     expect(await applyLiveBrandingPatchUnscoped(2_000_000_000, { tagline: 'x' })).toEqual({
       before: null,

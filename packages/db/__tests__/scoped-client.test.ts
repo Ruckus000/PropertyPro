@@ -227,13 +227,20 @@ describe('createScopedClient', () => {
       expect(setData).toHaveProperty('unitNumber', '202');
     });
 
-    it('auto-sets updatedAt on update', async () => {
+    it('auto-sets updatedAt on update: DB clock, ms-truncated, at least 1ms past the previous value', async () => {
+      const { SQL } = await import('drizzle-orm');
+      const { PgDialect } = await import('drizzle-orm/pg-core');
       const client = createScopedClient(42);
-      await client.update(units, { unitNumber: '202' });
+      // A caller-supplied value cannot override the version stamp.
+      await client.update(units, { unitNumber: '202', updatedAt: new Date(0) });
 
       const setData = mockSet.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
       expect(setData).toBeDefined();
-      expect(setData?.['updatedAt']).toBeInstanceOf(Date);
+      const stamp = setData?.['updatedAt'];
+      expect(stamp).toBeInstanceOf(SQL);
+      expect(new PgDialect().sqlToQuery(stamp as InstanceType<typeof SQL>).sql).toBe(
+        `greatest(date_trunc('milliseconds', now()), date_trunc('milliseconds', "units"."updated_at") + interval '1 millisecond')`,
+      );
     });
   });
 

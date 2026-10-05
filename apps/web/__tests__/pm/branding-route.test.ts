@@ -48,9 +48,11 @@ vi.mock('@propertypro/db', () => ({
   createPresignedUploadUrl: createPresignedUploadUrlMock,
   logAuditEvent: logAuditEventMock,
 }));
+const resizeEmailLogoMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/services/image-processor', () => ({
   resizeLogo: resizeLogoMock,
   resizeSiteLogo: resizeSiteLogoMock,
+  resizeEmailLogo: resizeEmailLogoMock,
 }));
 vi.mock('file-type', () => ({
   fileTypeFromBuffer: fileTypeFromBufferMock,
@@ -93,7 +95,37 @@ describe('pm branding route', () => {
 
       expect(res.status).toBe(200);
       const json = (await res.json()) as { data: unknown };
-      expect(json.data).toEqual({ primaryColor: '#1a56db' });
+      // Only the fields this route owns: never the look, the draft or settings.
+      expect(json.data).toEqual({
+        logoPath: null,
+        logoUrl: null,
+        siteLogoPath: null,
+        siteLogoUrl: null,
+        customEmailFooter: null,
+      });
+    });
+
+    it('resolves each stored logo to a URL the editor can show', async () => {
+      getBrandingForCommunityMock.mockResolvedValueOnce({
+        logoPath: 'communities/1/branding/logo.webp',
+        siteLogoPath: '1/site/wordmark.png',
+        customEmailFooter: 'Office hours 9-5',
+        draftLook: { primaryColor: '#000000' },
+      });
+      createPresignedDownloadUrlMock.mockResolvedValueOnce('https://storage/signed-logo');
+      vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://proj.supabase.co');
+
+      const res = await GET(new NextRequest('http://localhost/api/v1/pm/branding?communityId=1'));
+
+      const json = (await res.json()) as { data: unknown };
+      expect(json.data).toEqual({
+        logoPath: 'communities/1/branding/logo.webp',
+        logoUrl: 'https://storage/signed-logo',
+        siteLogoPath: '1/site/wordmark.png',
+        siteLogoUrl: 'https://proj.supabase.co/storage/v1/object/public/community-assets/1/site/wordmark.png',
+        customEmailFooter: 'Office hours 9-5',
+      });
+      vi.unstubAllEnvs();
     });
 
     it('returns 200 with empty object when no branding set', async () => {
@@ -103,7 +135,13 @@ describe('pm branding route', () => {
 
       expect(res.status).toBe(200);
       const json = (await res.json()) as { data: unknown };
-      expect(json.data).toEqual({});
+      expect(json.data).toEqual({
+        logoPath: null,
+        logoUrl: null,
+        siteLogoPath: null,
+        siteLogoUrl: null,
+        customEmailFooter: null,
+      });
     });
 
     it('returns 403 for non-PM user', async () => {
@@ -190,7 +228,7 @@ describe('pm branding route', () => {
       expect(res.status).toBe(200);
       expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
         customEmailFooter: 'Questions? Call the office.',
-      });
+      }, { remove: [] });
       expect(logAuditEventMock).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'settings_changed',
@@ -198,6 +236,34 @@ describe('pm branding route', () => {
           newValues: { customEmailFooter: 'Questions? Call the office.' },
         }),
       );
+    });
+
+    it.each([
+      ['logoStoragePath', ['logoPath', 'emailLogoPath']],
+      ['siteLogoStoragePath', ['siteLogoPath']],
+    ])('removes the logo when %s is null, and audits the removal', async (field, keys) => {
+      const key = keys[0]!;
+      updateBrandingForCommunityMock.mockResolvedValueOnce({});
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await PATCH(
+        new NextRequest('http://localhost/api/v1/pm/branding', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 1, [field]: null }),
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      // Removing the square logo removes its email copy too.
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {}, { remove: keys });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ newValues: Object.fromEntries(keys.map((k) => [k, null])) }),
+      );
+      expect((await res.json()).data).toMatchObject({ [key]: null });
+      vi.unstubAllGlobals();
     });
 
     it('passes an empty customEmailFooter through to clear the stored value', async () => {
@@ -214,7 +280,7 @@ describe('pm branding route', () => {
       // spreads the patch over existing branding, so '' overwrites the old text.
       expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
         customEmailFooter: '',
-      });
+      }, { remove: [] });
     });
 
     it('returns 403 for non-PM user — demo grace runs but update does not', async () => {
@@ -300,6 +366,51 @@ describe('pm branding route', () => {
       vi.unstubAllGlobals();
     });
 
+    it('stores the square logo twice: a WebP for the site and a public PNG for email', async () => {
+      createPresignedDownloadUrlMock.mockResolvedValueOnce('http://storage/raw-logo');
+      createPresignedUploadUrlMock
+        .mockResolvedValueOnce({ signedUrl: 'http://storage/put-logo' })
+        .mockResolvedValueOnce({ signedUrl: 'http://storage/put-email-logo' });
+      resizeLogoMock.mockResolvedValueOnce(Buffer.from('webp'));
+      resizeEmailLogoMock.mockResolvedValueOnce(Buffer.from('png'));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
+        .mockResolvedValue({ ok: true });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await PATCH(
+        new NextRequest('http://localhost/api/v1/pm/branding', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 1, logoStoragePath: 'communities/1/documents/u1/logo.png' }),
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(createPresignedUploadUrlMock).toHaveBeenCalledWith(
+        'documents',
+        'communities/1/branding/logo.webp',
+        { upsert: true },
+      );
+      // A new public name every time, so a mail client's cached copy of the
+      // old logo is never shown for the new one.
+      const [bucket, emailPath, opts] = createPresignedUploadUrlMock.mock.calls[1]!;
+      expect(bucket).toBe('community-assets');
+      expect(emailPath).toMatch(/^1\/email\/logo-[0-9a-f-]{36}\.png$/);
+      expect(opts).toEqual({ upsert: false });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://storage/put-email-logo',
+        expect.objectContaining({ headers: { 'content-type': 'image/png' } }),
+      );
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(
+        1,
+        { logoPath: 'communities/1/branding/logo.webp', emailLogoPath: emailPath },
+        { remove: [] },
+      );
+      vi.unstubAllGlobals();
+    });
+
     it('processes a site logo via resizeSiteLogo and persists siteLogoPath', async () => {
       createPresignedDownloadUrlMock.mockResolvedValueOnce('http://storage/raw-site-logo');
       createPresignedUploadUrlMock.mockResolvedValueOnce({ signedUrl: 'http://storage/put-site-logo' });
@@ -326,7 +437,7 @@ describe('pm branding route', () => {
       expect(resizeLogoMock).not.toHaveBeenCalled();
       expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
         siteLogoPath: 'communities/1/branding/site-logo.webp',
-      });
+      }, { remove: [] });
 
       vi.unstubAllGlobals();
     });

@@ -14,6 +14,11 @@ const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 const brandingUpdate = vi.fn();
 // The live write — one atomic UPDATE in packages/db (`@propertypro/db/unsafe`).
 const applyLive = vi.fn();
+const resolveLogoPreviewUrl = vi.fn(async (..._args: unknown[]): Promise<string | null> => null);
+
+vi.mock('@/lib/branding/logo-preview-url', () => ({
+  resolveLogoPreviewUrl: (...args: unknown[]) => resolveLogoPreviewUrl(...args),
+}));
 
 vi.mock('@propertypro/db/unsafe', () => ({
   applyLiveBrandingPatchUnscoped: (...args: unknown[]) => applyLive(...args),
@@ -65,6 +70,24 @@ async function callPatch(body: unknown) {
   return mod.PATCH(req as never, { params: Promise.resolve({ id: '7' }) } as never);
 }
 
+describe('community branding GET', () => {
+  afterEach(() => vi.resetModules());
+
+  it("returns a URL for the stored logo next to the branding, for this community's id", async () => {
+    requirePlatformAdmin.mockResolvedValue({ id: 'admin-1', email: 'a@b.com' });
+    resolveLogoPreviewUrl.mockResolvedValueOnce(null);
+    const mod = await import('@/app/api/admin/communities/[id]/branding/route');
+
+    const res = await mod.GET(new Request('http://localhost/x') as never, {
+      params: Promise.resolve({ id: '7' }),
+    } as never);
+
+    // The stored branding in this file's admin-client mock has no logo.
+    expect(resolveLogoPreviewUrl).toHaveBeenCalledWith(7, undefined);
+    expect(await res.json()).toEqual({ branding: { primaryColor: '#000000' }, logoUrl: null });
+  });
+});
+
 describe('community branding PATCH auditing', () => {
   beforeEach(() => {
     requirePlatformAdmin.mockResolvedValue({ id: 'admin-1', email: 'a@b.com' });
@@ -106,7 +129,8 @@ describe('community branding PATCH auditing', () => {
     expect(applyLive).toHaveBeenCalledWith(
       7,
       { primaryColor: '#123456', logoPath: 'communities/7/logo.webp' },
-      { touchUpdatedAt: true },
+      // A changed logo makes the manager's email copy of the old one stale.
+      { touchUpdatedAt: true, remove: ['emailLogoPath'] },
     );
     expect(brandingUpdate).not.toHaveBeenCalled();
     expect(await res.json()).toEqual({ branding: { primaryColor: '#123456' } });

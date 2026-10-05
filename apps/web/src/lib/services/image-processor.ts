@@ -50,6 +50,20 @@ export async function resizeSiteLogo(input: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
+const EMAIL_LOGO_SIZE = 96;
+
+/**
+ * The square logo for email: a 96x96 PNG (shown at 36px, so sharp on retina
+ * screens), cover-cropped like `resizeLogo`. PNG, not WebP, because Outlook
+ * desktop does not render WebP.
+ */
+export async function resizeEmailLogo(input: Buffer): Promise<Buffer> {
+  return sharp(input)
+    .resize(EMAIL_LOGO_SIZE, EMAIL_LOGO_SIZE, { fit: 'cover', position: 'center' })
+    .png()
+    .toBuffer();
+}
+
 const SITE_IMAGE_QUALITY = 82;
 
 export interface SiteImageVariants {

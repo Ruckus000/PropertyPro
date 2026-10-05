@@ -198,8 +198,9 @@ export interface BrandingPatch {
 export async function updateBrandingForCommunity(
   communityId: number,
   patch: BrandingPatch,
+  options: { remove?: readonly (keyof CommunityBranding)[] } = {},
 ): Promise<CommunityBranding> {
-  const { after } = await applyLiveBrandingPatchUnscoped(communityId, patch);
+  const { after } = await applyLiveBrandingPatchUnscoped(communityId, patch, options);
   return after ?? {};
 }
 

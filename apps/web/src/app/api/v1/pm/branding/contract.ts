@@ -17,7 +17,9 @@
  *     → requireCommunityMembership
  *     → membership.role is property_manager-tier
  *     → [optional logo sharp pipeline when logoStoragePath set]
- *     → updateBrandingForCommunity → logAuditEvent → tryAutoComplete
+ *     → updateBrandingForCommunity → logAuditEvent
+ *   (The "Customize your portal" checklist item is ticked by a site Publish,
+ *   not here: a logo alone does not customize the portal.)
  *
  * ## PATCH writes the LIVE-ONLY branding fields, nothing else
  *
@@ -36,8 +38,13 @@
  * `hexColor`, `allowedFont` and `customCssOverridesSchema` stay exported: the
  * design route and the onboarding website route validate the look with them.
  *
- * Response: loose `z.unknown()` — branding payloads may evolve additively and
- * the service return type is a partial community branding projection.
+ * A logo path of `null` removes that logo.
+ *
+ * Response: both verbs return `PmBranding`, the live-only fields and nothing
+ * else. It used to be the whole branding object, which now carries the
+ * manager's unpublished draft and site settings, none of them this route's.
+ * The logo URLs are resolved on the server (signed when the file is private),
+ * so a client can show the logo without knowing which bucket holds it.
  *
  * `permission: { resource: 'settings', action: 'read' | 'write' }` — `settings`
  * IS in `RBAC_RESOURCES`; the real gate is the property_manager-tier role
@@ -71,13 +78,23 @@ export const customCssOverridesSchema = z
 export const patchPmBrandingBodySchema = z
   .object({
     communityId: z.number().int().positive(),
-    logoStoragePath: z.string().min(1).max(500).optional(),
-    siteLogoStoragePath: z.string().min(1).max(500).optional(),
+    logoStoragePath: z.string().min(1).max(500).nullable().optional(),
+    siteLogoStoragePath: z.string().min(1).max(500).nullable().optional(),
     customEmailFooter: z.string().max(500).optional(),
   })
   .strict();
 
 export type PatchPmBrandingBody = z.infer<typeof patchPmBrandingBodySchema>;
+
+export const pmBrandingSchema = z.object({
+  logoPath: z.string().nullable(),
+  logoUrl: z.string().nullable(),
+  siteLogoPath: z.string().nullable(),
+  siteLogoUrl: z.string().nullable(),
+  customEmailFooter: z.string().nullable(),
+});
+
+export type PmBranding = z.infer<typeof pmBrandingSchema>;
 
 export const getPmBrandingContract = defineRoute({
   method: 'GET',
@@ -87,7 +104,7 @@ export const getPmBrandingContract = defineRoute({
       communityId: z.coerce.number().int().positive(),
     }),
   },
-  response: z.unknown(),
+  response: pmBrandingSchema,
   permission: { resource: 'settings', action: 'read' },
 });
 
@@ -97,6 +114,6 @@ export const patchPmBrandingContract = defineRoute({
   request: {
     body: patchPmBrandingBodySchema,
   },
-  response: z.unknown(),
+  response: pmBrandingSchema,
   permission: { resource: 'settings', action: 'write' },
 });

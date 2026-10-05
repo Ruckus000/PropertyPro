@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql as dsql } from 'drizzle-orm';
 import * as schema from '../src/schema';
 import {
   announcements,
@@ -65,29 +65,35 @@ describeDb('reconcilePublicUserIdWithAuthId (integration)', () => {
     try {
       // The trigger is database-wide; keep every privileged cleanup statement
       // in one transaction and the shared advisory-lock namespace.
-      await sql.begin(async (tx) => {
-        const txDb = drizzle(tx, { schema });
-        await tx`SELECT pg_advisory_xact_lock(${auditLogMaintenanceLockNamespace}, ${auditLogMaintenanceLockKey})`;
+      //
+      // drizzle's own transaction, not `sql.begin` + `drizzle(tx)`: the
+      // callback of postgres.js `begin()` is a scoped Sql with no `options`,
+      // and wrapping it in drizzle() throws on `options.parsers` — which made
+      // this hook fail and leak its community, users and audit rows.
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          dsql`SELECT pg_advisory_xact_lock(${auditLogMaintenanceLockNamespace}, ${auditLogMaintenanceLockKey})`,
+        );
         if (createdAuditLogIds.length > 0) {
-          await tx.unsafe(
-            'alter table compliance_audit_log disable trigger compliance_audit_log_append_only_guard',
+          await tx.execute(
+            dsql`alter table compliance_audit_log disable trigger compliance_audit_log_append_only_guard`,
           );
-          await txDb
+          await tx
             .delete(complianceAuditLog)
             .where(inArray(complianceAuditLog.id, createdAuditLogIds));
         }
         if (createdAnnouncementIds.length > 0) {
-          await txDb.delete(announcements).where(inArray(announcements.id, createdAnnouncementIds));
+          await tx.delete(announcements).where(inArray(announcements.id, createdAnnouncementIds));
         }
         for (const id of createdUserIds) {
-          await txDb.delete(users).where(eq(users.id, id)).catch(() => undefined);
+          await tx.delete(users).where(eq(users.id, id)).catch(() => undefined);
         }
         if (communityId) {
-          await txDb.delete(communities).where(eq(communities.id, communityId));
+          await tx.delete(communities).where(eq(communities.id, communityId));
         }
         if (createdAuditLogIds.length > 0) {
-          await tx.unsafe(
-            'alter table compliance_audit_log enable trigger compliance_audit_log_append_only_guard',
+          await tx.execute(
+            dsql`alter table compliance_audit_log enable trigger compliance_audit_log_append_only_guard`,
           );
         }
       });
