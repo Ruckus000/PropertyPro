@@ -54,6 +54,8 @@ import { createInsurancePolicy } from '@/lib/services/insurance-service';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 import { createVisitorForCommunity } from '@/lib/services/package-visitor-service';
 import { createPollForCommunity } from '@/lib/services/polls-service';
+import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
+import { mergeUserPreference } from '@/lib/services/user-preferences-service';
 import { setCommunitySnowbirdEnabled } from '@/lib/services/snowbird-digest-subscription-service';
 import { createArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { CAPTURE_COMMUNITIES } from './manifest-schema';
@@ -144,6 +146,18 @@ async function main(): Promise<void> {
     const created = await run();
     done.push(`${created ? '+' : '='} ${label}`);
   };
+
+  // Website editor shots (manager/website/*): the state a real new condo is in.
+  // createCommunityForPm gives every new community its starter sections; the
+  // demo seed does not, so its editor opens on an empty page. Same call, same
+  // idempotency (it skips a community that already has published sections).
+  await step('website starter sections (Sunset Condos)', async () =>
+    (await applyStarterPackToCommunity(condoId, 'condo_718')).applied,
+  );
+  // The site is never published, so the editor's first-run chooser would cover
+  // every editor shot. Key and shape: app/api/v1/pm/site-editor/preferences/route.ts.
+  await mergeUserPreference(camId, 'site_editor_mode', { mode: 'free' });
+  done.push('+ website editor mode for cam: free edit (set on every run)');
 
   // pk-pending, pk-pickup (site manager) and pk-mine (tenant). Inserted
   // directly: createPackageForCommunity notifies the unit's residents.

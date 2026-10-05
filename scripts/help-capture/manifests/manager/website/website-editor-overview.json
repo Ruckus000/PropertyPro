@@ -1,0 +1,36 @@
+{
+  "section": "manager",
+  "category": "website",
+  "slug": "website-editor-overview",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "ov-editor",
+      "kind": "still",
+      "route": "/pm/website-editor?communityId={cid}",
+      "role": "cam",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=group[name=\"Announcements section\"]"
+        },
+        {
+          "type": "click",
+          "selector": "role=group[name=\"Announcements section\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "[data-testid=\"selected-section-label\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=textbox[name=\"Empty-state message\"]"
+        }
+      ]
+    }
+  ]
+}
