@@ -93,7 +93,8 @@ export function useLeaseRosterData(communityId: number, today: string) {
     leases: leasesQuery.data ?? [],
     units: unitsQuery.data ?? [],
     offers: offersQuery.data ?? [],
-    residents: residentsQuery.data ?? [],
+    /** The resident picker: tenants only. Names for display come from `directory`, which has everyone. */
+    residents: (residentsQuery.data ?? []).filter((r) => r.canLease),
     directory,
     settings: settingsQuery.data ?? { alertWindows: [30, 60, 90], allowResidentsWithoutEmail: false },
     isLoading: leasesQuery.isLoading || unitsQuery.isLoading,
