@@ -92,3 +92,21 @@ describe('migration leases_v3_expand', () => {
     expect(MIGRATION).toMatch(/INSERT INTO lease_residents[\s\S]*NOT EXISTS \(/);
   });
 });
+
+describe('migration leases_v3_validate_checks', () => {
+  const name = readdirSync(MIGRATIONS_DIR).find((f) => /^\d{4}_leases_v3_validate_checks\.sql$/.test(f));
+  const raw = name ? readFileSync(path.join(MIGRATIONS_DIR, name), 'utf8') : '';
+  const sql = raw.replace(/--[^\n]*/g, '');
+  const NOT_VALID = [...MIGRATION.matchAll(/ADD CONSTRAINT "(\w+)" CHECK \([^;]*\) NOT VALID;/g)].map((m) => m[1]).sort();
+
+  it('validates exactly the CHECKs leases_v3_expand added NOT VALID, and does nothing else', () => {
+    expect(name).toBeDefined();
+    const validated = [...sql.matchAll(/ALTER TABLE "leases" VALIDATE CONSTRAINT "(\w+)";/g)].map((m) => m[1]).sort();
+    expect(validated).toEqual(NOT_VALID);
+    expect(sql.replace(/ALTER TABLE "leases" VALIDATE CONSTRAINT "\w+";/g, '').replace(/statement-breakpoint|\s/g, '')).toBe('');
+  });
+
+  it('keeps its number out of the header (the prod ledger hashes the bytes)', () => {
+    expect(raw).not.toContain(name!.slice(0, 4));
+  });
+});

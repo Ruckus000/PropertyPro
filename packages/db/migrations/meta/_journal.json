@@ -610,6 +610,13 @@
       "when": 1791164953906,
       "tag": "0087_leases_v3_expand",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1791211990302,
+      "tag": "0089_leases_v3_validate_checks",
+      "breakpoints": true
     }
   ]
 }
