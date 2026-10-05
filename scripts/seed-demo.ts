@@ -51,6 +51,7 @@ import {
 } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
+import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
 import { runSeedSafetyChecks } from './lib/seed-safety';
 import {
   getOrCreateBillingGroupForPm,
@@ -1761,6 +1762,9 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
     communityIdsBySlug[community.slug] = result.communityId;
     communitySeedResults.push(result);
+    // The starter sections every real new community gets (createCommunityForPm).
+    // seedCommunity applies none, so the demo's website editor opened empty.
+    await applyStarterPackToCommunity(result.communityId, community.communityType);
   }
   debugSeed('communities seeded via seedCommunity');
 

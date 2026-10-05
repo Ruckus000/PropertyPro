@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { createDemoSession } from '@/lib/services/demo-session';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
 import { getDemoInstanceForEntry } from '@/lib/services/demo-conversion';
+import { applyStarterPackToDemoCommunity } from '@/lib/services/starter-pack-service';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, BadRequestError, NotFoundError } from '@/lib/api/errors';
 
@@ -87,6 +88,7 @@ export const POST = withErrorHandler(async (request: NextRequest, context: Route
   if (!communityId) {
     throw new NotFoundError('Demo setup incomplete.');
   }
+  await applyStarterPackToDemoCommunity(communityId);
 
   // 4. Determine target email based on role
   const email = role === 'board' ? instance.demoBoardEmail : instance.demoResidentEmail;
