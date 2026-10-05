@@ -64,3 +64,33 @@ describe('MobileHomeContent', () => {
     expect(screen.getByRole('link', { name: /compliance/i })).toBeInTheDocument();
   });
 });
+
+describe('MobileHomeContent — the community logo', () => {
+  const props = {
+    userName: 'Jane Doe',
+    communityName: 'Palm Gardens',
+    communityId: 42,
+    city: 'Miami',
+    state: 'FL',
+    timezone: 'America/New_York',
+    role: 'resident',
+    hasCompliance: false,
+    hasFinance: false,
+    hasMaintenanceRequests: false,
+    hasMeetings: false,
+    announcementCount: 0,
+    openMaintenanceCount: 0,
+    nextMeetingDate: null,
+  };
+
+  it('shows the square logo beside the community name', () => {
+    render(<MobileHomeContent {...props} logoUrl="https://storage/signed-logo" />);
+    expect(document.querySelector('img[src="https://storage/signed-logo"]')).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'Palm Gardens' })).toBeInTheDocument();
+  });
+
+  it('renders as before when the community has no logo', () => {
+    const { container } = render(<MobileHomeContent {...props} />);
+    expect(container.querySelector('img')).toBeNull();
+  });
+});

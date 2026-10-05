@@ -35,6 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUserCommunities } from '@/hooks/use-user-communities';
 import { applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
 import { SEARCH_THRESHOLD } from './sidebar-tenant-switcher';
+import { CommunityAvatar } from './community-avatar';
 
 export interface CommunityPickerDialogProps {
   open: boolean;
@@ -125,6 +126,7 @@ export function CommunityPickerDialog({
                       className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-card px-3 py-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       aria-label={`Open ${itemLabel ?? 'this page'} for ${community.name}`}
                     >
+                      <CommunityAvatar name={community.name} logoUrl={community.logoUrl} className="size-8" />
                       <span className="min-w-0 flex-1 truncate text-sm font-medium text-content">
                         {community.name}
                       </span>

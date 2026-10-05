@@ -10,7 +10,7 @@
  * delegated to `runRoute()` from `@propertypro/api-contract`. The wire
  * response is the canonical single-payload envelope:
  *
- *     { data: [{ id, name, slug, role, displayTitle, communityType }, ...] }
+ *     { data: [{ id, name, slug, role, displayTitle, communityType, logoUrl }, ...] }
  *
  * Authorization: user is the anchor — only returns rows from the user's
  * own `user_roles`. No tenant scope; no RBAC matrix lookup. The
@@ -23,6 +23,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { getSupportScope, narrowToSupportScope } from '@/lib/support/support-scope';
+import { publicCommunityLogoUrl } from '@/lib/branding/public-logo-url';
 import { meCommunitiesContract } from './contract';
 
 // route-gate: self-scoped — lists the caller's own memberships (narrowed to the consented community under a support session)
@@ -43,6 +44,10 @@ export const GET = withErrorHandler(
       role: r.role,
       displayTitle: r.displayTitle,
       communityType: r.communityType,
+      logoUrl: publicCommunityLogoUrl(r.communityId, {
+        emailLogoPath: r.brandingEmailLogoPath,
+        logoPath: r.brandingLogoPath,
+      }),
     }));
   }),
 );

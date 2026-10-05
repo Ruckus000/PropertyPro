@@ -44,3 +44,4 @@ export async function resolveBrandingImageUrl(
 
   return null;
 }
+

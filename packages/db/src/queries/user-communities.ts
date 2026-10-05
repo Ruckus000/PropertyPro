@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../drizzle';
 import { communities } from '../schema/communities';
 import { userRoles } from '../schema/user-roles';
@@ -11,6 +11,13 @@ export interface UserCommunityRow {
   city: string | null;
   state: string | null;
   logoPath: string | null;
+  /**
+   * From `communities.branding`: the public email PNG of the square logo
+   * (`{id}/email/…`) and the square logo itself. Read for the community
+   * switcher's avatars; resolve with `publicCommunityLogoUrl` (apps/web).
+   */
+  brandingEmailLogoPath: string | null;
+  brandingLogoPath: string | null;
   role: string;
   isUnitOwner: boolean;
   displayTitle: string | null;
@@ -39,6 +46,8 @@ export async function findUserCommunitiesUnscoped(
       city: communities.city,
       state: communities.state,
       logoPath: communities.logoPath,
+      brandingEmailLogoPath: sql<string | null>`${communities.branding} ->> 'emailLogoPath'`,
+      brandingLogoPath: sql<string | null>`${communities.branding} ->> 'logoPath'`,
       role: userRoles.role,
       isUnitOwner: userRoles.isUnitOwner,
       displayTitle: userRoles.displayTitle,
