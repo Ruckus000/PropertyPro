@@ -216,6 +216,41 @@ async function main(): Promise<void> {
     return true;
   });
 
+  // Leases help: Unit 105 month-to-month (renewing-a-lease, "Offer a fixed
+  // term") and Unit 106 a holdover (move-out-and-holdovers). The demo seed
+  // gives both a fixed term ending months away.
+  // Whole-month terms, so the panels show "12 months" rather than "Custom term".
+  const today = new Date();
+  const monthStart = (monthsAgo: number) =>
+    isoDate(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - monthsAgo, 1)));
+  const endOfLastMonth = isoDate(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0)));
+  for (const [unitNumber, startDate, endDate] of [
+    ['105', monthStart(14), null],
+    ['106', monthStart(12), endOfLastMonth],
+  ] as const) {
+    await step(`lease state for Unit ${unitNumber} (Sunset Ridge)`, async () => {
+      const unit = await first<{ id: number }>(
+        apartment.selectFrom(units, { id: units.id }, eq(units.unitNumber, unitNumber)).limit(1),
+      );
+      const row =
+        unit &&
+        (await first<{ id: number; startDate: string; endDate: string | null }>(
+          apartment
+            .selectFrom(
+              leases,
+              { id: leases.id, startDate: leases.startDate, endDate: leases.endDate },
+              and(eq(leases.unitId, unit.id), isNull(leases.deletedAt)),
+            )
+            .orderBy(leases.id)
+            .limit(1),
+        ));
+      if (!row) throw new Error(`Sunset Ridge Unit ${unitNumber} has no lease — run pnpm seed:demo first`);
+      if (row.startDate === startDate && row.endDate === endDate) return false;
+      await apartment.update(leases, { startDate, endDate }, eq(leases.id, row.id));
+      return true;
+    });
+  }
+
   // ct-alerts (endDate inside the 90-day window), ct-bids (bidding closed, so bids show)
   await step('expiring contract with bids', async () => {
     const title = 'Landscaping Services';

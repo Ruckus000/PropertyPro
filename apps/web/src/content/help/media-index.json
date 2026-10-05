@@ -389,15 +389,360 @@
     394,
     "2026-10-01"
   ],
+  "manager/leases/adding-a-lease/step-1": [
+    1130,
+    152,
+    "2026-10-05"
+  ],
+  "manager/leases/adding-a-lease/step-2": [
+    702,
+    134,
+    "2026-10-05"
+  ],
+  "manager/leases/adding-a-lease/step-3": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/adding-a-lease/step-4": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/adding-a-lease/step-5": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/adding-a-lease/step-6": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/adding-a-lease/step-7": [
+    702,
+    134,
+    "2026-10-05"
+  ],
+  "manager/leases/adding-a-lease/step-8": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/deposit-notice/step-1": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/deposit-notice/step-2": [
+    752,
+    707,
+    "2026-10-05"
+  ],
+  "manager/leases/deposit-notice/step-3": [
+    752,
+    707,
+    "2026-10-05"
+  ],
+  "manager/leases/deposit-notice/step-4": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/editing-a-lease/step-1": [
+    1130,
+    36,
+    "2026-10-05"
+  ],
+  "manager/leases/editing-a-lease/step-2": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/editing-a-lease/step-3": [
+    592,
+    628,
+    "2026-10-05"
+  ],
+  "manager/leases/editing-a-lease/step-4": [
+    592,
+    628,
+    "2026-10-05"
+  ],
+  "manager/leases/ending-a-lease-early/step-1": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/ending-a-lease-early/step-2": [
+    542,
+    245,
+    "2026-10-05"
+  ],
+  "manager/leases/ending-a-lease-early/step-3": [
+    592,
+    757,
+    "2026-10-05"
+  ],
+  "manager/leases/ending-a-lease-early/step-4": [
+    592,
+    757,
+    "2026-10-05"
+  ],
+  "manager/leases/expiry-alert-windows/step-1": [
+    1130,
+    152,
+    "2026-10-05"
+  ],
+  "manager/leases/expiry-alert-windows/step-2": [
+    320,
+    450,
+    "2026-10-05"
+  ],
+  "manager/leases/expiry-alert-windows/step-3": [
+    1132,
+    206,
+    "2026-10-05"
+  ],
+  "manager/leases/lease-statuses/step-1": [
+    1132,
+    206,
+    "2026-10-05"
+  ],
+  "manager/leases/lease-statuses/step-2": [
+    1132,
+    206,
+    "2026-10-05"
+  ],
+  "manager/leases/managing-leases/step-1": [
+    1132,
+    206,
+    "2026-10-05"
+  ],
+  "manager/leases/managing-leases/step-2": [
+    1130,
+    152,
+    "2026-10-05"
+  ],
+  "manager/leases/managing-leases/step-3": [
+    556,
+    900,
+    "2026-10-05"
+  ],
   "manager/leases/move-in-out/mio-card": [
     1200,
     822,
-    "2026-10-01"
+    "2026-10-05"
   ],
   "manager/leases/move-in-out/mio-list": [
     1132,
     226,
-    "2026-10-01"
+    "2026-10-05"
+  ],
+  "manager/leases/move-out-and-holdovers/step-1": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/move-out-and-holdovers/step-2": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/move-out-and-holdovers/step-3": [
+    592,
+    614,
+    "2026-10-05"
+  ],
+  "manager/leases/move-out-and-holdovers/step-4": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/move-out-and-holdovers/step-5": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/move-out-and-holdovers/step-6": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/move-out-and-holdovers/step-7": [
+    1130,
+    100,
+    "2026-10-05"
+  ],
+  "manager/leases/recording-a-renewal/step-1": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/recording-a-renewal/step-2": [
+    592,
+    636,
+    "2026-10-05"
+  ],
+  "manager/leases/recording-a-renewal/step-3": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-1": [
+    1132,
+    595,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-10": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-11": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-12": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-2": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-3": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-4": [
+    702,
+    184,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-5": [
+    702,
+    134,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-6": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-7": [
+    592,
+    632,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-8": [
+    592,
+    751,
+    "2026-10-05"
+  ],
+  "manager/leases/renewing-a-lease/step-9": [
+    1130,
+    103,
+    "2026-10-05"
+  ],
+  "manager/leases/transferring-units/step-1": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/transferring-units/step-2": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/transferring-units/step-3": [
+    702,
+    134,
+    "2026-10-05"
+  ],
+  "manager/leases/transferring-units/step-4": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/transferring-units/step-5": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/transferring-units/step-6": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/transferring-units/step-7": [
+    752,
+    797,
+    "2026-10-05"
+  ],
+  "manager/leases/unit-offline/step-1": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/unit-offline/step-2": [
+    592,
+    647,
+    "2026-10-05"
+  ],
+  "manager/leases/unit-offline/step-3": [
+    592,
+    647,
+    "2026-10-05"
+  ],
+  "manager/leases/unit-offline/step-4": [
+    1130,
+    100,
+    "2026-10-05"
+  ],
+  "manager/leases/unit-offline/step-5": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/unit-offline/step-6": [
+    592,
+    364,
+    "2026-10-05"
+  ],
+  "manager/leases/upcoming-lease/step-1": [
+    1130,
+    100,
+    "2026-10-05"
+  ],
+  "manager/leases/upcoming-lease/step-2": [
+    592,
+    668,
+    "2026-10-05"
+  ],
+  "manager/leases/upcoming-lease/step-3": [
+    592,
+    668,
+    "2026-10-05"
+  ],
+  "manager/leases/upcoming-lease/step-4": [
+    556,
+    900,
+    "2026-10-05"
+  ],
+  "manager/leases/upcoming-lease/step-5": [
+    592,
+    467,
+    "2026-10-05"
+  ],
+  "manager/leases/upcoming-lease/step-6": [
+    388,
+    41,
+    "2026-10-05"
   ],
   "manager/maintenance/dispatch-work-order/wo-btn": [
     1141,
