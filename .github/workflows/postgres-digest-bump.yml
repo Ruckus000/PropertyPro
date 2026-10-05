@@ -9,9 +9,17 @@ name: Postgres Image Digest Bump
 # Weekly it resolves what `postgres:16` currently points at on the ECR Public
 # mirror and, if that differs from what is pinned, copies the new digest into
 # this repo's GHCR package (where the consumers actually pull from — see
-# ci-image-mirror.yml) and opens a PR moving the pin. The mirror step MUST
-# precede the PR: the PR's integration-tests pulls the new digest from GHCR, and
-# a push made with GITHUB_TOKEN does not trigger ci-image-mirror.yml.
+# ci-image-mirror.yml), pushes a branch moving the pin, and opens an ISSUE
+# linking to it. The mirror step MUST precede the branch: the PR's
+# integration-tests pulls the new digest from GHCR, and a push made with
+# GITHUB_TOKEN does not trigger ci-image-mirror.yml.
+#
+# Why an issue and not a PR: this repo has "Allow GitHub Actions to create and
+# approve pull requests" OFF (run 37377694633: `GitHub Actions is not permitted
+# to create or approve pull requests`), and turning it on would let every
+# workflow here open and approve PRs. An issue also reaches a human, and the PR
+# that human opens from its link runs CI normally — a PR opened by
+# GITHUB_TOKEN would not have.
 #
 # Why the digest is NOT written in the workflow files: GITHUB_TOKEN can never be
 # granted the `workflows` permission, so GitHub rejects any push of it that
@@ -39,10 +47,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # Needed to push the bump branch and open the PR. Deliberately scoped to
-      # this job rather than the workflow, and nothing wider than these three.
+      # Push the bump branch; open (and close superseded) bump issues; read
+      # PRs to skip a digest someone already opened one for. Deliberately
+      # scoped to this job rather than the workflow.
       contents: write
-      pull-requests: write
+      issues: write
+      pull-requests: read
       # Copy the new digest into ghcr.io/<owner>/postgres before proposing it.
       packages: write
 
@@ -122,68 +132,87 @@ jobs:
           fi
           echo "Verified: ${dest_repo}@${LATEST}"
 
-      - name: Open a bump PR
+      - name: Push the bump branch and open an issue
         if: steps.resolve.outputs.changed == 'true'
         env:
           # GITHUB_TOKEN, deliberately — no secret to create, rotate or expire.
-          # The trade: a PR it opens does NOT trigger other workflows (GitHub
-          # suppresses that to prevent recursion), so the PR's checks never
-          # report until a human closes and reopens it. The PR body says so.
           GH_TOKEN: ${{ github.token }}
           CURRENT: ${{ steps.resolve.outputs.current }}
           LATEST: ${{ steps.resolve.outputs.latest }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
           short="${LATEST#sha256:}"; short="${short:0:12}"
           branch="chore/postgres-digest-${short}"
+          prefix="Postgres CI image: new digest"
+          title="${prefix} ${short} ready to merge"
 
-          # Deterministic branch name, so a digest that stays stale for several
-          # weeks produces ONE PR rather than one per run.
-          if gh pr list --head "$branch" --state open --json number \
-              --jq 'length' | grep -qv '^0$'; then
+          # A PR for this digest already exists — someone acted on an earlier
+          # run's issue. Nothing left to do.
+          if [ "$(gh pr list --head "$branch" --state open --json number --jq 'length')" != "0" ]; then
             echo "A PR for $branch is already open — nothing to do."
             exit 0
           fi
 
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
+          # Deterministic branch name, so a digest that stays stale for several
+          # weeks is pushed ONCE. Re-pushing a fresh commit off a newer main
+          # would be a non-fast-forward and fail the run.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "Branch $branch already exists — not re-pushing."
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$branch"
 
-          # The one pin both consumers read; nothing under .github/workflows/
-          # changes, which is what lets GITHUB_TOKEN push this.
-          printf '%s\n' "$LATEST" > scripts/ci/postgres-image-digest
-          git add scripts/ci/postgres-image-digest
+            # The one pin both consumers read; nothing under .github/workflows/
+            # changes, which is what lets GITHUB_TOKEN push this.
+            printf '%s\n' "$LATEST" > scripts/ci/postgres-image-digest
+            git add scripts/ci/postgres-image-digest
 
-          # Separate -m flags rather than one multi-line string: every line in a
-          # YAML block scalar must stay indented, and a column-0 continuation
-          # silently ends the block and breaks the whole workflow file.
-          git commit \
-            -m "chore(ci): bump pinned postgres:16 digest" \
-            -m "${CURRENT} -> ${LATEST}" \
-            -m "Opened automatically by .github/workflows/postgres-digest-bump.yml. The tag still resolves to postgres:16 on the ECR Public mirror; only the digest moved, which is how upstream ships patch releases. The new digest was copied to this repo's GHCR package before this commit."
+            # Separate -m flags rather than one multi-line string: every line in a
+            # YAML block scalar must stay indented, and a column-0 continuation
+            # silently ends the block and breaks the whole workflow file.
+            git commit \
+              -m "chore(ci): bump pinned postgres:16 digest" \
+              -m "${CURRENT} -> ${LATEST}" \
+              -m "Pushed automatically by .github/workflows/postgres-digest-bump.yml. The tag still resolves to postgres:16 on the ECR Public mirror; only the digest moved, which is how upstream ships patch releases. The new digest was copied to this repo's GHCR package before this commit."
 
-          git push origin "$branch"
+            git push origin "$branch"
+          fi
 
+          # Close issues for OLDER digests: their branch is superseded by this one.
+          gh issue list --state open --search "\"${prefix}\" in:title" --json number,title \
+            --jq ".[] | select(.title | startswith(\"${prefix}\")) | select(.title != \"${title}\") | .number" \
+            | while read -r n; do
+                gh issue close "$n" --comment "Superseded: upstream moved again, to \`${LATEST}\`."
+              done
+
+          if [ "$(gh issue list --state open --search "\"${title}\" in:title" --json title \
+                --jq "[.[] | select(.title == \"${title}\")] | length")" != "0" ]; then
+            echo "Issue \"${title}\" is already open — nothing to do."
+            exit 0
+          fi
+
+          compare="https://github.com/${REPO}/compare/main...${branch}?expand=1"
           {
-            printf 'Automated digest bump for the Postgres service container.\n\n'
+            printf '`postgres:16` on the ECR Public mirror now resolves to a new image\n'
+            printf 'index — that is how upstream ships patch releases. The pin is\n'
+            printf 'stale; the bump is already on a branch.\n\n'
             printf '| | |\n|---|---|\n'
             printf '| From | `%s` |\n' "$CURRENT"
-            printf '| To | `%s` |\n\n' "$LATEST"
-            printf '`postgres:16` on the ECR Public mirror now resolves to a new image\n'
-            printf 'index — that is how upstream ships patch releases. The tag is\n'
-            printf 'unchanged; only the pin moves. The new digest has already been\n'
-            printf 'copied (digest-preserving) into the GHCR package, which is\n'
-            printf 'where the service containers pull from.\n\n'
-            printf 'Merging is safe once `integration-tests` is green, since that job is\n'
-            printf 'the primary consumer of this image and will pull the new digest.\n'
-            printf '\n> **CI will not start on its own.** This PR was opened with\n'
-            printf '> `GITHUB_TOKEN`, and GitHub suppresses workflow triggers for such\n'
-            printf '> PRs. Close and reopen it to run the checks.\n'
-          } > /tmp/bump-body.md
+            printf '| To | `%s` |\n' "$LATEST"
+            printf '| Branch | `%s` |\n\n' "$branch"
+            printf '**[Open the PR](%s)** — suggested title:\n' "$compare"
+            printf '`chore(ci): bump pinned postgres:16 digest to %s`\n\n' "$short"
+            printf 'Opened by a person, the PR runs CI normally. Merge once\n'
+            printf '`integration-tests` is green: it is the primary consumer of this\n'
+            printf 'image and will pull the new digest, which has already been copied\n'
+            printf '(digest-preserving) into the GHCR package. Close this issue when\n'
+            printf 'the PR merges.\n\n'
+            printf 'Opened by `.github/workflows/postgres-digest-bump.yml`. This job\n'
+            printf 'cannot open the PR itself: the repo does not allow GitHub Actions\n'
+            printf 'to create pull requests.\n'
+          } > /tmp/bump-issue.md
 
-          gh pr create \
-            --base main \
-            --head "$branch" \
-            --title "chore(ci): bump pinned postgres:16 digest to ${short}" \
-            --body-file /tmp/bump-body.md
+          gh issue create --title "$title" --body-file /tmp/bump-issue.md
