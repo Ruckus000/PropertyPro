@@ -29,20 +29,5 @@
       "@propertypro/ui/*": ["packages/ui/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "__tests__/**/*.ts"],
-  // Known-red when this project was added (2026-10-05): 53 pre-existing errors
-  // across these 10 files. SHRINK THIS LIST; never add to it to hide a new
-  // error. A new test file is type-checked by default.
-  "exclude": [
-    "__tests__/audit-logging.test.ts",
-    "__tests__/document-access.integration.test.ts",
-    "__tests__/documents-tenant-isolation.integration.test.ts",
-    "__tests__/keyset-indexes-migration.test.ts",
-    "__tests__/pagination.integration.test.ts",
-    "__tests__/pipeline-and-transactions.integration.test.ts",
-    "__tests__/rls-policies.integration.test.ts",
-    "__tests__/scoped-client.integration.test.ts",
-    "__tests__/support-inbox-migration.test.ts",
-    "__tests__/token-encryption.test.ts"
-  ]
+  "include": ["src/**/*.ts", "__tests__/**/*.ts"]
 }

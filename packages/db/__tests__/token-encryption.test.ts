@@ -50,7 +50,7 @@ describe('token-encryption', () => {
     const encrypted = encryptToken('sensitive-token');
 
     const payload = Buffer.from(encrypted, 'base64');
-    payload[payload.length - 1] = payload[payload.length - 1] ^ 0xff;
+    payload[payload.length - 1] = payload[payload.length - 1]! ^ 0xff;
     const tampered = payload.toString('base64');
 
     expect(() => decryptToken(tampered)).toThrow('Failed to decrypt token payload');

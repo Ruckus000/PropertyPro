@@ -403,7 +403,7 @@ describe('cross-tenant audit-read isolation', () => {
 
     // The scoped client's communityId is read-only and cannot be changed
     expect(() => {
-      (clientA as Record<string, unknown>).communityId = 200;
+      (clientA as unknown as Record<string, unknown>).communityId = 200;
     }).toThrow();
   });
 });

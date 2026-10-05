@@ -69,6 +69,19 @@ async function writeGaps(maxPipeline: number | undefined): Promise<number[]> {
 
 const stacked = (gap: number) => gap < SLEEP_MS / 2;
 
+/**
+ * Narrow a transaction handle back to the callable `Sql` interface.
+ *
+ * postgres.js declares `TransactionSql` as `Omit<Sql<T>, 'begin' | 'end' | …>`,
+ * and TypeScript's `Omit` silently drops CALL SIGNATURES along with the named
+ * keys. So `` tx`select 1` `` — which is the library's own documented usage and
+ * works perfectly at runtime — does not type-check. This is a defect in the
+ * package's types, not a claim about the value, which is why the cast is
+ * isolated here with a name rather than sprinkled at each call site.
+ * (Same helper as apps/web/__tests__/integration/support-tickets-rls.)
+ */
+const tagged = (tx: postgres.TransactionSql): postgres.Sql => tx as unknown as postgres.Sql;
+
 describeDb('postgres.js pipelining and transactions (DB integration)', () => {
   afterAll(async () => {
     await Promise.all(clients.map((client) => client.end({ timeout: 5 })));
@@ -96,15 +109,15 @@ describeDb('postgres.js pipelining and transactions (DB integration)', () => {
     const committed = Array.from({ length: 3 }, (_, t) =>
       sql.begin(async (tx) => {
         const inner = await Promise.all(
-          [1, 2, 3].map((n) => tx`select ${t * 10 + n}::int as v`),
+          [1, 2, 3].map((n) => tagged(tx)`select ${t * 10 + n}::int as v`),
         );
-        const nested = await tx.savepoint((sp) => sp`select 7::int as n`);
+        const nested = await tx.savepoint((sp) => tagged(sp)`select 7::int as n`);
         return [inner.map((rows) => rows[0]!.v as number), nested[0]!.n as number];
       }),
     );
     const rolledBack = sql
       .begin(async (tx) => {
-        await tx`select 1`;
+        await tagged(tx)`select 1`;
         throw new Error('rollback requested');
       })
       .then(
