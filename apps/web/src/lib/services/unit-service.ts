@@ -87,7 +87,9 @@ export async function createUnitForCommunity(
  * read. The write applies only if the row is unchanged since; returns null
  * when it is not (someone else saved in between). Compared at millisecond
  * precision — what JSON carries — since `defaultNow()` stores microseconds.
- * Returns the updated row otherwise.
+ * Sound only because every scoped write moves `updatedAt` at least 1ms forward
+ * (`nextUpdatedAt` in the scoped client), so no later write shares the
+ * token's millisecond. Returns the updated row otherwise.
  */
 export async function updateUnitById(
   scoped: ScopedClient,

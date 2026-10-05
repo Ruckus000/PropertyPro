@@ -119,7 +119,8 @@ export async function createOccupant(
 /**
  * Update only what changed. With `expectedUpdatedAt` the write applies only
  * if nobody saved since (millisecond precision, what JSON carries) — the same
- * optimistic-concurrency rule as units and residents.
+ * optimistic-concurrency rule as units and residents (sound because every
+ * scoped write moves `updatedAt` at least 1ms forward).
  */
 export async function updateOccupant(
   communityId: number,

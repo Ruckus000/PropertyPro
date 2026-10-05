@@ -344,8 +344,10 @@ export async function updateResidentUser(
  *
  * With `expectedUpdatedAt` (optimistic concurrency) the write applies only if
  * the row is unchanged since the caller read it, compared at millisecond
- * precision (what JSON carries; `defaultNow()` stores microseconds). Returns
- * false when someone else saved in between.
+ * precision (what JSON carries; `defaultNow()` stores microseconds). Every
+ * scoped write moves `updatedAt` at least 1ms forward, so a later write never
+ * shares the token's millisecond. Returns false when someone else saved in
+ * between.
  */
 export async function updateResidentRole(
   communityId: number,
