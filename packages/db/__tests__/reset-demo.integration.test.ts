@@ -18,6 +18,27 @@ const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.ski
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
 /**
+ * Refuse any database not on this machine (CI's is an ephemeral container).
+ * This file deletes and re-seeds the shared demo communities by slug, and the
+ * repo's `.env.local` DATABASE_URL is PRODUCTION — so a run that inherited it
+ * would reset the live demo tenants. Same guard as seed-community-counts.
+ */
+function assertLoopbackDatabaseOrCI(label: string): void {
+  if (process.env.CI) return;
+  let host = '';
+  try {
+    host = new URL(process.env.DATABASE_URL ?? '').hostname;
+  } catch {
+    throw new Error(`${label}: DATABASE_URL is not a parseable URL; refusing to run`);
+  }
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
+    throw new Error(
+      `${label}: refusing to run against non-local database host '${host}'; use scripts/local-test-db.sh`,
+    );
+  }
+}
+
+/**
  * Exact document counts seeded per community by seed-demo.ts.
  * Used to detect both orphaned duplicates and missing data after reset.
  *
@@ -50,6 +71,7 @@ describeDb('demo reset integration', () => {
   };
 
   beforeAll(async () => {
+    assertLoopbackDatabaseOrCI('reset-demo');
     sql = postgres(process.env.DATABASE_URL!, { prepare: false });
     db = drizzle(sql, { schema });
 
@@ -63,8 +85,11 @@ describeDb('demo reset integration', () => {
   }, 300_000);
 
   afterAll(async () => {
-    await sql.end();
-    await new Promise((resolve) => double?.server.close(resolve));
+    await sql?.end();
+    // Guarded: when beforeAll throws before the double starts, `double?.server`
+    // is undefined, `resolve` is never called, and the hook would hang until
+    // its 300s timeout.
+    if (double) await new Promise((resolve) => double.server.close(resolve));
     for (const [name, value] of [
       ['NEXT_PUBLIC_SUPABASE_URL', savedEnv.url],
       ['SUPABASE_SERVICE_ROLE_KEY', savedEnv.key],
