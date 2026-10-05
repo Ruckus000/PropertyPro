@@ -51,6 +51,19 @@ interface SeedData {
   auditResourcePrefix: string;
 }
 
+/**
+ * Narrow a transaction handle back to the callable `Sql` interface.
+ *
+ * postgres.js declares `TransactionSql` as `Omit<Sql<T>, 'begin' | 'end' | …>`,
+ * and TypeScript's `Omit` silently drops CALL SIGNATURES along with the named
+ * keys. So `` tx`select 1` `` — which is the library's own documented usage and
+ * works perfectly at runtime — does not type-check. This is a defect in the
+ * package's types, not a claim about the value, which is why the cast is
+ * isolated here with a name rather than sprinkled at each call site.
+ * (Same helper as apps/web/__tests__/integration/support-tickets-rls.)
+ */
+const tagged = (tx: postgres.TransactionSql): postgres.Sql => tx as unknown as postgres.Sql;
+
 describeDb('P4-55 RLS policies (integration)', () => {
   let adminSql: SqlClient;
   let authSql: SqlClient;
@@ -176,7 +189,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       {
         userId: adminAUserId,
         communityId: communityA.id,
-        role: 'property_manager', isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+        role: 'property_manager', isUnitOwner: false, displayTitle: 'Board Member',
         unitId: null,
       },
       {
@@ -194,7 +207,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       {
         userId: adminBUserId,
         communityId: communityB.id,
-        role: 'property_manager', isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+        role: 'property_manager', isUnitOwner: false, displayTitle: 'Board President',
         unitId: null,
       },
     ]);
@@ -519,7 +532,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
 
     const actual = new Map(
       rows
-        .filter((row) => RLS_TENANT_TABLE_NAMES.includes(row.relname))
+        .filter((row) => (RLS_TENANT_TABLE_NAMES as readonly string[]).includes(row.relname))
         .map((row) => [row.relname, row.relrowsecurity]),
     );
 
@@ -1388,7 +1401,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
 
     for (const entry of RLS_TENANT_TABLES) {
       const actualPolicies = (policyMap.get(entry.tableName) ?? []).sort();
-      let expectedPolicies = expectedPolicyOverrides[entry.tableName]?.toSorted();
+      let expectedPolicies = expectedPolicyOverrides[entry.tableName]?.slice().sort();
 
       if (expectedPolicies) {
         expect(
@@ -1483,7 +1496,9 @@ describeDb('P4-55 RLS policies (integration)', () => {
               'policy names — add an expectedPolicyOverrides entry listing its actual policies.',
           );
         default:
-          throw new Error(`Unhandled policy family: ${entry.policyFamily as string}`);
+          throw new Error(
+            `Unhandled policy family: ${(entry as { policyFamily: string }).policyFamily}`,
+          );
       }
 
       expect(
@@ -2455,7 +2470,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       await adminSql
         .begin(async (tx) => {
           await tx.unsafe('create table public.pp_0078_default_acl_probe (id bigserial primary key)');
-          [row] = await tx<BornRow[]>`
+          [row] = await tagged(tx)<BornRow[]>`
             select
               has_table_privilege('authenticated', c.oid, 'SELECT') as auth_select,
               has_table_privilege('authenticated', c.oid, 'INSERT')
@@ -2555,17 +2570,17 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // (so service_role read as unprivileged and the admin console's writes
       // tripped the tenant-scope trigger).
       const results = await adminSql.begin(async (tx) => {
-        await tx`select set_config('request.jwt.claim.role', '', true)`;
-        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'authenticated' })}, true)`;
-        const [asUser] = await tx<{ role: string; privileged: boolean }[]>`
+        await tagged(tx)`select set_config('request.jwt.claim.role', '', true)`;
+        await tagged(tx)`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'authenticated' })}, true)`;
+        const [asUser] = await tagged(tx)<{ role: string; privileged: boolean }[]>`
           select public.pp_rls_effective_role() as role, public.pp_rls_is_privileged() as privileged
         `;
-        await tx`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'service_role' })}, true)`;
-        const [asService] = await tx<{ role: string; privileged: boolean }[]>`
+        await tagged(tx)`select set_config('request.jwt.claims', ${JSON.stringify({ role: 'service_role' })}, true)`;
+        const [asService] = await tagged(tx)<{ role: string; privileged: boolean }[]>`
           select public.pp_rls_effective_role() as role, public.pp_rls_is_privileged() as privileged
         `;
-        await tx`select set_config('request.jwt.claims', '', true)`;
-        const [asDrizzle] = await tx<{ role: string; privileged: boolean }[]>`
+        await tagged(tx)`select set_config('request.jwt.claims', '', true)`;
+        const [asDrizzle] = await tagged(tx)<{ role: string; privileged: boolean }[]>`
           select public.pp_rls_effective_role() as role, public.pp_rls_is_privileged() as privileged
         `;
         return { asUser, asService, asDrizzle };

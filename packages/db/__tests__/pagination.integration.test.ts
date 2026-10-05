@@ -98,7 +98,10 @@ describeDb('paginate (integration)', () => {
     let pages = 0;
     const maxPages = 10; // safety cap; 250 rows / 50 per page = 5 pages
     while (pages < maxPages) {
-      const result = await paginate(scoped, units, { cursor, pageSize: PAGE_SIZE });
+      const result: Awaited<ReturnType<typeof paginate>> = await paginate(scoped, units, {
+        cursor,
+        pageSize: PAGE_SIZE,
+      });
       pages += 1;
 
       // No duplicates across pages.
@@ -151,7 +154,10 @@ describeDb('paginate (integration)', () => {
     let cursor: string | null | undefined = undefined;
     let last: Awaited<ReturnType<typeof paginate>> | null = null;
     for (let i = 0; i < 10; i++) {
-      const result = await paginate(scoped, units, { cursor, pageSize: PAGE_SIZE });
+      const result: Awaited<ReturnType<typeof paginate>> = await paginate(scoped, units, {
+        cursor,
+        pageSize: PAGE_SIZE,
+      });
       last = result;
       cursor = result.pagination.nextCursor;
       if (!cursor) break;
