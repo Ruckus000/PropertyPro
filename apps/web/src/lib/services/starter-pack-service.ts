@@ -10,16 +10,17 @@
  * Idempotent: if the community already has any published site_blocks,
  * skip the apply.
  *
- * AUTHZ: caller MUST have just created the community. That is the only path
- * today — `createCommunityForPm` calls this immediately after inserting the
+ * AUTHZ: caller MUST have just created the community, or be provisioning a
+ * demo. `createCommunityForPm` calls this immediately after inserting the
  * creator as the community's root_manager, so there is no prior membership to
- * verify. Reads platform-level catalog via unscoped client, inserts via
+ * verify; the demo seed and `applyStarterPackToDemoCommunity` (demo entry,
+ * after the demo instance is validated) write only to demo communities. Reads platform-level catalog via unscoped client, inserts via
  * scoped client.
  */
-import { createScopedClient, siteBlocks, siteStarterPacks } from '@propertypro/db';
+import { communities, createScopedClient, siteBlocks, sitePages, siteStarterPacks } from '@propertypro/db';
 // AUTHZ: PR #5 starter pack lookup — siteStarterPacks is platform-level catalog; caller verifies community creation.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { and, desc, eq } from '@propertypro/db/filters';
+import { and, desc, eq, sql } from '@propertypro/db/filters';
 import { ensureHomePage } from '@/lib/services/site-pages-service';
 import type { CommunityType } from '@propertypro/shared';
 
@@ -39,10 +40,11 @@ export async function applyStarterPackToCommunity(
   communityId: number,
   communityType: CommunityType,
 ): Promise<ApplyStarterPackResult> {
-  const scoped = createScopedClient(communityId);
   // queryWhere auto-injects community_id and deleted_at IS NULL; add isDraft=false to find published blocks.
-  const existing = await scoped.queryWhere(siteBlocks, eq(siteBlocks.isDraft, false));
-  if (existing.length > 0) {
+  const hasPublishedBlocks = async (scoped: ReturnType<typeof createScopedClient>) =>
+    (await scoped.queryWhere(siteBlocks, eq(siteBlocks.isDraft, false))).length > 0;
+  // Unlocked fast path: every demo entry after the first ends here.
+  if (await hasPublishedBlocks(createScopedClient(communityId))) {
     return { applied: false, blockCount: 0, packSlug: null };
   }
 
@@ -62,36 +64,45 @@ export async function applyStarterPackToCommunity(
     return { applied: false, blockCount: 0, packSlug: null };
   }
   const packSlug = pack.slug;
-
   const blocks = pack.blocks as StarterPackBlock[];
-  const now = new Date();
 
-  // Phase 11b: the starter pack is the "site is already live" path for a
-  // brand-new community, so it is also where that community's home page comes
-  // from. Without this the blocks land with `page_id` NULL — invisible to the
-  // multi-page editor and a guaranteed failure when 11c sets the column NOT NULL.
-  //
-  // Created as PUBLISHED with the same stamp the blocks carry: a starter pack is
-  // live immediately, so the page it lives on has to be too, or anon RLS hides
-  // the page while serving its blocks. The `publishedAt` option exists for this
-  // caller — at this point there are no blocks for `ensureHomePage` to derive
-  // published-ness from.
-  const homePageId = await ensureHomePage(communityId, undefined, { publishedAt: now });
+  // One transaction holding the community row lock, the same lock publish,
+  // reorder, remove and `ensureHomePage` take. The admin preview opens a demo's
+  // board and resident links together: without the lock, two first entries
+  // both pass the check above and the loser fails on the section-order unique
+  // index instead of finding the pack there. It also makes the inserts
+  // all-or-nothing.
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`);
+    const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
+    // Again under the lock: a racing entry may have applied it since.
+    if (await hasPublishedBlocks(scoped)) {
+      return { applied: false, blockCount: 0, packSlug: null };
+    }
 
-  // Inserts are independent (blockOrder is set explicitly per block);
-  // run them concurrently to avoid N sequential roundtrips.
-  //
-  // KNOWN LIMITATION: Promise.all rejects on the first failure but the other
-  // inserts may still complete. So a partial failure can leave the community
-  // with an unknown subset of starter blocks landed. The caller
-  // (createCommunityForPm) catches and logs — it does NOT roll back the
-  // community. The idempotency guard above means a manual re-apply or a
-  // future "reset to starter" tool (PR #6) will short-circuit cleanly rather
-  // than double-insert. Atomic batch insertion is part of the PR #8 publish
-  // workflow redesign.
-  await Promise.all(
-    blocks.map((block) =>
-      scoped.insert(siteBlocks, {
+    const now = new Date();
+    // Phase 11b: the starter pack is the "site is already live" path for a
+    // brand-new community, so it is also where that community's home page comes
+    // from. Without this the blocks land with `page_id` NULL — invisible to the
+    // multi-page editor and a guaranteed failure when 11c sets the column NOT NULL.
+    //
+    // Created as PUBLISHED with the same stamp the blocks carry: a starter pack is
+    // live immediately, so the page it lives on has to be too, or anon RLS hides
+    // the page while serving its blocks. The `publishedAt` option exists for this
+    // caller — at this point there are no blocks for `ensureHomePage` to derive
+    // published-ness from.
+    const homePageId = await ensureHomePage(communityId, tx, { publishedAt: now });
+    // A home page can already exist, as a draft, when the editor was opened
+    // before the pack (a demo entered before demos got one): `ensureHomePage`
+    // never flips an existing draft live. Nothing on the site is published yet,
+    // so the page goes live with the pack rather than hide it.
+    await tx
+      .update(sitePages)
+      .set({ isDraft: false, publishedAt: now })
+      .where(and(eq(sitePages.id, homePageId), eq(sitePages.isDraft, true)));
+
+    for (const block of blocks) {
+      await scoped.insert(siteBlocks, {
         communityId,
         pageId: homePageId,
         blockType: block.blockType,
@@ -99,9 +110,48 @@ export async function applyStarterPackToCommunity(
         isDraft: false,
         publishedAt: now,
         content: block.content,
-      }),
-    ),
-  );
+      });
+    }
 
-  return { applied: true, blockCount: blocks.length, packSlug };
+    return { applied: true, blockCount: blocks.length, packSlug };
+  });
+}
+
+/**
+ * Starter sections for a demo community, on entry. Demo communities are built
+ * by `seedCommunity` (the admin app's demo creation and the local demo seed),
+ * which, unlike `createCommunityForPm`, applies no starter pack: a prospect
+ * opening the website editor found an empty page.
+ *
+ * The admin app cannot import this service, so the web app's demo entry routes
+ * call it instead, which also fills demos created before this existed. A no-op
+ * for a community that is not a demo, or that has published sections.
+ *
+ * A community that has ever had a section row (a draft, or one removed: removal
+ * soft-deletes) is left alone, so a prospect who empties the site keeps it
+ * empty.
+ *
+ * ponytail: runs on every demo entry (two small reads once filled), and the
+ * removed rows it relies on are purged after 30 days (`cleanupSoftDeletedSiteBlocks`),
+ * about a demo's lifetime. Moving this into `seedCommunity` (it needs
+ * `ensureHomePage` in packages/db) ends both.
+ *
+ * Best-effort, like `createCommunityForPm`'s call: a failure is logged and
+ * never blocks the entry.
+ */
+export async function applyStarterPackToDemoCommunity(communityId: number): Promise<void> {
+  try {
+    const scoped = createScopedClient(communityId);
+    const [community] = (await scoped.selectFrom(
+      communities,
+      { communityType: communities.communityType, isDemo: communities.isDemo },
+      eq(communities.id, communityId),
+    )) as unknown as Array<{ communityType: CommunityType; isDemo: boolean }>;
+    if (!community?.isDemo) return;
+    // Removed rows included: they are the point here.
+    if ((await scoped.queryIncludingDeleted(siteBlocks)).length > 0) return;
+    await applyStarterPackToCommunity(communityId, community.communityType);
+  } catch (err) {
+    console.error('applyStarterPackToDemoCommunity failed', { communityId, err });
+  }
 }

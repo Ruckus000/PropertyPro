@@ -8,9 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(),
   siteBlocks: Symbol('siteBlocks'),
-  // Phase 8: publishCommunitySite now stamps communities.site_published_at.
-  communities: Symbol('communities'),
   siteStarterPacks: Symbol('siteStarterPacks'),
+  // applyStarterPackToDemoCommunity reads the community's own row.
+  communities: { id: 'communities.id', communityType: 'communities.community_type', isDemo: 'communities.is_demo' },
   // Phase 11b multi-page — reached through site-pages-service.
   sitePages: Symbol('sitePages'),
   sitePageRedirects: Symbol('sitePageRedirects'),
@@ -44,7 +44,10 @@ vi.mock('@/lib/services/site-pages-service', () => ({
   ensureHomePage: vi.fn(async () => 77),
 }));
 
-import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
+import {
+  applyStarterPackToCommunity,
+  applyStarterPackToDemoCommunity,
+} from '@/lib/services/starter-pack-service';
 import { createScopedClient } from '@propertypro/db';
 // AUTHZ: test file — mocks createUnscopedClient from @propertypro/db/unsafe; no real DB access occurs.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -81,8 +84,17 @@ function buildUnscopedClientFromRows(rows: unknown[]) {
   const whereMock = vi.fn((_predicate?: unknown) => ({ orderBy: orderByMock, limit: limitMock }));
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));
+  // The apply runs in one transaction under the community row lock. The tx
+  // mock takes the lock statement and the draft-home-page publish; the
+  // inserts go through the scoped client, as before.
+  const tx = {
+    execute: vi.fn().mockResolvedValue([]),
+    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
+  };
   return {
     select: selectMock,
+    transaction: vi.fn(async (run: (t: typeof tx) => unknown) => run(tx)),
+    tx,
     getWhereArg: () => whereMock.mock.calls[0]?.[0],
     getOrderByArgs: () => orderByMock.mock.calls[0] ?? [],
   };
@@ -140,9 +152,22 @@ describe('applyStarterPackToCommunity', () => {
 
     expect(ensureHomePage).toHaveBeenCalledWith(
       10,
-      undefined,
+      unscopedClient.tx,
       expect.objectContaining({ publishedAt: expect.any(Date) }),
     );
+  });
+
+  it('takes the community row lock before writing, and publishes a draft home page', async () => {
+    const scopedClient = buildScopedClient([]);
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    const unscopedClient = buildUnscopedClient([HERO_BLOCK]);
+    createUnscopedClientMock.mockReturnValue(unscopedClient as never);
+
+    await applyStarterPackToCommunity(10, 'condo_718');
+
+    expect(unscopedClient.transaction).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(unscopedClient.tx.execute.mock.calls[0]?.[0])).toContain('FOR UPDATE');
+    expect(unscopedClient.tx.update).toHaveBeenCalledTimes(1);
   });
 
   it('resolves with the slug of the selected hoa_720 pack', async () => {
@@ -236,5 +261,62 @@ describe('applyStarterPackToCommunity', () => {
     const res = await applyStarterPackToCommunity(42, 'condo_718');
 
     expect(res).toEqual({ applied: false, blockCount: 0, packSlug: null });
+  });
+});
+
+describe('applyStarterPackToDemoCommunity', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** The wrapper's two reads: the community's own row, and every section row it ever had. */
+  function buildDemoScopedClient(community: unknown[], everBlocks: unknown[] = []) {
+    return {
+      selectFrom: vi.fn().mockResolvedValue(community),
+      queryIncludingDeleted: vi.fn().mockResolvedValue(everBlocks),
+      queryWhere: vi.fn().mockResolvedValue([{ id: 1, isDraft: false }]),
+      insert: vi.fn(),
+    };
+  }
+
+  it('does nothing for a community that is not a demo', async () => {
+    const scoped = buildDemoScopedClient([{ communityType: 'condo_718', isDemo: false }]);
+    createScopedClientMock.mockReturnValue(scoped as never);
+
+    await applyStarterPackToDemoCommunity(10);
+
+    expect(scoped.queryIncludingDeleted).not.toHaveBeenCalled();
+    expect(scoped.queryWhere).not.toHaveBeenCalled();
+  });
+
+  it('applies the pack for the demo community type', async () => {
+    const scoped = buildDemoScopedClient([{ communityType: 'hoa_720', isDemo: true }]);
+    createScopedClientMock.mockReturnValue(scoped as never);
+
+    await applyStarterPackToDemoCommunity(20);
+
+    // Reached the pack's published-sections check for this community.
+    expect(createScopedClientMock).toHaveBeenCalledWith(20);
+    expect(scoped.queryWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a demo alone once it has had any section, removed ones included', async () => {
+    const scoped = buildDemoScopedClient([{ communityType: 'hoa_720', isDemo: true }], [{ id: 5 }]);
+    createScopedClientMock.mockReturnValue(scoped as never);
+
+    await applyStarterPackToDemoCommunity(20);
+
+    expect(scoped.queryWhere).not.toHaveBeenCalled();
+  });
+
+  it('never throws: a failure is logged, and the demo entry goes on', async () => {
+    createScopedClientMock.mockImplementation(() => {
+      throw new Error('db down');
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(applyStarterPackToDemoCommunity(10)).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith('applyStarterPackToDemoCommunity failed', expect.anything());
+    log.mockRestore();
   });
 });

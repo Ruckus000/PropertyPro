@@ -91,6 +91,12 @@ vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
 }));
 
+// Starter sections on demo entry; starter-pack-service.test.ts covers the apply.
+const applyStarterPackToDemoCommunityMock = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/lib/services/starter-pack-service', () => ({
+  applyStarterPackToDemoCommunity: applyStarterPackToDemoCommunityMock,
+}));
+
 vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
 }));
@@ -220,6 +226,7 @@ describe('demo-login route hardening', () => {
       token_hash: HASHED_TOKEN,
       type: 'magiclink',
     });
+    expect(applyStarterPackToDemoCommunityMock).toHaveBeenCalledWith(42);
   });
 
   it('keeps legacy plaintext-secret flow working without encryption key', async () => {
