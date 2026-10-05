@@ -9,6 +9,7 @@ import { complianceChecklistItems } from '../src/schema/compliance-checklist-ite
 import { leases } from '../src/schema/leases';
 import { maintenanceRequests } from '../src/schema/maintenance-requests';
 import { siteBlocks } from '../src/schema/site-blocks';
+import { sitePages } from '../src/schema/site-pages';
 import { units } from '../src/schema/units';
 import { userRoles } from '../src/schema/user-roles';
 import { users } from '../src/schema/users';
@@ -29,6 +30,9 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
   let communityCId: number;
   let submittedByUserId: string;
   let deletedOnlyPmUserId: string;
+  let mixedRoleUserId: string;
+  let homePageAId: number;
+  let homePageBId: number;
 
   beforeAll(async () => {
     const module = await import('../src/unsafe');
@@ -45,6 +49,7 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     outsiderUserId = randomUUID();
     submittedByUserId = randomUUID();
     deletedOnlyPmUserId = randomUUID();
+    mixedRoleUserId = randomUUID();
 
     await db.insert(users).values([
       {
@@ -66,6 +71,11 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
         id: deletedOnlyPmUserId,
         email: `deleted-only-pm+${COMMUNITY_A_SLUG}@example.com`,
         fullName: 'Deleted Community PM User',
+      },
+      {
+        id: mixedRoleUserId,
+        email: `mixed-role+${COMMUNITY_A_SLUG}@example.com`,
+        fullName: 'Mixed Role User',
       },
     ]);
 
@@ -100,11 +110,35 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     await db.insert(userRoles).values([
       { userId: pmUserId, communityId: communityAId, role: 'property_manager', isUnitOwner: false, displayTitle: 'Property Manager Admin' },
       { userId: pmUserId, communityId: communityBId, role: 'property_manager', isUnitOwner: false, displayTitle: 'Property Manager Admin' },
-      { userId: outsiderUserId, communityId: communityCId, role: 'property_manager', isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+      // The outsider is a board member of C — a RESIDENT with a board
+      // designation (ADR-006), which grants no PM scope. This row used to read
+      // `role: 'property_manager'` (plus `presetKey`/`permissions` keys that no
+      // longer exist as columns, so drizzle dropped them silently): the
+      // 2026-03-12 hybrid-model rewrite made board members `manager`, and the
+      // v3 rename turned `manager` into `property_manager`. That made the
+      // "no PM role" cases assert that a real PM gets nothing, and the query
+      // correctly refused to comply.
+      { userId: outsiderUserId, communityId: communityCId, role: 'resident', isUnitOwner: true, displayTitle: 'Board Member', designation: 'board_member' },
+      // PM of A, but only a board-member resident of C: the portfolio must
+      // stop at the communities where the user is actually a manager.
+      { userId: mixedRoleUserId, communityId: communityAId, role: 'property_manager', isUnitOwner: false, displayTitle: 'Property Manager' },
+      { userId: mixedRoleUserId, communityId: communityCId, role: 'resident', isUnitOwner: true, displayTitle: 'Board Member', designation: 'board_member' },
       { userId: submittedByUserId, communityId: communityAId, role: 'resident', isUnitOwner: false, displayTitle: 'Tenant' },
       { userId: submittedByUserId, communityId: communityBId, role: 'resident', isUnitOwner: false, displayTitle: 'Tenant' },
       { userId: deletedOnlyPmUserId, communityId: communityCId, role: 'property_manager', isUnitOwner: false, displayTitle: 'Property Manager Admin' },
     ]);
+
+    // site_blocks.page_id is NOT NULL since 0048, with a composite
+    // (community_id, page_id) FK, so a block needs its community's page.
+    const insertedPages = await db
+      .insert(sitePages)
+      .values([
+        { communityId: communityAId, name: 'Home', slug: '', isHome: true },
+        { communityId: communityBId, name: 'Home', slug: '', isHome: true },
+      ])
+      .returning({ id: sitePages.id, communityId: sitePages.communityId });
+    homePageAId = insertedPages.find((row) => row.communityId === communityAId)!.id;
+    homePageBId = insertedPages.find((row) => row.communityId === communityBId)!.id;
   });
 
   beforeEach(async () => {
@@ -125,7 +159,7 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     await db.delete(communities).where(inArray(communities.slug, [COMMUNITY_A_SLUG, COMMUNITY_B_SLUG, COMMUNITY_C_SLUG]));
     await db
       .delete(users)
-      .where(inArray(users.id, [pmUserId, outsiderUserId, submittedByUserId, deletedOnlyPmUserId]));
+      .where(inArray(users.id, [pmUserId, outsiderUserId, submittedByUserId, deletedOnlyPmUserId, mixedRoleUserId]));
     await sqlClient.end();
   });
 
@@ -282,6 +316,18 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
     const rows = await findManagedCommunitiesPortfolioUnscoped(outsiderUserId);
     expect(rows).toEqual([]);
+  });
+
+  it('a resident (owner or tenant) in several communities is not a PM anywhere', async () => {
+    const { isPmAdminInAnyCommunity, findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    await expect(isPmAdminInAnyCommunity(submittedByUserId)).resolves.toBe(false);
+    await expect(findManagedCommunitiesPortfolioUnscoped(submittedByUserId)).resolves.toEqual([]);
+  });
+
+  it('a PM of one community sees no community where they are only a resident', async () => {
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    const rows = await findManagedCommunitiesPortfolioUnscoped(mixedRoleUserId);
+    expect(rows.map((row) => row.communityId)).toEqual([communityAId]);
   });
 
   it('does not include soft-deleted communities', async () => {
@@ -518,9 +564,9 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
   it('sets hasUnpublishedSiteDrafts=true only when a non-deleted draft block exists', async () => {
     await db.insert(siteBlocks).values([
       // A: a draft block → counts
-      { communityId: communityAId, blockOrder: 1, blockType: 'hero', isDraft: true },
+      { communityId: communityAId, pageId: homePageAId, blockOrder: 1, blockType: 'hero', isDraft: true },
       // B: a published (is_draft=false) block → does NOT count
-      { communityId: communityBId, blockOrder: 1, blockType: 'hero', isDraft: false, publishedAt: new Date() },
+      { communityId: communityBId, pageId: homePageBId, blockOrder: 1, blockType: 'hero', isDraft: false, publishedAt: new Date() },
     ]);
 
     const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
@@ -534,7 +580,7 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
 
   it('excludes soft-deleted draft blocks from hasUnpublishedSiteDrafts', async () => {
     await db.insert(siteBlocks).values([
-      { communityId: communityAId, blockOrder: 1, blockType: 'hero', isDraft: true, deletedAt: new Date() },
+      { communityId: communityAId, pageId: homePageAId, blockOrder: 1, blockType: 'hero', isDraft: true, deletedAt: new Date() },
     ]);
 
     const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
