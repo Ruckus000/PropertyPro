@@ -73,7 +73,12 @@ describeDb('compliance_audit_log append-only (DB integration)', () => {
       // before the assertion is read.
       await expect(
         tx.savepoint((sp) => sp`update compliance_audit_log set action = 'update' where id = ${id}`),
-      ).rejects.toThrow(/append-only: UPDATE is not permitted/);
+      ).rejects.toMatchObject({
+        // 23514 (check_violation) is the ERRCODE the guard raises with: pins
+        // that the guard trigger itself fired, not some other error.
+        code: '23514',
+        message: expect.stringMatching(/append-only: UPDATE is not permitted/),
+      });
     });
   });
 
@@ -82,7 +87,12 @@ describeDb('compliance_audit_log append-only (DB integration)', () => {
       const id = await insertAuditRow(tx, 'delete');
       await expect(
         tx.savepoint((sp) => sp`delete from compliance_audit_log where id = ${id}`),
-      ).rejects.toThrow(/append-only: DELETE is not permitted/);
+      ).rejects.toMatchObject({
+        // 23514 (check_violation) is the ERRCODE the guard raises with: pins
+        // that the guard trigger itself fired, not some other error.
+        code: '23514',
+        message: expect.stringMatching(/append-only: DELETE is not permitted/),
+      });
     });
   });
 });
