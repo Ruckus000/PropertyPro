@@ -29,7 +29,7 @@ PROPERTYPRO_SEED_ENV="${PROPERTYPRO_SEED_ENV:-ci}" \
   pnpm --dir "$repo_root" exec vitest run \
     --config "$repo_root/apps/web/vitest.integration.config.ts" "$@"
 
-# The packages/db RLS suite lives behind its own config, which CI now also runs
+# The packages/db integration suite lives behind its own config, which CI now also runs
 # (.github/workflows/integration-tests.yml). Run it here too so "green locally"
 # == "green in CI" — that contract is the reason the stub is shared, and it was
 # quietly false for this suite: it ran in neither place.
@@ -39,15 +39,12 @@ PROPERTYPRO_SEED_ENV="${PROPERTYPRO_SEED_ENV:-ci}" \
 # confusing pass.
 if [[ $# -eq 0 ]]; then
   echo ""
-  echo "Running database RLS policy tests against ${database_url}"
-  # Scoped to the RLS file, matching the CI step exactly. The rest of
-  # packages/db's integration config has pre-existing failures unrelated to RLS
-  # (seed-demo / reset-demo / schema-gate0 want seeded demo data; several others
-  # fail on this vanilla-Postgres harness), so running the whole config here
-  # would report a red local run for problems this script cannot fix.
+  echo "Running packages/db integration tests against ${database_url}"
+  # The whole config, matching the CI step exactly (it runs every file, with no
+  # list and no denylist).
   DATABASE_URL="$database_url" \
   DIRECT_URL="$database_url" \
+  PROPERTYPRO_SEED_ENV="${PROPERTYPRO_SEED_ENV:-ci}" \
     pnpm --dir "$repo_root" --filter @propertypro/db exec vitest run \
-      --config vitest.integration.config.ts \
-      __tests__/rls-policies.integration.test.ts
+      --config vitest.integration.config.ts
 fi
