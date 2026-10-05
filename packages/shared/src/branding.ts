@@ -24,6 +24,19 @@ export interface CommunityBranding {
    * so the square avatar and the horizontal wordmark can differ.
    */
   siteLogoPath?: string;
+  /**
+   * Storage path, in the PUBLIC `community-assets` bucket, of the square logo
+   * as a 96x96 PNG for email (`{communityId}/email/logo-{uuid}.png`). Written
+   * with `logoPath` and removed with it.
+   *
+   * Email needs its own copy: a mail client fetches the image whenever the
+   * message is opened, possibly months later, so it cannot use a signed URL
+   * from the private bucket, and Outlook desktop does not render WebP. A new
+   * name on every upload means a cached old logo is never shown for a new one,
+   * and the old files are left in place on purpose: emails already sent still
+   * point at them.
+   */
+  emailLogoPath?: string;
   /** Custom footer text appended to outbound emails. Plain text. */
   customEmailFooter?: string;
   /**

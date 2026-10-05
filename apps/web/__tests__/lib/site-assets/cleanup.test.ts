@@ -170,6 +170,19 @@ describe('purgeCommunityAdminAssets', () => {
     expect(removeMock).toHaveBeenCalledWith(['42/site/a.webp', '42/site/b.png']);
   });
 
+  it('also purges the email copies of the logo, which every upload leaves behind', async () => {
+    // Each logo upload writes a new public PNG for email and keeps the old
+    // ones, so sent mail keeps its logo. A deleted community must take them all.
+    pages['42/email'] = [
+      { data: [{ name: 'logo-1.png' }, { name: 'logo-2.png' }], error: null },
+    ];
+
+    const result = await purgeCommunityAdminAssets(42);
+
+    expect(result.deletedCount).toBe(2);
+    expect(removeMock).toHaveBeenCalledWith(['42/email/logo-1.png', '42/email/logo-2.png']);
+  });
+
   it('reads the community-assets bucket, NOT community-site-assets', async () => {
     // The two bucket names differ by one word and hold different things. A
     // sweep pointed at the wrong one would delete the wrong community's

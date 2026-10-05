@@ -112,7 +112,8 @@ describe('demo branding PATCH', () => {
     const res = await callPatch({ primaryColor: '#123456' });
 
     expect(res.status).toBe(200);
-    expect(applyLive).toHaveBeenCalledWith(42, { primaryColor: '#123456' }, { touchUpdatedAt: true });
+    // No logo in the patch, so the email logo is left alone.
+    expect(applyLive).toHaveBeenCalledWith(42, { primaryColor: '#123456' }, { touchUpdatedAt: true, remove: [] });
     expect(supabaseUpdate).not.toHaveBeenCalled();
     expect(markDemoCustomized).toHaveBeenCalledWith(5);
     expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
@@ -123,6 +124,15 @@ describe('demo branding PATCH', () => {
       metadata: { source: 'admin_platform', demo_id: 5 },
     });
     expect(await res.json()).toEqual({ branding: { primaryColor: '#123456' } });
+  });
+
+  it('drops the stale email logo when the logo changes', async () => {
+    await callPatch({ logoPath: '42/site/new.png' });
+    expect(applyLive).toHaveBeenCalledWith(
+      42,
+      { logoPath: '42/site/new.png' },
+      { touchUpdatedAt: true, remove: ['emailLogoPath'] },
+    );
   });
 
   it('returns 404 for an unknown demo without writing', async () => {
