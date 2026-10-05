@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { and, eq, inArray, isNull, sql as drizzleSql } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import * as schema from '../src/schema';
 import {
   announcements,
@@ -95,22 +95,12 @@ describeDb('demo seed integration', () => {
       .where(inArray(communities.slug, [...DEMO_SLUGS]));
     expect(seededCommunities).toHaveLength(3);
 
-    const registryExistsResult = await db.execute<{ exists: boolean }>(drizzleSql`
-      select exists (
-        select 1
-        from information_schema.tables
-        where table_schema = 'public' and table_name = 'demo_seed_registry'
-      ) as exists
-    `);
-    const registryExistsRows = Array.isArray(registryExistsResult)
-      ? registryExistsResult
-      : ('rows' in registryExistsResult ? registryExistsResult.rows : []);
-    const registryExists = registryExistsRows[0]?.exists === true;
-
-    if (registryExists) {
-      const registryRows = await db.select().from(demoSeedRegistry);
-      expect(registryRows.length).toBeGreaterThanOrEqual(9);
-    }
+    // demo_seed_registry always exists after migrations; assert on it directly.
+    // (This used to probe information_schema first and skip the assertion when
+    // the table was missing — so a missing table passed — behind a node-pg
+    // `{ rows }` fallback that postgres-js `db.execute` never returns.)
+    const registryRows = await db.select().from(demoSeedRegistry);
+    expect(registryRows.length).toBeGreaterThanOrEqual(9);
 
     const sunset = seededCommunities.find((row) => row.slug === 'sunset-condos');
     const palm = seededCommunities.find((row) => row.slug === 'palm-shores-hoa');
@@ -180,18 +170,16 @@ describeDb('demo seed integration', () => {
       .where(eq(complianceChecklistItems.communityId, bay!.id));
     expect(apartmentChecklist).toHaveLength(0);
 
-    if (registryExists) {
-      const duplicateRegistry = await db
-        .select()
-        .from(demoSeedRegistry)
-        .where(
-          and(
-            eq(demoSeedRegistry.entityType, 'announcement'),
-            eq(demoSeedRegistry.seedKey, 'sunset-condos-announcement-pool-maintenance'),
-          ),
-        );
-      expect(duplicateRegistry).toHaveLength(1);
-    }
+    const duplicateRegistry = await db
+      .select()
+      .from(demoSeedRegistry)
+      .where(
+        and(
+          eq(demoSeedRegistry.entityType, 'announcement'),
+          eq(demoSeedRegistry.seedKey, 'sunset-condos-announcement-pool-maintenance'),
+        ),
+      );
+    expect(duplicateRegistry).toHaveLength(1);
   }, 30_000);
 
   it('creates correct system category counts per community type', async () => {
@@ -379,9 +367,11 @@ describeDb('demo seed integration', () => {
       .select()
       .from(billingGroups)
       .where(eq(billingGroups.id, billingGroupIds[0]!));
-    expect(group.activeCommunityCount).toBe(3);
-    expect(group.volumeTier).toBe('tier_10');
-    expect(group.couponSyncStatus).toBe('synced');
+    expect(group).toMatchObject({
+      activeCommunityCount: 3,
+      volumeTier: 'tier_10',
+      couponSyncStatus: 'synced',
+    });
   }, 60_000);
 
   // Last, so it covers every request both seed runs above made.
