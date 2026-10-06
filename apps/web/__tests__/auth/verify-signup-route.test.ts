@@ -111,6 +111,20 @@ describe('GET /auth/verify-signup', () => {
     expect(new URL(res.headers.get('location') as string).searchParams.get('signupRequestId')).toBeNull();
   });
 
+  it('still discards the session for a form-flow link (it carries a signupRequestId)', async () => {
+    verifyOtpMock.mockImplementation(async () => {
+      const options = createServerClientMock.mock.calls[0]?.[2] as {
+        cookies: { setAll: (c: Array<{ name: string; value: string; options?: object }>) => void };
+      };
+      options.cookies.setAll([{ name: 'sb-project-auth-token', value: 'session', options: { path: '/' } }]);
+      return { error: null };
+    });
+
+    const res = await GET(request('?token_hash=abc&type=signup&signupRequestId=req-1'));
+
+    expect(res.cookies.getAll()).toEqual([]);
+  });
+
   it('sets no cookies when the token fails', async () => {
     verifyOtpMock.mockResolvedValue({ error: { message: 'Token has expired' } });
     const res = await GET(request('?token_hash=stale&type=signup'));

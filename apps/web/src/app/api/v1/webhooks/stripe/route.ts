@@ -339,6 +339,7 @@ async function handleCheckoutSessionCompleted(
     stripeSubscriptionId,
     subscriptionStatus,
     subscriptionCurrentPeriodEndAt,
+    paidSelection: freshSession.metadata,
   });
 
   // Insert provisioning job stub — onConflictDoNothing handles idempotent re-delivery.

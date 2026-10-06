@@ -523,50 +523,25 @@ async function createOrLinkAuthAccount(
   input: SignupPersistenceInput,
   verificationRedirectUrl: string,
 ): Promise<AuthVerificationLinkResult> {
-  return generateSignupAuthLink({
-    email: input.email,
-    password: input.password,
-    redirectTo: verificationRedirectUrl,
-    signupRequestId: input.signupRequestId,
-    metadata: {
-      full_name: input.primaryContactName,
-      signup_request_id: input.signupRequestId,
-      community_name: input.communityName,
-      community_type: input.communityType,
-      signup_plan: input.planKey,
-    },
-  });
-}
-
-/**
- * Create (or find) the Supabase auth user for `email` and return a first-party
- * link that verifies it. Shared by the form signup above and the email-first
- * flow in `signup-email-first.ts`.
- *
- * A new address gets a `signup` link (which creates the user with `password`);
- * an address GoTrue already knows gets a `magiclink`, which also confirms it.
- */
-export async function generateSignupAuthLink(params: {
-  email: string;
-  password: string;
-  redirectTo: string;
-  /** Omitted by the email-first flow: GoTrue would otherwise write it onto an existing account. */
-  metadata?: Record<string, unknown>;
-  /** Absent for the email-first flow, which has no pending row yet. */
-  signupRequestId?: string;
-}): Promise<AuthVerificationLinkResult> {
   const admin = createAdminClient();
+  const metadata = {
+    full_name: input.primaryContactName,
+    signup_request_id: input.signupRequestId,
+    community_name: input.communityName,
+    community_type: input.communityType,
+    signup_plan: input.planKey,
+  };
 
   // Uses generateLink (admin API) instead of supabase.auth.signUp so that
   // Supabase does NOT send its default confirmation email. This lets us
   // control email delivery via our Resend-backed pipeline with branded templates.
   const signupLink = await admin.auth.admin.generateLink({
     type: 'signup',
-    email: params.email,
-    password: params.password,
+    email: input.email,
+    password: input.password,
     options: {
-      redirectTo: params.redirectTo,
-      ...(params.metadata ? { data: params.metadata } : {}),
+      redirectTo: verificationRedirectUrl,
+      data: metadata,
     },
   });
 
@@ -578,7 +553,7 @@ export async function generateSignupAuthLink(params: {
       authUserId: signupLink.data.user?.id ?? null,
       verificationLink: buildVerificationLink({
         hashedToken: signupToken,
-        signupRequestId: params.signupRequestId,
+        signupRequestId: input.signupRequestId,
         type: 'signup',
       }),
     };
@@ -590,10 +565,10 @@ export async function generateSignupAuthLink(params: {
 
   const magicLink = await admin.auth.admin.generateLink({
     type: 'magiclink',
-    email: params.email,
+    email: input.email,
     options: {
-      redirectTo: params.redirectTo,
-      ...(params.metadata ? { data: params.metadata } : {}),
+      redirectTo: verificationRedirectUrl,
+      data: metadata,
     },
   });
 
@@ -606,7 +581,7 @@ export async function generateSignupAuthLink(params: {
     authUserId: magicLink.data.user?.id ?? null,
     verificationLink: buildVerificationLink({
       hashedToken: magicToken,
-      signupRequestId: params.signupRequestId,
+      signupRequestId: input.signupRequestId,
       // The already-registered fallback generates a magiclink, so the token is
       // bound to that type and must be verified as one.
       type: 'magiclink',
@@ -614,12 +589,16 @@ export async function generateSignupAuthLink(params: {
   };
 }
 
-async function sendSignupVerificationEmail(
-  primaryContactName: string,
-  communityName: string,
+/**
+ * Send the verification email. The names and plan are optional because
+ * email-first signup sends this before it has asked for them.
+ */
+export async function sendSignupVerificationEmail(
+  primaryContactName: string | undefined,
+  communityName: string | undefined,
   email: string,
   verificationLink: string,
-  planKey: string,
+  planKey: string | undefined,
 ): Promise<string> {
   const result = await sendEmail({
     to: email,
@@ -630,14 +609,36 @@ async function sendSignupVerificationEmail(
       primaryContactName,
       communityName,
       verificationLink,
-      remainingSteps: signupRemainingSteps(planKey),
+      remainingSteps: planKey ? signupRemainingSteps(planKey) : undefined,
     }),
   });
 
   return result.id;
 }
 
-function buildPendingSignupPayload(input: SignupPersistenceInput): Record<string, unknown> {
+export type PendingSignupPayloadInput = Pick<
+  SignupPersistenceInput,
+  | 'signupRequestId'
+  | 'primaryContactName'
+  | 'email'
+  | 'communityName'
+  | 'address'
+  | 'addressLine1'
+  | 'city'
+  | 'state'
+  | 'zipCode'
+  | 'county'
+  | 'unitCount'
+  | 'communityType'
+  | 'planKey'
+  | 'candidateSlug'
+>;
+
+/** `extra` carries flow markers (email-first stamps `flow: 'email_first'`). */
+export function buildPendingSignupPayload(
+  input: PendingSignupPayloadInput,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     signupRequestId: input.signupRequestId,
     primaryContactName: input.primaryContactName,
@@ -654,6 +655,7 @@ function buildPendingSignupPayload(input: SignupPersistenceInput): Record<string
     planKey: input.planKey,
     candidateSlug: input.candidateSlug,
     termsAccepted: true,
+    ...extra,
   };
 }
 

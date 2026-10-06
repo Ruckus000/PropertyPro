@@ -296,6 +296,35 @@ describe('stripe-webhook-service', () => {
     );
   });
 
+  it('makes the plan and type Stripe actually priced authoritative on the row', async () => {
+    // Provisioning reads pending_signups.plan_key; answers edited after a
+    // Checkout session opened must not provision a plan the subscription
+    // does not bill.
+    const db = setupDb();
+    await markPendingSignupPaymentCompleted({
+      signupRequestId: 'signup_paid',
+      stripeCustomerId: 'cus_p',
+      stripeSubscriptionId: 'sub_p',
+      paidSelection: { communityType: 'condo_718', selectedPlan: 'professional', signupRequestId: 'signup_paid' },
+    });
+    expect(db.setMock).toHaveBeenCalledWith(
+      expect.objectContaining({ planKey: 'professional', communityType: 'condo_718', status: 'payment_completed' }),
+    );
+  });
+
+  it('ignores a paid selection that is not a valid plan for its type', async () => {
+    const db = setupDb();
+    await markPendingSignupPaymentCompleted({
+      signupRequestId: 'signup_bad',
+      stripeCustomerId: 'cus_b',
+      stripeSubscriptionId: 'sub_b',
+      paidSelection: { communityType: 'apartment', selectedPlan: 'essentials' },
+    });
+    const set = db.setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(set).not.toHaveProperty('planKey');
+    expect(set).not.toHaveProperty('communityType');
+  });
+
   it('returns true only when the community cancellation guard updates a row', async () => {
     const canceledAt = new Date('2026-05-13T13:00:00.000Z');
     const nextReminderAt = new Date('2026-06-05T13:00:00.000Z');

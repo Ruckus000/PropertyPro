@@ -198,12 +198,15 @@ export async function closeCheckoutSession(
     await getStripe().checkout.sessions.expire(sessionId);
     return 'closed';
   } catch (expireError) {
+    // Expire refuses a session that is no longer open. Ask which way it went;
+    // any OTHER failure (network, 5xx, rate limit) leaves the session possibly
+    // payable, so it must propagate rather than read as closed.
     let session: Stripe.Checkout.Session;
     try {
       session = await getStripe().checkout.sessions.retrieve(sessionId);
-    } catch {
-      // Unknown/deleted session: nothing can complete it.
-      return 'closed';
+    } catch (retrieveError) {
+      if ((retrieveError as { code?: string }).code === 'resource_missing') return 'closed';
+      throw retrieveError;
     }
     if (session.status === 'complete') return 'complete';
     if (session.status === 'expired') return 'closed';

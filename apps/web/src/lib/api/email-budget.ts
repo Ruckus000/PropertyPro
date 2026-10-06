@@ -12,8 +12,7 @@
  * instance (the same trade-off as `checkRateLimit`).
  */
 import { RateLimitError } from '@/lib/api/errors/RateLimitError';
-import { checkDistributedRateLimit } from '@/lib/middleware/distributed-rate-limiter';
-import { getRateLimiter } from '@/lib/middleware/rate-limiter';
+import { consumeKeyedRateLimit } from '@/lib/api/keyed-rate-limit';
 
 /** Raise here (product decision, 2026-10-02: start at 100). */
 export const EMAIL_RECIPIENTS_PER_MINUTE = 100;
@@ -22,9 +21,7 @@ const WINDOW_MS = 60_000;
 export async function consumeEmailBudget(userId: string, recipients: number): Promise<void> {
   if (recipients <= 0) return;
   const key = `rl:email:user:${userId}`;
-  const verdict =
-    (await checkDistributedRateLimit(key, EMAIL_RECIPIENTS_PER_MINUTE, WINDOW_MS, recipients)) ??
-    getRateLimiter().check(key, EMAIL_RECIPIENTS_PER_MINUTE, WINDOW_MS, recipients);
+  const verdict = await consumeKeyedRateLimit(key, EMAIL_RECIPIENTS_PER_MINUTE, WINDOW_MS, recipients);
   if (!verdict.allowed) {
     throw new RateLimitError(
       `Email limit reached: ${EMAIL_RECIPIENTS_PER_MINUTE} emails per minute. Try again in ${verdict.retryAfter} seconds.`,

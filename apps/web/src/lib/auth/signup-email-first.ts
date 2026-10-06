@@ -6,8 +6,10 @@
  * This flow asks for the email ONLY, and the row is written after the emailed
  * link has signed the user in:
  *
- *   1. `startEmailFirstSignup(email)` — create or find the Supabase auth user,
- *      email a first-party link. No `pending_signups` row: every community
+ *   1. `startEmailFirstSignup(email)` — one `magiclink` generateLink, which
+ *      GoTrue turns into a `signup` (creating a passwordless-in-practice user
+ *      with its own random password) when the address is new, and email a
+ *      first-party link. No `pending_signups` row: every community
  *      column there is NOT NULL, and a placeholder slug would collide on
  *      `pending_signups_candidate_slug_active_unique` the moment the row
  *      became `email_verified`. The auth user is the email-holding record.
@@ -20,28 +22,28 @@
  * ponytail: no migration. The pending row is written once it is complete,
  * instead of relaxing NOT NULLs to hold a half-finished one.
  */
-import { randomBytes } from 'node:crypto';
-import { createElement } from 'react';
 // AUTHZ: Auth flow — pre-tenant signup state keyed by the caller's own verified session email; no community exists yet.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups } from '@propertypro/db';
 import { eq, notInArray } from '@propertypro/db/filters';
-import { sendEmail, SignupVerificationEmail } from '@propertypro/email';
+// AUTHZ: GoTrue admin generateLink for the address the caller typed; the link is emailed only to that address.
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { ForbiddenError, SignupEmailDeliveryError, ValidationError } from '@/lib/api/errors';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
-import { checkDistributedRateLimit } from '@/lib/middleware/distributed-rate-limiter';
-import { getRateLimiter } from '@/lib/middleware/rate-limiter';
+import { consumeKeyedRateLimit } from '@/lib/api/keyed-rate-limit';
 import { closeCheckoutSession } from '@/lib/services/stripe-service';
 import { getBaseUrl } from '@/lib/utils/url';
 import {
   POST_PAYMENT_SIGNUP_STATUSES,
+  buildPendingSignupPayload,
   checkSignupSubdomainAvailability,
   enforceMinSignupResponseTime,
-  generateSignupAuthLink,
+  sendSignupVerificationEmail,
 } from './signup';
 import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 import { signupDetailsSchema, signupStartSchema } from './signup-schema';
+import { buildVerificationLink, type VerificationLinkType } from './verification-link';
 
 export const START_SIGNUP_MESSAGE = 'Check your email for a link to continue.';
 
@@ -52,26 +54,60 @@ export const START_SIGNUP_MESSAGE = 'Check your email for a link to continue.';
  */
 const MIN_START_RESPONSE_MS = 800;
 
-/** Per-address cap on link emails, on top of the auth tier's 10/min per IP. */
-const START_EMAILS_PER_WINDOW = 3;
-const START_WINDOW_MS = 15 * 60 * 1000;
-
 /**
- * The account is passwordless; GoTrue's `signup` link still requires one. It is
- * random, never stored or shown, and the user can set a real one through the
- * existing reset flow. The fixed suffix satisfies every PASSWORD_POLICY class
- * (lower/upper/digit/special) whatever the random part happens to contain.
+ * Link-email caps, on top of the auth tier's 10/min per IP.
+ *
+ * Per address AND caller IP, so someone else spending an address's budget does
+ * not silence the owner's own requests. Plus a looser per-address ceiling that
+ * bounds how many unsolicited emails any one inbox can be sent. An attacker can
+ * still exhaust that ceiling for a victim — any cap keyed on the address can be
+ * spent by someone else — so it is set where real retries never reach it.
  */
-function unusablePassword(): string {
-  return `${randomBytes(32).toString('base64url')}aA1!`;
+const START_EMAILS_PER_CALLER = 3;
+const START_CALLER_WINDOW_MS = 15 * 60 * 1000;
+const START_EMAILS_PER_ADDRESS = 10;
+const START_ADDRESS_WINDOW_MS = 60 * 60 * 1000;
+
+async function consumeStartBudget(email: string, ip: string): Promise<boolean> {
+  const caller = await consumeKeyedRateLimit(
+    `rl:signup-start:email-ip:${email}:${ip}`,
+    START_EMAILS_PER_CALLER,
+    START_CALLER_WINDOW_MS,
+  );
+  if (!caller.allowed) return false;
+  const address = await consumeKeyedRateLimit(
+    `rl:signup-start:email:${email}`,
+    START_EMAILS_PER_ADDRESS,
+    START_ADDRESS_WINDOW_MS,
+  );
+  return address.allowed;
 }
 
-async function consumeStartBudget(email: string): Promise<boolean> {
-  const key = `rl:signup-start:email:${email}`;
-  const verdict =
-    (await checkDistributedRateLimit(key, START_EMAILS_PER_WINDOW, START_WINDOW_MS)) ??
-    getRateLimiter().check(key, START_EMAILS_PER_WINDOW, START_WINDOW_MS);
-  return verdict.allowed;
+/**
+ * One GoTrue call for every address, so new and existing accounts cost the same
+ * time. `magiclink` for an unknown address is converted by GoTrue into a
+ * `signup` with a generated password (auth `adminGenerateLink`), and verifying
+ * either kind confirms the email. The token is bound to the type GoTrue
+ * reports, so the link carries `verification_type`, not the type we asked for.
+ */
+async function generateStartLink(email: string): Promise<{ link: string; authUserId: string | null }> {
+  const redirectTo = new URL('/signup', getBaseUrl());
+  redirectTo.searchParams.set('verified', '1');
+  const { data, error } = await createAdminClient().auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo: redirectTo.toString() },
+  });
+  const token = data?.properties?.hashed_token;
+  if (error || !token) {
+    throw new Error(error?.message ?? 'generateLink returned no token');
+  }
+  const reported = data.properties.verification_type;
+  const type: VerificationLinkType = reported === 'signup' ? 'signup' : 'magiclink';
+  return {
+    link: buildVerificationLink({ hashedToken: token, type }),
+    authUserId: data.user?.id ?? null,
+  };
 }
 
 /**
@@ -80,7 +116,10 @@ async function consumeStartBudget(email: string): Promise<boolean> {
  * learn who has an account. The email itself is what differs, and only the
  * address owner reads it.
  */
-export async function startEmailFirstSignup(rawInput: unknown): Promise<{ message: string }> {
+export async function startEmailFirstSignup(
+  rawInput: unknown,
+  callerIp: string,
+): Promise<{ message: string }> {
   const startMs = Date.now();
   const parsed = signupStartSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -90,43 +129,45 @@ export async function startEmailFirstSignup(rawInput: unknown): Promise<{ messag
   }
   const email = parsed.data.email.trim().toLowerCase();
 
-  if (!(await consumeStartBudget(email))) {
-    console.info(JSON.stringify({ event: 'signup.start.throttled' }));
-    await enforceMinSignupResponseTime(startMs, MIN_START_RESPONSE_MS);
-    return { message: START_SIGNUP_MESSAGE };
-  }
-
-  const redirectTo = new URL('/signup', getBaseUrl());
-  redirectTo.searchParams.set('verified', '1');
-
-  const auth = await generateSignupAuthLink({
-    email,
-    password: unusablePassword(),
-    redirectTo: redirectTo.toString(),
-  });
-
+  // Every branch below ends padded to the same floor, error branches included:
+  // a fast or differently-shaped failure would tell a caller something about
+  // the address.
   try {
-    await sendEmail({
-      to: email,
-      subject: 'Your link to continue your PropertyPro signup',
-      category: 'transactional',
-      react: createElement(SignupVerificationEmail, {
-        branding: { communityName: 'PropertyPro Florida' },
-        verificationLink: auth.verificationLink,
-      }),
-    });
-  } catch (emailError) {
-    console.error(JSON.stringify({
-      event: 'signup.start.email_failed',
-      authUserId: auth.authUserId,
-      error: emailError instanceof Error ? emailError.message : String(emailError),
-    }));
-    throw new SignupEmailDeliveryError();
-  }
+    if (!(await consumeStartBudget(email, callerIp))) {
+      console.info(JSON.stringify({ event: 'signup.start.throttled' }));
+      return { message: START_SIGNUP_MESSAGE };
+    }
 
-  console.info(JSON.stringify({ event: 'signup.start.sent', authUserId: auth.authUserId }));
-  await enforceMinSignupResponseTime(startMs, MIN_START_RESPONSE_MS);
-  return { message: START_SIGNUP_MESSAGE };
+    let auth: { link: string; authUserId: string | null };
+    try {
+      auth = await generateStartLink(email);
+    } catch (linkError) {
+      // Answered generically: GoTrue's refusals are per-account (a banned
+      // user, say). Logged for us; the user simply receives no email.
+      console.error(JSON.stringify({
+        event: 'signup.start.link_failed',
+        error: linkError instanceof Error ? linkError.message : String(linkError),
+      }));
+      return { message: START_SIGNUP_MESSAGE };
+    }
+
+    try {
+      await sendSignupVerificationEmail(undefined, undefined, email, auth.link, undefined);
+    } catch (emailError) {
+      // Provider failure is not per-address, so saying so reveals nothing.
+      console.error(JSON.stringify({
+        event: 'signup.start.email_failed',
+        authUserId: auth.authUserId,
+        error: emailError instanceof Error ? emailError.message : String(emailError),
+      }));
+      throw new SignupEmailDeliveryError();
+    }
+
+    console.info(JSON.stringify({ event: 'signup.start.sent', authUserId: auth.authUserId }));
+    return { message: START_SIGNUP_MESSAGE };
+  } finally {
+    await enforceMinSignupResponseTime(startMs, MIN_START_RESPONSE_MS);
+  }
 }
 
 export interface SignupSessionUser {
@@ -181,20 +222,23 @@ export async function submitSignupDetails(
     throw new ValidationError(ALREADY_SIGNED_UP_MESSAGE, { field: 'email' });
   }
 
-  // An expired row's id may have been disclosed while it was live; reusing it
-  // would hand that earlier holder the new signup. Mint a fresh one instead.
-  const isLive =
+  // Reuse the row's id only when THIS session wrote it. Anyone can create a
+  // form-flow row for any address with an id of their choosing (no proof of
+  // ownership is needed for pending_verification), and whoever holds the id of
+  // a paid signup can claim its first login token from provisioning-status.
+  // An expired row's id may also have been disclosed while it was live.
+  const ownLiveRow =
     existing
+    && existing.payload?.['flow'] === 'email_first'
+    && existing.payload?.['authUserId'] === user.id
     && existing.status !== 'expired'
     && (existing.expiresAt == null || existing.expiresAt > now);
-  const signupRequestId = isLive ? existing.signupRequestId : crypto.randomUUID();
+  const signupRequestId = ownLiveRow ? existing.signupRequestId : crypto.randomUUID();
 
-  // Editing answers after Checkout opened: close that session first, or it can
-  // still be paid at the old plan while provisioning reads the new one.
-  const openSessionId =
-    isLive && existing.status === 'checkout_started'
-      ? existing.payload?.stripeCheckoutSessionId
-      : undefined;
+  // Whatever row is being replaced, close any Checkout session it opened, or
+  // it can still be paid — at its old plan, or (when the id changes) against
+  // an id that no longer exists, which takes payment and provisions nothing.
+  const openSessionId = existing?.payload?.['stripeCheckoutSessionId'];
   if (typeof openSessionId === 'string' && openSessionId) {
     if ((await closeCheckoutSession(openSessionId)) === 'complete') {
       throw new ValidationError(ALREADY_SIGNED_UP_MESSAGE, { field: 'email' });
@@ -233,25 +277,27 @@ export async function submitSignupDetails(
     termsVersion: CURRENT_TERMS_VERSION,
     status: 'email_verified',
     // Rebuilt whole, which also drops a closed `stripeCheckoutSessionId` so
-    // `createCheckoutSession` opens a fresh one at the new plan.
-    payload: {
-      signupRequestId,
-      flow: 'email_first',
-      primaryContactName: input.primaryContactName,
-      email,
-      communityName: input.communityName,
-      address: input.address,
-      addressLine1: input.addressLine1,
-      city: input.city,
-      state: input.state,
-      zipCode: input.zipCode,
-      county: input.county,
-      unitCount: input.unitCount,
-      communityType: input.communityType,
-      planKey: input.planKey,
-      candidateSlug: subdomain.normalizedSubdomain,
-      termsAccepted: true,
-    },
+    // `createCheckoutSession` opens a fresh one at the new plan. `authUserId`
+    // in the payload marks the row as this session's (see `ownLiveRow`).
+    payload: buildPendingSignupPayload(
+      {
+        signupRequestId,
+        primaryContactName: input.primaryContactName,
+        email,
+        communityName: input.communityName,
+        address: input.address,
+        addressLine1: input.addressLine1,
+        city: input.city,
+        state: input.state,
+        zipCode: input.zipCode,
+        county: input.county,
+        unitCount: input.unitCount,
+        communityType: input.communityType,
+        planKey: input.planKey,
+        candidateSlug: subdomain.normalizedSubdomain,
+      },
+      { flow: 'email_first', authUserId: user.id },
+    ),
     updatedAt: now,
     expiresAt: new Date(now.getTime() + SIGNUP_EXPIRY_MS),
   };
@@ -295,7 +341,6 @@ export async function submitSignupDetails(
 
 export const _testInternals = {
   MIN_START_RESPONSE_MS,
-  START_EMAILS_PER_WINDOW,
-  START_WINDOW_MS,
-  unusablePassword,
+  START_EMAILS_PER_CALLER,
+  START_EMAILS_PER_ADDRESS,
 } as const;

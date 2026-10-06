@@ -10,7 +10,6 @@
  *   closes an open Checkout session before changing the answers it was priced on.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildPasswordZodSchema } from '@propertypro/shared';
 import {
   ForbiddenError,
   SignupEmailDeliveryError,
@@ -20,7 +19,8 @@ import {
 const h = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
   sendEmailMock: vi.fn(),
-  generateSignupAuthLinkMock: vi.fn(),
+  generateLinkMock: vi.fn(),
+  enforceMinMock: vi.fn(),
   checkSubdomainMock: vi.fn(),
   closeCheckoutSessionMock: vi.fn(),
   pendingSignupsTable: {
@@ -39,9 +39,8 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: (col: unknown, value: unknown) => ({ _type: 'eq', col, value }),
   notInArray: (col: unknown, values: unknown) => ({ _type: 'notInArray', col, values }),
 }));
-vi.mock('@propertypro/email', () => ({
-  sendEmail: h.sendEmailMock,
-  SignupVerificationEmail: () => null,
+vi.mock('@propertypro/db/supabase/admin', () => ({
+  createAdminClient: () => ({ auth: { admin: { generateLink: h.generateLinkMock } } }),
 }));
 vi.mock('../../src/lib/services/stripe-service', () => ({
   closeCheckoutSession: h.closeCheckoutSessionMock,
@@ -50,12 +49,16 @@ vi.mock('../../src/lib/services/stripe-service', () => ({
 vi.mock('../../src/lib/middleware/distributed-rate-limiter', () => ({
   checkDistributedRateLimit: vi.fn().mockResolvedValue(null),
 }));
-vi.mock('../../src/lib/auth/signup', () => ({
-  POST_PAYMENT_SIGNUP_STATUSES: ['payment_completed', 'provisioning', 'completed'],
-  checkSignupSubdomainAvailability: h.checkSubdomainMock,
-  enforceMinSignupResponseTime: vi.fn().mockResolvedValue(undefined),
-  generateSignupAuthLink: h.generateSignupAuthLinkMock,
-}));
+vi.mock('../../src/lib/auth/signup', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../src/lib/auth/signup')>();
+  return {
+    POST_PAYMENT_SIGNUP_STATUSES: real.POST_PAYMENT_SIGNUP_STATUSES,
+    buildPendingSignupPayload: real.buildPendingSignupPayload,
+    checkSignupSubdomainAvailability: h.checkSubdomainMock,
+    enforceMinSignupResponseTime: h.enforceMinMock,
+    sendSignupVerificationEmail: h.sendEmailMock,
+  };
+});
 
 import { resetGlobalRateLimiter } from '../../src/lib/middleware/rate-limiter';
 import {
@@ -124,10 +127,11 @@ const DETAILS = {
 beforeEach(() => {
   vi.clearAllMocks();
   resetGlobalRateLimiter();
-  h.sendEmailMock.mockResolvedValue({ id: 'email_1' });
-  h.generateSignupAuthLinkMock.mockResolvedValue({
-    authUserId: 'auth-1',
-    verificationLink: 'https://www.getpropertypro.com/auth/verify-signup?token_hash=t&type=signup',
+  h.sendEmailMock.mockResolvedValue('email_1');
+  h.enforceMinMock.mockResolvedValue(undefined);
+  h.generateLinkMock.mockResolvedValue({
+    data: { user: { id: 'auth-1' }, properties: { hashed_token: 'hashed-1', verification_type: 'signup' } },
+    error: null,
   });
   h.checkSubdomainMock.mockResolvedValue({
     normalizedSubdomain: 'bayview-towers',
@@ -139,53 +143,83 @@ beforeEach(() => {
 });
 
 describe('startEmailFirstSignup', () => {
+  const IP = '203.0.113.7';
+
   it('rejects a malformed email without creating anything', async () => {
-    await expect(startEmailFirstSignup({ email: 'not-an-email' })).rejects.toBeInstanceOf(ValidationError);
-    expect(h.generateSignupAuthLinkMock).not.toHaveBeenCalled();
+    await expect(startEmailFirstSignup({ email: 'not-an-email' }, IP)).rejects.toBeInstanceOf(ValidationError);
+    expect(h.generateLinkMock).not.toHaveBeenCalled();
     expect(h.sendEmailMock).not.toHaveBeenCalled();
   });
 
-  it('creates the auth user passwordlessly and emails the link to that address', async () => {
-    const result = await startEmailFirstSignup({ email: '  Founder@Example.com ' });
+  it('makes ONE magiclink call, sets no password or metadata, and emails the link to that address', async () => {
+    const result = await startEmailFirstSignup({ email: '  Founder@Example.com ' }, IP);
 
     expect(result).toEqual({ message: START_SIGNUP_MESSAGE });
-    const call = h.generateSignupAuthLinkMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(h.generateLinkMock).toHaveBeenCalledTimes(1);
+    const call = h.generateLinkMock.mock.calls[0]?.[0] as Record<string, unknown> & { options: Record<string, unknown> };
+    expect(call.type).toBe('magiclink');
     expect(call.email).toBe('founder@example.com');
-    // No metadata: on an existing account GoTrue would write it over theirs.
-    expect(call.metadata).toBeUndefined();
-    expect(call.signupRequestId).toBeUndefined();
-    const redirect = new URL(String(call.redirectTo));
+    expect(call).not.toHaveProperty('password');
+    expect(call.options).not.toHaveProperty('data');
+    const redirect = new URL(String(call.options.redirectTo));
     expect(redirect.pathname).toBe('/signup');
     expect(redirect.searchParams.get('verified')).toBe('1');
-    expect(h.sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ to: 'founder@example.com' }));
+
+    const [name, community, to, link] = h.sendEmailMock.mock.calls[0] as [unknown, unknown, string, string];
+    expect([name, community, to]).toEqual([undefined, undefined, 'founder@example.com']);
+    const url = new URL(link);
+    expect(url.pathname).toBe('/auth/verify-signup');
+    expect(url.searchParams.get('token_hash')).toBe('hashed-1');
+    expect(url.searchParams.get('signupRequestId')).toBeNull();
   });
 
-  it('uses a password that satisfies the policy every time', () => {
-    const schema = buildPasswordZodSchema();
-    for (let i = 0; i < 50; i += 1) {
-      expect(schema.safeParse(_testInternals.unusablePassword()).success).toBe(true);
-    }
+  it('links with the type GoTrue reports, since the token is bound to it', async () => {
+    // GoTrue turns a magiclink for an unknown address into a signup.
+    await startEmailFirstSignup({ email: 'new@example.com' }, IP);
+    expect(new URL(h.sendEmailMock.mock.calls[0]?.[3] as string).searchParams.get('type')).toBe('signup');
+
+    h.generateLinkMock.mockResolvedValueOnce({
+      data: { user: { id: 'auth-2' }, properties: { hashed_token: 'h2', verification_type: 'magiclink' } },
+      error: null,
+    });
+    await startEmailFirstSignup({ email: 'existing@example.com' }, IP);
+    expect(new URL(h.sendEmailMock.mock.calls[1]?.[3] as string).searchParams.get('type')).toBe('magiclink');
   });
 
-  it('stops sending after the per-address cap but answers exactly the same', async () => {
-    const cap = _testInternals.START_EMAILS_PER_WINDOW;
+  it('caps sends per address+IP, but another caller of the same address is not silenced', async () => {
+    const cap = _testInternals.START_EMAILS_PER_CALLER;
     for (let i = 0; i < cap; i += 1) {
-      await startEmailFirstSignup({ email: 'cap@example.com' });
+      await startEmailFirstSignup({ email: 'cap@example.com' }, IP);
     }
-    const throttled = await startEmailFirstSignup({ email: 'CAP@example.com' });
+    const throttled = await startEmailFirstSignup({ email: 'CAP@example.com' }, IP);
 
     expect(throttled).toEqual({ message: START_SIGNUP_MESSAGE });
     expect(h.sendEmailMock).toHaveBeenCalledTimes(cap);
-    expect(h.generateSignupAuthLinkMock).toHaveBeenCalledTimes(cap);
 
-    // A different address is unaffected.
-    await startEmailFirstSignup({ email: 'other@example.com' });
+    await startEmailFirstSignup({ email: 'cap@example.com' }, '198.51.100.9');
     expect(h.sendEmailMock).toHaveBeenCalledTimes(cap + 1);
   });
 
-  it('reports a delivery failure as such', async () => {
+  it('bounds the total sent to one address across callers', async () => {
+    const ceiling = _testInternals.START_EMAILS_PER_ADDRESS;
+    for (let i = 0; i < ceiling + 2; i += 1) {
+      await startEmailFirstSignup({ email: 'inbox@example.com' }, `198.51.100.${i}`);
+    }
+    expect(h.sendEmailMock).toHaveBeenCalledTimes(ceiling);
+  });
+
+  it('answers a GoTrue refusal generically, without sending', async () => {
+    h.generateLinkMock.mockResolvedValueOnce({ data: null, error: { message: 'User is banned' } });
+    await expect(startEmailFirstSignup({ email: 'banned@example.com' }, IP)).resolves.toEqual({
+      message: START_SIGNUP_MESSAGE,
+    });
+    expect(h.sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('reports a delivery failure, still padded to the response floor', async () => {
     h.sendEmailMock.mockRejectedValueOnce(new Error('resend down'));
-    await expect(startEmailFirstSignup({ email: 'a@example.com' })).rejects.toBeInstanceOf(SignupEmailDeliveryError);
+    await expect(startEmailFirstSignup({ email: 'a@example.com' }, IP)).rejects.toBeInstanceOf(SignupEmailDeliveryError);
+    expect(h.enforceMinMock).toHaveBeenCalledWith(expect.any(Number), _testInternals.MIN_START_RESPONSE_MS);
   });
 });
 
@@ -225,12 +259,12 @@ describe('submitSignupDetails', () => {
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('keeps the id of the caller\'s own live row', async () => {
+  it('keeps the id of a live row this session wrote', async () => {
     const { values } = mockDb({
       signupRequestId: 'live-id',
       status: 'email_verified',
       expiresAt: new Date(Date.now() + 60_000),
-      payload: {},
+      payload: { flow: 'email_first', authUserId: CONFIRMED_USER.id },
     });
     const result = await submitSignupDetails(CONFIRMED_USER, DETAILS);
     expect((values.mock.calls[0]?.[0] as Record<string, unknown>).signupRequestId).toBe('live-id');
@@ -265,12 +299,56 @@ describe('submitSignupDetails', () => {
     expect(config.setWhere.values).toEqual(['payment_completed', 'provisioning', 'completed']);
   });
 
+  it('never adopts the id of a live row someone else created for this address', async () => {
+    // The form flow lets anyone create a pending_verification row for any
+    // address, with an id of their choosing. Adopting it would hand them the
+    // bearer id of the victim's paid signup (provisioning-status login token).
+    const { values } = mockDb({
+      signupRequestId: 'attacker-chosen-id',
+      status: 'pending_verification',
+      expiresAt: new Date(Date.now() + 60_000),
+      payload: {},
+    });
+    const result = await submitSignupDetails(CONFIRMED_USER, DETAILS);
+    expect((values.mock.calls[0]?.[0] as Record<string, unknown>).signupRequestId).not.toBe('attacker-chosen-id');
+    expect(result.signupRequestId).not.toBe('attacker-chosen-id');
+  });
+
+  it('does not adopt an email-first row written by a different auth user', async () => {
+    const { values } = mockDb({
+      signupRequestId: 'other-users-id',
+      status: 'email_verified',
+      expiresAt: new Date(Date.now() + 60_000),
+      payload: { flow: 'email_first', authUserId: 'someone-else' },
+    });
+    await submitSignupDetails(CONFIRMED_USER, DETAILS);
+    expect((values.mock.calls[0]?.[0] as Record<string, unknown>).signupRequestId).not.toBe('other-users-id');
+  });
+
+  it('marks the row it writes as this session\'s', async () => {
+    const { values } = mockDb(null);
+    await submitSignupDetails(CONFIRMED_USER, DETAILS);
+    const row = values.mock.calls[0]?.[0] as { payload: Record<string, unknown> };
+    expect(row.payload).toMatchObject({ flow: 'email_first', authUserId: CONFIRMED_USER.id });
+  });
+
+  it('closes a stored Checkout session even when the row it belongs to has expired', async () => {
+    mockDb({
+      signupRequestId: 'old-id',
+      status: 'checkout_started',
+      expiresAt: new Date(Date.now() - 60_000),
+      payload: { flow: 'email_first', authUserId: CONFIRMED_USER.id, stripeCheckoutSessionId: 'cs_old' },
+    });
+    await submitSignupDetails(CONFIRMED_USER, DETAILS);
+    expect(h.closeCheckoutSessionMock).toHaveBeenCalledWith('cs_old');
+  });
+
   it('closes an open Checkout session before changing the answers it was priced on', async () => {
     const { values } = mockDb({
       signupRequestId: 'live-id',
       status: 'checkout_started',
       expiresAt: new Date(Date.now() + 60_000),
-      payload: { stripeCheckoutSessionId: 'cs_test_1' },
+      payload: { flow: 'email_first', authUserId: CONFIRMED_USER.id, stripeCheckoutSessionId: 'cs_test_1' },
     });
     await submitSignupDetails(CONFIRMED_USER, DETAILS);
     expect(h.closeCheckoutSessionMock).toHaveBeenCalledWith('cs_test_1');
@@ -284,7 +362,7 @@ describe('submitSignupDetails', () => {
       signupRequestId: 'live-id',
       status: 'checkout_started',
       expiresAt: new Date(Date.now() + 60_000),
-      payload: { stripeCheckoutSessionId: 'cs_test_1' },
+      payload: { flow: 'email_first', authUserId: CONFIRMED_USER.id, stripeCheckoutSessionId: 'cs_test_1' },
     });
     await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toBeInstanceOf(ValidationError);
     expect(values).not.toHaveBeenCalled();

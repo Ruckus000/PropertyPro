@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   checkoutSessionsCreateMock,
   checkoutSessionsRetrieveMock,
+  checkoutSessionsExpireMock,
   subscriptionsRetrieveMock,
   invoicesRetrieveMock,
   billingPortalSessionsCreateMock,
@@ -37,6 +38,7 @@ const {
 } = vi.hoisted(() => {
   const checkoutSessionsCreateMock = vi.fn();
   const checkoutSessionsRetrieveMock = vi.fn();
+  const checkoutSessionsExpireMock = vi.fn();
   const subscriptionsRetrieveMock = vi.fn();
   const invoicesRetrieveMock = vi.fn();
   const billingPortalSessionsCreateMock = vi.fn();
@@ -58,6 +60,7 @@ const {
   return {
     checkoutSessionsCreateMock,
     checkoutSessionsRetrieveMock,
+    checkoutSessionsExpireMock,
     subscriptionsRetrieveMock,
     invoicesRetrieveMock,
     billingPortalSessionsCreateMock,
@@ -84,6 +87,7 @@ vi.mock('stripe', () => ({
       sessions: {
         create: checkoutSessionsCreateMock,
         retrieve: checkoutSessionsRetrieveMock,
+        expire: checkoutSessionsExpireMock,
       },
     },
     subscriptions: { retrieve: subscriptionsRetrieveMock },
@@ -448,5 +452,41 @@ describe('stripe-service', () => {
 
       expect(() => getStripeClient()).toThrow('STRIPE_SECRET_KEY is not set');
     });
+  });
+});
+
+describe('closeCheckoutSession', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.resetAllMocks();
+    process.env.STRIPE_SECRET_KEY = 'sk_test_x';
+  });
+
+  it('closes an open session', async () => {
+    checkoutSessionsExpireMock.mockResolvedValue({ status: 'expired' });
+    const { closeCheckoutSession } = await importService();
+    await expect(closeCheckoutSession('cs_1')).resolves.toBe('closed');
+  });
+
+  it('reports a session the customer already paid', async () => {
+    checkoutSessionsExpireMock.mockRejectedValue(new Error('not open'));
+    checkoutSessionsRetrieveMock.mockResolvedValue({ status: 'complete' });
+    const { closeCheckoutSession } = await importService();
+    await expect(closeCheckoutSession('cs_1')).resolves.toBe('complete');
+  });
+
+  it('treats a session Stripe no longer has as closed', async () => {
+    checkoutSessionsExpireMock.mockRejectedValue(new Error('not open'));
+    checkoutSessionsRetrieveMock.mockRejectedValue(Object.assign(new Error('No such session'), { code: 'resource_missing' }));
+    const { closeCheckoutSession } = await importService();
+    await expect(closeCheckoutSession('cs_1')).resolves.toBe('closed');
+  });
+
+  it('does NOT call a session closed when Stripe could not be reached', async () => {
+    // The session may still be open and payable; the caller must not edit.
+    checkoutSessionsExpireMock.mockRejectedValue(new Error('ECONNRESET'));
+    checkoutSessionsRetrieveMock.mockRejectedValue(new Error('ECONNRESET'));
+    const { closeCheckoutSession } = await importService();
+    await expect(closeCheckoutSession('cs_1')).rejects.toThrow('ECONNRESET');
   });
 });

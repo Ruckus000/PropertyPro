@@ -18,17 +18,22 @@
  * showing a user a Supabase URL at all: `demo-session.ts:73`,
  * `dev/agent-login/route.ts:150` and `provisioning-service.ts`.
  *
- * THE SESSION IS KEPT. `verifyOtp` with a `token_hash` returns a session
- * directly (no PKCE verifier is involved), and the cookie adapter below writes
- * it onto the redirect — the same shape as `lib/services/demo-session.ts`.
- * Email-first signup (`lib/auth/signup-email-first.ts`) depends on it: the user
- * answers the community questions signed in, and `POST /auth/signup/details`
- * is session-authenticated. Until 2026-10 this route discarded the session,
- * because the form flow set a password up front and needed none.
+ * THE SESSION IS KEPT FOR EMAIL-FIRST LINKS ONLY — those without a
+ * `signupRequestId`. `verifyOtp` with a `token_hash` returns a session directly
+ * (no PKCE verifier is involved), and the cookie adapter below writes it onto
+ * the redirect, the same shape as `lib/services/demo-session.ts`. Email-first
+ * signup (`lib/auth/signup-email-first.ts`) depends on it: the user answers the
+ * community questions signed in, and `POST /auth/signup/details` is
+ * session-authenticated.
  *
- * Accepted cost, the usual one for any emailed sign-in link: whoever opens the
- * link is signed in as its address, replacing any session already in the
- * browser. The link only ever goes to the address being signed in.
+ * Form-flow links (they carry a `signupRequestId`) still DISCARD it, as before:
+ * that flow set a password up front and confirms with the id, so a session
+ * would only widen what an emailed link can do there.
+ *
+ * Accepted cost on the email-first path, the usual one for any emailed sign-in
+ * link: whoever opens it is signed in as its address, replacing any session in
+ * that browser (so a forwarded link signs the recipient into the sender's
+ * account). The link is only ever sent to the address it signs in.
  *
  * ONE OUTCOME, whether the token is good or not: redirect to `/signup` with
  * `verified=1`. `signup-form.tsx` then calls `confirm-verification`, which reads
@@ -79,8 +84,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
-          // Replayed onto the redirect below: see "THE SESSION IS KEPT".
-          sessionCookies.push(...cookiesToSet);
+          // Replayed onto the redirect below for email-first links only: see
+          // "THE SESSION IS KEPT FOR EMAIL-FIRST LINKS ONLY".
+          if (!signupRequestId) sessionCookies.push(...cookiesToSet);
         },
       },
     });

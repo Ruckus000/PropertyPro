@@ -6,9 +6,12 @@
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { startEmailFirstSignup } from '@/lib/auth/signup-email-first';
+import { extractClientIp } from '@/lib/middleware/rate-limit-config';
 import { authSignupStartPostContract } from './contract';
 
-// route-gate: public — sessionless; only emails a link to the submitted address, answers identically for every address, throttled per IP (auth tier) and per address
+// route-gate: public — sessionless; only emails a link to the submitted address, answers identically for every address, throttled per IP (auth tier), per address+IP and per address
 export const POST = withErrorHandler(
-  runRoute(authSignupStartPostContract, async ({ body }) => startEmailFirstSignup(body)),
+  runRoute(authSignupStartPostContract, async ({ body, req }) =>
+    startEmailFirstSignup(body, extractClientIp(req)),
+  ),
 );
