@@ -549,6 +549,22 @@ async function createOrLinkAuthAccount(
   // project domain; we link at our own route and finish with verifyOtp there.
   const signupToken = signupLink.data?.properties?.hashed_token;
   if (!signupLink.error && signupToken) {
+    // GoTrue IGNORES `password` when the address already has an UNCONFIRMED
+    // user (adminGenerateLink only merges metadata), and anyone can create one
+    // here with a password of their choosing. Confirming would then leave the
+    // planter's password on this person's account. Set the submitter's own.
+    // ponytail: unconditional for unconfirmed users — for a brand-new user it
+    // rewrites the same password, which beats guessing "pre-existing" from
+    // created_at across two clocks.
+    const linkedUser = signupLink.data.user;
+    if (linkedUser && !linkedUser.email_confirmed_at) {
+      const { error: passwordError } = await admin.auth.admin.updateUserById(linkedUser.id, {
+        password: input.password,
+      });
+      if (passwordError) {
+        throw new Error(`Failed to set signup password: ${passwordError.message}`);
+      }
+    }
     return {
       authUserId: signupLink.data.user?.id ?? null,
       verificationLink: buildVerificationLink({

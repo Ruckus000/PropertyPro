@@ -91,7 +91,10 @@ async function consumeStartBudget(email: string, ip: string): Promise<boolean> {
  * either kind confirms the email. The token is bound to the type GoTrue
  * reports, so the link carries `verification_type`, not the type we asked for.
  */
-async function generateStartLink(email: string): Promise<{ link: string; authUserId: string | null }> {
+async function generateStartLink(
+  email: string,
+  binding: string,
+): Promise<{ link: string; authUserId: string | null }> {
   const redirectTo = new URL('/signup', getBaseUrl());
   redirectTo.searchParams.set('verified', '1');
   const admin = createAdminClient();
@@ -121,7 +124,7 @@ async function generateStartLink(email: string): Promise<{ link: string; authUse
   const reported = data.properties.verification_type;
   const type: VerificationLinkType = reported === 'signup' ? 'signup' : 'magiclink';
   return {
-    link: buildVerificationLink({ hashedToken: token, type }),
+    link: buildVerificationLink({ hashedToken: token, type, binding }),
     authUserId: data.user?.id ?? null,
   };
 }
@@ -156,7 +159,7 @@ export async function startEmailFirstSignup(
 
     let auth: { link: string; authUserId: string | null };
     try {
-      auth = await generateStartLink(email);
+      auth = await generateStartLink(email, parsed.data.binding);
     } catch (linkError) {
       // Answered generically: GoTrue's refusals are per-account (a banned
       // user, say). Logged for us; the user simply receives no email.

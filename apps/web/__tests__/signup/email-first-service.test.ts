@@ -144,17 +144,30 @@ beforeEach(() => {
   h.closeCheckoutSessionMock.mockResolvedValue('closed');
 });
 
+const BINDING = 'a'.repeat(64);
+
 describe('startEmailFirstSignup', () => {
   const IP = '203.0.113.7';
 
+  it('requires a well-formed browser binding', async () => {
+    await expect(startEmailFirstSignup({ email: 'a@example.com' }, IP)).rejects.toBeInstanceOf(ValidationError);
+    await expect(startEmailFirstSignup({ email: 'a@example.com', binding: 'not-hex' }, IP)).rejects.toBeInstanceOf(ValidationError);
+    expect(h.generateLinkMock).not.toHaveBeenCalled();
+  });
+
+  it('binds the emailed link to the requesting browser', async () => {
+    await startEmailFirstSignup({ email: 'a@example.com', binding: BINDING }, IP);
+    expect(new URL(h.sendEmailMock.mock.calls[0]?.[3] as string).searchParams.get('b')).toBe(BINDING);
+  });
+
   it('rejects a malformed email without creating anything', async () => {
-    await expect(startEmailFirstSignup({ email: 'not-an-email' }, IP)).rejects.toBeInstanceOf(ValidationError);
+    await expect(startEmailFirstSignup({ email: 'not-an-email', binding: BINDING }, IP)).rejects.toBeInstanceOf(ValidationError);
     expect(h.generateLinkMock).not.toHaveBeenCalled();
     expect(h.sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('makes ONE magiclink call, sets no password or metadata, and emails the link to that address', async () => {
-    const result = await startEmailFirstSignup({ email: '  Founder@Example.com ' }, IP);
+    const result = await startEmailFirstSignup({ email: '  Founder@Example.com ', binding: BINDING }, IP);
 
     expect(result).toEqual({ message: START_SIGNUP_MESSAGE });
     expect(h.generateLinkMock).toHaveBeenCalledTimes(1);
@@ -177,35 +190,35 @@ describe('startEmailFirstSignup', () => {
 
   it('links with the type GoTrue reports, since the token is bound to it', async () => {
     // GoTrue turns a magiclink for an unknown address into a signup.
-    await startEmailFirstSignup({ email: 'new@example.com' }, IP);
+    await startEmailFirstSignup({ email: 'new@example.com', binding: BINDING }, IP);
     expect(new URL(h.sendEmailMock.mock.calls[0]?.[3] as string).searchParams.get('type')).toBe('signup');
 
     h.generateLinkMock.mockResolvedValueOnce({
       data: { user: { id: 'auth-2' }, properties: { hashed_token: 'h2', verification_type: 'magiclink' } },
       error: null,
     });
-    await startEmailFirstSignup({ email: 'existing@example.com' }, IP);
+    await startEmailFirstSignup({ email: 'existing@example.com', binding: BINDING }, IP);
     expect(new URL(h.sendEmailMock.mock.calls[1]?.[3] as string).searchParams.get('type')).toBe('magiclink');
   });
 
   it('caps sends per address+IP, but another caller of the same address is not silenced', async () => {
     const cap = _testInternals.START_EMAILS_PER_CALLER;
     for (let i = 0; i < cap; i += 1) {
-      await startEmailFirstSignup({ email: 'cap@example.com' }, IP);
+      await startEmailFirstSignup({ email: 'cap@example.com', binding: BINDING }, IP);
     }
-    const throttled = await startEmailFirstSignup({ email: 'CAP@example.com' }, IP);
+    const throttled = await startEmailFirstSignup({ email: 'CAP@example.com', binding: BINDING }, IP);
 
     expect(throttled).toEqual({ message: START_SIGNUP_MESSAGE });
     expect(h.sendEmailMock).toHaveBeenCalledTimes(cap);
 
-    await startEmailFirstSignup({ email: 'cap@example.com' }, '198.51.100.9');
+    await startEmailFirstSignup({ email: 'cap@example.com', binding: BINDING }, '198.51.100.9');
     expect(h.sendEmailMock).toHaveBeenCalledTimes(cap + 1);
   });
 
   it('bounds the total sent to one address across callers', async () => {
     const ceiling = _testInternals.START_EMAILS_PER_ADDRESS;
     for (let i = 0; i < ceiling + 2; i += 1) {
-      await startEmailFirstSignup({ email: 'inbox@example.com' }, `198.51.100.${i}`);
+      await startEmailFirstSignup({ email: 'inbox@example.com', binding: BINDING }, `198.51.100.${i}`);
     }
     expect(h.sendEmailMock).toHaveBeenCalledTimes(ceiling);
   });
@@ -217,13 +230,13 @@ describe('startEmailFirstSignup', () => {
       data: { user: { id: 'auth-u', email_confirmed_at: null }, properties: { hashed_token: 'hu', verification_type: 'magiclink' } },
       error: null,
     });
-    await startEmailFirstSignup({ email: 'victim@example.com' }, IP);
+    await startEmailFirstSignup({ email: 'victim@example.com', binding: BINDING }, IP);
     expect(h.updateUserByIdMock).toHaveBeenCalledWith('auth-u', { password: expect.any(String) });
     expect(h.sendEmailMock).toHaveBeenCalledTimes(1);
   });
 
   it('leaves a confirmed account\'s password alone', async () => {
-    await startEmailFirstSignup({ email: 'owner@example.com' }, IP);
+    await startEmailFirstSignup({ email: 'owner@example.com', binding: BINDING }, IP);
     expect(h.updateUserByIdMock).not.toHaveBeenCalled();
   });
 
@@ -233,13 +246,13 @@ describe('startEmailFirstSignup', () => {
       error: null,
     });
     h.updateUserByIdMock.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
-    await expect(startEmailFirstSignup({ email: 'victim@example.com' }, IP)).resolves.toEqual({ message: START_SIGNUP_MESSAGE });
+    await expect(startEmailFirstSignup({ email: 'victim@example.com', binding: BINDING }, IP)).resolves.toEqual({ message: START_SIGNUP_MESSAGE });
     expect(h.sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('answers a GoTrue refusal generically, without sending', async () => {
     h.generateLinkMock.mockResolvedValueOnce({ data: null, error: { message: 'User is banned' } });
-    await expect(startEmailFirstSignup({ email: 'banned@example.com' }, IP)).resolves.toEqual({
+    await expect(startEmailFirstSignup({ email: 'banned@example.com', binding: BINDING }, IP)).resolves.toEqual({
       message: START_SIGNUP_MESSAGE,
     });
     expect(h.sendEmailMock).not.toHaveBeenCalled();
@@ -247,7 +260,7 @@ describe('startEmailFirstSignup', () => {
 
   it('reports a delivery failure, still padded to the response floor', async () => {
     h.sendEmailMock.mockRejectedValueOnce(new Error('resend down'));
-    await expect(startEmailFirstSignup({ email: 'a@example.com' }, IP)).rejects.toBeInstanceOf(SignupEmailDeliveryError);
+    await expect(startEmailFirstSignup({ email: 'a@example.com', binding: BINDING }, IP)).rejects.toBeInstanceOf(SignupEmailDeliveryError);
     expect(h.enforceMinMock).toHaveBeenCalledWith(expect.any(Number), _testInternals.MIN_START_RESPONSE_MS);
   });
 });

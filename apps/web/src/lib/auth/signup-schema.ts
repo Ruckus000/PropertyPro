@@ -7,6 +7,7 @@ import {
   type PlanId,
 } from '@propertypro/shared';
 import { z } from 'zod';
+import { SIGNUP_BINDING_PATTERN } from './signup-binding';
 
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
 const STATE_PATTERN = /^[A-Za-z]{2}$/;
@@ -322,6 +323,8 @@ export type SignupInput = z.infer<typeof signupSchema>;
  */
 export const signupStartSchema = z.object({
   email: signupFieldsSchema.shape.email,
+  /** SHA-256 hex of the requesting browser's binding nonce (see signup-binding.ts). */
+  binding: z.string().regex(SIGNUP_BINDING_PATTERN, 'Invalid browser binding'),
 });
 
 /**

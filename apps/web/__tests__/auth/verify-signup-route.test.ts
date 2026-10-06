@@ -32,11 +32,19 @@ const { verifyOtpMock, createServerClientMock } = vi.hoisted(() => {
 vi.mock('@supabase/ssr', () => ({ createServerClient: createServerClientMock }));
 
 import { GET } from '../../src/app/auth/verify-signup/route';
+import { SIGNUP_BINDING_COOKIE, sha256Hex } from '../../src/lib/auth/signup-binding';
 
 const ORIGIN = 'https://www.getpropertypro.com';
 
-function request(query: string): NextRequest {
-  return new NextRequest(`${ORIGIN}/auth/verify-signup${query}`);
+function request(query: string, cookie?: string): NextRequest {
+  return new NextRequest(`${ORIGIN}/auth/verify-signup${query}`, cookie ? { headers: { cookie } } : undefined);
+}
+
+/** An email-first link opened in the browser that requested it. */
+const NONCE = 'browser-nonce-1';
+async function boundRequest(query: string): Promise<NextRequest> {
+  const b = await sha256Hex(NONCE);
+  return request(`${query}&b=${b}`, `${SIGNUP_BINDING_COOKIE}=${NONCE}`);
 }
 
 beforeEach(() => {
@@ -105,10 +113,31 @@ describe('GET /auth/verify-signup', () => {
       return { error: null };
     });
 
-    const res = await GET(request('?token_hash=abc&type=signup'));
+    const res = await GET(await boundRequest('?token_hash=abc&type=signup'));
 
     expect(res.cookies.get('sb-project-auth-token')?.value).toBe('session');
     expect(new URL(res.headers.get('location') as string).searchParams.get('signupRequestId')).toBeNull();
+    // Spent: the binding cookie is expired so the link cannot be replayed here.
+    expect(res.cookies.get(SIGNUP_BINDING_COOKIE)?.value).toBe('');
+  });
+
+  describe('an email-first link opened in a browser that did not request it', () => {
+    // Otherwise a link an attacker requested for their own address would sign
+    // in whoever they lured into opening it (login CSRF).
+    it.each([
+      ['no binding cookie', () => request(`?token_hash=abc&type=magiclink&b=${'a'.repeat(64)}`)],
+      ['a different browser\'s cookie', async () =>
+        request(`?token_hash=abc&type=magiclink&b=${await sha256Hex('attacker-nonce')}`, `${SIGNUP_BINDING_COOKIE}=victim-nonce`)],
+      ['no b parameter at all', () => request('?token_hash=abc&type=magiclink', `${SIGNUP_BINDING_COOKIE}=${NONCE}`)],
+    ])('with %s: does not verify, sets no session, and says why', async (_label, make) => {
+      const res = await GET(await make());
+      expect(verifyOtpMock).not.toHaveBeenCalled();
+      expect(res.cookies.getAll()).toEqual([]);
+      const location = new URL(res.headers.get('location') as string);
+      expect(location.pathname).toBe('/signup');
+      expect(location.searchParams.get('link')).toBe('other-device');
+      expect(location.searchParams.get('token_hash')).toBeNull();
+    });
   });
 
   it('still discards the session for a form-flow link (it carries a signupRequestId)', async () => {
@@ -127,7 +156,7 @@ describe('GET /auth/verify-signup', () => {
 
   it('sets no cookies when the token fails', async () => {
     verifyOtpMock.mockResolvedValue({ error: { message: 'Token has expired' } });
-    const res = await GET(request('?token_hash=stale&type=signup'));
+    const res = await GET(await boundRequest('?token_hash=stale&type=signup'));
     expect(res.cookies.getAll()).toEqual([]);
   });
 
