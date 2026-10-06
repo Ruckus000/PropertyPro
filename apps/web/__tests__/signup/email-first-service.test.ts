@@ -24,7 +24,7 @@ const h = vi.hoisted(() => ({
   enforceMinMock: vi.fn(),
   checkSubdomainMock: vi.fn(),
   closeCheckoutSessionMock: vi.fn(),
-  hasConflictMock: vi.fn(),
+  checkAddressMock: vi.fn(),
   pendingSignupsTable: {
     signupRequestId: 'pending_signups.signup_request_id',
     status: 'pending_signups.status',
@@ -64,7 +64,7 @@ vi.mock('../../src/lib/auth/signup', async (importOriginal) => {
 
 vi.mock('../../src/lib/auth/community-address-conflict', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../src/lib/auth/community-address-conflict')>();
-  return { ...real, hasConflictingCommunity: h.hasConflictMock };
+  return { ...real, checkSignupAddress: h.checkAddressMock };
 });
 
 import { RateLimitError } from '../../src/lib/api/errors/RateLimitError';
@@ -149,7 +149,7 @@ beforeEach(() => {
     message: 'Subdomain is available.',
   });
   h.closeCheckoutSessionMock.mockResolvedValue('closed');
-  h.hasConflictMock.mockResolvedValue(false);
+  h.checkAddressMock.mockResolvedValue('available');
 });
 
 const BINDING = 'a'.repeat(64);
@@ -439,7 +439,7 @@ describe('submitSignupDetails', () => {
     };
 
     it('is refused on the communityExists field before anything is written or closed', async () => {
-      h.hasConflictMock.mockResolvedValueOnce(true);
+      h.checkAddressMock.mockResolvedValueOnce('taken');
       const { values } = mockDb(LIVE_ROW);
       const error = await submitSignupDetails(CONFIRMED_USER, DETAILS).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ValidationError);
@@ -448,27 +448,22 @@ describe('submitSignupDetails', () => {
       expect(h.closeCheckoutSessionMock).not.toHaveBeenCalled();
     });
 
-    it('checks the submitted address, excluding the caller\'s own pending row', async () => {
+    it('checks the submitted address against the session email, excluding the caller\'s own row', async () => {
       mockDb(LIVE_ROW);
       await submitSignupDetails(CONFIRMED_USER, DETAILS);
-      expect(h.hasConflictMock).toHaveBeenCalledWith({
+      expect(h.checkAddressMock).toHaveBeenCalledWith({
+        email: 'founder@example.com',
         addressLine1: DETAILS.addressLine1,
         zipCode: DETAILS.zipCode,
         excludeSignupRequestId: 'live-id',
       });
     });
 
-    it('answers at most five conflicts an hour per user, then rate-limits', async () => {
-      h.hasConflictMock.mockResolvedValue(true);
-      mockDb(null);
-      for (let i = 0; i < 5; i += 1) {
-        await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toBeInstanceOf(ValidationError);
-      }
+    it('answers an exhausted check budget with a 429 and writes nothing', async () => {
+      h.checkAddressMock.mockResolvedValueOnce('rate_limited');
+      const { values } = mockDb(null);
       await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toBeInstanceOf(RateLimitError);
-      // Another user's budget is untouched.
-      await expect(
-        submitSignupDetails({ ...CONFIRMED_USER, id: '00000000-0000-4000-8000-000000000002' }, DETAILS),
-      ).rejects.toBeInstanceOf(ValidationError);
+      expect(values).not.toHaveBeenCalled();
     });
   });
 });

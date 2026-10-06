@@ -46,7 +46,7 @@ import {
 import {
   COMMUNITY_EXISTS_FIELD,
   COMMUNITY_EXISTS_MESSAGE,
-  hasConflictingCommunity,
+  checkSignupAddress,
 } from './community-address-conflict';
 import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 import { signupDetailsSchema, signupStartSchema } from './signup-schema';
@@ -206,14 +206,6 @@ export interface SignupDetailsResult {
   subdomain: string;
 }
 
-/**
- * A "this address is taken" answer is a probe of who our customers are, so a
- * session gets only a handful of them per hour. Counted on conflicts only: a
- * founder fixing a typo is never throttled.
- */
-const ADDRESS_CONFLICTS_PER_USER = 5;
-const ADDRESS_CONFLICT_WINDOW_MS = 60 * 60 * 1000;
-
 const ALREADY_SIGNED_UP_MESSAGE =
   'This email already has a PropertyPro community. Sign in to continue.';
 
@@ -270,17 +262,14 @@ export async function submitSignupDetails(
 
   // Before anything is written or closed: a refused address leaves the
   // caller's existing row and checkout exactly as they were.
-  if (await hasConflictingCommunity({
+  const addressCheck = await checkSignupAddress({
+    email,
     addressLine1: input.addressLine1,
     zipCode: input.zipCode,
     excludeSignupRequestId: existing?.signupRequestId,
-  })) {
-    const budget = await consumeKeyedRateLimit(
-      `rl:signup-address-conflict:${user.id}`,
-      ADDRESS_CONFLICTS_PER_USER,
-      ADDRESS_CONFLICT_WINDOW_MS,
-    );
-    if (!budget.allowed) throw new RateLimitError();
+  });
+  if (addressCheck === 'rate_limited') throw new RateLimitError();
+  if (addressCheck === 'taken') {
     throw new ValidationError(COMMUNITY_EXISTS_MESSAGE, { field: COMMUNITY_EXISTS_FIELD });
   }
 

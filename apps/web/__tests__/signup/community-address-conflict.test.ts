@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
+  consumeMock: vi.fn(),
   communitiesTable: {
     addressLine1: 'communities.address_line1',
     zipCode: 'communities.zip_code',
@@ -32,13 +33,17 @@ vi.mock('@propertypro/db', () => ({
 vi.mock('@propertypro/db/filters', () => ({
   and: (...clauses: unknown[]) => ({ _type: 'and', clauses }),
   eq: (col: unknown, value: unknown) => ({ _type: 'eq', col, value }),
+  like: (col: unknown, value: unknown) => ({ _type: 'like', col, value }),
   ne: (col: unknown, value: unknown) => ({ _type: 'ne', col, value }),
   isNull: (col: unknown) => ({ _type: 'isNull', col }),
   inArray: (col: unknown, values: unknown) => ({ _type: 'inArray', col, values }),
 }));
 
+vi.mock('../../src/lib/api/keyed-rate-limit', () => ({ consumeKeyedRateLimit: h.consumeMock }));
+
 import {
   buildAddressKey,
+  checkSignupAddress,
   hasConflictingCommunity,
 } from '../../src/lib/auth/community-address-conflict';
 
@@ -62,6 +67,7 @@ function mockDb(live: Row[], paid: Row[] = []) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.consumeMock.mockResolvedValue({ allowed: true });
 });
 
 describe('buildAddressKey', () => {
@@ -114,7 +120,7 @@ describe('hasConflictingCommunity', () => {
     expect(wheres[0]).toEqual({
       _type: 'and',
       clauses: [
-        { _type: 'eq', col: 'communities.zip_code', value: '33131' },
+        { _type: 'like', col: 'communities.zip_code', value: '33131%' },
         { _type: 'isNull', col: 'communities.deleted_at' },
         { _type: 'eq', col: 'communities.is_demo', value: false },
       ],
@@ -133,11 +139,18 @@ describe('hasConflictingCommunity', () => {
     expect(wheres[1]).toEqual({
       _type: 'and',
       clauses: [
-        { _type: 'eq', col: 'pending_signups.zip_code', value: '33131' },
+        { _type: 'like', col: 'pending_signups.zip_code', value: '33131%' },
         { _type: 'inArray', col: 'pending_signups.status', values: ['payment_completed', 'provisioning'] },
         { _type: 'ne', col: 'pending_signups.signup_request_id', value: 'mine' },
       ],
     });
+  });
+
+  it('finds a community whose ZIP was stored as ZIP+4', async () => {
+    mockDb([{ addressLine1: '1200 Brickell Bay Drive', zipCode: '33131-4410' }]);
+    await expect(
+      hasConflictingCommunity({ addressLine1: '1200 Brickell Bay Dr', zipCode: '33131' }),
+    ).resolves.toBe(true);
   });
 
   it('is false for a neighbour in the same ZIP', async () => {
@@ -153,5 +166,29 @@ describe('hasConflictingCommunity', () => {
       hasConflictingCommunity({ addressLine1: 'Brickell Bay Dr', zipCode: '33131' }),
     ).resolves.toBe(false);
     expect(h.createUnscopedClientMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('checkSignupAddress', () => {
+  const ADDRESS = { email: ' Founder@Example.com ', addressLine1: '1200 Brickell Bay Dr', zipCode: '33131' };
+
+  it('spends one unit of the email\'s budget on every check, free or taken', async () => {
+    mockDb([]);
+    await expect(checkSignupAddress(ADDRESS)).resolves.toBe('available');
+    mockDb([{ addressLine1: '1200 Brickell Bay Dr', zipCode: '33131' }]);
+    await expect(checkSignupAddress(ADDRESS)).resolves.toBe('taken');
+    expect(h.consumeMock).toHaveBeenCalledTimes(2);
+    expect(h.consumeMock).toHaveBeenCalledWith('rl:signup-address-check:founder@example.com', 30, 3_600_000);
+  });
+
+  it('once the budget is spent, answers rate_limited without looking the address up', async () => {
+    h.consumeMock.mockResolvedValueOnce({ allowed: false });
+    await expect(checkSignupAddress(ADDRESS)).resolves.toBe('rate_limited');
+    expect(h.createUnscopedClientMock).not.toHaveBeenCalled();
+  });
+
+  it('spends nothing on an address it cannot compare', async () => {
+    await expect(checkSignupAddress({ ...ADDRESS, addressLine1: 'Brickell Bay Dr' })).resolves.toBe('available');
+    expect(h.consumeMock).not.toHaveBeenCalled();
   });
 });

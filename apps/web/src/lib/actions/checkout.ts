@@ -17,6 +17,7 @@ import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups } from '@propertypro/db';
 import {
+  closeCheckoutSession,
   createEmbeddedCheckoutSession,
   retrieveCheckoutSession,
 } from '@/lib/services/stripe-service';
@@ -24,13 +25,15 @@ import type { SignupPlanId } from '@/lib/auth/signup-schema';
 import { headers } from 'next/headers';
 import { requireCommunityType } from '@/lib/utils/community-validators';
 import {
+  COMMUNITY_EXISTS_FIELD,
   COMMUNITY_EXISTS_MESSAGE,
-  hasConflictingCommunity,
+  checkSignupAddress,
 } from '@/lib/auth/community-address-conflict';
 
 export type CheckoutSessionResult =
   | { ok: true; clientSecret: string; sessionId: string }
-  | { ok: false; error: string };
+  /** `field` names what the caller should send the user back to fix. */
+  | { ok: false; error: string; field?: typeof COMMUNITY_EXISTS_FIELD };
 
 const STATUS_MESSAGES: Record<string, string> = {
   pending_verification:
@@ -67,13 +70,26 @@ export async function createCheckoutSession(
 
   // The last gate before money moves, and the only one the form flow passes
   // (its submit is unauthenticated, so it is not asked there). Re-checked on a
-  // refresh too: another signup for the address may have paid in the meantime.
-  if (await hasConflictingCommunity({
+  // refresh too: another signup for the address may have paid in the meantime,
+  // in which case the session this row already opened must stop being payable.
+  const addressCheck = await checkSignupAddress({
+    email: signup.email,
     addressLine1: signup.addressLine1,
     zipCode: signup.zipCode,
     excludeSignupRequestId: signupRequestId,
-  })) {
-    return { ok: false, error: COMMUNITY_EXISTS_MESSAGE };
+  });
+  if (addressCheck === 'rate_limited') {
+    return { ok: false, error: 'Too many attempts. Please wait a few minutes and try again.' };
+  }
+  if (addressCheck === 'taken') {
+    const openSessionId = (signup.payload as Record<string, unknown> | null)?.['stripeCheckoutSessionId'];
+    if (typeof openSessionId === 'string' && openSessionId) {
+      if ((await closeCheckoutSession(openSessionId)) === 'complete') {
+        // Already paid: provisioning owns it from here.
+        return { ok: false, error: STATUS_MESSAGES['completed']! };
+      }
+    }
+    return { ok: false, error: COMMUNITY_EXISTS_MESSAGE, field: COMMUNITY_EXISTS_FIELD };
   }
 
   // If already checkout_started, retrieve the existing session to avoid

@@ -190,6 +190,12 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
     setDraft((d) => ({ ...d, [key]: value }));
   }, []);
 
+  // "This address already has a community" describes the address that was
+  // refused; once the user picks or types another, it no longer applies.
+  useEffect(() => {
+    setErrors((e) => (e.communityExists ? { ...e, communityExists: undefined } : e));
+  }, [draft.addressLine1, draft.zipCode]);
+
   const type = draft.communityType;
   const meta = type ? getTypeMeta(type) : null;
   const units = Number.parseInt(draft.unitCount, 10);

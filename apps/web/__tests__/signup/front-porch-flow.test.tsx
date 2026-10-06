@@ -282,6 +282,25 @@ describe('trial step', () => {
     expect(h.createCheckoutSessionMock).not.toHaveBeenCalled();
   });
 
+  it('routes a checkout-time refusal of the address back to "place" too, and drops the warning once the address changes', async () => {
+    saveDraft(READY_DRAFT);
+    fetchMock.mockReturnValueOnce(json(200, { data: { signupRequestId: 'req-1', subdomain: 'bayview-towers' } }));
+    h.createCheckoutSessionMock.mockResolvedValueOnce({
+      ok: false,
+      error: 'This address already has a PropertyPro community. Ask to join it instead.',
+      field: 'communityExists',
+    });
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+    expect(await screen.findByRole('heading', { name: /where is bayview towers/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /request to join/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: /zip/i }), { target: { value: '33130' } });
+    await waitFor(() => expect(screen.queryByText(/already has a PropertyPro community/i)).not.toBeInTheDocument());
+  });
+
   it('offers a fresh sign-in link when the session lapsed, keeping the answers', async () => {
     saveDraft(READY_DRAFT);
     fetchMock.mockReturnValueOnce(json(401, { error: { message: 'Unauthorized' } }));

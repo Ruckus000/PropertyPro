@@ -95,6 +95,7 @@ export function TrialStep({
 
     onSaved(signupRequestId);
     const session = await createCheckoutSession(signupRequestId).catch(() => null);
+    if (session && !session.ok && session.field && onRejected(session.field, session.error)) return;
     if (!session || !session.ok) {
       setCheckout({ kind: 'error', message: session && !session.ok ? session.error : 'Unable to start checkout. Please try again.' });
       return;

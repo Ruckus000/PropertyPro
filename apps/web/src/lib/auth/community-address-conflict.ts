@@ -9,7 +9,10 @@
  *
  * The answer is a boolean. Which community matched is never returned, so the
  * caller learns only that the address is taken — the same thing the
- * association's own public website already says.
+ * association's own public website already says. Even that is a probe of who
+ * our customers are, so `checkSignupAddress` meters every check, conflict or
+ * not: a cap that counted only conflicts would itself answer the question once
+ * spent.
  *
  * Matching is deliberately narrow: ZIP plus a canonical street line. An address
  * we cannot canonicalize (no house number, no 5-digit ZIP) never blocks, because
@@ -19,7 +22,8 @@
 // AUTHZ: Pre-tenant signup check across every community; returns only a boolean, never a row or id.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, pendingSignups } from '@propertypro/db';
-import { and, eq, inArray, isNull, ne } from '@propertypro/db/filters';
+import { and, eq, inArray, isNull, like, ne } from '@propertypro/db/filters';
+import { consumeKeyedRateLimit } from '@/lib/api/keyed-rate-limit';
 import { normalizeAddressAutocompleteText } from '@/lib/address-autocomplete';
 
 export const COMMUNITY_EXISTS_FIELD = 'communityExists';
@@ -75,6 +79,14 @@ export function buildAddressKey(addressLine1: string | null | undefined, zipCode
   return `${zip}|${tokens.join(' ')}`;
 }
 
+/**
+ * Checks per signup email per hour, shared by the details step and checkout.
+ * A real founder spends two per attempt (save, then open checkout) plus one per
+ * plan change, so this is well above any honest session.
+ */
+const ADDRESS_CHECKS_PER_EMAIL = 30;
+const ADDRESS_CHECK_WINDOW_MS = 60 * 60 * 1000;
+
 const PAID_NOT_PROVISIONED = ['payment_completed', 'provisioning'] as const;
 
 /**
@@ -90,16 +102,18 @@ export async function hasConflictingCommunity(params: {
   const key = buildAddressKey(params.addressLine1, params.zipCode);
   if (!key) return false;
   const zip = key.slice(0, 5);
+  // `zip_code` may hold ZIP+4 (the signup schema accepts it), so match the prefix.
+  const zipPrefix = `${zip}%`;
   const db = createUnscopedClient();
 
   const live = await db
     .select({ addressLine1: communities.addressLine1, zipCode: communities.zipCode })
     .from(communities)
-    .where(and(eq(communities.zipCode, zip), isNull(communities.deletedAt), eq(communities.isDemo, false)));
+    .where(and(like(communities.zipCode, zipPrefix), isNull(communities.deletedAt), eq(communities.isDemo, false)));
   if (live.some((row) => buildAddressKey(row.addressLine1, row.zipCode) === key)) return true;
 
   const paidFilters = [
-    eq(pendingSignups.zipCode, zip),
+    like(pendingSignups.zipCode, zipPrefix),
     inArray(pendingSignups.status, [...PAID_NOT_PROVISIONED]),
   ];
   if (params.excludeSignupRequestId) {
@@ -110,4 +124,27 @@ export async function hasConflictingCommunity(params: {
     .from(pendingSignups)
     .where(and(...paidFilters));
   return paid.some((row) => buildAddressKey(row.addressLine1, row.zipCode) === key);
+}
+
+export type SignupAddressCheck = 'available' | 'taken' | 'rate_limited';
+
+/**
+ * `hasConflictingCommunity`, metered per signup email. The budget is spent
+ * BEFORE the answer is computed, so an exhausted caller learns nothing about
+ * the address either way.
+ */
+export async function checkSignupAddress(params: {
+  email: string;
+  addressLine1: string | null | undefined;
+  zipCode: string | null | undefined;
+  excludeSignupRequestId?: string;
+}): Promise<SignupAddressCheck> {
+  if (!buildAddressKey(params.addressLine1, params.zipCode)) return 'available';
+  const budget = await consumeKeyedRateLimit(
+    `rl:signup-address-check:${params.email.trim().toLowerCase()}`,
+    ADDRESS_CHECKS_PER_EMAIL,
+    ADDRESS_CHECK_WINDOW_MS,
+  );
+  if (!budget.allowed) return 'rate_limited';
+  return (await hasConflictingCommunity(params)) ? 'taken' : 'available';
 }
