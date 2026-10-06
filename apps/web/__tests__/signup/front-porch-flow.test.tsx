@@ -1,0 +1,231 @@
+/**
+ * Email-first signup UI (`components/signup/front-porch/signup-flow.tsx`).
+ *
+ * Pinned here: what each step refuses, what it sends, and that the trial step
+ * — the only place answers reach the server — sends exactly the answers plus
+ * Terms acceptance and nothing the session should decide (no email).
+ */
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const h = vi.hoisted(() => ({
+  createCheckoutSessionMock: vi.fn(),
+}));
+
+vi.mock('@/lib/actions/checkout', () => ({ createCheckoutSession: h.createCheckoutSessionMock }));
+vi.mock('@/lib/stripe/browser', () => ({ getStripePromise: () => Promise.resolve({}) }));
+vi.mock('@stripe/react-stripe-js', () => ({
+  EmbeddedCheckoutProvider: ({ children, options }: { children: React.ReactNode; options: { clientSecret: string } }) => (
+    <div data-testid="checkout-provider" data-secret={options.clientSecret}>{children}</div>
+  ),
+  EmbeddedCheckout: () => <div>stripe-form</div>,
+}));
+// The address index is a static asset fetch; the flow is tested in manual mode.
+vi.mock('@/lib/address-autocomplete', () => ({
+  loadAddressAutocompleteSuggestions: vi.fn().mockResolvedValue([]),
+  parseAddressAutocompleteQuery: () => null,
+}));
+
+import { SignupFlow } from '../../src/components/signup/front-porch/signup-flow';
+
+const fetchMock = vi.fn();
+
+function json(status: number, body: unknown) {
+  return Promise.resolve({ ok: status < 400, status, json: async () => body });
+}
+
+function setInput(label: RegExp | string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+}
+
+function clickNext(name: RegExp = /continue/i) {
+  // The footer CTA; the type cards are buttons too, so match by name.
+  fireEvent.click(screen.getAllByRole('button', { name })[0]!);
+}
+
+beforeEach(() => {
+  window.sessionStorage.clear();
+  fetchMock.mockReset();
+  h.createCheckoutSessionMock.mockReset();
+  vi.stubGlobal('fetch', fetchMock);
+  window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  cleanup();
+});
+
+describe('email step', () => {
+  it('refuses a malformed email without calling the API', () => {
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkFailed={false} initialType={null} initialPlan={null} />);
+    setInput('Email', 'nope');
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/valid email/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends the link and shows the masked address', async () => {
+    fetchMock.mockReturnValue(json(200, { data: { message: 'ok' } }));
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkFailed={false} initialType={null} initialPlan={null} />);
+    setInput('Email', 'Dana@Sunset.org');
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }));
+
+    expect(await screen.findByRole('heading', { name: /check your email/i })).toBeInTheDocument();
+    expect(screen.getByText('d••••@sunset.org')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/signup/start', expect.objectContaining({ method: 'POST' }));
+    // Resend is on cooldown right after a send.
+    expect(screen.getByRole('button', { name: /resend in/i })).toBeDisabled();
+  });
+
+  it('says so when the emailed link failed', () => {
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkFailed initialType={null} initialPlan={null} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/expired or was already used/i);
+  });
+});
+
+describe('question steps', () => {
+  it('requires a name and a community type', () => {
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    clickNext();
+    expect(screen.getByText('Enter your community name.')).toBeInTheDocument();
+    expect(screen.getByText('Choose the type of community.')).toBeInTheDocument();
+  });
+
+  it('restores saved answers after the inbox detour', () => {
+    window.sessionStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({ communityName: 'Bayview Towers', communityType: 'condo_718', step: 'place' }),
+    );
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    expect(screen.getByRole('heading', { name: /where is bayview towers/i })).toBeInTheDocument();
+  });
+
+  it('refuses a ZIP outside Florida', () => {
+    window.sessionStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({
+        communityName: 'Bayview Towers',
+        communityType: 'condo_718',
+        manualAddress: true,
+        addressLine1: '1200 Brickell Bay Dr',
+        city: 'Miami',
+        zipCode: '10001',
+        county: 'Miami-Dade',
+        unitCount: '48',
+        step: 'place',
+      }),
+    );
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    clickNext();
+    expect(screen.getByText(/enter a florida zip code/i)).toBeInTheDocument();
+  });
+
+  it('shows the statutory verdict at the threshold', () => {
+    window.sessionStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({ communityName: 'Bayview', communityType: 'condo_718', unitCount: '25', step: 'place' }),
+    );
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    expect(screen.getByText('Website required')).toBeInTheDocument();
+    setInput(/number of units/i, '24');
+    expect(screen.getByText(/website optional at 24 units/i)).toBeInTheDocument();
+  });
+
+  it('will not leave "you" until the web address is confirmed available', async () => {
+    fetchMock.mockReturnValue(json(200, { data: { available: false, reason: 'taken', message: 'taken' } }));
+    window.sessionStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({ communityName: 'Bayview', communityType: 'condo_718', city: 'Miami', step: 'you' }),
+    );
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    setInput(/your name/i, 'Dana Reyes');
+    expect(await screen.findByText('bayview.getpropertypro.com is taken.', {}, { timeout: 2000 })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /see what florida requires/i }));
+    expect(screen.getByRole('heading', { name: /who's setting this up/i })).toBeInTheDocument();
+    // The suggestion offers a free alternative built from the city.
+    expect(screen.getByRole('button', { name: /use bayview-miami\.getpropertypro\.com/i })).toBeInTheDocument();
+  });
+});
+
+describe('trial step', () => {
+  const READY_DRAFT = {
+    communityName: 'Bayview Towers',
+    communityType: 'condo_718',
+    manualAddress: true,
+    addressLine1: '1200 Brickell Bay Dr',
+    city: 'Miami',
+    zipCode: '33131',
+    county: 'Miami-Dade',
+    unitCount: '48',
+    primaryContactName: 'Dana Reyes',
+    slug: 'bayview-towers',
+    slugDirty: true,
+    step: 'trial',
+  };
+
+  it('posts the answers with Terms acceptance, then mounts Stripe inline', async () => {
+    window.sessionStorage.setItem('pp.signup.draft.v1', JSON.stringify(READY_DRAFT));
+    fetchMock.mockReturnValue(json(200, { data: { signupRequestId: 'req-1', subdomain: 'bayview-towers' } }));
+    h.createCheckoutSessionMock.mockResolvedValue({ ok: true, clientSecret: 'cs_secret_1', sessionId: 'cs_1' });
+
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    expect(screen.getByText(/by starting your trial, you agree/i)).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, { body: string }];
+    expect(url).toBe('/api/v1/auth/signup/details');
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      communityName: 'Bayview Towers',
+      communityType: 'condo_718',
+      planKey: 'essentials',
+      candidateSlug: 'bayview-towers',
+      state: 'FL',
+      unitCount: 48,
+      termsAccepted: true,
+    });
+    expect(body).not.toHaveProperty('email');
+    expect(h.createCheckoutSessionMock).toHaveBeenCalledWith('req-1');
+    await waitFor(() => expect(screen.getByTestId('checkout-provider')).toHaveAttribute('data-secret', 'cs_secret_1'));
+  });
+
+  it('re-prices the open checkout when the plan changes', async () => {
+    window.sessionStorage.setItem('pp.signup.draft.v1', JSON.stringify(READY_DRAFT));
+    fetchMock.mockReturnValue(json(200, { data: { signupRequestId: 'req-1', subdomain: 'bayview-towers' } }));
+    h.createCheckoutSessionMock
+      .mockResolvedValueOnce({ ok: true, clientSecret: 'cs_secret_1', sessionId: 'cs_1' })
+      .mockResolvedValueOnce({ ok: true, clientSecret: 'cs_secret_2', sessionId: 'cs_2' });
+
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /professional/i }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('checkout-provider')).toHaveAttribute('data-secret', 'cs_secret_2'));
+    const second = JSON.parse((fetchMock.mock.calls[1] as [string, { body: string }])[1].body) as Record<string, unknown>;
+    expect(second.planKey).toBe('professional');
+  });
+
+  it('sends a rejected web address back to the "you" step', async () => {
+    window.sessionStorage.setItem('pp.signup.draft.v1', JSON.stringify(READY_DRAFT));
+    fetchMock.mockReturnValueOnce(json(400, {
+      error: { message: 'That subdomain is no longer available.', details: { field: 'candidateSlug' } },
+    }));
+    // The "you" step re-checks the slug on arrival.
+    fetchMock.mockReturnValue(json(200, { data: { available: false, reason: 'taken', message: '' } }));
+
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+
+    expect(await screen.findByRole('heading', { name: /who's setting this up/i })).toBeInTheDocument();
+    expect(h.createCheckoutSessionMock).not.toHaveBeenCalled();
+  });
+});

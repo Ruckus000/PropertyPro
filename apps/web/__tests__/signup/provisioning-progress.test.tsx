@@ -155,3 +155,39 @@ describe('ProvisioningProgress — completion', () => {
     );
   });
 });
+
+describe('ProvisioningProgress — live', () => {
+  it('signs in, shows the live screen, and leaves for the dashboard only when asked', async () => {
+    routerMock.push.mockClear();
+    window.sessionStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({ communityName: 'Bayview Towers', submittedSlug: 'bayview-towers' }),
+    );
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { status: 'completed', loginToken: 'tok', communityId: 7 } }),
+    });
+
+    await act(async () => {
+      render(<ProvisioningProgress signupRequestId="sr-1" />);
+    });
+
+    // Fake timers are on in this file: vi.waitFor, not findBy*.
+    await vi.waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Bayview Towers is live.' })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('link', { name: /visit your portal/i })).toHaveAttribute(
+      'href',
+      'https://bayview-towers.getpropertypro.com',
+    );
+    expect(routerMock.push).not.toHaveBeenCalled();
+    // The answers are no longer needed once the community exists.
+    expect(window.sessionStorage.getItem('pp.signup.draft.v1')).toBeNull();
+
+    await act(async () => {
+      screen.getByRole('button', { name: /go to your dashboard/i }).click();
+    });
+    expect(routerMock.push).toHaveBeenCalledWith('/dashboard?communityId=7');
+  });
+});

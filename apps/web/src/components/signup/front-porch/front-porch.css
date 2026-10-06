@@ -1,0 +1,26 @@
+/*
+ * Front-porch signup motion. Durations come from the motion tokens; the
+ * staggered entrance and the value "flights" are deliberate, product-requested
+ * motion (orientation: the answer travels to where it now lives). Everything
+ * here is disabled under prefers-reduced-motion.
+ */
+@keyframes fp-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fp-enter {
+  animation: fp-enter var(--duration-slow) var(--ease-standard) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-enter {
+    animation: none;
+  }
+}
