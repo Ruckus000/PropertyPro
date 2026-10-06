@@ -132,22 +132,29 @@ export interface SignupFlowProps {
   /** `type` when the emailed link has already signed the user in. */
   initialStep: 'email' | 'type';
   sessionEmail: string | null;
-  /** The emailed link was spent or expired: say so on the email step. */
-  linkFailed: boolean;
+  /**
+   * Why the emailed link did not sign the user in, shown on the email step:
+   * spent/expired, or opened in a browser other than the one that asked.
+   */
+  linkNotice: 'expired' | 'other-device' | null;
   initialType: CommunityType | null;
   initialPlan: SignupPlanId | null;
 }
 
-export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType, initialPlan }: SignupFlowProps) {
+const LINK_NOTICES = {
+  expired: 'That sign-in link has expired or was already used. Enter your email and we will send a new one.',
+  'other-device':
+    'This link was requested on a different device or browser. Open it there, or enter your email to get a new link on this one.',
+} as const;
+
+export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType, initialPlan }: SignupFlowProps) {
   const [step, setStep] = useState<SignupStep>(initialStep);
   const [email, setEmail] = useState('');
   const [sentTo, setSentTo] = useState('');
   const [draft, setDraft] = useState<SignupDraft>(() => emptyDraft(initialType, initialPlan));
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
-  const [formError, setFormError] = useState<string | null>(linkFailed
-    ? 'That sign-in link has expired or was already used. Enter your email and we will send a new one.'
-    : null);
+  const [formError, setFormError] = useState<string | null>(linkNotice ? LINK_NOTICES[linkNotice] : null);
   const [resendIn, setResendIn] = useState(0);
   const restored = useRef(false);
 

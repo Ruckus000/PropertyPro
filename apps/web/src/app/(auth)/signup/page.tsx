@@ -64,7 +64,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
       <SignupFlow
         initialStep={confirmed ? 'type' : 'email'}
         sessionEmail={confirmed ? user?.email ?? null : null}
-        linkFailed={verified && !confirmed}
+        linkNotice={
+          confirmed ? null : pickFirst(params.link) === 'other-device' ? 'other-device' : verified ? 'expired' : null
+        }
         initialType={requestedType ? parseCommunityType(requestedType) : null}
         initialPlan={plan as PlanId | null}
       />

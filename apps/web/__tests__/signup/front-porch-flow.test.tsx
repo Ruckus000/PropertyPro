@@ -27,6 +27,7 @@ vi.mock('@/lib/address-autocomplete', () => ({
 }));
 
 import { SignupFlow } from '../../src/components/signup/front-porch/signup-flow';
+import { sha256Hex } from '../../src/lib/auth/signup-binding';
 
 const fetchMock = vi.fn();
 
@@ -50,6 +51,7 @@ function clickNext(name: RegExp = /continue/i) {
 
 beforeEach(() => {
   window.localStorage.clear();
+  document.cookie = 'pp_signup_binding=; Max-Age=0; Path=/';
   fetchMock.mockReset();
   h.createCheckoutSessionMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
@@ -63,7 +65,7 @@ afterEach(() => {
 
 describe('email step', () => {
   it('refuses a malformed email without calling the API', () => {
-    render(<SignupFlow initialStep="email" sessionEmail={null} linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkNotice={null} initialType={null} initialPlan={null} />);
     setInput('Email', 'nope');
     fireEvent.click(screen.getByRole('button', { name: /continue with email/i }));
     expect(screen.getByRole('alert')).toHaveTextContent(/valid email/i);
@@ -72,7 +74,7 @@ describe('email step', () => {
 
   it('sends the link and shows the masked address', async () => {
     fetchMock.mockReturnValue(json(200, { data: { message: 'ok' } }));
-    render(<SignupFlow initialStep="email" sessionEmail={null} linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkNotice={null} initialType={null} initialPlan={null} />);
     setInput('Email', 'Dana@Sunset.org');
     fireEvent.click(screen.getByRole('button', { name: /continue with email/i }));
 
@@ -83,15 +85,42 @@ describe('email step', () => {
     expect(screen.getByRole('button', { name: /resend in/i })).toBeDisabled();
   });
 
+  it('binds the link to this browser, and a resend keeps the same binding', async () => {
+    fetchMock.mockReturnValue(json(200, { data: { message: 'ok' } }));
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkNotice={null} initialType={null} initialPlan={null} />);
+    setInput('Email', 'dana@sunset.org');
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }));
+    await screen.findByRole('heading', { name: /check your email/i });
+
+    const first = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body) as { binding: string };
+    expect(first.binding).toMatch(/^[0-9a-f]{64}$/);
+    const nonce = /pp_signup_binding=([0-9a-f]{64})/.exec(document.cookie)?.[1];
+    expect(nonce).toBeDefined();
+    // The link carries only the hash; the nonce never leaves this browser.
+    expect(first.binding).toBe(await sha256Hex(nonce as string));
+
+    fireEvent.click(screen.getByRole('button', { name: /^wrong email\? go back$/i }));
+    setInput('Email', 'dana@sunset.org');
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }));
+    await screen.findByRole('heading', { name: /check your email/i });
+    const second = JSON.parse((fetchMock.mock.calls[1] as [string, { body: string }])[1].body) as { binding: string };
+    expect(second.binding).toBe(first.binding);
+  });
+
+  it('explains a link opened in a different browser', () => {
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkNotice="other-device" initialType={null} initialPlan={null} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/requested on a different device or browser/i);
+  });
+
   it('says so when the emailed link failed', () => {
-    render(<SignupFlow initialStep="email" sessionEmail={null} linkFailed initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="email" sessionEmail={null} linkNotice="expired" initialType={null} initialPlan={null} />);
     expect(screen.getByRole('alert')).toHaveTextContent(/expired or was already used/i);
   });
 });
 
 describe('question steps', () => {
   it('requires a name and a community type', () => {
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     clickNext();
     expect(screen.getByText('Enter your community name.')).toBeInTheDocument();
     expect(screen.getByText('Choose the type of community.')).toBeInTheDocument();
@@ -99,7 +128,7 @@ describe('question steps', () => {
 
   it('restores saved answers after the inbox detour', () => {
     saveDraft({ communityName: 'Bayview Towers', communityType: 'condo_718', step: 'place' });
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     expect(screen.getByRole('heading', { name: /where is bayview towers/i })).toBeInTheDocument();
   });
 
@@ -115,14 +144,14 @@ describe('question steps', () => {
         unitCount: '48',
         step: 'place',
       });
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     clickNext();
     expect(screen.getByText(/enter a florida zip code/i)).toBeInTheDocument();
   });
 
   it('shows the statutory verdict at the threshold', () => {
     saveDraft({ communityName: 'Bayview', communityType: 'condo_718', unitCount: '25', step: 'place' });
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     expect(screen.getByText('Website required')).toBeInTheDocument();
     setInput(/number of units/i, '24');
     expect(screen.getByText(/website optional at 24 units/i)).toBeInTheDocument();
@@ -131,7 +160,7 @@ describe('question steps', () => {
   it('will not leave "you" until the web address is confirmed available', async () => {
     fetchMock.mockReturnValue(json(200, { data: { available: false, reason: 'taken', message: 'taken' } }));
     saveDraft({ communityName: 'Bayview', communityType: 'condo_718', city: 'Miami', step: 'you' });
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     setInput(/your name/i, 'Dana Reyes');
     expect(await screen.findByText('bayview.getpropertypro.com is taken.', {}, { timeout: 2000 })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /see what florida requires/i }));
@@ -162,7 +191,7 @@ describe('trial step', () => {
     fetchMock.mockReturnValue(json(200, { data: { signupRequestId: 'req-1', subdomain: 'bayview-towers' } }));
     h.createCheckoutSessionMock.mockResolvedValue({ ok: true, clientSecret: 'cs_secret_1', sessionId: 'cs_1' });
 
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     expect(screen.getByText(/by starting your trial, you agree/i)).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
@@ -192,7 +221,7 @@ describe('trial step', () => {
       .mockResolvedValueOnce({ ok: true, clientSecret: 'cs_secret_1', sessionId: 'cs_1' })
       .mockResolvedValueOnce({ ok: true, clientSecret: 'cs_secret_2', sessionId: 'cs_2' });
 
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
     });
@@ -213,7 +242,7 @@ describe('trial step', () => {
     // The "you" step re-checks the slug on arrival.
     fetchMock.mockReturnValue(json(200, { data: { available: false, reason: 'taken', message: '' } }));
 
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
     });
@@ -227,7 +256,7 @@ describe('trial step', () => {
     fetchMock.mockReturnValueOnce(json(400, {
       error: { message: 'Invalid signup payload', details: { fieldErrors: { county: ['County is required'] } } },
     }));
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
     });
@@ -238,7 +267,7 @@ describe('trial step', () => {
   it('offers a fresh sign-in link when the session lapsed, keeping the answers', async () => {
     saveDraft(READY_DRAFT);
     fetchMock.mockReturnValueOnce(json(401, { error: { message: 'Unauthorized' } }));
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
     });
@@ -251,20 +280,20 @@ describe('review fixes', () => {
   it('excludes the signup\'s own saved row when re-checking its web address', async () => {
     fetchMock.mockReturnValue(json(200, { data: { normalizedSubdomain: 'bayview', available: true, reason: 'available', message: '' } }));
     saveDraft({ communityName: 'Bayview', communityType: 'condo_718', signupRequestId: 'req-own', step: 'you' });
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled(), { timeout: 2000 });
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('signupRequestId=req-own');
   });
 
   it('does not restore a draft another account wrote on this device', () => {
     saveDraft({ communityName: 'Someone Else HOA', communityType: 'hoa_720', step: 'place' }, 'other@x.org');
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     expect(screen.getByRole('heading', { name: /what's your community called/i })).toBeInTheDocument();
     expect(screen.queryByDisplayValue('Someone Else HOA')).toBeNull();
   });
 
   it('shows who is signed in, with a way to switch', () => {
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     expect(screen.getByText('d@x.org')).toBeVisible();
     expect(screen.getByRole('button', { name: /use a different email/i })).toBeInTheDocument();
   });
@@ -273,7 +302,7 @@ describe('review fixes', () => {
     const long = 'a'.repeat(63);
     fetchMock.mockReturnValue(json(200, { data: { normalizedSubdomain: long, available: false, reason: 'taken', message: '' } }));
     saveDraft({ communityName: long, communityType: 'condo_718', city: 'Miami', step: 'you' });
-    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     const suggestion = await screen.findByRole('button', { name: /^use /i }, { timeout: 2000 });
     expect(suggestion.textContent).toContain('-miami');
     expect(suggestion.textContent).not.toBe(`Use ${long}.getpropertypro.com`);
