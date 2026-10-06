@@ -57,32 +57,57 @@ const STREET_WORDS: Readonly<Record<string, string>> = {
 };
 
 /** Everything from one of these on names a unit inside the building, not the building. */
-const UNIT_DESIGNATORS = new Set(['apt', 'apartment', 'unit', 'ste', 'suite', 'bldg', 'building', 'fl', 'floor', 'rm', 'room']);
+const UNIT_DESIGNATORS = new Set([
+  'apt', 'apartment', 'unit', 'ste', 'suite', 'bldg', 'building', 'fl', 'floor', 'rm', 'room',
+  'ph', 'penthouse', 'lot', 'spc', 'space', 'trlr',
+]);
+
+/** Canonical suffixes; a bare number after one of these is a unit (`100 Ocean Dr 401`). */
+const STREET_SUFFIXES = new Set(['st', 'ave', 'blvd', 'dr', 'rd', 'ln', 'ct', 'pl', 'ter', 'cir', 'pkwy', 'hwy', 'trl', 'sq', 'way']);
+
+const ZIP_PATTERN = /^\s*(\d{5})(?:-\d{4})?\s*$/;
+/** A one-line address ending in its ZIP: `123 Ocean Dr, Miami FL 33139`. */
+const TRAILING_ZIP_PATTERN = /[\s,](\d{5})(?:-\d{4})?\s*$/;
 
 /**
  * `"123 N. Ocean Boulevard, Apt 4"` + `"33139-1234"` → `"33139|123 n ocean blvd"`.
  * Returns null when the address cannot be compared safely.
+ *
+ * With no ZIP field, a one-line address (the form flow's free-text `address`,
+ * which leaves the structured fields empty) is read for a trailing ZIP and the
+ * street before its first comma, so that shape cannot skip the check.
  */
 export function buildAddressKey(addressLine1: string | null | undefined, zipCode: string | null | undefined): string | null {
-  const zip = /^\s*(\d{5})(?:-\d{4})?\s*$/.exec(zipCode ?? '')?.[1];
-  if (!zip || !addressLine1) return null;
+  if (!addressLine1) return null;
+  let zip = ZIP_PATTERN.exec(zipCode ?? '')?.[1];
+  let line = addressLine1;
+  if (!zip && !zipCode?.trim()) {
+    zip = TRAILING_ZIP_PATTERN.exec(addressLine1)?.[1];
+    line = addressLine1.split(',')[0] ?? '';
+  }
+  if (!zip) return null;
 
   // `#` is a unit marker too, but normalization turns it into a space, so cut first.
-  const street = normalizeAddressAutocompleteText(addressLine1.split('#')[0] ?? '');
+  const street = normalizeAddressAutocompleteText(line.split('#')[0] ?? '');
   const tokens: string[] = [];
   for (const token of street.split(' ')) {
     if (!token) continue;
     if (UNIT_DESIGNATORS.has(token)) break;
-    tokens.push(STREET_WORDS[token] ?? token);
+    const word = STREET_WORDS[token] ?? token;
+    const previous = tokens[tokens.length - 1];
+    if (tokens.length >= 3 && previous && STREET_SUFFIXES.has(previous) && /\d/.test(word)) break;
+    tokens.push(word);
   }
   if (tokens.length < 2 || !/^\d+[a-z]?$/.test(tokens[0]!)) return null;
   return `${zip}|${tokens.join(' ')}`;
 }
 
 /**
- * Checks per signup email per hour, shared by the details step and checkout.
- * A real founder spends two per attempt (save, then open checkout) plus one per
- * plan change, so this is well above any honest session.
+ * Checks per signup email per hour at the details step, where a signed-in
+ * founder can change the address without re-verifying. One per save; a real
+ * founder spends one per plan change, so this is well above any honest session.
+ * Checkout is not metered: the address there is the row's, and changing a
+ * row's address costs a fresh verification email (form flow) or a metered save.
  */
 const ADDRESS_CHECKS_PER_EMAIL = 30;
 const ADDRESS_CHECK_WINDOW_MS = 60 * 60 * 1000;
@@ -106,12 +131,6 @@ export async function hasConflictingCommunity(params: {
   const zipPrefix = `${zip}%`;
   const db = createUnscopedClient();
 
-  const live = await db
-    .select({ addressLine1: communities.addressLine1, zipCode: communities.zipCode })
-    .from(communities)
-    .where(and(like(communities.zipCode, zipPrefix), isNull(communities.deletedAt), eq(communities.isDemo, false)));
-  if (live.some((row) => buildAddressKey(row.addressLine1, row.zipCode) === key)) return true;
-
   const paidFilters = [
     like(pendingSignups.zipCode, zipPrefix),
     inArray(pendingSignups.status, [...PAID_NOT_PROVISIONED]),
@@ -119,11 +138,17 @@ export async function hasConflictingCommunity(params: {
   if (params.excludeSignupRequestId) {
     paidFilters.push(ne(pendingSignups.signupRequestId, params.excludeSignupRequestId));
   }
-  const paid = await db
-    .select({ addressLine1: pendingSignups.addressLine1, zipCode: pendingSignups.zipCode })
-    .from(pendingSignups)
-    .where(and(...paidFilters));
-  return paid.some((row) => buildAddressKey(row.addressLine1, row.zipCode) === key);
+  const [live, paid] = await Promise.all([
+    db
+      .select({ addressLine1: communities.addressLine1, zipCode: communities.zipCode })
+      .from(communities)
+      .where(and(like(communities.zipCode, zipPrefix), isNull(communities.deletedAt), eq(communities.isDemo, false))),
+    db
+      .select({ addressLine1: pendingSignups.addressLine1, zipCode: pendingSignups.zipCode })
+      .from(pendingSignups)
+      .where(and(...paidFilters)),
+  ]);
+  return [...live, ...paid].some((row) => buildAddressKey(row.addressLine1, row.zipCode) === key);
 }
 
 export type SignupAddressCheck = 'available' | 'taken' | 'rate_limited';

@@ -31,7 +31,7 @@ vi.mock('../../src/lib/services/stripe-service', () => ({
 }));
 vi.mock('../../src/lib/auth/community-address-conflict', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../src/lib/auth/community-address-conflict')>();
-  return { ...real, checkSignupAddress: h.checkAddressMock };
+  return { ...real, hasConflictingCommunity: h.checkAddressMock };
 });
 
 import { createCheckoutSession } from '../../src/lib/actions/checkout';
@@ -59,13 +59,13 @@ beforeEach(() => {
     update: () => ({ set: () => ({ where: async () => undefined }) }),
   });
   h.createEmbeddedMock.mockResolvedValue({ clientSecret: 'cs_secret', sessionId: 'cs_1' });
-  h.checkAddressMock.mockResolvedValue('available');
+  h.checkAddressMock.mockResolvedValue(false);
   h.closeMock.mockResolvedValue('closed');
 });
 
 describe('createCheckoutSession — duplicate address', () => {
   it('refuses before opening a Stripe session, naming the field to fix', async () => {
-    h.checkAddressMock.mockResolvedValueOnce('taken');
+    h.checkAddressMock.mockResolvedValueOnce(true);
     await expect(createCheckoutSession('req-1')).resolves.toEqual({
       ok: false,
       error: COMMUNITY_EXISTS_MESSAGE,
@@ -73,7 +73,6 @@ describe('createCheckoutSession — duplicate address', () => {
     });
     expect(h.createEmbeddedMock).not.toHaveBeenCalled();
     expect(h.checkAddressMock).toHaveBeenCalledWith({
-      email: 'founder@example.com',
       addressLine1: '1200 Brickell Bay Dr',
       zipCode: '33131',
       excludeSignupRequestId: 'req-1',
@@ -82,23 +81,21 @@ describe('createCheckoutSession — duplicate address', () => {
 
   it('closes the session this row already opened, so it can no longer be paid', async () => {
     row = { ...SIGNUP, status: 'checkout_started', payload: { stripeCheckoutSessionId: 'cs_open' } };
-    h.checkAddressMock.mockResolvedValueOnce('taken');
+    h.checkAddressMock.mockResolvedValueOnce(true);
     await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: false, field: 'communityExists' });
     expect(h.closeMock).toHaveBeenCalledWith('cs_open');
     expect(h.retrieveMock).not.toHaveBeenCalled();
   });
 
-  it('refuses without answering when the check budget is spent', async () => {
-    h.checkAddressMock.mockResolvedValueOnce('rate_limited');
-    const result = await createCheckoutSession('req-1');
-    expect(result).toMatchObject({ ok: false });
-    expect(result).not.toHaveProperty('field');
-    expect(h.createEmbeddedMock).not.toHaveBeenCalled();
+  it('is not metered, so refreshing an open checkout can never lock its founder out', async () => {
+    for (let i = 0; i < 40; i += 1) {
+      await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: true });
+    }
   });
 
   it('opens the session for a row the details step marked as a separate association', async () => {
     row = { ...SIGNUP, payload: { sharedAddress: true } };
-    h.checkAddressMock.mockResolvedValueOnce('taken');
+    h.checkAddressMock.mockResolvedValueOnce(true);
     await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: true, sessionId: 'cs_1' });
   });
 

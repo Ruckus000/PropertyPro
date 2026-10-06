@@ -27,7 +27,7 @@ import { requireCommunityType } from '@/lib/utils/community-validators';
 import {
   COMMUNITY_EXISTS_FIELD,
   COMMUNITY_EXISTS_MESSAGE,
-  checkSignupAddress,
+  hasConflictingCommunity,
 } from '@/lib/auth/community-address-conflict';
 
 export type CheckoutSessionResult =
@@ -72,20 +72,21 @@ export async function createCheckoutSession(
   // (its submit is unauthenticated, so it is not asked there). Re-checked on a
   // refresh too: another signup for the address may have paid in the meantime,
   // in which case the session this row already opened must stop being payable.
-  const addressCheck = await checkSignupAddress({
-    email: signup.email,
+  //
+  // Not metered, unlike the details step: this checks the row's own address,
+  // and changing that costs a fresh verification email (form flow) or a
+  // metered details save — so a refresh or plan change can never lock a
+  // founder out of the checkout they already opened.
+  const addressTaken = await hasConflictingCommunity({
     addressLine1: signup.addressLine1,
     zipCode: signup.zipCode,
     excludeSignupRequestId: signupRequestId,
   });
-  if (addressCheck === 'rate_limited') {
-    return { ok: false, error: 'Too many attempts. Please wait a few minutes and try again.' };
-  }
   // `sharedAddress` is written only by the details step, server-side, when the
   // founder said theirs is a separate association at this address.
   const sharedAddress =
     (signup.payload as Record<string, unknown> | null)?.['sharedAddress'] === true;
-  if (addressCheck === 'taken' && !sharedAddress) {
+  if (addressTaken && !sharedAddress) {
     const openSessionId = (signup.payload as Record<string, unknown> | null)?.['stripeCheckoutSessionId'];
     if (typeof openSessionId === 'string' && openSessionId) {
       if ((await closeCheckoutSession(openSessionId)) === 'complete') {

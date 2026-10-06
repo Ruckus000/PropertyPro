@@ -313,7 +313,7 @@ describe('trial step', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
     });
-    fireEvent.click(await screen.findByRole('button', { name: /separate association at this address/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /continue as a separate association/i }));
     expect(screen.queryByText(/already has a PropertyPro community/i)).not.toBeInTheDocument();
     expect(screen.getByText(/continuing as a separate association/i)).toBeInTheDocument();
 

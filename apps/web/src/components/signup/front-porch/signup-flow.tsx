@@ -681,12 +681,12 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
                 status="warning"
                 variant="subtle"
                 title={errors.communityExists}
-                description="If you manage or live there, request access to the existing community. Some addresses hold more than one association — a later condo phase, or a master and sub-association. If yours is one of those, you can continue."
+                description="If you manage or live there, request access by searching for the association's name. Some addresses hold more than one association — a later condo phase, or a master and sub-association. If yours is one of those, you can continue."
                 action={(
                   <div className="flex flex-wrap items-center gap-4">
                     <Link
                       href="/account/join-community"
-                      className="inline-flex min-h-9 items-center gap-1 text-sm font-medium text-content-link hover:text-content-link-hover"
+                      className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-content-link hover:text-content-link-hover md:min-h-9"
                     >
                       Request to join
                       <ArrowRight className="size-4" aria-hidden="true" />
@@ -698,9 +698,9 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
                         update('sharedAddressAcknowledged', true);
                         setErrors((e) => ({ ...e, communityExists: undefined }));
                       }}
-                      className="inline-flex min-h-9 items-center text-sm font-medium text-content-secondary underline underline-offset-4 hover:text-content"
+                      className="inline-flex min-h-11 items-center text-sm font-medium text-content-secondary underline underline-offset-4 hover:text-content md:min-h-9"
                     >
-                      It&apos;s a separate association at this address
+                      Continue as a separate association
                     </button>
                   </div>
                 )}

@@ -78,6 +78,10 @@ describe('buildAddressKey', () => {
     ['1200 Brickell Bay Dr, Apt 4B', '33131'],
     ['1200 Brickell Bay Dr #1203', '33131'],
     ['1200 Brickell Bay Dr Suite 300', '33131'],
+    ['1200 Brickell Bay Dr 401', '33131'],
+    ['1200 Brickell Bay Dr PH 2', '33131'],
+    ['1200 Brickell Bay Dr, Miami FL 33131', ''],
+    ['1200 Brickell Bay Drive, Miami, FL 33131-4410', null],
   ])('reads %j / %j as the same building', (line, zip) => {
     expect(buildAddressKey(line, zip)).toBe('33131|1200 brickell bay dr');
   });
@@ -86,6 +90,15 @@ describe('buildAddressKey', () => {
     expect(buildAddressKey('500 North Ocean Boulevard', '33062')).toBe(
       buildAddressKey('500 N Ocean Blvd', '33062'),
     );
+  });
+
+  it('keeps a number that is part of the street name', () => {
+    expect(buildAddressKey('100 Avenue 5', '33139')).toBe('33139|100 ave 5');
+    expect(buildAddressKey('100 Avenue 5', '33139')).not.toBe(buildAddressKey('100 Avenue 6', '33139'));
+  });
+
+  it('reads a trailing ZIP only when the ZIP field is empty, never over a bad one', () => {
+    expect(buildAddressKey('1200 Brickell Bay Dr, Miami FL 33131', '3313')).toBeNull();
   });
 
   it('keeps a different house number or ZIP apart', () => {

@@ -8,6 +8,7 @@
  *
  * The inner component uses useSearchParams(), which requires a Suspense boundary.
  */
+import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 import { useSearchParams } from 'next/navigation';
@@ -20,6 +21,7 @@ function CheckoutInner() {
   const signupRequestId = searchParams.get('signupRequestId') ?? '';
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [addressTaken, setAddressTaken] = useState(false);
 
   useEffect(() => {
     if (!signupRequestId) {
@@ -29,6 +31,7 @@ function CheckoutInner() {
       .then((result) => {
         if (!result.ok) {
           setError(result.error);
+          setAddressTaken(result.field === 'communityExists');
           return;
         }
         setClientSecret(result.clientSecret);
@@ -46,6 +49,18 @@ function CheckoutInner() {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
         <p className="text-sm text-status-danger">{error}</p>
+        {addressTaken ? (
+          // This older flow cannot record "a separate association at this
+          // address"; the current signup at /signup can.
+          <p className="mt-4 text-sm text-content-secondary">
+            Search for that association by name on the{' '}
+            <Link href="/account/join-community" className="font-medium text-content-link hover:text-content-link-hover">
+              join page
+            </Link>
+            . If yours is a separate association at the same address — a later condo phase, or a master
+            and sub-association — start again below and choose that option at the address step.
+          </p>
+        ) : null}
         <a
           href="/signup"
           className="mt-6 inline-block text-sm font-medium text-interactive hover:text-interactive-hover"
