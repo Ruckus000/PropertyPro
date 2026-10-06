@@ -1,7 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { CommunityType } from '@propertypro/shared';
+import { createServerClient } from '@propertypro/db/supabase/server';
 import { SignupForm } from '@/components/signup/signup-form';
+import { SignupFlow } from '@/components/signup/front-porch/signup-flow';
+import { PLAN_IDS, type PlanId } from '@propertypro/shared';
 
 interface SignupPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -41,6 +44,33 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   // so there is no SEO equity worth making permanent.
   if (requestedType === 'pm') {
     redirect('/contact?from=pm-signup');
+  }
+
+  // ponytail: a form-flow verification link (it carries a signupRequestId) still
+  // finishes on the form it started from. Those links live 24h
+  // (SIGNUP_EXPIRY_MS); this branch and SignupForm can go once none are
+  // outstanding.
+  if (!signupRequestId) {
+    // The emailed email-first link signs the user in (/auth/verify-signup)
+    // and lands here; a confirmed session goes straight to the questions.
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const confirmed = Boolean(user?.email && user.email_confirmed_at);
+    const plan = PLAN_IDS.find((id) => id === requestedPlan) ?? null;
+
+    return (
+      <SignupFlow
+        initialStep={confirmed ? 'type' : 'email'}
+        sessionEmail={confirmed ? user?.email ?? null : null}
+        linkNotice={
+          confirmed ? null : pickFirst(params.link) === 'other-device' ? 'other-device' : verified ? 'expired' : null
+        }
+        initialType={requestedType ? parseCommunityType(requestedType) : null}
+        initialPlan={plan as PlanId | null}
+      />
+    );
   }
 
   return (

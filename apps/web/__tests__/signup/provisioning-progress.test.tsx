@@ -155,3 +155,64 @@ describe('ProvisioningProgress — completion', () => {
     );
   });
 });
+
+describe('ProvisioningProgress — live', () => {
+  it('signs in, shows the live screen, and leaves for the dashboard only when asked', async () => {
+    routerMock.push.mockClear();
+    window.localStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({ communityName: 'Bayview Towers', submittedSlug: 'bayview-towers', signupRequestId: 'sr-1' }),
+    );
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { status: 'completed', loginToken: 'tok', communityId: 7 } }),
+    });
+
+    await act(async () => {
+      render(<ProvisioningProgress signupRequestId="sr-1" />);
+    });
+
+    // Fake timers are on in this file: vi.waitFor, not findBy*.
+    await vi.waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Bayview Towers is live.' })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('link', { name: /visit your portal/i })).toHaveAttribute(
+      'href',
+      'https://bayview-towers.getpropertypro.com/',
+    );
+    expect(routerMock.push).not.toHaveBeenCalled();
+    // The answers are no longer needed once the community exists.
+    expect(window.localStorage.getItem('pp.signup.draft.v1')).toBeNull();
+
+    await act(async () => {
+      screen.getByRole('button', { name: /go to your dashboard/i }).click();
+    });
+    expect(routerMock.push).toHaveBeenCalledWith('/dashboard?communityId=7');
+  });
+
+  it('stops claiming activity once polling has stopped (delayed)', async () => {
+    fetchMock.mockResolvedValue(failure(500));
+    await act(async () => {
+      render(<ProvisioningProgress signupRequestId="sr-1" />);
+    });
+    await tick();
+    await tick();
+    expect(screen.getByText(DELAYED_TEXT)).toBeInTheDocument();
+    // The only live region is the delayed notice itself, not a spinning stage.
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.queryByText('Setting up your portal')).toBeNull();
+  });
+
+  it('ignores a draft left on this device by a different signup', async () => {
+    window.localStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({ communityName: 'Someone Else HOA', submittedSlug: 'someone-else', signupRequestId: 'sr-other' }),
+    );
+    fetchMock.mockResolvedValue(provisioning());
+    await act(async () => {
+      render(<ProvisioningProgress signupRequestId="sr-1" />);
+    });
+    expect(screen.queryByText(/someone else hoa/i)).toBeNull();
+  });
+});

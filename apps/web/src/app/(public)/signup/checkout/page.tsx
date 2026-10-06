@@ -9,25 +9,11 @@
  * The inner component uses useSearchParams(), which requires a Suspense boundary.
  */
 import { Suspense, useEffect, useState } from 'react';
-import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 import { useSearchParams } from 'next/navigation';
 import { CheckoutMissingSession } from '@/components/signup/checkout-missing-session';
 import { createCheckoutSession } from '@/lib/actions/checkout';
-
-// Lazy-initialize Stripe only in the browser to avoid SSR crashes.
-// Next.js SSR-renders 'use client' components for initial HTML — calling
-// loadStripe at module level can throw if browser APIs are unavailable.
-let stripePromise: Promise<Stripe | null> | null = null;
-function getStripePromise() {
-  if (!stripePromise && typeof window !== 'undefined') {
-    const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-    if (key) {
-      stripePromise = loadStripe(key);
-    }
-  }
-  return stripePromise;
-}
+import { getStripePromise } from '@/lib/stripe/browser';
 
 function CheckoutInner() {
   const searchParams = useSearchParams();

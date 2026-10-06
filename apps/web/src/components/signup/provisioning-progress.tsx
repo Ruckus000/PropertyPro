@@ -1,17 +1,33 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AlertCircle,
+  ArrowRight,
   CheckCircle2,
   CircleDashed,
   Loader2,
-  Layers,
-  ShieldCheck,
-  Sparkles,
-  AlertTriangle,
+  RotateCcw,
+  XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  formatAddressRow,
+  formatUnitsRow,
+  getTypeMeta,
+  portalHost,
+  portalUrl,
+} from './front-porch/front-porch-data';
+import { clearSignupDraft, readSignupDraft, type SignupDraft } from './front-porch/draft-storage';
+import {
+  FrontPorchShell,
+  StepHeading,
+  type CardFooter,
+  type CommunityCardModel,
+} from './front-porch/front-porch-shell';
+import { burstConfetti } from './front-porch/motion';
 
 interface ProvisioningStatusResponse {
   status: 'pending' | 'provisioning' | 'completed' | 'consumed' | 'failed';
@@ -20,16 +36,35 @@ interface ProvisioningStatusResponse {
   communityId?: number;
 }
 
-interface Stage {
-  label: string;
-  Icon: React.ElementType;
+function stageLabels(isApartment: boolean): string[] {
+  return [
+    'Creating your portal',
+    isApartment ? 'Setting up resident tools' : 'Setting up compliance tools',
+    'Finalizing your account',
+  ];
 }
 
-const STAGES: Stage[] = [
-  { label: 'Creating your portal', Icon: Layers },
-  { label: 'Setting up compliance tools', Icon: ShieldCheck },
-  { label: 'Finalizing your account', Icon: Sparkles },
-];
+/**
+ * The community card on the setting-up and live screens, rebuilt from the
+ * answers the signup flow saved on this device (see draft-storage.ts). The form
+ * flow leaves none, so its card shows the placeholder rows instead.
+ */
+function cardFromDraft(draft: Partial<SignupDraft> | null, footer: CardFooter): CommunityCardModel {
+  const type = draft?.communityType ?? null;
+  const meta = type ? getTypeMeta(type) : null;
+  return {
+    name: draft?.communityName?.trim() || null,
+    type,
+    typeBadge: meta?.badge ?? null,
+    rows: [
+      { key: 'addr', text: draft ? formatAddressRow(draft) : null },
+      { key: 'units', text: formatUnitsRow(type, Number.parseInt(draft?.unitCount ?? '', 10)) },
+      { key: 'url', text: draft?.submittedSlug ? portalHost(draft.submittedSlug) : null, mono: true },
+      { key: 'plan', text: null },
+    ],
+    footer,
+  };
+}
 
 const MAX_POLLS = 180; // 6 minutes before showing delayed/retry messaging
 const POLL_INTERVAL_MS = 2000;
@@ -64,6 +99,16 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
   const [completedStages, setCompletedStages] = useState<Set<number>>(new Set());
   const [failed, setFailed] = useState(false);
   const [delayed, setDelayed] = useState(false);
+  const [live, setLive] = useState<{ communityId?: number } | null>(null);
+  const [draft, setDraft] = useState<Partial<SignupDraft> | null>(null);
+  const liveBadgeRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    // Only the draft of THIS signup: on a shared device another person's
+    // answers must not decorate this card.
+    const saved = readSignupDraft();
+    setDraft(saved?.signupRequestId === signupRequestId ? saved : null);
+  }, [signupRequestId]);
   const pollCount = useRef(0);
   const consecutiveFailures = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -88,10 +133,18 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         router.push('/auth/login?message=portal-ready');
         return;
       }
-      router.push(communityId ? `/dashboard?communityId=${communityId}` : '/select-community');
+      // Signed in. Show "live" before the dashboard: it is the moment the
+      // design celebrates, and the user chooses when to leave it.
+      setLive({ communityId });
     },
     [router, stopPolling],
   );
+
+  useEffect(() => {
+    if (!live) return;
+    clearSignupDraft();
+    burstConfetti(liveBadgeRef.current);
+  }, [live]);
 
   const handleConsumed = useCallback(
     async (communityId?: number) => {
@@ -197,154 +250,181 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
     return () => stopPolling();
   }, [startPolling, stopPolling]);
 
-  if (failed) {
+  const isApartment = draft?.communityType === 'apartment';
+  const name = draft?.communityName?.trim() || 'your community';
+  const stages = useMemo(() => stageLabels(isApartment), [isApartment]);
+  const dashboardHref = live?.communityId ? `/dashboard?communityId=${live.communityId}` : '/select-community';
+  const host = draft?.submittedSlug ? portalHost(draft.submittedSlug) : null;
+
+  function retry() {
+    pollCount.current = 0;
+    setFailed(false);
+    setDelayed(false);
+    startPolling();
+  }
+
+  if (live) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16">
-        <div
-          role="alert"
-          className="rounded-[10px] border border-edge bg-status-danger-subtle border-l-4 border-l-status-danger-border p-4"
-        >
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-status-danger" aria-hidden="true" />
-            <div>
-              <p className="text-base text-content">
-                Something went wrong setting up your portal. Our team has been notified — we&apos;ll
-                email you when it&apos;s ready.
-              </p>
+      <FrontPorchShell card={cardFromDraft(draft, { kind: 'live' })}>
+        <div className="flex flex-col items-start gap-6 pt-6">
+          <span
+            ref={liveBadgeRef}
+            className="fp-enter flex h-20 w-20 items-center justify-center rounded-full bg-status-success-subtle text-status-success"
+          >
+            <CheckCircle2 className="h-10 w-10" aria-hidden="true" />
+          </span>
+          <StepHeading
+            eyebrow="You're live"
+            title={`${draft?.communityName?.trim() || 'Your community'} is live.`}
+            lede={
+              host ? (
+                <>
+                  Your portal is at <span className="font-mono text-base text-content-link">{host}</span>. Next,
+                  post your first document — your dashboard walks you through it.
+                </>
+              ) : (
+                'Next, post your first document — your dashboard walks you through it.'
+              )
+            }
+          />
+          <div className="fp-enter flex flex-wrap gap-3" style={{ animationDelay: '160ms' }}>
+            <button
+              type="button"
+              onClick={() => router.push(dashboardHref)}
+              className="inline-flex h-12 items-center gap-2 whitespace-nowrap rounded-md bg-interactive px-6 text-base font-semibold text-content-inverse shadow-e1 hover:bg-interactive-hover"
+            >
+              Go to your dashboard
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {host && draft?.submittedSlug ? (
               <a
-                href="/auth/login"
-                className="mt-3 inline-block text-sm font-medium text-interactive hover:text-interactive-hover"
+                href={portalUrl(draft.submittedSlug)}
+                className="inline-flex h-12 items-center gap-2 rounded-md border border-edge bg-surface-card px-5 text-base font-medium text-content hover:bg-surface-hover"
               >
-                Go to login
+                Visit your portal
               </a>
-              <div className="mt-4 flex flex-col items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    pollCount.current = 0;
-                    setFailed(false);
-                    setDelayed(false);
-                    startPolling();
-                  }}
-                  className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
-                >
-                  Check again
-                </button>
-                <a
-                  href="/auth/login"
-                  className="text-sm text-content-secondary transition-colors hover:text-interactive"
-                >
-                  Or log in manually
-                </a>
-              </div>
-            </div>
+            ) : null}
           </div>
         </div>
-      </main>
+      </FrontPorchShell>
     );
   }
 
-  if (delayed) {
-    return (
-      <main className="mx-auto max-w-lg px-6 py-16">
-        <div
-          role="status"
-          className="rounded-[10px] border border-edge bg-status-warning-subtle border-l-4 border-l-status-warning-border p-4"
-        >
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-status-warning" aria-hidden="true" />
-            <div>
-              <p className="text-base text-content">
-                Your portal is taking longer than usual to finish setting up. We&apos;re retrying
-                automatically, so you don&apos;t need to start over or create another account.
-              </p>
-              <div className="mt-4 flex flex-col items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    pollCount.current = 0;
-                    setFailed(false);
-                    setDelayed(false);
-                    startPolling();
-                  }}
-                  className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-interactive-hover"
-                >
-                  Check again
-                </button>
-                <a
-                  href="/auth/login"
-                  className="text-sm text-content-secondary transition-colors hover:text-interactive"
-                >
-                  Or log in manually
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  // Delayed means polling has stopped: nothing on screen may claim activity.
+  const card = cardFromDraft(draft, failed || delayed ? null : { kind: 'provisioning' });
 
   return (
-    <main className="mx-auto max-w-lg px-6 py-16">
-      <div className="rounded-[10px] border border-edge bg-surface-card p-6">
-        <h1 className="text-2xl font-bold tracking-tight text-content">
-          Setting up your community
-        </h1>
-        <p className="mt-2 text-base text-content-secondary">
-          This usually takes just a few seconds.
-        </p>
-
-        <div className="mt-6 space-y-3" aria-live="polite">
-          {STAGES.map((stage, index) => {
+    <FrontPorchShell card={card}>
+      <div className="flex flex-col gap-7 pt-6">
+        <StepHeading
+          title={failed ? 'Setup did not finish' : `Setting up ${name}`}
+          lede={
+            failed
+              ? `Something went wrong on our end while setting up ${name}.`
+              : 'This usually takes just a few seconds.'
+          }
+        />
+        <div className="flex flex-col gap-2" aria-live="polite">
+          {stages.map((label, index) => {
             const isCompleted = completedStages.has(index);
-            const isActive = !isCompleted && activeStage === index;
-            const isPending = !isCompleted && !isActive;
+            const isActive = !isCompleted && activeStage === index && !failed && !delayed;
+            const isFailed = failed && !isCompleted && activeStage === index;
+            const isPending = !isCompleted && !isActive && !isFailed;
 
             return (
               <div
-                key={stage.label}
+                key={label}
                 className={cn(
-                  'flex items-center gap-3 rounded-[10px] px-4 py-3 transition-colors duration-250',
+                  'fp-enter flex items-center gap-3 rounded-md px-4 py-3.5 transition-colors duration-200',
                   isActive && 'bg-surface-muted',
+                  isFailed && 'bg-status-danger-bg',
                 )}
+                style={{ animationDelay: `${index * 80}ms` }}
                 {...(isActive ? { role: 'status' } : {})}
               >
-                {isCompleted && (
-                  <CheckCircle2
-                    className="h-5 w-5 shrink-0 text-status-success"
-                    aria-hidden="true"
-                  />
-                )}
-                {isActive && (
+                {isCompleted ? (
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-status-success" aria-hidden="true" />
+                ) : null}
+                {isActive ? (
                   <Loader2
                     className="h-5 w-5 shrink-0 animate-spin text-interactive motion-reduce:animate-none motion-reduce:opacity-75"
                     aria-hidden="true"
-                    aria-label="Loading"
                   />
-                )}
-                {isPending && (
-                  <CircleDashed
-                    className="h-5 w-5 shrink-0 text-content-disabled"
-                    aria-hidden="true"
-                  />
-                )}
-
+                ) : null}
+                {isFailed ? <XCircle className="h-5 w-5 shrink-0 text-status-danger" aria-hidden="true" /> : null}
+                {isPending ? <CircleDashed className="h-5 w-5 shrink-0 text-content-disabled" aria-hidden="true" /> : null}
                 <span
                   className={cn(
                     'text-base',
                     isCompleted && 'text-content',
-                    isActive && 'text-content font-medium',
+                    (isActive || isFailed) && 'font-semibold text-content',
                     isPending && 'text-content-disabled',
                   )}
                 >
-                  {stage.label}
+                  {label}
                 </span>
               </div>
             );
           })}
         </div>
+
+        {failed ? (
+          <div role="alert" className="flex flex-col gap-4 rounded-md border border-status-danger-border bg-status-danger-bg p-4">
+            <div className="flex gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 flex-none text-status-danger" aria-hidden="true" />
+              <div>
+                <div className="text-base font-semibold text-content">
+                  Nothing was charged, and your answers are saved.
+                </div>
+                <div className="mt-0.5 text-sm text-content-secondary">
+                  Our team has been notified and will finish setting up your portal — we&apos;ll email you when
+                  it&apos;s ready. You can check again, or contact support if you need it sooner.
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={retry}
+                className="inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-md bg-interactive px-6 text-base font-semibold text-content-inverse shadow-e1 hover:bg-interactive-hover"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Check again
+              </button>
+              <Link
+                href="/contact?from=signup-setup"
+                className="inline-flex h-11 items-center gap-2 rounded-md border border-edge bg-surface-card px-5 text-base font-medium text-content hover:bg-surface-hover"
+              >
+                Contact support
+              </Link>
+              <Link href="/auth/login" className="self-center text-sm text-content-secondary hover:text-content-link">
+                Go to login
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {delayed ? (
+          <div role="status" className="flex flex-col gap-4 rounded-md border border-status-warning-border bg-status-warning-bg p-4">
+            <p className="m-0 text-base text-content">
+              Your portal is taking longer than usual to finish setting up. We&apos;re retrying automatically, so you
+              don&apos;t need to start over or create another account.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={retry}
+                className="inline-flex h-11 items-center gap-2 rounded-md bg-interactive px-5 text-base font-semibold text-content-inverse hover:bg-interactive-hover"
+              >
+                Check again
+              </button>
+              <Link href="/auth/login" className="text-sm text-content-secondary hover:text-content-link">
+                Or log in manually
+              </Link>
+            </div>
+          </div>
+        ) : null}
       </div>
-    </main>
+    </FrontPorchShell>
   );
 }
