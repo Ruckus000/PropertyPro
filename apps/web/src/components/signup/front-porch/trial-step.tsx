@@ -20,7 +20,7 @@ import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe
 import { ArrowLeft, ArrowRight, Check, Loader2, Lock } from 'lucide-react';
 import { PlanBadge } from '@propertypro/ui';
 import { SIGNUP_TRIAL_DAYS, type CommunityType } from '@propertypro/shared';
-import { submitSignupDetails } from '@/hooks/use-email-first-signup';
+import { submitSignupDetails, type SignupDetailsBody } from '@/hooks/use-email-first-signup';
 import { createCheckoutSession } from '@/lib/actions/checkout';
 import { ApiRequestError } from '@/lib/api/request-json';
 import type { SignupPlanId, SignupPlanOption } from '@/lib/auth/signup-schema';
@@ -29,18 +29,7 @@ import { cn } from '@/lib/utils';
 import { StepHeading } from './front-porch-shell';
 import { flyTo } from './motion';
 
-export interface SignupDetailsPayload {
-  primaryContactName: string;
-  communityName: string;
-  addressLine1: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  county: string;
-  unitCount: number;
-  communityType: CommunityType;
-  candidateSlug: string;
-}
+export type SignupDetailsPayload = Omit<SignupDetailsBody, 'planKey' | 'termsAccepted'>;
 
 interface TrialStepProps {
   communityType: CommunityType;
@@ -50,14 +39,17 @@ interface TrialStepProps {
   trialEnd: { long: string; short: string };
   details: SignupDetailsPayload;
   onBack: () => void;
-  onSlugRejected: (message: string) => void;
+  /** The row the answers became; the "you" step excludes it from availability checks. */
+  onSaved: (signupRequestId: string) => void;
+  /** A field the server refused. Returns true when the user was sent to fix it. */
+  onRejected: (field: string, message: string) => boolean;
 }
 
 type CheckoutState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'ready'; clientSecret: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; signedOut?: boolean };
 
 export function TrialStep({
   plans,
@@ -66,7 +58,8 @@ export function TrialStep({
   trialEnd,
   details,
   onBack,
-  onSlugRejected,
+  onSaved,
+  onRejected,
 }: TrialStepProps) {
   const [checkout, setCheckout] = useState<CheckoutState>({ kind: 'idle' });
   const started = useRef(false);
@@ -82,18 +75,25 @@ export function TrialStep({
         setCheckout({ kind: 'error', message: "We couldn't reach PropertyPro. Check your connection and try again." });
         return;
       }
-      if (err.details?.['field'] === 'candidateSlug') {
-        onSlugRejected(err.message);
-        return;
-      }
       if (err.status === 401 || err.status === 403) {
-        setCheckout({ kind: 'error', message: 'Your sign-in expired. Reload this page to get a new link.' });
+        setCheckout({
+          kind: 'error',
+          message: 'Your sign-in expired. Your answers are saved on this device — sign in again to finish.',
+          signedOut: true,
+        });
         return;
       }
+      const fieldErrors = err.details?.['fieldErrors'] as Record<string, string[] | undefined> | undefined;
+      const field =
+        (typeof err.details?.['field'] === 'string' ? (err.details['field'] as string) : undefined)
+        ?? Object.keys(fieldErrors ?? {})[0];
+      const message = (field && fieldErrors?.[field]?.[0]) || err.message;
+      if (field && onRejected(field, message)) return;
       setCheckout({ kind: 'error', message: err.message });
       return;
     }
 
+    onSaved(signupRequestId);
     const session = await createCheckoutSession(signupRequestId).catch(() => null);
     if (!session || !session.ok) {
       setCheckout({ kind: 'error', message: session && !session.ok ? session.error : 'Unable to start checkout. Please try again.' });
@@ -176,6 +176,14 @@ export function TrialStep({
       {checkout.kind === 'error' ? (
         <div role="alert" className="rounded-md border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-content">
           {checkout.message}
+          {checkout.signedOut ? (
+            <>
+              {' '}
+              <Link href="/signup" className="font-medium text-content-link hover:underline">
+                Get a new sign-in link
+              </Link>
+            </>
+          ) : null}
         </div>
       ) : null}
 

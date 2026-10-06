@@ -4,7 +4,9 @@
  * requirements are NOT restated here — they come from `SIGNUP_PLAN_OPTIONS`
  * and `getComplianceTemplate`, so this file cannot drift from them.
  */
+import { Building2, House, KeyRound } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 
 export interface CommunityTypeMeta {
   id: CommunityType;
@@ -104,4 +106,29 @@ export function formatTrialEnd(days: number, from: Date = new Date()): { long: s
       sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' },
     ),
   };
+}
+
+export const TYPE_ICONS = { condo_718: Building2, hoa_720: House, apartment: KeyRound } as const;
+
+/** The portal's host as owners will type it, for the configured root domain. */
+export function portalHost(slug: string): string {
+  return new URL(buildCommunityUrl(slug, '/')).host;
+}
+
+export function portalUrl(slug: string): string {
+  return buildCommunityUrl(slug, '/');
+}
+
+/** Card row: "1200 Brickell Bay Dr, Miami · Miami-Dade County". */
+export function formatAddressRow(a: { addressLine1?: string; city?: string; county?: string }): string | null {
+  if (!a.addressLine1?.trim()) return null;
+  return [a.addressLine1.trim(), a.city?.trim()].filter(Boolean).join(', ') + (a.county?.trim() ? ` · ${a.county.trim()} County` : '');
+}
+
+/** Card row: "48 units · website required". */
+export function formatUnitsRow(type: CommunityType | null | undefined, units: number): string | null {
+  if (!type || !Number.isFinite(units) || units <= 0) return null;
+  const { noun } = getTypeMeta(type);
+  if (type === 'apartment') return `${units} ${noun}`;
+  return `${units} ${noun} · website ${isWebsiteRequired(type, units) ? 'required' : 'optional'}`;
 }

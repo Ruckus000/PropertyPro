@@ -30,6 +30,11 @@ import { SignupFlow } from '../../src/components/signup/front-porch/signup-flow'
 
 const fetchMock = vi.fn();
 
+/** Save a draft as the signed-in test user ('d@x.org') would have. */
+function saveDraft(draft: Record<string, unknown>, owner = 'd@x.org') {
+  window.localStorage.setItem('pp.signup.draft.v1', JSON.stringify({ ...draft, owner }));
+}
+
 function json(status: number, body: unknown) {
   return Promise.resolve({ ok: status < 400, status, json: async () => body });
 }
@@ -44,7 +49,7 @@ function clickNext(name: RegExp = /continue/i) {
 }
 
 beforeEach(() => {
-  window.sessionStorage.clear();
+  window.localStorage.clear();
   fetchMock.mockReset();
   h.createCheckoutSessionMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
@@ -93,18 +98,13 @@ describe('question steps', () => {
   });
 
   it('restores saved answers after the inbox detour', () => {
-    window.sessionStorage.setItem(
-      'pp.signup.draft.v1',
-      JSON.stringify({ communityName: 'Bayview Towers', communityType: 'condo_718', step: 'place' }),
-    );
+    saveDraft({ communityName: 'Bayview Towers', communityType: 'condo_718', step: 'place' });
     render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
     expect(screen.getByRole('heading', { name: /where is bayview towers/i })).toBeInTheDocument();
   });
 
   it('refuses a ZIP outside Florida', () => {
-    window.sessionStorage.setItem(
-      'pp.signup.draft.v1',
-      JSON.stringify({
+    saveDraft({
         communityName: 'Bayview Towers',
         communityType: 'condo_718',
         manualAddress: true,
@@ -114,18 +114,14 @@ describe('question steps', () => {
         county: 'Miami-Dade',
         unitCount: '48',
         step: 'place',
-      }),
-    );
+      });
     render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
     clickNext();
     expect(screen.getByText(/enter a florida zip code/i)).toBeInTheDocument();
   });
 
   it('shows the statutory verdict at the threshold', () => {
-    window.sessionStorage.setItem(
-      'pp.signup.draft.v1',
-      JSON.stringify({ communityName: 'Bayview', communityType: 'condo_718', unitCount: '25', step: 'place' }),
-    );
+    saveDraft({ communityName: 'Bayview', communityType: 'condo_718', unitCount: '25', step: 'place' });
     render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
     expect(screen.getByText('Website required')).toBeInTheDocument();
     setInput(/number of units/i, '24');
@@ -134,10 +130,7 @@ describe('question steps', () => {
 
   it('will not leave "you" until the web address is confirmed available', async () => {
     fetchMock.mockReturnValue(json(200, { data: { available: false, reason: 'taken', message: 'taken' } }));
-    window.sessionStorage.setItem(
-      'pp.signup.draft.v1',
-      JSON.stringify({ communityName: 'Bayview', communityType: 'condo_718', city: 'Miami', step: 'you' }),
-    );
+    saveDraft({ communityName: 'Bayview', communityType: 'condo_718', city: 'Miami', step: 'you' });
     render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
     setInput(/your name/i, 'Dana Reyes');
     expect(await screen.findByText('bayview.getpropertypro.com is taken.', {}, { timeout: 2000 })).toBeInTheDocument();
@@ -165,7 +158,7 @@ describe('trial step', () => {
   };
 
   it('posts the answers with Terms acceptance, then mounts Stripe inline', async () => {
-    window.sessionStorage.setItem('pp.signup.draft.v1', JSON.stringify(READY_DRAFT));
+    saveDraft(READY_DRAFT);
     fetchMock.mockReturnValue(json(200, { data: { signupRequestId: 'req-1', subdomain: 'bayview-towers' } }));
     h.createCheckoutSessionMock.mockResolvedValue({ ok: true, clientSecret: 'cs_secret_1', sessionId: 'cs_1' });
 
@@ -193,7 +186,7 @@ describe('trial step', () => {
   });
 
   it('re-prices the open checkout when the plan changes', async () => {
-    window.sessionStorage.setItem('pp.signup.draft.v1', JSON.stringify(READY_DRAFT));
+    saveDraft(READY_DRAFT);
     fetchMock.mockReturnValue(json(200, { data: { signupRequestId: 'req-1', subdomain: 'bayview-towers' } }));
     h.createCheckoutSessionMock
       .mockResolvedValueOnce({ ok: true, clientSecret: 'cs_secret_1', sessionId: 'cs_1' })
@@ -213,7 +206,7 @@ describe('trial step', () => {
   });
 
   it('sends a rejected web address back to the "you" step', async () => {
-    window.sessionStorage.setItem('pp.signup.draft.v1', JSON.stringify(READY_DRAFT));
+    saveDraft(READY_DRAFT);
     fetchMock.mockReturnValueOnce(json(400, {
       error: { message: 'That subdomain is no longer available.', details: { field: 'candidateSlug' } },
     }));
@@ -227,5 +220,62 @@ describe('trial step', () => {
 
     expect(await screen.findByRole('heading', { name: /who's setting this up/i })).toBeInTheDocument();
     expect(h.createCheckoutSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('sends any refused field back to the step that can fix it', async () => {
+    saveDraft(READY_DRAFT);
+    fetchMock.mockReturnValueOnce(json(400, {
+      error: { message: 'Invalid signup payload', details: { fieldErrors: { county: ['County is required'] } } },
+    }));
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+    expect(await screen.findByRole('heading', { name: /where is bayview towers/i })).toBeInTheDocument();
+    expect(screen.getByText('County is required')).toBeInTheDocument();
+  });
+
+  it('offers a fresh sign-in link when the session lapsed, keeping the answers', async () => {
+    saveDraft(READY_DRAFT);
+    fetchMock.mockReturnValueOnce(json(401, { error: { message: 'Unauthorized' } }));
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+    expect(screen.getByRole('link', { name: /get a new sign-in link/i })).toHaveAttribute('href', '/signup');
+    expect(JSON.parse(window.localStorage.getItem('pp.signup.draft.v1') ?? '{}')).toMatchObject({ communityName: 'Bayview Towers' });
+  });
+});
+
+describe('review fixes', () => {
+  it('excludes the signup\'s own saved row when re-checking its web address', async () => {
+    fetchMock.mockReturnValue(json(200, { data: { normalizedSubdomain: 'bayview', available: true, reason: 'available', message: '' } }));
+    saveDraft({ communityName: 'Bayview', communityType: 'condo_718', signupRequestId: 'req-own', step: 'you' });
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled(), { timeout: 2000 });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('signupRequestId=req-own');
+  });
+
+  it('does not restore a draft another account wrote on this device', () => {
+    saveDraft({ communityName: 'Someone Else HOA', communityType: 'hoa_720', step: 'place' }, 'other@x.org');
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    expect(screen.getByRole('heading', { name: /what's your community called/i })).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Someone Else HOA')).toBeNull();
+  });
+
+  it('shows who is signed in, with a way to switch', () => {
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    expect(screen.getByText('d@x.org')).toBeVisible();
+    expect(screen.getByRole('button', { name: /use a different email/i })).toBeInTheDocument();
+  });
+
+  it('never suggests the taken address itself, even at the 63-character limit', async () => {
+    const long = 'a'.repeat(63);
+    fetchMock.mockReturnValue(json(200, { data: { normalizedSubdomain: long, available: false, reason: 'taken', message: '' } }));
+    saveDraft({ communityName: long, communityType: 'condo_718', city: 'Miami', step: 'you' });
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkFailed={false} initialType={null} initialPlan={null} />);
+    const suggestion = await screen.findByRole('button', { name: /^use /i }, { timeout: 2000 });
+    expect(suggestion.textContent).toContain('-miami');
+    expect(suggestion.textContent).not.toBe(`Use ${long}.getpropertypro.com`);
   });
 });

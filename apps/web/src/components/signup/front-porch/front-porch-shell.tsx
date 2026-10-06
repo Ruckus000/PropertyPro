@@ -18,7 +18,6 @@ import {
   CreditCard,
   FileText,
   Globe,
-  House,
   KeyRound,
   Loader2,
   MapPin,
@@ -26,6 +25,7 @@ import {
 } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
 import { cn } from '@/lib/utils';
+import { TYPE_ICONS } from './front-porch-data';
 import './front-porch.css';
 
 export interface CardRow {
@@ -51,7 +51,6 @@ export interface CommunityCardModel {
 
 const ROW_ICONS = { addr: MapPin, units: Building, url: Globe, plan: CreditCard } as const;
 const SKELETON_WIDTHS = { addr: 'w-3/5', units: 'w-1/2', url: 'w-2/3', plan: 'w-1/2' } as const;
-const TYPE_ICONS = { condo_718: Building2, hoa_720: House, apartment: KeyRound } as const;
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -76,7 +75,8 @@ export function CommunityCard({ card }: { card: CommunityCardModel }) {
   return (
     <div
       data-testid="community-card"
-      className="relative mx-6 -mt-32 rounded-lg border border-edge bg-surface-card p-6 shadow-e3"
+      // E1, not the prototype's E3: design.md reserves E2/E3 for overlays.
+      className="relative mx-6 -mt-32 rounded-lg border border-edge bg-surface-card p-6 shadow-e1"
     >
       <div className="flex items-center gap-4">
         {card.name ? (

@@ -13,7 +13,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getTypeMeta, isWebsiteRequired } from './front-porch/front-porch-data';
+import {
+  formatAddressRow,
+  formatUnitsRow,
+  getTypeMeta,
+  portalHost,
+  portalUrl,
+} from './front-porch/front-porch-data';
 import { clearSignupDraft, readSignupDraft, type SignupDraft } from './front-porch/draft-storage';
 import {
   FrontPorchShell,
@@ -40,33 +46,20 @@ function stageLabels(isApartment: boolean): string[] {
 
 /**
  * The community card on the setting-up and live screens, rebuilt from the
- * answers the signup flow left in sessionStorage (same tab — Stripe's return is
- * a same-tab redirect). The form flow leaves none, so its card shows the
- * placeholder rows instead.
+ * answers the signup flow saved on this device (see draft-storage.ts). The form
+ * flow leaves none, so its card shows the placeholder rows instead.
  */
 function cardFromDraft(draft: Partial<SignupDraft> | null, footer: CardFooter): CommunityCardModel {
   const type = draft?.communityType ?? null;
   const meta = type ? getTypeMeta(type) : null;
-  const units = Number.parseInt(draft?.unitCount ?? '', 10);
-  const hasUnits = Number.isFinite(units) && units > 0;
   return {
     name: draft?.communityName?.trim() || null,
     type,
     typeBadge: meta?.badge ?? null,
     rows: [
-      {
-        key: 'addr',
-        text: draft?.addressLine1
-          ? [draft.addressLine1, draft.city].filter(Boolean).join(', ') + (draft.county ? ` · ${draft.county} County` : '')
-          : null,
-      },
-      {
-        key: 'units',
-        text: hasUnits && meta && type
-          ? `${units} ${meta.noun}${type === 'apartment' ? '' : isWebsiteRequired(type, units) ? ' · website required' : ' · website optional'}`
-          : null,
-      },
-      { key: 'url', text: draft?.submittedSlug ? `${draft.submittedSlug}.getpropertypro.com` : null, mono: true },
+      { key: 'addr', text: draft ? formatAddressRow(draft) : null },
+      { key: 'units', text: formatUnitsRow(type, Number.parseInt(draft?.unitCount ?? '', 10)) },
+      { key: 'url', text: draft?.submittedSlug ? portalHost(draft.submittedSlug) : null, mono: true },
       { key: 'plan', text: null },
     ],
     footer,
@@ -258,7 +251,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
   const name = draft?.communityName?.trim() || 'your community';
   const stages = useMemo(() => stageLabels(isApartment), [isApartment]);
   const dashboardHref = live?.communityId ? `/dashboard?communityId=${live.communityId}` : '/select-community';
-  const portalHost = draft?.submittedSlug ? `${draft.submittedSlug}.getpropertypro.com` : null;
+  const host = draft?.submittedSlug ? portalHost(draft.submittedSlug) : null;
 
   function retry() {
     pollCount.current = 0;
@@ -281,9 +274,9 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
             eyebrow="You're live"
             title={`${draft?.communityName?.trim() || 'Your community'} is live.`}
             lede={
-              portalHost ? (
+              host ? (
                 <>
-                  Your portal is at <span className="font-mono text-base text-content-link">{portalHost}</span>. Next,
+                  Your portal is at <span className="font-mono text-base text-content-link">{host}</span>. Next,
                   post your first document — your dashboard walks you through it.
                 </>
               ) : (
@@ -300,9 +293,9 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
               Go to your dashboard
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
-            {portalHost ? (
+            {host && draft?.submittedSlug ? (
               <a
-                href={`https://${portalHost}`}
+                href={portalUrl(draft.submittedSlug)}
                 className="inline-flex h-12 items-center gap-2 rounded-md border border-edge bg-surface-card px-5 text-base font-medium text-content hover:bg-surface-hover"
               >
                 Visit your portal
@@ -314,7 +307,8 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
     );
   }
 
-  const card = cardFromDraft(draft, failed ? null : { kind: 'provisioning' });
+  // Delayed means polling has stopped: nothing on screen may claim activity.
+  const card = cardFromDraft(draft, failed || delayed ? null : { kind: 'provisioning' });
 
   return (
     <FrontPorchShell card={card}>
@@ -330,7 +324,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         <div className="flex flex-col gap-2" aria-live="polite">
           {stages.map((label, index) => {
             const isCompleted = completedStages.has(index);
-            const isActive = !isCompleted && activeStage === index && !failed;
+            const isActive = !isCompleted && activeStage === index && !failed && !delayed;
             const isFailed = failed && !isCompleted && activeStage === index;
             const isPending = !isCompleted && !isActive && !isFailed;
 
@@ -380,7 +374,8 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
                   Nothing was charged, and your answers are saved.
                 </div>
                 <div className="mt-0.5 text-sm text-content-secondary">
-                  Try again in a moment. If it keeps happening, contact support and we will finish setup for you.
+                  Our team has been notified and will finish setting up your portal — we&apos;ll email you when
+                  it&apos;s ready. You can check again, or contact support if you need it sooner.
                 </div>
               </div>
             </div>
@@ -391,13 +386,16 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
                 className="inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-md bg-interactive px-6 text-base font-semibold text-content-inverse shadow-e1 hover:bg-interactive-hover"
               >
                 <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                Try again
+                Check again
               </button>
               <Link
                 href="/contact?from=signup-setup"
                 className="inline-flex h-11 items-center gap-2 rounded-md border border-edge bg-surface-card px-5 text-base font-medium text-content hover:bg-surface-hover"
               >
                 Contact support
+              </Link>
+              <Link href="/auth/login" className="self-center text-sm text-content-secondary hover:text-content-link">
+                Go to login
               </Link>
             </div>
           </div>

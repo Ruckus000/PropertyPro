@@ -12,21 +12,19 @@
  * `POST /api/v1/auth/signup/details` turns the answers into a checkout-ready
  * row; see `lib/auth/signup-email-first.ts`.
  *
- * Answers live in sessionStorage until then ("Progress saves automatically"),
- * so a refresh or a detour to the inbox does not lose them.
+ * Answers live in localStorage, scoped to the signed-in address, until the
+ * community is live ("Progress saves automatically"), so a refresh or a fresh
+ * sign-in link — which opens a new tab — does not lose them.
  */
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
-  Building2,
   Check,
   CheckCircle2,
   CircleDashed,
   FileText,
-  House,
   Info,
-  KeyRound,
   MailCheck,
   Minus,
   PencilLine,
@@ -54,11 +52,15 @@ import {
   APARTMENT_TOOLS,
   COMMUNITY_TYPES,
   REQUIREMENT_GROUP_LABELS,
+  TYPE_ICONS,
+  formatAddressRow,
   formatTrialEnd,
+  formatUnitsRow,
   getTypeMeta,
   isFloridaZip,
   isWebsiteRequired,
   maskEmail,
+  portalHost,
 } from './front-porch-data';
 import {
   FieldError,
@@ -78,9 +80,27 @@ import { flyTo } from './motion';
 import { TrialStep } from './trial-step';
 
 const QUESTION_STEPS: readonly SignupStep[] = ['type', 'place', 'you'];
+
+/**
+ * Where a server-side rejection of a field sends the user back to. A restored
+ * draft can reach the trial step without re-running each step's checks, so the
+ * server's answer has to land on the step that can fix it.
+ */
+const REJECTED_FIELD_STEPS: Record<string, { step: SignupStep; error: keyof Errors }> = {
+  communityName: { step: 'type', error: 'communityName' },
+  communityType: { step: 'type', error: 'communityType' },
+  address: { step: 'place', error: 'address' },
+  addressLine1: { step: 'place', error: 'address' },
+  city: { step: 'place', error: 'address' },
+  state: { step: 'place', error: 'address' },
+  zipCode: { step: 'place', error: 'address' },
+  county: { step: 'place', error: 'address' },
+  unitCount: { step: 'place', error: 'unitCount' },
+  primaryContactName: { step: 'you', error: 'primaryContactName' },
+  candidateSlug: { step: 'you', error: 'slug' },
+};
 const ORDER: readonly SignupStep[] = ['type', 'place', 'you', 'reveal', 'trial'];
 const RESEND_COOLDOWN_S = 60;
-const TYPE_ICONS = { condo_718: Building2, hoa_720: House, apartment: KeyRound } as const;
 
 type Errors = Partial<Record<
   'email' | 'communityName' | 'communityType' | 'address' | 'unitCount' | 'primaryContactName' | 'slug',
@@ -134,12 +154,12 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
   useEffect(() => {
     if (restored.current || initialStep !== 'type') return;
     restored.current = true;
-    const saved = readSignupDraft();
+    const saved = sessionEmail ? readSignupDraft(sessionEmail) : null;
     if (saved) {
       setDraft((d) => ({ ...d, ...saved, step: 'type' }));
       if (saved.step && ORDER.includes(saved.step)) setStep(saved.step);
     }
-  }, [initialStep]);
+  }, [initialStep, sessionEmail]);
 
 
   useEffect(() => {
@@ -161,8 +181,10 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
   const slugCandidate = normalizeSignupSubdomain(draft.slugDirty ? draft.slug : draft.communityName);
 
   useEffect(() => {
-    if (ORDER.includes(step)) writeSignupDraft({ ...draft, step, submittedSlug: slugCandidate });
-  }, [draft, step, slugCandidate]);
+    if (ORDER.includes(step) && sessionEmail) {
+      writeSignupDraft({ ...draft, step, submittedSlug: slugCandidate, owner: sessionEmail.toLowerCase() });
+    }
+  }, [draft, step, slugCandidate, sessionEmail]);
   const plans = type ? SIGNUP_PLAN_OPTIONS[type] : [];
   const plan = plans.find((p) => p.id === draft.planKey) ?? plans[0] ?? null;
   const trialEnd = formatTrialEnd(SIGNUP_TRIAL_DAYS);
@@ -170,35 +192,38 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
   const past = (s: SignupStep) => stepIndex > ORDER.indexOf(s);
 
   // ---- web address availability: the shared debounced lookup ----
-  const availability = useSubdomainAvailability(step === 'you' ? slugCandidate : '');
+  // The signup's own saved row holds its slug; exclude it, or a user who went
+  // back from the trial step would find their own address "taken".
+  const availability = useSubdomainAvailability(step === 'you' ? slugCandidate : '', draft.signupRequestId);
+  const host = portalHost(slugCandidate || 'your-community');
   const slugReady = availability?.normalizedSubdomain === slugCandidate && availability.available;
   const slugTaken = availability?.reason === 'taken' || availability?.reason === 'reserved';
   const slugMessage = !availability
     ? ''
     : availability.available
-      ? `${slugCandidate}.getpropertypro.com is available`
+      ? `${host} is available`
       : slugTaken
-        ? `${slugCandidate}.getpropertypro.com is taken.`
+        ? `${host} is taken.`
         : availability.message;
 
-  const slugSuggestion = `${slugCandidate}-${normalizeSignupSubdomain(draft.city) || 'fl'}`.slice(0, 63);
+  // Trim the base, not the result, so a 63-character slug cannot come back as itself.
+  const suggestionSuffix = `-${normalizeSignupSubdomain(draft.city).slice(0, 20) || 'fl'}`;
+  const slugSuggestion = normalizeSignupSubdomain(
+    `${slugCandidate.slice(0, 63 - suggestionSuffix.length)}${suggestionSuffix}`,
+  );
 
   // ---- the assembling community card ----
   const card: CommunityCardModel = useMemo(() => {
     const rows: CardRow[] = [
       {
         key: 'addr',
-        text: past('place') || (step === 'place' && draft.addressKey)
-          ? [draft.addressLine1, draft.city].filter(Boolean).join(', ') + (draft.county ? ` · ${draft.county} County` : '')
-          : null,
+        text: past('place') || (step === 'place' && draft.addressKey) ? formatAddressRow(draft) : null,
       },
       {
         key: 'units',
-        text: past('place') && unitsValid && meta
-          ? `${units} ${meta.noun}${isApartment ? '' : type && isWebsiteRequired(type, units) ? ' · website required' : ' · website optional'}`
-          : null,
+        text: past('place') ? formatUnitsRow(type, units) : null,
       },
-      { key: 'url', text: past('you') ? `${slugCandidate}.getpropertypro.com` : null, mono: true },
+      { key: 'url', text: past('you') ? host : null, mono: true },
       {
         key: 'plan',
         text: step === 'trial' && plan ? `${plan.label} · free until ${trialEnd.short}` : null,
@@ -218,7 +243,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
     };
     // `past` reads stepIndex, which is derived from `step`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, step, meta, type, units, unitsValid, isApartment, slugCandidate, plan, trialEnd.short, requirements.length]);
+  }, [draft, step, meta, type, units, isApartment, host, plan, trialEnd.short, requirements.length]);
 
   // ---- step validation ----
   function validate(current: SignupStep): Errors {
@@ -303,7 +328,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
       flyTo(fieldRef('fp-unitCount'), 'units', `${units} ${meta?.noun ?? 'units'}`);
     }
     if (step === 'you') {
-      flyTo(fieldRef('fp-slug'), 'url', `${slugCandidate}.getpropertypro.com`);
+      flyTo(fieldRef('fp-slug'), 'url', host);
     }
     const i = ORDER.indexOf(step);
     const following = ORDER[i + 1];
@@ -452,7 +477,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
             title="What's your community called?"
             lede="Use the name owners know. The legal name can come later."
           />
-          {sessionEmail ? <span className="sr-only">Signed in as {sessionEmail}</span> : null}
+          {sessionEmail ? <SignedInAs email={sessionEmail} /> : null}
           <div className="fp-enter" style={{ animationDelay: '60ms' }}>
             <label htmlFor="fp-communityName" className="mb-1.5 block text-sm font-medium text-content-secondary">
               Community name
@@ -758,7 +783,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
                 )}
               />
               <span className="flex items-center rounded-r-sm border border-edge-strong bg-surface-page px-4 font-mono text-sm text-content-secondary">
-                .getpropertypro.com
+                {portalHost('x').slice(1)}
               </span>
             </div>
             <div
@@ -778,7 +803,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
                 onClick={() => setDraft((d) => ({ ...d, slug: slugSuggestion, slugDirty: true }))}
                 className="mt-1 inline-flex min-h-9 items-center font-mono text-sm font-medium text-content-link hover:text-content-link-hover"
               >
-                Use {slugSuggestion}.getpropertypro.com
+                Use {portalHost(slugSuggestion)}
               </button>
             ) : null}
             <p className="mt-1 text-sm text-content-tertiary">
@@ -843,9 +868,13 @@ export function SignupFlow({ initialStep, sessionEmail, linkFailed, initialType,
             candidateSlug: slugCandidate,
           }}
           onBack={back}
-          onSlugRejected={(message) => {
-            setErrors({ slug: message });
-            setStep('you');
+          onSaved={(id) => update('signupRequestId', id)}
+          onRejected={(field, message) => {
+            const target = REJECTED_FIELD_STEPS[field];
+            if (!target) return false;
+            setErrors({ [target.error]: message });
+            setStep(target.step);
+            return true;
           }}
         />
       ) : null}
@@ -895,6 +924,38 @@ function RequirementGroups({ items }: { items: ReturnType<typeof getComplianceTe
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Shown on the first question: the answers that follow are saved against this
+ * account, so someone who arrived already signed in (a manager clicking a
+ * marketing link, a shared computer) must be able to see it and switch.
+ */
+function SignedInAs({ email }: { email: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="fp-enter flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-content-secondary">
+      <span>
+        Signed in as <strong className="font-semibold text-content">{email}</strong>
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const { createBrowserClient } = await import('@/lib/supabase/client');
+            await createBrowserClient().auth.signOut();
+          } finally {
+            window.location.assign('/signup');
+          }
+        }}
+        className="text-content-link hover:text-content-link-hover hover:underline"
+      >
+        Use a different email
+      </button>
     </div>
   );
 }
