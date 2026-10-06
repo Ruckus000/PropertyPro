@@ -7,6 +7,7 @@ import {
   type PlanId,
 } from '@propertypro/shared';
 import { z } from 'zod';
+import { SIGNUP_BINDING_PATTERN } from './signup-binding';
 
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
 const STATE_PATTERN = /^[A-Za-z]{2}$/;
@@ -141,7 +142,7 @@ export const signupSubdomainSchema = z.object({
   signupRequestId: z.string().trim().min(1).optional(),
 });
 
-export const signupSchema = z
+const signupFieldsSchema = z
   .object({
     signupRequestId: z.string().uuid().optional(),
     primaryContactName: z
@@ -216,91 +217,124 @@ export const signupSchema = z
       .refine((value) => value, {
         message: 'You must accept the Terms of Service to continue',
       }),
-  })
-  .superRefine((value, ctx) => {
-    const normalizedAddress = normalizeSignupAddressFields(value);
-    // The signup form submits `addressLine1: ''` (not undefined) when blank, so
-    // `usedStructuredAddress` (content-based) can't distinguish "structured form
-    // left blank" from "legacy caller". Routing the missing-address error by
-    // whether the structured surface was provided at all keeps the error under
-    // the visible `addressLine1` field instead of a silent `address` key.
-    const providedStructuredFields =
-      value.addressLine1 !== undefined ||
-      value.city !== undefined ||
-      value.state !== undefined ||
-      value.zipCode !== undefined;
-    const structuredSurface = providedStructuredFields || normalizedAddress.usedStructuredAddress;
-
-    if (!normalizedAddress.addressLine1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: structuredSurface ? 'Street address is required' : 'Address is required',
-        path: [structuredSurface ? 'addressLine1' : 'address'],
-      });
-    } else if (normalizedAddress.addressLine1.length < 5) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: structuredSurface ? 'Street address is required' : 'Address is required',
-        path: [structuredSurface ? 'addressLine1' : 'address'],
-      });
-    }
-
-    if (normalizedAddress.usedStructuredAddress) {
-      if (!normalizedAddress.city) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'City is required',
-          path: ['city'],
-        });
-      }
-      if (!normalizedAddress.state) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'State is required',
-          path: ['state'],
-        });
-      } else if (!STATE_PATTERN.test(normalizedAddress.state)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'State must be a 2-letter abbreviation',
-          path: ['state'],
-        });
-      }
-      if (!normalizedAddress.zipCode) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'ZIP Code is required',
-          path: ['zipCode'],
-        });
-      } else if (!ZIP_CODE_PATTERN.test(normalizedAddress.zipCode)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Please enter a valid ZIP Code',
-          path: ['zipCode'],
-        });
-      }
-    }
-
-    if (!isPlanAvailableForCommunityType(value.communityType, value.planKey)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Selected plan is not available for this community type',
-        path: ['planKey'],
-      });
-    }
-  })
-  .transform((value) => {
-    const normalizedAddress = normalizeSignupAddressFields(value);
-
-    return {
-      ...value,
-      address: normalizedAddress.address,
-      addressLine1: normalizedAddress.addressLine1,
-      city: normalizedAddress.city,
-      state: normalizedAddress.state,
-      zipCode: normalizedAddress.zipCode,
-      county: normalizedAddress.county,
-    };
   });
 
+type SignupRefinable = Pick<
+  z.infer<typeof signupFieldsSchema>,
+  'address' | 'addressLine1' | 'city' | 'state' | 'zipCode' | 'county' | 'communityType' | 'planKey'
+>;
+
+function refineSignupAddressAndPlan(value: SignupRefinable, ctx: z.RefinementCtx): void {
+  const normalizedAddress = normalizeSignupAddressFields(value);
+  // The signup form submits `addressLine1: ''` (not undefined) when blank, so
+  // `usedStructuredAddress` (content-based) can't distinguish "structured form
+  // left blank" from "legacy caller". Routing the missing-address error by
+  // whether the structured surface was provided at all keeps the error under
+  // the visible `addressLine1` field instead of a silent `address` key.
+  const providedStructuredFields =
+    value.addressLine1 !== undefined ||
+    value.city !== undefined ||
+    value.state !== undefined ||
+    value.zipCode !== undefined;
+  const structuredSurface = providedStructuredFields || normalizedAddress.usedStructuredAddress;
+
+  if (!normalizedAddress.addressLine1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: structuredSurface ? 'Street address is required' : 'Address is required',
+      path: [structuredSurface ? 'addressLine1' : 'address'],
+    });
+  } else if (normalizedAddress.addressLine1.length < 5) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: structuredSurface ? 'Street address is required' : 'Address is required',
+      path: [structuredSurface ? 'addressLine1' : 'address'],
+    });
+  }
+
+  if (normalizedAddress.usedStructuredAddress) {
+    if (!normalizedAddress.city) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'City is required',
+        path: ['city'],
+      });
+    }
+    if (!normalizedAddress.state) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'State is required',
+        path: ['state'],
+      });
+    } else if (!STATE_PATTERN.test(normalizedAddress.state)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'State must be a 2-letter abbreviation',
+        path: ['state'],
+      });
+    }
+    if (!normalizedAddress.zipCode) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'ZIP Code is required',
+        path: ['zipCode'],
+      });
+    } else if (!ZIP_CODE_PATTERN.test(normalizedAddress.zipCode)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Please enter a valid ZIP Code',
+        path: ['zipCode'],
+      });
+    }
+  }
+
+  if (!isPlanAvailableForCommunityType(value.communityType, value.planKey)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Selected plan is not available for this community type',
+      path: ['planKey'],
+    });
+  }
+}
+
+function withNormalizedAddress<T extends SignupRefinable>(value: T) {
+  const normalizedAddress = normalizeSignupAddressFields(value);
+
+  return {
+    ...value,
+    address: normalizedAddress.address,
+    addressLine1: normalizedAddress.addressLine1,
+    city: normalizedAddress.city,
+    state: normalizedAddress.state,
+    zipCode: normalizedAddress.zipCode,
+    county: normalizedAddress.county,
+  };
+}
+
+export const signupSchema = signupFieldsSchema
+  .superRefine(refineSignupAddressAndPlan)
+  .transform(withNormalizedAddress);
+
 export type SignupInput = z.infer<typeof signupSchema>;
+
+/**
+ * Email-first signup, step 1: the address only. Everything else is asked after
+ * the emailed link has signed the user in (see `signup-email-first.ts`).
+ */
+export const signupStartSchema = z.object({
+  email: signupFieldsSchema.shape.email,
+  /** SHA-256 hex of the requesting browser's binding nonce (see signup-binding.ts). */
+  binding: z.string().regex(SIGNUP_BINDING_PATTERN, 'Invalid browser binding'),
+});
+
+/**
+ * Email-first signup, step 2: the community answers. No `email` (the session's
+ * verified address is authoritative), no `password` (the flow is passwordless),
+ * no `signupRequestId` (the session, not a bearer id, proves ownership of the row).
+ */
+export const signupDetailsSchema = signupFieldsSchema
+  .omit({ email: true, password: true, signupRequestId: true })
+  .superRefine(refineSignupAddressAndPlan)
+  .transform(withNormalizedAddress);
+
+export type SignupDetailsInput = z.infer<typeof signupDetailsSchema>;

@@ -1150,6 +1150,7 @@ export async function reconcileLostCheckoutSignups(
         subscriptionCurrentPeriodEndAt: subscriptionObject
           ? resolveSubscriptionPeriodEndAt(subscriptionObject)
           : null,
+        paidSelection: session.metadata,
       });
       await insertProvisioningJobFence({
         signupRequestId: row.signupRequestId,

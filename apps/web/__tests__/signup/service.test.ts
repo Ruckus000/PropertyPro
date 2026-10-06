@@ -432,6 +432,7 @@ describe('signup service', () => {
   let state: MockDbState;
   let insertSpy: ReturnType<typeof vi.fn>;
   let generateLinkMock: ReturnType<typeof vi.fn>;
+  let updateUserByIdMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -460,12 +461,45 @@ describe('signup service', () => {
       error: null,
     });
 
+    updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+
     createAdminClientMock.mockReturnValue({
       auth: {
         admin: {
           generateLink: generateLinkMock,
+          updateUserById: updateUserByIdMock,
         },
       },
+    });
+  });
+
+  describe('a password planted on an unconfirmed account', () => {
+    // Anyone can create an unconfirmed user for any address with a password of
+    // their choosing; GoTrue then ignores the next submitter's password. The
+    // person who confirms must end up with THEIR password, not the planter's.
+    it('is replaced with the submitter\'s own password', async () => {
+      await submitSignup(validSignupPayload);
+      expect(updateUserByIdMock).toHaveBeenCalledWith('auth-user-1', {
+        password: validSignupPayload.password,
+      });
+    });
+
+    it('leaves a confirmed account\'s password alone', async () => {
+      generateLinkMock.mockResolvedValueOnce({
+        data: {
+          user: { id: 'auth-user-1', email_confirmed_at: '2026-01-01T00:00:00Z' },
+          properties: { hashed_token: 'hashed-token-signup' },
+        },
+        error: null,
+      });
+      await submitSignup(validSignupPayload);
+      expect(updateUserByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('sends no verification link when the password cannot be set', async () => {
+      updateUserByIdMock.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+      await expect(submitSignup(validSignupPayload)).rejects.toThrow(/signup password/);
+      expect(sendEmailMock).not.toHaveBeenCalled();
     });
   });
 

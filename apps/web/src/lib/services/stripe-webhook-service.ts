@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, ne, or, sql } from '@propertypro/db/filters';
-import { CHURNED_STATUSES, reactivationClears } from '@propertypro/shared';
+import { CHURNED_STATUSES, reactivationClears, type CommunityType } from '@propertypro/shared';
+import { isPlanAvailableForCommunityType, type SignupPlanId } from '@/lib/auth/signup-schema';
 import {
   accessPlans,
   communities,
@@ -175,6 +176,18 @@ export async function pendingSignupExists(signupRequestId: string): Promise<bool
   return rows.length > 0;
 }
 
+function resolvePaidSelection(
+  metadata: Record<string, string> | null | undefined,
+): { planKey: SignupPlanId; communityType: CommunityType } | null {
+  const communityType = metadata?.['communityType'];
+  const planKey = metadata?.['selectedPlan'];
+  if (communityType !== 'condo_718' && communityType !== 'hoa_720' && communityType !== 'apartment') {
+    return null;
+  }
+  if (!planKey || !isPlanAvailableForCommunityType(communityType, planKey)) return null;
+  return { planKey, communityType };
+}
+
 /**
  * AUTHZ: Caller MUST verify the checkout.session.completed event belongs to Stripe.
  */
@@ -187,11 +200,21 @@ export async function markPendingSignupPaymentCompleted(input: {
   // onboarding until a later subscription.updated event happens to arrive.
   subscriptionStatus?: string | null;
   subscriptionCurrentPeriodEndAt?: Date | null;
+  /**
+   * The Checkout session's metadata, as Stripe returned it. Its `selectedPlan`
+   * and `communityType` are what was actually priced and paid; when they are a
+   * valid pair they overwrite the row's, because provisioning reads the row.
+   * Answers edited after a session opened (and a session not closed in time)
+   * must not provision a plan the subscription does not bill.
+   */
+  paidSelection?: Record<string, string> | null;
 }): Promise<void> {
+  const paid = resolvePaidSelection(input.paidSelection);
   const db = createUnscopedClient();
   await db
     .update(pendingSignups)
     .set({
+      ...(paid ? { planKey: paid.planKey, communityType: paid.communityType } : {}),
       status: 'payment_completed',
       payload: sql`coalesce(${pendingSignups.payload}, '{}'::jsonb) || ${JSON.stringify({
         stripeCustomerId: input.stripeCustomerId,

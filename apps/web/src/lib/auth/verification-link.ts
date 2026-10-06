@@ -29,13 +29,21 @@ export type VerificationLinkType = 'signup' | 'magiclink';
  */
 export function buildVerificationLink(params: {
   hashedToken: string;
-  signupRequestId: string;
+  /** Absent for email-first signup, which has no pending row until the details step. */
+  signupRequestId?: string;
   type: VerificationLinkType;
+  /** Email-first only: SHA-256 of the requesting browser's nonce (signup-binding.ts). */
+  binding?: string;
 }): string {
   const url = new URL('/auth/verify-signup', getBaseUrl());
   url.searchParams.set('token_hash', params.hashedToken);
   url.searchParams.set('type', params.type);
-  url.searchParams.set('signupRequestId', params.signupRequestId);
+  if (params.signupRequestId) {
+    url.searchParams.set('signupRequestId', params.signupRequestId);
+  }
+  if (params.binding) {
+    url.searchParams.set('b', params.binding);
+  }
   return url.toString();
 }
 

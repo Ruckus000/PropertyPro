@@ -344,7 +344,7 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
 
 // A6: statuses at or past payment. A pending-signup row in one of these is a
 // live/committed signup and must never be reset by a re-submission.
-const POST_PAYMENT_SIGNUP_STATUSES = ['payment_completed', 'provisioning', 'completed'] as const;
+export const POST_PAYMENT_SIGNUP_STATUSES = ['payment_completed', 'provisioning', 'completed'] as const;
 
 /**
  * Insert the pending signup, or update the existing row for this email ONLY when
@@ -549,6 +549,22 @@ async function createOrLinkAuthAccount(
   // project domain; we link at our own route and finish with verifyOtp there.
   const signupToken = signupLink.data?.properties?.hashed_token;
   if (!signupLink.error && signupToken) {
+    // GoTrue IGNORES `password` when the address already has an UNCONFIRMED
+    // user (adminGenerateLink only merges metadata), and anyone can create one
+    // here with a password of their choosing. Confirming would then leave the
+    // planter's password on this person's account. Set the submitter's own.
+    // ponytail: unconditional for unconfirmed users — for a brand-new user it
+    // rewrites the same password, which beats guessing "pre-existing" from
+    // created_at across two clocks.
+    const linkedUser = signupLink.data.user;
+    if (linkedUser && !linkedUser.email_confirmed_at) {
+      const { error: passwordError } = await admin.auth.admin.updateUserById(linkedUser.id, {
+        password: input.password,
+      });
+      if (passwordError) {
+        throw new Error(`Failed to set signup password: ${passwordError.message}`);
+      }
+    }
     return {
       authUserId: signupLink.data.user?.id ?? null,
       verificationLink: buildVerificationLink({
@@ -589,12 +605,16 @@ async function createOrLinkAuthAccount(
   };
 }
 
-async function sendSignupVerificationEmail(
-  primaryContactName: string,
-  communityName: string,
+/**
+ * Send the verification email. The names and plan are optional because
+ * email-first signup sends this before it has asked for them.
+ */
+export async function sendSignupVerificationEmail(
+  primaryContactName: string | undefined,
+  communityName: string | undefined,
   email: string,
   verificationLink: string,
-  planKey: string,
+  planKey: string | undefined,
 ): Promise<string> {
   const result = await sendEmail({
     to: email,
@@ -605,14 +625,36 @@ async function sendSignupVerificationEmail(
       primaryContactName,
       communityName,
       verificationLink,
-      remainingSteps: signupRemainingSteps(planKey),
+      remainingSteps: planKey ? signupRemainingSteps(planKey) : undefined,
     }),
   });
 
   return result.id;
 }
 
-function buildPendingSignupPayload(input: SignupPersistenceInput): Record<string, unknown> {
+export type PendingSignupPayloadInput = Pick<
+  SignupPersistenceInput,
+  | 'signupRequestId'
+  | 'primaryContactName'
+  | 'email'
+  | 'communityName'
+  | 'address'
+  | 'addressLine1'
+  | 'city'
+  | 'state'
+  | 'zipCode'
+  | 'county'
+  | 'unitCount'
+  | 'communityType'
+  | 'planKey'
+  | 'candidateSlug'
+>;
+
+/** `extra` carries flow markers (email-first stamps `flow: 'email_first'`). */
+export function buildPendingSignupPayload(
+  input: PendingSignupPayloadInput,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     signupRequestId: input.signupRequestId,
     primaryContactName: input.primaryContactName,
@@ -629,6 +671,7 @@ function buildPendingSignupPayload(input: SignupPersistenceInput): Record<string
     planKey: input.planKey,
     candidateSlug: input.candidateSlug,
     termsAccepted: true,
+    ...extra,
   };
 }
 
@@ -661,9 +704,12 @@ function getUndefinedColumnName(error: unknown): string | null {
   return match?.[1] ?? null;
 }
 
-async function enforceMinSignupResponseTime(startMs: number): Promise<void> {
+export async function enforceMinSignupResponseTime(
+  startMs: number,
+  minMs: number = MIN_SIGNUP_RESPONSE_MS,
+): Promise<void> {
   const elapsed = Date.now() - startMs;
-  const remaining = MIN_SIGNUP_RESPONSE_MS - elapsed;
+  const remaining = minMs - elapsed;
   if (remaining > 0) {
     await new Promise((resolve) => setTimeout(resolve, remaining));
   }
