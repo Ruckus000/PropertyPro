@@ -459,6 +459,30 @@ describe('submitSignupDetails', () => {
       });
     });
 
+    it('continues for a founder who says theirs is a separate association there, and marks the row', async () => {
+      h.checkAddressMock.mockResolvedValueOnce('taken');
+      const { values } = mockDb(null);
+      await submitSignupDetails(CONFIRMED_USER, { ...DETAILS, sharedAddressAcknowledged: true });
+      const row = values.mock.calls[0]?.[0] as { payload: Record<string, unknown> };
+      expect(row.payload.sharedAddress).toBe(true);
+    });
+
+    it('does not mark a row whose address was free, whatever the client sent', async () => {
+      const { values } = mockDb(null);
+      await submitSignupDetails(CONFIRMED_USER, { ...DETAILS, sharedAddressAcknowledged: true });
+      const row = values.mock.calls[0]?.[0] as { payload: Record<string, unknown> };
+      expect(row.payload).not.toHaveProperty('sharedAddress');
+    });
+
+    it('still answers a spent budget with a 429 when the founder acknowledged a shared address', async () => {
+      h.checkAddressMock.mockResolvedValueOnce('rate_limited');
+      const { values } = mockDb(null);
+      await expect(
+        submitSignupDetails(CONFIRMED_USER, { ...DETAILS, sharedAddressAcknowledged: true }),
+      ).rejects.toBeInstanceOf(RateLimitError);
+      expect(values).not.toHaveBeenCalled();
+    });
+
     it('answers an exhausted check budget with a 429 and writes nothing', async () => {
       h.checkAddressMock.mockResolvedValueOnce('rate_limited');
       const { values } = mockDb(null);

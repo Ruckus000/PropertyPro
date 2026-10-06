@@ -96,6 +96,12 @@ describe('createCheckoutSession — duplicate address', () => {
     expect(h.createEmbeddedMock).not.toHaveBeenCalled();
   });
 
+  it('opens the session for a row the details step marked as a separate association', async () => {
+    row = { ...SIGNUP, payload: { sharedAddress: true } };
+    h.checkAddressMock.mockResolvedValueOnce('taken');
+    await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: true, sessionId: 'cs_1' });
+  });
+
   it('opens the session when the address is free', async () => {
     await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: true, sessionId: 'cs_1' });
     expect(h.createEmbeddedMock).toHaveBeenCalledTimes(1);

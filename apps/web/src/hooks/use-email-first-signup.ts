@@ -61,6 +61,7 @@ export interface SignupDetailsBody {
   candidateSlug: string;
   planKey: SignupPlanId;
   termsAccepted: true;
+  sharedAddressAcknowledged?: boolean;
 }
 
 export function submitSignupDetails(

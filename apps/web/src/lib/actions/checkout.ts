@@ -81,7 +81,11 @@ export async function createCheckoutSession(
   if (addressCheck === 'rate_limited') {
     return { ok: false, error: 'Too many attempts. Please wait a few minutes and try again.' };
   }
-  if (addressCheck === 'taken') {
+  // `sharedAddress` is written only by the details step, server-side, when the
+  // founder said theirs is a separate association at this address.
+  const sharedAddress =
+    (signup.payload as Record<string, unknown> | null)?.['sharedAddress'] === true;
+  if (addressCheck === 'taken' && !sharedAddress) {
     const openSessionId = (signup.payload as Record<string, unknown> | null)?.['stripeCheckoutSessionId'];
     if (typeof openSessionId === 'string' && openSessionId) {
       if ((await closeCheckoutSession(openSessionId)) === 'complete') {

@@ -25,6 +25,7 @@ const {
   createAdminClientMock,
   sendEmailMock,
   captureExceptionMock,
+  captureMessageMock,
   retrieveCheckoutSessionMock,
   markPendingSignupPaymentCompletedMock,
   insertProvisioningJobFenceMock,
@@ -55,6 +56,7 @@ const {
     createAdminClientMock: vi.fn(),
     sendEmailMock: vi.fn().mockResolvedValue({ id: 'email_test_001' }),
     captureExceptionMock: vi.fn(),
+    captureMessageMock: vi.fn(),
     retrieveCheckoutSessionMock: vi.fn(),
     markPendingSignupPaymentCompletedMock: vi.fn().mockResolvedValue(undefined),
     insertProvisioningJobFenceMock: vi.fn().mockResolvedValue(undefined),
@@ -166,6 +168,7 @@ vi.mock('@propertypro/email', () => ({
 
 vi.mock('@sentry/nextjs', () => ({
   captureException: captureExceptionMock,
+  captureMessage: captureMessageMock,
 }));
 
 vi.mock('@/lib/services/stripe-service', () => ({
@@ -455,6 +458,45 @@ describe('runProvisioning', () => {
     // The signup's declared size reaches the community (migration 0081) — it is
     // what decides whether Florida's website rules apply.
     expect((communityInsert?.values as { unitCount?: number }).unitCount).toBe(48);
+  });
+
+  it('raises a shared-address signup for review once, when it creates the community', async () => {
+    const { calls } = buildDb({
+      selectSequence: [
+        [makeJob({})],
+        [{ ...CONDO_SIGNUP, payload: { sharedAddress: true } }],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+    await runProvisioning(1);
+    expect(calls.some((c) => c.op === 'insert' && c.table === communitiesTable)).toBe(true);
+    expect(captureMessageMock).toHaveBeenCalledTimes(1);
+    expect(captureMessageMock).toHaveBeenCalledWith('signup_shared_address', {
+      level: 'warning',
+      tags: { review: 'shared_address' },
+      extra: { communityId: 10, slug: CONDO_SIGNUP.candidateSlug, signupRequestId: 'req_condo_001' },
+    });
+  });
+
+  it('raises nothing for an ordinary signup, or on a re-run that adopts its own community', async () => {
+    buildDb({
+      selectSequence: [[makeJob({})], [CONDO_SIGNUP], [{ userId: 'auth-uuid-001' }], [{ userId: 'auth-uuid-001' }]],
+    });
+    await runProvisioning(1);
+    vi.clearAllMocks();
+    buildDb({
+      insertReturning: [],
+      selectSequence: [
+        [makeJob({ communityId: 10 })],
+        [{ ...CONDO_SIGNUP, payload: { sharedAddress: true } }],
+        [{ id: 10 }],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+    await runProvisioning(1);
+    expect(captureMessageMock).not.toHaveBeenCalled();
   });
 
   it("stores a signup's unit count of 1 as unknown — the old form's pre-filled default", async () => {

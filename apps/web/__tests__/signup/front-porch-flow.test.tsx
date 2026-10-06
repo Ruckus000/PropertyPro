@@ -301,6 +301,40 @@ describe('trial step', () => {
     await waitFor(() => expect(screen.queryByText(/already has a PropertyPro community/i)).not.toBeInTheDocument());
   });
 
+  it('lets a separate association at the same address continue, and says so in the next save', async () => {
+    saveDraft(READY_DRAFT);
+    fetchMock.mockReturnValueOnce(json(400, {
+      error: {
+        message: 'This address already has a PropertyPro community. Ask to join it instead.',
+        details: { field: 'communityExists' },
+      },
+    }));
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /separate association at this address/i }));
+    expect(screen.queryByText(/already has a PropertyPro community/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/continuing as a separate association/i)).toBeInTheDocument();
+
+    // Changing the address withdraws the answer.
+    fireEvent.change(screen.getByRole('textbox', { name: /zip/i }), { target: { value: '33130' } });
+    await waitFor(() => expect(screen.queryByText(/continuing as a separate association/i)).not.toBeInTheDocument());
+  });
+
+  it('sends the separate-association answer with the details', async () => {
+    saveDraft({ ...READY_DRAFT, sharedAddressAcknowledged: true });
+    fetchMock.mockReturnValueOnce(json(200, { data: { signupRequestId: 'req-1', subdomain: 'bayview-towers' } }));
+    h.createCheckoutSessionMock.mockResolvedValueOnce({ ok: true, clientSecret: 'cs_secret_1', sessionId: 'cs_1' });
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start free trial/i }));
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body) as Record<string, unknown>;
+    expect(body.sharedAddressAcknowledged).toBe(true);
+  });
+
   it('offers a fresh sign-in link when the session lapsed, keeping the answers', async () => {
     saveDraft(READY_DRAFT);
     fetchMock.mockReturnValueOnce(json(401, { error: { message: 'Unauthorized' } }));

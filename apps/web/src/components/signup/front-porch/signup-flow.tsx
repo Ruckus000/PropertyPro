@@ -186,15 +186,19 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
     return () => window.clearTimeout(t);
   }, [resendIn]);
 
-  const update = useCallback(<K extends keyof SignupDraft>(key: K, value: SignupDraft[K]) => {
-    setDraft((d) => ({ ...d, [key]: value }));
+  // "This address already has a community", and the founder's answer to it,
+  // describe the address that was refused; an edited address needs neither.
+  // Called from the edit handlers rather than an effect on the address, which
+  // would also fire when a saved draft is restored and wipe the answer.
+  const forgetAddressVerdict = useCallback(() => {
+    setErrors((e) => (e.communityExists ? { ...e, communityExists: undefined } : e));
+    setDraft((d) => (d.sharedAddressAcknowledged ? { ...d, sharedAddressAcknowledged: undefined } : d));
   }, []);
 
-  // "This address already has a community" describes the address that was
-  // refused; once the user picks or types another, it no longer applies.
-  useEffect(() => {
-    setErrors((e) => (e.communityExists ? { ...e, communityExists: undefined } : e));
-  }, [draft.addressLine1, draft.zipCode]);
+  const update = useCallback(<K extends keyof SignupDraft>(key: K, value: SignupDraft[K]) => {
+    setDraft((d) => ({ ...d, [key]: value }));
+    if (key === 'addressLine1' || key === 'zipCode') forgetAddressVerdict();
+  }, [forgetAddressVerdict]);
 
   const type = draft.communityType;
   const meta = type ? getTypeMeta(type) : null;
@@ -612,6 +616,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
                     addressKey: s.key,
                   }));
                   setErrors((e) => ({ ...e, address: undefined }));
+                  forgetAddressVerdict();
                 }}
               />
             )}
@@ -676,17 +681,36 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
                 status="warning"
                 variant="subtle"
                 title={errors.communityExists}
-                description="If you manage or live there, request access to the existing community. If this is a different property, check the street number and ZIP."
+                description="If you manage or live there, request access to the existing community. Some addresses hold more than one association — a later condo phase, or a master and sub-association. If yours is one of those, you can continue."
                 action={(
-                  <Link
-                    href="/account/join-community"
-                    className="inline-flex min-h-9 items-center gap-1 text-sm font-medium text-content-link hover:text-content-link-hover"
-                  >
-                    Request to join
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <Link
+                      href="/account/join-community"
+                      className="inline-flex min-h-9 items-center gap-1 text-sm font-medium text-content-link hover:text-content-link-hover"
+                    >
+                      Request to join
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Stays on this step: Continue still runs its checks.
+                        update('sharedAddressAcknowledged', true);
+                        setErrors((e) => ({ ...e, communityExists: undefined }));
+                      }}
+                      className="inline-flex min-h-9 items-center text-sm font-medium text-content-secondary underline underline-offset-4 hover:text-content"
+                    >
+                      It&apos;s a separate association at this address
+                    </button>
+                  </div>
                 )}
               />
+            ) : null}
+            {draft.sharedAddressAcknowledged && !errors.communityExists ? (
+              <p className="flex items-center gap-2 text-sm text-content-secondary">
+                <Info className="size-4 shrink-0" aria-hidden="true" />
+                Continuing as a separate association at this address.
+              </p>
             ) : null}
             <button
               type="button"
@@ -907,6 +931,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
             unitCount: units,
             communityType: type,
             candidateSlug: slugCandidate,
+            ...(draft.sharedAddressAcknowledged ? { sharedAddressAcknowledged: true } : {}),
           }}
           onBack={back}
           onSaved={(id) => update('signupRequestId', id)}

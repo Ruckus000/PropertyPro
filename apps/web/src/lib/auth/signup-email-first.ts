@@ -269,7 +269,12 @@ export async function submitSignupDetails(
     excludeSignupRequestId: existing?.signupRequestId,
   });
   if (addressCheck === 'rate_limited') throw new RateLimitError();
-  if (addressCheck === 'taken') {
+  // One address can hold more than one association (phased condos, master and
+  // sub-associations), so a founder may say so and continue. That makes this
+  // block a guard against accidents, not against intent: the choice is stored
+  // on the row, and provisioning raises it for review.
+  const sharedAddress = addressCheck === 'taken' && input.sharedAddressAcknowledged === true;
+  if (addressCheck === 'taken' && !sharedAddress) {
     throw new ValidationError(COMMUNITY_EXISTS_MESSAGE, { field: COMMUNITY_EXISTS_FIELD });
   }
 
@@ -334,7 +339,7 @@ export async function submitSignupDetails(
         planKey: input.planKey,
         candidateSlug: subdomain.normalizedSubdomain,
       },
-      { flow: 'email_first', authUserId: user.id },
+      { flow: 'email_first', authUserId: user.id, ...(sharedAddress ? { sharedAddress: true } : {}) },
     ),
     updatedAt: now,
     expiresAt: new Date(now.getTime() + SIGNUP_EXPIRY_MS),
@@ -369,6 +374,12 @@ export async function submitSignupDetails(
     throw new ValidationError(ALREADY_SIGNED_UP_MESSAGE, { field: 'email' });
   }
 
+  if (sharedAddress) {
+    console.info(JSON.stringify({
+      event: 'signup.shared_address_acknowledged',
+      signupRequestId: row.signupRequestId,
+    }));
+  }
   console.info(JSON.stringify({
     event: 'signup.details_saved',
     signupRequestId: row.signupRequestId,
