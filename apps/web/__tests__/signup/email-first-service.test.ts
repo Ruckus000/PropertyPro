@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   enforceMinMock: vi.fn(),
   checkSubdomainMock: vi.fn(),
   closeCheckoutSessionMock: vi.fn(),
+  hasConflictMock: vi.fn(),
   pendingSignupsTable: {
     signupRequestId: 'pending_signups.signup_request_id',
     status: 'pending_signups.status',
@@ -61,6 +62,12 @@ vi.mock('../../src/lib/auth/signup', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/lib/auth/community-address-conflict', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../src/lib/auth/community-address-conflict')>();
+  return { ...real, hasConflictingCommunity: h.hasConflictMock };
+});
+
+import { RateLimitError } from '../../src/lib/api/errors/RateLimitError';
 import { resetGlobalRateLimiter } from '../../src/lib/middleware/rate-limiter';
 import {
   START_SIGNUP_MESSAGE,
@@ -142,6 +149,7 @@ beforeEach(() => {
     message: 'Subdomain is available.',
   });
   h.closeCheckoutSessionMock.mockResolvedValue('closed');
+  h.hasConflictMock.mockResolvedValue(false);
 });
 
 const BINDING = 'a'.repeat(64);
@@ -420,5 +428,47 @@ describe('submitSignupDetails', () => {
     const { values } = mockDb(null);
     await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toThrow('already taken');
     expect(values).not.toHaveBeenCalled();
+  });
+
+  describe('an address that already has a community', () => {
+    const LIVE_ROW = {
+      signupRequestId: 'live-id',
+      status: 'checkout_started',
+      expiresAt: new Date(Date.now() + 60_000),
+      payload: { flow: 'email_first', authUserId: CONFIRMED_USER.id, stripeCheckoutSessionId: 'cs_test_1' },
+    };
+
+    it('is refused on the communityExists field before anything is written or closed', async () => {
+      h.hasConflictMock.mockResolvedValueOnce(true);
+      const { values } = mockDb(LIVE_ROW);
+      const error = await submitSignupDetails(CONFIRMED_USER, DETAILS).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).details).toMatchObject({ field: 'communityExists' });
+      expect(values).not.toHaveBeenCalled();
+      expect(h.closeCheckoutSessionMock).not.toHaveBeenCalled();
+    });
+
+    it('checks the submitted address, excluding the caller\'s own pending row', async () => {
+      mockDb(LIVE_ROW);
+      await submitSignupDetails(CONFIRMED_USER, DETAILS);
+      expect(h.hasConflictMock).toHaveBeenCalledWith({
+        addressLine1: DETAILS.addressLine1,
+        zipCode: DETAILS.zipCode,
+        excludeSignupRequestId: 'live-id',
+      });
+    });
+
+    it('answers at most five conflicts an hour per user, then rate-limits', async () => {
+      h.hasConflictMock.mockResolvedValue(true);
+      mockDb(null);
+      for (let i = 0; i < 5; i += 1) {
+        await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toBeInstanceOf(ValidationError);
+      }
+      await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toBeInstanceOf(RateLimitError);
+      // Another user's budget is untouched.
+      await expect(
+        submitSignupDetails({ ...CONFIRMED_USER, id: '00000000-0000-4000-8000-000000000002' }, DETAILS),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
   });
 });

@@ -23,6 +23,10 @@ import {
 import type { SignupPlanId } from '@/lib/auth/signup-schema';
 import { headers } from 'next/headers';
 import { requireCommunityType } from '@/lib/utils/community-validators';
+import {
+  COMMUNITY_EXISTS_MESSAGE,
+  hasConflictingCommunity,
+} from '@/lib/auth/community-address-conflict';
 
 export type CheckoutSessionResult =
   | { ok: true; clientSecret: string; sessionId: string }
@@ -59,6 +63,17 @@ export async function createCheckoutSession(
       STATUS_MESSAGES[signup.status]
       ?? `Cannot start checkout from current status. Please verify your email first.`;
     return { ok: false, error: message };
+  }
+
+  // The last gate before money moves, and the only one the form flow passes
+  // (its submit is unauthenticated, so it is not asked there). Re-checked on a
+  // refresh too: another signup for the address may have paid in the meantime.
+  if (await hasConflictingCommunity({
+    addressLine1: signup.addressLine1,
+    zipCode: signup.zipCode,
+    excludeSignupRequestId: signupRequestId,
+  })) {
+    return { ok: false, error: COMMUNITY_EXISTS_MESSAGE };
   }
 
   // If already checkout_started, retrieve the existing session to avoid

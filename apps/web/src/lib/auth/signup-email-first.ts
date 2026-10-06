@@ -31,6 +31,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { randomBytes } from 'node:crypto';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { ForbiddenError, SignupEmailDeliveryError, ValidationError } from '@/lib/api/errors';
+import { RateLimitError } from '@/lib/api/errors/RateLimitError';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { consumeKeyedRateLimit } from '@/lib/api/keyed-rate-limit';
 import { closeCheckoutSession } from '@/lib/services/stripe-service';
@@ -42,6 +43,11 @@ import {
   enforceMinSignupResponseTime,
   sendSignupVerificationEmail,
 } from './signup';
+import {
+  COMMUNITY_EXISTS_FIELD,
+  COMMUNITY_EXISTS_MESSAGE,
+  hasConflictingCommunity,
+} from './community-address-conflict';
 import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 import { signupDetailsSchema, signupStartSchema } from './signup-schema';
 import { buildVerificationLink, type VerificationLinkType } from './verification-link';
@@ -200,6 +206,14 @@ export interface SignupDetailsResult {
   subdomain: string;
 }
 
+/**
+ * A "this address is taken" answer is a probe of who our customers are, so a
+ * session gets only a handful of them per hour. Counted on conflicts only: a
+ * founder fixing a typo is never throttled.
+ */
+const ADDRESS_CONFLICTS_PER_USER = 5;
+const ADDRESS_CONFLICT_WINDOW_MS = 60 * 60 * 1000;
+
 const ALREADY_SIGNED_UP_MESSAGE =
   'This email already has a PropertyPro community. Sign in to continue.';
 
@@ -253,6 +267,22 @@ export async function submitSignupDetails(
     && existing.status !== 'expired'
     && (existing.expiresAt == null || existing.expiresAt > now);
   const signupRequestId = ownLiveRow ? existing.signupRequestId : crypto.randomUUID();
+
+  // Before anything is written or closed: a refused address leaves the
+  // caller's existing row and checkout exactly as they were.
+  if (await hasConflictingCommunity({
+    addressLine1: input.addressLine1,
+    zipCode: input.zipCode,
+    excludeSignupRequestId: existing?.signupRequestId,
+  })) {
+    const budget = await consumeKeyedRateLimit(
+      `rl:signup-address-conflict:${user.id}`,
+      ADDRESS_CONFLICTS_PER_USER,
+      ADDRESS_CONFLICT_WINDOW_MS,
+    );
+    if (!budget.allowed) throw new RateLimitError();
+    throw new ValidationError(COMMUNITY_EXISTS_MESSAGE, { field: COMMUNITY_EXISTS_FIELD });
+  }
 
   // Whatever row is being replaced, close any Checkout session it opened, or
   // it can still be paid — at its old plan, or (when the id changes) against

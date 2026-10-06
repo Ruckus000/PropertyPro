@@ -38,6 +38,7 @@ import {
   getComplianceTemplate,
   type CommunityType,
 } from '@propertypro/shared';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { SignupAddressAutocomplete } from '@/components/signup/address-autocomplete';
 import { startEmailFirstSignup } from '@/hooks/use-email-first-signup';
 import { useSubdomainAvailability } from '@/hooks/use-subdomain-availability';
@@ -99,12 +100,21 @@ const REJECTED_FIELD_STEPS: Record<string, { step: SignupStep; error: keyof Erro
   unitCount: { step: 'place', error: 'unitCount' },
   primaryContactName: { step: 'you', error: 'primaryContactName' },
   candidateSlug: { step: 'you', error: 'slug' },
+  // lib/auth/community-address-conflict.ts — the address already has a community.
+  communityExists: { step: 'place', error: 'communityExists' },
 };
 const ORDER: readonly SignupStep[] = ['type', 'place', 'you', 'reveal', 'trial'];
 const RESEND_COOLDOWN_S = 60;
 
 type Errors = Partial<Record<
-  'email' | 'communityName' | 'communityType' | 'address' | 'unitCount' | 'primaryContactName' | 'slug',
+  | 'email'
+  | 'communityName'
+  | 'communityType'
+  | 'address'
+  | 'communityExists'
+  | 'unitCount'
+  | 'primaryContactName'
+  | 'slug',
   string
 >>;
 
@@ -655,6 +665,23 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
               </div>
             ) : null}
             <FieldError id="fp-address-error" message={errors.address} />
+            {errors.communityExists ? (
+              <AlertBanner
+                status="warning"
+                variant="subtle"
+                title={errors.communityExists}
+                description="If you manage or live there, request access to the existing community. If this is a different property, check the street number and ZIP."
+                action={(
+                  <Link
+                    href="/account/join-community"
+                    className="inline-flex min-h-9 items-center gap-1 text-sm font-medium text-content-link hover:text-content-link-hover"
+                  >
+                    Request to join
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                )}
+              />
+            ) : null}
             <button
               type="button"
               onClick={() => {
