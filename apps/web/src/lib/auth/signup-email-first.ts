@@ -31,6 +31,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { randomBytes } from 'node:crypto';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { ForbiddenError, SignupEmailDeliveryError, ValidationError } from '@/lib/api/errors';
+import { RateLimitError } from '@/lib/api/errors/RateLimitError';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { consumeKeyedRateLimit } from '@/lib/api/keyed-rate-limit';
 import { closeCheckoutSession } from '@/lib/services/stripe-service';
@@ -42,6 +43,11 @@ import {
   enforceMinSignupResponseTime,
   sendSignupVerificationEmail,
 } from './signup';
+import {
+  COMMUNITY_EXISTS_FIELD,
+  COMMUNITY_EXISTS_MESSAGE,
+  checkSignupAddress,
+} from './community-address-conflict';
 import { SIGNUP_EXPIRY_MS } from './signup-expiry';
 import { signupDetailsSchema, signupStartSchema } from './signup-schema';
 import { buildVerificationLink, type VerificationLinkType } from './verification-link';
@@ -254,6 +260,24 @@ export async function submitSignupDetails(
     && (existing.expiresAt == null || existing.expiresAt > now);
   const signupRequestId = ownLiveRow ? existing.signupRequestId : crypto.randomUUID();
 
+  // Before anything is written or closed: a refused address leaves the
+  // caller's existing row and checkout exactly as they were.
+  const addressCheck = await checkSignupAddress({
+    email,
+    addressLine1: input.addressLine1,
+    zipCode: input.zipCode,
+    excludeSignupRequestId: existing?.signupRequestId,
+  });
+  if (addressCheck === 'rate_limited') throw new RateLimitError();
+  // One address can hold more than one association (phased condos, master and
+  // sub-associations), so a founder may say so and continue. That makes this
+  // block a guard against accidents, not against intent: the choice is stored
+  // on the row, and provisioning raises it for review.
+  const sharedAddress = addressCheck === 'taken' && input.sharedAddressAcknowledged === true;
+  if (addressCheck === 'taken' && !sharedAddress) {
+    throw new ValidationError(COMMUNITY_EXISTS_MESSAGE, { field: COMMUNITY_EXISTS_FIELD });
+  }
+
   // Whatever row is being replaced, close any Checkout session it opened, or
   // it can still be paid — at its old plan, or (when the id changes) against
   // an id that no longer exists, which takes payment and provisions nothing.
@@ -315,7 +339,7 @@ export async function submitSignupDetails(
         planKey: input.planKey,
         candidateSlug: subdomain.normalizedSubdomain,
       },
-      { flow: 'email_first', authUserId: user.id },
+      { flow: 'email_first', authUserId: user.id, ...(sharedAddress ? { sharedAddress: true } : {}) },
     ),
     updatedAt: now,
     expiresAt: new Date(now.getTime() + SIGNUP_EXPIRY_MS),
@@ -350,6 +374,12 @@ export async function submitSignupDetails(
     throw new ValidationError(ALREADY_SIGNED_UP_MESSAGE, { field: 'email' });
   }
 
+  if (sharedAddress) {
+    console.info(JSON.stringify({
+      event: 'signup.shared_address_acknowledged',
+      signupRequestId: row.signupRequestId,
+    }));
+  }
   console.info(JSON.stringify({
     event: 'signup.details_saved',
     signupRequestId: row.signupRequestId,

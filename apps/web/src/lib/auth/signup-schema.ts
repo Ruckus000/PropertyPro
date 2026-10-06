@@ -334,6 +334,14 @@ export const signupStartSchema = z.object({
  */
 export const signupDetailsSchema = signupFieldsSchema
   .omit({ email: true, password: true, signupRequestId: true })
+  .extend({
+    /**
+     * The founder says theirs is a separate association at an address that
+     * already has a community (a later phase, a sub-association). Lets the
+     * duplicate-address check pass; recorded and raised for review.
+     */
+    sharedAddressAcknowledged: z.boolean().optional(),
+  })
   .superRefine(refineSignupAddressAndPlan)
   .transform(withNormalizedAddress);
 

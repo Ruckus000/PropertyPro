@@ -35,6 +35,8 @@ export interface SignupDraft {
   submittedSlug?: string;
   /** The pending signup the trial step created; lets the "you" step exclude it. */
   signupRequestId?: string;
+  /** The founder said theirs is a separate association at an address that already has one. */
+  sharedAddressAcknowledged?: boolean;
   /** Lower-cased email of the account that wrote this draft. */
   owner?: string;
 }

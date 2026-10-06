@@ -17,16 +17,23 @@ import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups } from '@propertypro/db';
 import {
+  closeCheckoutSession,
   createEmbeddedCheckoutSession,
   retrieveCheckoutSession,
 } from '@/lib/services/stripe-service';
 import type { SignupPlanId } from '@/lib/auth/signup-schema';
 import { headers } from 'next/headers';
 import { requireCommunityType } from '@/lib/utils/community-validators';
+import {
+  COMMUNITY_EXISTS_FIELD,
+  COMMUNITY_EXISTS_MESSAGE,
+  hasConflictingCommunity,
+} from '@/lib/auth/community-address-conflict';
 
 export type CheckoutSessionResult =
   | { ok: true; clientSecret: string; sessionId: string }
-  | { ok: false; error: string };
+  /** `field` names what the caller should send the user back to fix. */
+  | { ok: false; error: string; field?: typeof COMMUNITY_EXISTS_FIELD };
 
 const STATUS_MESSAGES: Record<string, string> = {
   pending_verification:
@@ -59,6 +66,35 @@ export async function createCheckoutSession(
       STATUS_MESSAGES[signup.status]
       ?? `Cannot start checkout from current status. Please verify your email first.`;
     return { ok: false, error: message };
+  }
+
+  // The last gate before money moves, and the only one the form flow passes
+  // (its submit is unauthenticated, so it is not asked there). Re-checked on a
+  // refresh too: another signup for the address may have paid in the meantime,
+  // in which case the session this row already opened must stop being payable.
+  //
+  // Not metered, unlike the details step: this checks the row's own address,
+  // and changing that costs a fresh verification email (form flow) or a
+  // metered details save — so a refresh or plan change can never lock a
+  // founder out of the checkout they already opened.
+  const addressTaken = await hasConflictingCommunity({
+    addressLine1: signup.addressLine1,
+    zipCode: signup.zipCode,
+    excludeSignupRequestId: signupRequestId,
+  });
+  // `sharedAddress` is written only by the details step, server-side, when the
+  // founder said theirs is a separate association at this address.
+  const sharedAddress =
+    (signup.payload as Record<string, unknown> | null)?.['sharedAddress'] === true;
+  if (addressTaken && !sharedAddress) {
+    const openSessionId = (signup.payload as Record<string, unknown> | null)?.['stripeCheckoutSessionId'];
+    if (typeof openSessionId === 'string' && openSessionId) {
+      if ((await closeCheckoutSession(openSessionId)) === 'complete') {
+        // Already paid: provisioning owns it from here.
+        return { ok: false, error: STATUS_MESSAGES['completed']! };
+      }
+    }
+    return { ok: false, error: COMMUNITY_EXISTS_MESSAGE, field: COMMUNITY_EXISTS_FIELD };
   }
 
   // If already checkout_started, retrieve the existing session to avoid

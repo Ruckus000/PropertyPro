@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   enforceMinMock: vi.fn(),
   checkSubdomainMock: vi.fn(),
   closeCheckoutSessionMock: vi.fn(),
+  checkAddressMock: vi.fn(),
   pendingSignupsTable: {
     signupRequestId: 'pending_signups.signup_request_id',
     status: 'pending_signups.status',
@@ -61,6 +62,12 @@ vi.mock('../../src/lib/auth/signup', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/lib/auth/community-address-conflict', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../src/lib/auth/community-address-conflict')>();
+  return { ...real, checkSignupAddress: h.checkAddressMock };
+});
+
+import { RateLimitError } from '../../src/lib/api/errors/RateLimitError';
 import { resetGlobalRateLimiter } from '../../src/lib/middleware/rate-limiter';
 import {
   START_SIGNUP_MESSAGE,
@@ -142,6 +149,7 @@ beforeEach(() => {
     message: 'Subdomain is available.',
   });
   h.closeCheckoutSessionMock.mockResolvedValue('closed');
+  h.checkAddressMock.mockResolvedValue('available');
 });
 
 const BINDING = 'a'.repeat(64);
@@ -420,5 +428,66 @@ describe('submitSignupDetails', () => {
     const { values } = mockDb(null);
     await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toThrow('already taken');
     expect(values).not.toHaveBeenCalled();
+  });
+
+  describe('an address that already has a community', () => {
+    const LIVE_ROW = {
+      signupRequestId: 'live-id',
+      status: 'checkout_started',
+      expiresAt: new Date(Date.now() + 60_000),
+      payload: { flow: 'email_first', authUserId: CONFIRMED_USER.id, stripeCheckoutSessionId: 'cs_test_1' },
+    };
+
+    it('is refused on the communityExists field before anything is written or closed', async () => {
+      h.checkAddressMock.mockResolvedValueOnce('taken');
+      const { values } = mockDb(LIVE_ROW);
+      const error = await submitSignupDetails(CONFIRMED_USER, DETAILS).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).details).toMatchObject({ field: 'communityExists' });
+      expect(values).not.toHaveBeenCalled();
+      expect(h.closeCheckoutSessionMock).not.toHaveBeenCalled();
+    });
+
+    it('checks the submitted address against the session email, excluding the caller\'s own row', async () => {
+      mockDb(LIVE_ROW);
+      await submitSignupDetails(CONFIRMED_USER, DETAILS);
+      expect(h.checkAddressMock).toHaveBeenCalledWith({
+        email: 'founder@example.com',
+        addressLine1: DETAILS.addressLine1,
+        zipCode: DETAILS.zipCode,
+        excludeSignupRequestId: 'live-id',
+      });
+    });
+
+    it('continues for a founder who says theirs is a separate association there, and marks the row', async () => {
+      h.checkAddressMock.mockResolvedValueOnce('taken');
+      const { values } = mockDb(null);
+      await submitSignupDetails(CONFIRMED_USER, { ...DETAILS, sharedAddressAcknowledged: true });
+      const row = values.mock.calls[0]?.[0] as { payload: Record<string, unknown> };
+      expect(row.payload.sharedAddress).toBe(true);
+    });
+
+    it('does not mark a row whose address was free, whatever the client sent', async () => {
+      const { values } = mockDb(null);
+      await submitSignupDetails(CONFIRMED_USER, { ...DETAILS, sharedAddressAcknowledged: true });
+      const row = values.mock.calls[0]?.[0] as { payload: Record<string, unknown> };
+      expect(row.payload).not.toHaveProperty('sharedAddress');
+    });
+
+    it('still answers a spent budget with a 429 when the founder acknowledged a shared address', async () => {
+      h.checkAddressMock.mockResolvedValueOnce('rate_limited');
+      const { values } = mockDb(null);
+      await expect(
+        submitSignupDetails(CONFIRMED_USER, { ...DETAILS, sharedAddressAcknowledged: true }),
+      ).rejects.toBeInstanceOf(RateLimitError);
+      expect(values).not.toHaveBeenCalled();
+    });
+
+    it('answers an exhausted check budget with a 429 and writes nothing', async () => {
+      h.checkAddressMock.mockResolvedValueOnce('rate_limited');
+      const { values } = mockDb(null);
+      await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toBeInstanceOf(RateLimitError);
+      expect(values).not.toHaveBeenCalled();
+    });
   });
 });

@@ -20,6 +20,7 @@
  *   - Retry resumes from lastSuccessfulStatus — never restarts from scratch
  */
 import { createElement } from 'react';
+import { captureMessage } from '@sentry/nextjs';
 import { redactParams } from '@propertypro/shared/observability';
 import type Stripe from 'stripe';
 import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from '@propertypro/db/filters';
@@ -246,6 +247,16 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
   let communityId: number;
   if (inserted) {
     communityId = inserted.id;
+    // The founder continued past "this address already has a community" by
+    // saying theirs is a separate association there. Raised once, on the
+    // creating run only, so an operator can confirm it is not a duplicate.
+    if (payload.sharedAddress === true) {
+      captureMessage('signup_shared_address', {
+        level: 'warning',
+        tags: { review: 'shared_address' },
+        extra: { communityId, slug: ctx.signup.candidateSlug, signupRequestId: ctx.signup.signupRequestId },
+      });
+    }
   } else {
     const [existing] = await db
       .select({
