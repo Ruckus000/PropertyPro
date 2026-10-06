@@ -71,6 +71,7 @@ import {
   type ShellFooter,
 } from './front-porch-shell';
 import {
+  clearSignupDraft,
   readSignupDraft,
   writeSignupDraft,
   type SignupDraft,
@@ -946,6 +947,7 @@ function SignedInAs({ email }: { email: string }) {
         onClick={async () => {
           setBusy(true);
           try {
+            clearSignupDraft();
             const { createBrowserClient } = await import('@/lib/supabase/client');
             await createBrowserClient().auth.signOut();
           } finally {

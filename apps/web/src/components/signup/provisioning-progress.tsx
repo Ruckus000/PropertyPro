@@ -104,8 +104,11 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
   const liveBadgeRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    setDraft(readSignupDraft());
-  }, []);
+    // Only the draft of THIS signup: on a shared device another person's
+    // answers must not decorate this card.
+    const saved = readSignupDraft();
+    setDraft(saved?.signupRequestId === signupRequestId ? saved : null);
+  }, [signupRequestId]);
   const pollCount = useRef(0);
   const consecutiveFailures = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);

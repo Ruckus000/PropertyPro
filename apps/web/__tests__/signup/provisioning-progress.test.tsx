@@ -161,7 +161,7 @@ describe('ProvisioningProgress — live', () => {
     routerMock.push.mockClear();
     window.localStorage.setItem(
       'pp.signup.draft.v1',
-      JSON.stringify({ communityName: 'Bayview Towers', submittedSlug: 'bayview-towers' }),
+      JSON.stringify({ communityName: 'Bayview Towers', submittedSlug: 'bayview-towers', signupRequestId: 'sr-1' }),
     );
     fetchMock.mockResolvedValue({
       ok: true,
@@ -202,5 +202,17 @@ describe('ProvisioningProgress — live', () => {
     // The only live region is the delayed notice itself, not a spinning stage.
     expect(screen.getAllByRole('status')).toHaveLength(1);
     expect(screen.queryByText('Setting up your portal')).toBeNull();
+  });
+
+  it('ignores a draft left on this device by a different signup', async () => {
+    window.localStorage.setItem(
+      'pp.signup.draft.v1',
+      JSON.stringify({ communityName: 'Someone Else HOA', submittedSlug: 'someone-else', signupRequestId: 'sr-other' }),
+    );
+    fetchMock.mockResolvedValue(provisioning());
+    await act(async () => {
+      render(<ProvisioningProgress signupRequestId="sr-1" />);
+    });
+    expect(screen.queryByText(/someone else hoa/i)).toBeNull();
   });
 });
