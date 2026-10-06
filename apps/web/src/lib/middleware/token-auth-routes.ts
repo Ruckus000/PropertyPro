@@ -22,6 +22,8 @@ export const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> 
   { path: '/api/v1/invitations', method: 'PATCH' },
   { path: '/api/v1/auth/signup', method: 'GET' },
   { path: '/api/v1/auth/signup', method: 'POST' },
+  // Email-first signup step 1: takes an email, sends a sign-in link; no session yet
+  { path: '/api/v1/auth/signup/start', method: 'POST' },
   // Snowbird digest one-click unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM)
   { path: '/api/v1/snowbird-digest/unsubscribe', method: 'GET' },
   // Insurance alerts unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM);

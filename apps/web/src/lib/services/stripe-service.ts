@@ -182,6 +182,35 @@ export async function retrieveCheckoutSession(
   });
 }
 
+/**
+ * Close a signup's Checkout session so it can no longer be paid.
+ *
+ * Stripe's `expire` only succeeds on an `open` session, which makes it the
+ * atomic check: once it returns, no `checkout.session.completed` can follow.
+ * Returns `'complete'` when the customer already paid — the caller must then
+ * leave the signup alone, because provisioning trusts `pending_signups.plan_key`
+ * and the paid subscription would disagree with any edited answers.
+ */
+export async function closeCheckoutSession(
+  sessionId: string,
+): Promise<'closed' | 'complete'> {
+  try {
+    await getStripe().checkout.sessions.expire(sessionId);
+    return 'closed';
+  } catch (expireError) {
+    let session: Stripe.Checkout.Session;
+    try {
+      session = await getStripe().checkout.sessions.retrieve(sessionId);
+    } catch {
+      // Unknown/deleted session: nothing can complete it.
+      return 'closed';
+    }
+    if (session.status === 'complete') return 'complete';
+    if (session.status === 'expired') return 'closed';
+    throw expireError;
+  }
+}
+
 /** Retrieve a subscription with the latest invoice expanded. */
 export async function retrieveSubscription(
   subscriptionId: string,

@@ -68,6 +68,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/user-linking.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/notification-digest-processor.ts'),
   resolve(repoRoot, 'apps/web/src/lib/auth/signup.ts'),
+  // Email-first signup: pending_signups is pre-tenant (no community_id); the row is
+  // keyed by the caller's own confirmed session email. Same footing as signup.ts.
+  resolve(repoRoot, 'apps/web/src/lib/auth/signup-email-first.ts'),
   // Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
   resolve(repoRoot, 'apps/web/src/lib/services/assessment-automation-service.ts'),
   // Calendar reminder cron — cross-community reminder enqueue + delivery

@@ -6,7 +6,8 @@
  * `docs/audits/2026-09-11-signup-verification-deliverability.md`.
  *
  * The behaviour worth pinning is the one that is easy to get wrong later: it
- * redirects to the SAME place whether or not the token verifies. That is not
+ * redirects to the SAME place whether or not the token verifies, and it keeps
+ * the session a good token produces (email-first signup needs it). That is not
  * laziness — `confirm-verification` reads `email_confirmed_at` and is the
  * authority, and it already owns a correct user-facing message and a Retry
  * button for the failure case. A route that rendered its own error would be a
@@ -93,16 +94,27 @@ describe('GET /auth/verify-signup', () => {
     expect(new URL(res.headers.get('location') as string).pathname).toBe('/signup');
   });
 
-  it('writes no auth cookies — the session is discarded', async () => {
-    await GET(request('?token_hash=abc&type=signup&signupRequestId=req-1'));
+  it('keeps the session: writes the auth cookies onto the redirect', async () => {
+    // Email-first signup answers the community questions signed in, and
+    // POST /auth/signup/details is session-authenticated.
+    verifyOtpMock.mockImplementation(async () => {
+      const options = createServerClientMock.mock.calls[0]?.[2] as {
+        cookies: { setAll: (c: Array<{ name: string; value: string; options?: object }>) => void };
+      };
+      options.cookies.setAll([{ name: 'sb-project-auth-token', value: 'session', options: { path: '/' } }]);
+      return { error: null };
+    });
 
-    const options = createServerClientMock.mock.calls[0]?.[2] as {
-      cookies: { getAll: () => unknown[]; setAll: (c: unknown[]) => void };
-    };
-    expect(options.cookies.getAll()).toEqual([]);
-    // Nothing downstream needs a session: signup-form.tsx confirms with a
-    // signupRequestId and /signup/checkout is public.
-    expect(() => options.cookies.setAll([{ name: 'sb-x', value: 'y' }])).not.toThrow();
+    const res = await GET(request('?token_hash=abc&type=signup'));
+
+    expect(res.cookies.get('sb-project-auth-token')?.value).toBe('session');
+    expect(new URL(res.headers.get('location') as string).searchParams.get('signupRequestId')).toBeNull();
+  });
+
+  it('sets no cookies when the token fails', async () => {
+    verifyOtpMock.mockResolvedValue({ error: { message: 'Token has expired' } });
+    const res = await GET(request('?token_hash=stale&type=signup'));
+    expect(res.cookies.getAll()).toEqual([]);
   });
 
   it('marks the response no-store, since the URL carried a credential', async () => {

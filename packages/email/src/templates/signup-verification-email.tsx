@@ -17,8 +17,9 @@ export interface SignupRemainingStep {
 }
 
 export interface SignupVerificationEmailProps extends BaseEmailProps {
-  primaryContactName: string;
-  communityName: string;
+  /** Omitted by email-first signup, which asks for names after this link is clicked. */
+  primaryContactName?: string;
+  communityName?: string;
   verificationLink: string;
   /** Optional: the signup steps still ahead ("What's left"). Rendered only when supplied. */
   remainingSteps?: SignupRemainingStep[];
@@ -44,17 +45,21 @@ export function SignupVerificationEmail({
       branding={branding}
       sender="platform"
       previewText={previewText ?? 'Verify your email to continue your PropertyPro signup'}
-      mastheadContext={communityName}
+      mastheadContext={communityName ?? 'PropertyPro Florida'}
       footerReason="Sent because a signup was started with this address."
     >
       <PhotoBand image="photo-coast.jpg" alt="Condominium towers along the Florida shoreline" />
       <CategoryMark icon="shield-coral" label="Verify your email" tone="coral" />
       <Headline
         lede={
-          <>
-            Hi {primaryContactName} — thanks for starting signup for <Strong>{communityName}</Strong>. Confirm your email
-            address to finish setting up your account.
-          </>
+          primaryContactName && communityName ? (
+            <>
+              Hi {primaryContactName} — thanks for starting signup for <Strong>{communityName}</Strong>. Confirm your
+              email address to finish setting up your account.
+            </>
+          ) : (
+            <>Thanks for starting your PropertyPro signup. Confirm your email address to continue.</>
+          )
         }
       >
         Verify your email address

@@ -18,13 +18,17 @@
  * showing a user a Supabase URL at all: `demo-session.ts:73`,
  * `dev/agent-login/route.ts:150` and `provisioning-service.ts`.
  *
- * THE SESSION IS DISCARDED, deliberately. The cookie adapter below is a no-op,
- * so no auth cookies are written. Nothing downstream needs one: `signup-form.tsx`
- * confirms with a `signupRequestId` and never touches a session, and
- * `/signup/checkout` is public. This also preserves current behaviour rather
- * than changing it — the browser client uses PKCE, and a code issued to a
- * server-side `generateLink` has no verifier in the user's browser, so today's
- * redirect cannot establish a working session either.
+ * THE SESSION IS KEPT. `verifyOtp` with a `token_hash` returns a session
+ * directly (no PKCE verifier is involved), and the cookie adapter below writes
+ * it onto the redirect — the same shape as `lib/services/demo-session.ts`.
+ * Email-first signup (`lib/auth/signup-email-first.ts`) depends on it: the user
+ * answers the community questions signed in, and `POST /auth/signup/details`
+ * is session-authenticated. Until 2026-10 this route discarded the session,
+ * because the form flow set a password up front and needed none.
+ *
+ * Accepted cost, the usual one for any emailed sign-in link: whoever opens the
+ * link is signed in as its address, replacing any session already in the
+ * browser. The link only ever goes to the address being signed in.
  *
  * ONE OUTCOME, whether the token is good or not: redirect to `/signup` with
  * `verified=1`. `signup-form.tsx` then calls `confirm-verification`, which reads
@@ -32,10 +36,12 @@
  * answers "Email has not been verified yet. Please click the verification link
  * in your email." and renders the existing error card with its Retry button.
  * That is a correct message and an existing surface, so this route adds no error
- * UI of its own.
+ * UI of its own. An email-first link carries no `signupRequestId`; there the
+ * signup page reads the session, and a spent link simply leaves none.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { getCookieOptions } from '@propertypro/db/supabase/cookie-config';
 
 /**
  * `signup` for a first-time link, `magiclink` for the already-registered
@@ -45,6 +51,8 @@ import { createServerClient } from '@supabase/ssr';
  * security boundary.
  */
 const VERIFIABLE_TYPES = new Set(['signup', 'magiclink']);
+
+type SessionCookie = { name: string; value: string; options?: Record<string, unknown> };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const params = request.nextUrl.searchParams;
@@ -63,12 +71,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  const sessionCookies: SessionCookie[] = [];
+
   if (tokenHash && VERIFIABLE_TYPES.has(type) && supabaseUrl && supabaseAnonKey) {
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookieOptions: getCookieOptions(),
       cookies: {
-        getAll: () => [],
-        setAll: () => {
-          /* no-op: see "THE SESSION IS DISCARDED" above */
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          // Replayed onto the redirect below: see "THE SESSION IS KEPT".
+          sessionCookies.push(...cookiesToSet);
         },
       },
     });
@@ -89,6 +101,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   destination.searchParams.set('verified', '1');
 
   const response = NextResponse.redirect(destination);
+  for (const { name, value, options } of sessionCookies) {
+    response.cookies.set(name, value, options);
+  }
   // The URL carried a single-use credential. Keep it out of shared caches.
   response.headers.set('Cache-Control', 'no-store');
   return response;

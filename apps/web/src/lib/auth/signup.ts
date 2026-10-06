@@ -344,7 +344,7 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
 
 // A6: statuses at or past payment. A pending-signup row in one of these is a
 // live/committed signup and must never be reset by a re-submission.
-const POST_PAYMENT_SIGNUP_STATUSES = ['payment_completed', 'provisioning', 'completed'] as const;
+export const POST_PAYMENT_SIGNUP_STATUSES = ['payment_completed', 'provisioning', 'completed'] as const;
 
 /**
  * Insert the pending signup, or update the existing row for this email ONLY when
@@ -523,25 +523,50 @@ async function createOrLinkAuthAccount(
   input: SignupPersistenceInput,
   verificationRedirectUrl: string,
 ): Promise<AuthVerificationLinkResult> {
+  return generateSignupAuthLink({
+    email: input.email,
+    password: input.password,
+    redirectTo: verificationRedirectUrl,
+    signupRequestId: input.signupRequestId,
+    metadata: {
+      full_name: input.primaryContactName,
+      signup_request_id: input.signupRequestId,
+      community_name: input.communityName,
+      community_type: input.communityType,
+      signup_plan: input.planKey,
+    },
+  });
+}
+
+/**
+ * Create (or find) the Supabase auth user for `email` and return a first-party
+ * link that verifies it. Shared by the form signup above and the email-first
+ * flow in `signup-email-first.ts`.
+ *
+ * A new address gets a `signup` link (which creates the user with `password`);
+ * an address GoTrue already knows gets a `magiclink`, which also confirms it.
+ */
+export async function generateSignupAuthLink(params: {
+  email: string;
+  password: string;
+  redirectTo: string;
+  /** Omitted by the email-first flow: GoTrue would otherwise write it onto an existing account. */
+  metadata?: Record<string, unknown>;
+  /** Absent for the email-first flow, which has no pending row yet. */
+  signupRequestId?: string;
+}): Promise<AuthVerificationLinkResult> {
   const admin = createAdminClient();
-  const metadata = {
-    full_name: input.primaryContactName,
-    signup_request_id: input.signupRequestId,
-    community_name: input.communityName,
-    community_type: input.communityType,
-    signup_plan: input.planKey,
-  };
 
   // Uses generateLink (admin API) instead of supabase.auth.signUp so that
   // Supabase does NOT send its default confirmation email. This lets us
   // control email delivery via our Resend-backed pipeline with branded templates.
   const signupLink = await admin.auth.admin.generateLink({
     type: 'signup',
-    email: input.email,
-    password: input.password,
+    email: params.email,
+    password: params.password,
     options: {
-      redirectTo: verificationRedirectUrl,
-      data: metadata,
+      redirectTo: params.redirectTo,
+      ...(params.metadata ? { data: params.metadata } : {}),
     },
   });
 
@@ -553,7 +578,7 @@ async function createOrLinkAuthAccount(
       authUserId: signupLink.data.user?.id ?? null,
       verificationLink: buildVerificationLink({
         hashedToken: signupToken,
-        signupRequestId: input.signupRequestId,
+        signupRequestId: params.signupRequestId,
         type: 'signup',
       }),
     };
@@ -565,10 +590,10 @@ async function createOrLinkAuthAccount(
 
   const magicLink = await admin.auth.admin.generateLink({
     type: 'magiclink',
-    email: input.email,
+    email: params.email,
     options: {
-      redirectTo: verificationRedirectUrl,
-      data: metadata,
+      redirectTo: params.redirectTo,
+      ...(params.metadata ? { data: params.metadata } : {}),
     },
   });
 
@@ -581,7 +606,7 @@ async function createOrLinkAuthAccount(
     authUserId: magicLink.data.user?.id ?? null,
     verificationLink: buildVerificationLink({
       hashedToken: magicToken,
-      signupRequestId: input.signupRequestId,
+      signupRequestId: params.signupRequestId,
       // The already-registered fallback generates a magiclink, so the token is
       // bound to that type and must be verified as one.
       type: 'magiclink',
@@ -661,9 +686,12 @@ function getUndefinedColumnName(error: unknown): string | null {
   return match?.[1] ?? null;
 }
 
-async function enforceMinSignupResponseTime(startMs: number): Promise<void> {
+export async function enforceMinSignupResponseTime(
+  startMs: number,
+  minMs: number = MIN_SIGNUP_RESPONSE_MS,
+): Promise<void> {
   const elapsed = Date.now() - startMs;
-  const remaining = MIN_SIGNUP_RESPONSE_MS - elapsed;
+  const remaining = minMs - elapsed;
   if (remaining > 0) {
     await new Promise((resolve) => setTimeout(resolve, remaining));
   }
