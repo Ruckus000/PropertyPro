@@ -28,6 +28,7 @@ import { pendingSignups } from '@propertypro/db';
 import { eq, notInArray } from '@propertypro/db/filters';
 // AUTHZ: GoTrue admin generateLink for the address the caller typed; the link is emailed only to that address.
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { randomBytes } from 'node:crypto';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { ForbiddenError, SignupEmailDeliveryError, ValidationError } from '@/lib/api/errors';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
@@ -93,7 +94,8 @@ async function consumeStartBudget(email: string, ip: string): Promise<boolean> {
 async function generateStartLink(email: string): Promise<{ link: string; authUserId: string | null }> {
   const redirectTo = new URL('/signup', getBaseUrl());
   redirectTo.searchParams.set('verified', '1');
-  const { data, error } = await createAdminClient().auth.admin.generateLink({
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email,
     options: { redirectTo: redirectTo.toString() },
@@ -101,6 +103,20 @@ async function generateStartLink(email: string): Promise<{ link: string; authUse
   const token = data?.properties?.hashed_token;
   if (error || !token) {
     throw new Error(error?.message ?? 'generateLink returned no token');
+  }
+  // An UNCONFIRMED account may carry a password someone else chose: the form
+  // flow creates one for any address with no proof of ownership. Verifying
+  // this link confirms the account and leaves that password in place
+  // (GoTrue recoverVerify), so the planter could then sign in to the
+  // community this owner pays for. Replace it before the link goes out. An
+  // unconfirmed account cannot have signed in, so no session is lost.
+  if (data.user && !data.user.email_confirmed_at) {
+    const { error: rotateError } = await admin.auth.admin.updateUserById(data.user.id, {
+      password: randomBytes(48).toString('base64url'),
+    });
+    if (rotateError) {
+      throw new Error(`password rotation failed: ${rotateError.message}`);
+    }
   }
   const reported = data.properties.verification_type;
   const type: VerificationLinkType = reported === 'signup' ? 'signup' : 'magiclink';

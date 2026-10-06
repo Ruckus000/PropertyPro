@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
   sendEmailMock: vi.fn(),
   generateLinkMock: vi.fn(),
+  updateUserByIdMock: vi.fn(),
   enforceMinMock: vi.fn(),
   checkSubdomainMock: vi.fn(),
   closeCheckoutSessionMock: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock('@propertypro/db/filters', () => ({
   notInArray: (col: unknown, values: unknown) => ({ _type: 'notInArray', col, values }),
 }));
 vi.mock('@propertypro/db/supabase/admin', () => ({
-  createAdminClient: () => ({ auth: { admin: { generateLink: h.generateLinkMock } } }),
+  createAdminClient: () => ({ auth: { admin: { generateLink: h.generateLinkMock, updateUserById: h.updateUserByIdMock } } }),
 }));
 vi.mock('../../src/lib/services/stripe-service', () => ({
   closeCheckoutSession: h.closeCheckoutSessionMock,
@@ -129,8 +130,9 @@ beforeEach(() => {
   resetGlobalRateLimiter();
   h.sendEmailMock.mockResolvedValue('email_1');
   h.enforceMinMock.mockResolvedValue(undefined);
+  h.updateUserByIdMock.mockResolvedValue({ data: {}, error: null });
   h.generateLinkMock.mockResolvedValue({
-    data: { user: { id: 'auth-1' }, properties: { hashed_token: 'hashed-1', verification_type: 'signup' } },
+    data: { user: { id: 'auth-1', email_confirmed_at: '2026-01-01T00:00:00Z' }, properties: { hashed_token: 'hashed-1', verification_type: 'signup' } },
     error: null,
   });
   h.checkSubdomainMock.mockResolvedValue({
@@ -206,6 +208,33 @@ describe('startEmailFirstSignup', () => {
       await startEmailFirstSignup({ email: 'inbox@example.com' }, `198.51.100.${i}`);
     }
     expect(h.sendEmailMock).toHaveBeenCalledTimes(ceiling);
+  });
+
+  it('replaces a password planted on an unconfirmed account before sending the link', async () => {
+    // The form flow lets anyone create an unconfirmed user with a password of
+    // their choosing; confirming it through this link must not keep that password.
+    h.generateLinkMock.mockResolvedValueOnce({
+      data: { user: { id: 'auth-u', email_confirmed_at: null }, properties: { hashed_token: 'hu', verification_type: 'magiclink' } },
+      error: null,
+    });
+    await startEmailFirstSignup({ email: 'victim@example.com' }, IP);
+    expect(h.updateUserByIdMock).toHaveBeenCalledWith('auth-u', { password: expect.any(String) });
+    expect(h.sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a confirmed account\'s password alone', async () => {
+    await startEmailFirstSignup({ email: 'owner@example.com' }, IP);
+    expect(h.updateUserByIdMock).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when the rotation fails', async () => {
+    h.generateLinkMock.mockResolvedValueOnce({
+      data: { user: { id: 'auth-u', email_confirmed_at: null }, properties: { hashed_token: 'hu', verification_type: 'magiclink' } },
+      error: null,
+    });
+    h.updateUserByIdMock.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+    await expect(startEmailFirstSignup({ email: 'victim@example.com' }, IP)).resolves.toEqual({ message: START_SIGNUP_MESSAGE });
+    expect(h.sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('answers a GoTrue refusal generically, without sending', async () => {
