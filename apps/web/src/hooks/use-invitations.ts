@@ -17,12 +17,18 @@ export interface AcceptInvitationInput {
   noticeConsent?: boolean;
 }
 
+export interface AcceptInvitationResult {
+  email: string;
+  /** Present only when electronic-notice consent was asked for: whether it was saved. */
+  noticeConsentRecorded?: boolean;
+}
+
 /**
  * Accepts an invitation by setting the account password. Returns the email
  * of the now-active account so the caller can sign the user in.
  */
 export function useAcceptInvitation() {
-  return useMutation<string, Error, AcceptInvitationInput>({
+  return useMutation<AcceptInvitationResult, Error, AcceptInvitationInput>({
     // Documented exception to the requestJson rule: the route surfaces
     // `error.code` (TOKEN_USED / TOKEN_EXPIRED) that drives distinct
     // user-facing copy, and the success payload's `email` is consumed by
@@ -48,8 +54,8 @@ export function useAcceptInvitation() {
         throw new Error(json?.error?.message ?? 'Failed to accept invitation.');
       }
 
-      const json = (await res.json()) as { data: { email: string } };
-      return json.data.email;
+      const json = (await res.json()) as { data: AcceptInvitationResult };
+      return { email: json.data.email, noticeConsentRecorded: json.data.noticeConsentRecorded };
     },
   });
 }

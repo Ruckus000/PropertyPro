@@ -43,6 +43,7 @@ export function SetPasswordForm({ token, communityId, noticeConsentEmail = null 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
+  const [noticeConsentFailed, setNoticeConsentFailed] = useState(false);
   const acceptInvitation = useAcceptInvitation();
 
   function handlePasswordChange(value: string): void {
@@ -89,13 +90,15 @@ export function SetPasswordForm({ token, communityId, noticeConsentEmail = null 
       // types the field as `z.literal(true)` so a `false` could never be a valid
       // request anyway. Passing the state variable would type-error, which is
       // the point: there is no path here that submits without acceptance.
-      email = await acceptInvitation.mutateAsync({
+      const accepted = await acceptInvitation.mutateAsync({
         token,
         communityId,
         password,
         termsAccepted: true,
         ...(noticeConsentEmail && noticeConsent ? { noticeConsent: true } : {}),
       });
+      email = accepted.email;
+      setNoticeConsentFailed(accepted.noticeConsentRecorded === false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation.');
       setLoading(false);
@@ -135,6 +138,11 @@ export function SetPasswordForm({ token, communityId, noticeConsentEmail = null 
       <div className="text-center" data-testid="invite-success">
         <h2 className="mb-2 text-xl font-semibold text-content">Welcome aboard!</h2>
         <p className="mb-4 text-content-secondary">Your account is ready.</p>
+        {noticeConsentFailed ? (
+          <p className="mb-4 text-sm text-status-warning" role="alert" data-testid="invite-notice-consent-failed">
+            We couldn&apos;t save your consent to receive notices by email. You can give it in Settings.
+          </p>
+        ) : null}
         <a
           href={`/welcome?communityId=${communityId}`}
           className="inline-block text-content-link underline hover:text-content-link"

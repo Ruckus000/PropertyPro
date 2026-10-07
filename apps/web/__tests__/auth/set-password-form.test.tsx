@@ -38,7 +38,7 @@ describe('SetPasswordForm', () => {
     signInWithPasswordMock.mockReset();
     signInWithPasswordMock.mockResolvedValue({ error: null });
     acceptInvitationMutateAsyncMock.mockReset();
-    acceptInvitationMutateAsyncMock.mockResolvedValue('invited@example.com');
+    acceptInvitationMutateAsyncMock.mockResolvedValue({ email: 'invited@example.com' });
   });
 
   it('routes to the community welcome screen on success (B1)', async () => {
@@ -193,6 +193,18 @@ describe('SetPasswordForm', () => {
 
     it('sends nothing about consent when the owner leaves it unticked', async () => {
       expect(await submitWith({ noticeConsentEmail: 'owner@example.com' }, false)).not.toHaveProperty('noticeConsent');
+    });
+    it('tells the owner when their ticked consent could not be saved', async () => {
+      acceptInvitationMutateAsyncMock.mockResolvedValueOnce({ email: 'owner@example.com', noticeConsentRecorded: false });
+      await submitWith({ noticeConsentEmail: 'owner@example.com' }, true);
+      expect(await screen.findByTestId('invite-notice-consent-failed')).toHaveTextContent('You can give it in Settings');
+    });
+
+    it('says nothing extra when consent was saved', async () => {
+      acceptInvitationMutateAsyncMock.mockResolvedValueOnce({ email: 'owner@example.com', noticeConsentRecorded: true });
+      await submitWith({ noticeConsentEmail: 'owner@example.com' }, true);
+      await screen.findByTestId('invite-success');
+      expect(screen.queryByTestId('invite-notice-consent-failed')).toBeNull();
     });
   });
 });

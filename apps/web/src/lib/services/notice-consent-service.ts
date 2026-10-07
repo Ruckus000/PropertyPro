@@ -86,7 +86,8 @@ export async function giveNoticeConsent(params: {
     resourceId: userId,
     communityId,
     newValues: { email, consentVersion: NOTICE_CONSENT_VERSION },
-    metadata: { ipAddress: params.ipAddress, userAgent: params.userAgent },
+    // IP and user agent stay on the consent row only: the audit log is
+    // manager-readable and permanent, and they are evidence, not record.
   });
   return getNoticeConsent(communityId, userId);
 }
@@ -132,12 +133,16 @@ export async function withdrawNoticeConsent(
   return true;
 }
 
-/** The users in a community with an active consent. For the manager-only residents view. */
-export async function listNoticeConsentUserIds(communityId: number): Promise<Set<string>> {
+/**
+ * Active consents in a community, as userId → the email each covers. For the
+ * manager-only residents view, which shows a consent only while it covers the
+ * owner's current email.
+ */
+export async function listNoticeConsentEmails(communityId: number): Promise<Map<string, string>> {
   const rows = await createScopedClient(communityId).selectFrom(
     noticeConsent,
-    { userId: noticeConsent.userId },
+    { userId: noticeConsent.userId, email: noticeConsent.email },
     isNull(noticeConsent.revokedAt),
   );
-  return new Set((rows as Array<{ userId: string }>).map((r) => r.userId));
+  return new Map((rows as Array<{ userId: string; email: string }>).map((r) => [r.userId, r.email]));
 }

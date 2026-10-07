@@ -60,6 +60,8 @@ describe('giveNoticeConsent', () => {
         newValues: { email: 'owner@example.com', consentVersion: NOTICE_CONSENT_VERSION },
       }),
     );
+    // IP and user agent stay on the consent row; the audit log is manager-readable and permanent.
+    expect(JSON.stringify(h.logAuditEventMock.mock.calls)).not.toMatch(/1\.2\.3\.4|"UA"/);
   });
 
   it('is a no-op when already consented at the same address', async () => {

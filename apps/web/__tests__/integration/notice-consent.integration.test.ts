@@ -40,6 +40,9 @@ describeDb('notice consent (integration)', () => {
   let routes: { GET: Handler; POST: Handler; DELETE: Handler };
   const owner = randomUUID();
   const tenant = randomUUID();
+  const manager = randomUUID();
+  const owner2 = randomUUID();
+  let residents: { PATCH: Handler; DELETE: Handler };
   let ownerEmail = '';
 
   const call = (handler: Handler, method: string, cid = communityId) =>
@@ -67,12 +70,18 @@ describeDb('notice consent (integration)', () => {
     for (const [id, email] of [
       [owner, ownerEmail],
       [tenant, `nc-tenant+${state.runSuffix}@example.com`],
+      [manager, `nc-manager+${state.runSuffix}@example.com`],
+      [owner2, `nc-owner2+${state.runSuffix}@example.com`],
     ] as const) {
       trackUserForCleanup(state, id);
       await state.db.insert(m.users).values({ id, email, fullName: 'NC' });
     }
     await scoped.insert(m.userRoles, { userId: owner, role: 'resident', unitId: unit, isUnitOwner: true, displayTitle: 'Owner' });
     await scoped.insert(m.userRoles, { userId: tenant, role: 'resident', unitId: unit, isUnitOwner: false, displayTitle: 'Tenant' });
+    await scoped.insert(m.userRoles, { userId: manager, role: 'property_manager', isUnitOwner: false, displayTitle: 'Manager' });
+    await scoped.insert(m.userRoles, { userId: owner2, role: 'resident', unitId: unit, isUnitOwner: true, displayTitle: 'Owner' });
+    const r = await import('../../src/app/api/v1/residents/route');
+    residents = { PATCH: r.PATCH, DELETE: r.DELETE };
 
     const mod = await import('../../src/app/api/v1/notice-consent/route');
     routes = { GET: mod.GET, POST: mod.POST, DELETE: mod.DELETE };
@@ -147,10 +156,65 @@ describeDb('notice consent (integration)', () => {
 
   it('managers see it in the residents list; other readers do not', async () => {
     await call(routes.POST, 'POST');
-    const forManager = await listResidentsForCommunity(communityId, {}, { includePortalActivity: true });
+    const forManager = await listResidentsForCommunity(communityId, {}, { includeNoticeConsent: true });
     expect(forManager.find((r) => r.userId === owner)?.noticeConsent).toBe(true);
     expect(forManager.find((r) => r.userId === tenant)?.noticeConsent).toBe(false);
     const forResident = await listResidentsForCommunity(communityId);
     expect(forResident.find((r) => r.userId === owner)).not.toHaveProperty('noticeConsent');
+  });
+
+  it('managers stop seeing it once the owner\'s email no longer matches the consent', async () => {
+    await call(routes.POST, 'POST');
+    const m = state.dbModule;
+    const changed = `nc-owner-new+${state.runSuffix}@example.com`;
+    await state.db.update(m.users).set({ email: changed }).where(eq(m.users.id, owner));
+    try {
+      const rows = await listResidentsForCommunity(communityId, {}, { includeNoticeConsent: true });
+      expect(rows.find((r) => r.userId === owner)?.noticeConsent).toBe(false);
+    } finally {
+      await state.db.update(m.users).set({ email: ownerEmail }).where(eq(m.users.id, owner));
+    }
+  });
+
+  const residentsCall = (handler: Handler, method: string, body: Record<string, unknown>) =>
+    handler(
+      new NextRequest('http://localhost:3000/api/v1/residents', {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId, ...body }),
+      }),
+    );
+  const activeFor = async (userId: string) => {
+    const m = state.dbModule;
+    const rows = await state.db.select().from(m.noticeConsent).where(eq(m.noticeConsent.userId, userId));
+    return rows.filter((row) => row.revokedAt === null).length;
+  };
+  const withdrawReasons = async (userId: string) => {
+    const m = state.dbModule;
+    const rows = await state.db
+      .select({ metadata: m.complianceAuditLog.metadata })
+      .from(m.complianceAuditLog)
+      .where(and(eq(m.complianceAuditLog.action, 'notice_consent_withdrawn'), eq(m.complianceAuditLog.resourceId, userId)));
+    return rows.map((row) => (row.metadata as { reason?: string } | null)?.reason);
+  };
+
+  it('a manager removing an owner withdraws their consent', async () => {
+    setActorById(state, owner2);
+    await call(routes.POST, 'POST');
+    expect(await activeFor(owner2)).toBe(1);
+    setActorById(state, manager);
+    expect((await residentsCall(residents.DELETE, 'DELETE', { userId: owner2 })).status).toBe(200);
+    expect(await activeFor(owner2)).toBe(0);
+    expect(await withdrawReasons(owner2)).toEqual(['membership_removed']);
+  });
+
+  it('a manager re-classing an owner as a tenant withdraws their consent (runs last: changes the owner)', async () => {
+    await call(routes.POST, 'POST');
+    setActorById(state, manager);
+    expect((await residentsCall(residents.PATCH, 'PATCH', { userId: owner, fullName: 'Renamed' })).status).toBe(200);
+    expect(await activeFor(owner)).toBe(1);
+    expect((await residentsCall(residents.PATCH, 'PATCH', { userId: owner, isUnitOwner: false })).status).toBe(200);
+    expect(await activeFor(owner)).toBe(0);
+    expect(await withdrawReasons(owner)).toContain('ownership_ended');
   });
 });

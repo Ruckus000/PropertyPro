@@ -53,27 +53,24 @@ export const POST = withErrorHandler(
     }
     const email = await getConsentEmail(communityId, userId);
     if (!email) throw new NotFoundError('No email address on file');
-    await giveNoticeConsent({
+    const state = await giveNoticeConsent({
       communityId,
       userId,
       email,
       ipAddress: resolveClientIp(req),
       userAgent: req.headers.get('user-agent'),
     });
-    return stateFor(communityId, userId);
+    return { ...state, currentEmail: email };
   }),
 );
 
 // route-gate: self-scoped — withdraws only the caller's own consent, after a membership check
 export const DELETE = withErrorHandler(
-  runRoute(noticeConsentDeleteContract, async ({ communityId, req }) => {
+  runRoute(noticeConsentDeleteContract, async ({ communityId }) => {
     const userId = await requireAuthenticatedUserId();
     await assertNotDemoGrace(communityId);
     await requireCommunityMembership(communityId, userId);
-    await withdrawNoticeConsent(communityId, userId, {
-      ipAddress: resolveClientIp(req),
-      userAgent: req.headers.get('user-agent'),
-    });
+    await withdrawNoticeConsent(communityId, userId, { reason: 'owner_request' });
     return stateFor(communityId, userId);
   }),
 );

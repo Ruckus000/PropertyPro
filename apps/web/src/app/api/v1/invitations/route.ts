@@ -179,6 +179,7 @@ export const PATCH = withErrorHandler(
     // only and a stale tab must not block an account that already exists.
     // Ordered last and never fatal for the same reason: the account is live,
     // and a missing consent is recoverable from Settings.
+    let noticeConsentRecorded: boolean | undefined;
     if (body.noticeConsent === true) {
       try {
         if (await isUnitOwnerInvitee(communityId, userId)) {
@@ -189,12 +190,19 @@ export const PATCH = withErrorHandler(
             ipAddress: resolveClientIp(req),
             userAgent: req.headers.get('user-agent'),
           });
+          noticeConsentRecorded = true;
         }
       } catch (err) {
         captureException(err, { tags: { route: 'invitations', phase: 'notice_consent' } });
+        // Tell the owner, so they do not believe a consent exists that does not.
+        noticeConsentRecorded = false;
       }
     }
 
-    return { success: true as const, email: user.email };
+    return {
+      success: true as const,
+      email: user.email,
+      ...(noticeConsentRecorded === undefined ? {} : { noticeConsentRecorded }),
+    };
   }),
 );

@@ -38,6 +38,7 @@ import {
   updateResidentRole,
   updateResidentUser,
 } from '@/lib/services/resident-service';
+import { withdrawNoticeConsent } from '@/lib/services/notice-consent-service';
 import {
   residentsCreateContract,
   residentsDeleteContract,
@@ -87,6 +88,7 @@ export const GET = withErrorHandler(
     // residents:read (condo/HOA directories), and must not see neighbours'.
     return listResidentsForCommunity(communityId, roleFilter, {
       includePortalActivity: membership.isAdmin,
+      includeNoticeConsent: membership.isAdmin,
     });
   }),
 );
@@ -333,6 +335,16 @@ export const PATCH = withErrorHandler(
       return { userId, communityId, role: oldRole, unitId: oldUnitId };
     }
 
+    // Electronic-notice consent belongs to unit owners. When this edit ends
+    // ownership, the consent ends with it, recorded as such rather than left
+    // active on a tenant or manager.
+    const wasOwner = oldRole === 'resident' && existingRole['isUnitOwner'] === true;
+    const isOwnerNow =
+      newRole === 'resident' && (roleUpdate['isUnitOwner'] ?? existingRole['isUnitOwner']) === true;
+    if (wasOwner && !isOwnerNow) {
+      await withdrawNoticeConsent(communityId, userId, { reason: 'ownership_ended', actorUserId });
+    }
+
     await logAuditEvent({
       userId: actorUserId,
       action: 'update',
@@ -379,6 +391,7 @@ export const DELETE = withErrorHandler(
     }
 
     await deleteResidentRole(communityId, userId);
+    await withdrawNoticeConsent(communityId, userId, { reason: 'membership_removed', actorUserId });
 
     const revokedCount = await revokeVisitorPassesForUser(communityId, userId);
     if (revokedCount > 0) {

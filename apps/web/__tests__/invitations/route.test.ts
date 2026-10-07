@@ -454,6 +454,7 @@ describe('PATCH — electronic-notice consent at invite acceptance', () => {
   it('records consent for an owner who ticked the box, at the invited email', async () => {
     const res = await acceptWith({ noticeConsent: true });
     expect(res.status).toBe(200);
+    expect((await res.json()).data.noticeConsentRecorded).toBe(true);
     expect(isUnitOwnerInviteeMock).toHaveBeenCalledWith(55, 'user-1');
     expect(giveNoticeConsentMock).toHaveBeenCalledWith({
       communityId: 55,
@@ -474,6 +475,7 @@ describe('PATCH — electronic-notice consent at invite acceptance', () => {
   it.each([[{ noticeConsent: false }], [{}]])('records nothing when the box was not ticked (%j)', async (extra) => {
     const res = await acceptWith(extra);
     expect(res.status).toBe(200);
+    expect((await res.json()).data).not.toHaveProperty('noticeConsentRecorded');
     expect(isUnitOwnerInviteeMock).not.toHaveBeenCalled();
     expect(giveNoticeConsentMock).not.toHaveBeenCalled();
   });
@@ -482,7 +484,7 @@ describe('PATCH — electronic-notice consent at invite acceptance', () => {
     giveNoticeConsentMock.mockRejectedValueOnce(new Error('db down'));
     const res = await acceptWith({ noticeConsent: true });
     expect(res.status).toBe(200);
-    expect((await res.json()).data.email).toBe('owner@example.com');
+    expect((await res.json()).data).toMatchObject({ email: 'owner@example.com', noticeConsentRecorded: false });
     expect(captureExceptionMock).toHaveBeenCalledWith(expect.any(Error), {
       tags: { route: 'invitations', phase: 'notice_consent' },
     });

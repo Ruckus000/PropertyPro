@@ -49,7 +49,7 @@ beforeEach(() => {
   h.assertNotDemoGraceMock.mockResolvedValue(undefined);
   h.getNoticeConsentMock.mockResolvedValue(NONE);
   h.getConsentEmailMock.mockResolvedValue('me@example.com');
-  h.giveNoticeConsentMock.mockResolvedValue(undefined);
+  h.giveNoticeConsentMock.mockResolvedValue({ consented: true, givenAt: '2026-10-06T00:00:00.000Z', version: 'v', email: 'me@example.com' });
   h.withdrawNoticeConsentMock.mockResolvedValue(true);
 });
 
@@ -93,7 +93,7 @@ describe('/api/v1/notice-consent', () => {
 
   it('DELETE withdraws the caller\'s own consent', async () => {
     expect((await call(DELETE, 'DELETE')).status).toBe(200);
-    expect(h.withdrawNoticeConsentMock).toHaveBeenCalledWith(7, 'me', { ipAddress: '203.0.113.9', userAgent: 'UA/1' });
+    expect(h.withdrawNoticeConsentMock).toHaveBeenCalledWith(7, 'me', { reason: 'owner_request' });
   });
 
   it.each([

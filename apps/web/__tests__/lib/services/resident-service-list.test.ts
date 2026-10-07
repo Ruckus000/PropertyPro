@@ -35,7 +35,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 
 vi.mock('../../../src/lib/services/notice-consent-service', () => ({
-  listNoticeConsentUserIds: noticeConsentIdsMock,
+  listNoticeConsentEmails: noticeConsentIdsMock,
 }));
 
 import {
@@ -78,11 +78,12 @@ describe('listResidentsForCommunity', () => {
         ['u-tenant', { userId: 'u-tenant', lastSignInAt: null, lastInvitedAt: INVITED, accessApprovedAt: APPROVED }],
       ]),
     );
-    noticeConsentIdsMock.mockResolvedValue(new Set(['u-owner']));
+    // The tenant's consent covers an address that is no longer theirs: not shown.
+    noticeConsentIdsMock.mockResolvedValue(new Map([['u-owner', 'o@x.test'], ['u-tenant', 'old@x.test']]));
   });
 
   it('hydrates owner flag, designation, phone and portal status per resident', async () => {
-    const rows = await listResidentsForCommunity(42, {}, { includePortalActivity: true });
+    const rows = await listResidentsForCommunity(42, {}, { includePortalActivity: true, includeNoticeConsent: true });
 
     expect(portalActivityMock).toHaveBeenCalledWith(42);
     expect(rows).toEqual([

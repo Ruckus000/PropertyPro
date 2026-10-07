@@ -72,6 +72,10 @@ vi.mock('@/lib/api/community-membership', () => ({
 
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('@/lib/services/notice-consent-service', () => ({
+  withdrawNoticeConsent: vi.fn().mockResolvedValue(false),
+}));
+
 import { GET, POST } from '../../src/app/api/v1/residents/route';
 
 describe('p1-18 residents route', () => {

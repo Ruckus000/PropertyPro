@@ -70,6 +70,8 @@ export const acceptInvitationContract = defineRoute({
   response: z.object({
     success: z.literal(true),
     email: z.string(),
+    /** Present only when the owner ticked electronic-notice consent: whether it was saved. */
+    noticeConsentRecorded: z.boolean().optional(),
   }),
   permission: { resource: 'settings', action: 'write' },
 });

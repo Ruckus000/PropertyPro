@@ -112,6 +112,10 @@ vi.mock('@/lib/utils/community-validators', () => ({
   requireCommunityRole: requireCommunityRoleMock,
 }));
 
+vi.mock('@/lib/services/notice-consent-service', () => ({
+  withdrawNoticeConsent: vi.fn().mockResolvedValue(false),
+}));
+
 import { DELETE, GET, POST, PATCH } from '../../../src/app/api/v1/residents/route';
 
 const COMMUNITY_ID = 42;
