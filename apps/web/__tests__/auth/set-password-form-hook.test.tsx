@@ -53,7 +53,7 @@ afterEach(() => {
 
 describe('SetPasswordForm — hook submit flow', () => {
   it('signs in and shows the success state on a successful accept', async () => {
-    mutateAsyncMock.mockResolvedValueOnce('user@example.com');
+    mutateAsyncMock.mockResolvedValueOnce({ email: 'user@example.com' });
     render(<SetPasswordForm token="tok" communityId={9} />);
 
     await submitValid();
@@ -94,7 +94,7 @@ describe('SetPasswordForm — hook submit flow', () => {
   });
 
   it('shows the sign-in-failure copy when Supabase sign-in fails', async () => {
-    mutateAsyncMock.mockResolvedValueOnce('user@example.com');
+    mutateAsyncMock.mockResolvedValueOnce({ email: 'user@example.com' });
     signInWithPasswordMock.mockResolvedValueOnce({ error: { message: 'no' } });
     render(<SetPasswordForm token="tok" communityId={9} />);
 

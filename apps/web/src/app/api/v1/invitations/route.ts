@@ -8,6 +8,7 @@
  * `./contract.ts` for schemas and auth-chain rationale.
  */
 import { runRoute } from '@propertypro/api-contract';
+import { captureException } from '@sentry/nextjs';
 import { logAuditEvent } from '@propertypro/db';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -17,15 +18,18 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { consumeEmailBudget } from '@/lib/api/email-budget';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { resolveClientIp } from '@/lib/api/client-ip';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createSupabaseAuthUserFromInvitation,
   findInvitationByToken,
   getCommunityNameForInvitation,
   getUserForInvitation,
+  isUnitOwnerInvitee,
   markInvitationConsumed,
   recordTermsAcceptance,
 } from '@/lib/services/invitations-service';
+import { giveNoticeConsent } from '@/lib/services/notice-consent-service';
 import {
   acceptInvitationContract,
   createInvitationContract,
@@ -170,6 +174,35 @@ export const PATCH = withErrorHandler(
       },
     });
 
-    return { success: true as const, email: user.email };
+    // Electronic-notice consent: optional, owners only. Anyone else's `true`
+    // is ignored rather than refused, because the form shows the box to owners
+    // only and a stale tab must not block an account that already exists.
+    // Ordered last and never fatal for the same reason: the account is live,
+    // and a missing consent is recoverable from Settings.
+    let noticeConsentRecorded: boolean | undefined;
+    if (body.noticeConsent === true) {
+      try {
+        if (await isUnitOwnerInvitee(communityId, userId)) {
+          await giveNoticeConsent({
+            communityId,
+            userId,
+            email: user.email,
+            ipAddress: resolveClientIp(req),
+            userAgent: req.headers.get('user-agent'),
+          });
+          noticeConsentRecorded = true;
+        }
+      } catch (err) {
+        captureException(err, { tags: { route: 'invitations', phase: 'notice_consent' } });
+        // Tell the owner, so they do not believe a consent exists that does not.
+        noticeConsentRecorded = false;
+      }
+    }
+
+    return {
+      success: true as const,
+      email: user.email,
+      ...(noticeConsentRecorded === undefined ? {} : { noticeConsentRecorded }),
+    };
   }),
 );

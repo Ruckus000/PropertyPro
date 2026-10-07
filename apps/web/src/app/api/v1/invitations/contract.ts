@@ -35,6 +35,12 @@ const acceptInvitationBodySchema = z.object({
    * See docs/audits/2026-08-09-legal-risk-audit.md F-18.
    */
   termsAccepted: z.literal(true),
+  /**
+   * Optional consent to electronic notice (§718.112(2)(d), §720.303). Unlike
+   * the clickwrap this is a free choice, so `false` and absent are both fine.
+   * Honoured only for an invitee who is a unit owner.
+   */
+  noticeConsent: z.boolean().optional(),
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')
@@ -64,6 +70,8 @@ export const acceptInvitationContract = defineRoute({
   response: z.object({
     success: z.literal(true),
     email: z.string(),
+    /** Present only when the owner ticked electronic-notice consent: whether it was saved. */
+    noticeConsentRecorded: z.boolean().optional(),
   }),
   permission: { resource: 'settings', action: 'write' },
 });

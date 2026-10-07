@@ -37,7 +37,7 @@ describe('useAcceptInvitation', () => {
     });
     result.current.mutate({ token: 't', communityId: 1, password: 'pw', termsAccepted: true });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toBe('a@b.com');
+    expect(result.current.data).toEqual({ email: 'a@b.com', noticeConsentRecorded: undefined });
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },

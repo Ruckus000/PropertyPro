@@ -15,6 +15,7 @@ import { and, eq, inArray, sql } from '@propertypro/db/filters';
 // AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
 import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
 import { expandTransitionRoleFilter } from '@propertypro/shared';
+import { listNoticeConsentEmails } from '@/lib/services/notice-consent-service';
 
 type RoleFilter = {
   role?: string;
@@ -49,6 +50,12 @@ export interface ResidentListRow {
   portalStatus?: ResidentPortalStatus;
   lastSignInAt?: string | null;
   lastInvitedAt?: string | null;
+  /**
+   * Active consent to electronic notice (§718.112(2)(d), §720.303) covering
+   * the user's current email. Managers only (`includeNoticeConsent`). A record
+   * only — it does not change how notices are delivered.
+   */
+  noticeConsent?: boolean;
   createdAt: unknown;
   /**
    * Version of this membership for optimistic concurrency: the `user_roles`
@@ -114,12 +121,16 @@ export async function getResidentCommunityTypeValue(
  *
  * AUTHZ: caller MUST have verified `requirePermission('residents', 'read')`.
  * `includePortalActivity` (sign-in / invitation history, read from
- * `auth.users`) is for management only: residents hold `residents:read` too.
+ * `auth.users`) and `includeNoticeConsent` are for management only: residents
+ * hold `residents:read` too.
  */
 export async function listResidentsForCommunity(
   communityId: number,
   filter: RoleFilter = {},
-  { includePortalActivity = false }: { includePortalActivity?: boolean } = {},
+  {
+    includePortalActivity = false,
+    includeNoticeConsent = false,
+  }: { includePortalActivity?: boolean; includeNoticeConsent?: boolean } = {},
 ): Promise<ResidentListRow[]> {
   const scoped = createScopedClient(communityId);
 
@@ -178,9 +189,10 @@ export async function listResidentsForCommunity(
     }
   }
 
-  const activityByUser = includePortalActivity
-    ? await findCommunityResidentPortalActivity(communityId)
-    : null;
+  const [activityByUser, consentEmailByUser] = await Promise.all([
+    includePortalActivity ? findCommunityResidentPortalActivity(communityId) : null,
+    includeNoticeConsent ? listNoticeConsentEmails(communityId) : null,
+  ]);
 
   return roleRows.map((roleRow) => {
     const userId = roleRow['userId'] as string;
@@ -207,6 +219,15 @@ export async function listResidentsForCommunity(
                 .filter((d): d is Date => d instanceof Date)
                 .sort((a, b) => b.getTime() - a.getTime())[0]
                 ?.toISOString() ?? null,
+          }
+        : {}),
+      // Shown only while the consent covers the address the association has
+      // on file: a consent names its email, and a changed one needs a new consent.
+      ...(consentEmailByUser
+        ? {
+            noticeConsent:
+              consentEmailByUser.get(userId) !== undefined
+              && consentEmailByUser.get(userId) === (userRow?.['email'] ?? null),
           }
         : {}),
       createdAt: roleRow['createdAt'],

@@ -30,6 +30,8 @@ export interface ResidentRecord {
   portalStatus: ResidentPortalStatus;
   lastSignInAt: string | null;
   lastInvitedAt: string | null;
+  /** Active electronic-notice consent; manager views only. A record, not a delivery switch. */
+  noticeConsent?: boolean;
   /** Membership version; sent back as `expectedUpdatedAt` so a stale edit is refused. */
   updatedAt: string;
   /** Set only on household members: the `unit_occupants` id (their `userId` is synthetic). */

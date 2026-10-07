@@ -3,12 +3,18 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
+import { noticeConsentText } from '@propertypro/shared';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 import { useAcceptInvitation } from '@/hooks/use-invitations';
 
 interface Props {
   token: string;
   communityId: number;
+  /**
+   * The invitee's email when they are a unit owner, which is when the form
+   * offers electronic-notice consent. `null` hides the box.
+   */
+  noticeConsentEmail?: string | null;
 }
 
 function validatePassword(pw: string): string | null {
@@ -20,7 +26,7 @@ function validatePassword(pw: string): string | null {
   return null;
 }
 
-export function SetPasswordForm({ token, communityId }: Props) {
+export function SetPasswordForm({ token, communityId, noticeConsentEmail = null }: Props) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   // Invited residents reach the product through this form and NEVER pass through
@@ -31,9 +37,13 @@ export function SetPasswordForm({ token, communityId }: Props) {
   // disclaimers most need to bind.
   // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
   const [termsAccepted, setTermsAccepted] = useState(false);
+  // Optional and unchecked by default: consent to electronic notice must be the
+  // owner's own affirmative act (§718.112(2)(d), §720.303).
+  const [noticeConsent, setNoticeConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
+  const [noticeConsentFailed, setNoticeConsentFailed] = useState(false);
   const acceptInvitation = useAcceptInvitation();
 
   function handlePasswordChange(value: string): void {
@@ -80,12 +90,15 @@ export function SetPasswordForm({ token, communityId }: Props) {
       // types the field as `z.literal(true)` so a `false` could never be a valid
       // request anyway. Passing the state variable would type-error, which is
       // the point: there is no path here that submits without acceptance.
-      email = await acceptInvitation.mutateAsync({
+      const accepted = await acceptInvitation.mutateAsync({
         token,
         communityId,
         password,
         termsAccepted: true,
+        ...(noticeConsentEmail && noticeConsent ? { noticeConsent: true } : {}),
       });
+      email = accepted.email;
+      setNoticeConsentFailed(accepted.noticeConsentRecorded === false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation.');
       setLoading(false);
@@ -125,6 +138,11 @@ export function SetPasswordForm({ token, communityId }: Props) {
       <div className="text-center" data-testid="invite-success">
         <h2 className="mb-2 text-xl font-semibold text-content">Welcome aboard!</h2>
         <p className="mb-4 text-content-secondary">Your account is ready.</p>
+        {noticeConsentFailed ? (
+          <p className="mb-4 text-sm text-status-warning" role="alert" data-testid="invite-notice-consent-failed">
+            We couldn&apos;t save your consent to receive notices by email. You can give it in Settings.
+          </p>
+        ) : null}
         <a
           href={`/welcome?communityId=${communityId}`}
           className="inline-block text-content-link underline hover:text-content-link"
@@ -208,6 +226,23 @@ export function SetPasswordForm({ token, communityId }: Props) {
           .
         </span>
       </label>
+
+      {noticeConsentEmail ? (
+        <label className="flex min-h-11 items-start gap-2 text-sm text-content-secondary md:min-h-9">
+          <input
+            type="checkbox"
+            checked={noticeConsent}
+            onChange={(e) => setNoticeConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-edge-strong"
+            disabled={loading}
+            data-testid="invite-notice-consent-checkbox"
+          />
+          <span>
+            {noticeConsentText(noticeConsentEmail)}{' '}
+            <span className="text-content-tertiary">Optional.</span>
+          </span>
+        </label>
+      ) : null}
 
       {error && (
         <p className="text-sm text-status-danger" role="alert" data-testid="set-password-error">

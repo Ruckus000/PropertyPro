@@ -13,6 +13,14 @@ export interface AcceptInvitationInput {
    * See docs/audits/2026-08-09-legal-risk-audit.md F-18.
    */
   termsAccepted: true;
+  /** Electronic-notice consent; owners only, optional. */
+  noticeConsent?: boolean;
+}
+
+export interface AcceptInvitationResult {
+  email: string;
+  /** Present only when electronic-notice consent was asked for: whether it was saved. */
+  noticeConsentRecorded?: boolean;
 }
 
 /**
@@ -20,17 +28,17 @@ export interface AcceptInvitationInput {
  * of the now-active account so the caller can sign the user in.
  */
 export function useAcceptInvitation() {
-  return useMutation<string, Error, AcceptInvitationInput>({
+  return useMutation<AcceptInvitationResult, Error, AcceptInvitationInput>({
     // Documented exception to the requestJson rule: the route surfaces
     // `error.code` (TOKEN_USED / TOKEN_EXPIRED) that drives distinct
     // user-facing copy, and the success payload's `email` is consumed by
     // the caller. requestJson exposes neither `error.code` nor lets the
     // caller read the body, so raw fetch + bespoke parsing is retained.
-    mutationFn: async ({ token, communityId, password, termsAccepted }) => {
+    mutationFn: async ({ token, communityId, password, termsAccepted, noticeConsent }) => {
       const res = await fetch('/api/v1/invitations', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token, communityId, password, termsAccepted }),
+        body: JSON.stringify({ token, communityId, password, termsAccepted, noticeConsent }),
       });
 
       if (!res.ok) {
@@ -46,8 +54,8 @@ export function useAcceptInvitation() {
         throw new Error(json?.error?.message ?? 'Failed to accept invitation.');
       }
 
-      const json = (await res.json()) as { data: { email: string } };
-      return json.data.email;
+      const json = (await res.json()) as { data: AcceptInvitationResult };
+      return { email: json.data.email, noticeConsentRecorded: json.data.noticeConsentRecorded };
     },
   });
 }

@@ -1,5 +1,7 @@
+import { captureException } from '@sentry/nextjs';
 import { SetPasswordForm } from '@/components/auth/set-password-form';
 import { resolveAuthPageBranding } from '@/lib/auth/resolve-auth-page-branding';
+import { getNoticeConsentInviteContext } from '@/lib/services/invitations-service';
 
 export const metadata = {
   title: 'Accept Invitation',
@@ -24,6 +26,14 @@ export default async function AcceptInvitePage({
       </div>
     );
   }
+
+  // Owners only: decides whether the form offers the electronic-notice box.
+  // The box is optional, so a failed lookup hides it rather than breaking the
+  // page every invitee needs.
+  const noticeConsent = await getNoticeConsentInviteContext(communityId, token).catch((err: unknown) => {
+    captureException(err, { tags: { page: 'accept-invite', phase: 'notice_consent' } });
+    return null;
+  });
 
   const heading = branding.communityName
     ? `Join ${branding.communityName}`
@@ -52,7 +62,11 @@ export default async function AcceptInvitePage({
         <p className="mb-6 text-content-secondary">
           Choose a password to activate your account.
         </p>
-        <SetPasswordForm token={token} communityId={communityId} />
+        <SetPasswordForm
+          token={token}
+          communityId={communityId}
+          noticeConsentEmail={noticeConsent?.email ?? null}
+        />
       </div>
     </>
   );

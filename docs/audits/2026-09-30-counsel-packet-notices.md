@@ -61,6 +61,28 @@ owner would. Changes since:
    consent. Production held zero consent records on 2026-09-28. Do the consumer-disclosure
    rules apply when an association sends owners documents to e-sign, and if so what must
    withdrawal look like?
+7. **Owner consent to electronic notice (§718.112(2)(d), §720.303).** Facts: since
+   migration `0090_notice_consent`, an owner can tick an optional, unchecked box when
+   accepting an invitation, or give or withdraw consent later in Settings. Tenants and
+   managers are not offered it. Each consent stores the exact wording, its version
+   (`NOTICE_CONSENT_VERSION` in `packages/shared/src/notice-consent.ts`, currently
+   `2026-10-06.1`), the email address it covers, IP address, user agent and time.
+   Withdrawal stamps the row; consenting again adds a new row, so history is kept. Every
+   change is written to the audit log. Managers see an "E-notice" marker in the residents
+   list, and the community export includes the records. **Nothing changes how notices are
+   delivered**: the screens say "Recorded only. Notices are still delivered the way they are
+   today." The current wording is:
+
+   > I consent to receive official notices from my association by email at
+   > {email}, instead of by mail or hand delivery. This includes notices of owner and
+   > board meetings and other notices Florida law requires the association to send. I can
+   > withdraw this consent at any time in Settings, and I will keep my email address up to date.
+
+   Questions: (a) Is this wording, given this way, a valid written consent under both
+   statutes? (b) Does a consent cover only the address it names, so a changed email needs
+   a new consent? The product currently asks for one. (c) Must the association, rather than
+   PropertyPro, collect or countersign it? (d) What would have to be true before an
+   association may rely on these records to stop sending paper notice?
 
 ## 3. Known gaps in the samples (engineering, not for counsel to fix)
 
@@ -80,3 +102,4 @@ owner would. Changes since:
 | 4. Notice period | | |
 | 5. ARC denial content | | |
 | 6. E-sign consent withdrawal | | |
+| 7. Electronic-notice consent | | |

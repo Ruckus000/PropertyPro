@@ -38,7 +38,7 @@ describe('SetPasswordForm', () => {
     signInWithPasswordMock.mockReset();
     signInWithPasswordMock.mockResolvedValue({ error: null });
     acceptInvitationMutateAsyncMock.mockReset();
-    acceptInvitationMutateAsyncMock.mockResolvedValue('invited@example.com');
+    acceptInvitationMutateAsyncMock.mockResolvedValue({ email: 'invited@example.com' });
   });
 
   it('routes to the community welcome screen on success (B1)', async () => {
@@ -145,6 +145,66 @@ describe('SetPasswordForm', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('set-password-error')).toBeNull();
+    });
+  });
+
+  describe('electronic-notice consent (owners only)', () => {
+    async function submitWith(props: { noticeConsentEmail?: string | null }, tick: boolean) {
+      render(
+        <Wrapper>
+          <SetPasswordForm token="invite-token" communityId={7} {...props} />
+        </Wrapper>,
+      );
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Abcdefg1!' } });
+      fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'Abcdefg1!' } });
+      fireEvent.click(screen.getByTestId('invite-terms-checkbox'));
+      if (tick) fireEvent.click(screen.getByTestId('invite-notice-consent-checkbox'));
+      await act(async () => {
+        fireEvent.submit(screen.getByTestId('set-password-form'));
+      });
+      await waitFor(() => expect(acceptInvitationMutateAsyncMock).toHaveBeenCalledTimes(1));
+      return acceptInvitationMutateAsyncMock.mock.calls[0]![0] as Record<string, unknown>;
+    }
+
+    it('offers an unchecked box naming the owner\'s email', () => {
+      render(
+        <Wrapper>
+          <SetPasswordForm token="invite-token" communityId={7} noticeConsentEmail="owner@example.com" />
+        </Wrapper>,
+      );
+      const box = screen.getByTestId('invite-notice-consent-checkbox') as HTMLInputElement;
+      expect(box.checked).toBe(false);
+      expect(box.required).toBe(false);
+      expect(box.closest('label')?.textContent).toContain('by email at owner@example.com');
+    });
+
+    it('is absent for an invitee who is not an owner', () => {
+      render(
+        <Wrapper>
+          <SetPasswordForm token="invite-token" communityId={7} noticeConsentEmail={null} />
+        </Wrapper>,
+      );
+      expect(screen.queryByTestId('invite-notice-consent-checkbox')).toBeNull();
+    });
+
+    it('sends noticeConsent only when the owner ticks it', async () => {
+      expect(await submitWith({ noticeConsentEmail: 'owner@example.com' }, true)).toMatchObject({ noticeConsent: true });
+    });
+
+    it('sends nothing about consent when the owner leaves it unticked', async () => {
+      expect(await submitWith({ noticeConsentEmail: 'owner@example.com' }, false)).not.toHaveProperty('noticeConsent');
+    });
+    it('tells the owner when their ticked consent could not be saved', async () => {
+      acceptInvitationMutateAsyncMock.mockResolvedValueOnce({ email: 'owner@example.com', noticeConsentRecorded: false });
+      await submitWith({ noticeConsentEmail: 'owner@example.com' }, true);
+      expect(await screen.findByTestId('invite-notice-consent-failed')).toHaveTextContent('You can give it in Settings');
+    });
+
+    it('says nothing extra when consent was saved', async () => {
+      acceptInvitationMutateAsyncMock.mockResolvedValueOnce({ email: 'owner@example.com', noticeConsentRecorded: true });
+      await submitWith({ noticeConsentEmail: 'owner@example.com' }, true);
+      await screen.findByTestId('invite-success');
+      expect(screen.queryByTestId('invite-notice-consent-failed')).toBeNull();
     });
   });
 });
