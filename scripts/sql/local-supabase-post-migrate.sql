@@ -99,7 +99,10 @@ BEGIN
     'unit_occupants',
     -- Revoked by migration leases_v3_expand, which creates them: who is on
     -- each lease, §83.49 deposit records, renewal offers. Sequences below.
-    'lease_residents', 'lease_deposits', 'lease_renewal_offers'
+    'lease_residents', 'lease_deposits', 'lease_renewal_offers',
+    -- Revoked by migration 0090, which creates it: owners' notice-consent
+    -- records (email, IP, user agent). Sequence below.
+    'notice_consent'
   ]
   LOOP
     IF EXISTS (
@@ -160,7 +163,9 @@ BEGIN
     -- 0085's household-members table.
     'unit_occupants_id_seq',
     -- leases_v3_expand's three tables.
-    'lease_residents_id_seq', 'lease_deposits_id_seq', 'lease_renewal_offers_id_seq'
+    'lease_residents_id_seq', 'lease_deposits_id_seq', 'lease_renewal_offers_id_seq',
+    -- 0090's notice-consent table.
+    'notice_consent_id_seq'
   ]
   LOOP
     IF EXISTS (

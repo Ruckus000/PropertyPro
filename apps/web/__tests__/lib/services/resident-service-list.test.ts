@@ -9,10 +9,11 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { queryMock, selectFromMock, portalActivityMock } = vi.hoisted(() => ({
+const { queryMock, selectFromMock, portalActivityMock, noticeConsentIdsMock } = vi.hoisted(() => ({
   queryMock: vi.fn(),
   selectFromMock: vi.fn(),
   portalActivityMock: vi.fn(),
+  noticeConsentIdsMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -31,6 +32,10 @@ vi.mock('@propertypro/db/filters', () => ({
 
 vi.mock('@propertypro/db/unsafe', () => ({
   findCommunityResidentPortalActivity: portalActivityMock,
+}));
+
+vi.mock('../../../src/lib/services/notice-consent-service', () => ({
+  listNoticeConsentUserIds: noticeConsentIdsMock,
 }));
 
 import {
@@ -73,6 +78,7 @@ describe('listResidentsForCommunity', () => {
         ['u-tenant', { userId: 'u-tenant', lastSignInAt: null, lastInvitedAt: INVITED, accessApprovedAt: APPROVED }],
       ]),
     );
+    noticeConsentIdsMock.mockResolvedValue(new Set(['u-owner']));
   });
 
   it('hydrates owner flag, designation, phone and portal status per resident', async () => {
@@ -88,6 +94,7 @@ describe('listResidentsForCommunity', () => {
         portalStatus: 'active',
         lastSignInAt: SIGNED_IN.toISOString(),
         lastInvitedAt: INVITED.toISOString(),
+        noticeConsent: true,
       }),
       expect.objectContaining({
         userId: 'u-tenant',
@@ -97,6 +104,7 @@ describe('listResidentsForCommunity', () => {
         lastSignInAt: null,
         // The newer of invitation and access-request approval.
         lastInvitedAt: APPROVED.toISOString(),
+        noticeConsent: false,
       }),
       expect.objectContaining({
         userId: 'u-pm',
@@ -111,8 +119,10 @@ describe('listResidentsForCommunity', () => {
   it('never reads or returns sign-in history unless asked (residents hold residents:read too)', async () => {
     const rows = await listResidentsForCommunity(42);
     expect(portalActivityMock).not.toHaveBeenCalled();
+    expect(noticeConsentIdsMock).not.toHaveBeenCalled();
     for (const row of rows) {
       expect(row).not.toHaveProperty('portalStatus');
+      expect(row).not.toHaveProperty('noticeConsent');
       expect(row).not.toHaveProperty('lastSignInAt');
       expect(row).not.toHaveProperty('lastInvitedAt');
     }

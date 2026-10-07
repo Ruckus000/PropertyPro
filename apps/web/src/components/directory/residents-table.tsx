@@ -4,7 +4,7 @@ import { BadgeCheck } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { Avatar, PortalBadge, avatarToneFor } from './directory-badges';
+import { Avatar, NoticeConsentBadge, PortalBadge, avatarToneFor } from './directory-badges';
 import { residentTypeLabel, type DirectoryResidentRow } from './directory-model';
 
 // Columns by breakpoint: <md name · portal (unit · type · board in the subline),
@@ -121,6 +121,7 @@ export function ResidentsTable({
                   >
                     {typeLabel}
                   </span>
+                  {isOwner && r.noticeConsent ? <span className="ml-2"><NoticeConsentBadge /></span> : null}
                 </TableCell>
                 <TableCell className={cn(XL, 'text-xs text-content-secondary')}>
                   <span className="inline-flex items-center gap-1.5">

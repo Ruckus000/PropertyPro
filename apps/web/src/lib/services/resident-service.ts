@@ -15,6 +15,7 @@ import { and, eq, inArray, sql } from '@propertypro/db/filters';
 // AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
 import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
 import { expandTransitionRoleFilter } from '@propertypro/shared';
+import { listNoticeConsentUserIds } from '@/lib/services/notice-consent-service';
 
 type RoleFilter = {
   role?: string;
@@ -49,6 +50,12 @@ export interface ResidentListRow {
   portalStatus?: ResidentPortalStatus;
   lastSignInAt?: string | null;
   lastInvitedAt?: string | null;
+  /**
+   * Active consent to electronic notice (§718.112(2)(d), §720.303). Managers
+   * only, behind the same flag as portal activity. A record only — it does not
+   * change how notices are delivered.
+   */
+  noticeConsent?: boolean;
   createdAt: unknown;
   /**
    * Version of this membership for optimistic concurrency: the `user_roles`
@@ -178,9 +185,12 @@ export async function listResidentsForCommunity(
     }
   }
 
-  const activityByUser = includePortalActivity
-    ? await findCommunityResidentPortalActivity(communityId)
-    : null;
+  const [activityByUser, noticeConsentUserIds] = includePortalActivity
+    ? await Promise.all([
+        findCommunityResidentPortalActivity(communityId),
+        listNoticeConsentUserIds(communityId),
+      ])
+    : [null, null];
 
   return roleRows.map((roleRow) => {
     const userId = roleRow['userId'] as string;
@@ -207,6 +217,7 @@ export async function listResidentsForCommunity(
                 .filter((d): d is Date => d instanceof Date)
                 .sort((a, b) => b.getTime() - a.getTime())[0]
                 ?.toISOString() ?? null,
+            noticeConsent: noticeConsentUserIds?.has(userId) ?? false,
           }
         : {}),
       createdAt: roleRow['createdAt'],

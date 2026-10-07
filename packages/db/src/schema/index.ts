@@ -78,6 +78,7 @@ export * from './site-pages';
 export * from './site-blocks';
 export * from './site-publish-schedules';
 export * from './unit-occupants';
+export * from './notice-consent';
 export { siteThemePresets, type ThemePresetTokens } from './site-theme-presets';
 export { siteStarterPacks, type StarterPackBlock } from './site-starter-packs';
 export { siteLayoutMetadata } from './site-layout-metadata';

@@ -147,4 +147,52 @@ describe('SetPasswordForm', () => {
       expect(screen.queryByTestId('set-password-error')).toBeNull();
     });
   });
+
+  describe('electronic-notice consent (owners only)', () => {
+    async function submitWith(props: { noticeConsentEmail?: string | null }, tick: boolean) {
+      render(
+        <Wrapper>
+          <SetPasswordForm token="invite-token" communityId={7} {...props} />
+        </Wrapper>,
+      );
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Abcdefg1!' } });
+      fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'Abcdefg1!' } });
+      fireEvent.click(screen.getByTestId('invite-terms-checkbox'));
+      if (tick) fireEvent.click(screen.getByTestId('invite-notice-consent-checkbox'));
+      await act(async () => {
+        fireEvent.submit(screen.getByTestId('set-password-form'));
+      });
+      await waitFor(() => expect(acceptInvitationMutateAsyncMock).toHaveBeenCalledTimes(1));
+      return acceptInvitationMutateAsyncMock.mock.calls[0]![0] as Record<string, unknown>;
+    }
+
+    it('offers an unchecked box naming the owner\'s email', () => {
+      render(
+        <Wrapper>
+          <SetPasswordForm token="invite-token" communityId={7} noticeConsentEmail="owner@example.com" />
+        </Wrapper>,
+      );
+      const box = screen.getByTestId('invite-notice-consent-checkbox') as HTMLInputElement;
+      expect(box.checked).toBe(false);
+      expect(box.required).toBe(false);
+      expect(box.closest('label')?.textContent).toContain('by email at owner@example.com');
+    });
+
+    it('is absent for an invitee who is not an owner', () => {
+      render(
+        <Wrapper>
+          <SetPasswordForm token="invite-token" communityId={7} noticeConsentEmail={null} />
+        </Wrapper>,
+      );
+      expect(screen.queryByTestId('invite-notice-consent-checkbox')).toBeNull();
+    });
+
+    it('sends noticeConsent only when the owner ticks it', async () => {
+      expect(await submitWith({ noticeConsentEmail: 'owner@example.com' }, true)).toMatchObject({ noticeConsent: true });
+    });
+
+    it('sends nothing about consent when the owner leaves it unticked', async () => {
+      expect(await submitWith({ noticeConsentEmail: 'owner@example.com' }, false)).not.toHaveProperty('noticeConsent');
+    });
+  });
 });

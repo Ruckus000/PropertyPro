@@ -6,6 +6,7 @@ import { NotificationPreferencesForm } from '@/components/settings/notification-
 import { SnowbirdDigestCard } from '@/components/settings/snowbird-digest-card';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
 import { SmsConsentCard } from '@/components/settings/sms-consent-card';
+import { NoticeConsentCard } from '@/components/settings/notice-consent-card';
 import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
 import { AccessSettingsCard } from '@/components/settings/access-settings-card';
 import { EmailFooterCard } from '@/components/settings/email-footer-card';
@@ -144,6 +145,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           .hasSnowbirdDigest && (
           <div className="mt-4">
             <SnowbirdDigestCard communityId={context.communityId} canManage={membership.isAdmin} />
+          </div>
+        )}
+        {/* Electronic-notice consent is an owner's statutory choice (§718.112(2)(d), §720.303). */}
+        {membership.role === 'resident' && membership.isUnitOwner && (
+          <div className="mt-4">
+            <NoticeConsentCard communityId={context.communityId} />
           </div>
         )}
       </div>

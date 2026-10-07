@@ -1219,6 +1219,15 @@ describeDb('P4-55 RLS policies (integration)', () => {
         'pp_unit_occupants_select',
         'pp_unit_occupants_update',
       ],
+      // notice_consent (tenant_user_scoped, 0090): all four bespoke. INSERT/UPDATE
+      // are owner-only (a manager cannot consent for an owner), SELECT adds the
+      // manager tier, DELETE is privileged-only (append-only history).
+      notice_consent: [
+        'pp_notice_consent_delete',
+        'pp_notice_consent_insert',
+        'pp_notice_consent_select',
+        'pp_notice_consent_update',
+      ],
       support_consent_grants: ['consent_community_read', 'consent_service_bypass'],
       support_access_log: ['access_log_community_read', 'access_log_service_bypass'],
       // onboarding_checklist_items (tenant_user_scoped): bespoke per-user policy

@@ -110,6 +110,11 @@ export const RLS_TENANT_TABLES = [
     notes: 'Household members with no portal login (Directory). Names, emails and phones of people who never signed up: SELECT is manager-tier too (pp_unit_occupants_select), and Data API grants are revoked in 0085.',
   },
   {
+    tableName: 'notice_consent',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'Owner consent to electronic notice (§718.112(2)(d), §720.303). Only the owner may INSERT or UPDATE (withdraw) their own row — a manager cannot consent for an owner; the manager tier may SELECT every row. No authenticated DELETE (append-only history). Data API grants revoked in 0090.',
+  },
+  {
     tableName: 'site_publish_schedules',
     policyFamily: 'tenant_admin_write',
     notes:
@@ -603,9 +608,11 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // line auto-merge without a conflict, so the second one to merge has to set the
 // true total rather than trusting the number it was authored against.
 // 80 on main + community_export_jobs + community_export_job_parts (0058) = 82,
-// + site_publish_schedules (0065) = 83, + unit_occupants (0085) = 84.
+// + site_publish_schedules (0065) = 83, + unit_occupants (0085) = 84,
+// + lease_residents / lease_deposits / lease_renewal_offers = 87,
+// + notice_consent (0090) = 88.
 // RE-DERIVE AT MERGE, same as every bump above.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 87;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 88;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

@@ -102,6 +102,22 @@ export async function getUserRoleForInvitation(
 }
 
 /**
+ * True when the invitee holds a resident role marked as a unit owner here —
+ * the only people electronic-notice consent applies to (§718.112(2)(d),
+ * §720.303). `user_roles` holds one row per user per community, so a manager
+ * who also owns a unit is not offered it.
+ */
+export async function isUnitOwnerInvitee(communityId: number, userId: string): Promise<boolean> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    userRoles,
+    { role: userRoles.role, isUnitOwner: userRoles.isUnitOwner },
+    eq(userRoles.userId, userId),
+  )) as unknown as Array<{ role?: unknown; isUnitOwner?: unknown }>;
+  return rows.some((row) => row.role === 'resident' && row.isUnitOwner === true);
+}
+
+/**
  * Insert an invitation row.
  *
  * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
@@ -150,6 +166,25 @@ export async function findInvitationByToken(
     eq(invitationsTable.token, token),
   )) as unknown as Array<ActiveInvitation>;
   return rows[0] ?? null;
+}
+
+/**
+ * What the accept page needs to offer the electronic-notice consent box: the
+ * invitee's email, when the token is live and the invitee is a unit owner.
+ * `null` otherwise — no box. The token is the credential, exactly as in the
+ * accept PATCH, so this reveals nothing its holder cannot already learn by
+ * accepting.
+ */
+export async function getNoticeConsentInviteContext(
+  communityId: number,
+  token: string,
+): Promise<{ email: string } | null> {
+  const invitation = await findInvitationByToken(communityId, token);
+  if (!invitation || invitation.consumedAt) return null;
+  if (Date.now() >= new Date(invitation.expiresAt).getTime()) return null;
+  if (!(await isUnitOwnerInvitee(communityId, invitation.userId))) return null;
+  const user = await getUserForInvitation(communityId, invitation.userId);
+  return user ? { email: user.email } : null;
 }
 
 /**

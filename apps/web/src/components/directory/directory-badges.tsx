@@ -1,6 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { MailCheck } from 'lucide-react';
+import { NOTICE_CONSENT_RECORD_ONLY_NOTE } from '@propertypro/shared';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { cn } from '@/lib/utils';
 import type { UnitOccupancy } from '@/hooks/use-units';
@@ -50,6 +52,22 @@ export function OccupancyBadge({
 export function PortalBadge({ status }: { status: ResidentPortalStatus }) {
   const { key, label } = PORTAL_STATUS[status];
   return <StatusBadge status={key} label={label} className="shrink-0 whitespace-nowrap" />;
+}
+
+/** The owner has consented to electronic notice. Icon + text, never colour alone. */
+export function NoticeConsentBadge() {
+  const title = `Consented to official notices by email. ${NOTICE_CONSENT_RECORD_ONLY_NOTE}`;
+  return (
+    <span
+      className="inline-flex h-6 items-center gap-1 whitespace-nowrap text-xs text-content-secondary"
+      title={title}
+      data-testid="notice-consent-badge"
+    >
+      <MailCheck size={14} className="text-content-tertiary" aria-hidden="true" />
+      E-notice
+      <span className="sr-only">: {title}</span>
+    </span>
+  );
 }
 
 export const PORTAL_DETAIL: Record<ResidentPortalStatus, string> = {

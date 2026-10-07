@@ -1,5 +1,6 @@
 import { SetPasswordForm } from '@/components/auth/set-password-form';
 import { resolveAuthPageBranding } from '@/lib/auth/resolve-auth-page-branding';
+import { getNoticeConsentInviteContext } from '@/lib/services/invitations-service';
 
 export const metadata = {
   title: 'Accept Invitation',
@@ -24,6 +25,9 @@ export default async function AcceptInvitePage({
       </div>
     );
   }
+
+  // Owners only: decides whether the form offers the electronic-notice box.
+  const noticeConsent = await getNoticeConsentInviteContext(communityId, token);
 
   const heading = branding.communityName
     ? `Join ${branding.communityName}`
@@ -52,7 +56,11 @@ export default async function AcceptInvitePage({
         <p className="mb-6 text-content-secondary">
           Choose a password to activate your account.
         </p>
-        <SetPasswordForm token={token} communityId={communityId} />
+        <SetPasswordForm
+          token={token}
+          communityId={communityId}
+          noticeConsentEmail={noticeConsent?.email ?? null}
+        />
       </div>
     </>
   );

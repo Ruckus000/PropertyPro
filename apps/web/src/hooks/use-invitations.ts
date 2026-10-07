@@ -13,6 +13,8 @@ export interface AcceptInvitationInput {
    * See docs/audits/2026-08-09-legal-risk-audit.md F-18.
    */
   termsAccepted: true;
+  /** Electronic-notice consent; owners only, optional. */
+  noticeConsent?: boolean;
 }
 
 /**
@@ -26,11 +28,11 @@ export function useAcceptInvitation() {
     // user-facing copy, and the success payload's `email` is consumed by
     // the caller. requestJson exposes neither `error.code` nor lets the
     // caller read the body, so raw fetch + bespoke parsing is retained.
-    mutationFn: async ({ token, communityId, password, termsAccepted }) => {
+    mutationFn: async ({ token, communityId, password, termsAccepted, noticeConsent }) => {
       const res = await fetch('/api/v1/invitations', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token, communityId, password, termsAccepted }),
+        body: JSON.stringify({ token, communityId, password, termsAccepted, noticeConsent }),
       });
 
       if (!res.ok) {

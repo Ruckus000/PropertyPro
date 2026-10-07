@@ -17,6 +17,9 @@ const {
   createSupabaseAuthUserFromInvitationMock,
   markInvitationConsumedMock,
   recordTermsAcceptanceMock,
+  isUnitOwnerInviteeMock,
+  giveNoticeConsentMock,
+  captureExceptionMock,
 } = vi.hoisted(() => ({
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   sendEmailMock: vi.fn().mockResolvedValue({ id: 'test_1' }),
@@ -32,6 +35,9 @@ const {
   createSupabaseAuthUserFromInvitationMock: vi.fn(),
   markInvitationConsumedMock: vi.fn().mockResolvedValue(undefined),
   recordTermsAcceptanceMock: vi.fn().mockResolvedValue(undefined),
+  isUnitOwnerInviteeMock: vi.fn(),
+  giveNoticeConsentMock: vi.fn(),
+  captureExceptionMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -68,7 +74,14 @@ vi.mock('@/lib/services/invitations-service', () => ({
   createSupabaseAuthUserFromInvitation: createSupabaseAuthUserFromInvitationMock,
   markInvitationConsumed: markInvitationConsumedMock,
   recordTermsAcceptance: recordTermsAcceptanceMock,
+  isUnitOwnerInvitee: isUnitOwnerInviteeMock,
 }));
+
+vi.mock('@/lib/services/notice-consent-service', () => ({
+  giveNoticeConsent: giveNoticeConsentMock,
+}));
+
+vi.mock('@sentry/nextjs', () => ({ captureException: captureExceptionMock }));
 
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { PATCH, POST } from '../../src/app/api/v1/invitations/route';
@@ -407,4 +420,71 @@ describe('p1-20 invitation auth flow', () => {
     expect(createSupabaseAuthUserFromInvitationMock).not.toHaveBeenCalled();
   });
 
+});
+
+describe('PATCH — electronic-notice consent at invite acceptance', () => {
+  function acceptWith(extra: Record<string, unknown>) {
+    findInvitationByTokenMock.mockResolvedValueOnce({
+      userId: 'user-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+    });
+    getUserForInvitationMock.mockResolvedValueOnce({ email: 'owner@example.com', fullName: 'Olive Owner' });
+    createSupabaseAuthUserFromInvitationMock.mockResolvedValueOnce({ ok: true });
+    return PATCH(
+      new NextRequest('http://localhost:3000/api/v1/invitations', {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+          'user-agent': 'TestBrowser/1.0',
+        },
+        body: JSON.stringify({ communityId: 55, token: 'tok', password: 'Strongpass123!', termsAccepted: true, ...extra }),
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
+    isUnitOwnerInviteeMock.mockResolvedValue(true);
+    giveNoticeConsentMock.mockResolvedValue(undefined);
+  });
+
+  it('records consent for an owner who ticked the box, at the invited email', async () => {
+    const res = await acceptWith({ noticeConsent: true });
+    expect(res.status).toBe(200);
+    expect(isUnitOwnerInviteeMock).toHaveBeenCalledWith(55, 'user-1');
+    expect(giveNoticeConsentMock).toHaveBeenCalledWith({
+      communityId: 55,
+      userId: 'user-1',
+      email: 'owner@example.com',
+      ipAddress: '203.0.113.7',
+      userAgent: 'TestBrowser/1.0',
+    });
+  });
+
+  it('records nothing for a non-owner, even if the request says true', async () => {
+    isUnitOwnerInviteeMock.mockResolvedValue(false);
+    const res = await acceptWith({ noticeConsent: true });
+    expect(res.status).toBe(200);
+    expect(giveNoticeConsentMock).not.toHaveBeenCalled();
+  });
+
+  it.each([[{ noticeConsent: false }], [{}]])('records nothing when the box was not ticked (%j)', async (extra) => {
+    const res = await acceptWith(extra);
+    expect(res.status).toBe(200);
+    expect(isUnitOwnerInviteeMock).not.toHaveBeenCalled();
+    expect(giveNoticeConsentMock).not.toHaveBeenCalled();
+  });
+
+  it('still accepts the invitation when recording consent fails, and reports it', async () => {
+    giveNoticeConsentMock.mockRejectedValueOnce(new Error('db down'));
+    const res = await acceptWith({ noticeConsent: true });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.email).toBe('owner@example.com');
+    expect(captureExceptionMock).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { route: 'invitations', phase: 'notice_consent' },
+    });
+  });
 });

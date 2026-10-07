@@ -149,9 +149,9 @@ describe('platform_admin_audit_log RLS registration', () => {
     // Bumped 80 → 82 by migration 0058 (community_export_jobs +
     // community_export_job_parts), then 82 → 83 by 0065
     // (site_publish_schedules), 83 → 84 by unit_occupants, then 84 → 87 by
-    // leases_v3_expand (lease_residents, lease_deposits, lease_renewal_offers)
-    // — all tenant tables. The assertion still does
+    // leases_v3_expand (lease_residents, lease_deposits, lease_renewal_offers),
+    // then 87 → 88 by 0090 (notice_consent) — all tenant tables. The assertion still does
     // its job: it pins the value so an accidental bump is visible.
-    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(87);
+    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(88);
   });
 });
