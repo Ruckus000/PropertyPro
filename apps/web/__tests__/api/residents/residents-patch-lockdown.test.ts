@@ -384,12 +384,12 @@ describe('GET /api/v1/residents — portal activity is for management only', () 
   it('a manager gets sign-in and invitation history', async () => {
     requireCommunityMembershipMock.mockResolvedValue(ACTOR_MEMBERSHIP);
     expect((await GET(getReq())).status).toBe(200);
-    expect(listResidentsForCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, {}, { includePortalActivity: true });
+    expect(listResidentsForCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, {}, { includePortalActivity: true, includeNoticeConsent: true });
   });
 
   it("a resident (who also holds residents:read) never gets neighbours' sign-in history", async () => {
     requireCommunityMembershipMock.mockResolvedValue({ ...ACTOR_MEMBERSHIP, role: 'resident', isAdmin: false, isUnitOwner: true });
     expect((await GET(getReq())).status).toBe(200);
-    expect(listResidentsForCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, {}, { includePortalActivity: false });
+    expect(listResidentsForCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, {}, { includePortalActivity: false, includeNoticeConsent: false });
   });
 });
