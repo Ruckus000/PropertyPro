@@ -88,9 +88,10 @@ flowchart LR
   Postgres enforces the same boundary with `FORCE ROW LEVEL SECURITY` and a
   write trigger. Cross-tenant reads must import `@propertypro/db/unsafe` and
   carry a written authorisation comment, which a lint guard checks.
-- **Delivery:** GitHub Actions is the merge authority; `deploy.yml` deploys the
-  exact SHA that passed CI. Migrations are applied to production by hand,
-  expand-before-code and contract-after (see Decisions below).
+- **Delivery:** GitHub Actions runs the checks and `deploy.yml` ships the code
+  to Vercel; nothing in the pipeline migrates the database. Migrations are
+  applied to production by hand, expand-before-code and contract-after (see
+  Decisions below).
 
 ## How to run it
 
@@ -113,6 +114,30 @@ The demo identities are all `*.local` addresses.
 > Checked with Node 22: `pnpm install` warns `Unsupported engine` (the repo
 > wants 24.x) but completes, and the sandbox and dev server ran. Use Node 24
 > to match CI and Vercel.
+
+## Decisions and trade-offs
+
+- **Three roles plus a board designation, not seven job titles**
+  ([ADR-006](docs/adr/ADR-006-root-manager-role-model.md)). Community roles are
+  `resident`, `property_manager` and `root_manager`; board seats are a separate
+  `designation` that general permissions never read. Accepted costs, in the
+  ADR's own words: "No per-manager permission overrides post-cleanup
+  (granularity loss — accepted)", and rootless communities lose billing and
+  deletion until someone claims root.
+- **Mechanism over guidance**
+  ([ADR-003](docs/adr/ADR-003-layering-and-import-boundaries.md)). "A rule
+  documented in CLAUDE.md without enforcement decays", so each layering rule
+  gets a CI check (hence the 34 guards). But there are "no big-bang refactors":
+  existing violators are grandfathered, and the ADR admits that "the 57
+  grandfathered components still bypass hooks".
+- **Migrations applied by hand, in expand/contract order**
+  ([migration-safety rules](.claude/rules/migration-safety.md)). An automatic
+  `db:migrate` step in the deploy pipeline conflicted with manual applies,
+  failed on every run and "silently blocked all prod deploys for ~2 weeks". It
+  was also unsafe for contract migrations, because migrating first would drop
+  columns the live code still reads. The replacement is discipline rather than
+  automation: expand before the code ships, contract after, then verify the
+  ledger with `pnpm db:ledger:verify`.
 
 ## Overview
 
