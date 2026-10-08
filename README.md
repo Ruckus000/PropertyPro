@@ -59,6 +59,61 @@ cross-community totals.
 </tr>
 </table>
 
+## Architecture
+
+```mermaid
+flowchart LR
+  P["Residents · boards · managers"] --> W
+  O["Platform operators"] --> A
+  subgraph Vercel
+    W["apps/web<br/>portal · public sites · /mobile · /api/v1"]
+    A["apps/admin<br/>operator console"]
+    C["18 crons<br/>→ /api/v1/internal/*"]
+  end
+  C --> W
+  W --> K["packages/<br/>api-contract · db · shared · ui · email"]
+  A --> K
+  K --> DB[("Supabase Postgres<br/>FORCE RLS + write trigger")]
+  W --> S["Supabase Auth + Storage"]
+  W --> ST["Stripe"]
+  K --> R["Resend"]
+```
+
+- **Monorepo:** two Next.js apps over shared packages (Turborepo + pnpm).
+  `packages/db` owns the Drizzle schema, migrations and the scoped client;
+  `packages/shared` owns roles and the RBAC matrix; `packages/api-contract`
+  defines typed routes (`defineRoute` / `runRoute`, Zod in and out).
+- **Tenancy:** one database, isolated by `community_id`. Middleware resolves
+  the tenant; every query goes through `createScopedClient(communityId)`, and
+  Postgres enforces the same boundary with `FORCE ROW LEVEL SECURITY` and a
+  write trigger. Cross-tenant reads must import `@propertypro/db/unsafe` and
+  carry a written authorisation comment, which a lint guard checks.
+- **Delivery:** GitHub Actions is the merge authority; `deploy.yml` deploys the
+  exact SHA that passed CI. Migrations are applied to production by hand,
+  expand-before-code and contract-after (see Decisions below).
+
+## How to run it
+
+What this README was checked against (2026-10-08, Linux, Docker): a fresh
+clone, **no `.env` file of any kind**, and only local services. The sandbox
+starts its own Supabase stack in Docker, migrates and seeds it, and refuses
+remote backends.
+
+```bash
+pnpm install              # the repo pins Node 24 (.nvmrc); see the note below
+pnpm agent:env:prepare    # local Supabase (Auth, Storage, Postgres) + migrate + seed:demo + seed:verify
+pnpm agent:live:web       # Next dev server on the printed port (e.g. http://localhost:31002)
+```
+
+Then open the printed `/dev/agent-login?as=<persona>` URL; add
+`&communityId=1` to land in Sunset Condos. Useful personas: `root_sunset`
+(compliance), `pm_admin` (PM portfolio), `owner` (resident `/mobile` view).
+The demo identities are all `*.local` addresses.
+
+> Checked with Node 22: `pnpm install` warns `Unsupported engine` (the repo
+> wants 24.x) but completes, and the sandbox and dev server ran. Use Node 24
+> to match CI and Vercel.
+
 ## Overview
 
 PropertyPro helps condo associations, HOAs, and apartments meet Florida statutory requirements (§718 / §720) for document posting, meeting notices, and owner portal access.
