@@ -33,6 +33,32 @@ TanStack Query · Stripe · Resend · Vercel · Turborepo + pnpm
 Guardrails, measured 2026-10-08: 34 repository-specific lint guards
 (`scripts/run-lint-guards.mjs`) and 1,461 test files.
 
+## Screenshots
+
+Captured from the local agent sandbox (`pnpm agent:live:web`) with the seeded
+demo communities and `*.local` demo personas. No production data.
+
+**Compliance** — the required-records queue for a §718 condo, as its root
+manager sees it.
+
+![Compliance page for Sunset Condos: 82% readiness with 14 of 17 items satisfied, 0 posting windows due, 0 overdue, 0 needing board action, and a required-records queue listing each record with its status, owner-portal visibility, deadline and Florida statute citation](docs/images/compliance.png)
+
+**Property-manager portfolio** — every community the manager runs, with
+cross-community totals.
+
+![Property manager dashboard listing three demo communities (Palm Shores HOA, Sunset Condos, Sunset Ridge Apartments) with units, residents, open maintenance and occupancy, under a totals bar for units, occupancy, open maintenance, compliance and delinquency](docs/images/pm.png)
+
+<table>
+<tr>
+<td width="68%"><img src="docs/images/marketing.png" alt="Public marketing page headlined 'The records your association owes owners, on the record', beside a sample compliance panel with late, due and published records and their statute citations"></td>
+<td><img src="docs/images/mobile.png" alt="Resident mobile view for Sunset Condos showing a summary of announcements, open requests and the next meeting date, with links to documents, announcements, meetings, maintenance and payments"></td>
+</tr>
+<tr>
+<td><b>Public site</b> — what the live link shows</td>
+<td><b>Resident view</b> (<code>/mobile</code>)</td>
+</tr>
+</table>
+
 ## Overview
 
 PropertyPro helps condo associations, HOAs, and apartments meet Florida statutory requirements (§718 / §720) for document posting, meeting notices, and owner portal access.
