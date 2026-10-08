@@ -1,6 +1,37 @@
 # PropertyPro Florida
 
-Compliance and community management platform for Florida condominium associations.
+**A multi-tenant web platform that helps Florida condo associations, HOAs and
+apartment communities keep the records state law requires them to publish —
+with deadlines, statute citations and an audit trail.**
+
+**Live site:** <https://property-pro-web.vercel.app> — the public marketing
+site, including an interactive compliance panel with demo data. The portal
+itself needs an account.
+
+**Status:** pre-launch hardening. E-voting is gated on attorney review. There is
+no native mobile app (residents use web routes under `/mobile`). PropertyPro
+does not provide legal, engineering or financial advice.
+
+**Stack:** Next.js 15 (App Router) · React 19 · TypeScript · Supabase (Postgres
++ row-level security, Auth, Storage) · Drizzle ORM · Tailwind CSS + shadcn/ui ·
+TanStack Query · Stripe · Resend · Vercel · Turborepo + pnpm
+
+- **Statutory records tracking** for condos (§718.111(12)(g)) and HOAs
+  (§720.303): a required-records queue with deadlines, statute citations,
+  owner-portal visibility and a readiness score.
+- **One product, three audiences** — a community portal for boards and
+  managers, a mobile-web view for residents, and a dashboard for property
+  managers who run several communities.
+- **Day-to-day operations** around the records: documents, meetings,
+  announcements, maintenance requests and Stripe billing.
+- **Tenant isolation enforced in four layers**, not by convention: a scoped
+  database client, a CI import guard, `FORCE ROW LEVEL SECURITY`, and a write
+  trigger that rejects unscoped mutations.
+- **An operator console** (`apps/admin`) for support tickets, service health,
+  billing and onboarding.
+
+Guardrails, measured 2026-10-08: 34 repository-specific lint guards
+(`scripts/run-lint-guards.mjs`) and 1,461 test files.
 
 ## Overview
 
