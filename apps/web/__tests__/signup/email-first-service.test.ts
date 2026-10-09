@@ -375,9 +375,9 @@ describe('submitSignupDetails', () => {
   });
 
   it('never adopts the id of a live row someone else created for this address', async () => {
-    // The form flow lets anyone create a pending_verification row for any
-    // address, with an id of their choosing. Adopting it would hand them the
-    // bearer id of the victim's paid signup (provisioning-status login token).
+    // The retired form flow let anyone create a pending_verification row for
+    // any address, with an id of their choosing. Adopting it would hand them
+    // the id of the victim's signup.
     const { values } = mockDb({
       signupRequestId: 'attacker-chosen-id',
       status: 'pending_verification',
