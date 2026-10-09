@@ -33,6 +33,7 @@ const {
   linkCommunityToBillingGroupMock,
   recalculateVolumeTierMock,
   createCommunityForPmMock,
+  seedNewCommunitySiteMock,
   andMock,
   ascMock,
   eqMock,
@@ -64,6 +65,7 @@ const {
     linkCommunityToBillingGroupMock: vi.fn().mockResolvedValue(undefined),
     recalculateVolumeTierMock: vi.fn().mockResolvedValue(undefined),
     createCommunityForPmMock: vi.fn().mockResolvedValue({ communityId: 99, slug: 'oceanview' }),
+    seedNewCommunitySiteMock: vi.fn().mockResolvedValue(undefined),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     ascMock: vi.fn((col: unknown) => ({ _asc: col })),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
@@ -130,10 +132,9 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 
 vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
-  // Reached transitively: provisioning applies the starter pack, which since
-  // Phase 11b resolves the community's home page. Every export the chain touches
-  // has to be here or the module throws at load and the failure reads as this
-  // file breaking rather than a missing stub.
+  // Site tables: kept although the starter-pack chain is now mocked at
+  // `new-community-site` below, so a module that still imports one of them at
+  // load does not throw and read as this file breaking rather than a missing stub.
   sitePages: Symbol('sitePages'),
   sitePageRedirects: Symbol('sitePageRedirects'),
   siteBlocks: Symbol('siteBlocks'),
@@ -193,6 +194,13 @@ vi.mock('@/lib/billing/billing-group-service', () => ({
 
 vi.mock('@/lib/pm/create-community', () => ({
   createCommunityForPm: createCommunityForPmMock,
+}));
+
+// Mocked as a unit rather than through its callees: the starter-pack chain
+// reaches site-pages-service, whose module-scope table reads the partial
+// `@propertypro/db` factory above cannot satisfy.
+vi.mock('@/lib/services/new-community-site', () => ({
+  seedNewCommunitySite: seedNewCommunitySiteMock,
 }));
 
 // Service import must come after all vi.mock calls
@@ -497,6 +505,32 @@ describe('runProvisioning', () => {
     });
     await runProvisioning(1);
     expect(captureMessageMock).not.toHaveBeenCalled();
+  });
+
+  // A self-serve founder reached "Live — owners can find you now" with a site
+  // that had no pages: only createCommunityForPm seeded one.
+  it('seeds the starter website for the community it creates', async () => {
+    buildDb({
+      selectSequence: [[makeJob({})], [CONDO_SIGNUP], [{ userId: 'auth-uuid-001' }], [{ userId: 'auth-uuid-001' }]],
+    });
+    await runProvisioning(1);
+    expect(seedNewCommunitySiteMock).toHaveBeenCalledOnce();
+    expect(seedNewCommunitySiteMock).toHaveBeenCalledWith(10, 'condo_718');
+  });
+
+  it('seeds again on a re-run that adopts its own community, so an earlier failure is filled in', async () => {
+    buildDb({
+      insertReturning: [],
+      selectSequence: [
+        [makeJob({ communityId: 10 })],
+        [CONDO_SIGNUP],
+        [{ id: 10 }],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+    await runProvisioning(1);
+    expect(seedNewCommunitySiteMock).toHaveBeenCalledWith(10, 'condo_718');
   });
 
   it("stores a signup's unit count of 1 as unknown — the old form's pre-filled default", async () => {
