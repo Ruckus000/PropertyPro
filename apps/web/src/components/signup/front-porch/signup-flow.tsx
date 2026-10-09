@@ -680,6 +680,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
               <AlertBanner
                 status="warning"
                 variant="subtle"
+                actionPlacement="below"
                 title={errors.communityExists}
                 description="If you manage or live there, request access by searching for the association's name. Some addresses hold more than one association — a later condo phase, or a master and sub-association. If yours is one of those, you can continue."
                 action={(
@@ -872,7 +873,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
               </button>
             ) : null}
             <p className="mt-1 text-sm text-content-tertiary">
-              Owners will find your portal here. You can change it later in Settings.
+              Owners will find your portal here, so choose carefully. It can&apos;t be changed after signup.
             </p>
           </div>
         </div>
