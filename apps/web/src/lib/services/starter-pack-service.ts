@@ -1,7 +1,8 @@
 /**
  * PR #5: Apply a community-type-matched starter pack to a new community.
  *
- * Called from createCommunityForPm AFTER the community is inserted. Selects
+ * Called through `seedNewCommunitySite` (createCommunityForPm, and signup
+ * provisioning's community_created step) AFTER the community is inserted. Selects
  * the highest-version, non-archived site_starter_packs row for the
  * community_type (ties broken by id desc), then inserts one published
  * site_blocks row per entry in the pack's blocks jsonb. No-ops when every
@@ -13,7 +14,9 @@
  * AUTHZ: caller MUST have just created the community, or be provisioning a
  * demo. `createCommunityForPm` calls this immediately after inserting the
  * creator as the community's root_manager, so there is no prior membership to
- * verify; the demo seed and `applyStarterPackToDemoCommunity` (demo entry,
+ * verify. Signup provisioning calls it in `community_created`, BEFORE
+ * `user_linked` adds any membership: the authority there is the paid Checkout
+ * that created the community, under the job's claim, not a member. The demo seed and `applyStarterPackToDemoCommunity` (demo entry,
  * after the demo instance is validated) write only to demo communities. Reads platform-level catalog via unscoped client, inserts via
  * scoped client.
  */

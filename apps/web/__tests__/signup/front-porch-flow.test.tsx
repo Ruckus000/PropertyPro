@@ -168,6 +168,14 @@ describe('question steps', () => {
     // The suggestion offers a free alternative built from the city.
     expect(screen.getByRole('button', { name: /use bayview-miami\.getpropertypro\.com/i })).toBeInTheDocument();
   });
+
+  it('does not promise the web address can be changed later', () => {
+    saveDraft({ communityName: 'Bayview', communityType: 'condo_718', city: 'Miami', step: 'you' });
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
+    // No route or screen changes a community's address after signup.
+    expect(screen.getByText(/it can't be changed after signup/i)).toBeInTheDocument();
+    expect(screen.queryByText(/change it later/i)).not.toBeInTheDocument();
+  });
 });
 
 describe('trial step', () => {
@@ -279,6 +287,11 @@ describe('trial step', () => {
     expect(await screen.findByRole('heading', { name: /where is bayview towers/i })).toBeInTheDocument();
     expect(screen.getByText(/already has a PropertyPro community/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /request to join/i })).toHaveAttribute('href', '/account/join-community');
+    // Under the explanation, not in a column beside it: beside it, the two
+    // actions squeezed the message to one word per line.
+    expect(screen.getByText(/some addresses hold more than one association/i).parentElement).toContainElement(
+      screen.getByRole('link', { name: /request to join/i }),
+    );
     expect(h.createCheckoutSessionMock).not.toHaveBeenCalled();
   });
 

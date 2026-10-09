@@ -96,6 +96,13 @@ interface AlertBannerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "t
   description?: React.ReactNode;
   /** Action element (usually a button or link) */
   action?: React.ReactNode;
+  /**
+   * Where `action` sits. `inline` (default) puts it in its own column at the
+   * right edge, sized for one short button. `below` puts it under the
+   * description, for actions too wide to share the row: beside the text, two
+   * links squeezed the message to one word per line.
+   */
+  actionPlacement?: "inline" | "below";
   /** Show dismiss button */
   dismissible?: boolean;
   /** Callback when dismissed */
@@ -120,6 +127,7 @@ export function AlertBanner({
   title,
   description,
   action,
+  actionPlacement = "inline",
   dismissible = false,
   onDismiss,
   dismissButtonProps,
@@ -154,10 +162,11 @@ export function AlertBanner({
         {description && (
           <p className="text-sm opacity-85">{description}</p>
         )}
+        {action && actionPlacement === "below" && <div className="mt-2">{action}</div>}
       </div>
 
       {/* Action */}
-      {action && <div className="shrink-0">{action}</div>}
+      {action && actionPlacement === "inline" && <div className="shrink-0">{action}</div>}
 
       {/* Dismiss */}
       {dismissible && onDismiss && (

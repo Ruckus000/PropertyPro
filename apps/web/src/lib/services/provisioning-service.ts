@@ -44,6 +44,7 @@ import {
   recalculateVolumeTier,
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
+import { seedNewCommunitySite } from '@/lib/services/new-community-site';
 import { ConflictError } from '@/lib/api/errors';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
@@ -310,6 +311,14 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
     .where(eq(provisioningJobs.id, ctx.jobId));
 
   ctx.communityId = communityId;
+
+  // The starter website, as `createCommunityForPm` gives every PM-created
+  // community. Runs on an adopting retry too, which is safe (both halves skip a
+  // community already seeded) and fills a site an earlier run's failure left
+  // empty. Riding on this step rather than a new one: `provisioning_jobs.status`
+  // is pinned by a CHECK constraint. Never throws, so a paid signup is never
+  // failed over its website.
+  await seedNewCommunitySite(communityId, ctx.signup.communityType);
 }
 
 async function stepUserLinked(ctx: JobContext): Promise<void> {
