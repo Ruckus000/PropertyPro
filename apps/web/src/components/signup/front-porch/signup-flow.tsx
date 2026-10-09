@@ -618,6 +618,12 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
                   setErrors((e) => ({ ...e, address: undefined }));
                   forgetAddressVerdict();
                 }}
+                // A typed address is not accepted here without a pick, so the
+                // empty-results hint offers the manual form instead of "keep typing".
+                onEnterManually={() => {
+                  setErrors((e) => ({ ...e, address: undefined }));
+                  setDraft((d) => ({ ...d, manualAddress: true, addressKey: null }));
+                }}
               />
             )}
             {!draft.manualAddress && draft.addressKey ? (
