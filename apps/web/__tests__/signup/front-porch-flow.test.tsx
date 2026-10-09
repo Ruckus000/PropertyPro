@@ -23,10 +23,11 @@ vi.mock('@stripe/react-stripe-js', () => ({
 // The address index is a static asset fetch; the flow is tested in manual mode.
 vi.mock('@/lib/address-autocomplete', () => ({
   loadAddressAutocompleteSuggestions: vi.fn().mockResolvedValue([]),
-  parseAddressAutocompleteQuery: () => null,
+  parseAddressAutocompleteQuery: vi.fn(() => null),
 }));
 
 import { SignupFlow } from '../../src/components/signup/front-porch/signup-flow';
+import { parseAddressAutocompleteQuery } from '../../src/lib/address-autocomplete';
 import { sha256Hex } from '../../src/lib/auth/signup-binding';
 
 const fetchMock = vi.fn();
@@ -54,6 +55,7 @@ beforeEach(() => {
   document.cookie = 'pp_signup_binding=; Max-Age=0; Path=/';
   fetchMock.mockReset();
   h.createCheckoutSessionMock.mockReset();
+  vi.mocked(parseAddressAutocompleteQuery).mockReturnValue(null);
   vi.stubGlobal('fetch', fetchMock);
   window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia;
 });
@@ -147,6 +149,21 @@ describe('question steps', () => {
     render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
     clickNext();
     expect(screen.getByText(/enter a florida zip code/i)).toBeInTheDocument();
+  });
+
+  it('turns an empty address search into the manual form, in one click', async () => {
+    // Production's address index is empty, so every founder reaches this.
+    vi.mocked(parseAddressAutocompleteQuery).mockReturnValue(
+      { houseNumber: '2400', streetTokens: ['ocean', 'drive'] } as unknown as ReturnType<typeof parseAddressAutocompleteQuery>,
+    );
+    saveDraft({ communityName: 'Bayview', communityType: 'condo_718', step: 'place' });
+    render(<SignupFlow initialStep="type" sessionEmail="d@x.org" linkNotice={null} initialType={null} initialPlan={null} />);
+    const street = screen.getByRole('combobox');
+    fireEvent.focus(street);
+    fireEvent.change(street, { target: { value: '2400 Ocean Drive' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Enter it manually' }, { timeout: 2000 }));
+    expect(screen.getByRole('textbox', { name: /^city$/i })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /street address/i })).toHaveValue('2400 Ocean Drive');
   });
 
   it('shows the statutory verdict at the threshold', () => {

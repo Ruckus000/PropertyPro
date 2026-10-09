@@ -67,7 +67,7 @@ function setupFetchSuccess() {
   });
 }
 
-function Harness() {
+function Harness({ onEnterManually }: { onEnterManually?: () => void } = {}) {
   const [addressLine1, setAddressLine1] = React.useState('');
   const [city, setCity] = React.useState('');
   const [state, setState] = React.useState('');
@@ -90,6 +90,7 @@ function Harness() {
           setCounty(suggestion.county);
         }}
         onSelectedSuggestionChange={setSelectedSuggestionKey}
+        onEnterManually={onEnterManually}
       />
       <output data-testid="city">{city}</output>
       <output data-testid="state">{state}</output>
@@ -173,5 +174,48 @@ describe('SignupAddressAutocomplete', () => {
 
     expect((input as HTMLInputElement).value).toBe('123 main');
     expect(screen.getByText(/Address suggestions are unavailable right now/)).not.toBeNull();
+  });
+
+  // The new signup refuses a typed address that was not picked from the list,
+  // so "keep typing" sent founders straight into a validation error.
+  it('offers manual entry, not "keep typing", when the caller handles it and nothing matches', async () => {
+    const onEnterManually = vi.fn();
+    render(<Harness onEnterManually={onEnterManually} />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '2400 ocean drive' } });
+    await flushAutocomplete();
+
+    expect(screen.getByText(/No address suggestions found/)).not.toBeNull();
+    expect(screen.queryByText(/keep typing/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Enter it manually' }));
+    expect(onEnterManually).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/No address suggestions found/)).toBeNull();
+  });
+
+  it('offers manual entry when the index cannot be fetched, too', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network failure'));
+    render(<Harness onEnterManually={vi.fn()} />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '123 main' } });
+    await flushAutocomplete();
+
+    expect(screen.getByText(/Address suggestions are unavailable right now/)).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Enter it manually' })).not.toBeNull();
+  });
+
+  it('keeps "keep typing" for a caller that accepts a typed address', async () => {
+    render(<Harness />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '2400 ocean drive' } });
+    await flushAutocomplete();
+
+    expect(screen.getByText(/No address suggestions found\. You can keep typing manually\./)).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Enter it manually' })).toBeNull();
   });
 });
