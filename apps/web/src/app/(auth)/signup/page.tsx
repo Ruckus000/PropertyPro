@@ -1,8 +1,6 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { CommunityType } from '@propertypro/shared';
 import { createServerClient } from '@propertypro/db/supabase/server';
-import { SignupForm } from '@/components/signup/signup-form';
 import { SignupFlow } from '@/components/signup/front-porch/signup-flow';
 import { PLAN_IDS, type PlanId } from '@propertypro/shared';
 
@@ -31,7 +29,6 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const params = await searchParams;
   const requestedType = pickFirst(params.communityType) ?? pickFirst(params.type);
   const requestedPlan = pickFirst(params.plan);
-  const signupRequestId = pickFirst(params.signupRequestId);
   const verified = pickFirst(params.verified) === '1';
 
   // PM signup has no self-serve checkout. This used to be a dead-end page whose
@@ -46,57 +43,24 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     redirect('/contact?from=pm-signup');
   }
 
-  // ponytail: a form-flow verification link (it carries a signupRequestId) still
-  // finishes on the form it started from. Those links live 24h
-  // (SIGNUP_EXPIRY_MS); this branch and SignupForm can go once none are
-  // outstanding.
-  if (!signupRequestId) {
-    // The emailed email-first link signs the user in (/auth/verify-signup)
-    // and lands here; a confirmed session goes straight to the questions.
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const confirmed = Boolean(user?.email && user.email_confirmed_at);
-    const plan = PLAN_IDS.find((id) => id === requestedPlan) ?? null;
-
-    return (
-      <SignupFlow
-        initialStep={confirmed ? 'type' : 'email'}
-        sessionEmail={confirmed ? user?.email ?? null : null}
-        linkNotice={
-          confirmed ? null : pickFirst(params.link) === 'other-device' ? 'other-device' : verified ? 'expired' : null
-        }
-        initialType={requestedType ? parseCommunityType(requestedType) : null}
-        initialPlan={plan as PlanId | null}
-      />
-    );
-  }
+  // The emailed email-first link signs the user in (/auth/verify-signup)
+  // and lands here; a confirmed session goes straight to the questions.
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const confirmed = Boolean(user?.email && user.email_confirmed_at);
+  const plan = PLAN_IDS.find((id) => id === requestedPlan) ?? null;
 
   return (
-    <main id="main-content" className="min-h-screen bg-surface-page px-4 py-12">
-      <div className="mx-auto w-full max-w-3xl space-y-5">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold text-content">Start Your PropertyPro Signup</h1>
-          <p className="mt-2 text-sm text-content-secondary">
-            Capture your community details now. Billing checkout opens after email verification.
-          </p>
-        </div>
-
-        <SignupForm
-          initialCommunityType={parseCommunityType(requestedType)}
-          initialPlanId={requestedPlan}
-          initialSignupRequestId={signupRequestId}
-          verificationReturn={verified}
-        />
-
-        <p className="text-center text-sm text-content-secondary">
-          Already have an account?{' '}
-          <Link href="/auth/login" className="text-content-link hover:text-interactive">
-            Sign in
-          </Link>
-        </p>
-      </div>
-    </main>
+    <SignupFlow
+      initialStep={confirmed ? 'type' : 'email'}
+      sessionEmail={confirmed ? user?.email ?? null : null}
+      linkNotice={
+        confirmed ? null : pickFirst(params.link) === 'other-device' ? 'other-device' : verified ? 'expired' : null
+      }
+      initialType={requestedType ? parseCommunityType(requestedType) : null}
+      initialPlan={plan as PlanId | null}
+    />
   );
 }

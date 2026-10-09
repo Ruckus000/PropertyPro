@@ -82,10 +82,6 @@ export function normalizeSignupSubdomain(rawValue: string): string {
     .slice(0, 63);
 }
 
-export function suggestSubdomainFromCommunityName(communityName: string): string {
-  return normalizeSignupSubdomain(communityName);
-}
-
 interface RawSignupAddressFields {
   address?: string;
   addressLine1?: string;

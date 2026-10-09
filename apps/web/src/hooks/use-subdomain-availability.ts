@@ -17,8 +17,7 @@ export const UNKNOWN_MESSAGE =
 /**
  * Debounced, abortable subdomain-availability lookup.
  *
- * Behavior preserved byte-for-byte from the former inline effect in
- * `subdomain-checker.tsx`:
+ * Behavior (lifted from the now-deleted legacy `subdomain-checker.tsx`):
  * - empty normalized value → `null` (no fetch)
  * - normalized length < 3 → synthetic `invalid` state (no fetch)
  * - otherwise → immediate synthetic `checking` state, then a 350ms debounced

@@ -51,6 +51,8 @@ export interface CommunityCardModel {
 
 const ROW_ICONS = { addr: MapPin, units: Building, url: Globe, plan: CreditCard } as const;
 const SKELETON_WIDTHS = { addr: 'w-3/5', units: 'w-1/2', url: 'w-2/3', plan: 'w-1/2' } as const;
+/** Screen-reader terms for the card's rows; sighted users get the icons. */
+const ROW_LABELS = { addr: 'Address', units: 'Size', url: 'Web address', plan: 'Plan' } as const;
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -113,21 +115,31 @@ export function CommunityCard({ card }: { card: CommunityCardModel }) {
         {card.rows.map((row) => {
           const Icon = ROW_ICONS[row.key];
           return (
+            // <dt>/<dd> pairs: a <dl> may hold only those (or <div>s of them),
+            // or assistive tech reads it as a broken list.
             <div key={row.key} className="flex min-h-6 items-center gap-3 text-content-tertiary">
-              <Icon className="h-4 w-4 flex-none" aria-hidden="true" />
-              {row.text ? (
-                <span
-                  data-land={row.key}
-                  className={cn(
-                    'fp-enter min-w-0 truncate text-sm text-content',
-                    row.mono && 'font-mono',
-                  )}
-                >
-                  {row.text}
-                </span>
-              ) : (
-                <span className={cn('block h-2.5 rounded-full bg-surface-muted', SKELETON_WIDTHS[row.key])} />
-              )}
+              <dt className="flex-none">
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">{ROW_LABELS[row.key]}</span>
+              </dt>
+              <dd className="flex min-w-0 flex-1 items-center">
+                {row.text ? (
+                  <span
+                    data-land={row.key}
+                    className={cn(
+                      'fp-enter min-w-0 truncate text-sm text-content',
+                      row.mono && 'font-mono',
+                    )}
+                  >
+                    {row.text}
+                  </span>
+                ) : (
+                  <>
+                    <span aria-hidden="true" className={cn('block h-2.5 rounded-full bg-surface-muted', SKELETON_WIDTHS[row.key])} />
+                    <span className="sr-only">Not entered yet</span>
+                  </>
+                )}
+              </dd>
             </div>
           );
         })}
