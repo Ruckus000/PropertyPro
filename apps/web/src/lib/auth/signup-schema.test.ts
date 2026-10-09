@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { signupSchema } from './signup-schema';
+import { signupDetailsSchema } from './signup-schema';
 
 const baseSignupPayload = {
   primaryContactName: 'Alex Morgan',
-  email: 'alex@example.com',
-  password: 'TestPassw0rd!',
   communityName: 'Sunset Condos',
   county: 'Palm Beach',
   unitCount: 24,
@@ -14,9 +12,9 @@ const baseSignupPayload = {
   termsAccepted: true,
 };
 
-describe('signupSchema address normalization', () => {
+describe('signupDetailsSchema address normalization', () => {
   it('accepts legacy address payloads and normalizes them into addressLine1', () => {
-    const result = signupSchema.parse({
+    const result = signupDetailsSchema.parse({
       ...baseSignupPayload,
       address: '123 Legacy Lane',
     });
@@ -29,7 +27,7 @@ describe('signupSchema address normalization', () => {
   });
 
   it('accepts structured address payloads and dual-writes the legacy address field', () => {
-    const result = signupSchema.parse({
+    const result = signupDetailsSchema.parse({
       ...baseSignupPayload,
       addressLine1: '123 Main Street',
       city: 'Boca Raton',

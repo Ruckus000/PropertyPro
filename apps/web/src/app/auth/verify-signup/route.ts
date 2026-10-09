@@ -18,19 +18,14 @@
  * showing a user a Supabase URL at all: `demo-session.ts:73`,
  * `dev/agent-login/route.ts:150` and `provisioning-service.ts`.
  *
- * THE SESSION IS KEPT FOR EMAIL-FIRST LINKS ONLY — those without a
- * `signupRequestId`. `verifyOtp` with a `token_hash` returns a session directly
- * (no PKCE verifier is involved), and the cookie adapter below writes it onto
- * the redirect, the same shape as `lib/services/demo-session.ts`. Email-first
- * signup (`lib/auth/signup-email-first.ts`) depends on it: the user answers the
- * community questions signed in, and `POST /auth/signup/details` is
- * session-authenticated.
+ * THE SESSION IS KEPT. `verifyOtp` with a `token_hash` returns a session
+ * directly (no PKCE verifier is involved), and the cookie adapter below writes
+ * it onto the redirect, the same shape as `lib/services/demo-session.ts`.
+ * Email-first signup (`lib/auth/signup-email-first.ts`) depends on it: the user
+ * answers the community questions signed in, and `POST /auth/signup/details`
+ * is session-authenticated.
  *
- * Form-flow links (they carry a `signupRequestId`) still DISCARD it, as before:
- * that flow set a password up front and confirms with the id, so a session
- * would only widen what an emailed link can do there.
- *
- * Email-first links are BOUND TO THE BROWSER THAT REQUESTED THEM (`b` is the
+ * Every link is BOUND TO THE BROWSER THAT REQUESTED IT (`b` is the
  * SHA-256 of that browser's `pp_signup_binding` cookie; see
  * `lib/auth/signup-binding.ts`). Without it, a link an attacker requested for
  * their own address would sign in whoever they lured into opening it (login
@@ -44,9 +39,9 @@
  * the questions start; a spent or expired one left none and the page shows its
  * "link failed" notice. So this route adds no error UI of its own.
  *
- * A link carrying `signupRequestId` comes from the retired form flow (its
- * links lived 24h). The page no longer has a form branch, so such a link now
- * lands in the email-first flow like any other.
+ * A link carrying `signupRequestId` came from the retired form flow, which
+ * skipped the binding and discarded the session. It is now treated like any
+ * other link: without a matching `b` it is refused before `verifyOtp`.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
@@ -59,8 +54,8 @@ import {
 } from '@/lib/auth/signup-binding';
 
 /**
- * `signup` for a first-time link, `magiclink` for the already-registered
- * fallback in `createOrLinkAuthAccount` and for every resend. The token is bound
+ * Whatever GoTrue reported when the link was minted (`generateStartLink`):
+ * `signup` for a new address, `magiclink` for an existing one. The token is bound
  * to its type by Supabase, so a tampered value simply fails to verify — this
  * allowlist exists to keep an arbitrary string out of the SDK call, not as a
  * security boundary.
@@ -73,31 +68,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const params = request.nextUrl.searchParams;
   const tokenHash = params.get('token_hash');
   const type = params.get('type') ?? 'signup';
-  const signupRequestId = params.get('signupRequestId');
 
   // Redirect to the host the user actually arrived on, so this does not add a
   // hop of its own. (The apex -> www redirect still applies to the emailed link
   // itself; settling that is a separate change — see DEPLOYMENT.md §5.1.)
   const destination = new URL('/signup', request.nextUrl.origin);
-  if (signupRequestId) {
-    destination.searchParams.set('signupRequestId', signupRequestId);
-  }
 
-  // Email-first only: proceed only in the browser that asked for the link.
-  if (!signupRequestId) {
-    const expected = params.get('b') ?? '';
-    const nonce = request.cookies.get(SIGNUP_BINDING_COOKIE)?.value;
-    const bound =
-      SIGNUP_BINDING_PATTERN.test(expected)
-      && Boolean(nonce)
-      && bindingMatches(expected, await sha256Hex(nonce as string));
-    if (!bound) {
-      const elsewhere = new URL('/signup', request.nextUrl.origin);
-      elsewhere.searchParams.set('link', 'other-device');
-      const refused = NextResponse.redirect(elsewhere);
-      refused.headers.set('Cache-Control', 'no-store');
-      return refused;
-    }
+  // Proceed only in the browser that asked for the link.
+  const expected = params.get('b') ?? '';
+  const nonce = request.cookies.get(SIGNUP_BINDING_COOKIE)?.value;
+  const bound =
+    SIGNUP_BINDING_PATTERN.test(expected)
+    && Boolean(nonce)
+    && bindingMatches(expected, await sha256Hex(nonce as string));
+  if (!bound) {
+    const elsewhere = new URL('/signup', request.nextUrl.origin);
+    elsewhere.searchParams.set('link', 'other-device');
+    const refused = NextResponse.redirect(elsewhere);
+    refused.headers.set('Cache-Control', 'no-store');
+    return refused;
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -111,10 +100,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       cookieOptions: getCookieOptions(),
       cookies: {
         getAll: () => request.cookies.getAll(),
+        // Replayed onto the redirect below: see "THE SESSION IS KEPT".
         setAll: (cookiesToSet) => {
-          // Replayed onto the redirect below for email-first links only: see
-          // "THE SESSION IS KEPT FOR EMAIL-FIRST LINKS ONLY".
-          if (!signupRequestId) sessionCookies.push(...cookiesToSet);
+          sessionCookies.push(...cookiesToSet);
         },
       },
     });
@@ -126,9 +114,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     verified = !error;
     if (error) {
-      // Not fatal, and not surfaced here: `confirm-verification` is the
-      // authority on whether the email is confirmed and owns the user-facing
-      // message. Logged without the token.
+      // Not fatal, and not surfaced here: with no session, `/signup` shows its
+      // "link failed" notice. Logged without the token.
       console.error('[verify-signup] verifyOtp failed:', error.message);
     }
   }
@@ -139,7 +126,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   for (const { name, value, options } of sessionCookies) {
     response.cookies.set(name, value, options);
   }
-  if (!signupRequestId && verified) {
+  if (verified) {
     // Spent: this browser cannot replay the link.
     response.cookies.set(SIGNUP_BINDING_COOKIE, '', { path: '/', maxAge: 0 });
   }

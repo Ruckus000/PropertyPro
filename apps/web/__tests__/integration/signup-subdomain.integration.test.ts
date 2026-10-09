@@ -1,12 +1,15 @@
 /**
  * Integration test: subdomain availability check advisory behavior.
  *
- * Exercises the GET preflight + POST authoritative path against a real DB:
+ * Exercises the GET preflight + the authoritative re-check against a real DB:
  *  - GET returns 'available' for an unseeded slug.
  *  - GET returns 'taken' for an existing community slug (log branch: taken.community).
- *  - POST with a taken slug returns 400 with details.field='candidateSlug'
- *    BEFORE any Supabase auth call — the authoritative re-check still blocks
- *    the write path even though the preflight is now advisory.
+ *  - Saving signup answers (`submitSignupDetails`, behind
+ *    POST /api/v1/auth/signup/details) with a taken slug is refused with
+ *    details.field='candidateSlug' and writes no row — the authoritative
+ *    re-check still blocks the write path even though the preflight is advisory.
+ *    The service is called directly: the route reads a real Supabase session,
+ *    which this harness has no Auth server to mint.
  *
  * No mocks — per repository no-mock-guard, integration tests must hit the
  * real DB via createUnscopedClient.
@@ -14,12 +17,12 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from '@propertypro/db/filters';
 import {
   type TestKitState,
   apiUrl,
   getDescribeDb,
   initTestKit,
-  jsonRequest,
   parseJson,
   requireDatabaseUrlInCI,
   teardownTestKit,
@@ -31,16 +34,17 @@ requireDatabaseUrlInCI('signup subdomain advisory integration tests');
 const describeDb = getDescribeDb();
 
 type SignupRouteModule = typeof import('../../src/app/api/v1/auth/signup/route');
+type EmailFirstModule = typeof import('../../src/lib/auth/signup-email-first');
 
 let state: TestKitState | null = null;
-let routes: { signup: SignupRouteModule } | null = null;
+let routes: { signup: SignupRouteModule; emailFirst: EmailFirstModule } | null = null;
 
 function requireState(): TestKitState {
   if (!state) throw new Error('Test state not initialized');
   return state;
 }
 
-function requireRoutes(): { signup: SignupRouteModule } {
+function requireRoutes(): { signup: SignupRouteModule; emailFirst: EmailFirstModule } {
   if (!routes) throw new Error('Route modules not loaded');
   return routes;
 }
@@ -69,6 +73,7 @@ describeDb('signup subdomain availability — advisory behavior', () => {
     state = await initTestKit();
     routes = {
       signup: await import('../../src/app/api/v1/auth/signup/route'),
+      emailFirst: await import('../../src/lib/auth/signup-email-first'),
     };
   });
 
@@ -114,37 +119,41 @@ describeDb('signup subdomain availability — advisory behavior', () => {
     expect(body.data.available).toBe(false);
   });
 
-  it('POST with a taken slug is rejected by the authoritative re-check (400, field=candidateSlug)', async () => {
+  it('saving signup answers with a taken slug is refused by the authoritative re-check (field=candidateSlug)', async () => {
     const takenSlug = `advisory-posttaken-${randomUUID().slice(0, 8)}`;
     await seedCommunityWithSlug(takenSlug);
+    const email = `advisory+${randomUUID().slice(0, 8)}@example.com`;
+    // A fresh house number: the duplicate-address check runs first and must pass.
+    const houseNumber = 1000 + Math.floor(Math.random() * 89_000);
 
-    const req = jsonRequest(apiUrl('/api/v1/auth/signup'), 'POST', {
-      signupRequestId: randomUUID(),
-      primaryContactName: 'Advisory Tester',
-      email: `advisory+${randomUUID().slice(0, 8)}@example.com`,
-      password: 'Secure!123',
-      communityName: 'Advisory Test Community',
-      address: '100 Test Ln, Miami, FL 33101',
-      county: 'Miami-Dade',
-      unitCount: 10,
-      communityType: 'condo_718',
-      planKey: 'essentials',
-      candidateSlug: takenSlug,
-      termsAccepted: true,
+    const attempt = requireRoutes().emailFirst.submitSignupDetails(
+      { id: randomUUID(), email, email_confirmed_at: new Date().toISOString() },
+      {
+        primaryContactName: 'Advisory Tester',
+        communityName: 'Advisory Test Community',
+        addressLine1: `${houseNumber} Test Ln`,
+        city: 'Miami',
+        state: 'FL',
+        zipCode: '33101',
+        county: 'Miami-Dade',
+        unitCount: 10,
+        communityType: 'condo_718',
+        planKey: 'essentials',
+        candidateSlug: takenSlug,
+        termsAccepted: true,
+      },
+    );
+
+    await expect(attempt).rejects.toMatchObject({
+      statusCode: 400,
+      details: { field: 'candidateSlug', reason: 'taken' },
     });
 
-    const res = await requireRoutes().signup.POST(req);
-    expect(res.status).toBe(400);
-
-    const body = await parseJson<{
-      error: {
-        code: string;
-        message: string;
-        details?: { field?: string; reason?: string };
-      };
-    }>(res);
-    expect(body.error.code).toBe('VALIDATION_ERROR');
-    expect(body.error.details?.field).toBe('candidateSlug');
-    expect(body.error.details?.reason).toBe('taken');
+    const s = requireState();
+    const rows = await s.db
+      .select({ id: s.dbModule.pendingSignups.id })
+      .from(s.dbModule.pendingSignups)
+      .where(eq(s.dbModule.pendingSignups.emailNormalized, email));
+    expect(rows).toHaveLength(0);
   });
 });

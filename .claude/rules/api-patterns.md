@@ -393,7 +393,7 @@ call `routeModule.GET(req)` directly.
 `apps/web/src/middleware.ts` handles: Supabase session refresh, tenant resolution, auth redirects, email verification checks, request tracing (`X-Request-ID`), rate limiting, and header sanitization.
 
 - Protected paths: `/dashboard`, `/settings`, `/documents`, `/maintenance`, `/api/v1`, etc.
-- Token-authenticated routes (no session): `/api/v1/invitations`, `/api/v1/auth/signup`, `/api/v1/webhooks/stripe`, cron endpoints
+- Token-authenticated routes (no session): `/api/v1/invitations`, `/api/v1/auth/signup` (GET availability) and `/api/v1/auth/signup/start`, `/api/v1/webhooks/stripe`, cron endpoints
 
 ## Route Catalog
 
@@ -437,7 +437,7 @@ POST     /api/v1/internal/account-lifecycle  (cron: daily lifecycle processing)
 #              /notification-preferences, /help, /faqs, /search
 # Residents & access — /api/v1/access-requests, /import-residents, /invitations,
 #                       /transparency, /me, /user, /users
-# Auth & onboarding — /api/v1/auth/signup, /onboarding/condo, /onboarding/apartment
+# Auth & onboarding — /api/v1/auth/signup{,/start,/details}, /onboarding/condo, /onboarding/apartment
 # Webhooks — /api/v1/webhooks/stripe, /webhooks/twilio
 ```
 

@@ -3,7 +3,6 @@ import {
   PLAN_IDS,
   PLANS_BY_COMMUNITY_TYPE,
   PLAN_FEATURES,
-  buildPasswordZodSchema,
   type PlanId,
 } from '@propertypro/shared';
 import { z } from 'zod';
@@ -140,7 +139,6 @@ export const signupSubdomainSchema = z.object({
 
 const signupFieldsSchema = z
   .object({
-    signupRequestId: z.string().uuid().optional(),
     primaryContactName: z
       .string()
       .trim()
@@ -151,7 +149,6 @@ const signupFieldsSchema = z
       .trim()
       .min(1, 'Email is required')
       .email('Please enter a valid email address'),
-    password: buildPasswordZodSchema(),
     communityName: z
       .string()
       .trim()
@@ -307,12 +304,6 @@ function withNormalizedAddress<T extends SignupRefinable>(value: T) {
   };
 }
 
-export const signupSchema = signupFieldsSchema
-  .superRefine(refineSignupAddressAndPlan)
-  .transform(withNormalizedAddress);
-
-export type SignupInput = z.infer<typeof signupSchema>;
-
 /**
  * Email-first signup, step 1: the address only. Everything else is asked after
  * the emailed link has signed the user in (see `signup-email-first.ts`).
@@ -329,7 +320,7 @@ export const signupStartSchema = z.object({
  * no `signupRequestId` (the session, not a bearer id, proves ownership of the row).
  */
 export const signupDetailsSchema = signupFieldsSchema
-  .omit({ email: true, password: true, signupRequestId: true })
+  .omit({ email: true })
   .extend({
     /**
      * The founder says theirs is a separate association at an address that

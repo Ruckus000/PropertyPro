@@ -3,8 +3,8 @@
 /**
  * Checkout server action — P2-34
  *
- * Called from the checkout page client component to obtain the clientSecret
- * needed to mount Stripe EmbeddedCheckout.
+ * Called from the trial step on `/signup` (`trial-step.tsx`) to obtain the
+ * clientSecret needed to mount Stripe EmbeddedCheckout.
  *
  * Accepts email_verified or checkout_started status to handle page refreshes
  * gracefully (returns the existing session rather than creating a duplicate).
@@ -68,15 +68,13 @@ export async function createCheckoutSession(
     return { ok: false, error: message };
   }
 
-  // The last gate before money moves, and the only one the form flow passes
-  // (its submit is unauthenticated, so it is not asked there). Re-checked on a
-  // refresh too: another signup for the address may have paid in the meantime,
-  // in which case the session this row already opened must stop being payable.
+  // The last gate before money moves. Re-checked on a refresh too: another
+  // signup for the address may have paid in the meantime, in which case the
+  // session this row already opened must stop being payable.
   //
   // Not metered, unlike the details step: this checks the row's own address,
-  // and changing that costs a fresh verification email (form flow) or a
-  // metered details save — so a refresh or plan change can never lock a
-  // founder out of the checkout they already opened.
+  // and changing that costs a metered details save — so a refresh or plan
+  // change can never lock a founder out of the checkout they already opened.
   const addressTaken = await hasConflictingCommunity({
     addressLine1: signup.addressLine1,
     zipCode: signup.zipCode,

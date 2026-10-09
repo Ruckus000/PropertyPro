@@ -15,15 +15,19 @@ each one tells you something about how the flow fails.
 ## 1. The flow
 
 ```
-POST /api/v1/auth/signup
-      │  creates pending_signups (status=pending_verification)
-      │  creates the Supabase auth user (admin generateLink)
+/signup  (email step)  →  POST /api/v1/auth/signup/start  { email, binding }
+      │  one admin generateLink (magiclink; GoTrue makes it a signup for a new
+      │  address) and a first-party link emailed to /auth/verify-signup?…&b=
+      │  no pending_signups row yet
       ▼
-email confirmed  →  POST /api/v1/auth/confirm-verification
-      │  status=email_verified
+/auth/verify-signup  →  verifyOtp, binding checked, session KEPT
+      │  redirects to /signup?verified=1, signed in
       ▼
-/signup/checkout?signupRequestId=…
-      │  server action createCheckoutSession()
+community questions, then the trial step  →  POST /api/v1/auth/signup/details
+      │  pending_signups written straight to status=email_verified,
+      │  payload.flow='email_first', authUserId = the session user
+      ▼
+"Start free trial"  →  server action createCheckoutSession()  (inline on /signup)
       │  resolveStripePrice(plan, communityType, interval) reads stripe_prices
       │  status=checkout_started, payload.stripeCheckoutSessionId stored
       ▼
@@ -40,10 +44,14 @@ lastSuccessfulStatus:
    → preferences_set → email_sent → completed
       ▼
 /signup/checkout/return  → ProvisioningProgress polls
-/api/v1/auth/provisioning-status, auto-logs-in, redirects
+/api/v1/auth/provisioning-status, signs in, shows "is live" → "Go to your dashboard"
       ▼
 community: subscription_status=trialing, subscription_plan=<purchased plan>
 ```
+
+The password form flow (`POST /api/v1/auth/signup`, `confirm-verification`,
+`/signup/checkout?signupRequestId=…`) was retired on 2026-10-09; the old
+checkout URL now shows the "restart checkout" screen.
 
 The founding user gets `root_manager` (creator-is-root, ADR-006 §3.5(a)). The
 trial is `SIGNUP_TRIAL_DAYS` (30) and the first invoice is **$0**.
@@ -205,7 +213,7 @@ E2E_STRIPE=1 pnpm --filter @propertypro/web exec playwright test \
 
 If another checkout already runs a Supabase stack, start your own on shifted
 ports rather than sharing one: a stack torn down mid-run by another session
-surfaces as `subdomain.check.db_failure` and a 400 from `/api/v1/auth/signup`,
+surfaces as `subdomain.check.db_failure` and a 400 from `/api/v1/auth/signup/details`,
 which looks like a validation bug rather than a missing database.
 
 If :3000 is taken by another worktree, set `PLAYWRIGHT_WEB_PORT` (and forward
@@ -213,7 +221,7 @@ webhooks to that port). `reuseExistingServer` is always on, so without this
 Playwright silently attaches to the other checkout's server and tests another
 branch's code.
 
-Both specs skip — not fail — when the env is absent, so the default suite stays
+All three specs skip — not fail — when the env is absent, so the default suite stays
 green.
 
 ### In CI

@@ -44,8 +44,6 @@ import {
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
 import { seedNewCommunitySite } from '@/lib/services/new-community-site';
-import { ConflictError } from '@/lib/api/errors';
-import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import {
   getComplianceTemplate,
@@ -1480,79 +1478,6 @@ export async function issueSingleUseLoginToken(
   return { status: 'issued', token };
 }
 
-// ---------------------------------------------------------------------------
-// Email verification confirmation helpers (used by /api/v1/auth/confirm-verification)
-// ---------------------------------------------------------------------------
-
-export interface PendingSignupForVerification {
-  id: bigint;
-  signupRequestId: string;
-  authUserId: string | null;
-  status: string;
-  expiresAt: Date | null;
-}
-
-/**
- * Fetch the projection needed by the email-verification confirmation flow.
- * Returns `null` when the signup request id doesn't match a row.
- *
- * AUTHZ: pre-tenant pre-auth public endpoint — secured by the unguessable
- * `signupRequestId`. Caller validates payload shape before invoking.
- */
-export async function getPendingSignupForVerification(
-  signupRequestId: string,
-): Promise<PendingSignupForVerification | null> {
-  const db = createUnscopedClient();
-  const [row] = await db
-    .select({
-      id: pendingSignups.id,
-      signupRequestId: pendingSignups.signupRequestId,
-      authUserId: pendingSignups.authUserId,
-      status: pendingSignups.status,
-      expiresAt: pendingSignups.expiresAt,
-    })
-    .from(pendingSignups)
-    .where(eq(pendingSignups.signupRequestId, signupRequestId))
-    .limit(1);
-  return row ?? null;
-}
-
-export type SupabaseEmailVerificationResult =
-  | { ok: true; emailConfirmedAt: string | null }
-  | { ok: false; error: string };
-
-/**
- * Look up the Supabase auth user by id and return whether their email is
- * confirmed. Wraps the auth-admin call so the route doesn't need to import
- * `@propertypro/db/supabase/admin` directly.
- */
-export async function getSupabaseEmailVerificationStatus(
-  authUserId: string,
-): Promise<SupabaseEmailVerificationResult> {
-  const admin = createAdminClient();
-  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(
-    authUserId,
-  );
-  if (authError || !authUser?.user) {
-    return { ok: false, error: authError?.message ?? 'User not found' };
-  }
-  return {
-    ok: true,
-    emailConfirmedAt: (authUser.user.email_confirmed_at as string | null) ?? null,
-  };
-}
-
-export interface MarkEmailVerifiedResult {
-  /** True when this call performed the transition (1 row updated). */
-  updated: boolean;
-  /**
-   * Current status after the attempted transition. When `updated=true`, this
-   * is `'email_verified'`. When `updated=false`, this is whatever the row
-   * currently holds (or `null` if it disappeared, which would be a bug).
-   */
-  currentStatus: string | null;
-}
-
 export interface ExpireStalePendingSignupsSummary {
   /**
    * Deliberately NOT named `failed` / `errors` / `failures` / `rowsFailed` /
@@ -1578,9 +1503,8 @@ export interface ExpireStalePendingSignupsSummary {
  * the two disagreed, and the disagreement surfaced late and badly:
  *
  *   1. Second user is told the subdomain is AVAILABLE (stale row is expired).
- *   2. Their INSERT succeeds as `pending_verification` — outside the index.
- *   3. They click the verification link, the row flips to `email_verified`,
- *      ENTERS the index, and collides with the stale row → 23505 → HTTP 500.
+ *   2. Their answers are saved as `email_verified`, which ENTERS the index and
+ *      collides with the stale row → 23505.
  *
  * The predicate below is therefore the exact complement of that availability
  * filter, so the index and the check finally agree. Two consequences are
@@ -1626,66 +1550,6 @@ export async function expireStalePendingSignups(): Promise<ExpireStalePendingSig
     .returning({ id: pendingSignups.id });
 
   return { expired: expiredRows.length };
-}
-
-/**
- * Attempt to transition a pending_signups row from `pending_verification` to
- * `email_verified`. Uses a CAS-style WHERE predicate to prevent TOCTOU
- * races: only updates when the row is currently `pending_verification`.
- *
- * On race (0 rows updated), re-reads the row's status so the caller can
- * decide whether the loser branch is still a successful idempotent outcome
- * (`email_verified` / `checkout_started`) or a hard error (any other status).
- */
-export async function markPendingSignupEmailVerifiedIfPending(
-  signupRequestId: string,
-): Promise<MarkEmailVerifiedResult> {
-  const db = createUnscopedClient();
-
-  // This UPDATE is what moves the row INTO
-  // `pending_signups_candidate_slug_active_unique`, so it is where a slug
-  // collision surfaces — not at signup time, where the user was told the
-  // subdomain was free. `expireStalePendingSignups` removes the common cause,
-  // but it cannot close the window: two people verifying into the same slug
-  // concurrently still collide. Uncaught, a raw PG error is not an `AppError`,
-  // so `withErrorHandler` returns 500 "An unexpected error occurred" — an
-  // opaque dead end at the end of the signup funnel.
-  let updatedRows: Array<{ id: bigint }>;
-  try {
-    updatedRows = await db
-      .update(pendingSignups)
-      .set({
-        status: 'email_verified',
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(pendingSignups.signupRequestId, signupRequestId),
-          eq(pendingSignups.status, 'pending_verification'),
-        ),
-      )
-      .returning({ id: pendingSignups.id });
-  } catch (error) {
-    if (isNamedUniqueViolation(error, 'pending_signups_candidate_slug_active_unique')) {
-      throw new ConflictError(
-        'That subdomain was claimed by another signup while you were verifying. '
-          + 'Please start a new signup and choose a different subdomain.',
-      );
-    }
-    throw error;
-  }
-
-  if (updatedRows.length > 0) {
-    return { updated: true, currentStatus: 'email_verified' };
-  }
-
-  // Race: re-read the row's status so the caller can branch on it.
-  const recheck = await db
-    .select({ status: pendingSignups.status })
-    .from(pendingSignups)
-    .where(eq(pendingSignups.signupRequestId, signupRequestId))
-    .limit(1);
-  return { updated: false, currentStatus: recheck[0]?.status ?? null };
 }
 
 // ---------------------------------------------------------------------------

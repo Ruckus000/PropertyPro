@@ -2,16 +2,22 @@
 
 Moving a deployment from test-mode Stripe keys to live ones.
 
-**Production serves test-mode keys today.** Measured 2026-09-08 by reading the
-publishable key out of the deployed bundle:
+**Production served test-mode keys when this runbook was written** (measured
+2026-09-08). It serves live keys now. Read the publishable key out of the
+deployed bundle to check:
 
 ```bash
-chunk=$(curl -s https://www.getpropertypro.com/signup/checkout \
-  | grep -oE '/_next/static/[^"]+signup/checkout/page-[a-f0-9]+\.js' | head -1)
+chunk=$(curl -s https://www.getpropertypro.com/signup \
+  | grep -oE '/_next/static/[^"]+/signup/page-[a-f0-9]+\.js' | head -1)
 curl -sg "https://www.getpropertypro.com$chunk" \
   | grep -oE 'pk_(test|live)_[A-Za-z0-9]{6}'
-# -> pk_test_51Syt6      (re-run 2026-09-09)
+# -> pk_test_51Syt6      (2026-09-09, from the since-retired /signup/checkout chunk)
+# -> pk_live_51Syt6      (2026-10-09, /signup chunk)
 ```
+
+Embedded Checkout mounts inline in the trial step on `/signup`, so the key is in
+that route's chunk. `/signup/checkout` is now only a "restart checkout" screen and
+carries no key.
 
 Two steps, not one: the chunk hash changes every build, so the path must come out of the
 HTML. A fixed `page-*.js` URL does **not** work — `curl -g` disables globbing, so the

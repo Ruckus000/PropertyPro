@@ -206,7 +206,6 @@ vi.mock('@/lib/services/new-community-site', () => ({
 // Service import must come after all vi.mock calls
 import {
   expireStalePendingSignups,
-  markPendingSignupEmailVerifiedIfPending,
   reconcileLostCheckoutSignups,
   recoverStuckProvisioningJobs,
   runProvisioning,
@@ -1433,52 +1432,5 @@ describe('expireStalePendingSignups', () => {
       .map((call) => Array.from(call[0] as ArrayLike<string>).join('?'))
       .join(' | ');
     expect(raw).toContain('NOT EXISTS');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// markPendingSignupEmailVerifiedIfPending — this UPDATE is what moves a row
-// INTO the partial slug index, so it is where a collision surfaces. The user
-// was told at signup time that the subdomain was free.
-// ---------------------------------------------------------------------------
-
-function buildRejectingCasDb(error: unknown) {
-  const returningMock = vi.fn().mockRejectedValue(error);
-  const whereMock = vi.fn(() => ({ returning: returningMock }));
-  const setMock = vi.fn(() => ({ where: whereMock }));
-  return { update: vi.fn(() => ({ set: setMock })) };
-}
-
-describe('markPendingSignupEmailVerifiedIfPending — slug collision', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('maps the slug-index 23505 to a 409, not an opaque 500', async () => {
-    createUnscopedClientMock.mockReturnValue(
-      buildRejectingCasDb({
-        code: '23505',
-        constraint: 'pending_signups_candidate_slug_active_unique',
-      }),
-    );
-
-    await expect(markPendingSignupEmailVerifiedIfPending('req_collide')).rejects.toMatchObject({
-      statusCode: 409,
-      name: 'ConflictError',
-    });
-  });
-
-  // Anti-vacuity: the catch must be targeted at that ONE constraint, not a
-  // blanket swallow reporting every database failure as a slug conflict.
-  it('rethrows an unrelated database error unchanged', async () => {
-    const unrelated = Object.assign(new Error('connection terminated'), { code: '57P01' });
-    createUnscopedClientMock.mockReturnValue(buildRejectingCasDb(unrelated));
-
-    await expect(markPendingSignupEmailVerifiedIfPending('req_other')).rejects.toBe(unrelated);
-  });
-
-  it('rethrows a 23505 from a DIFFERENT constraint unchanged', async () => {
-    const otherIndex = { code: '23505', constraint: 'pending_signups_email_normalized_unique' };
-    createUnscopedClientMock.mockReturnValue(buildRejectingCasDb(otherIndex));
-
-    await expect(markPendingSignupEmailVerifiedIfPending('req_email')).rejects.toBe(otherIndex);
   });
 });
