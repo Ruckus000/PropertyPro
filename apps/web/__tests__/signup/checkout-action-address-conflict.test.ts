@@ -1,8 +1,9 @@
 /**
- * `createCheckoutSession` refuses an address that already has a community.
- *
- * It is the last gate before payment and the only one the form-flow signup
- * passes through, so it is pinned separately from the email-first details step.
+ * `createCheckoutSession`, the last gate before payment:
+ * - it refuses an address that already has a community, even after the
+ *   details step passed (another signup for it may have paid since);
+ * - it serves only the signed-in founder's own row, since the
+ *   `signupRequestId` it is called with is not a secret.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +13,11 @@ const h = vi.hoisted(() => ({
   retrieveMock: vi.fn(),
   checkAddressMock: vi.fn(),
   closeMock: vi.fn(),
+  getUserMock: vi.fn(),
+}));
+
+vi.mock('@propertypro/db/supabase/server', () => ({
+  createServerClient: async () => ({ auth: { getUser: h.getUserMock } }),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({ createUnscopedClient: h.createUnscopedClientMock }));
@@ -37,8 +43,11 @@ vi.mock('../../src/lib/auth/community-address-conflict', async (importOriginal) 
 import { createCheckoutSession } from '../../src/lib/actions/checkout';
 import { COMMUNITY_EXISTS_MESSAGE } from '../../src/lib/auth/community-address-conflict';
 
+const FOUNDER = { id: '00000000-0000-4000-8000-000000000001', email: 'founder@example.com', email_confirmed_at: '2026-10-09T12:00:00Z' };
+
 const SIGNUP = {
   signupRequestId: 'req-1',
+  authUserId: FOUNDER.id,
   status: 'email_verified',
   addressLine1: '1200 Brickell Bay Dr',
   zipCode: '33131',
@@ -50,13 +59,18 @@ const SIGNUP = {
 };
 
 let row: Record<string, unknown> = SIGNUP;
+const updateMock = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
   row = SIGNUP;
+  h.getUserMock.mockResolvedValue({ data: { user: FOUNDER }, error: null });
   h.createUnscopedClientMock.mockReturnValue({
     select: () => ({ from: () => ({ where: () => ({ limit: async () => [row] }) }) }),
-    update: () => ({ set: () => ({ where: async () => undefined }) }),
+    update: () => {
+      updateMock();
+      return { set: () => ({ where: async () => undefined }) };
+    },
   });
   h.createEmbeddedMock.mockResolvedValue({ clientSecret: 'cs_secret', sessionId: 'cs_1' });
   h.checkAddressMock.mockResolvedValue(false);
@@ -100,6 +114,55 @@ describe('createCheckoutSession — duplicate address', () => {
   });
 
   it('opens the session when the address is free', async () => {
+    await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: true, sessionId: 'cs_1' });
+    expect(h.createEmbeddedMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createCheckoutSession — owner binding', () => {
+  function expectNothingOpened() {
+    expect(h.createEmbeddedMock).not.toHaveBeenCalled();
+    expect(h.retrieveMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+  }
+
+  it('refuses a caller with no session, before reading the row', async () => {
+    h.getUserMock.mockResolvedValueOnce({ data: { user: null }, error: null });
+    await expect(createCheckoutSession('req-1')).resolves.toEqual({
+      ok: false,
+      error: 'Please sign in to continue your signup.',
+    });
+    expect(h.createUnscopedClientMock).not.toHaveBeenCalled();
+    expectNothingOpened();
+  });
+
+  it('refuses a session whose email is not confirmed', async () => {
+    h.getUserMock.mockResolvedValueOnce({ data: { user: { ...FOUNDER, email_confirmed_at: null } }, error: null });
+    await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: false });
+    expectNothingOpened();
+  });
+
+  // Holding someone else's id (it is in their Stripe return URL) must not
+  // open, refresh or re-price their checkout, nor confirm the id exists.
+  it("answers another founder's row exactly like a missing one", async () => {
+    row = { ...SIGNUP, authUserId: '00000000-0000-4000-8000-000000000002', status: 'checkout_started', payload: { stripeCheckoutSessionId: 'cs_open' } };
+    await expect(createCheckoutSession('req-1')).resolves.toEqual({
+      ok: false,
+      error: 'Signup not found. Please start a new signup.',
+    });
+    expectNothingOpened();
+  });
+
+  it('refuses a row with no owner (written by the retired form flow)', async () => {
+    row = { ...SIGNUP, authUserId: null };
+    await expect(createCheckoutSession('req-1')).resolves.toEqual({
+      ok: false,
+      error: 'Signup not found. Please start a new signup.',
+    });
+    expectNothingOpened();
+  });
+
+  it("opens checkout for the founder's own row", async () => {
     await expect(createCheckoutSession('req-1')).resolves.toMatchObject({ ok: true, sessionId: 'cs_1' });
     expect(h.createEmbeddedMock).toHaveBeenCalledTimes(1);
   });
