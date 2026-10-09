@@ -21,6 +21,12 @@ interface SignupAddressAutocompleteProps {
   onSelectedSuggestionChange: (key: string | null) => void;
   disabled?: boolean;
   invalid?: boolean;
+  /**
+   * Switches the caller to manual address entry. When given, a search with no
+   * usable suggestions offers it right there, instead of saying "keep typing",
+   * which is only true for a caller that accepts a typed address as-is.
+   */
+  onEnterManually?: () => void;
 }
 
 export function SignupAddressAutocomplete({
@@ -32,6 +38,7 @@ export function SignupAddressAutocomplete({
   onSelectedSuggestionChange,
   disabled = false,
   invalid = false,
+  onEnterManually,
 }: SignupAddressAutocompleteProps) {
   const listboxId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -121,6 +128,22 @@ export function SignupAddressAutocomplete({
   }
 
   const activeSuggestion = activeIndex >= 0 ? suggestions[activeIndex] : null;
+
+  const manualHint = onEnterManually ? (
+    <button
+      type="button"
+      className="font-medium text-content-link underline underline-offset-4 hover:text-content-link-hover"
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => {
+        setOpen(false);
+        onEnterManually();
+      }}
+    >
+      Enter it manually
+    </button>
+  ) : (
+    'You can keep typing manually.'
+  );
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -214,7 +237,7 @@ export function SignupAddressAutocomplete({
 
           {!isLoading && hasFetchError ? (
             <div className="px-3 py-3 text-sm text-content-secondary">
-              Address suggestions are unavailable right now. You can keep typing manually.
+              Address suggestions are unavailable right now. {manualHint}
             </div>
           ) : null}
 
@@ -226,7 +249,7 @@ export function SignupAddressAutocomplete({
 
           {!isLoading && !hasFetchError && parsedQuery && suggestions.length === 0 ? (
             <div className="px-3 py-3 text-sm text-content-secondary">
-              No address suggestions found. You can keep typing manually.
+              No address suggestions found. {manualHint}
             </div>
           ) : null}
 
