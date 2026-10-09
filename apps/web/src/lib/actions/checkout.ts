@@ -6,6 +6,16 @@
  * Called from the trial step on `/signup` (`trial-step.tsx`) to obtain the
  * clientSecret needed to mount Stripe EmbeddedCheckout.
  *
+ * BOUND TO THE SIGNED-IN FOUNDER. The `signupRequestId` is not a secret (it is
+ * in the Stripe return URL, and a server action can be called from anywhere),
+ * so it only names the row; the session decides whether the caller may use
+ * it. Every row Checkout can start from is written by the email-first details
+ * step, which stamps `auth_user_id` with the signed-in user, so the caller must
+ * be that user. It reads the REAL session user, as that route does, not
+ * `requireAuthenticatedUser()`, which substitutes a support-impersonated
+ * identity: a signup belongs to whoever actually holds the verified email.
+ * A row someone else owns answers exactly like a missing one.
+ *
  * Accepts email_verified or checkout_started status to handle page refreshes
  * gracefully (returns the existing session rather than creating a duplicate).
  *
@@ -13,6 +23,7 @@
  * Next.js production error sanitization and reach the client UI.
  */
 import { eq } from '@propertypro/db/filters';
+import { createServerClient } from '@propertypro/db/supabase/server';
 // AUTHZ: Pre-tenant Stripe checkout — writes pending_signups before any community exists; no communityId available yet (the community is provisioned after successful payment).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups } from '@propertypro/db';
@@ -44,9 +55,20 @@ const STATUS_MESSAGES: Record<string, string> = {
     'This signup has already been completed.',
 };
 
+const SIGNUP_NOT_FOUND = 'Signup not found. Please start a new signup.';
+
 export async function createCheckoutSession(
   signupRequestId: string,
 ): Promise<CheckoutSessionResult> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user || !user.email_confirmed_at) {
+    return { ok: false, error: 'Please sign in to continue your signup.' };
+  }
+
   const db = createUnscopedClient();
 
   const rows = await db
@@ -58,7 +80,10 @@ export async function createCheckoutSession(
   const signup = rows[0];
 
   if (!signup) {
-    return { ok: false, error: 'Signup not found. Please start a new signup.' };
+    return { ok: false, error: SIGNUP_NOT_FOUND };
+  }
+  if (signup.authUserId !== user.id) {
+    return { ok: false, error: SIGNUP_NOT_FOUND };
   }
 
   if (signup.status !== 'email_verified' && signup.status !== 'checkout_started') {
