@@ -1,12 +1,12 @@
 /**
  * Route contract for `GET /api/v1/auth/provisioning-status`.
  *
- * Plan A1 drain #152. Post-checkout provisioning poll (no session auth — secured
- * by unguessable signupRequestId UUID).
+ * Plan A1 drain #152. Post-checkout provisioning poll, for the signed-in
+ * founder's own signup only (see route.ts).
  *
  * Response is loose (`z.unknown()`) — branches differ by job status (pending,
- * provisioning, completed with optional loginToken, failed). Consumer unwraps
- * `{ data: payload }` after B1 migration in provisioning-progress.tsx.
+ * provisioning, completed with communityId, failed). Consumer unwraps
+ * `{ data: payload }` in provisioning-progress.tsx.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 

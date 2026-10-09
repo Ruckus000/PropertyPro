@@ -30,9 +30,8 @@ import {
 import { burstConfetti } from './front-porch/motion';
 
 interface ProvisioningStatusResponse {
-  status: 'pending' | 'provisioning' | 'completed' | 'consumed' | 'failed';
+  status: 'pending' | 'provisioning' | 'completed' | 'failed';
   step: string;
-  loginToken?: string;
   communityId?: number;
 }
 
@@ -120,50 +119,30 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
     }
   }, []);
 
+  // The founder is already signed in: email-first signup signs them in before
+  // they pay, and provisioning makes that same account the root manager. So
+  // "completed" needs no login step. Show "live" before the dashboard: it is
+  // the moment the design celebrates, and the user chooses when to leave it.
   const handleComplete = useCallback(
-    async (loginToken: string, communityId?: number) => {
+    (communityId?: number) => {
       stopPolling();
-      try {
-        const { createBrowserClient } = await import('@/lib/supabase/client');
-        const { error } = await createBrowserClient().auth.verifyOtp({ token_hash: loginToken, type: 'magiclink' });
-        if (error) throw error;
-      } catch {
-        // Includes the client chunk failing to load: polling has stopped, so
-        // anything but a navigation leaves the user on a finished spinner.
-        router.push('/auth/login?message=portal-ready');
-        return;
-      }
-      // Signed in. Show "live" before the dashboard: it is the moment the
-      // design celebrates, and the user chooses when to leave it.
       setLive({ communityId });
     },
-    [router, stopPolling],
+    [stopPolling],
   );
+
+  // The poll answers only the signed-in founder; a 401 means the session ended
+  // mid-flow. The community is still being set up, so send them to sign in.
+  const handleSignedOut = useCallback(() => {
+    stopPolling();
+    router.push('/auth/login?message=portal-ready');
+  }, [router, stopPolling]);
 
   useEffect(() => {
     if (!live) return;
     clearSignupDraft();
     burstConfetti(liveBadgeRef.current);
   }, [live]);
-
-  const handleConsumed = useCallback(
-    async (communityId?: number) => {
-      // The single-use login token was already claimed — typically this tab
-      // was refreshed (or a second tab polled first) after auto-login. If a
-      // session exists, go straight in; otherwise fall back to manual login.
-      stopPolling();
-      const session = await import('@/lib/supabase/client')
-        .then(({ createBrowserClient }) => createBrowserClient().auth.getSession())
-        .then(({ data }) => data.session)
-        .catch(() => null);
-      if (session) {
-        router.push(communityId ? `/dashboard?communityId=${communityId}` : '/select-community');
-        return;
-      }
-      router.push('/auth/login?message=portal-ready');
-    },
-    [router, stopPolling],
-  );
 
   const handleFailure = useCallback(() => {
     stopPolling();
@@ -187,6 +166,10 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
       const res = await fetch(
         `/api/v1/auth/provisioning-status?signupRequestId=${encodeURIComponent(signupRequestId)}`,
       );
+      if (res.status === 401) {
+        handleSignedOut();
+        return;
+      }
       if (!res.ok) {
         consecutiveFailures.current += 1;
         if (consecutiveFailures.current >= MAX_CONSECUTIVE_FAILURES) {
@@ -212,16 +195,9 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         return;
       }
 
-      if (data.status === 'completed' && data.loginToken) {
-        // Mark all stages complete before navigating
+      if (data.status === 'completed') {
         setCompletedStages(new Set([0, 1, 2]));
-        await handleComplete(data.loginToken, data.communityId);
-        return;
-      }
-
-      if (data.status === 'consumed') {
-        setCompletedStages(new Set([0, 1, 2]));
-        await handleConsumed(data.communityId);
+        handleComplete(data.communityId);
         return;
       }
 
@@ -236,7 +212,7 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         handleDelayed();
       }
     }
-  }, [signupRequestId, handleComplete, handleConsumed, handleFailure, handleDelayed]);
+  }, [signupRequestId, handleComplete, handleSignedOut, handleFailure, handleDelayed]);
 
   const startPolling = useCallback(() => {
     stopPolling();

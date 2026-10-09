@@ -251,9 +251,9 @@ export async function submitSignupDetails(
 
   // Reuse the row's id only when THIS session wrote it. A row this session did
   // not write may carry an id someone else knows (the retired form flow let
-  // anyone create one for any address, with an id of their choosing), and
-  // whoever holds the id of a paid signup can claim its first login token from
-  // provisioning-status.
+  // anyone create one for any address, with an id of their choosing). The
+  // checkout action and provisioning-status now answer only the row's owner,
+  // so a known id is no longer a login, but a fresh one costs nothing.
   // An expired row's id may also have been disclosed while it was live.
   const ownLiveRow =
     existing

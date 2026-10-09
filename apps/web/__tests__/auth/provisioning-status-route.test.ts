@@ -1,27 +1,38 @@
 /**
  * Route unit tests — `GET /api/v1/auth/provisioning-status`.
  *
- * The magic-link token is single-use: the first poll after completion issues a
- * token and atomically stamps login_token_consumed_at; later polls (and any
- * leaked-signupRequestId replay) see the consumed marker and get no token.
- * These tests mock the provisioning-service layer the route delegates to.
+ * The poll answers only the signed-in founder's own signup, and mints no login
+ * token: the founder already holds the root manager's session (email-first
+ * signs them in before they pay; provisioning links that same account). It
+ * used to hand the first poller a single-use magic-link token, so holding the
+ * signupRequestId (it is in the Stripe return URL) was a race for a
+ * root-manager login. These tests mock the provisioning-service layer.
  */
 import { NextRequest } from 'next/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getProvisioningJobBySignupRequestId = vi.fn();
 const getPendingSignupBySignupRequestId = vi.fn();
-const issueSingleUseLoginToken = vi.fn();
+const getUserMock = vi.fn();
 
 vi.mock('@/lib/services/provisioning-service', () => ({
   getProvisioningJobBySignupRequestId: (...args: unknown[]) =>
     getProvisioningJobBySignupRequestId(...args),
   getPendingSignupBySignupRequestId: (...args: unknown[]) =>
     getPendingSignupBySignupRequestId(...args),
-  issueSingleUseLoginToken: (...args: unknown[]) => issueSingleUseLoginToken(...args),
+}));
+
+vi.mock('@propertypro/db/supabase/server', () => ({
+  createServerClient: async () => ({ auth: { getUser: getUserMock } }),
 }));
 
 import { GET } from '../../src/app/api/v1/auth/provisioning-status/route';
+
+const FOUNDER = {
+  id: '00000000-0000-4000-8000-000000000001',
+  email: 'founder@example.com',
+  email_confirmed_at: '2026-10-09T12:00:00Z',
+};
 
 const BASE_JOB = {
   id: 1,
@@ -31,14 +42,7 @@ const BASE_JOB = {
   lastSuccessfulStatus: 'completed',
 };
 
-const BASE_SIGNUP = {
-  email: 'newuser@example.com',
-  payload: null,
-  signupRequestId: 'req-uuid-abc123',
-  loginTokenConsumedAt: null,
-};
-
-const HASHED_TOKEN = 'hashed-token-xyz789';
+const OWN_SIGNUP = { signupRequestId: 'req-uuid-abc123', authUserId: FOUNDER.id };
 
 function makeRequest(signupRequestId?: string): NextRequest {
   const url = signupRequestId
@@ -55,12 +59,9 @@ async function dataOf(response: Response): Promise<Record<string, unknown>> {
 describe('provisioning-status route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    issueSingleUseLoginToken.mockResolvedValue({ status: 'issued', token: HASHED_TOKEN });
-    getPendingSignupBySignupRequestId.mockResolvedValue({ ...BASE_SIGNUP });
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
+    getUserMock.mockResolvedValue({ data: { user: FOUNDER }, error: null });
+    getPendingSignupBySignupRequestId.mockResolvedValue({ ...OWN_SIGNUP });
+    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
   });
 
   it('returns 400 when signupRequestId is missing', async () => {
@@ -70,89 +71,78 @@ describe('provisioning-status route', () => {
     expect(body.error?.code).toBe('VALIDATION_ERROR');
   });
 
-  it('returns pending when no provisioning job exists yet', async () => {
-    getProvisioningJobBySignupRequestId.mockResolvedValue(null);
-
-    const response = await GET(makeRequest('req-uuid-abc123'));
-    expect(response.status).toBe(200);
-    expect(await dataOf(response)).toEqual({ status: 'pending', step: 'waiting' });
-    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
-  });
-
-  it('returns provisioning with current step when job is in progress', async () => {
-    getProvisioningJobBySignupRequestId.mockResolvedValue({
-      ...BASE_JOB,
-      status: 'in_progress',
-      lastSuccessfulStatus: 'community_created',
+  describe('binding to the signed-in founder', () => {
+    it('refuses a caller with no session, before reading anything', async () => {
+      getUserMock.mockResolvedValueOnce({ data: { user: null }, error: null });
+      const response = await GET(makeRequest('req-uuid-abc123'));
+      expect(response.status).toBe(401);
+      expect(getPendingSignupBySignupRequestId).not.toHaveBeenCalled();
+      expect(getProvisioningJobBySignupRequestId).not.toHaveBeenCalled();
     });
 
-    const response = await GET(makeRequest('req-uuid-abc123'));
-    expect(response.status).toBe(200);
-    expect(await dataOf(response)).toEqual({ status: 'provisioning', step: 'community_created' });
-    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
-  });
-
-  it('returns failed with last successful step on failure', async () => {
-    getProvisioningJobBySignupRequestId.mockResolvedValue({
-      ...BASE_JOB,
-      status: 'failed',
-      lastSuccessfulStatus: 'community_created',
+    it('refuses a session whose email is not confirmed', async () => {
+      getUserMock.mockResolvedValueOnce({
+        data: { user: { ...FOUNDER, email_confirmed_at: null } },
+        error: null,
+      });
+      const response = await GET(makeRequest('req-uuid-abc123'));
+      expect(response.status).toBe(401);
     });
 
-    const response = await GET(makeRequest('req-uuid-abc123'));
-    expect(response.status).toBe(200);
-    expect(await dataOf(response)).toEqual({ status: 'failed', step: 'community_created' });
-    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
-  });
-
-  it('issues and returns loginToken + communityId on the first completed poll', async () => {
-    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
-
-    const response = await GET(makeRequest('req-uuid-abc123'));
-    expect(response.status).toBe(200);
-    expect(await dataOf(response)).toEqual({
-      status: 'completed',
-      step: 'completed',
-      loginToken: HASHED_TOKEN,
-      communityId: 42,
-    });
-    expect(issueSingleUseLoginToken).toHaveBeenCalledWith('req-uuid-abc123', BASE_SIGNUP.email);
-  });
-
-  it('returns consumed (no token) when the token was already consumed (leaked-id replay)', async () => {
-    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
-    getPendingSignupBySignupRequestId.mockResolvedValue({
-      ...BASE_SIGNUP,
-      loginTokenConsumedAt: new Date('2026-05-04T00:00:00Z'),
+    // Holding another founder's id (it is in their Stripe return URL) must
+    // reveal nothing: not the job, not the community, and above all no login.
+    it("answers another founder's completed signup exactly like an unknown id", async () => {
+      getPendingSignupBySignupRequestId.mockResolvedValueOnce({
+        ...OWN_SIGNUP,
+        authUserId: '00000000-0000-4000-8000-000000000002',
+      });
+      const response = await GET(makeRequest('req-uuid-abc123'));
+      expect(response.status).toBe(200);
+      expect(await dataOf(response)).toEqual({ status: 'pending', step: 'waiting' });
+      expect(getProvisioningJobBySignupRequestId).not.toHaveBeenCalled();
     });
 
-    const response = await GET(makeRequest('req-uuid-abc123'));
-    expect(response.status).toBe(200);
-    const data = await dataOf(response);
-    expect(data).toEqual({ status: 'consumed', step: 'completed', communityId: 42 });
-    expect(data).not.toHaveProperty('loginToken');
-    // Must not even attempt to issue a new token.
-    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
+    it('answers an unknown id as pending', async () => {
+      getPendingSignupBySignupRequestId.mockResolvedValueOnce(null);
+      const response = await GET(makeRequest('req-unknown'));
+      expect(await dataOf(response)).toEqual({ status: 'pending', step: 'waiting' });
+      expect(getProvisioningJobBySignupRequestId).not.toHaveBeenCalled();
+    });
   });
 
-  it('returns consumed (no token) when a concurrent poll wins the atomic claim', async () => {
-    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
-    issueSingleUseLoginToken.mockResolvedValue({ status: 'consumed' });
+  describe("the founder's own signup", () => {
+    it('is pending until the webhook creates a job', async () => {
+      getProvisioningJobBySignupRequestId.mockResolvedValueOnce(null);
+      const response = await GET(makeRequest('req-uuid-abc123'));
+      expect(await dataOf(response)).toEqual({ status: 'pending', step: 'waiting' });
+    });
 
-    const response = await GET(makeRequest('req-uuid-abc123'));
-    expect(response.status).toBe(200);
-    const data = await dataOf(response);
-    expect(data).toEqual({ status: 'consumed', step: 'completed', communityId: 42 });
-    expect(data).not.toHaveProperty('loginToken');
-  });
+    it('reports the provisioning step', async () => {
+      getProvisioningJobBySignupRequestId.mockResolvedValueOnce({
+        ...BASE_JOB,
+        status: 'user_linked',
+        lastSuccessfulStatus: 'community_created',
+      });
+      const response = await GET(makeRequest('req-uuid-abc123'));
+      expect(await dataOf(response)).toEqual({ status: 'provisioning', step: 'community_created' });
+    });
 
-  it('returns 500 when token issuance fails', async () => {
-    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
-    issueSingleUseLoginToken.mockResolvedValue({ status: 'error' });
+    it('reports a failure with the last good step', async () => {
+      getProvisioningJobBySignupRequestId.mockResolvedValueOnce({
+        ...BASE_JOB,
+        status: 'failed',
+        lastSuccessfulStatus: 'categories_created',
+      });
+      const response = await GET(makeRequest('req-uuid-abc123'));
+      expect(await dataOf(response)).toEqual({ status: 'failed', step: 'categories_created' });
+    });
 
-    const response = await GET(makeRequest('req-uuid-abc123'));
-    expect(response.status).toBe(500);
-    const body = await response.json();
-    expect(body.error?.message).toMatch(/login token/i);
+    it('reports completion with the community, and no login token', async () => {
+      const response = await GET(makeRequest('req-uuid-abc123'));
+      expect(response.status).toBe(200);
+      const data = await dataOf(response);
+      expect(data).toEqual({ status: 'completed', step: 'completed', communityId: 42 });
+      expect(data).not.toHaveProperty('loginToken');
+    });
   });
 });

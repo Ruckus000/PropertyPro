@@ -2,35 +2,53 @@
  * Provisioning status polling endpoint.
  *
  * Called by the post-checkout ProvisioningProgress client component every 2s.
- * No auth required — secured by an unguessable signupRequestId UUID.
  *
- * The magic-link login token is SINGLE-USE with a short TTL:
- *   - The first poll that observes status='completed' generates a token AND
- *     atomically marks pending_signups.login_token_consumed_at in the same
- *     update (guarded by `login_token_consumed_at IS NULL`).
- *   - Subsequent polls (or any leaked-signupRequestId replay) see the consumed
- *     marker and receive { status: 'consumed' } with no token.
- * The genuine browser polls every 2s and consumes the token essentially
- * immediately; any later replay gets no token. Closes the audit's leaked-id
- * replay scenario.
+ * BOUND TO THE SIGNED-IN FOUNDER. The `signupRequestId` is not a secret (it is
+ * in the Stripe return URL), so it only names the signup; the session decides
+ * whether the caller may watch it. Email-first signup signs the founder in
+ * before they pay, the details step stamps `auth_user_id` with that user, and
+ * provisioning links that same account as the community's root manager. So the
+ * founder already holds the root manager's session when they land here, and
+ * this endpoint mints no login token: it used to hand the FIRST poller a
+ * single-use magic-link token (for the retired form flow, whose founders had no
+ * session), which made the id a race for a root-manager login.
+ *
+ * Reads the REAL session user (as the details route does), not
+ * `requireAuthenticatedUser()`, which substitutes a support-impersonated
+ * identity. A signup someone else owns answers exactly like an unknown id:
+ * `pending`, forever.
  *
  * Plan A1 drain #152. `runRoute(contract, handler)`; success payloads are the
  * canonical `{ data: { status, step, ... } }`.
  */
 import { runRoute } from '@propertypro/api-contract';
+import { createServerClient } from '@propertypro/db/supabase/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { AppError } from '@/lib/api/errors';
+import { UnauthorizedError } from '@/lib/api/errors';
 import {
   getPendingSignupBySignupRequestId,
   getProvisioningJobBySignupRequestId,
-  issueSingleUseLoginToken,
 } from '@/lib/services/provisioning-service';
 import { provisioningStatusGetContract } from './contract';
 
-// route-gate: public — sessionless provisioning poll keyed by signupRequestId, which is never disclosed to a non-owner since #1198
+// route-gate: self-scoped — answers only for a signup whose auth_user_id is the session user; anyone else sees what an unknown id sees
 export const GET = withErrorHandler(
   runRoute(provisioningStatusGetContract, async ({ query }) => {
     const { signupRequestId } = query;
+
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user || !user.email_confirmed_at) {
+      throw new UnauthorizedError();
+    }
+
+    const signup = await getPendingSignupBySignupRequestId(signupRequestId);
+    if (!signup || signup.authUserId !== user.id) {
+      return { status: 'pending' as const, step: 'waiting' };
+    }
 
     const job = await getProvisioningJobBySignupRequestId(signupRequestId);
 
@@ -46,44 +64,9 @@ export const GET = withErrorHandler(
     }
 
     if (job.status === 'completed') {
-      const signup = await getPendingSignupBySignupRequestId(signupRequestId);
-
-      if (!signup) {
-        throw new AppError('Signup record not found', 500, 'INTERNAL_ERROR');
-      }
-
-      // Already consumed — a repeat poll after the genuine browser claimed the
-      // token, or a leaked-signupRequestId replay. Surface 'consumed' with no
-      // token so it can never be replayed.
-      if (signup.loginTokenConsumedAt) {
-        return {
-          status: 'consumed' as const,
-          step: 'completed',
-          communityId: job.communityId,
-        };
-      }
-
-      const result = await issueSingleUseLoginToken(signupRequestId, signup.email);
-
-      if (result.status === 'error') {
-        throw new AppError('Failed to generate login token', 500, 'INTERNAL_ERROR');
-      }
-
-      if (result.status === 'consumed') {
-        // A concurrent poll won the atomic claim in the window between our
-        // SELECT and UPDATE. Don't return the freshly generated token — the
-        // other poller already received the canonical one.
-        return {
-          status: 'consumed' as const,
-          step: 'completed',
-          communityId: job.communityId,
-        };
-      }
-
       return {
         status: 'completed' as const,
         step: 'completed',
-        loginToken: result.token,
         communityId: job.communityId,
       };
     }

@@ -137,6 +137,15 @@ describe('p1-22 session middleware', () => {
     expect(response.status).toBe(200);
   });
 
+  // It used to be sessionless and hand its first poller a login token.
+  it('keeps unauthenticated GET /api/v1/auth/provisioning-status protected', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/auth/provisioning-status?signupRequestId=sr-1', {}, 'GET'),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
   // The retired password signup posted here without a session.
   it('keeps unauthenticated POST /api/v1/auth/signup protected', async () => {
     const response = await middleware(

@@ -1344,9 +1344,9 @@ export interface ProvisioningJobStatusRow {
  * request id. Returns `null` when no job has been created yet (normal during
  * the first few polls after checkout, before the Stripe webhook fires).
  *
- * AUTHZ: pre-auth public endpoint — secured by the unguessable
- * `signupRequestId` UUID. Caller MUST validate the param shape before
- * invoking.
+ * AUTHZ: the status poller calls this only after
+ * `getPendingSignupBySignupRequestId` has shown the signup is the session
+ * user's. Caller MUST validate the param shape before invoking.
  */
 export async function getProvisioningJobBySignupRequestId(
   signupRequestId: string,
@@ -1366,116 +1366,31 @@ export async function getProvisioningJobBySignupRequestId(
   return row ?? null;
 }
 
-export interface PendingSignupTokenRow {
-  email: string;
-  payload: Record<string, unknown> | null;
+export interface PendingSignupOwnerRow {
   signupRequestId: string;
-  loginTokenConsumedAt: Date | null;
+  authUserId: string | null;
 }
 
-/** Result of an attempt to issue a single-use magic-link login token. */
-export type IssueLoginTokenResult =
-  | { status: 'issued'; token: string }
-  | { status: 'consumed' }
-  | { status: 'error' };
-
-const LOGIN_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
 /**
- * Fetch the email + token lifecycle state for a pending signup, used by the
- * post-completion magic-link path in the status poller. Returns `null` when no
- * pending_signups row matches.
+ * Who owns a pending signup: the poller answers only when this is the session
+ * user. Returns `null` when no pending_signups row matches.
  *
- * AUTHZ: same pre-auth endpoint as `getProvisioningJobBySignupRequestId`.
+ * AUTHZ: read by the status poller BEFORE it reveals anything, to bind the
+ * signup to the signed-in founder (see provisioning-status/route.ts).
  */
 export async function getPendingSignupBySignupRequestId(
   signupRequestId: string,
-): Promise<PendingSignupTokenRow | null> {
+): Promise<PendingSignupOwnerRow | null> {
   const db = createUnscopedClient();
   const [row] = await db
     .select({
-      email: pendingSignups.email,
-      payload: pendingSignups.payload,
       signupRequestId: pendingSignups.signupRequestId,
-      loginTokenConsumedAt: pendingSignups.loginTokenConsumedAt,
+      authUserId: pendingSignups.authUserId,
     })
     .from(pendingSignups)
     .where(eq(pendingSignups.signupRequestId, signupRequestId))
     .limit(1);
-  if (!row) return null;
-  return {
-    email: row.email,
-    payload: (row.payload ?? null) as Record<string, unknown> | null,
-    signupRequestId: row.signupRequestId,
-    loginTokenConsumedAt: row.loginTokenConsumedAt ?? null,
-  };
-}
-
-/**
- * Issue a SINGLE-USE magic-link login token for a completed provisioning
- * signup. Generates a fresh Supabase magic link, then atomically claims it by
- * stamping login_token_issued_at + login_token_consumed_at guarded by
- * `WHERE login_token_consumed_at IS NULL OR login_token_issued_at < ttlCutoff`.
- *
- * - `issued` — this caller won the claim; return the token to the browser.
- * - `consumed` — a concurrent poll (or an earlier poll / leaked-id replay)
- *   already claimed the token; return NO token.
- * - `error` — Supabase failed to generate a link (caller responds 500).
- *
- * The TTL lets a fresh token be minted if the genuine browser closed before
- * consuming the previous one (stale unused window), without ever re-serving a
- * previously-consumed token.
- */
-export async function issueSingleUseLoginToken(
-  signupRequestId: string,
-  email: string,
-): Promise<IssueLoginTokenResult> {
-  const admin = createAdminClient();
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-  });
-
-  if (linkError || !linkData?.properties?.hashed_token) {
-    console.error(
-      '[provisioning-service] Failed to generate magic link:',
-      linkError?.message,
-    );
-    return { status: 'error' };
-  }
-
-  const token: string = linkData.properties.hashed_token;
-  const now = new Date();
-  const ttlCutoff = new Date(now.getTime() - LOGIN_TOKEN_TTL_MS);
-
-  const db = createUnscopedClient();
-  // Atomic single-use claim: only stamp the token if not already consumed
-  // (or the prior issuance is older than the TTL). A concurrent poll that
-  // already claimed leaves 0 rows here, so we surface 'consumed' rather than
-  // double-issuing.
-  const [claimed] = await db
-    .update(pendingSignups)
-    .set({
-      loginTokenIssuedAt: now,
-      loginTokenConsumedAt: now,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(pendingSignups.signupRequestId, signupRequestId),
-        or(
-          isNull(pendingSignups.loginTokenConsumedAt),
-          lt(pendingSignups.loginTokenIssuedAt, ttlCutoff),
-        ),
-      ),
-    )
-    .returning({ id: pendingSignups.id });
-
-  if (!claimed) {
-    return { status: 'consumed' };
-  }
-
-  return { status: 'issued', token };
+  return row ?? null;
 }
 
 export interface ExpireStalePendingSignupsSummary {

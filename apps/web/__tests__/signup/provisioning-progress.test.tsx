@@ -8,8 +8,8 @@
  * 2026-09-11, which is how this one was found.
  *
  * This poll cannot simply be deleted the way that one was: it tracks an async
- * server process through staged progress and consumes a `loginToken` at the
- * end. There is no link for the user to click instead. So it tolerates two
+ * server process through staged progress and ends on the live screen. There is
+ * no link for the user to click instead. So it tolerates two
  * consecutive failures and surfaces the existing `delayed` state on the third.
  *
  * The "keeps polling after 2" case is the control: it proves the counter is
@@ -20,7 +20,7 @@ import { render, screen, act, cleanup } from '@testing-library/react';
 
 // The router object MUST be referentially stable across renders. The real
 // `useRouter` is; a mock returning a fresh object each call gives
-// `handleComplete`/`handleConsumed` new identities every render, which cascades
+// `handleSignedOut` a new identity every render, which cascades
 // into `poll` -> `startPolling` -> the mount effect re-running, and each re-run
 // fires an extra immediate poll. That is a property of the mock, not of the
 // component, and it silently inflates every call count asserted below.
@@ -31,6 +31,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => routerMock,
 }));
 
+// The founder is already signed in, so the auth client must never be needed.
 const { createBrowserClientMock } = vi.hoisted(() => ({ createBrowserClientMock: vi.fn() }));
 vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: createBrowserClientMock }));
 
@@ -63,9 +64,6 @@ const DELAYED_TEXT = /taking longer than usual/i;
 
 beforeEach(() => {
   createBrowserClientMock.mockReset();
-  createBrowserClientMock.mockReturnValue({
-    auth: { verifyOtp: vi.fn().mockResolvedValue({ error: null }) },
-  });
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   vi.useFakeTimers();
@@ -129,22 +127,12 @@ describe('ProvisioningProgress — failure tolerance', () => {
   });
 });
 
-describe('ProvisioningProgress — completion', () => {
-  /**
-   * The Supabase client is imported on completion, not at module load, so the
-   * import itself can now reject (a chunk that fails to load). Polling has
-   * already stopped by then; without a navigation the user sits on a finished
-   * progress bar with nothing to click.
-   */
-  it('falls back to manual login when the auth client cannot be loaded', async () => {
-    createBrowserClientMock.mockImplementation(() => {
-      throw new Error('ChunkLoadError');
-    });
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: { status: 'completed', loginToken: 'tok', communityId: 7 } }),
-    });
+describe('ProvisioningProgress — session', () => {
+  // The poll answers only the signed-in founder. A 401 means the session ended
+  // mid-flow; without a navigation the user would sit on a stalled progress bar.
+  it('sends a signed-out founder to sign in, and stops polling', async () => {
+    routerMock.push.mockClear();
+    fetchMock.mockResolvedValue(failure(401));
 
     await act(async () => {
       render(<ProvisioningProgress signupRequestId="sr-1" />);
@@ -153,11 +141,14 @@ describe('ProvisioningProgress — completion', () => {
     await vi.waitFor(() =>
       expect(routerMock.push).toHaveBeenCalledWith('/auth/login?message=portal-ready'),
     );
+    const calls = fetchMock.mock.calls.length;
+    await tick();
+    expect(fetchMock.mock.calls.length).toBe(calls);
   });
 });
 
 describe('ProvisioningProgress — live', () => {
-  it('signs in, shows the live screen, and leaves for the dashboard only when asked', async () => {
+  it('shows the live screen, and leaves for the dashboard only when asked', async () => {
     routerMock.push.mockClear();
     window.localStorage.setItem(
       'pp.signup.draft.v1',
@@ -166,7 +157,7 @@ describe('ProvisioningProgress — live', () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ data: { status: 'completed', loginToken: 'tok', communityId: 7 } }),
+      json: async () => ({ data: { status: 'completed', step: 'completed', communityId: 7 } }),
     });
 
     await act(async () => {
@@ -189,6 +180,8 @@ describe('ProvisioningProgress — live', () => {
       screen.getByRole('button', { name: /go to your dashboard/i }).click();
     });
     expect(routerMock.push).toHaveBeenCalledWith('/dashboard?communityId=7');
+    // No login step: the poll no longer hands out a token to sign in with.
+    expect(createBrowserClientMock).not.toHaveBeenCalled();
   });
 
   it('stops claiming activity once polling has stopped (delayed)', async () => {

@@ -44,7 +44,8 @@ lastSuccessfulStatus:
    → preferences_set → email_sent → completed
       ▼
 /signup/checkout/return  → ProvisioningProgress polls
-/api/v1/auth/provisioning-status, signs in, shows "is live" → "Go to your dashboard"
+/api/v1/auth/provisioning-status (founder's own signup only; no login
+token: the founder is already signed in), shows "is live" → "Go to your dashboard"
       ▼
 community: subscription_status=trialing, subscription_plan=<purchased plan>
 ```
