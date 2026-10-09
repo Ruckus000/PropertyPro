@@ -73,8 +73,9 @@ const TRAILING_ZIP_PATTERN = /[\s,](\d{5})(?:-\d{4})?\s*$/;
  * `"123 N. Ocean Boulevard, Apt 4"` + `"33139-1234"` → `"33139|123 n ocean blvd"`.
  * Returns null when the address cannot be compared safely.
  *
- * With no ZIP field, a one-line address (the form flow's free-text `address`,
- * which leaves the structured fields empty) is read for a trailing ZIP and the
+ * With no ZIP field, a one-line address (the free-text `address` the retired
+ * form flow wrote, which leaves the structured fields empty; such rows may
+ * still exist) is read for a trailing ZIP and the
  * street before its first comma, so that shape cannot skip the check.
  */
 export function buildAddressKey(addressLine1: string | null | undefined, zipCode: string | null | undefined): string | null {
@@ -107,7 +108,7 @@ export function buildAddressKey(addressLine1: string | null | undefined, zipCode
  * founder can change the address without re-verifying. One per save; a real
  * founder spends one per plan change, so this is well above any honest session.
  * Checkout is not metered: the address there is the row's, and changing a
- * row's address costs a fresh verification email (form flow) or a metered save.
+ * row's address costs a metered save.
  */
 const ADDRESS_CHECKS_PER_EMAIL = 30;
 const ADDRESS_CHECK_WINDOW_MS = 60 * 60 * 1000;

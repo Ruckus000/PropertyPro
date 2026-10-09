@@ -165,7 +165,7 @@ describe('classifyRoute', () => {
 
   it('classifies API auth routes', () => {
     expect(classifyRoute('/api/v1/auth/login', 'POST')).toBe('auth');
-    expect(classifyRoute('/api/v1/auth/signup', 'POST')).toBe('auth');
+    expect(classifyRoute('/api/v1/auth/signup/start', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/auth/password-reset', 'POST')).toBe('auth');
     // OTP guessing surface — must be `auth` (10/min per IP, Redis-backed), not
     // `write` (30/min, in-memory per isolate). See #947.
@@ -210,7 +210,7 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/signup/checkout', 'GET')).toBe('page');
 
     // The API signup route is a separate entry and is unaffected by the change.
-    expect(classifyRoute('/api/v1/auth/signup', 'POST')).toBe('auth');
+    expect(classifyRoute('/api/v1/auth/signup/start', 'POST')).toBe('auth');
   });
 
   it('classifies webhook routes as exempt', () => {

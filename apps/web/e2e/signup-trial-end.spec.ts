@@ -22,8 +22,9 @@
  *
  * Nothing in OUR code is bypassed by that: the webhook receives a genuine
  * `checkout.session.completed` carrying our metadata, and provisioning runs
- * exactly as in production. The signup row itself is created through the real
- * `/api/v1/auth/signup` route.
+ * exactly as in production. The founder is signed in, and the signup row
+ * created, through the real email-first routes (`/api/v1/auth/signup/start`,
+ * `/auth/verify-signup`, `/api/v1/auth/signup/details`).
  *
  * GUARDED like its siblings: skips unless `E2E_STRIPE=1` and the test-mode
  * Stripe + Supabase service-role secrets are set.
@@ -35,11 +36,11 @@ import {
   STRIPE_E2E_SKIP_REASON,
   assertSafeStripeE2eTarget,
   buildSignupInputs,
-  confirmSupabaseEmail,
   fillHostedStripeCheckout,
   readCommunityBillingBySlug,
+  signInEmailFirst,
   stripeE2eConfigured,
-  submitSignupViaApi,
+  submitSignupDetailsViaApi,
 } from './helpers/stripe-e2e';
 
 /** Trial length the app configures (`SIGNUP_TRIAL_DAYS`); advance past it. */
@@ -49,7 +50,7 @@ const DAY_SECONDS = 24 * 60 * 60;
 test.describe('Trial end → first real charge (GA gate)', () => {
   test.skip(!stripeE2eConfigured(), STRIPE_E2E_SKIP_REASON);
 
-  test('a trial that expires becomes active without losing its plan', async ({ page, request }) => {
+  test('a trial that expires becomes active without losing its plan', async ({ page }) => {
     assertSafeStripeE2eTarget();
     // A clock advance is a batch job on Stripe's side: it settles in tens of
     // seconds, and the webhooks it emits arrive afterwards.
@@ -59,13 +60,9 @@ test.describe('Trial end → first real charge (GA gate)', () => {
     const runId = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
     const inputs = buildSignupInputs(runId);
 
-    // 1. Real signup + email confirmation, through the real routes.
-    const signupRequestId = await submitSignupViaApi(request, inputs);
-    await confirmSupabaseEmail(inputs.email);
-    const confirm = await request.post('/api/v1/auth/confirm-verification', {
-      data: { signupRequestId },
-    });
-    expect(confirm.ok(), 'confirm-verification failed').toBeTruthy();
+    // 1. Real sign-in + signup answers, through the real email-first routes.
+    await signInEmailFirst(page, inputs);
+    const signupRequestId = await submitSignupDetailsViaApi(page, inputs);
 
     // 2. A customer pinned to a test clock frozen at "now".
     const clock = await stripe.testHelpers.testClocks.create({
@@ -95,7 +92,7 @@ test.describe('Trial end → first real charge (GA gate)', () => {
       line_items: [{ price: price!.id, quantity: 1 }],
       subscription_data: { trial_period_days: TRIAL_DAYS },
       success_url: `${baseUrl}/signup/checkout/return?session_id={CHECKOUT_SESSION_ID}&signupRequestId=${encodeURIComponent(signupRequestId)}`,
-      cancel_url: `${baseUrl}/signup/checkout?signupRequestId=${encodeURIComponent(signupRequestId)}`,
+      cancel_url: `${baseUrl}/signup`,
       metadata: {
         signupRequestId,
         communityType: inputs.communityType,
@@ -111,7 +108,9 @@ test.describe('Trial end → first real charge (GA gate)', () => {
 
     // 5. Provisioning lands the community trialing, via the real webhook.
     await expect(page).toHaveURL(/\/signup\/checkout\/return/, { timeout: 60_000 });
-    await expect(page.getByText(/free trial active/i)).toBeVisible({ timeout: 180_000 });
+    await expect(page.getByText(/ is live\./)).toBeVisible({ timeout: 180_000 });
+    await page.getByRole('button', { name: 'Go to your dashboard' }).click();
+    await expect(page.getByText(/free trial active/i)).toBeVisible({ timeout: 60_000 });
 
     const subscriptionId =
       typeof session.subscription === 'string'

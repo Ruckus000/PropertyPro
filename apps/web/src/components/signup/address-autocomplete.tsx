@@ -22,11 +22,11 @@ interface SignupAddressAutocompleteProps {
   disabled?: boolean;
   invalid?: boolean;
   /**
-   * Switches the caller to manual address entry. When given, a search with no
-   * usable suggestions offers it right there, instead of saying "keep typing",
-   * which is only true for a caller that accepts a typed address as-is.
+   * Switches the caller to manual address entry. A search with no usable
+   * suggestions offers it right there: a typed address alone is not accepted,
+   * so "keep typing" would send the founder into a validation error.
    */
-  onEnterManually?: () => void;
+  onEnterManually: () => void;
 }
 
 export function SignupAddressAutocomplete({
@@ -129,7 +129,7 @@ export function SignupAddressAutocomplete({
 
   const activeSuggestion = activeIndex >= 0 ? suggestions[activeIndex] : null;
 
-  const manualHint = onEnterManually ? (
+  const manualHint = (
     <button
       type="button"
       className="font-medium text-content-link underline underline-offset-4 hover:text-content-link-hover"
@@ -141,8 +141,6 @@ export function SignupAddressAutocomplete({
     >
       Enter it manually
     </button>
-  ) : (
-    'You can keep typing manually.'
   );
 
   return (

@@ -54,7 +54,7 @@
     "unscoped": 1
   },
   "apps/web/src/lib/auth/signup.ts": {
-    "unscoped": 4
+    "unscoped": 1
   },
   "apps/web/src/lib/billing/billing-group-service.ts": {
     "unscoped": 15
@@ -194,7 +194,7 @@
     "unscoped": 4
   },
   "apps/web/src/lib/services/provisioning-service.ts": {
-    "unscoped": 21
+    "unscoped": 17
   },
   "apps/web/src/lib/services/readiness-service.ts": {
     "unscoped": 3

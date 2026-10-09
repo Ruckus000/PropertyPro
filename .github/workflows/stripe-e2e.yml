@@ -7,8 +7,9 @@ name: Stripe E2E
 #
 # It is the only suite in the repo that talks to a third-party API, needs
 # repository secrets, and needs a full Supabase stack (Auth included, not the
-# Postgres stub `integration-tests.yml` uses — `/api/v1/auth/signup` calls
-# `auth.admin.generateLink`, which a bare Postgres cannot serve). Putting that on
+# Postgres stub `integration-tests.yml` uses — `/api/v1/auth/signup/start` calls
+# `auth.admin.generateLink` and `/auth/verify-signup` calls `verifyOtp`, which a
+# bare Postgres cannot serve). Putting that on
 # the critical path of every merge would make an unrelated PR unmergeable
 # whenever Stripe has a blip, and would deny secrets to fork PRs, where it would
 # then fail for everyone outside the repo.
@@ -48,7 +49,11 @@ on:
       - 'apps/web/src/lib/services/provisioning-service.ts'
       - 'apps/web/src/lib/actions/checkout.ts'
       - 'apps/web/src/lib/auth/signup.ts'
-      - 'apps/web/src/app/(marketing)/signup/**'
+      - 'apps/web/src/lib/auth/signup-email-first.ts'
+      - 'apps/web/src/app/auth/verify-signup/**'
+      - 'apps/web/src/app/(auth)/signup/**'
+      - 'apps/web/src/app/(public)/signup/**'
+      - 'apps/web/src/components/signup/**'
       - 'apps/web/e2e/signup-*.spec.ts'
       - 'apps/web/e2e/helpers/stripe-e2e.ts'
       - 'packages/db/migrations/**'

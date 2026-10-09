@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SignupEmailDeliveryError, ValidationError } from '../../src/lib/api/errors';
 
 const {
   createUnscopedClientMock,
-  createAdminClientMock,
-  sendEmailMock,
   eqMock,
   andMock,
   notInArrayMock,
@@ -17,8 +14,6 @@ const {
   userRolesTable,
 } = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
-  createAdminClientMock: vi.fn(),
-  sendEmailMock: vi.fn().mockResolvedValue({ id: 'email_1' }),
   eqMock: vi.fn((col: unknown, value: unknown) => ({ _type: 'eq', col, value })),
   andMock: vi.fn((...conditions: unknown[]) => ({ _type: 'and', conditions })),
   notInArrayMock: vi.fn((col: unknown, values: unknown) => ({ _type: 'notInArray', col, values })),
@@ -47,15 +42,6 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
 
-vi.mock('@propertypro/db/supabase/admin', () => ({
-  createAdminClient: createAdminClientMock,
-}));
-
-vi.mock('@propertypro/email', () => ({
-  sendEmail: sendEmailMock,
-  SignupVerificationEmail: () => null,
-}));
-
 vi.mock('@propertypro/db/filters', () => ({
   and: andMock,
   eq: eqMock,
@@ -72,11 +58,7 @@ vi.mock('@propertypro/db', () => ({
   userRoles: userRolesTable,
 }));
 
-import {
-  _testInternals,
-  checkSignupSubdomainAvailability,
-  submitSignup,
-} from '../../src/lib/auth/signup';
+import { checkSignupSubdomainAvailability } from '../../src/lib/auth/signup';
 
 interface CommunityRow {
   id: number;
@@ -413,26 +395,8 @@ function createMockDb(state: MockDbState): {
   };
 }
 
-const validSignupPayload = {
-  signupRequestId: '6f83f6d3-7b45-4ff4-a7ef-f8f91a4f663a',
-  primaryContactName: 'Jordan Admin',
-  email: 'jordan@example.com',
-  password: 'Secure!123',
-  communityName: 'Seaside Villas',
-  address: '101 Coastal Dr, Naples, FL 34102',
-  county: 'Collier',
-  unitCount: 140,
-  communityType: 'condo_718' as const,
-  planKey: 'essentials' as const,
-  candidateSlug: 'seaside-villas',
-  termsAccepted: true,
-};
-
 describe('signup service', () => {
   let state: MockDbState;
-  let insertSpy: ReturnType<typeof vi.fn>;
-  let generateLinkMock: ReturnType<typeof vi.fn>;
-  let updateUserByIdMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -442,65 +406,7 @@ describe('signup service', () => {
       pendingSignups: [],
     };
 
-    const mockDb = createMockDb(state);
-    insertSpy = mockDb.insertSpy;
-    createUnscopedClientMock.mockReturnValue(mockDb.db);
-
-    generateLinkMock = vi.fn().mockResolvedValue({
-      data: {
-        user: { id: 'auth-user-1' },
-        // `hashed_token`, not `action_link`: the emailed link is built on OUR
-        // domain and finished by /auth/verify-signup. action_link is still
-        // returned by Supabase and still ignored.
-        properties: {
-          hashed_token: 'hashed-token-signup',
-          action_link:
-            'https://vbqobyagjzvlfpfozvmx.supabase.co/auth/v1/verify?token=tok&type=signup',
-        },
-      },
-      error: null,
-    });
-
-    updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
-
-    createAdminClientMock.mockReturnValue({
-      auth: {
-        admin: {
-          generateLink: generateLinkMock,
-          updateUserById: updateUserByIdMock,
-        },
-      },
-    });
-  });
-
-  describe('a password planted on an unconfirmed account', () => {
-    // Anyone can create an unconfirmed user for any address with a password of
-    // their choosing; GoTrue then ignores the next submitter's password. The
-    // person who confirms must end up with THEIR password, not the planter's.
-    it('is replaced with the submitter\'s own password', async () => {
-      await submitSignup(validSignupPayload);
-      expect(updateUserByIdMock).toHaveBeenCalledWith('auth-user-1', {
-        password: validSignupPayload.password,
-      });
-    });
-
-    it('leaves a confirmed account\'s password alone', async () => {
-      generateLinkMock.mockResolvedValueOnce({
-        data: {
-          user: { id: 'auth-user-1', email_confirmed_at: '2026-01-01T00:00:00Z' },
-          properties: { hashed_token: 'hashed-token-signup' },
-        },
-        error: null,
-      });
-      await submitSignup(validSignupPayload);
-      expect(updateUserByIdMock).not.toHaveBeenCalled();
-    });
-
-    it('sends no verification link when the password cannot be set', async () => {
-      updateUserByIdMock.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
-      await expect(submitSignup(validSignupPayload)).rejects.toThrow(/signup password/);
-      expect(sendEmailMock).not.toHaveBeenCalled();
-    });
+    createUnscopedClientMock.mockReturnValue(createMockDb(state).db);
   });
 
   it('rejects reserved subdomains and accepts free subdomains', async () => {
@@ -519,31 +425,6 @@ describe('signup service', () => {
     const result = await checkSignupSubdomainAvailability('taken-community');
     expect(result.available).toBe(false);
     expect(result.reason).toBe('taken');
-  });
-
-  it('performs authoritative submit-time subdomain re-check', async () => {
-    state.communities.push({ id: 8, slug: 'seaside-villas' });
-
-    await expect(submitSignup(validSignupPayload)).rejects.toBeInstanceOf(
-      ValidationError,
-    );
-    expect(insertSpy).not.toHaveBeenCalled();
-  });
-
-  it('is idempotent for duplicate submit and never writes communities/user_roles', async () => {
-    const first = await submitSignup(validSignupPayload);
-    const second = await submitSignup(validSignupPayload);
-
-    expect(first.signupRequestId).toBe(validSignupPayload.signupRequestId);
-    expect(second.signupRequestId).toBe(validSignupPayload.signupRequestId);
-    expect(state.pendingSignups).toHaveLength(1);
-    expect(state.pendingSignups[0]?.authUserId).toBe('auth-user-1');
-    expect(state.pendingSignups[0]?.verificationEmailId).toBe('email_1');
-
-    const insertedTables = insertSpy.mock.calls.map((call) => call[0]);
-    expect(insertedTables).toEqual([pendingSignupsTable, pendingSignupsTable]);
-    expect(insertedTables).not.toContain(communitiesTable);
-    expect(insertedTables).not.toContain(userRolesTable);
   });
 
   it('allows reclaiming slugs from expired pending signups', async () => {
@@ -600,230 +481,6 @@ describe('signup service', () => {
     const availability = await checkSignupSubdomainAvailability('palm-gardens');
     expect(availability.available).toBe(false);
     expect(availability.reason).toBe('taken');
-  });
-
-  it('keeps email uniqueness handling non-enumerating for already-registered users', async () => {
-    generateLinkMock
-      .mockResolvedValueOnce({
-        data: {
-          user: null,
-          properties: null,
-        },
-        error: { message: 'A user with this email address has already been registered' },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          user: { id: 'auth-user-1' },
-          properties: {
-            hashed_token: 'hashed-token-magic',
-            action_link:
-              'https://vbqobyagjzvlfpfozvmx.supabase.co/auth/v1/verify?token=tok&type=magiclink',
-          },
-        },
-        error: null,
-      });
-
-    const result = await submitSignup(validSignupPayload);
-    expect(result.message).toContain('Check your email');
-    expect(result.verificationRequired).toBe(true);
-    expect(generateLinkMock).toHaveBeenCalledTimes(2);
-
-    // The fallback arm generates a MAGICLINK, so its token must be verified as
-    // one. Getting this wrong fails only for already-registered emails, which
-    // is the rarer path and the one least likely to be noticed.
-    const fallbackLink = new URL(
-      (sendEmailMock.mock.calls.at(-1)?.[0] as { react: { props: { verificationLink: string } } })
-        .react.props.verificationLink,
-    );
-    expect(fallbackLink.searchParams.get('type')).toBe('magiclink');
-    expect(fallbackLink.searchParams.get('token_hash')).toBe('hashed-token-magic');
-  });
-
-  it('lists the steps after verification, naming the chosen plan — and no durations', async () => {
-    await submitSignup(validSignupPayload);
-
-    const sent = sendEmailMock.mock.calls.at(-1)?.[0] as {
-      category: string;
-      react: { props: { remainingSteps: Array<{ label: string; value: string }> } };
-    };
-    expect(sent.category).toBe('transactional');
-    expect(sent.react.props.remainingSteps).toEqual([
-      { label: 'Checkout', value: 'Essentials plan' },
-      { label: 'Community setup', value: 'After checkout' },
-    ]);
-    expect(JSON.stringify(sent.react.props.remainingSteps)).not.toMatch(/minute/i);
-  });
-
-  it('emails a link on OUR domain, not Supabase\'s action_link', async () => {
-    await submitSignup(validSignupPayload);
-
-    const sent = sendEmailMock.mock.calls.at(-1)?.[0] as {
-      react: { props: { verificationLink: string } };
-    };
-    const link = new URL(sent.react.props.verificationLink);
-
-    // The defect this guards: a mail from getpropertypro.com whose only button
-    // points at <project-ref>.supabase.co. Measured into Gmail spam on two
-    // independent accounts — docs/audits/2026-09-11-signup-verification-deliverability.md
-    expect(link.host).not.toContain('supabase.co');
-    expect(link.origin).toBe(new URL(_testInternals.getBaseUrl()).origin);
-    expect(link.pathname).toBe('/auth/verify-signup');
-    expect(link.searchParams.get('token_hash')).toBe('hashed-token-signup');
-    expect(link.searchParams.get('type')).toBe('signup');
-    expect(link.searchParams.get('signupRequestId')).toBeTruthy();
-  });
-
-  // A6 — clear, status-aware errors on signupRequestId reuse (hijack guard kept)
-  it('refuses to reset a completed signup and tells the user to log in (A6)', async () => {
-    state.pendingSignups.push({
-      id: 51,
-      signupRequestId: validSignupPayload.signupRequestId,
-      emailNormalized: 'already-done@example.com',
-      candidateSlug: 'legacy-slug',
-      status: 'completed',
-      expiresAt: null,
-      authUserId: 'auth-existing-1',
-      verificationEmailId: 'email_done',
-      verificationEmailSentAt: new Date(),
-    });
-
-    await expect(submitSignup(validSignupPayload)).rejects.toThrow(/already complete/i);
-    // The completed row must NOT be clobbered back to pending_verification.
-    expect(state.pendingSignups[0]?.status).toBe('completed');
-  });
-
-  it('rejects signupRequestId reuse from a different email (cross-user hijacking)', async () => {
-    // First user creates a pending signup.
-    await submitSignup(validSignupPayload);
-    expect(state.pendingSignups).toHaveLength(1);
-
-    // Attacker tries to reuse the same signupRequestId with a different email.
-    const hijackPayload = {
-      ...validSignupPayload,
-      email: 'attacker@example.com',
-      candidateSlug: 'attacker-community',
-    };
-
-    // A6: still rejected (a reused signupRequestId must never be reassigned to a
-    // new email), now with an actionable message instead of the opaque one.
-    await expect(submitSignup(hijackPayload)).rejects.toThrow(
-      /started with a different email/i,
-    );
-
-    // Original signup should be untouched.
-    expect(state.pendingSignups[0]?.emailNormalized).toBe('jordan@example.com');
-    expect(state.pendingSignups[0]?.candidateSlug).toBe('seaside-villas');
-  });
-
-  // F1 (route-authz census, 2026-09-28): the email-keyed upsert used to hand
-  // the EXISTING signupRequestId to anyone who submitted that email, and let
-  // them overwrite the prospect's community details. The id is the only key to
-  // GET /auth/provisioning-status, whose first poller after provisioning gets a
-  // login token for the new root manager.
-  describe('a second submission of an email with a live signup it did not start', () => {
-    const victimId = validSignupPayload.signupRequestId;
-    const attackerPayload = {
-      ...validSignupPayload,
-      signupRequestId: undefined,
-      password: 'Attacker!999',
-      communityName: 'Attacker Towers',
-      candidateSlug: 'attacker-towers',
-    };
-
-    async function victimSignsUp() {
-      await submitSignup(validSignupPayload);
-      state.pendingSignups[0]!.expiresAt = new Date(Date.now() + 3600_000);
-      generateLinkMock.mockClear();
-      sendEmailMock.mockClear();
-    }
-
-    it('never discloses the existing signupRequestId', async () => {
-      // Revert-check: drop the ownership arm of the setWhere (and this mock's
-      // mirror of it) and the attacker receives victimId again.
-      await victimSignsUp();
-
-      const result = await submitSignup(attackerPayload);
-
-      expect(result.signupRequestId).not.toBe(victimId);
-      expect(result.message).toContain('Check your email');
-    });
-
-    it('leaves the prospect\'s row untouched and makes no auth or email call', async () => {
-      await victimSignsUp();
-
-      await submitSignup(attackerPayload);
-
-      expect(state.pendingSignups).toHaveLength(1);
-      expect(state.pendingSignups[0]).toMatchObject({
-        signupRequestId: victimId,
-        communityName: 'Seaside Villas',
-        candidateSlug: 'seaside-villas',
-      });
-      expect(generateLinkMock).not.toHaveBeenCalled();
-      expect(sendEmailMock).not.toHaveBeenCalled();
-    });
-
-    it('also refuses a caller presenting a DIFFERENT id for that email', async () => {
-      await victimSignsUp();
-
-      const result = await submitSignup({
-        ...attackerPayload,
-        signupRequestId: '0b9f5c1e-2a4d-4e6f-8a1b-3c5d7e9f1a2b',
-      });
-
-      expect(result.signupRequestId).not.toBe(victimId);
-      expect(state.pendingSignups[0]?.communityName).toBe('Seaside Villas');
-    });
-
-    it('lets the owner (same id) keep updating their own signup', async () => {
-      await victimSignsUp();
-
-      const result = await submitSignup({ ...validSignupPayload, communityName: 'Seaside Villas II' });
-
-      expect(result.signupRequestId).toBe(victimId);
-      expect(state.pendingSignups[0]?.communityName).toBe('Seaside Villas II');
-    });
-
-    it('lets anyone restart an EXPIRED signup, under a new id', async () => {
-      await victimSignsUp();
-      state.pendingSignups[0]!.expiresAt = new Date('2020-01-01');
-
-      const result = await submitSignup(attackerPayload);
-
-      expect(result.signupRequestId).not.toBe(victimId);
-      expect(state.pendingSignups).toHaveLength(1);
-      expect(state.pendingSignups[0]?.signupRequestId).toBe(result.signupRequestId);
-    });
-  });
-
-  it('skips re-sending verification email within cooldown period', async () => {
-    // First submission sends the email.
-    const first = await submitSignup(validSignupPayload);
-    expect(first.signupRequestId).toBe(validSignupPayload.signupRequestId);
-    expect(sendEmailMock).toHaveBeenCalledTimes(1);
-
-    // Simulate the pending signup having a recent verificationEmailSentAt.
-    state.pendingSignups[0]!.verificationEmailSentAt = new Date();
-
-    sendEmailMock.mockClear();
-
-    // Second submission within cooldown should NOT re-send.
-    const second = await submitSignup(validSignupPayload);
-    expect(second.signupRequestId).toBe(validSignupPayload.signupRequestId);
-    expect(sendEmailMock).not.toHaveBeenCalled();
-  });
-
-  it('persists auth linkage before surfacing a verification email delivery failure', async () => {
-    sendEmailMock.mockRejectedValueOnce(new Error('provider timeout'));
-
-    await expect(submitSignup(validSignupPayload)).rejects.toBeInstanceOf(
-      SignupEmailDeliveryError,
-    );
-
-    expect(state.pendingSignups).toHaveLength(1);
-    expect(state.pendingSignups[0]?.authUserId).toBe('auth-user-1');
-    expect(state.pendingSignups[0]?.verificationEmailId).toBeNull();
-    expect(state.pendingSignups[0]?.verificationEmailSentAt).toBeNull();
   });
 
   describe('advisory subdomain check logging and transient failures', () => {
@@ -904,32 +561,5 @@ describe('signup service', () => {
       expect(getLoggedEvents(infoSpy)).toContain('subdomain.check.available');
     });
 
-    it('submitSignup throws a retryable ValidationError when the re-check returns unknown', async () => {
-      // First call (authoritative re-check inside submitSignup) fails; any
-      // subsequent DB call for upsert would not be reached.
-      const failingDb = {
-        select: vi.fn(() => {
-          throw new Error('connection refused');
-        }),
-        insert: vi.fn(),
-        update: vi.fn(),
-      };
-      createUnscopedClientMock.mockReturnValueOnce(failingDb);
-
-      let captured: unknown;
-      try {
-        await submitSignup(validSignupPayload);
-      } catch (err) {
-        captured = err;
-      }
-
-      expect(captured).toBeInstanceOf(ValidationError);
-      const err = captured as ValidationError & {
-        details?: { reason?: string; field?: string };
-      };
-      expect(err.message).toMatch(/couldn't verify/i);
-      expect(err.details?.reason).toBe('unknown');
-      expect(err.details?.field).toBe('candidateSlug');
-    });
   });
 });

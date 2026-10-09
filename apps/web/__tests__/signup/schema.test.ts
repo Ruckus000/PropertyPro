@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeSignupSubdomain,
-  signupSchema,
+  signupDetailsSchema,
+  signupStartSchema,
 } from '../../src/lib/auth/signup-schema';
 
 const validPayload = {
   primaryContactName: 'Jordan Admin',
-  email: 'jordan@example.com',
-  password: 'Secure!123',
   communityName: 'Ocean Breeze HOA',
   addressLine1: '123 Palm Ave',
   city: 'West Palm Beach',
@@ -21,16 +20,14 @@ const validPayload = {
   termsAccepted: true,
 };
 
-describe('signup schema validation', () => {
+describe('signup details schema validation', () => {
   it('requires all core fields', () => {
-    const result = signupSchema.safeParse({});
+    const result = signupDetailsSchema.safeParse({});
     expect(result.success).toBe(false);
 
     if (result.success) return;
     const errors = result.error.flatten().fieldErrors;
     expect(errors.primaryContactName?.length).toBeGreaterThan(0);
-    expect(errors.email?.length).toBeGreaterThan(0);
-    expect(errors.password?.length).toBeGreaterThan(0);
     expect(errors.communityName?.length).toBeGreaterThan(0);
     expect(errors.county?.length).toBeGreaterThan(0);
     expect(errors.unitCount?.length).toBeGreaterThan(0);
@@ -41,7 +38,7 @@ describe('signup schema validation', () => {
   });
 
   it('requires an address when neither legacy nor structured address fields are provided', () => {
-    const result = signupSchema.safeParse({
+    const result = signupDetailsSchema.safeParse({
       ...validPayload,
       addressLine1: undefined,
       city: undefined,
@@ -56,10 +53,10 @@ describe('signup schema validation', () => {
   });
 
   it('routes the missing-address error to addressLine1 when the structured form submits blank strings', () => {
-    // The signup form always passes addressLine1/city/state/zipCode as strings
-    // (initialized to ''). An empty submission would route to `addressLine1`
-    // so the inline error under the Street Address field renders.
-    const result = signupSchema.safeParse({
+    // The signup flow always passes addressLine1/city/state/zipCode as strings
+    // (initialized to ''). An empty submission routes to `addressLine1` so the
+    // inline error under the street address field renders.
+    const result = signupDetailsSchema.safeParse({
       ...validPayload,
       addressLine1: '',
       city: '',
@@ -75,42 +72,27 @@ describe('signup schema validation', () => {
   });
 
   it('requires Terms acceptance', () => {
-    const result = signupSchema.safeParse({
+    const result = signupDetailsSchema.safeParse({
       ...validPayload,
       termsAccepted: false,
     });
     expect(result.success).toBe(false);
   });
 
-  it.each([
-    ['too short', 'Ab1!'],
-    ['missing lowercase', 'ABCDEFG1!'],
-    ['missing uppercase', 'abcdefg1!'],
-    ['missing number', 'Abcdefgh!'],
-    ['missing special character', 'Abcdefg1'],
-  ])('rejects password that is %s', (_label, password) => {
-    const result = signupSchema.safeParse({
-      ...validPayload,
-      password,
-    });
-    expect(result.success).toBe(false);
-  });
-
   it('accepts a fully compliant payload', () => {
-    const result = signupSchema.safeParse(validPayload);
+    const result = signupDetailsSchema.safeParse(validPayload);
     expect(result.success).toBe(true);
   });
 
-  it('rejects invalid emails', () => {
-    const result = signupSchema.safeParse({
-      ...validPayload,
-      email: 'not-an-email',
-    });
+  it('rejects invalid emails at the start step', () => {
+    const result = signupStartSchema.safeParse({ email: 'not-an-email', binding: 'a'.repeat(64) });
     expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.flatten().fieldErrors.email?.length).toBeGreaterThan(0);
   });
 
   it('rejects invalid unit counts', () => {
-    const result = signupSchema.safeParse({
+    const result = signupDetailsSchema.safeParse({
       ...validPayload,
       unitCount: 0,
     });

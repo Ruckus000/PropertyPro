@@ -17,106 +17,80 @@
  *   3. E2E_STRIPE=1 pnpm --filter @propertypro/web exec playwright test \
  *        -c playwright.config.ts e2e/signup-trialing.spec.ts
  *
- * Deterministic prerequisite (signup + email confirm) runs via API + Supabase
- * admin; only the Stripe checkout hop is driven in the browser. The Stripe
- * iframe selectors and the Supabase admin call are the two seams to validate on
- * first run (see helpers/stripe-e2e.ts).
+ * The founder is signed in through the email-first routes (the emailed link is
+ * re-minted with the service-role key, since CI has no inbox), then walks the
+ * real `/signup` trial step: "Start free trial" saves the answers and mounts
+ * Embedded Checkout inline. See helpers/stripe-e2e.ts.
  */
 import { expect, test } from '@playwright/test';
 import {
   STRIPE_E2E_SKIP_REASON,
   assertSafeStripeE2eTarget,
   buildSignupInputs,
-  confirmSupabaseEmail,
   fillStripeEmbeddedCheckout,
+  reachEmbeddedCheckout,
+  signInEmailFirst,
+  signupDetailsBody,
   stripeE2eConfigured,
-  submitSignupViaApi,
 } from './helpers/stripe-e2e';
 
 test.describe('Signup → Stripe Checkout → trialing (GA gate)', () => {
   test.skip(!stripeE2eConfigured(), STRIPE_E2E_SKIP_REASON);
 
-  test('a founding admin can sign up, pay with the test card, and land trialing', async ({
-    page,
-    request,
-  }) => {
+  test('a founding admin can sign up, pay with the test card, and land trialing', async ({ page }) => {
     // Blast-radius guard: this test creates real auth users + communities, so
     // refuse to run against a known-production Supabase project (Stripe test
     // mode does NOT make a prod database safe). Fails fast before any write.
     assertSafeStripeE2eTarget();
 
     // Provisioning polls a Stripe webhook round-trip, and the assertions below
-    // budget up to ~150s combined — set an explicit per-test timeout that
+    // budget up to ~210s combined — set an explicit per-test timeout that
     // comfortably exceeds them (test.slow() would only give 90s).
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
 
     const runId = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
     const inputs = buildSignupInputs(runId);
 
-    // 1. Create the signup request. The route also creates the Supabase auth
-    //    user (server-side admin generateLink) and links it to the pending row.
-    const signupRequestId = await submitSignupViaApi(request, inputs);
+    // 1. Sign in as the founder, through the email-first routes.
+    await signInEmailFirst(page, inputs);
 
-    // 2. Confirm the email out-of-band — there is no inbox in CI, and
-    //    confirm-verification gates on the auth user's email_confirmed_at.
-    await confirmSupabaseEmail(inputs.email);
-
-    // 3. Advance the pending signup to email_verified. In the product this is
-    //    what /signup?verified=1 does on arrival from the emailed link — the
-    //    /signup/verify screen used to poll for it and no longer does.
-    const confirm = await request.post('/api/v1/auth/confirm-verification', {
-      data: { signupRequestId },
-    });
-    expect(
-      confirm.ok(),
-      `confirm-verification failed: ${confirm.status()} ${await confirm.text().catch(() => '')}`,
-    ).toBeTruthy();
-
-    // 4. Open embedded Stripe Checkout and pay with the test card.
-    await page.goto(`/signup/checkout?signupRequestId=${signupRequestId}`, {
-      waitUntil: 'domcontentloaded',
-    });
+    // 2. "Start free trial" on the trial step saves the answers and mounts
+    //    embedded Stripe Checkout inline. Pay with the test card.
+    await reachEmbeddedCheckout(page, inputs);
     await fillStripeEmbeddedCheckout(page);
 
-    // 5. Stripe returns to the provisioning page; the webhook provisions a
-    //    trialing community and ProvisioningProgress auto-logs-in + redirects.
+    // 3. Stripe returns to the provisioning page; the webhook provisions the
+    //    community and ProvisioningProgress shows the "live" screen.
     await expect(page).toHaveURL(/\/signup\/checkout\/return/, { timeout: 30_000 });
+    await expect(page.getByText(/ is live\./)).toBeVisible({ timeout: 120_000 });
 
-    // 6. Trialing is live: the app shell shows the "Free trial active" banner
+    // 4. Into the community.
+    await page.getByRole('button', { name: 'Go to your dashboard' }).click();
+
+    // 5. Trialing is live: the app shell shows the "Free trial active" banner
     //    (rendered only for subscriptionStatus === 'trialing'). This is the
     //    definitive success signal and is host-agnostic (works even if the
     //    redirect lands on the community's subdomain).
-    await expect(page.getByText(/free trial active/i)).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(/free trial active/i)).toBeVisible({ timeout: 60_000 });
 
-    // 7. A paid email cannot start a second signup.
+    // 6. A paid email cannot start a second signup.
     //
     // Asserted here rather than in signup-failure-paths.spec.ts because it needs
     // an email that has genuinely completed payment, and this test has just
     // produced one — checking it there would mean paying twice. Without this
     // guard a customer who already has a community can walk the pricing page
     // again and be charged for a second one.
-    const duplicate = await request.post('/api/v1/auth/signup', {
+    const duplicate = await page.request.post('/api/v1/auth/signup/details', {
       data: {
-        primaryContactName: inputs.primaryContactName,
-        email: inputs.email,
-        password: inputs.password,
+        ...signupDetailsBody(inputs),
         communityName: `${inputs.communityName} Duplicate`,
-        addressLine1: '100 Ocean Drive',
-        city: 'Miami',
-        state: 'FL',
-        zipCode: '33139',
-        county: 'Miami-Dade',
-        unitCount: 40,
-        communityType: inputs.communityType,
-        planKey: inputs.planKey,
         candidateSlug: `${inputs.candidateSlug}-dup`.slice(0, 40),
-        termsAccepted: true,
       },
     });
     expect(
       duplicate.status(),
       'a second signup with an already-paid email must be refused',
     ).toBe(400);
-    expect(await duplicate.text()).toMatch(/already exists/i);
+    expect(await duplicate.text()).toMatch(/already has a PropertyPro community/i);
   });
 });

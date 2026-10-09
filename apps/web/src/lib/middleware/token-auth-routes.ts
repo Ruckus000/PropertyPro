@@ -21,7 +21,6 @@ import type { NextRequest } from 'next/server';
 export const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/invitations', method: 'PATCH' },
   { path: '/api/v1/auth/signup', method: 'GET' },
-  { path: '/api/v1/auth/signup', method: 'POST' },
   // Email-first signup step 1: takes an email, sends a sign-in link; no session yet
   { path: '/api/v1/auth/signup/start', method: 'POST' },
   // Snowbird digest one-click unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM)
@@ -53,8 +52,6 @@ export const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> 
   // issues nothing else. A provider POST carries no Origin header, so the CSRF
   // check must be skipped or every delivery 403s.
   { path: '/api/v1/webhooks/inbound-email', method: 'POST' },
-  // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]
-  { path: '/api/v1/auth/confirm-verification', method: 'POST' },
   // Provisioning status polling: no session yet, signupRequestId-authenticated [Provisioning Screen]
   { path: '/api/v1/auth/provisioning-status', method: 'GET' },
   // Self-service resident signup: public submit + OTP verify (no session required)

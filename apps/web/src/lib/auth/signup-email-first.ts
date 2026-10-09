@@ -1,10 +1,11 @@
 /**
  * Email-first signup (design "Front porch").
  *
- * The form signup in `signup.ts` asks for everything — including a password —
- * before the email is verified, and writes a `pending_signups` row up front.
- * This flow asks for the email ONLY, and the row is written after the emailed
- * link has signed the user in:
+ * The only signup flow. (The form flow it replaced asked for everything —
+ * including a password — before the email was verified, and wrote a
+ * `pending_signups` row up front; it was retired on 2026-10-09.) This flow asks
+ * for the email ONLY, and the row is written after the emailed link has signed
+ * the user in:
  *
  *   1. `startEmailFirstSignup(email)` — one `magiclink` generateLink, which
  *      GoTrue turns into a `signup` (creating a passwordless-in-practice user
@@ -55,7 +56,7 @@ import { buildVerificationLink, type VerificationLinkType } from './verification
 export const START_SIGNUP_MESSAGE = 'Check your email for a link to continue.';
 
 /**
- * Floor on the start response. Higher than the form flow's 250ms because the
+ * Floor on the start response. Higher than the retired form flow's 250ms because the
  * already-registered branch makes a second GoTrue call; an unpadded response
  * would tell a caller whether an address has an account.
  */
@@ -113,8 +114,9 @@ async function generateStartLink(
   if (error || !token) {
     throw new Error(error?.message ?? 'generateLink returned no token');
   }
-  // An UNCONFIRMED account may carry a password someone else chose: the form
-  // flow creates one for any address with no proof of ownership. Verifying
+  // An UNCONFIRMED account may carry a password someone else chose: the
+  // retired form flow created one for any address with no proof of ownership,
+  // and such accounts can outlive it. Verifying
   // this link confirms the account and leaves that password in place
   // (GoTrue recoverVerify), so the planter could then sign in to the
   // community this owner pays for. Replace it before the link goes out. An
@@ -177,7 +179,7 @@ export async function startEmailFirstSignup(
     }
 
     try {
-      await sendSignupVerificationEmail(undefined, undefined, email, auth.link, undefined);
+      await sendSignupVerificationEmail(email, auth.link);
     } catch (emailError) {
       // Provider failure is not per-address, so saying so reveals nothing.
       console.error(JSON.stringify({
@@ -211,7 +213,7 @@ const ALREADY_SIGNED_UP_MESSAGE =
 
 /**
  * Step 3. The caller is the signed-in owner of `user.email`, which is stronger
- * proof than the bearer `signupRequestId` the form flow relies on, so an
+ * proof than a bearer `signupRequestId` (what the retired form flow relied on), so an
  * existing pre-payment row for this address is theirs to overwrite.
  */
 export async function submitSignupDetails(
@@ -247,10 +249,11 @@ export async function submitSignupDetails(
     throw new ValidationError(ALREADY_SIGNED_UP_MESSAGE, { field: 'email' });
   }
 
-  // Reuse the row's id only when THIS session wrote it. Anyone can create a
-  // form-flow row for any address with an id of their choosing (no proof of
-  // ownership is needed for pending_verification), and whoever holds the id of
-  // a paid signup can claim its first login token from provisioning-status.
+  // Reuse the row's id only when THIS session wrote it. A row this session did
+  // not write may carry an id someone else knows (the retired form flow let
+  // anyone create one for any address, with an id of their choosing), and
+  // whoever holds the id of a paid signup can claim its first login token from
+  // provisioning-status.
   // An expired row's id may also have been disclosed while it was live.
   const ownLiveRow =
     existing

@@ -129,12 +129,21 @@ describe('p1-22 session middleware', () => {
     expect(response.status).toBe(200);
   });
 
-  it('allows unauthenticated POST /api/v1/auth/signup', async () => {
+  it('allows unauthenticated POST /api/v1/auth/signup/start', async () => {
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/auth/signup/start', {}, 'POST'),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  // The retired password signup posted here without a session.
+  it('keeps unauthenticated POST /api/v1/auth/signup protected', async () => {
     const response = await middleware(
       request('http://localhost:3000/api/v1/auth/signup', {}, 'POST'),
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
   });
 
   it('allows unauthenticated GET /api/v1/transparency', async () => {

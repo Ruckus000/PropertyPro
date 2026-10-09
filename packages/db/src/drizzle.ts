@@ -56,7 +56,8 @@ if (!databaseUrl) {
  * INSTANCE. It does nothing across instances. So the arithmetic is
  * instances × max, and at the previous `max: 10` the whole production budget
  * was TWENTY concurrent instances. A signup during a post-deploy cold-start
- * fan-out was enough to exhaust it, and `confirm-verification` answered 500.
+ * fan-out was enough to exhaust it, and signup verification (the since-retired
+ * `confirm-verification` route) answered 500.
  *
  * `docs/audits/2026-08-03-e2e-inventory.md:126-128` predicted the opposite —
  * "Production sits behind Supabase's pooler, so this may never surface there".

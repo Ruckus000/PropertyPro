@@ -1,11 +1,5 @@
 /**
- * The URL the signup verification email links to.
- *
- * One builder for `lib/auth/signup.ts` (initial send and its
- * already-registered fallback). It exists because the halves of this had
- * already drifted once: `buildVerificationRedirectUrl`
- * existed twice, once using `getBaseUrl()` and once re-deriving the same
- * fallback chain by hand.
+ * The URL the signup sign-in email links to (`signup-email-first.ts`).
  *
  * This points at OUR domain rather than Supabase's `action_link`. See
  * `app/auth/verify-signup/route.ts` for why, and
@@ -29,34 +23,13 @@ export type VerificationLinkType = 'signup' | 'magiclink';
  */
 export function buildVerificationLink(params: {
   hashedToken: string;
-  /** Absent for email-first signup, which has no pending row until the details step. */
-  signupRequestId?: string;
   type: VerificationLinkType;
-  /** Email-first only: SHA-256 of the requesting browser's nonce (signup-binding.ts). */
-  binding?: string;
+  /** SHA-256 of the requesting browser's nonce (signup-binding.ts); the route requires it. */
+  binding: string;
 }): string {
   const url = new URL('/auth/verify-signup', getBaseUrl());
   url.searchParams.set('token_hash', params.hashedToken);
   url.searchParams.set('type', params.type);
-  if (params.signupRequestId) {
-    url.searchParams.set('signupRequestId', params.signupRequestId);
-  }
-  if (params.binding) {
-    url.searchParams.set('b', params.binding);
-  }
-  return url.toString();
-}
-
-/**
- * Where Supabase should send the user if the emailed `action_link` is ever used
- * directly — links already delivered before this change, for instance.
- *
- * Still passed to `generateLink` so those remain functional: they redirect to
- * `/signup?...&verified=1`, which is exactly where the new route lands too.
- */
-export function buildVerificationRedirectUrl(signupRequestId: string): string {
-  const url = new URL('/signup', getBaseUrl());
-  url.searchParams.set('signupRequestId', signupRequestId);
-  url.searchParams.set('verified', '1');
+  url.searchParams.set('b', params.binding);
   return url.toString();
 }

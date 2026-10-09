@@ -2,30 +2,34 @@
  * Helpers for the signup → Stripe Checkout → trialing E2E (`signup-trialing.spec.ts`).
  *
  * This flow is the one GA-gate item that cannot run in CI: it needs live
- * **Stripe test-mode** secrets, a Supabase **service-role** key (to confirm the
- * signup email out-of-band — there is no inbox in CI), and a running Stripe
- * webhook forwarder (`stripe listen`) so `checkout.session.completed` provisions
- * the community. When those aren't configured the spec skips (see
+ * **Stripe test-mode** secrets, a Supabase **service-role** key (to mint the
+ * emailed sign-in link out-of-band — there is no inbox in CI), and a running
+ * Stripe webhook forwarder (`stripe listen`) so `checkout.session.completed`
+ * provisions the community. When those aren't configured the spec skips (see
  * `stripeE2eConfigured`), keeping the default suite green.
  *
  * Also used by `signup-failure-paths.spec.ts` (declined card, abandonment,
- * duplicate signup), which shares the same guards and skip behaviour.
+ * duplicate signup) and `signup-trial-end.spec.ts`, which share the same guards
+ * and skip behaviour.
  *
- * ── First run: DONE, 2026-08-09 ──
- * Both externally-owned seams flagged here have now been exercised against a
- * real Stripe test account and a local Supabase stack:
- *   1. `confirmSupabaseEmail` — the admin `updateUserById(..., { email_confirm })`
- *      shape is correct as written; no change was needed.
- *   2. `fillStripeEmbeddedCheckout` — needed three fixes, all recorded at the
- *      function itself: the card form is not mounted until the accordion is
- *      expanded, the submit control must be found by test id (a name regex
- *      matches an invisible accordion header first), and a REQUIRED phone field
- *      silently blocks submission when the account collects one.
- * The end-to-end result: community `trialing` on the purchased plan, verified in
- * the database and not merely from the UI banner.
+ * The founder is signed in through the email-first flow's own routes
+ * (`signInEmailFirst`) and reaches Checkout from the trial step on `/signup`
+ * (`reachEmbeddedCheckout`), as a real founder does. The only seam is the
+ * inbox: the link the server emailed is re-minted with the service-role key.
+ *
+ * `fillStripeEmbeddedCheckout` needed three fixes on its first real run
+ * (2026-08-09), all recorded at the function itself: the card form is not
+ * mounted until the accordion is expanded, the submit control must be found by
+ * test id (a name regex matches an invisible accordion header first), and a
+ * REQUIRED phone field silently blocks submission when the account collects one.
  */
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { createHash, randomBytes } from 'node:crypto';
+import { expect, test, type Page } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
+import { clickWhenHydrated } from './hydration';
+
+/** `SIGNUP_BINDING_COOKIE` in `apps/web/src/lib/auth/signup-binding.ts`. */
+const SIGNUP_BINDING_COOKIE = 'pp_signup_binding';
 
 /** Env this spec needs to actually run; missing/invalid values → skip. */
 export const STRIPE_E2E_ENV = {
@@ -108,7 +112,7 @@ export const STRIPE_E2E_SKIP_REASON =
   'See docs/audits/2026-07-11-stripe-cancel-smoke.md.';
 
 /**
- * The copy `/signup/checkout` renders when `createCheckoutSession` returns
+ * The copy the trial step on `/signup` renders when `createCheckoutSession` returns
  * `{ ok: false }` (see `apps/web/src/lib/actions/checkout.ts`). Matching it is
  * how the spec tells "Stripe Checkout has not mounted yet" apart from "Stripe
  * Checkout is never going to mount".
@@ -133,7 +137,7 @@ const CHECKOUT_IFRAME_SELECTOR =
  * mount is unchanged, it just stops being expressed as a 180s wait for a field
  * that cannot appear.
  */
-async function assertCheckoutSessionStarted(page: Page): Promise<void> {
+export async function assertCheckoutSessionStarted(page: Page): Promise<void> {
   const failure = page.getByText(CHECKOUT_FAILURE_COPY);
   const iframe = page.locator(CHECKOUT_IFRAME_SELECTOR);
 
@@ -159,7 +163,7 @@ async function assertCheckoutSessionStarted(page: Page): Promise<void> {
         timeout: 30_000,
         message:
           'Stripe embedded Checkout never mounted and the app reported no error — ' +
-          'check that the dev server is up and /signup/checkout was reached with a valid signupRequestId.',
+          'check that the dev server is up and "Start free trial" was reached on /signup.',
       },
     )
     .not.toBe('pending');
@@ -215,99 +219,161 @@ export interface StripeTestCard {
 
 export interface SignupInputs {
   email: string;
-  password: string;
   primaryContactName: string;
   communityName: string;
   candidateSlug: string;
+  /** Unique per run: the duplicate-address check (#1336) refuses a second community at one address. */
+  addressLine1: string;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
   planKey: 'essentials' | 'professional';
 }
 
 /**
- * Unique-per-run inputs so repeated runs don't collide on email/subdomain.
- * Pass a monotonic `runId` (e.g. `Date.now()`); randomness is fine in test code.
+ * Unique-per-run inputs so repeated runs don't collide on email, subdomain or
+ * street address. Pass a monotonic `runId` (e.g. `Date.now()`); randomness is
+ * fine in test code.
  */
 export function buildSignupInputs(runId: string): SignupInputs {
+  const houseNumber = 1000 + (Number(runId.replace(/\D/g, '').slice(-6)) % 89_000);
   return {
     email: `e2e-trialing+${runId}@propertypro-e2e.test`,
-    password: 'E2eTrial!ng-9f3k2Q',
     primaryContactName: 'E2E Founding Admin',
     communityName: `E2E Trial Community ${runId}`,
     candidateSlug: `e2e-trial-${runId}`.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40),
+    addressLine1: `${houseNumber} Ocean Drive`,
     communityType: 'condo_718',
     planKey: 'essentials',
   };
 }
 
-/**
- * POST /api/v1/auth/signup — creates the pending-signup row AND the Supabase
- * auth user (server-side via the admin `generateLink` API; see
- * `apps/web/src/lib/auth/signup.ts`). Returns the `signupRequestId`.
- */
-export async function submitSignupViaApi(
-  request: APIRequestContext,
-  inputs: SignupInputs,
-): Promise<string> {
-  const res = await request.post('/api/v1/auth/signup', {
-    data: {
-      primaryContactName: inputs.primaryContactName,
-      email: inputs.email,
-      password: inputs.password,
-      communityName: inputs.communityName,
-      addressLine1: '100 Ocean Drive',
-      city: 'Miami',
-      state: 'FL',
-      zipCode: '33139',
-      county: 'Miami-Dade',
-      unitCount: 40,
-      communityType: inputs.communityType,
-      planKey: inputs.planKey,
-      candidateSlug: inputs.candidateSlug,
-      termsAccepted: true,
-    },
-  });
-  expect(
-    res.ok(),
-    `signup POST failed: ${res.status()} ${await res.text().catch(() => '')}`,
-  ).toBeTruthy();
-  const body = (await res.json()) as
-    | { signupRequestId?: string; data?: { signupRequestId?: string } }
-    | undefined;
-  // Route envelope may be flat or `{ data: … }` depending on runRoute wrapping.
-  const signupRequestId = body?.data?.signupRequestId ?? body?.signupRequestId;
-  expect(signupRequestId, 'signup response missing signupRequestId').toBeTruthy();
-  return signupRequestId as string;
-}
-
-/**
- * Confirm the signup email out-of-band via the Supabase admin API. CI has no
- * inbox, and `/api/v1/auth/confirm-verification` gates on the auth user's
- * `email_confirmed_at` — so we set it directly with the service-role key.
- *
- * FIRST-RUN: verify the admin `updateUserById(..., { email_confirm: true })`
- * shape against the installed `@supabase/supabase-js` version.
- */
-export async function confirmSupabaseEmail(email: string): Promise<void> {
-  const admin = createClient(
+function serviceRoleClient() {
+  return createClient(
     STRIPE_E2E_ENV.supabaseUrl as string,
     STRIPE_E2E_ENV.supabaseServiceRoleKey as string,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
+}
 
-  // Supabase admin has no getUserByEmail; page through listUsers until found.
-  const target = email.toLowerCase();
-  let userId: string | undefined;
-  for (let pageNum = 1; pageNum <= 20 && !userId; pageNum++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page: pageNum, perPage: 200 });
-    if (error) throw new Error(`Supabase listUsers failed: ${error.message}`);
-    const users = (data?.users ?? []) as Array<{ id: string; email?: string | null }>;
-    userId = users.find((u) => u.email?.toLowerCase() === target)?.id;
-    if (users.length < 200) break; // last page
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * Sign the browser in the way an email-first founder is signed in: through the
+ * real `/api/v1/auth/signup/start` and `/auth/verify-signup` routes.
+ *
+ * CI has no inbox, so the emailed link is the one seam: after `start` (which
+ * creates the account and sends the email), a link of the same shape is minted
+ * with the service-role key — `generateLink`'s `hashed_token` — and opened in
+ * the SAME browser, carrying the hash of this browser's binding cookie, exactly
+ * as `generateStartLink` builds it. Verifying it confirms the email and sets the
+ * session cookies on the redirect to `/signup?verified=1`.
+ */
+export async function signInEmailFirst(page: Page, inputs: SignupInputs): Promise<void> {
+  const baseUrl = test.info().project.use.baseURL as string;
+  const nonce = randomBytes(32).toString('hex');
+  await page.context().addCookies([
+    { name: SIGNUP_BINDING_COOKIE, value: nonce, url: baseUrl, sameSite: 'Lax' },
+  ]);
+
+  const start = await page.request.post('/api/v1/auth/signup/start', {
+    data: { email: inputs.email, binding: sha256Hex(nonce) },
+  });
+  expect(start.ok(), `signup/start failed: ${start.status()} ${await start.text().catch(() => '')}`).toBeTruthy();
+
+  const { data, error } = await serviceRoleClient().auth.admin.generateLink({
+    type: 'magiclink',
+    email: inputs.email,
+  });
+  const hashedToken = data?.properties?.hashed_token;
+  if (error || !hashedToken) {
+    throw new Error(`generateLink failed: ${error?.message ?? 'no hashed_token'}`);
   }
-  if (!userId) throw new Error(`No Supabase auth user found for ${email}`);
+  const type = data.properties.verification_type === 'signup' ? 'signup' : 'magiclink';
+  const link = new URL('/auth/verify-signup', baseUrl);
+  link.searchParams.set('token_hash', hashedToken);
+  link.searchParams.set('type', type);
+  link.searchParams.set('b', sha256Hex(nonce));
 
-  const { error } = await admin.auth.admin.updateUserById(userId, { email_confirm: true });
-  if (error) throw new Error(`Supabase email confirm failed: ${error.message}`);
+  await page.goto(link.toString(), { waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(/\/signup\?verified=1/);
+  await expect(page.getByText(`Signed in as ${inputs.email}`)).toBeVisible({ timeout: 30_000 });
+}
+
+/** The `POST /api/v1/auth/signup/details` body for these inputs. */
+export function signupDetailsBody(inputs: SignupInputs) {
+  return {
+    primaryContactName: inputs.primaryContactName,
+    communityName: inputs.communityName,
+    addressLine1: inputs.addressLine1,
+    city: 'Miami Beach',
+    state: 'FL',
+    zipCode: '33139',
+    county: 'Miami-Dade',
+    unitCount: 40,
+    communityType: inputs.communityType,
+    candidateSlug: inputs.candidateSlug,
+    planKey: inputs.planKey,
+    termsAccepted: true,
+  };
+}
+
+/**
+ * Save the answers through the real details route, as the signed-in founder
+ * (the page's request context shares the browser's cookies). Returns the
+ * `signupRequestId`; the row is `email_verified`, ready for checkout.
+ */
+export async function submitSignupDetailsViaApi(page: Page, inputs: SignupInputs): Promise<string> {
+  const res = await page.request.post('/api/v1/auth/signup/details', { data: signupDetailsBody(inputs) });
+  expect(res.ok(), `signup/details failed: ${res.status()} ${await res.text().catch(() => '')}`).toBeTruthy();
+  const body = (await res.json()) as { data?: { signupRequestId?: string } };
+  const signupRequestId = body?.data?.signupRequestId;
+  expect(signupRequestId, 'signup/details response missing signupRequestId').toBeTruthy();
+  return signupRequestId as string;
+}
+
+/**
+ * Drive the signed-in browser to the trial step's inline Embedded Checkout.
+ *
+ * The answers are written to the flow's own saved draft (`pp.signup.draft.v1`,
+ * scoped to the signed-in address) at the trial step, then "Start free trial"
+ * is clicked: that is where the product posts the details (Terms acceptance
+ * included) and calls `createCheckoutSession`. Returns the `signupRequestId`
+ * read off that details response.
+ */
+export async function reachEmbeddedCheckout(page: Page, inputs: SignupInputs): Promise<string> {
+  const draft = {
+    communityName: inputs.communityName,
+    communityType: inputs.communityType,
+    addressLine1: inputs.addressLine1,
+    city: 'Miami Beach',
+    zipCode: '33139',
+    county: 'Miami-Dade',
+    addressKey: null,
+    manualAddress: true,
+    unitCount: '40',
+    primaryContactName: inputs.primaryContactName,
+    slug: inputs.candidateSlug,
+    slugDirty: true,
+    planKey: inputs.planKey,
+    step: 'trial',
+    owner: inputs.email.toLowerCase(),
+  };
+  await page.evaluate((value) => window.localStorage.setItem('pp.signup.draft.v1', value), JSON.stringify(draft));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+
+  const startTrial = page.getByRole('button', { name: 'Start free trial' });
+  await expect(startTrial).toBeVisible({ timeout: 30_000 });
+  const detailsResponse = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/auth/signup/details') && r.request().method() === 'POST',
+  );
+  await clickWhenHydrated(startTrial);
+  const res = await detailsResponse;
+  expect(res.ok(), `signup/details failed: ${res.status()} ${await res.text().catch(() => '')}`).toBeTruthy();
+  const body = (await res.json()) as { data?: { signupRequestId?: string } };
+  const signupRequestId = body?.data?.signupRequestId;
+  expect(signupRequestId, 'signup/details response missing signupRequestId').toBeTruthy();
+  return signupRequestId as string;
 }
 
 /**
@@ -320,19 +386,14 @@ export async function confirmSupabaseEmail(email: string): Promise<void> {
  * the UI, so assertions about billing state should come from here.
  *
  * Uses the service-role key, so it bypasses RLS deliberately — the same key the
- * spec already holds to confirm signup emails.
+ * spec already holds to mint the sign-in link.
  */
 export async function readCommunityBillingBySlug(slug: string): Promise<{
   subscriptionStatus: string | null;
   subscriptionPlan: string | null;
   subscriptionCurrentPeriodEndAt: string | null;
 } | null> {
-  const admin = createClient(
-    STRIPE_E2E_ENV.supabaseUrl as string,
-    STRIPE_E2E_ENV.supabaseServiceRoleKey as string,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-  const { data, error } = await admin
+  const { data, error } = await serviceRoleClient()
     .from('communities')
     .select('subscription_status, subscription_plan, subscription_current_period_end_at')
     .eq('slug', slug)
@@ -352,7 +413,7 @@ export async function readCommunityBillingBySlug(slug: string): Promise<{
 }
 
 /**
- * Fill and submit the Stripe **Embedded Checkout** form on `/signup/checkout`.
+ * Fill and submit the Stripe **Embedded Checkout** form mounted in the trial step on `/signup`.
  *
  * ── Measured against the live test-mode UI, 2026-08-09 ──
  * The two things that made the original best-effort version time out:

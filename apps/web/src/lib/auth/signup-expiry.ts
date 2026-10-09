@@ -3,14 +3,15 @@
  * release it.
  *
  * Deliberately its own module with no imports: the obvious home is
- * `lib/auth/signup.ts`, but that file pulls in `@propertypro/email`, the
- * Supabase admin client and the DB. Importing one number from it would drag
+ * `lib/auth/signup-email-first.ts`, but that file pulls in the Supabase admin
+ * client, Stripe and the DB. Importing one number from it would drag
  * that whole graph into every billing test.
  *
  * TWO producers must agree on this value, and until 2026-09-10 only one of them
  * used it at all:
  *
- *   - `upsertPendingSignup` (lib/auth/signup.ts) — the public signup form.
+ *   - `submitSignupDetails` (lib/auth/signup-email-first.ts) — public signup.
+ *     (Before 2026-10-09 the form flow's `upsertPendingSignup` held this slot.)
  *   - `createPendingAddToGroupSignup` (lib/billing/billing-group-service.ts) —
  *     a PM adding a community to an existing billing group.
  *

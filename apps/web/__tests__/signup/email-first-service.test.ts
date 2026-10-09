@@ -83,7 +83,7 @@ interface ExistingRow {
   payload: Record<string, unknown>;
 }
 
-function mockDb(existing: ExistingRow | null, returned?: Array<Record<string, string>>) {
+function mockDb(existing: ExistingRow | null, returned?: Array<Record<string, string>>, upsertError?: unknown) {
   const values = vi.fn();
   const onConflictDoUpdate = vi.fn();
   const db = {
@@ -99,8 +99,10 @@ function mockDb(existing: ExistingRow | null, returned?: Array<Record<string, st
           onConflictDoUpdate: (config: Record<string, unknown>) => {
             onConflictDoUpdate(config);
             return {
-              returning: async () =>
-                returned ?? [{ signupRequestId: String(v.signupRequestId), candidateSlug: String(v.candidateSlug) }],
+              returning: async () => {
+                if (upsertError !== undefined) throw upsertError;
+                return returned ?? [{ signupRequestId: String(v.signupRequestId), candidateSlug: String(v.candidateSlug) }];
+              },
             };
           },
         };
@@ -165,7 +167,7 @@ describe('startEmailFirstSignup', () => {
 
   it('binds the emailed link to the requesting browser', async () => {
     await startEmailFirstSignup({ email: 'a@example.com', binding: BINDING }, IP);
-    expect(new URL(h.sendEmailMock.mock.calls[0]?.[3] as string).searchParams.get('b')).toBe(BINDING);
+    expect(new URL(h.sendEmailMock.mock.calls[0]?.[1] as string).searchParams.get('b')).toBe(BINDING);
   });
 
   it('rejects a malformed email without creating anything', async () => {
@@ -188,9 +190,13 @@ describe('startEmailFirstSignup', () => {
     expect(redirect.pathname).toBe('/signup');
     expect(redirect.searchParams.get('verified')).toBe('1');
 
-    const [name, community, to, link] = h.sendEmailMock.mock.calls[0] as [unknown, unknown, string, string];
-    expect([name, community, to]).toEqual([undefined, undefined, 'founder@example.com']);
+    const [to, link] = h.sendEmailMock.mock.calls[0] as [string, string];
+    expect(to).toBe('founder@example.com');
     const url = new URL(link);
+    // On OUR domain, not Supabase's action_link: a getpropertypro.com mail whose
+    // only button points at <ref>.supabase.co was measured into Gmail spam
+    // (docs/audits/2026-09-11-signup-verification-deliverability.md).
+    expect(url.host).not.toContain('supabase.co');
     expect(url.pathname).toBe('/auth/verify-signup');
     expect(url.searchParams.get('token_hash')).toBe('hashed-1');
     expect(url.searchParams.get('signupRequestId')).toBeNull();
@@ -199,14 +205,14 @@ describe('startEmailFirstSignup', () => {
   it('links with the type GoTrue reports, since the token is bound to it', async () => {
     // GoTrue turns a magiclink for an unknown address into a signup.
     await startEmailFirstSignup({ email: 'new@example.com', binding: BINDING }, IP);
-    expect(new URL(h.sendEmailMock.mock.calls[0]?.[3] as string).searchParams.get('type')).toBe('signup');
+    expect(new URL(h.sendEmailMock.mock.calls[0]?.[1] as string).searchParams.get('type')).toBe('signup');
 
     h.generateLinkMock.mockResolvedValueOnce({
       data: { user: { id: 'auth-2' }, properties: { hashed_token: 'h2', verification_type: 'magiclink' } },
       error: null,
     });
     await startEmailFirstSignup({ email: 'existing@example.com', binding: BINDING }, IP);
-    expect(new URL(h.sendEmailMock.mock.calls[1]?.[3] as string).searchParams.get('type')).toBe('magiclink');
+    expect(new URL(h.sendEmailMock.mock.calls[1]?.[1] as string).searchParams.get('type')).toBe('magiclink');
   });
 
   it('caps sends per address+IP, but another caller of the same address is not silenced', async () => {
@@ -341,6 +347,25 @@ describe('submitSignupDetails', () => {
       expect(values).not.toHaveBeenCalled();
     },
   );
+
+  // Writing the row as `email_verified` puts it INTO the partial slug index, so
+  // a slug claimed since the availability check collides here. Uncaught, a raw
+  // PG error is not an AppError and `withErrorHandler` answers an opaque 500.
+  it('maps a slug-index collision to a field error, not a 500', async () => {
+    mockDb(null, undefined, { code: '23505', constraint: 'pending_signups_candidate_slug_active_unique' });
+    await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toMatchObject({
+      name: 'ValidationError',
+      message: 'That subdomain is no longer available.',
+    });
+  });
+
+  // Anti-vacuity: the catch is aimed at that ONE constraint, not a blanket
+  // swallow that reports every database failure as a taken subdomain.
+  it('rethrows any other database error unchanged', async () => {
+    const otherIndex = { code: '23505', constraint: 'pending_signups_email_normalized_unique' };
+    mockDb(null, undefined, otherIndex);
+    await expect(submitSignupDetails(CONFIRMED_USER, DETAILS)).rejects.toBe(otherIndex);
+  });
 
   it('guards the upsert itself against a payment landing mid-request', async () => {
     const { onConflictDoUpdate } = mockDb(null, []);
