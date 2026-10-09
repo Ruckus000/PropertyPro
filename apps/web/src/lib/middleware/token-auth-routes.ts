@@ -55,8 +55,6 @@ export const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> 
   { path: '/api/v1/webhooks/inbound-email', method: 'POST' },
   // Signup email verification confirmation: no session yet, called from post-verify redirect [O-01]
   { path: '/api/v1/auth/confirm-verification', method: 'POST' },
-  // Resend signup verification email: no session yet, called from /signup/verify page
-  { path: '/api/v1/auth/resend-verification', method: 'POST' },
   // Provisioning status polling: no session yet, signupRequestId-authenticated [Provisioning Screen]
   { path: '/api/v1/auth/provisioning-status', method: 'GET' },
   // Self-service resident signup: public submit + OTP verify (no session required)

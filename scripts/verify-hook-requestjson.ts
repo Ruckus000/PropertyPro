@@ -155,7 +155,6 @@ const KNOWN_RAW_FETCH_HOOKS = new Set<string>([
   'apps/web/src/hooks/use-data-search.ts',
   'apps/web/src/hooks/use-demo-self-service-upgrade.ts',
   'apps/web/src/hooks/use-document-search.ts',
-  'apps/web/src/hooks/use-email-verification.ts',
   'apps/web/src/hooks/use-export-data.ts',
   'apps/web/src/hooks/use-faq-manage.ts',
   'apps/web/src/hooks/use-fee-policy.ts',
@@ -177,7 +176,6 @@ const KNOWN_RAW_FETCH_HOOKS = new Set<string>([
   // useSetDesignation does a raw fetch to detect the 409 NON_OWNER_ACK_REQUIRED
   // response and surface it as a typed result rather than a thrown error.
   'apps/web/src/hooks/use-role-management.ts',
-  'apps/web/src/hooks/use-signup.ts',
   'apps/web/src/hooks/use-stripe-connect-complete.ts',
   'apps/web/src/hooks/use-stripe-connect.ts',
   'apps/web/src/hooks/use-support-access.ts',

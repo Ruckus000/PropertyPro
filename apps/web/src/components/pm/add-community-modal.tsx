@@ -56,7 +56,9 @@ export function AddCommunityModal({
     state: 'FL',
     zipCode: '',
     subdomain: '',
-    // 0 = not entered yet. Never pre-filled — see the note in signup-form.tsx.
+    // 0 = not entered yet. Never pre-filled: the count decides whether Florida's
+    // website rules apply (packages/shared `requirementLevel`), so a default
+    // would quietly mark an association exempt.
     unitCount: 0,
     timezone: 'America/New_York',
   });

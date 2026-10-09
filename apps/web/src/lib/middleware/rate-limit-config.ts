@@ -95,7 +95,6 @@ const AUTH_RATE_LIMIT_PATHS = [
   '/api/v1/auth/register',
   '/api/v1/auth/password-reset',
   '/api/v1/auth/forgot-password',
-  '/api/v1/auth/resend-verification',
   /*
    * Access-request OTP verification. This is a credential-guessing surface —
    * six digits, ~900k values — and it sat in the `write` tier, which is 30/min

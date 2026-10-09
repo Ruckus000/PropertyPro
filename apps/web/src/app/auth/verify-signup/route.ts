@@ -40,13 +40,13 @@
  * cannot be replayed from that browser.
  *
  * ONE OUTCOME, whether the token is good or not: redirect to `/signup` with
- * `verified=1`. `signup-form.tsx` then calls `confirm-verification`, which reads
- * `email_confirmed_at` and is the authority. On a spent or expired token it
- * answers "Email has not been verified yet. Please click the verification link
- * in your email." and renders the existing error card with its Retry button.
- * That is a correct message and an existing surface, so this route adds no error
- * UI of its own. An email-first link carries no `signupRequestId`; there the
- * signup page reads the session, and a spent link simply leaves none.
+ * `verified=1`. The signup page reads the session: a good token left one and
+ * the questions start; a spent or expired one left none and the page shows its
+ * "link failed" notice. So this route adds no error UI of its own.
+ *
+ * A link carrying `signupRequestId` comes from the retired form flow (its
+ * links lived 24h). The page no longer has a form branch, so such a link now
+ * lands in the email-first flow like any other.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';

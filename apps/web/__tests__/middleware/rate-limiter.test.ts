@@ -167,7 +167,6 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/auth/login', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/auth/signup', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/auth/password-reset', 'POST')).toBe('auth');
-    expect(classifyRoute('/api/v1/auth/resend-verification', 'POST')).toBe('auth');
     // OTP guessing surface — must be `auth` (10/min per IP, Redis-backed), not
     // `write` (30/min, in-memory per isolate). See #947.
     expect(classifyRoute('/api/v1/access-requests/verify', 'POST')).toBe('auth');

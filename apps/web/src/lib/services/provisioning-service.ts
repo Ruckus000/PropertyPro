@@ -38,7 +38,6 @@ import {
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 // AUTHZ: GoTrue admin createUser/generateLink/getUserById while provisioning a paid signup; no scoped equivalent
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { buildVerificationLink } from '@/lib/auth/verification-link';
 import {
   linkCommunityToBillingGroup,
   recalculateVolumeTier,
@@ -1687,120 +1686,6 @@ export async function markPendingSignupEmailVerifiedIfPending(
     .where(eq(pendingSignups.signupRequestId, signupRequestId))
     .limit(1);
   return { updated: false, currentStatus: recheck[0]?.status ?? null };
-}
-
-// ---------------------------------------------------------------------------
-// Resend verification email helpers (used by /api/v1/auth/resend-verification)
-// ---------------------------------------------------------------------------
-
-export interface PendingSignupForResend {
-  id: bigint;
-  signupRequestId: string;
-  authUserId: string | null;
-  email: string;
-  primaryContactName: string | null;
-  communityName: string | null;
-  planKey: string;
-  status: string;
-  expiresAt: Date | null;
-  verificationEmailSentAt: Date | null;
-}
-
-/**
- * Fetch the projection needed by the resend-verification flow. Returns
- * `null` when no row matches the signup request id.
- *
- * AUTHZ: pre-tenant pre-auth public endpoint — secured by the unguessable
- * `signupRequestId` UUID. Caller validates payload shape before invoking.
- */
-export async function getPendingSignupForResend(
-  signupRequestId: string,
-): Promise<PendingSignupForResend | null> {
-  const db = createUnscopedClient();
-  const [row] = await db
-    .select({
-      id: pendingSignups.id,
-      signupRequestId: pendingSignups.signupRequestId,
-      authUserId: pendingSignups.authUserId,
-      email: pendingSignups.email,
-      primaryContactName: pendingSignups.primaryContactName,
-      communityName: pendingSignups.communityName,
-      planKey: pendingSignups.planKey,
-      status: pendingSignups.status,
-      expiresAt: pendingSignups.expiresAt,
-      verificationEmailSentAt: pendingSignups.verificationEmailSentAt,
-    })
-    .from(pendingSignups)
-    .where(eq(pendingSignups.signupRequestId, signupRequestId))
-    .limit(1);
-  return row ?? null;
-}
-
-export type SupabaseVerificationLinkResult =
-  | { ok: true; verificationLink: string }
-  | { ok: false; error: string };
-
-/**
- * Generate the verification link to embed in a resent verification email.
- *
- * Returns a link on OUR domain, built from `hashed_token` — not Supabase's
- * `action_link`, whose host is the project's `*.supabase.co` domain. See
- * `app/auth/verify-signup/route.ts`. The token is always a `magiclink` here,
- * which is the `type` that route must verify it as.
- *
- * Wraps the auth-admin client so the route doesn't need to import
- * `@propertypro/db/supabase/admin` directly.
- */
-export async function generateVerificationActionLink(params: {
-  signupRequestId: string;
-  email: string;
-  redirectTo: string;
-}): Promise<SupabaseVerificationLinkResult> {
-  const admin = createAdminClient();
-  const linkResult = await admin.auth.admin.generateLink({
-    type: 'magiclink',
-    email: params.email,
-    options: {
-      redirectTo: params.redirectTo,
-      data: { signup_request_id: params.signupRequestId },
-    },
-  });
-  const hashedToken = linkResult.data?.properties?.hashed_token;
-  if (linkResult.error || !hashedToken) {
-    return {
-      ok: false,
-      error: linkResult.error?.message ?? 'No verification token returned',
-    };
-  }
-  return {
-    ok: true,
-    verificationLink: buildVerificationLink({
-      hashedToken,
-      signupRequestId: params.signupRequestId,
-      type: 'magiclink',
-    }),
-  };
-}
-
-/**
- * Persist the verification-email send metadata
- * (`verificationEmailSentAt = now`, `verificationEmailId = messageId`,
- * `updatedAt = now`) for cooldown tracking and observability.
- */
-export async function markVerificationEmailSent(
-  pendingSignupId: bigint,
-  messageId: string,
-): Promise<void> {
-  const now = new Date();
-  const db = createUnscopedClient();
-  await db
-    .update(pendingSignups)
-    .set({
-      verificationEmailSentAt: now,
-      verificationEmailId: messageId,
-      updatedAt: now,
-    })
-    .where(eq(pendingSignups.id, pendingSignupId));
 }
 
 // ---------------------------------------------------------------------------

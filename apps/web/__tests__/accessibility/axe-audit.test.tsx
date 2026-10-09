@@ -47,6 +47,10 @@ vi.mock('@propertypro/db/supabase/client', () => ({
   }),
 }));
 
+// SignupFlow: its checkout server action reaches the database at import.
+vi.mock('@/lib/actions/checkout', () => ({ createCheckoutSession: vi.fn() }));
+vi.mock('@/lib/stripe/browser', () => ({ getStripePromise: () => Promise.resolve({}) }));
+
 vi.mock('@/lib/auth/actions', () => ({
   forgotPasswordAction: vi.fn(),
   resetPasswordAction: vi.fn(),
@@ -104,18 +108,15 @@ describe('P4-63: Accessibility audit — axe-core', () => {
       expect(results).toHaveNoViolations();
     });
 
-    it('SignupForm has no axe violations', async () => {
-      const { SignupForm } = await import(
-        '@/components/signup/signup-form'
+    it('SignupFlow (email step) has no axe violations', async () => {
+      const { SignupFlow } = await import(
+        '@/components/signup/front-porch/signup-flow'
       );
-      const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-      });
-      const { container } = render(
-        <QueryClientProvider client={queryClient}>
-          <SignupForm />
-        </QueryClientProvider>,
+      const { container, getByRole } = render(
+        <SignupFlow initialStep="email" sessionEmail={null} linkNotice={null} initialType={null} initialPlan={null} />,
       );
+      // Proves the form rendered: axe passes vacuously on an empty container.
+      expect(getByRole('button', { name: /continue with email/i })).toBeTruthy();
       const results = await axe(container);
       expect(results).toHaveNoViolations();
     });

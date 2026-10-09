@@ -1,9 +1,9 @@
 /**
  * The URL the signup verification email links to.
  *
- * One builder, three callers — `lib/auth/signup.ts` (initial send and its
- * already-registered fallback) and `api/v1/auth/resend-verification` — because
- * the two halves of this had already drifted: `buildVerificationRedirectUrl`
+ * One builder for `lib/auth/signup.ts` (initial send and its
+ * already-registered fallback). It exists because the halves of this had
+ * already drifted once: `buildVerificationRedirectUrl`
  * existed twice, once using `getBaseUrl()` and once re-deriving the same
  * fallback chain by hand.
  *
