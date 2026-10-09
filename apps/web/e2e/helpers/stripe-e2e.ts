@@ -259,6 +259,31 @@ function sha256Hex(value: string): string {
 }
 
 /**
+ * One signup spends about five requests on the `auth` rate-limit tier, which is
+ * 10 per minute per IP over a sliding 60s window (`rate-limit-config.ts`):
+ * `GET /signup`, `POST /api/v1/auth/signup/start`, `GET /signup?verified=1`
+ * (arrival, and the reload in `reachEmbeddedCheckout`), `POST
+ * /api/v1/auth/signup/details`, and the checkout server action, which POSTs to
+ * `/signup`. Measured 2026-10-09: three signups back to back (the failure-paths
+ * spec) got a 429 on the third `signup/start`. So signups in one worker start
+ * at least a window apart. The limit is the product's real behaviour; the suite
+ * waits for it rather than working around it.
+ */
+const SIGNUP_SPACING_MS = 61_000;
+let lastSignupStartedAt: number | null = null;
+
+async function paceSignup(page: Page): Promise<void> {
+  if (lastSignupStartedAt !== null) {
+    const wait = lastSignupStartedAt + SIGNUP_SPACING_MS - Date.now();
+    if (wait > 0) {
+      test.info().setTimeout(test.info().timeout + wait);
+      await page.waitForTimeout(wait);
+    }
+  }
+  lastSignupStartedAt = Date.now();
+}
+
+/**
  * Sign the browser in the way an email-first founder is signed in: through the
  * real `/api/v1/auth/signup/start` and `/auth/verify-signup` routes.
  *
@@ -270,6 +295,7 @@ function sha256Hex(value: string): string {
  * session cookies on the redirect to `/signup?verified=1`.
  */
 export async function signInEmailFirst(page: Page, inputs: SignupInputs): Promise<void> {
+  await paceSignup(page);
   const baseUrl = test.info().project.use.baseURL as string;
   const nonce = randomBytes(32).toString('hex');
   await page.context().addCookies([
@@ -359,6 +385,18 @@ export async function reachEmbeddedCheckout(page: Page, inputs: SignupInputs): P
     step: 'trial',
     owner: inputs.email.toLowerCase(),
   };
+  // Write only once the flow has saved its OWN draft for this address: that
+  // save runs in an effect, so it proves the page hydrated. Writing earlier
+  // races it, and the flow's empty draft overwrites ours before the reload
+  // (measured 2026-10-09: the reload then restored step 1 with no answers).
+  await page.waitForFunction((owner) => {
+    try {
+      const raw = window.localStorage.getItem('pp.signup.draft.v1');
+      return raw !== null && (JSON.parse(raw) as { owner?: string }).owner === owner;
+    } catch {
+      return false;
+    }
+  }, draft.owner, { timeout: 30_000 });
   await page.evaluate((value) => window.localStorage.setItem('pp.signup.draft.v1', value), JSON.stringify(draft));
   await page.reload({ waitUntil: 'domcontentloaded' });
 
@@ -549,5 +587,13 @@ async function fillCheckoutForm(
   //
   // `hosted-payment-submit-button` is Stripe's own stable hook for this control
   // (measured: `type="submit"`, label "Start trial" while a trial applies).
+  //
+  // If the button then sits on "Processing" with no `setup_intent.*` event,
+  // read the trace's network log before suspecting our code: on 2026-10-09,
+  // after four automated checkouts in ~4 minutes from one machine, Stripe
+  // answered the fifth submit with an invisible hCaptcha challenge
+  // (`api.hcaptcha.com/getcaptcha`) and never called `confirm`. That is
+  // Stripe's bot detection; the same spec passed alone and in an earlier full
+  // run. Not something to automate around.
   await checkout.getByTestId('hosted-payment-submit-button').click();
 }
