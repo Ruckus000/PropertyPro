@@ -6,8 +6,11 @@
  * authenticated console DOCUMENTS — that is what read-only offline is — and
  * that exception is bounded three ways: the cache is cleared on sign-out
  * (`../src/lib/pwa/clear-offline-cache.ts`), a stored document expires after
- * `NAVIGATION_MAX_AGE_MS` and is deleted on read, and the thread detail is
- * never stored at all. See `../src/lib/pwa/sw-cache-policy.ts` for all of it.
+ * `NAVIGATION_MAX_AGE_MS` and is deleted on read, and the documents in
+ * `NEVER_STORE_PATTERNS` are not stored at all. See
+ * `../src/lib/pwa/sw-cache-policy.ts` for all of it, and for why each pattern
+ * earned its place — do not re-enumerate that list here, which is how this
+ * paragraph went stale the first time.
  *
  * Served straight from `public/`, so it is a plain script: no TypeScript, no
  * imports, no build step. That is why `classifyRequest` below is duplicated.
@@ -31,8 +34,10 @@ const CACHED_AT_HEADER = 'x-ppro-cached-at';
 const STATIC_PREFIXES = ['/_next/static/', '/fonts/', '/icons/'];
 
 // Documents that must never be written to disk. `/inbox/<threadId>` renders the
-// full body of somebody's correspondence with us — see the policy module.
-const NEVER_STORE_PATTERNS = [/^\/inbox\/[^/]+/];
+// full body of somebody's correspondence with us; `/health/logs` renders the
+// audit table's old/new/metadata JSONB, which in production carries the
+// recipient and subject of that same correspondence — see the policy module.
+const NEVER_STORE_PATTERNS = [/^\/inbox\/[^/]+/, /^\/health\/logs/];
 
 // How long a stored console document may still be served offline: one hour,
 // matching the Supabase access-token lifetime. Checked on READ, so an entry that
@@ -173,10 +178,11 @@ async function handleStatic(request) {
 /**
  * Network-first for a console document.
  *
- * `store` is false for `navigation-network-only` — the thread detail, which
- * renders full support-email bodies and must not exist on disk at all. Such a
- * request is fetched live, never written, and falls to `/offline` rather than to
- * a stale copy.
+ * `store` is false for `navigation-network-only` — a document matched by
+ * `NEVER_STORE_PATTERNS`, which must not exist on disk at all. Such a request is
+ * fetched live, never written, and falls to `/offline` rather than to a stale
+ * copy. The patterns and their reasons live in `sw-cache-policy.ts`; naming one
+ * of them here is what made this comment wrong when a second was added.
  *
  * A stored hit is served only while `isCachedDocumentFresh` allows it. An
  * expired entry is DELETED rather than merely skipped: leaving it would keep an

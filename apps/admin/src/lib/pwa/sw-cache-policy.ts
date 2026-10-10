@@ -34,10 +34,12 @@
  * 2. **Expired on read.** A stored document is served only while
  *    `isCachedDocumentFresh` says so; past that it is deleted and the offline
  *    page is shown instead. See `NAVIGATION_MAX_AGE_MS` for the value and why.
- * 3. **Never stored at all for `NEVER_STORE_PATTERNS`.** A thread detail renders
- *    full support-email bodies — the most sensitive content the console has —
- *    so it is `navigation-network-only`: fetched live, never written, and the
- *    offline page rather than a stale copy when there is no network.
+ * 3. **Never stored at all for `NEVER_STORE_PATTERNS`.** Some documents carry
+ *    content that no freshness window makes acceptable to leave on a shared
+ *    device — a thread detail's full support-email bodies, an audit payload's
+ *    before/after JSONB. Those are `navigation-network-only`: fetched live,
+ *    never written, and the offline page rather than a stale copy when there is
+ *    no network. See that list for which, and why each earned its place.
  *
  * What remains uncovered, stated plainly: a session that EXPIRES without a
  * sign-out leaves documents readable until the TTL runs out. That is the window
@@ -72,13 +74,45 @@ const STATIC_PREFIXES = ['/_next/static/', '/fonts/', '/icons/'];
  *
  * `/inbox/<threadId>` server-renders the SANITIZED HTML BODY of every message on
  * a support thread (`app/(console)/inbox/[threadId]/page.tsx`) — the full text
- * of somebody's correspondence with us, and the one thing in this console that
- * no freshness window makes acceptable to leave on a shared device. The inbox
- * LIST is not matched: it carries subjects and participants, which the tray on
- * every other console page already carries, so excluding it would buy nothing
- * while removing the offline case this feature exists for.
+ * of somebody's correspondence with us. The inbox LIST is not matched: it
+ * carries subjects and participants, which the tray on every other console page
+ * already carries, so excluding it would buy nothing while removing the offline
+ * case this feature exists for.
+ *
+ * `/health/logs` renders the `old_values` / `new_values` / `metadata` JSONB of
+ * every row in `platform_admin_audit_log`, and it is the ONLY surface in the
+ * console that does — `lib/server/community-activity.ts`, the other reader of
+ * that table, deliberately selects neither. Those payloads are not a milder
+ * version of the inbox case; in production they are partly the SAME data
+ * arriving through a second door. A `support_thread_replied` row carries
+ * `{ to, subject, mailbox, provider_message_id }` — the recipient address and
+ * subject line of the very correspondence the pattern above exists to keep off
+ * disk. An `auth_user_deleted` row carries a deleted account's email and sign-in
+ * timestamps; a `data_repair` row carries the `super_admin` grant it revoked.
+ *
+ * The argument that the audit table is "safe to display" (see
+ * `lib/audit/log-admin-action.ts`, which is scrupulous about never writing a
+ * credential) holds for rows written BY `logAdminAction` and does not reach the
+ * rows that matter most here: `data_repair` and `auth_user_deleted` are written
+ * by hand through `execute_sql` per `.claude/rules/migration-safety.md`, under
+ * no such discipline, and both are in production today.
+ *
+ * Displaying them to a `super_admin` is correct and is the point of the page.
+ * PERSISTING them to the browser profile is a different question with a
+ * different answer, and it is the one this list settles.
+ *
+ * The `/health` BOARD is deliberately still cacheable, by the same test that
+ * spares the inbox list: its activity card renders only time, action, resource
+ * and the OPERATOR's own address — no payloads — and that page already stores
+ * `cron_runs.last_error`, so excluding it would remove the offline case without
+ * removing a sensitivity class.
+ *
+ * The `/health/logs` pattern is deliberately prefix-loose rather than
+ * `[^/]+`-shaped: a future `/health/logs/<id>` detail would carry the same
+ * payloads, so any sub-route inherits the exclusion rather than having to
+ * remember to ask for it.
  */
-const NEVER_STORE_PATTERNS = [/^\/inbox\/[^/]+/];
+const NEVER_STORE_PATTERNS = [/^\/inbox\/[^/]+/, /^\/health\/logs/];
 
 /**
  * How long a cached console document may still be served offline.

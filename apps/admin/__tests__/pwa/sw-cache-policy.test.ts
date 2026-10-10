@@ -134,6 +134,44 @@ describe('classifyRequest', () => {
     );
   });
 
+  // The activity log renders the audit table's old/new/metadata JSONB — the only
+  // console surface that does. In production those payloads carry the recipient
+  // address and subject line of the same support correspondence the `/inbox`
+  // pattern above exists to keep off disk, plus a deleted account's email and a
+  // revoked `super_admin` grant. Showing that to an operator is the point of the
+  // page; writing it into the browser profile is a separate question, and this
+  // is the answer.
+  it.each(['/health/logs', '/health/logs/', '/health/logs?action=data_repair'])(
+    'never stores %s, the document that carries audit payloads',
+    (path) => {
+      expect(classifyRequest({ method: 'GET', url: `${o}${path}`, mode: 'navigate' }, o)).toBe(
+        'navigation-network-only',
+      );
+    },
+  );
+
+  // The BOARD stays cacheable, by the same test that spares the inbox list: its
+  // activity card renders time/action/resource and the operator's own address,
+  // no payloads. This is the case that would silently over-reach if the pattern
+  // were written `/^\/health/` — which would also take the offline board away.
+  it('still caches the health board, which renders no audit payloads', () => {
+    expect(classifyRequest({ method: 'GET', url: `${o}/health`, mode: 'navigate' }, o)).toBe(
+      'navigation-network-first',
+    );
+  });
+
+  // The pre-existing mirror test asserts only that `NEVER_STORE_PATTERNS` EXISTS
+  // in sw.js, which stayed green while the list held one entry and the two
+  // copies agreed. It cannot see an entry added to the module and forgotten in
+  // the worker — the exact "change both" failure the header docblock warns
+  // about, and the one that would leave this page cached with every check green.
+  it('sw.js carries every never-store pattern, not just the array', () => {
+    const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
+    for (const pattern of ['/^\\/inbox\\/[^/]+/', '/^\\/health\\/logs/']) {
+      expect(sw).toContain(pattern);
+    }
+  });
+
   it('sw.js mirrors the policy verbatim', async () => {
     const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
     for (const needle of [
