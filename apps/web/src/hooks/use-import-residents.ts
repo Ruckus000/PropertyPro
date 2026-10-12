@@ -11,6 +11,10 @@ export interface DryRunRow {
   email: string;
   role: string;
   unit_number: string | null;
+  /** The row's line in the uploaded file (the header is line 1). */
+  rowNumber: number;
+  /** The email matches an account that already exists; the import attaches it. */
+  existingAccount: boolean;
 }
 
 export interface CsvError {

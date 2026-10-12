@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateResidentCsv } from '../../src/lib/utils/csv-validator';
+import { RESIDENT_IMPORT_MAX_ROWS, validateResidentCsv } from '../../src/lib/utils/csv-validator';
 
 describe('csv-validator (P1-19)', () => {
   it('parses commas in quoted fields', () => {
@@ -67,5 +67,21 @@ describe('csv-validator (P1-19)', () => {
       { rowNumber: 2, column: 'email', message: 'Invalid email address' },
     ]);
   });
-});
 
+  it('refuses a file over the row cap as a whole, with one file-level error', () => {
+    const row = (i: number) => `Person ${i},p${i}@example.com,owner,${i}`;
+    const atCap = ['name,email,role,unit_number', ...Array.from({ length: RESIDENT_IMPORT_MAX_ROWS }, (_, i) => row(i))].join('\n');
+    expect(validateResidentCsv(atCap).rows).toHaveLength(RESIDENT_IMPORT_MAX_ROWS);
+
+    const overCap = `${atCap}\n${row(RESIDENT_IMPORT_MAX_ROWS)}`;
+    const result = validateResidentCsv(overCap);
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toEqual([
+      {
+        rowNumber: 1,
+        column: null,
+        message: `At most ${RESIDENT_IMPORT_MAX_ROWS} residents per import; this file has ${RESIDENT_IMPORT_MAX_ROWS + 1}. Split it into smaller files.`,
+      },
+    ]);
+  });
+});

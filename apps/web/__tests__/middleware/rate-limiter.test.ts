@@ -259,6 +259,14 @@ describe('classifyRoute', () => {
     ).toBe('esign-sign');
   });
 
+  it('classifies roster CSV imports (POST) as roster-imports', () => {
+    expect(classifyRoute('/api/v1/import-residents', 'POST')).toBe('roster-imports');
+    expect(classifyRoute('/api/v1/import-units', 'POST')).toBe('roster-imports');
+    // Exact match only: no other verb and no lookalike path.
+    expect(classifyRoute('/api/v1/import-residents', 'GET')).toBe('read');
+    expect(classifyRoute('/api/v1/import-residents-extra', 'POST')).toBe('write');
+  });
+
   it('does not classify other esign routes as esign-sign', () => {
     expect(classifyRoute('/api/v1/esign/templates', 'GET')).toBe('read');
     expect(classifyRoute('/api/v1/esign/submissions', 'POST')).toBe('write');
@@ -469,6 +477,33 @@ describe('checkRateLimit', () => {
     const result = await checkRateLimit(request, userId);
     expect(result!.allowed).toBe(false);
     expect(result!.category).toBe('write');
+  });
+
+  it('enforces the roster-imports limit (20 per 10 min) per user, across both import routes', async () => {
+    // A resident preview checks every email in the file against the platform's
+    // accounts with no side effects, so it is throttled harder than generic
+    // writes (security review of onboarding audit F1).
+    const paths = ['/api/v1/import-residents', '/api/v1/import-units'];
+    for (let i = 0; i < 20; i++) {
+      const request = createRequest(`http://localhost:3000${paths[i % 2]}`, { method: 'POST' });
+      const result = await checkRateLimit(request, 'manager-1');
+      expect(result!.allowed).toBe(true);
+      expect(result!.category).toBe('roster-imports');
+      expect(result!.limit).toBe(20);
+    }
+
+    const blocked = await checkRateLimit(
+      createRequest('http://localhost:3000/api/v1/import-residents', { method: 'POST' }),
+      'manager-1',
+    );
+    expect(blocked!.allowed).toBe(false);
+
+    // Another manager has their own budget.
+    const other = await checkRateLimit(
+      createRequest('http://localhost:3000/api/v1/import-residents', { method: 'POST' }),
+      'manager-2',
+    );
+    expect(other!.allowed).toBe(true);
   });
 
   it('enforces esign-sign route limit (10 req/min) and is IP-keyed', async () => {

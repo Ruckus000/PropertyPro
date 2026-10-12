@@ -11,7 +11,8 @@
  *     → assertNotDemoGrace            (async — awaited; runs BEFORE membership)
  *     → requireCommunityMembership
  *     → requirePermission('residents', 'write')   (sync — NOT awaited)
- *     → import loop (CSV parse + per-row user/role inserts + audit log)
+ *     → validateResidentCsv → planResidentImport (read-only eligibility, shared
+ *       by preview and import) → dryRun ? preview : user/role inserts + audit log
  *
  * The pre-migration handler did its own `importSchema.safeParse(body)` and
  * threw `ValidationError('Invalid import request')`. That is now expressed as

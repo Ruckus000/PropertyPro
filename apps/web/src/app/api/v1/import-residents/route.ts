@@ -11,65 +11,42 @@
  *     → assertNotDemoGrace            (async — awaited; runs BEFORE membership)
  *     → requireCommunityMembership
  *     → requirePermission('residents', 'write')   (sync — NOT awaited)
- *     → import loop
+ *     → validateResidentCsv → planResidentImport → (dryRun ? preview : writes)
  *
  * The inline `importSchema.safeParse` is now the contract body schema, so the
  * runner rejects invalid payloads with the canonical `VALIDATION_ERROR`
- * envelope (status unchanged at 400). The full import loop — CSV validation,
- * per-row user/role/notification inserts, tenant-uniqueness check, and the
- * per-user audit-log fan-out — is preserved byte-identical. Both the dryRun
- * preview and the real-import summary are returned via the runner's canonical
- * `{ data: ... }` wrapper, byte-identical to the prior `NextResponse.json`.
+ * envelope (status unchanged at 400).
+ *
+ * The preview and the import share one read-only eligibility evaluation,
+ * `planResidentImport` (`lib/services/resident-import-plan.ts`). Until
+ * 2026-10-12 the preview returned right after the CSV shape checks, so it
+ * reported rows as ready that the import then skipped (onboarding audit F1,
+ * `docs/audits/2026-10-05-onboarding/01-evidence-brief.md`). The import
+ * re-plans in its own request rather than trusting the preview, then writes
+ * user + role + notification preferences for each ready row, followed by the
+ * per-user audit-log fan-out. Both responses are returned via the runner's
+ * canonical `{ data: ... }` wrapper.
  */
 import { runRoute } from "@propertypro/api-contract";
 import { logAuditEvent } from "@propertypro/db";
-import { withErrorHandler } from "@/lib/api/error-handler";
-import {
-  RESIDENT_IMPORT_ROLES,
-  validateResidentCsv,
-  type ResidentImportRole,
-} from "@/lib/utils/csv-validator";
-import { isResidentTierRole, validateRoleAssignment } from "@/lib/utils/role-validator";
 import type { CommunityRole } from "@propertypro/shared";
+import { withErrorHandler } from "@/lib/api/error-handler";
+import { validateResidentCsv, type ResidentImportRole } from "@/lib/utils/csv-validator";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { requirePermission } from "@/lib/db/access-control";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
-import { listCommunitiesForUser } from "@/lib/api/user-communities";
 import { assertNotDemoGrace } from "@/lib/middleware/demo-grace-guard";
 import { requireActiveSubscriptionForMutation } from "@/lib/middleware/subscription-guard";
-import { getCommunityTypeForOnboarding } from "@/lib/services/onboarding-service";
 import {
   insertNotificationPreferencesForImport,
   insertUserForImport,
   insertUserRoleForImport,
-  loadUnitNumberMapForImport,
-  loadUserEmailMapForImport,
-  loadUsersWithExistingRoleForImport,
 } from "@/lib/services/import-residents-service";
-import {
-  assertActorMayAttachExistingUser,
-  loadActorCommunitiesForLinking,
-} from "@/lib/services/user-linking";
+import { planResidentImport } from "@/lib/services/resident-import-plan";
 import { importResidentsContract } from "./contract";
 
-interface MappedRole {
-  role: CommunityRole;
-  isUnitOwner: boolean;
-  displayTitle: string;
-}
-
-/**
- * Role-v3 invariant 3: the import path may only mint resident-tier rows.
- * Manager/board CSV roles were removed from the import vocabulary — board and
- * manager access is assigned from the root-only Roles & Access screen.
- */
-function mapImportRole(csvRole: ResidentImportRole): MappedRole {
-  if (csvRole === "owner") {
-    return { role: "resident", isUnitOwner: true, displayTitle: "Owner" };
-  }
-  return { role: "resident", isUnitOwner: false, displayTitle: "Tenant" };
-}
+const byRowNumber = (a: { rowNumber: number }, b: { rowNumber: number }) => a.rowNumber - b.rowNumber;
 
 export const POST = withErrorHandler(
   runRoute(importResidentsContract, async ({ body, req }) => {
@@ -86,158 +63,47 @@ export const POST = withErrorHandler(
     const parsedCsv = validateResidentCsv(csv);
     const invalidCsvRowNumbers = new Set<number>(parsedCsv.errors.map((e) => e.rowNumber));
 
-    // If dryRun, just return preview + errors
+    // The same read-only evaluation serves the preview and the import, so the
+    // preview reports exactly the rows the import would take. See
+    // `planResidentImport` for the checks.
+    const plan = await planResidentImport({ communityId, actorUserId, rows: parsedCsv.rows });
+
     if (dryRun) {
       return {
-        preview: parsedCsv.rows.map((r) => r.data),
-        errors: parsedCsv.errors,
+        // `rowNumber` is the line in the uploaded file; `existingAccount`
+        // says the row attaches an account that already exists rather than
+        // creating one. Both are additive to the original preview row shape.
+        preview: plan.ready.map((r) => ({
+          ...r.data,
+          rowNumber: r.rowNumber,
+          existingAccount: r.existingUserId !== null,
+        })),
+        errors: [...parsedCsv.errors, ...plan.errors].sort(byRowNumber),
         header: parsedCsv.header,
       };
     }
 
-    // Proceed with import
-    const communityType = await getCommunityTypeForOnboarding(communityId);
-    const unitByNumber = await loadUnitNumberMapForImport(communityId);
-    const userByEmail = await loadUserEmailMapForImport(
-      communityId,
-      parsedCsv.rows.map((row) => row.data.email),
-    );
-    // Hoisted out of the row loop: the cross-tenant guard needs the actor's own
-    // memberships for every pre-existing match, and they do not change mid-import.
-    const actorCommunities = await loadActorCommunitiesForLinking(actorUserId);
-    const userHasRole = await loadUsersWithExistingRoleForImport(communityId);
-
-    const errors = [...parsedCsv.errors];
+    // `plan` was computed in THIS request, not carried over from the preview,
+    // so anything that changed since the manager previewed is caught here.
+    const errors = [...parsedCsv.errors, ...plan.errors];
     const createdUsers: Array<{ userId: string; email: string; role: CommunityRole; legacyRole: ResidentImportRole }> = [];
     let importedCount = 0;
-    let skippedCount = invalidCsvRowNumbers.size; // rows with parse-level errors already skipped
+    // rows with parse-level errors, plus rows the plan refused
+    let skippedCount = invalidCsvRowNumbers.size + plan.errors.length;
 
-    for (const row of parsedCsv.rows) {
-      const { name, email, role, unit_number } = row.data;
+    for (const row of plan.ready) {
+      const { name, email, role } = row.data;
 
-      // Role-v3 invariant 3 (mirrors residents POST): only resident-tier rows
-      // may be minted here. The CSV validator already rejects manager/board
-      // vocabulary; this re-check keeps the invariant even if the validator
-      // drifts or is bypassed.
-      const mapped = mapImportRole(role);
-      if (
-        !(RESIDENT_IMPORT_ROLES as readonly string[]).includes(role) ||
-        !isResidentTierRole(mapped.role)
-      ) {
-        errors.push({
-          rowNumber: row.rowNumber,
-          column: "role",
-          message: `Role '${role}' cannot be imported. Manager roles are assigned from Roles & Access (root only).`,
-        });
-        skippedCount++;
-        continue;
-      }
-
-      // Apartments have no unit owners. Pre-v3 this was enforced by
-      // ROLE_COMMUNITY_CONSTRAINTS rejecting 'owner' for apartment; in v3 it is
-      // an isUnitOwner-vs-community-type rule, preserved explicitly here.
-      if (communityType === "apartment" && mapped.isUnitOwner) {
-        errors.push({
-          rowNumber: row.rowNumber,
-          column: "role",
-          message: `Role '${role}' is not allowed for apartment communities.`,
-        });
-        skippedCount++;
-        continue;
-      }
-
-      // Resolve unitId if provided
-      let unitId: number | null = null;
-      if (unit_number) {
-        const found = unitByNumber.get(unit_number.toLowerCase());
-        if (!found) {
-          errors.push({ rowNumber: row.rowNumber, column: "unit_number", message: `Unit '${unit_number}' not found` });
-          skippedCount++;
-          continue;
-        }
-        unitId = found;
-      }
-
-      // Validate the v3 role being assigned (resident) against unit-requirement.
-      const validation = validateRoleAssignment(mapped.role, communityType, unitId);
-      if (!validation.valid) {
-        errors.push({ rowNumber: row.rowNumber, column: "role", message: validation.error ?? "Invalid role assignment" });
-        skippedCount++;
-        continue;
-      }
-
-      // Find or create user
-      let userId = userByEmail.get(email);
-      // `userByEmail` comes from a platform-wide lookup (`users` has no
-      // `community_id`, so the scoped client does not filter it). A hit here
-      // may therefore be a resident of a DIFFERENT association, and binding
-      // them in would publish their real name, email and phone through this
-      // community's residents list. Issue #940 — same hole as the single-add
-      // paths, reachable with one CSV row per victim.
-      const isPreExistingUser = Boolean(userId);
+      let userId = row.existingUserId;
       if (!userId) {
-        const newUserId = crypto.randomUUID();
-        const insertedUserId = await insertUserForImport(communityId, {
-          id: newUserId,
+        userId = await insertUserForImport(communityId, {
+          id: crypto.randomUUID(),
           email,
           fullName: name,
         });
 
-        if (!insertedUserId) {
+        if (!userId) {
           errors.push({ rowNumber: row.rowNumber, column: "email", message: `Failed to create user for '${email}'` });
-          skippedCount++;
-          continue;
-        }
-
-        userId = insertedUserId;
-        userByEmail.set(email, insertedUserId);
-      }
-
-      if (isPreExistingUser) {
-        try {
-          await assertActorMayAttachExistingUser({
-            actorUserId,
-            targetUserId: userId,
-            communityId,
-            actorCommunities,
-          });
-        } catch {
-          // Soft-fail the ROW, not the import. Throwing here would let a single
-          // stranger's address abort an otherwise valid CSV.
-          errors.push({
-            rowNumber: row.rowNumber,
-            column: "email",
-            message: `'${email}' belongs to an existing account you cannot already see`,
-          });
-          skippedCount++;
-          continue;
-        }
-      }
-
-      // Skip if user already has a role in this community
-      if (userHasRole.has(userId)) {
-        errors.push({
-          rowNumber: row.rowNumber,
-          column: "email",
-          message: `User with email '${email}' already has a role in this community`,
-        });
-        skippedCount++;
-        continue;
-      }
-
-      // Tenants belong to exactly one community. Block if this user already
-      // has a tenant role in any other community.
-      if (!mapped.isUnitOwner) {
-        const existingCommunities = await listCommunitiesForUser(userId);
-        const hasTenantElsewhere = existingCommunities.some(
-          (c) => c.role === "resident" && !c.isUnitOwner && c.communityId !== communityId,
-        );
-        if (hasTenantElsewhere) {
-          errors.push({
-            rowNumber: row.rowNumber,
-            column: "role",
-            message: `Tenant '${email}' already belongs to another community`,
-          });
           skippedCount++;
           continue;
         }
@@ -247,17 +113,16 @@ export const POST = withErrorHandler(
       // the designation column stays null and is set only via the root-only path.
       await insertUserRoleForImport(communityId, {
         userId,
-        role: mapped.role,
-        unitId,
-        isUnitOwner: mapped.isUnitOwner,
-        displayTitle: mapped.displayTitle,
+        role: row.mapped.role,
+        unitId: row.unitId,
+        isUnitOwner: row.mapped.isUnitOwner,
+        displayTitle: row.mapped.displayTitle,
       });
 
       await insertNotificationPreferencesForImport(communityId, userId);
 
-      userHasRole.add(userId);
       importedCount++;
-      createdUsers.push({ userId, email, role: mapped.role, legacyRole: role });
+      createdUsers.push({ userId, email, role: row.mapped.role, legacyRole: role });
     }
 
     // Audit log one event per created user with bulkCount metadata
@@ -276,7 +141,7 @@ export const POST = withErrorHandler(
     return {
       importedCount,
       skippedCount,
-      errors,
+      errors: errors.sort(byRowNumber),
     };
   }),
 );

@@ -92,7 +92,16 @@ describe('p1-19 import-residents route', () => {
   });
 
   it('dryRun returns preview and detects duplicate emails', async () => {
-    const csv = 'name,email,role\nOwner,dup@example.com,owner\nTenant,dup@example.com,tenant';
+    // Since onboarding audit F1 the preview runs the import's eligibility
+    // checks, so it reads the same four tables the import does. The row also
+    // needs a unit now: a resident without one used to show as ready in the
+    // preview and was then skipped by the import ("requires a unit assignment").
+    scopedQueryMock
+      .mockResolvedValueOnce([{ id: 42, communityType: 'hoa_720' }]) // communities
+      .mockResolvedValueOnce([{ id: 100, unitNumber: '12A' }]) // units
+      .mockResolvedValueOnce([]) // users
+      .mockResolvedValueOnce([]); // user_roles
+    const csv = 'name,email,role,unit_number\nOwner,dup@example.com,owner,12A\nTenant,dup@example.com,tenant,12A';
     const req = new NextRequest('http://localhost:3000/api/v1/import-residents', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -106,7 +115,8 @@ describe('p1-19 import-residents route', () => {
     expect(json.data.errors).toEqual([
       { rowNumber: 3, column: 'email', message: "Duplicate email 'dup@example.com' in import" },
     ]);
-    expect(json.data.header).toEqual(['name', 'email', 'role']);
+    expect(json.data.header).toEqual(['name', 'email', 'role', 'unit_number']);
+    expect(scopedInsertMock).not.toHaveBeenCalled();
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(
       42,
       '95c454d2-9728-4f1f-8b75-5b9549fb9679',
