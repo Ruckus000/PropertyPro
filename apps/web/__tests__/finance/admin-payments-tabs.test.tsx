@@ -62,8 +62,14 @@ const BODIES = ['Assessments Content', 'Delinquency Content', 'Ledger Content'];
 function renderTabs() {
   return render(<AdminPaymentsTabs communityId={3} userId="user-1" userRole="property_manager" />);
 }
+// Tab switches write the URL with history.replaceState, which Next syncs into
+// useSearchParams without a server render. Asserting router.replace is NOT
+// called is the point: that call re-rendered the force-dynamic page.
+const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+
 
 beforeEach(() => {
+  historyReplace.mockClear();
   search = new URLSearchParams();
   routerReplace.mockReset();
   kpiSpy.mockReset();
@@ -137,9 +143,8 @@ describe('AdminPaymentsTabs — one switcher', () => {
     await user.click(screen.getByRole('tab', { name: 'Ledger' }));
 
     // `replace`, not `push`: Back should leave the page, not walk every tab.
-    expect(routerReplace).toHaveBeenCalledWith('/communities/3/payments?unitId=9&tab=ledger', {
-      scroll: false,
-    });
+    expect(historyReplace).toHaveBeenCalledWith(null, '', '/communities/3/payments?unitId=9&tab=ledger');
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 });
 
@@ -150,7 +155,7 @@ describe('AdminPaymentsTabs — one unit\'s ledger (Directory unit panel)', () =
     const props = ledgerSpy.mock.calls[0]![0] as { unitId?: number; onShowAllUnits: () => void };
     expect(props.unitId).toBe(7);
     props.onShowAllUnits();
-    expect(routerReplace).toHaveBeenCalledWith('/communities/3/payments?tab=ledger', { scroll: false });
+    expect(historyReplace).toHaveBeenCalledWith(null, '', '/communities/3/payments?tab=ledger');
   });
 
   it('ignores a unitId that is not a positive integer', () => {

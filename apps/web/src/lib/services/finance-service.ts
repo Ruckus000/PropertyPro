@@ -9,6 +9,7 @@ import {
   financeStripeWebhookEvents,
   getUnitLedgerBalance,
   leases,
+  ledgerEntries,
   listLedgerEntries,
   logAuditEvent,
   postLedgerEntry,
@@ -1629,18 +1630,28 @@ export async function buildCommunityStatement(
     unitById.set(row.id, row);
   }
 
-  const read = await readStatementLineItems(scoped, { startDate, endDate, limit });
+  interface LedgerAmountRow {
+    [key: string]: unknown;
+    unitId: number | null;
+    amountCents: number;
+  }
+  const [read, ledgerEntriesForCommunity, ledgerAmountRows] = await Promise.all([
+    readStatementLineItems(scoped, { startDate, endDate, limit }),
+    listLedgerEntries(scoped, { startDate, endDate, limit: 500 }),
+    scoped.selectFrom<LedgerAmountRow>(ledgerEntries, {
+      unitId: ledgerEntries.unitId,
+      amountCents: ledgerEntries.amountCents,
+    }),
+  ]);
 
-  const ledgerEntriesForCommunity = await listLedgerEntries(scoped, {
-    startDate,
-    endDate,
-    limit: 500,
-  });
-
-  // Community balance = sum of per-unit balances across all known units.
+  // Community balance = sum of per-unit balances across all known units, from
+  // one read of the ledger. It was one getUnitLedgerBalance query per unit, in
+  // series: 100 round trips for a 100-unit community, each holding a pool lane.
   let balanceCents = 0;
-  for (const row of unitRows) {
-    balanceCents += await getUnitLedgerBalance(scoped, row.id);
+  for (const row of ledgerAmountRows) {
+    if (row.unitId !== null && unitById.has(row.unitId) && Number.isFinite(row.amountCents)) {
+      balanceCents += row.amountCents;
+    }
   }
 
   // The likelier of the two to fire: a ~70-unit community on monthly

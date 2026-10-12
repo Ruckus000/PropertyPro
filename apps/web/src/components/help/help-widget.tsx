@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { captureMessage } from '@sentry/nextjs';
 import { X, Search, BookOpen, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -63,11 +62,14 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
     searchQuery,
     communityId,
   );
+  // Only while the drawer is open, as the newer modal does: unconditionally,
+  // every navigation to a new path fired a contextual-help request that
+  // competed with the page's own data calls for nothing on screen.
   const {
     data: contextualArticles,
     isFetching: contextualFetching,
     isError: contextualHasError,
-  } = useContextualHelp(pathname, communityId, { applyTimeout: true });
+  } = useContextualHelp(pathname, communityId, { applyTimeout: true, enabled: isOpen });
 
   // Track consecutive routes with no contextual matches; surface a one-shot
   // Sentry signal when the threshold trips so the weekly content-gaps script
@@ -82,12 +84,15 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
         );
       }
       if (noMatchRunRef.current.length >= CONTEXTUAL_GAP_THRESHOLD) {
-        captureMessage('help_contextual_no_match', {
-          level: 'info',
-          extra: {
-            communityId,
-            paths: [...noMatchRunRef.current],
-          },
+        // Snapshot before the reset below: the SDK loads asynchronously.
+        const paths = [...noMatchRunRef.current];
+        // On demand, not a static import: this widget mounts with the shell, so
+        // a static import put the whole Sentry SDK in every signed-in first load.
+        void import('@sentry/nextjs').then(({ captureMessage }) => {
+          captureMessage('help_contextual_no_match', {
+            level: 'info',
+            extra: { communityId, paths },
+          });
         });
         noMatchRunRef.current = [];
       }

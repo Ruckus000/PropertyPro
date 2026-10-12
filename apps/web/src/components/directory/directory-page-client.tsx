@@ -2,7 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertTriangle, DollarSign, Download, MoreHorizontal, Plus, Upload } from 'lucide-react';
@@ -161,7 +161,6 @@ export function DirectoryPageClient({
   canSendDocuments,
   initialTab,
 }: DirectoryPageClientProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -231,9 +230,9 @@ export function DirectoryPageClient({
       params.delete('q');
       setSelection(new Set());
       // `replace`, not `push`: Back should leave the page, not walk the tabs.
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
     },
-    [pathname, router, searchParams],
+    [pathname, searchParams],
   );
 
   /* ── Data ── */

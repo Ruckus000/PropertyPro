@@ -9,7 +9,6 @@
  * Reports caught errors to Sentry for monitoring.
  */
 import React from 'react';
-import * as Sentry from '@sentry/nextjs';
 
 interface ErrorBoundaryProps {
   /** Optional custom fallback UI to show when an error occurs. */
@@ -39,12 +38,16 @@ export class ErrorBoundary extends React.Component<
     // Log to console for development
     console.error('ErrorBoundary caught an error:', error, errorInfo);
 
-    // Report to Sentry
-    Sentry.captureException(error, {
-      contexts: {
-        react: { componentStack: errorInfo.componentStack ?? undefined },
-      },
-    });
+    // Report to Sentry. The SDK is loaded on demand, never statically, so
+    // pages that merely wrap content in this boundary don't ship it in their
+    // first load (instrumentation-client.ts defers it the same way).
+    void import('@sentry/nextjs').then((Sentry) =>
+      Sentry.captureException(error, {
+        contexts: {
+          react: { componentStack: errorInfo.componentStack ?? undefined },
+        },
+      }),
+    );
   }
 
   private handleRetry = (): void => {

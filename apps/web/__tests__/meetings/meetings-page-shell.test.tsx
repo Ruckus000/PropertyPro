@@ -119,8 +119,14 @@ function renderShell(overrides: Partial<{ canWrite: boolean }> = {}) {
     />,
   );
 }
+// Tab switches write the URL with history.replaceState, which Next syncs into
+// useSearchParams without a server render. Asserting router.replace is NOT
+// called is the point: that call re-rendered the force-dynamic page.
+const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+
 
 beforeEach(() => {
+  historyReplace.mockClear();
   vi.useFakeTimers({ toFake: ['Date'], now: NOW });
   search = new URLSearchParams();
   meetingsData = [UPCOMING_BOARD, UPCOMING_ANNUAL, PAST_OWED];
@@ -199,9 +205,8 @@ describe('MeetingsPageShell — one switcher, one view at a time', () => {
     await user.click(screen.getByRole('tab', { name: 'Schedule' }));
 
     // `replace`, not `push`: Back should leave the page, not walk every view.
-    expect(routerReplace).toHaveBeenCalledWith('/communities/3/meetings?foo=bar&view=schedule', {
-      scroll: false,
-    });
+    expect(historyReplace).toHaveBeenCalledWith(null, '', '/communities/3/meetings?foo=bar&view=schedule');
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it('counts owed minutes on the Minutes tab, and drops the count when nothing is owed', () => {

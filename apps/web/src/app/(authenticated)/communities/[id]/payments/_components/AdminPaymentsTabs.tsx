@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AssessmentManager } from '@/components/finance/assessment-manager';
 import { DelinquencyTable } from '@/components/finance/delinquency-table';
@@ -51,7 +51,6 @@ interface AdminPaymentsTabsProps {
 }
 
 export function AdminPaymentsTabs({ communityId, userId, userRole }: AdminPaymentsTabsProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab = coercePaymentsTab(searchParams.get('tab'));
@@ -62,14 +61,14 @@ export function AdminPaymentsTabs({ communityId, userId, userRole }: AdminPaymen
   function showAllUnits() {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('unitId');
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
   }
 
   function handleTabChange(nextValue: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', coercePaymentsTab(nextValue));
     // `replace`, not `push`: Back should leave the page, not walk every view.
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
   }
 
   return (
