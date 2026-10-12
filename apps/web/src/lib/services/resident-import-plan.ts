@@ -44,6 +44,12 @@ export interface ResidentImportRowError {
   rowNumber: number;
   column: string | null;
   message: string;
+  /**
+   * `already_member`: the person is already in this community. Not something
+   * to fix — after an interrupted import it is exactly what a saved row looks
+   * like, so the preview shows it as done rather than as an error.
+   */
+  code?: 'already_member';
 }
 
 export interface ResidentImportReadyRow {
@@ -103,8 +109,8 @@ export async function planResidentImport(params: {
 
   for (const row of rows) {
     const { email, role, unit_number } = row.data;
-    const refuse = (column: string, message: string) => {
-      errors.push({ rowNumber: row.rowNumber, column, message });
+    const refuse = (column: string, message: string, code?: ResidentImportRowError['code']) => {
+      errors.push({ rowNumber: row.rowNumber, column, message, ...(code ? { code } : {}) });
     };
 
     // Role-v3 invariant 3 (mirrors residents POST): only resident-tier rows
@@ -172,7 +178,7 @@ export async function planResidentImport(params: {
       }
 
       if (userHasRole.has(existingUserId)) {
-        refuse('email', `User with email '${email}' already has a role in this community`);
+        refuse('email', `User with email '${email}' already has a role in this community`, 'already_member');
         continue;
       }
 

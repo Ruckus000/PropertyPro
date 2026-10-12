@@ -124,6 +124,34 @@ describe('useImportResidents', () => {
     expect(result.current.error?.message).toBe('Import blew up');
   });
 
+  it("reads the API's nested { error: { message } } and keeps the HTTP status", async () => {
+    // withErrorHandler's real envelope. Before, only a top-level `message` was
+    // read, so the server's own words never reached the screen.
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 402,
+      json: () => Promise.resolve({ error: { code: 'SUBSCRIPTION_REQUIRED', message: 'Your subscription has ended' } }),
+    } as unknown as Response);
+
+    const { result } = renderHook(() => useImportResidents(COMMUNITY_ID), { wrapper });
+    result.current.mutate(CSV);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Your subscription has ended');
+    expect((result.current.error as { status?: number | null }).status).toBe(402);
+  });
+
+  it('marks a request that never got a response with status null', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const { result } = renderHook(() => useImportResidents(COMMUNITY_ID), { wrapper });
+    result.current.mutate(CSV);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Failed to import residents');
+    expect((result.current.error as { status?: number | null }).status).toBeNull();
+  });
+
   it('throws the exact "Failed to import residents" literal on non-JSON non-OK', async () => {
     fetchMock.mockResolvedValue(nonJsonResponse());
 

@@ -136,6 +136,14 @@ export interface AuditEventParams {
 }
 
 /**
+ * Either the package-level `db` or a Drizzle transaction handle — anything with
+ * the `insert()` that {@link logAuditEvent} uses.
+ */
+export type AuditExecutor = {
+  insert: typeof db.insert;
+};
+
+/**
  * Log an audit event by INSERTing into compliance_audit_log.
  *
  * Called from mutation handlers across the application.
@@ -147,9 +155,18 @@ export interface AuditEventParams {
  * This invariant is satisfied by the `db` instance (drizzle.ts), which connects via
  * DATABASE_URL as the postgres superuser. Do NOT call from a Supabase anon/authenticated
  * client — the INSERT will be blocked by RLS with no error surfaced to the caller.
+ *
+ * @param executor - Optional executor (`db` by default). Pass the transaction
+ *   handle from a `db.transaction(async (tx) => ...)` callback so the audit row
+ *   commits or rolls back with the change it records. Without it, a mutation
+ *   that commits and a request that then dies leaves a change with no audit
+ *   entry. Same shape as `insertNotifications`'s executor.
  */
-export async function logAuditEvent(params: AuditEventParams): Promise<void> {
-  await db.insert(complianceAuditLog).values({
+export async function logAuditEvent(
+  params: AuditEventParams,
+  executor: AuditExecutor = db,
+): Promise<void> {
+  await executor.insert(complianceAuditLog).values({
     userId: params.userId,
     communityId: params.communityId,
     action: params.action,

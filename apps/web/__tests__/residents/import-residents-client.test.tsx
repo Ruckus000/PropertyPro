@@ -175,9 +175,99 @@ describe('ImportResidentsClient — import + results', () => {
     fireEvent.click(screen.getByRole('button', { name: /Import 1 Resident/ }));
 
     await waitFor(() =>
-      expect(screen.getByText('Import failed')).toBeInTheDocument(),
+      expect(screen.getByText('The import stopped before finishing')).toBeInTheDocument(),
     );
-    expect(screen.getByText('Failed to import residents')).toBeInTheDocument();
+    expect(screen.getByText(/^Failed to import residents\. Every row that was saved is complete/)).toBeInTheDocument();
+    // The spinner is gone once the request has failed.
+    expect(screen.queryByText('Importing residents...')).not.toBeInTheDocument();
+  });
+
+  it("'Check what's left' re-checks the same file and returns to the preview (audit F2)", async () => {
+    await advanceToPreview();
+    importMutation.error = new Error('Failed to import residents');
+    fireEvent.click(screen.getByRole('button', { name: /Import 1 Resident/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: "Check what's left" })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: "Check what's left" }));
+
+    // Not yet: clearing the import's error before the re-check succeeds put
+    // the "Importing residents..." spinner back up with nowhere to show a
+    // failed re-check (review of audit F2).
+    expect(importMutation.reset).not.toHaveBeenCalled();
+    // Same CSV as the first preview — not a new upload.
+    expect(dryRunMutation.mutate).toHaveBeenCalledTimes(2);
+    const [csvAgain, opts] = dryRunMutation.mutate.mock.calls[1]!;
+    expect(csvAgain).toBe(dryRunMutation.mutate.mock.calls[0]![0]);
+
+    // The saved row now comes back as already a member.
+    (opts as { onSuccess: (d: unknown) => void }).onSuccess({
+      data: {
+        preview: [],
+        errors: [
+          {
+            rowNumber: 2,
+            column: 'email',
+            message: "User with email 'jane@x.com' already has a role in this community",
+            code: 'already_member',
+          },
+        ],
+        header: ['name', 'email', 'role', 'unit_number'],
+      },
+    });
+    await waitFor(() => expect(screen.getByText('0 ready to import')).toBeInTheDocument());
+    expect(importMutation.reset).toHaveBeenCalledTimes(1);
+    // Shown as done — not as a row to fix, and not in the rows-to-fix download.
+    expect(screen.getByText('1 already a member')).toBeInTheDocument();
+    expect(screen.getByText('Already in this community — nothing to import')).toBeInTheDocument();
+    expect(screen.queryByText(/need(s)? fixing/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Download rows to fix' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ImportResidentsClient — import failures (audit F2)', () => {
+  async function failImport(error: Error) {
+    renderClient();
+    uploadCsv();
+    await waitFor(() => expect(dryRunMutation.mutate).toHaveBeenCalled());
+    const [, opts] = dryRunMutation.mutate.mock.calls[0]!;
+    (opts as { onSuccess: (d: unknown) => void }).onSuccess({
+      data: {
+        preview: [{ name: 'Jane', email: 'jane@x.com', role: 'owner', unit_number: '101', rowNumber: 2, existingAccount: false }],
+        errors: [],
+        header: ['name'],
+      },
+    });
+    await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
+    importMutation.error = error;
+    fireEvent.click(screen.getByRole('button', { name: /Import 1 Resident/ }));
+  }
+
+  it('a refusal (4xx) says nothing was imported and offers the preview back', async () => {
+    await failImport(Object.assign(new Error('Your subscription has ended'), { status: 402 }));
+
+    await waitFor(() => expect(screen.getByText("The import didn't start")).toBeInTheDocument());
+    expect(screen.getByText('Your subscription has ended. Nothing was imported.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "Check what's left" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to preview' }));
+    expect(importMutation.reset).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
+  });
+
+  it('a server error or lost response says rows may be saved and offers the re-check', async () => {
+    await failImport(Object.assign(new Error('The request timed out'), { status: 504 }));
+
+    await waitFor(() => expect(screen.getByText('The import stopped before finishing')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: "Check what's left" })).toBeInTheDocument();
+  });
+
+  it('a re-check that fails is shown, not swallowed', async () => {
+    dryRunMutation.error = new Error('Your session has expired');
+    await failImport(Object.assign(new Error('Failed to import residents'), { status: null }));
+
+    await waitFor(() => expect(screen.getByText("We couldn't check the file again")).toBeInTheDocument());
+    expect(screen.getByText('Your session has expired')).toBeInTheDocument();
+    expect(screen.queryByText('Importing residents...')).not.toBeInTheDocument();
   });
 });
 
@@ -322,6 +412,35 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     fireEvent.click(screen.getByRole('button', { name: 'Download rows to fix' }));
     const [csv] = saveCsvFileMock.mock.calls[0]!;
     expect((csv as string).split('\r\n')[1]).toBe('"Lee, Al",bad,owner,102,3,Invalid email address');
+  });
+
+  it('keeps an already-member row out of the fix count and the download, beside real problems', async () => {
+    await previewOf(MIXED, {
+      data: {
+        ...MIXED_RESPONSE.data,
+        // Line 6 is already in the community instead of ready.
+        preview: MIXED_RESPONSE.data.preview.filter((r) => r.rowNumber !== 6),
+        errors: [
+          ...MIXED_RESPONSE.data.errors,
+          {
+            rowNumber: 6,
+            column: 'email',
+            message: "User with email 'dee@x.com' already has a role in this community",
+            code: 'already_member',
+          },
+        ],
+      },
+    });
+    await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
+    expect(screen.getByText('2 rows need fixing')).toBeInTheDocument();
+    expect(screen.getByText('1 already a member')).toBeInTheDocument();
+    const row6 = bodyRows().find((r) => r[0] === '6')!;
+    expect(row6[1]).toBe('Member');
+    expect(row6[6]).toBe('Already in this community — nothing to import');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download rows to fix' }));
+    const [csv] = saveCsvFileMock.mock.calls[0]!;
+    expect((csv as string).split('\r\n').map((l) => l.split(',')[0])).toEqual(['name', '', 'Cal']);
   });
 
   it('offers no download when every row is ready', async () => {

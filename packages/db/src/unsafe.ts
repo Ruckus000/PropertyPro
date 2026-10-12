@@ -120,6 +120,28 @@ export {
 } from './ops/branding-ops';
 
 /**
+ * Resident CSV import — one row in one transaction (user if new, membership,
+ * notification preferences, audit entry).
+ *
+ * **Authorization contract:** callers MUST have verified, for `communityId`,
+ * the actor's membership and `requirePermission(..., 'residents', 'write')`,
+ * and MUST have planned the row with `planResidentImport`
+ * (apps/web/src/lib/services/resident-import-plan.ts) in the same request. That
+ * plan runs the cross-tenant attach guard (`assertActorMayAttachExistingUser`)
+ * for every `existingUserId`; this op attaches whatever id it is given and does
+ * not re-check. The plan is also what makes the other inputs true, and the op
+ * trusts them: `isUnitOwner` respects the community type (an apartment has no
+ * owners), and on the attach path `email` is `existingUserId`'s email (it is
+ * written only to the audit row, so a mismatch would falsify the record). The
+ * op itself refuses any role but `resident` and any `unitId` that is not a
+ * live unit of `communityId`.
+ */
+export {
+  importResidentRowOp,
+  type ImportResidentRowOpParams,
+} from './ops/resident-import-ops';
+
+/**
  * Returns the raw Drizzle client without tenant scoping.
  * Use only for deliberate, reviewed escape-hatch flows.
  */
