@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Loader2,
+  UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -17,6 +18,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import {
   useDryRunImport,
   useImportResidents,
+  type ImportRequestError,
   type DryRunRow,
   type CsvError,
   type DryRunResponse,
@@ -26,6 +28,7 @@ import { directoryHref } from '@/lib/directory/directory-href';
 import {
   buildImportDisplayRows,
   buildRowsToFixCsv,
+  countAlreadyMembers,
   countRowsWithErrors,
   fileLevelErrors,
   rowsToFixFileName,
@@ -136,6 +139,33 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
     });
   }, [importMutation, csvText]);
 
+  // After an import request fails part-way: every row it saved is complete
+  // (one transaction per row), so re-checking the same file shows exactly
+  // what is left — saved rows come back as already members. The import's
+  // error is cleared only once the re-check has succeeded: clearing it first
+  // would put the "Importing residents..." spinner back up, and a failed
+  // re-check would then have nowhere to show.
+  const handleCheckWhatsLeft = useCallback(() => {
+    dryRunMutation.mutate(csvText, {
+      onSuccess: (data) => {
+        importMutation.reset();
+        setDryRunData(data.data);
+        setStep('preview');
+      },
+    });
+  }, [importMutation, dryRunMutation, csvText]);
+
+  // A refusal (4xx) happens before any row is written; go back to the preview.
+  const handleBackToPreview = useCallback(() => {
+    importMutation.reset();
+    setStep('preview');
+  }, [importMutation]);
+
+  const importError = importMutation.error instanceof Error ? importMutation.error : null;
+  const importStatus = (importError as ImportRequestError | null)?.status ?? null;
+  // No response, or a server error: some rows may have been saved.
+  const mayHavePartlyImported = importError !== null && (importStatus === null || importStatus >= 500);
+
 
   return (
     <div className="space-y-6">
@@ -171,26 +201,69 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
       )}
 
       {/* Step 3: Importing */}
-      {step === 'importing' && (
-        <div className="flex flex-col items-center gap-4 py-16">
+      {step === 'importing' && !importError && (
+        <div className="flex flex-col items-center gap-4 py-16" role="status">
           <Loader2 size={40} className="animate-spin text-interactive" aria-hidden="true" />
           <p className="text-sm text-content-secondary">Importing residents...</p>
-          {importMutation.error instanceof Error && (
+        </div>
+      )}
+      {step === 'importing' && importError && !mayHavePartlyImported && (
+        <div className="space-y-4">
+          <AlertBanner
+            status="danger"
+            title="The import didn't start"
+            description={`${importError.message.replace(/\.$/, '')}. Nothing was imported.`}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleBackToPreview}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
+            >
+              Back to preview
+            </button>
+            <button
+              type="button"
+              onClick={resetWizard}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+            >
+              Start over
+            </button>
+          </div>
+        </div>
+      )}
+      {step === 'importing' && importError && mayHavePartlyImported && (
+        <div className="space-y-4">
+          <AlertBanner
+            status="danger"
+            title="The import stopped before finishing"
+            description={`${importError.message.replace(/\.$/, '')}. Every row that was saved is complete, and nothing is half-saved. Check the file again to see which rows are left.`}
+          />
+          {dryRunMutation.error instanceof Error && (
             <AlertBanner
-              status="danger"
-              title="Import failed"
-              description={importMutation.error.message}
-              action={
-                <button
-                  type="button"
-                  onClick={resetWizard}
-                  className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
-                >
-                  Start Over
-                </button>
-              }
+              status="warning"
+              title="We couldn't check the file again"
+              description={dryRunMutation.error.message}
             />
           )}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCheckWhatsLeft}
+              disabled={dryRunMutation.isPending}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[36px]"
+            >
+              {dryRunMutation.isPending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+              {dryRunMutation.isPending ? 'Checking...' : "Check what's left"}
+            </button>
+            <button
+              type="button"
+              onClick={resetWizard}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+            >
+              Start over
+            </button>
+          </div>
         </div>
       )}
 
@@ -356,6 +429,7 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }:
   const fileErrors = fileLevelErrors(errors);
   const readyCount = preview.length;
   const fixCount = countRowsWithErrors(errors);
+  const memberCount = countAlreadyMembers(errors);
   // A file-level problem (a missing column, too many rows) blocks the whole
   // file; listing every line under it would only repeat the banner.
   const showRows = fileErrors.length === 0;
@@ -380,6 +454,14 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }:
                 {readyCount} ready to import
               </span>
             </div>
+            {memberCount > 0 && (
+              <div className="flex items-center gap-2">
+                <UserCheck size={16} className="text-content-secondary" aria-hidden="true" />
+                <span className="text-sm font-medium text-content">
+                  {memberCount} already {memberCount === 1 ? 'a member' : 'members'}
+                </span>
+              </div>
+            )}
             {fixCount > 0 && (
               <div className="flex items-center gap-2">
                 <XCircle size={16} className="text-status-danger" aria-hidden="true" />
@@ -429,6 +511,11 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }:
                           <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
                           Ready
                         </span>
+                      ) : row.status === 'member' ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-content">
+                          <UserCheck size={16} className="text-content-secondary" aria-hidden="true" />
+                          Member
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 text-sm text-content">
                           <XCircle size={16} className="text-status-danger" aria-hidden="true" />
@@ -443,9 +530,11 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }:
                     <td className="px-3 py-2 text-sm text-content-secondary">
                       {row.status === 'error'
                         ? row.problems.join('; ') || 'Not imported'
-                        : row.existingAccount
-                          ? 'Existing account — will be added to this community'
-                          : 'New account'}
+                        : row.status === 'member'
+                          ? 'Already in this community — nothing to import'
+                          : row.existingAccount
+                            ? 'Existing account — will be added to this community'
+                            : 'New account'}
                     </td>
                   </tr>
                 ))}

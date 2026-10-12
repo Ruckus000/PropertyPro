@@ -15,6 +15,7 @@ interface RowError {
   rowNumber: number;
   column: string | null;
   message: string;
+  code?: 'already_member';
 }
 
 interface ReadyRow {
@@ -32,7 +33,11 @@ export interface ImportDisplayRow {
   email: string;
   role: string;
   unitNumber: string;
-  status: 'ready' | 'error';
+  /**
+   * `member`: already in this community, so there is nothing to import — after
+   * an interrupted import this is what a saved row looks like (audit F2).
+   */
+  status: 'ready' | 'member' | 'error';
   /** Every reason the row will not be imported; empty for a ready row. */
   problems: string[];
   existingAccount: boolean;
@@ -43,10 +48,13 @@ export function fileLevelErrors(errors: RowError[]): RowError[] {
   return errors.filter((e) => e.rowNumber <= 1);
 }
 
+const isAlreadyMember = (err: RowError) => err.code === 'already_member';
+
+/** Problems to fix, by line. Already-member rows are done, not problems. */
 function groupRowErrors(errors: RowError[]): Map<number, string[]> {
   const byRow = new Map<number, string[]>();
   for (const err of errors) {
-    if (err.rowNumber <= 1) continue;
+    if (err.rowNumber <= 1 || isAlreadyMember(err)) continue;
     byRow.set(err.rowNumber, [...(byRow.get(err.rowNumber) ?? []), err.message]);
   }
   return byRow;
@@ -55,6 +63,11 @@ function groupRowErrors(errors: RowError[]): Map<number, string[]> {
 /** How many distinct lines have at least one problem (not how many messages). */
 export function countRowsWithErrors(errors: RowError[]): number {
   return groupRowErrors(errors).size;
+}
+
+/** Lines whose person is already in this community. */
+export function countAlreadyMembers(errors: RowError[]): number {
+  return new Set(errors.filter(isAlreadyMember).map((e) => e.rowNumber)).size;
 }
 
 // Same cell clean-up as `validateResidentCsv`, so a raw value reads as the
@@ -75,6 +88,7 @@ export function buildImportDisplayRows(
   const col = (name: string) => header.lastIndexOf(name);
   const readyByRow = new Map(preview.map((r) => [r.rowNumber, r]));
   const problemsByRow = groupRowErrors(errors);
+  const memberRows = new Set(errors.filter(isAlreadyMember).map((e) => e.rowNumber));
 
   const rows: ImportDisplayRow[] = records.map((record) => {
     const ready = readyByRow.get(record.rowNumber);
@@ -86,7 +100,12 @@ export function buildImportDisplayRows(
       role: cell(record.values, col('role')),
       // The validator trims unit_number once more after unquoting.
       unitNumber: cell(record.values, col('unit_number')).trim(),
-      status: ready && problems.length === 0 ? 'ready' : 'error',
+      status:
+        ready && problems.length === 0
+          ? 'ready'
+          : memberRows.has(record.rowNumber) && problems.length === 0
+            ? 'member'
+            : 'error',
       problems,
       existingAccount: ready?.existingAccount ?? false,
     };

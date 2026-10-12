@@ -16,6 +16,7 @@ describe('db export boundaries', () => {
     expect(rootExports).not.toHaveProperty('findCandidateDigestCommunityIds');
     expect(rootExports).not.toHaveProperty('claimDigestQueueRows');
     expect(rootExports).not.toHaveProperty('hasMoreDigestRows');
+    expect(rootExports).not.toHaveProperty('importResidentRowOp');
   });
 
   it('keeps document access helpers on root exports', () => {
@@ -32,6 +33,7 @@ describe('db export boundaries', () => {
     expect(unsafeExports).toHaveProperty('findCandidateDigestCommunityIds');
     expect(unsafeExports).toHaveProperty('claimDigestQueueRows');
     expect(unsafeExports).toHaveProperty('hasMoreDigestRows');
+    expect(unsafeExports).toHaveProperty('importResidentRowOp');
   });
 
   it('exposes only approved runtime filter helpers', () => {

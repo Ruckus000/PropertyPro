@@ -31,9 +31,8 @@ const {
   loadUnitNumberMapForImportMock,
   loadUserEmailMapForImportMock,
   loadUsersWithExistingRoleForImportMock,
-  insertUserForImportMock,
-  insertUserRoleForImportMock,
-  insertNotificationPreferencesForImportMock,
+  importResidentRowMock,
+  captureExceptionMock,
   assertActorMayAttachExistingUserMock,
   loadActorCommunitiesForLinkingMock,
 } = vi.hoisted(() => ({
@@ -50,11 +49,15 @@ const {
   loadUnitNumberMapForImportMock: vi.fn(),
   loadUserEmailMapForImportMock: vi.fn(),
   loadUsersWithExistingRoleForImportMock: vi.fn(),
-  insertUserForImportMock: vi.fn(),
-  insertUserRoleForImportMock: vi.fn(),
-  insertNotificationPreferencesForImportMock: vi.fn(),
+  importResidentRowMock: vi.fn(),
+  captureExceptionMock: vi.fn(),
   assertActorMayAttachExistingUserMock: vi.fn(),
   loadActorCommunitiesForLinkingMock: vi.fn(),
+}));
+
+vi.mock('@sentry/nextjs', async () => ({
+  ...(await vi.importActual<typeof import('@sentry/nextjs')>('@sentry/nextjs')),
+  captureException: captureExceptionMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -121,9 +124,7 @@ vi.mock('@/lib/services/import-residents-service', () => ({
   loadUnitNumberMapForImport: loadUnitNumberMapForImportMock,
   loadUserEmailMapForImport: loadUserEmailMapForImportMock,
   loadUsersWithExistingRoleForImport: loadUsersWithExistingRoleForImportMock,
-  insertUserForImport: insertUserForImportMock,
-  insertUserRoleForImport: insertUserRoleForImportMock,
-  insertNotificationPreferencesForImport: insertNotificationPreferencesForImportMock,
+  importResidentRow: importResidentRowMock,
 }));
 
 import { POST } from '../../src/app/api/v1/import-residents/route';
@@ -167,9 +168,7 @@ describe('POST /api/v1/import-residents', () => {
     loadUnitNumberMapForImportMock.mockResolvedValue(new Map());
     loadUserEmailMapForImportMock.mockResolvedValue(new Map());
     loadUsersWithExistingRoleForImportMock.mockResolvedValue(new Set());
-    insertUserForImportMock.mockResolvedValue('new-user-1');
-    insertUserRoleForImportMock.mockResolvedValue(undefined);
-    insertNotificationPreferencesForImportMock.mockResolvedValue(undefined);
+    importResidentRowMock.mockResolvedValue('new-user-1');
     logAuditEventMock.mockResolvedValue(undefined);
   });
 
@@ -197,10 +196,7 @@ describe('POST /api/v1/import-residents', () => {
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'actor-1');
     expect(requirePermissionMock).toHaveBeenCalledWith(ADMIN_MEMBERSHIP, 'residents', 'write');
     // No import side-effects on a dry run.
-    expect(insertUserForImportMock).not.toHaveBeenCalled();
-    expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
-    expect(insertNotificationPreferencesForImportMock).not.toHaveBeenCalled();
-    expect(logAuditEventMock).not.toHaveBeenCalled();
+    expect(importResidentRowMock).not.toHaveBeenCalled();
     // Until onboarding audit F1 this asserted the preview never loaded the
     // community at all — which is exactly why it could not predict the import.
     expect(getCommunityTypeForOnboardingMock).toHaveBeenCalledWith(42);
@@ -273,6 +269,8 @@ describe('POST /api/v1/import-residents', () => {
           rowNumber: 2,
           column: 'email',
           message: "User with email 'cy@x.com' already has a role in this community",
+          // Tagged so the preview can show it as done, not as a problem to fix.
+          code: 'already_member',
         },
       },
       {
@@ -309,7 +307,7 @@ describe('POST /api/v1/import-residents', () => {
       expect(imported.importedCount).toBe(0);
       expect(imported.skippedCount).toBe(1);
       expect(imported.errors).toEqual([error]);
-      expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+      expect(importResidentRowMock).not.toHaveBeenCalled();
     });
 
     it('keeps each row on its own source line number through a mixed file', async () => {
@@ -352,7 +350,7 @@ describe('POST /api/v1/import-residents', () => {
       expect(imported.data.errors).toEqual([
         { rowNumber: 2, column: 'unit_number', message: "Unit '101' not found" },
       ]);
-      expect(insertUserForImportMock).not.toHaveBeenCalled();
+      expect(importResidentRowMock).not.toHaveBeenCalled();
     });
 
     it('attaches an existing account it may see without creating a second user', async () => {
@@ -364,8 +362,171 @@ describe('POST /api/v1/import-residents', () => {
       const json = (await res.json()) as ImportJson;
 
       expect(json.data.importedCount).toBe(1);
-      expect(insertUserForImportMock).not.toHaveBeenCalled();
-      expect(insertUserRoleForImportMock).toHaveBeenCalledWith(42, expect.objectContaining({ userId: 'returning-1', unitId: 7 }));
+      // The existing account is attached, never a second user created.
+      expect(importResidentRowMock).toHaveBeenCalledWith(
+        expect.objectContaining({ existingUserId: 'returning-1', unitId: 7 }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Onboarding audit F2: each row is its own transaction. A row that fails has
+  // written nothing (proven on real Postgres in
+  // __tests__/integration/import-residents-atomicity.integration.test.ts); here
+  // we pin that the route reports it and carries on.
+  // -------------------------------------------------------------------------
+  describe('row writes (audit F2)', () => {
+    const threeRows = () =>
+      validateResidentCsvMock.mockReturnValueOnce({
+        header: ['name', 'email', 'role', 'unit_number'],
+        rows: [
+          { rowNumber: 2, data: { name: 'A', email: 'a@x.com', role: 'owner', unit_number: '101' } },
+          { rowNumber: 3, data: { name: 'B', email: 'b@x.com', role: 'owner', unit_number: '101' } },
+          { rowNumber: 4, data: { name: 'C', email: 'c@x.com', role: 'owner', unit_number: '101' } },
+        ],
+        errors: [],
+      });
+
+    type ImportJson = {
+      data: {
+        importedCount: number;
+        skippedCount: number;
+        errors: Array<{ rowNumber: number; column: string | null; message: string }>;
+      };
+    };
+
+    it('a row that fails is reported and the rows after it still import', async () => {
+      threeRows();
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      importResidentRowMock
+        .mockResolvedValueOnce('u-a')
+        .mockRejectedValueOnce(new Error('connection reset'))
+        .mockResolvedValueOnce('u-c');
+
+      const res = await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+      const json = (await res.json()) as ImportJson;
+
+      expect(res.status).toBe(200);
+      expect(importResidentRowMock).toHaveBeenCalledTimes(3);
+      expect(json.data.importedCount).toBe(2);
+      expect(json.data.skippedCount).toBe(1);
+      expect(json.data.errors).toEqual([
+        {
+          rowNumber: 3,
+          column: null,
+          message: "We couldn't import this row, and nothing was saved for it. Please try it again.",
+        },
+      ]);
+      // An unexpected failure is reported, with no row contents attached.
+      expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+      expect(captureExceptionMock).toHaveBeenCalledWith(expect.any(Error), {
+        tags: { route: 'import-residents', phase: 'row-write' },
+        extra: { communityId: 42, rowNumber: 3 },
+      });
+      // Every row's audit says how big the import was, even though the final
+      // count is not known inside a row's transaction.
+      for (const [arg] of importResidentRowMock.mock.calls) {
+        expect(arg).toEqual(expect.objectContaining({ bulkCount: 3 }));
+      }
+    });
+
+    it('does not call any other unique violation a race (it would fail the same way on every upload)', async () => {
+      threeRows();
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      const notARace = Object.assign(new Error('Failed query'), {
+        cause: Object.assign(new Error('duplicate key'), { code: '23505', constraint_name: 'users_email_unique' }),
+      });
+      importResidentRowMock
+        .mockResolvedValueOnce('u-a')
+        .mockRejectedValueOnce(notARace)
+        .mockResolvedValueOnce('u-c');
+
+      const json = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }))).json()) as ImportJson;
+
+      expect(json.data.errors).toEqual([
+        {
+          rowNumber: 3,
+          column: null,
+          message: "We couldn't import this row, and nothing was saved for it. Please try it again.",
+        },
+      ]);
+      expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops after five unexpected failures in a row and says which rows were not tried', async () => {
+      validateResidentCsvMock.mockReturnValueOnce({
+        header: ['name', 'email', 'role', 'unit_number'],
+        rows: Array.from({ length: 7 }, (_, i) => ({
+          rowNumber: i + 2,
+          data: { name: `P${i}`, email: `p${i}@x.com`, role: 'owner', unit_number: '101' },
+        })),
+        errors: [],
+      });
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      importResidentRowMock.mockRejectedValue(new Error('pool exhausted'));
+
+      const json = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }))).json()) as ImportJson;
+
+      expect(importResidentRowMock).toHaveBeenCalledTimes(5);
+      expect(captureExceptionMock).toHaveBeenCalledTimes(5);
+      expect(json.data.importedCount).toBe(0);
+      expect(json.data.skippedCount).toBe(7);
+      expect(json.data.errors.slice(5)).toEqual([
+        { rowNumber: 7, column: null, message: 'Not imported: the import stopped after repeated errors. Upload the file again to finish.' },
+        { rowNumber: 8, column: null, message: 'Not imported: the import stopped after repeated errors. Upload the file again to finish.' },
+      ]);
+    });
+
+    it('a success resets the failure streak', async () => {
+      validateResidentCsvMock.mockReturnValueOnce({
+        header: ['name', 'email', 'role', 'unit_number'],
+        rows: Array.from({ length: 9 }, (_, i) => ({
+          rowNumber: i + 2,
+          data: { name: `P${i}`, email: `p${i}@x.com`, role: 'owner', unit_number: '101' },
+        })),
+        errors: [],
+      });
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      const boom = new Error('flaky');
+      importResidentRowMock
+        .mockRejectedValueOnce(boom).mockRejectedValueOnce(boom).mockRejectedValueOnce(boom).mockRejectedValueOnce(boom)
+        .mockResolvedValueOnce('ok')
+        .mockRejectedValueOnce(boom).mockRejectedValueOnce(boom).mockRejectedValueOnce(boom).mockRejectedValueOnce(boom);
+
+      const json = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }))).json()) as ImportJson;
+
+      expect(importResidentRowMock).toHaveBeenCalledTimes(9);
+      expect(json.data.importedCount).toBe(1);
+    });
+
+    it('names a membership race instead of the generic message', async () => {
+      threeRows();
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      // postgres.js puts the SQLSTATE on `.cause` (postgres-error-shape test).
+      const race = Object.assign(new Error('Failed query'), {
+        cause: Object.assign(new Error('duplicate key'), {
+          code: '23505',
+          constraint_name: 'user_roles_user_community_unique',
+        }),
+      });
+      importResidentRowMock
+        .mockResolvedValueOnce('u-a')
+        .mockRejectedValueOnce(race)
+        .mockResolvedValueOnce('u-c');
+
+      const json = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }))).json()) as ImportJson;
+
+      expect(json.data.importedCount).toBe(2);
+      // An expected race is not an error report.
+      expect(captureExceptionMock).not.toHaveBeenCalled();
+      expect(json.data.errors).toEqual([
+        {
+          rowNumber: 3,
+          column: 'email',
+          message:
+            "'b@x.com' was added while this import ran, so nothing was saved for this row. Upload the file again to see where it stands.",
+        },
+      ]);
     });
   });
 
@@ -388,20 +549,21 @@ describe('POST /api/v1/import-residents', () => {
     expect(json.data.importedCount).toBe(1);
     expect(json.data.skippedCount).toBe(0);
     expect(json.data.errors).toEqual([]);
-    expect(insertUserForImportMock).toHaveBeenCalledWith(42, {
-      id: expect.any(String),
+    // One call per row: user, membership, preferences and audit are written
+    // together in that row's transaction (onboarding audit F2).
+    expect(importResidentRowMock).toHaveBeenCalledTimes(1);
+    expect(importResidentRowMock).toHaveBeenCalledWith({
+      communityId: 42,
+      actorUserId: 'actor-1',
       email: 'ada@x.com',
       fullName: 'Ada',
-    });
-    expect(insertUserRoleForImportMock).toHaveBeenCalledWith(42, {
-      userId: 'new-user-1',
-      role: 'resident',
-      unitId: 7,
+      existingUserId: null,
       isUnitOwner: true,
+      unitId: 7,
       displayTitle: 'Owner',
+      legacyRole: 'owner',
+      bulkCount: 1,
     });
-    expect(insertNotificationPreferencesForImportMock).toHaveBeenCalledWith(42, 'new-user-1');
-    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
   });
 
   // Note: pre-lockdown this suite had "writes designation in lockstep" tests for
@@ -453,8 +615,7 @@ describe('POST /api/v1/import-residents', () => {
         expect(json.data.errors[0]?.column).toBe('role');
         expect(json.data.errors[0]?.message).toContain('cannot be imported');
         // No user row and — critically — no role row with a permissions JSONB.
-        expect(insertUserForImportMock).not.toHaveBeenCalled();
-        expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+        expect(importResidentRowMock).not.toHaveBeenCalled();
       },
     );
   });
@@ -478,7 +639,7 @@ describe('POST /api/v1/import-residents', () => {
     expect(json.data.importedCount).toBe(0);
     expect(json.data.skippedCount).toBe(1);
     expect(json.data.errors[0]?.message).toBe("Unit '999' not found");
-    expect(insertUserForImportMock).not.toHaveBeenCalled();
+    expect(importResidentRowMock).not.toHaveBeenCalled();
   });
 
   it('skips a row whose user already has a role in this community', async () => {
@@ -503,7 +664,7 @@ describe('POST /api/v1/import-residents', () => {
     expect(json.data.errors[0]?.message).toBe(
       "User with email 'cy@x.com' already has a role in this community",
     );
-    expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+    expect(importResidentRowMock).not.toHaveBeenCalled();
   });
 
   it('skips a row whose email belongs to a user the actor cannot already see', async () => {
@@ -540,7 +701,7 @@ describe('POST /api/v1/import-residents', () => {
     expect(json.data.importedCount).toBe(0);
     expect(json.data.skippedCount).toBe(1);
     expect(json.data.errors[0]?.message).toContain('cannot already see');
-    expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+    expect(importResidentRowMock).not.toHaveBeenCalled();
   });
 
   it("looks up only the CSV's own emails, not every user on the platform", async () => {
@@ -568,7 +729,7 @@ describe('POST /api/v1/import-residents', () => {
     });
     loadUserEmailMapForImportMock.mockResolvedValueOnce(new Map());
     loadUsersWithExistingRoleForImportMock.mockResolvedValueOnce(new Set());
-    insertUserForImportMock.mockResolvedValueOnce('brand-new-1');
+    importResidentRowMock.mockResolvedValueOnce('brand-new-1');
 
     await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
 

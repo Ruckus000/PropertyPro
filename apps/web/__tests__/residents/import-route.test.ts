@@ -15,6 +15,7 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requirePermissionMock,
+  importResidentRowOpMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +29,14 @@ const {
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue({ role: 'cam' }),
   requirePermissionMock: vi.fn(),
+  importResidentRowOpMock: vi.fn(),
+}));
+
+// Row writes go through one transaction per row (onboarding audit F2). The op
+// itself is tested in packages/db/__tests__/resident-import-ops.test.ts and on
+// real Postgres in __tests__/integration/import-residents-atomicity.integration.test.ts.
+vi.mock('@propertypro/db/unsafe', () => ({
+  importResidentRowOp: importResidentRowOpMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -134,14 +143,7 @@ describe('p1-19 import-residents route', () => {
       .mockResolvedValueOnce([]) // users
       .mockResolvedValueOnce([]); // user_roles
 
-    // Insert users, roles, notification preferences
-    scopedInsertMock
-      .mockResolvedValueOnce([{ id: 'u1', email: 'owner1@example.com' }]) // users
-      .mockResolvedValueOnce([{ id: 900 }]) // user_roles
-      .mockResolvedValueOnce([{ id: 901 }]) // notification_preferences
-      .mockResolvedValueOnce([{ id: 'u2', email: 'tenant1@example.com' }]) // users
-      .mockResolvedValueOnce([{ id: 902 }]) // user_roles
-      .mockResolvedValueOnce([{ id: 903 }]); // notification_preferences
+    importResidentRowOpMock.mockResolvedValueOnce('u1').mockResolvedValueOnce('u2');
 
     const csv = 'name,email,role,unit_number\nOwner One,owner1@example.com,owner,12A\nTenant One,tenant1@example.com,tenant,12B';
     const req = new NextRequest('http://localhost:3000/api/v1/import-residents', {
@@ -157,17 +159,19 @@ describe('p1-19 import-residents route', () => {
     expect(json.data.skippedCount).toBe(0);
     expect(json.data.errors).toHaveLength(0);
 
-    // Audit for both users, with bulkCount = 2
-    expect(logAuditEventMock).toHaveBeenCalledTimes(2);
-    for (const call of logAuditEventMock.mock.calls) {
-      expect(call[0]).toEqual(
-        expect.objectContaining({
-          action: 'user_invited',
-          communityId: 42,
-          metadata: { bulkCount: 2 },
-        }),
+    // One transactional write per row; each row's audit carries the import's
+    // size (the op writes the audit inside that row's transaction).
+    expect(importResidentRowOpMock).toHaveBeenCalledTimes(2);
+    expect(importResidentRowOpMock.mock.calls.map(([p]) => [p.email, p.newUser, p.unitId, p.legacyRole])).toEqual([
+      ['owner1@example.com', { fullName: 'Owner One' }, 100, 'owner'],
+      ['tenant1@example.com', { fullName: 'Tenant One' }, 101, 'tenant'],
+    ]);
+    for (const [p] of importResidentRowOpMock.mock.calls) {
+      expect(p).toEqual(
+        expect.objectContaining({ communityId: 42, role: 'resident', auditMetadata: { bulkCount: 2 } }),
       );
     }
+    expect(scopedInsertMock).not.toHaveBeenCalled();
   });
 
   it('skips rows when unit is not found and reports errors with row numbers', async () => {
@@ -227,6 +231,7 @@ describe('p1-19 import-residents route', () => {
       expect(err.message).toContain('Invalid role');
     }
     expect(scopedInsertMock).not.toHaveBeenCalled();
+    expect(importResidentRowOpMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 for authenticated non-member', async () => {

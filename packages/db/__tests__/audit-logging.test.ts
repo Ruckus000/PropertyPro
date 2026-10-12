@@ -173,6 +173,27 @@ describe('append-only enforcement on compliance_audit_log', () => {
 // ---------------------------------------------------------------------------
 
 describe('logAuditEvent — create mutation logging', () => {
+  it('writes through the executor it is given, so it can join a transaction', async () => {
+    const txValues = vi.fn().mockResolvedValue(undefined);
+    const tx = { insert: vi.fn().mockReturnValue({ values: txValues }) };
+
+    await logAuditEvent(
+      {
+        userId: 'user-1',
+        action: 'user_invited',
+        resourceType: 'resident',
+        resourceId: 'u-9',
+        communityId: 7,
+      },
+      tx as unknown as Parameters<typeof logAuditEvent>[1],
+    );
+
+    expect(tx.insert).toHaveBeenCalledWith(complianceAuditLog);
+    expect(txValues).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'u-9', communityId: 7 }));
+    // Not the package-level client: that write would commit outside the caller's transaction.
+    expect(mockInsertInto).not.toHaveBeenCalled();
+  });
+
   it('INSERTs into compliance_audit_log with correct values', async () => {
     const newValues = { title: 'Annual Budget', category: 'financial' };
 

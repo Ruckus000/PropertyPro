@@ -128,6 +128,12 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/work-orders-service.ts'),
   // Elections vote/proxy/state transitions require one transaction for domain rows and audit rows.
   resolve(repoRoot, 'apps/web/src/lib/services/elections-service.ts'),
+  // Resident CSV import (onboarding audit F2): each row's user + membership +
+  // notification preferences + audit entry commit in ONE transaction, via the
+  // purpose-built importResidentRowOp. The route verifies membership +
+  // residents:write and planResidentImport runs the cross-tenant attach guard
+  // for every existing account before a row reaches the op.
+  resolve(repoRoot, 'apps/web/src/lib/services/import-residents-service.ts'),
   // PR #8a: site-blocks atomic publish + transactional upserts.
   // publishCommunitySite runs a single transaction (SELECT FOR UPDATE on
   // communities → soft-delete published → promote drafts → audit log) per

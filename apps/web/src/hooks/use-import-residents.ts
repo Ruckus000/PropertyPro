@@ -21,6 +21,8 @@ export interface CsvError {
   rowNumber: number;
   column: string | null;
   message: string;
+  /** `already_member`: already in this community — done, not a problem to fix. */
+  code?: 'already_member';
 }
 
 export interface DryRunResponse {
@@ -43,25 +45,48 @@ export interface ImportResponse {
 // API helpers (relocated verbatim from import-residents-client.tsx)
 // ---------------------------------------------------------------------------
 
+/**
+ * A failed import request. `status` is the HTTP status, or `null` when no
+ * response arrived (network failure, timeout) — the one case where the server
+ * may have saved some rows before the browser gave up. A 4xx is a refusal
+ * before any row was written (auth, plan, subscription, rate limit, input).
+ */
+export class ImportRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+  ) {
+    super(message);
+    this.name = 'ImportRequestError';
+  }
+}
+
 // dryRunImport and executeImport differed only by the `dryRun` flag and the
-// fallback error literal — collapsed into one parameterized helper. Behavior
-// (URL/method/headers/body, the `.catch(() => null)` parse, the exact
-// fallbacks, the whole-envelope return) is byte-identical to the originals.
+// fallback error literal — collapsed into one parameterized helper.
 async function performImport<T>(
   communityId: number,
   csvText: string,
   dryRun: boolean,
 ): Promise<T> {
-  const response = await fetch('/api/v1/import-residents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ communityId, csv: csvText, dryRun }),
-  });
+  const fallback = dryRun ? 'Failed to validate CSV' : 'Failed to import residents';
+  let response: Response;
+  try {
+    response = await fetch('/api/v1/import-residents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ communityId, csv: csvText, dryRun }),
+    });
+  } catch {
+    throw new ImportRequestError(fallback, null);
+  }
   if (!response.ok) {
-    const err = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(
-      err?.message ?? (dryRun ? 'Failed to validate CSV' : 'Failed to import residents'),
-    );
+    // `withErrorHandler` nests the message: `{ error: { code, message } }`.
+    // Reading only a top-level `message` meant the server's own words never
+    // reached the screen — every failure read "Failed to import residents".
+    const err = await response.json().catch(() => null) as
+      | { message?: string; error?: { message?: string } }
+      | null;
+    throw new ImportRequestError(err?.error?.message ?? err?.message ?? fallback, response.status);
   }
   return response.json() as Promise<T>;
 }

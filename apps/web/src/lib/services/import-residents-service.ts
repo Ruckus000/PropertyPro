@@ -7,23 +7,24 @@
  * community-scoped, so those are full reads of this community's rows. `users`
  * is platform-global, so that map is built from the CSV's own emails instead.
  *
+ * Writes go through `importResidentRow`: one transaction per row.
+ *
  * Companion to:
  *   - apps/web/src/app/api/v1/import-residents/route.ts
+ *   - apps/web/src/lib/services/resident-import-plan.ts (the read-only plan)
  */
-import {
-  createScopedClient,
-  notificationPreferences,
-  units,
-  userRoles,
-  users,
-} from '@propertypro/db';
+import { createScopedClient, units, userRoles, users } from '@propertypro/db';
 import { inArray, sql } from '@propertypro/db/filters';
+// AUTHZ: importResidentRowOp writes one planned row (user, membership, prefs, audit) in one transaction; the route has verified membership + residents:write and planResidentImport has run the cross-tenant attach guard for every existing account.
+import { importResidentRowOp } from '@propertypro/db/unsafe';
 import { chunk } from '@/lib/utils/chunk';
 
 /**
  * Emails per `IN (...)` lookup. Each email is one bind parameter and Postgres
- * caps a statement at 65,535, while the import body has no row limit. Chunks
- * run sequentially, never in parallel (the pool is 3).
+ * caps a statement at 65,535. The validator caps a file at
+ * `RESIDENT_IMPORT_MAX_ROWS` (2,000), so this is one chunk today; it stays
+ * chunked so raising that cap cannot break the lookup. Chunks run
+ * sequentially, never in parallel (the pool is 3).
  */
 const EMAIL_LOOKUP_CHUNK = 1000;
 
@@ -90,58 +91,42 @@ export async function loadUsersWithExistingRoleForImport(
 }
 
 /**
- * Insert a user row during the import loop. Returns the inserted user id
- * (string), or `null` when the inserted row's id was missing/wrong-shape.
+ * Import one planned row in a single transaction: the user (only when
+ * `existingUserId` is null), the resident membership, notification
+ * preferences for this community, and the audit entry. A row is either fully
+ * imported and audited, or nothing of it is written (onboarding audit F2).
+ * Returns the user id; throws, having written nothing, on any failure.
  *
- * AUTHZ: tenant-scoped — caller MUST verify community membership +
- * `requirePermission('residents', 'write')` BEFORE invoking.
+ * AUTHZ: caller MUST have verified community membership +
+ * `requirePermission('residents', 'write')`, and the row MUST come from
+ * `planResidentImport` in the same request — that is where the cross-tenant
+ * attach guard ran for `existingUserId`.
  */
-export async function insertUserForImport(
-  communityId: number,
-  params: { id: string; email: string; fullName: string },
-): Promise<string | null> {
-  const scoped = createScopedClient(communityId);
-  const inserted = (await scoped.insert(users, {
-    id: params.id,
-    email: params.email,
-    fullName: params.fullName,
-    phone: null,
-  })) as Array<Record<string, unknown>>;
-  const insertedId = inserted[0]?.['id'];
-  return typeof insertedId === 'string' ? insertedId : null;
-}
-
-export interface InsertUserRoleForImportInput {
-  [key: string]: unknown;
-  userId: string;
-  role: string;
-  unitId: number | null;
+export async function importResidentRow(input: {
+  communityId: number;
+  actorUserId: string;
+  email: string;
+  fullName: string;
+  existingUserId: string | null;
   isUnitOwner: boolean;
-  /** Resident-tier imports never carry a board designation (role-v3 invariant 3). */
-  designation?: string | null;
+  unitId: number | null;
   displayTitle: string;
-}
-
-/**
- * Insert a user_roles row during the import loop.
- */
-export async function insertUserRoleForImport(
-  communityId: number,
-  input: InsertUserRoleForImportInput,
-): Promise<void> {
-  const scoped = createScopedClient(communityId);
-  await scoped.insert(userRoles, input);
-}
-
-/**
- * Insert a notification_preferences row for a newly-created user.
- * Idempotency is the caller's responsibility (route only inserts when
- * the user was just created via insertUserForImport).
- */
-export async function insertNotificationPreferencesForImport(
-  communityId: number,
-  userId: string,
-): Promise<void> {
-  const scoped = createScopedClient(communityId);
-  await scoped.insert(notificationPreferences, { userId });
+  legacyRole: string;
+  /** Rows this import attempted; stamped on every row's audit entry. */
+  bulkCount: number;
+}): Promise<string> {
+  return importResidentRowOp({
+    communityId: input.communityId,
+    actorUserId: input.actorUserId,
+    email: input.email,
+    ...(input.existingUserId
+      ? { existingUserId: input.existingUserId }
+      : { newUser: { fullName: input.fullName } }),
+    role: 'resident',
+    isUnitOwner: input.isUnitOwner,
+    unitId: input.unitId,
+    displayTitle: input.displayTitle,
+    legacyRole: input.legacyRole,
+    auditMetadata: { bulkCount: input.bulkCount },
+  });
 }
