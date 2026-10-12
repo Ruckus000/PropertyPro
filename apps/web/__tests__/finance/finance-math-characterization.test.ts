@@ -53,6 +53,7 @@ const {
   communitiesTable,
   usersTable,
   userRolesTable,
+  ledgerEntriesTable,
   eqMock,
   neMock,
   ltMock,
@@ -114,6 +115,10 @@ const {
     },
     usersTable: { id: col('users', 'id') },
     userRolesTable: { id: col('user_roles', 'id') },
+    ledgerEntriesTable: {
+      unitId: col('ledger_entries', 'unitId'),
+      amountCents: col('ledger_entries', 'amountCents'),
+    },
     eqMock: vi.fn((column: symbol, value: unknown) => ({ op: 'eq', column, value })),
     neMock: vi.fn((column: symbol, value: unknown) => ({ op: 'ne', column, value })),
     ltMock: vi.fn((column: symbol, value: unknown) => ({ op: 'lt', column, value })),
@@ -144,6 +149,7 @@ vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
   users: usersTable,
   userRoles: userRolesTable,
+  ledgerEntries: ledgerEntriesTable,
   createScopedClient: createScopedClientMock,
   getUnitLedgerBalance: getUnitLedgerBalanceMock,
   listLedgerEntries: listLedgerEntriesMock,
@@ -1281,14 +1287,24 @@ describe('6. statements', () => {
         lineItem({ id: 22, unitId: 3, dueDate: '2026-03-10', status: 'paid', paidAt: PAID_AT }),
       ]));
       seed(rentObligationsTable, [rent({ id: 600, unitId: 2, dueDate: '2026-03-05', lateFeeCents: 999 })]);
-      const balances: Record<number, number> = { 1: 1000, 2: -250, 3: 0 };
-      getUnitLedgerBalanceMock.mockImplementation(async (_scoped: unknown, unitId: number) => balances[unitId]);
+      // Per-unit balances 1: 1000, 2: -250, 3: 0, plus two rows that belong to
+      // no known unit and must not count.
+      seed(ledgerEntriesTable, [
+        { unitId: 1, amountCents: 1500 },
+        { unitId: 1, amountCents: -500 },
+        { unitId: 2, amountCents: -250 },
+        { unitId: 3, amountCents: 0 },
+        { unitId: 404, amountCents: 99999 },
+        { unitId: null, amountCents: 7777 },
+      ]);
     });
 
     it('balance is the sum of per-unit ledger balances over every unit', async () => {
       const statement = await buildCommunityStatement(11, '2026-01-01', '2026-03-31');
       expect(statement.balanceCents).toBe(750);
-      expect(getUnitLedgerBalanceMock.mock.calls.map(([, unitId]) => unitId)).toEqual([1, 2, 3]);
+      // One ledger read for the whole community, not a query per unit.
+      expect(getUnitLedgerBalanceMock).not.toHaveBeenCalled();
+      expect(selectFromMock.mock.calls.filter(([table]) => table === ledgerEntriesTable)).toHaveLength(1);
       expect(listLedgerEntriesMock).toHaveBeenCalledWith(expect.anything(), {
         startDate: '2026-01-01',
         endDate: '2026-03-31',
