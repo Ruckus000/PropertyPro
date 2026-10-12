@@ -6,6 +6,14 @@ import { z } from 'zod';
  * manager access is assigned from the root-only Roles & Access screen.
  */
 export const RESIDENT_IMPORT_ROLES = ['owner', 'tenant'] as const;
+
+/**
+ * Rows per resident import, matching `UNIT_IMPORT_MAX_ROWS`. Each row with an
+ * existing account costs several sequential reads (and an Auth admin call for
+ * an unclaimed one), and a preview now runs them all. Larger rosters go in
+ * batches (onboarding audit F2: "Bound resident rows").
+ */
+export const RESIDENT_IMPORT_MAX_ROWS = 2000;
 export type ResidentImportRole = (typeof RESIDENT_IMPORT_ROLES)[number];
 
 export interface CsvParseResult<T> {
@@ -106,6 +114,15 @@ export function validateResidentCsv(input: string): CsvParseResult<ResidentCsvRo
     if (!(col in colIndex)) {
       errors.push({ rowNumber: 1, column: col, message: `Missing required column '${col}'` });
     }
+  }
+
+  if (records.length > RESIDENT_IMPORT_MAX_ROWS) {
+    errors.push({
+      rowNumber: 1,
+      column: null,
+      message: `At most ${RESIDENT_IMPORT_MAX_ROWS} residents per import; this file has ${records.length}. Split it into smaller files.`,
+    });
+    return { header, rows: [], errors };
   }
 
   const outRows: Array<{ rowNumber: number; data: ResidentCsvRow }> = [];

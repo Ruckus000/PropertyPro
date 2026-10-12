@@ -31,6 +31,7 @@ export type RouteCategory =
   | 'page'
   | 'esign-sign'
   | 'site-uploads'
+  | 'roster-imports'
   | 'webhook';
 
 /** Rate limit tiers per route category. */
@@ -83,6 +84,17 @@ const RATE_LIMIT_TIERS: Record<RouteCategory, RateLimitTier> = {
    * A future infrastructure pass may add community-keyed limits.
    */
   'site-uploads': { limit: 20, windowMs: 5 * 60_000 },
+
+  /**
+   * Roster CSV imports (residents, units): 20 requests per 10 minutes per
+   * user, counted in Redis. A resident preview has no side effects but checks
+   * every email in the file against the platform's accounts, so under the
+   * generic `write` tier (30/min, per isolate) it was a free, silent, bulk
+   * account-existence probe and a repeatable load on Supabase Auth (security
+   * review of onboarding audit F1). A real migration is a preview and an import
+   * per batch, plus a few fix-and-retry rounds, well inside this.
+   */
+  'roster-imports': { limit: 20, windowMs: 10 * 60_000 },
 
   /** Webhook routes: exempt (Stripe retries need to succeed) */
   webhook: { limit: 0, windowMs: 0 },
@@ -161,6 +173,9 @@ const SITE_UPLOAD_PATH_PREFIXES = [
   '/api/v1/site/images/',
 ];
 
+/** Roster CSV import routes, matched exactly for POST. */
+const ROSTER_IMPORT_PATHS: readonly string[] = ['/api/v1/import-residents', '/api/v1/import-units'];
+
 /** API route prefix for identifying API requests. */
 const API_PREFIX = '/api/';
 
@@ -190,6 +205,11 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
   // Site asset upload routes — tighter tier than generic write.
   if (SITE_UPLOAD_PATH_PREFIXES.some((p) => pathname.startsWith(p))) {
     return 'site-uploads';
+  }
+
+  // Roster CSV imports — tighter, Redis-backed tier than generic write.
+  if (method === 'POST' && ROSTER_IMPORT_PATHS.includes(pathname)) {
+    return 'roster-imports';
   }
 
   // Public unauthenticated API endpoints
@@ -276,12 +296,14 @@ export interface RateLimitCheckResult extends RateLimitResult {
 const DISTRIBUTED_CATEGORIES: ReadonlySet<RouteCategory> = new Set<RouteCategory>([
   'auth',
   'esign-sign',
+  'roster-imports',
 ]);
 
 /**
  * Check rate limit for a request.
  *
- * Async because the security-critical tiers (`auth`, `esign-sign`) consult
+ * Async because the security-critical tiers (`auth`, `esign-sign`,
+ * `roster-imports`) consult
  * Redis — a per-isolate counter cannot bound an attacker who just keeps
  * retrying. Every other tier resolves in-memory without awaiting I/O.
  *

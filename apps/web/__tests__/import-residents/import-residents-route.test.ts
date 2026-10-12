@@ -181,6 +181,7 @@ describe('POST /api/v1/import-residents', () => {
       ],
       errors: [],
     });
+    loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
 
     const res = await POST(jsonPost({ communityId: 42, csv: 'header\nrow', dryRun: true }));
 
@@ -188,14 +189,184 @@ describe('POST /api/v1/import-residents', () => {
     const json = (await res.json()) as {
       data: { preview: unknown[]; errors: unknown[]; header: string[] };
     };
-    expect(json.data.preview).toHaveLength(1);
+    expect(json.data.preview).toEqual([
+      { name: 'Ada', email: 'ada@x.com', role: 'owner', unit_number: '101', rowNumber: 2, existingAccount: false },
+    ]);
     expect(json.data.header).toEqual(['name', 'email', 'role', 'unit_number']);
     expect(assertNotDemoGraceMock).toHaveBeenCalledWith(42);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'actor-1');
     expect(requirePermissionMock).toHaveBeenCalledWith(ADMIN_MEMBERSHIP, 'residents', 'write');
     // No import side-effects on a dry run.
     expect(insertUserForImportMock).not.toHaveBeenCalled();
-    expect(getCommunityTypeForOnboardingMock).not.toHaveBeenCalled();
+    expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+    expect(insertNotificationPreferencesForImportMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+    // Until onboarding audit F1 this asserted the preview never loaded the
+    // community at all — which is exactly why it could not predict the import.
+    expect(getCommunityTypeForOnboardingMock).toHaveBeenCalledWith(42);
+  });
+
+  // -------------------------------------------------------------------------
+  // Onboarding audit F1: the preview must report what the import will do.
+  // Each case runs the SAME fixture through dryRun and through the import, and
+  // asserts the preview refuses exactly the rows the import skips.
+  // -------------------------------------------------------------------------
+  describe('preview predicts the import (audit F1)', () => {
+    type PreviewJson = {
+      data: {
+        preview: Array<{ email: string; rowNumber: number; existingAccount: boolean }>;
+        errors: Array<{ rowNumber: number; column: string | null; message: string }>;
+      };
+    };
+    type ImportJson = {
+      data: {
+        importedCount: number;
+        skippedCount: number;
+        errors: Array<{ rowNumber: number; column: string | null; message: string }>;
+      };
+    };
+
+    const rows = (...entries: Array<[number, string, string, string]>) => ({
+      header: ['name', 'email', 'role', 'unit_number'],
+      rows: entries.map(([rowNumber, email, role, unit]) => ({
+        rowNumber,
+        data: { name: email.split('@')[0]!, email, role, unit_number: unit || null },
+      })),
+      errors: [],
+    });
+
+    async function previewAndImport(setup: () => void) {
+      setup();
+      const preview = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: true }))).json()) as PreviewJson;
+      setup();
+      const imported = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }))).json()) as ImportJson;
+      return { preview: preview.data, imported: imported.data };
+    }
+
+    it.each([
+      {
+        name: 'a unit that does not exist',
+        setup: () => {
+          validateResidentCsvMock.mockReturnValueOnce(rows([2, 'bo@x.com', 'owner', '999']));
+          loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+        },
+        error: { rowNumber: 2, column: 'unit_number', message: "Unit '999' not found" },
+      },
+      {
+        name: 'an owner in an apartment community',
+        setup: () => {
+          validateResidentCsvMock.mockReturnValueOnce(rows([2, 'ow@x.com', 'owner', '101']));
+          getCommunityTypeForOnboardingMock.mockResolvedValueOnce('apartment');
+          loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+        },
+        error: { rowNumber: 2, column: 'role', message: "Role 'owner' is not allowed for apartment communities." },
+      },
+      {
+        name: 'a person who is already a member',
+        setup: () => {
+          validateResidentCsvMock.mockReturnValueOnce(rows([2, 'cy@x.com', 'owner', '101']));
+          loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+          loadUserEmailMapForImportMock.mockResolvedValueOnce(new Map([['cy@x.com', 'existing-1']]));
+          loadUsersWithExistingRoleForImportMock.mockResolvedValueOnce(new Set(['existing-1']));
+        },
+        error: {
+          rowNumber: 2,
+          column: 'email',
+          message: "User with email 'cy@x.com' already has a role in this community",
+        },
+      },
+      {
+        name: 'an existing account the manager cannot already see',
+        setup: () => {
+          validateResidentCsvMock.mockReturnValueOnce(rows([2, 'victim@other.example.com', 'owner', '101']));
+          loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+          loadUserEmailMapForImportMock.mockResolvedValueOnce(new Map([['victim@other.example.com', 'stranger-1']]));
+          assertActorMayAttachExistingUserMock.mockRejectedValueOnce(new ForbiddenError('nope'));
+        },
+        error: {
+          rowNumber: 2,
+          column: 'email',
+          message: "'victim@other.example.com' belongs to an existing account you cannot already see",
+        },
+      },
+      {
+        name: 'a tenant who is already a tenant elsewhere',
+        setup: () => {
+          validateResidentCsvMock.mockReturnValueOnce(rows([2, 'te@x.com', 'tenant', '101']));
+          loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+          loadUserEmailMapForImportMock.mockResolvedValueOnce(new Map([['te@x.com', 'tenant-1']]));
+          listCommunitiesForUserMock.mockResolvedValueOnce([
+            { communityId: 99, role: 'resident', isUnitOwner: false },
+          ]);
+        },
+        error: { rowNumber: 2, column: 'role', message: "Tenant 'te@x.com' already belongs to another community" },
+      },
+    ])('refuses $name in the preview, exactly as the import does', async ({ setup, error }) => {
+      const { preview, imported } = await previewAndImport(setup);
+
+      expect(preview.preview).toEqual([]);
+      expect(preview.errors).toEqual([error]);
+      expect(imported.importedCount).toBe(0);
+      expect(imported.skippedCount).toBe(1);
+      expect(imported.errors).toEqual([error]);
+      expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+    });
+
+    it('keeps each row on its own source line number through a mixed file', async () => {
+      validateResidentCsvMock.mockReturnValueOnce({
+        header: ['name', 'email', 'role', 'unit_number'],
+        rows: [
+          { rowNumber: 3, data: { name: 'Ok', email: 'ok@x.com', role: 'owner', unit_number: '101' } },
+          { rowNumber: 5, data: { name: 'No', email: 'no@x.com', role: 'owner', unit_number: '999' } },
+          { rowNumber: 6, data: { name: 'Back', email: 'back@x.com', role: 'owner', unit_number: '101' } },
+        ],
+        // Line 2 failed the shape checks; line 4 was blank.
+        errors: [{ rowNumber: 2, column: 'email', message: 'Invalid email address' }],
+      });
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      loadUserEmailMapForImportMock.mockResolvedValueOnce(new Map([['back@x.com', 'returning-1']]));
+
+      const res = await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: true }));
+      const json = (await res.json()) as PreviewJson;
+
+      expect(json.data.preview.map((r) => [r.rowNumber, r.email, r.existingAccount])).toEqual([
+        [3, 'ok@x.com', false],
+        [6, 'back@x.com', true],
+      ]);
+      expect(json.data.errors.map((e) => e.rowNumber)).toEqual([2, 5]);
+    });
+
+    it('re-checks at import time instead of trusting the preview', async () => {
+      // Previewed while unit 101 existed…
+      validateResidentCsvMock.mockReturnValueOnce(rows([2, 'ada@x.com', 'owner', '101']));
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      const preview = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: true }))).json()) as PreviewJson;
+      expect(preview.data.preview).toHaveLength(1);
+
+      // …and imported after it was deleted.
+      validateResidentCsvMock.mockReturnValueOnce(rows([2, 'ada@x.com', 'owner', '101']));
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map());
+      const imported = (await (await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }))).json()) as ImportJson;
+
+      expect(imported.data.importedCount).toBe(0);
+      expect(imported.data.errors).toEqual([
+        { rowNumber: 2, column: 'unit_number', message: "Unit '101' not found" },
+      ]);
+      expect(insertUserForImportMock).not.toHaveBeenCalled();
+    });
+
+    it('attaches an existing account it may see without creating a second user', async () => {
+      validateResidentCsvMock.mockReturnValueOnce(rows([2, 'back@x.com', 'owner', '101']));
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+      loadUserEmailMapForImportMock.mockResolvedValueOnce(new Map([['back@x.com', 'returning-1']]));
+
+      const res = await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+      const json = (await res.json()) as ImportJson;
+
+      expect(json.data.importedCount).toBe(1);
+      expect(insertUserForImportMock).not.toHaveBeenCalled();
+      expect(insertUserRoleForImportMock).toHaveBeenCalledWith(42, expect.objectContaining({ userId: 'returning-1', unitId: 7 }));
+    });
   });
 
   it('imports a single new owner row end-to-end (creates user + role + prefs + audit)', async () => {
@@ -247,7 +418,8 @@ describe('POST /api/v1/import-residents', () => {
       data: { importedCount: number; skippedCount: number };
     };
     expect(json.data.importedCount).toBe(0);
-    // Real-import path loads community type (dryRun short-circuits before this).
+    // Proves the real-import path ran: the preview loads the community type too,
+    // so the distinguishing signal is the import summary shape asserted above.
     expect(getCommunityTypeForOnboardingMock).toHaveBeenCalledWith(42);
   });
 

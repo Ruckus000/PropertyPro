@@ -23,6 +23,14 @@ import {
   type ImportResponse,
 } from '@/hooks/use-import-residents';
 import { directoryHref } from '@/lib/directory/directory-href';
+import {
+  buildImportDisplayRows,
+  buildRowsToFixCsv,
+  countRowsWithErrors,
+  fileLevelErrors,
+  rowsToFixFileName,
+} from '@/lib/utils/resident-import-rows';
+import { saveCsvFile } from '@/lib/utils/save-csv-file';
 
 /* ─────── Types ─────── */
 
@@ -128,10 +136,6 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
     });
   }, [importMutation, csvText]);
 
-  // Compute preview stats
-  const validRows = dryRunData?.preview.length ?? 0;
-  const errorRows = dryRunData?.errors.length ?? 0;
-  const errorRowNumbers = new Set(dryRunData?.errors.map((e) => e.rowNumber) ?? []);
 
   return (
     <div className="space-y-6">
@@ -157,11 +161,10 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
       {/* Step 2: Preview */}
       {step === 'preview' && dryRunData && (
         <PreviewStep
+          csvText={csvText}
+          fileName={fileName}
           preview={dryRunData.preview}
           errors={dryRunData.errors}
-          validCount={validRows}
-          errorCount={errorRows}
-          errorRowNumbers={errorRowNumbers}
           onImport={handleImport}
           onCancel={resetWizard}
         />
@@ -194,6 +197,8 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
       {/* Step 4: Results */}
       {step === 'results' && importResult && (
         <ResultsStep
+          csvText={csvText}
+          fileName={fileName}
           result={importResult}
           communityId={communityId}
           onImportMore={resetWizard}
@@ -310,186 +315,166 @@ function UploadStep({
   );
 }
 
+/* ─────── Rows to fix ─────── */
+
+function DownloadRowsToFix({
+  csvText,
+  fileName,
+  errors,
+}: {
+  csvText: string;
+  fileName: string;
+  errors: CsvError[];
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => saveCsvFile(buildRowsToFixCsv(csvText, errors), rowsToFixFileName(fileName))}
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+    >
+      <Download size={14} aria-hidden="true" />
+      Download rows to fix
+    </button>
+  );
+}
+
 /* ─────── Preview Step ─────── */
 
 interface PreviewStepProps {
+  csvText: string;
+  fileName: string;
   preview: DryRunRow[];
   errors: CsvError[];
-  validCount: number;
-  errorCount: number;
-  errorRowNumbers: Set<number>;
   onImport: () => void;
   onCancel: () => void;
 }
 
-function PreviewStep({
-  preview,
-  errors,
-  validCount,
-  errorCount,
-  errorRowNumbers,
-  onImport,
-  onCancel,
-}: PreviewStepProps) {
-  // Build a map of row number to error messages
-  const errorsByRow = new Map<number, string[]>();
-  for (const err of errors) {
-    const existing = errorsByRow.get(err.rowNumber) ?? [];
-    existing.push(err.message);
-    errorsByRow.set(err.rowNumber, existing);
-  }
-
-  // Merge valid rows and error rows into a unified display list
-  const allDisplayRows: Array<{
-    rowNumber: number;
-    name: string;
-    email: string;
-    role: string;
-    unitNumber: string;
-    status: 'valid' | 'error';
-    errors: string[];
-  }> = [];
-
-  // Valid rows from the preview
-  for (let i = 0; i < preview.length; i++) {
-    const row = preview[i]!;
-    allDisplayRows.push({
-      rowNumber: i + 2, // CSV row 2+ (row 1 is header)
-      name: row.name,
-      email: row.email,
-      role: row.role,
-      unitNumber: row.unit_number ?? '',
-      status: 'valid',
-      errors: [],
-    });
-  }
-
-  // Error rows (they are not in the preview array)
-  for (const [rowNum, msgs] of errorsByRow) {
-    // Only add if not already in the display
-    if (!allDisplayRows.some((r) => r.rowNumber === rowNum)) {
-      allDisplayRows.push({
-        rowNumber: rowNum,
-        name: '-',
-        email: '-',
-        role: '-',
-        unitNumber: '-',
-        status: 'error',
-        errors: msgs,
-      });
-    }
-  }
-
-  allDisplayRows.sort((a, b) => a.rowNumber - b.rowNumber);
+function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }: PreviewStepProps) {
+  // Every line of the uploaded file, on its own line number, with the values
+  // as typed — ready and rejected alike.
+  const rows = buildImportDisplayRows(csvText, preview, errors);
+  const fileErrors = fileLevelErrors(errors);
+  const readyCount = preview.length;
+  const fixCount = countRowsWithErrors(errors);
+  // A file-level problem (a missing column, too many rows) blocks the whole
+  // file; listing every line under it would only repeat the banner.
+  const showRows = fileErrors.length === 0;
 
   return (
     <div className="space-y-6">
-      {/* Summary */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
-          <span className="text-sm font-medium text-content">
-            {validCount} ready to import
-          </span>
-        </div>
-        {errorCount > 0 && (
-          <div className="flex items-center gap-2">
-            <XCircle size={16} className="text-status-danger" aria-hidden="true" />
-            <span className="text-sm font-medium text-content">
-              {errorCount} {errorCount === 1 ? 'error' : 'errors'}
-            </span>
-          </div>
-        )}
-      </div>
+      {fileErrors.length > 0 && (
+        <AlertBanner
+          status="danger"
+          title="This file can't be imported as it is"
+          description={fileErrors.map((e) => e.message).join('. ')}
+        />
+      )}
 
-      {/* Preview table */}
-      <div className="overflow-x-auto rounded-md border border-edge">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-edge bg-surface-muted">
-              <th className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary">
-                Status
-              </th>
-              <th className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary">
-                Row
-              </th>
-              <th className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary">
-                Name
-              </th>
-              <th className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary">
-                Email
-              </th>
-              <th className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary">
-                Role
-              </th>
-              <th className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary">
-                Unit
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {allDisplayRows.map((row) => (
-              <tr
-                key={row.rowNumber}
-                className={cn(
-                  'h-[52px] border-b border-edge last:border-b-0',
-                  row.status === 'error' && 'bg-status-danger-bg',
-                )}
-              >
-                <td className="px-3">
-                  {row.status === 'valid' ? (
-                    <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
-                  ) : (
-                    <span title={row.errors.join('; ')}>
-                      <XCircle size={16} className="text-status-danger" aria-hidden="true" />
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 text-sm text-content-secondary">{row.rowNumber}</td>
-                <td className="px-3 text-sm text-content">{row.name}</td>
-                <td className="px-3 text-sm text-content">{row.email}</td>
-                <td className="px-3 text-sm text-content">{row.role}</td>
-                <td className="px-3 text-sm text-content">{row.unitNumber || '-'}</td>
-              </tr>
-            ))}
-            {allDisplayRows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-content-secondary">
-                  No rows found in the CSV file.
-                </td>
-              </tr>
+      {showRows && (
+        <>
+          {/* Summary — counts are rows, not messages */}
+          <div className="flex flex-wrap items-center gap-4" role="status">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
+              <span className="text-sm font-medium text-content">
+                {readyCount} ready to import
+              </span>
+            </div>
+            {fixCount > 0 && (
+              <div className="flex items-center gap-2">
+                <XCircle size={16} className="text-status-danger" aria-hidden="true" />
+                <span className="text-sm font-medium text-content">
+                  {fixCount} {fixCount === 1 ? 'row needs' : 'rows need'} fixing
+                </span>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Error details */}
-      {errors.length > 0 && (
-        <div className="rounded-md border border-edge bg-surface-card p-4">
-          <div className="flex items-center gap-2 pb-3">
-            <AlertTriangle size={16} className="text-status-warning" aria-hidden="true" />
-            <span className="text-sm font-medium text-content">Row errors</span>
           </div>
-          <ul className="space-y-1">
-            {errors.map((err, i) => (
-              <li key={i} className="text-sm text-content-secondary">
-                Row {err.rowNumber}{err.column ? ` (${err.column})` : ''}: {err.message}
-              </li>
-            ))}
-          </ul>
-        </div>
+
+          {fixCount > 0 && (
+            <p className="text-sm text-content-secondary">
+              Rows that need fixing are left out of the import. Download them, correct them, and upload
+              that file afterwards. Each row keeps its line number from your file.
+            </p>
+          )}
+
+          {/* Preview table */}
+          <div className="overflow-x-auto rounded-md border border-edge">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-edge bg-surface-muted">
+                  {['Line', 'Status', 'Name', 'Email', 'Role', 'Unit', 'Details'].map((label) => (
+                    <th
+                      key={label}
+                      scope="col"
+                      className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary"
+                    >
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.rowNumber}
+                    className={cn(
+                      'h-[52px] border-b border-edge last:border-b-0',
+                      row.status === 'error' && 'bg-status-danger-bg',
+                    )}
+                  >
+                    <td className="px-3 text-sm text-content-secondary">{row.rowNumber}</td>
+                    <td className="px-3">
+                      {row.status === 'ready' ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-content">
+                          <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
+                          Ready
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-sm text-content">
+                          <XCircle size={16} className="text-status-danger" aria-hidden="true" />
+                          Fix
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 text-sm text-content">{row.name || '-'}</td>
+                    <td className="px-3 text-sm text-content">{row.email || '-'}</td>
+                    <td className="px-3 text-sm text-content">{row.role || '-'}</td>
+                    <td className="px-3 text-sm text-content">{row.unitNumber || '-'}</td>
+                    <td className="px-3 py-2 text-sm text-content-secondary">
+                      {row.status === 'error'
+                        ? row.problems.join('; ') || 'Not imported'
+                        : row.existingAccount
+                          ? 'Existing account — will be added to this community'
+                          : 'New account'}
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-content-secondary">
+                      No rows found in the CSV file.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={onImport}
-          disabled={validCount === 0}
+          disabled={readyCount === 0}
           className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[36px]"
         >
-          Import {validCount} {validCount === 1 ? 'Resident' : 'Residents'}
+          Import {readyCount} {readyCount === 1 ? 'Resident' : 'Residents'}
         </button>
+        {showRows && fixCount > 0 && (
+          <DownloadRowsToFix csvText={csvText} fileName={fileName} errors={errors} />
+        )}
         <button
           type="button"
           onClick={onCancel}
@@ -505,12 +490,14 @@ function PreviewStep({
 /* ─────── Results Step ─────── */
 
 interface ResultsStepProps {
+  csvText: string;
+  fileName: string;
   result: ImportResponse['data'];
   communityId: number;
   onImportMore: () => void;
 }
 
-function ResultsStep({ result, communityId, onImportMore }: ResultsStepProps) {
+function ResultsStep({ csvText, fileName, result, communityId, onImportMore }: ResultsStepProps) {
   return (
     <div className="space-y-6">
       {/* Success summary */}
@@ -532,10 +519,14 @@ function ResultsStep({ result, communityId, onImportMore }: ResultsStepProps) {
 
       {result.errors.length > 0 && (
         <div className="rounded-md border border-edge bg-surface-card p-4">
+          <div className="flex items-center gap-2 pb-3">
+            <AlertTriangle size={16} className="text-status-warning" aria-hidden="true" />
+            <span className="text-sm font-medium text-content">Skipped rows</span>
+          </div>
           <ul className="space-y-1">
             {result.errors.map((err, i) => (
               <li key={i} className="text-sm text-content-secondary">
-                Row {err.rowNumber}{err.column ? ` (${err.column})` : ''}: {err.message}
+                Line {err.rowNumber}{err.column ? ` (${err.column})` : ''}: {err.message}
               </li>
             ))}
           </ul>
@@ -552,13 +543,16 @@ function ResultsStep({ result, communityId, onImportMore }: ResultsStepProps) {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Link
           href={directoryHref('residents', { communityId })}
           className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
         >
           View Residents
         </Link>
+        {countRowsWithErrors(result.errors) > 0 && (
+          <DownloadRowsToFix csvText={csvText} fileName={fileName} errors={result.errors} />
+        )}
         <button
           type="button"
           onClick={onImportMore}

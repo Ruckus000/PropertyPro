@@ -524,7 +524,24 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const appRoutes = requireRoutes();
     const communityA = requireCommunity(kit, 'communityA');
 
-    const csv = 'name,email,role\nTest User,test-dryrun@example.com,tenant';
+    // Since onboarding audit F1 the preview runs the import's own eligibility
+    // checks against this community's data, so a ready row needs a real unit,
+    // exactly as the non-dry-run test below does. The second row has none: the
+    // old preview listed it as ready and the import then skipped it.
+    const scopedAForUnit = kit.dbModule.createScopedClient(communityA.id);
+    const unitNumberA = `P243D-A-${kit.runSuffix}`;
+    await scopedAForUnit.insert(kit.dbModule.units, {
+      unitNumber: unitNumberA,
+      building: null,
+      floor: null,
+    });
+
+    const readyEmail = `test-dryrun-${kit.runSuffix}@example.com`;
+    const csv = [
+      'name,email,role,unit_number',
+      `Test User,${readyEmail},tenant,${unitNumberA}`,
+      `No Unit,test-dryrun-nounit-${kit.runSuffix}@example.com,tenant,`,
+    ].join('\n');
     const response = await appRoutes.importResidents.POST(
       jsonRequest(apiUrl('/api/v1/import-residents'), 'POST', {
         communityId: communityA.id,
@@ -533,8 +550,23 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       }),
     );
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: { preview: unknown[] } }>(response);
-    expect(json.data.preview).toHaveLength(1);
+    const json = await parseJson<{
+      data: {
+        preview: Array<{ email: string; rowNumber: number }>;
+        errors: Array<{ rowNumber: number; column: string | null; message: string }>;
+      };
+    }>(response);
+    expect(json.data.preview.map((r) => [r.rowNumber, r.email])).toEqual([[2, readyEmail]]);
+    expect(json.data.errors).toEqual([
+      { rowNumber: 3, column: 'role', message: 'Role "resident" requires a unit assignment' },
+    ]);
+
+    // A preview writes nothing.
+    const created = await kit.db
+      .select({ id: kit.dbModule.users.id })
+      .from(kit.dbModule.users)
+      .where(eq(kit.dbModule.users.email, readyEmail));
+    expect(created).toHaveLength(0);
   });
 
   it('import-residents POST: actorA import into communityB → 403', async () => {
