@@ -49,6 +49,14 @@ function firstArrayLiteral(sql: string): string[] {
 
 const EXPECTED = [...DATA_API_REVOKED_TENANT_TABLES].sort();
 
+/**
+ * Tables 0077 revoked that a later migration dropped. 0077 is applied and
+ * hashed in the ledger, so its frozen array keeps naming them; only the
+ * comparison against the migration file adds them back.
+ */
+const DROPPED_AFTER_0077 = ['onboarding_wizard_state']; // 0091
+const EXPECTED_IN_0077 = [...DATA_API_REVOKED_TENANT_TABLES, ...DROPPED_AFTER_0077].sort();
+
 describe('migration 0077 — tenant tables shut to the Data API', () => {
   it('strips comments without emptying the migration', () => {
     // Anti-vacuity: if the strip ever ate the statements, every negative
@@ -60,9 +68,9 @@ describe('migration 0077 — tenant tables shut to the Data API', () => {
 
   it('revokes exactly the tables DATA_API_REVOKED_TENANT_TABLES names', () => {
     const tables = firstArrayLiteral(MIGRATION);
-    expect(tables.length).toBe(DATA_API_REVOKED_TENANT_TABLES.length);
+    expect(tables.length).toBe(EXPECTED_IN_0077.length);
     expect(new Set(tables).size).toBe(tables.length);
-    expect([...tables].sort()).toEqual(EXPECTED);
+    expect([...tables].sort()).toEqual(EXPECTED_IN_0077);
   });
 
   it('revokes every privilege from anon AND authenticated, on tables and their sequences', () => {

@@ -24,7 +24,6 @@ import {
   findExistingAuthUserByEmail,
   getDefaultPassword,
 } from './users';
-import { seedWizardState } from './wizard';
 
 export async function seedCommunity(
   config: SeedCommunityConfig,
@@ -509,7 +508,6 @@ export async function seedCommunity(
   }
 
   await seedCommunityCompliance(communityId, config.communityType);
-  await seedWizardState(communityId, config.communityType === 'apartment' ? 'apartment' : 'condo');
 
   if (config.communityType === 'apartment') {
     const { unitIds, unitNumbers } = await seedApartmentUnits(communityId);

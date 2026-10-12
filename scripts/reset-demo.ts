@@ -62,7 +62,6 @@ const DEMO_RESET_TABLE_DELETION_ORDER = [
   'document_categories',
   'meetings',
   'units',
-  'onboarding_wizard_state',
   'provisioning_jobs',
 
   // Phase 3 — standalone metadata

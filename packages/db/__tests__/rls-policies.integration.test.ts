@@ -13,7 +13,6 @@ import { documents } from '../src/schema/documents';
 import { maintenanceRequests } from '../src/schema/maintenance-requests';
 import { notificationPreferences } from '../src/schema/notification-preferences';
 import { onboardingChecklistItems } from '../src/schema/onboarding-checklist-items';
-import { onboardingWizardState } from '../src/schema/onboarding-wizard-state';
 import { siteBlocks } from '../src/schema/site-blocks';
 import { sitePageRedirects, sitePages } from '../src/schema/site-pages';
 import {
@@ -46,7 +45,6 @@ interface SeedData {
   tenantBSameCommAMaintenanceRequestId: number;
   tenantANotifPrefId: number;
   tenantBSameCommANotifPrefId: number;
-  communityAOnboardingWizardStateId: number;
   filePrefix: string;
   auditResourcePrefix: string;
 }
@@ -336,21 +334,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
       throw new Error('Failed to seed notification preferences for RLS integration tests');
     }
 
-    // Seed onboarding wizard state for community A (admin-write restriction test).
-    const [wizardStateA] = await db
-      .insert(onboardingWizardState)
-      .values({
-        communityId: communityA.id,
-        wizardType: 'apartment',
-        status: 'in_progress',
-        stepData: {},
-      })
-      .returning({ id: onboardingWizardState.id });
-
-    if (!wizardStateA) {
-      throw new Error('Failed to seed onboarding wizard state for RLS integration tests');
-    }
-
     seed = {
       runTag,
       communityAId: communityA.id,
@@ -366,7 +349,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
       tenantBSameCommAMaintenanceRequestId: maintenanceRequestBSameCommA.id,
       tenantANotifPrefId: notifPrefA.id,
       tenantBSameCommANotifPrefId: notifPrefBSameCommA.id,
-      communityAOnboardingWizardStateId: wizardStateA.id,
       filePrefix,
       auditResourcePrefix,
     };
@@ -441,10 +423,6 @@ describeDb('P4-55 RLS policies (integration)', () => {
             seed.tenantBSameCommANotifPrefId,
           ]),
         );
-
-      await db
-        .delete(onboardingWizardState)
-        .where(inArray(onboardingWizardState.id, [seed.communityAOnboardingWizardStateId]));
 
       // maintenance_requests support soft-delete but hard-delete is fine for test data.
       await db

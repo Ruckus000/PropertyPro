@@ -1,0 +1,29 @@
+-- Drop `onboarding_wizard_state` — the deleted setup wizard's progress table.
+--
+-- WHAT IT WAS
+--
+-- One row per (community, wizard_type) recording progress through the 2-step
+-- condo/apartment setup wizard at /onboarding/{condo,apartment}. No route ever
+-- sent a founder there, and #1353 deleted the wizard's pages, API and dev
+-- reset route (onboarding audit F11). Since that deploy nothing reads the
+-- table; the demo seed wrote it until this migration's own PR removed the
+-- write, which is why this is a CONTRACT migration: apply it only after that
+-- code is live, or the nightly demo reset fails inserting into a missing table.
+--
+-- PRE-DROP CHECKS (production, read-only, 2026-10-12)
+--
+--   8 rows, every one status = 'completed': 7 demo communities (is_demo = true)
+--   and `stripe-test` (a test community). No customer data.
+--   No inbound FKs, views or functions reference it; no enum types are used
+--   (wizard_type and status are text).
+--
+-- CASCADE removes what the table owns: its four policies
+-- (pp_onboarding_wizard_state_{insert,update,delete}, pp_tenant_select), the
+-- pp_rls_enforce_tenant_scope trigger, the unique index, the id sequence and
+-- the outbound FK to communities. IF EXISTS keeps a re-run harmless.
+--
+-- Dropping that FK locks `communities`, which nearly every request reads. Behind
+-- a long-running reader the lock would queue all app traffic, so give up after
+-- 5s and let the operator re-run it (the 0077 pattern; the drop is idempotent).
+SET LOCAL lock_timeout = '5s';--> statement-breakpoint
+DROP TABLE IF EXISTS "public"."onboarding_wizard_state" CASCADE;

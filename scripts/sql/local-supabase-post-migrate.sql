@@ -245,7 +245,7 @@ BEGIN
     'forum_threads', 'help_article_feedback', 'help_article_views',
     'insurance_policies', 'invitations', 'leases', 'ledger_entries',
     'maintenance_comments', 'meeting_documents', 'meetings', 'move_checklists',
-    'onboarding_wizard_state', 'package_log', 'polls', 'rent_obligations',
+    'package_log', 'polls', 'rent_obligations',
     'rent_payments', 'reserve_assets', 'stripe_connected_accounts',
     'support_access_log', 'support_consent_grants', 'units', 'vendors',
     'violation_fines', 'violations', 'visitor_log', 'wind_mitigation_reports',

@@ -6,7 +6,7 @@
  * that drops a seeding call, calls one twice, or loses a branch would still
  * type-check and still leave most of the demo looking alive — `pnpm
  * seed:verify` checks categories, e-sign templates and storage, and nothing
- * about units, leases, maintenance, wizard state or announcements. This file
+ * about units, leases, maintenance or announcements. This file
  * pins every table the seed touches, for every community type and every
  * `seedHints` branch the admin demo route can pass, so any such drift names the
  * table that moved.
@@ -18,7 +18,7 @@
  *     to a table nobody thought of still shows up;
  *   - per-domain breakdowns where a count alone could hide a swap (role shape,
  *     meeting types, announcement audience/pinned, lease/maintenance status,
- *     registry entity types, owned units, backdated hint documents, wizard row);
+ *     registry entity types, owned units, backdated hint documents);
  *   - PDFs uploaded to storage for the community, and public.users rows made.
  *
  * Each case is then seeded a SECOND time and must produce the identical
@@ -120,7 +120,6 @@ interface CountSnapshot {
   units: { total: number; owned: number };
   leases: Record<string, number>;
   maintenance: Record<string, number>;
-  wizard: string[];
   storageObjects: number;
   publicUsers: number;
 }
@@ -160,8 +159,6 @@ const APARTMENT_MAINTENANCE = {
   'resolved|normal': 1,
   'closed|low': 1,
 };
-const CONDO_WIZARD = ['condo|completed|step=2'];
-const APARTMENT_WIZARD = ['apartment|completed|step=3'];
 
 const EXPECTED: Record<string, CountSnapshot> = {
   condo: {
@@ -175,7 +172,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
       meeting_documents: 1,
       meetings: 1,
       notification_preferences: 5,
-      onboarding_wizard_state: 1,
       units: 6,
       user_roles: 5,
     },
@@ -188,7 +184,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
     units: { total: 6, owned: 1 },
     leases: {},
     maintenance: {},
-    wizard: CONDO_WIZARD,
     storageObjects: 2,
     publicUsers: 5,
   },
@@ -203,7 +198,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
       meeting_documents: 1,
       meetings: 1,
       notification_preferences: 3,
-      onboarding_wizard_state: 1,
       units: 6,
       user_roles: 3,
     },
@@ -216,7 +210,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
     units: { total: 6, owned: 2 },
     leases: {},
     maintenance: {},
-    wizard: CONDO_WIZARD,
     storageObjects: 2,
     publicUsers: 3,
   },
@@ -232,7 +225,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
       meeting_documents: 1,
       meetings: 1,
       notification_preferences: 5,
-      onboarding_wizard_state: 1,
       units: 26,
       user_roles: 5,
     },
@@ -245,7 +237,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
     units: { total: 26, owned: 1 },
     leases: { active: 15 },
     maintenance: APARTMENT_MAINTENANCE,
-    wizard: APARTMENT_WIZARD,
     storageObjects: 3,
     publicUsers: 5,
   },
@@ -260,7 +251,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
       meeting_documents: 1,
       meetings: 6,
       notification_preferences: 5,
-      onboarding_wizard_state: 1,
       units: 6,
       user_roles: 5,
     },
@@ -273,7 +263,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
     units: { total: 6, owned: 1 },
     leases: {},
     maintenance: {},
-    wizard: CONDO_WIZARD,
     storageObjects: 4,
     publicUsers: 5,
   },
@@ -288,7 +277,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
       meeting_documents: 1,
       meetings: 2,
       notification_preferences: 3,
-      onboarding_wizard_state: 1,
       units: 6,
       user_roles: 3,
     },
@@ -301,7 +289,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
     units: { total: 6, owned: 2 },
     leases: {},
     maintenance: {},
-    wizard: CONDO_WIZARD,
     storageObjects: 4,
     publicUsers: 3,
   },
@@ -317,7 +304,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
       meeting_documents: 1,
       meetings: 4,
       notification_preferences: 5,
-      onboarding_wizard_state: 1,
       units: 26,
       user_roles: 5,
     },
@@ -330,7 +316,6 @@ const EXPECTED: Record<string, CountSnapshot> = {
     units: { total: 26, owned: 1 },
     leases: { active: 15 },
     maintenance: APARTMENT_MAINTENANCE,
-    wizard: APARTMENT_WIZARD,
     storageObjects: 5,
     publicUsers: 5,
   },
@@ -471,10 +456,6 @@ describeDb('seedCommunity per-domain row counts (integration)', () => {
         select status || '|' || priority as k, count(*)::int as n
         from maintenance_requests where community_id = ${communityId} group by 1
       `),
-      wizard: rowsOf<{ k: string }>(await db.execute(sql`
-        select wizard_type || '|' || status || '|step=' || last_completed_step::text as k
-        from onboarding_wizard_state where community_id = ${communityId} order by 1
-      `)).map((r) => r.k),
       storageObjects: [...double.objects.keys()].filter((key) => key.startsWith(`documents/demo/${communityId}/`))
         .length,
       publicUsers: await scalar(sql`select count(*)::int as n from users where email in (${emailList})`),
