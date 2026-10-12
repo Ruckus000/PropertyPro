@@ -59,8 +59,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // user_roles.community_id so it returns only that community's own members.
   // Called only from listResidentsForCommunity, behind residents:read.
   resolve(repoRoot, 'apps/web/src/lib/services/resident-service.ts'),
-  // Dev-only: reset onboarding wizard state for E2E testing (gated by NODE_ENV)
-  resolve(repoRoot, 'apps/web/src/app/dev/reset-onboarding/route.ts'),
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   // Cross-tenant guard for the add-resident-by-email paths: compares the actor's
   // community memberships against the target's. "Do these two people share any
@@ -193,8 +191,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/dev/login/route.ts'),
   // Dev agent-login — password-based login for agents (dev-only, 404 in production)
   resolve(repoRoot, 'apps/web/src/app/dev/agent-login/route.ts'),
-  // Dev reset-onboarding — resets community onboarding state (dev-only, 404 in production)
-  resolve(repoRoot, 'apps/web/src/app/dev/reset-onboarding/route.ts'),
   // O-01: Email verification confirmation — pre-tenant state, checks Supabase auth via admin.
   // The unsafe-client + auth-admin usage moved into provisioning-service in
   // A3 Phase 2, so the route itself no longer needs the allowance.

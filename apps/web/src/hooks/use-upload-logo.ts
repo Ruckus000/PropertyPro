@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 /**
  * TanStack-Query mutation hook for the community-logo upload flow. Replaces
  * the module-scope `uploadLogoFile()` helper previously in
- * `apps/web/src/components/onboarding/steps/profile-step.tsx`.
+ * the site editor's logo panel (`components/pm/site-editor-v3/panels/LogosSection.tsx`).
  *
  * Two-leg flow, preserved VERBATIM:
  *  1. `POST /api/v1/upload` — presign request returning

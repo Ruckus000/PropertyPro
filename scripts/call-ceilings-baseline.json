@@ -29,9 +29,6 @@
   "apps/web/src/app/demo/[slug]/upgrade/page.tsx": {
     "unscoped": 1
   },
-  "apps/web/src/app/dev/reset-onboarding/route.ts": {
-    "unscoped": 1
-  },
   "apps/web/src/lib/account-lifecycle/root-offboarding.ts": {
     "unscoped": 2
   },
@@ -89,17 +86,11 @@
   "apps/web/src/lib/middleware/subscription-guard.ts": {
     "unscoped": 1
   },
-  "apps/web/src/lib/onboarding/wizard-common.ts": {
-    "fullTableRead": 2
-  },
   "apps/web/src/lib/pm/create-community.ts": {
     "unscoped": 1
   },
   "apps/web/src/lib/queries/apartment-metrics.ts": {
     "fullTableRead": 4
-  },
-  "apps/web/src/lib/queries/wizard-state.ts": {
-    "fullTableRead": 1
   },
   "apps/web/src/lib/services/access-request-service.ts": {
     "fullTableRead": 2

@@ -6,7 +6,6 @@ describe('production development-surface guard', () => {
     '/pdfjs-test',
     '/pdfjs-test/viewer',
     '/dev/site-preview',
-    '/dev/reset-onboarding',
     '/dev/login',
     '/dev/login/board_member',
   ])('hides %s in production', (pathname) => {

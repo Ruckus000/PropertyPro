@@ -4,9 +4,11 @@
  * Validates that feature flags correctly gate community-type-specific features.
  * Tests ensure that:
  * 1. Lease tracking is apartment-only (hasLeaseTracking)
- * 2. Condo onboarding is condo/HOA-only (hasCompliance)
- * 3. Compliance API is condo/HOA-only (hasCompliance)
- * 4. Feature flag consistency across community types
+ * 2. Compliance API is condo/HOA-only (hasCompliance)
+ * 3. Feature flag consistency across community types
+ *
+ * (A condo-onboarding-wizard gate case lived here until the wizard was
+ * deleted; no route ever reached it. Onboarding audit F11.)
  */
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,12 +54,10 @@ vi.mock('@/lib/api/auth', () => ({
 // ---------------------------------------------------------------------------
 
 type LeasesRouteModule = typeof import('../../src/app/api/v1/leases/route');
-type CondoOnboardingRouteModule = typeof import('../../src/app/api/v1/onboarding/condo/route');
 type ComplianceRouteModule = typeof import('../../src/app/api/v1/compliance/route');
 
 interface RouteModules {
   leases: LeasesRouteModule;
-  condoOnboarding: CondoOnboardingRouteModule;
   compliance: ComplianceRouteModule;
 }
 
@@ -142,7 +142,6 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
     // Load route modules
     routes = {
       leases: await import('../../src/app/api/v1/leases/route'),
-      condoOnboarding: await import('../../src/app/api/v1/onboarding/condo/route'),
       compliance: await import('../../src/app/api/v1/compliance/route'),
     };
   });
@@ -291,90 +290,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 2. Condo Onboarding Feature Gate (hasCompliance)
-  // ---------------------------------------------------------------------------
-
-  describe('condo onboarding wizard (hasCompliance - condo/HOA only)', () => {
-    it('allows condo wizard GET on condo communities (hasCompliance=true)', async () => {
-      const kit = requireState();
-      const { condoOnboarding } = requireRoutes();
-      const communityA = requireCommunity(kit, 'communityA');
-
-      setActor(kit, 'siteManagerA');
-
-      const req = jsonRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityA.id}`), 'GET');
-      const res = await condoOnboarding.GET(req);
-
-      expect(res.status).toBe(200);
-      const body = await parseJson<{ data: unknown }>(res);
-      expect(body.data).toHaveProperty('nextStep');
-    });
-
-    it('allows condo wizard GET on HOA communities (hasCompliance=true)', async () => {
-      const kit = requireState();
-      const { condoOnboarding } = requireRoutes();
-      const communityB = requireCommunity(kit, 'communityB');
-
-      setActor(kit, 'actorB');
-
-      const req = jsonRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityB.id}`), 'GET');
-      const res = await condoOnboarding.GET(req);
-
-      expect(res.status).toBe(200);
-    });
-
-    it('rejects condo wizard GET on apartment communities (hasCompliance=false)', async () => {
-      const kit = requireState();
-      const { condoOnboarding } = requireRoutes();
-      const communityC = requireCommunity(kit, 'communityC');
-
-      setActor(kit, 'siteManagerC');
-
-      const req = jsonRequest(apiUrl(`/api/v1/onboarding/condo?communityId=${communityC.id}`), 'GET');
-      const res = await condoOnboarding.GET(req);
-
-      expect(res.status).toBe(403);
-      const body = await parseJson<{ error: { message: string } }>(res);
-      expect(body.error.message).toMatch(/condo onboarding/i);
-      expect(body.error.message).toMatch(/condo\/hoa/i);
-    });
-
-    it('rejects condo wizard PATCH on apartment communities', async () => {
-      const kit = requireState();
-      const { condoOnboarding } = requireRoutes();
-      const communityC = requireCommunity(kit, 'communityC');
-
-      setActor(kit, 'siteManagerC');
-
-      const req = jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'PATCH', {
-        communityId: communityC.id,
-        currentStep: 2,
-        stepData: {},
-      });
-      const res = await condoOnboarding.PATCH(req);
-
-      expect(res.status).toBe(403);
-    });
-
-    it('rejects condo wizard POST complete on apartment communities', async () => {
-      const kit = requireState();
-      const { condoOnboarding } = requireRoutes();
-      const communityC = requireCommunity(kit, 'communityC');
-
-      setActor(kit, 'siteManagerC');
-
-      const req = jsonRequest(apiUrl('/api/v1/onboarding/condo'), 'POST', {
-        communityId: communityC.id,
-        action: 'complete',
-      });
-      const res = await condoOnboarding.POST(req);
-
-      expect(res.status).toBe(403);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 3. Compliance API Feature Gate (hasCompliance)
+  // 2. Compliance API Feature Gate (hasCompliance)
   // ---------------------------------------------------------------------------
 
   describe('compliance API (hasCompliance - condo/HOA only)', () => {
@@ -444,7 +360,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 4. Cross-Feature Consistency Tests
+  // 3. Cross-Feature Consistency Tests
   // ---------------------------------------------------------------------------
 
   describe('feature flag consistency', () => {

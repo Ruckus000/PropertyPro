@@ -1,6 +1,6 @@
 /**
  * Unit tests for useUploadLogo (B5 batch #11 drain of
- * onboarding/steps/profile-step.tsx).
+ * pm/site-editor-v3/panels/LogosSection.tsx).
  *
  * Documented exception to the requestJson rule: ProfileStep renders the thrown
  * error's `.message` verbatim, so the hook keeps a manual fetch + non-OK throw

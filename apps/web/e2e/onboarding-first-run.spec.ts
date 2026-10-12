@@ -12,11 +12,10 @@
  *
  * What it deliberately does NOT do:
  *
- *   - Open the 2-step wizard (`/onboarding/condo`, `/onboarding/apartment`).
- *     Nothing in the app routes a founder there — signup, "Add community" and
- *     the agent login all land on the dashboard — so a spec that opened it by
- *     URL would prove a page no customer reaches. Whether to route founders
- *     into it or delete it is an open product decision, not this spec's.
+ *   - A setup wizard. A 2-step one existed at `/onboarding/condo` and
+ *     `/onboarding/apartment`, but nothing routed a founder there (signup,
+ *     "Add community" and the agent login all land on the dashboard), so it
+ *     was deleted. The dashboard checklist below IS the first run.
  *   - Self-serve signup and PM "Add community". Both create the community from
  *     a Stripe webhook; they are owned by `stripe-e2e.yml` and need its secrets.
  *     That also rules out the PORTFOLIO branch (a PM adding a second community

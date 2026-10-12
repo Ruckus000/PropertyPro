@@ -262,7 +262,7 @@ pnpm --filter @propertypro/web test:e2e:prod
 > conditional on its secrets) and the tenant-host blocks (they need `:3002`).
 > `onboarding-first-run` is no longer fixme: since 2026-10-12 it runs a fresh
 > community end to end (created by `scripts/agent-fixture.ts`, no Stripe) and is
-> on the allowlist. The 2-step wizard it skips is reached by no route.
+> on the allowlist. The 2-step setup wizard, which no route reached, was deleted.
 >
 > `support-access` joined the allowlist in #958. It had looked like a broken
 > spec — a 120s timeout on the admin popup — but the cause was that the admin

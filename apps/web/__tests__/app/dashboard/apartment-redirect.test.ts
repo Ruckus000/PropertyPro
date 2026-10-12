@@ -18,14 +18,12 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   resolveCommunityContextMock,
-  loadWizardStateMock,
   getAuthorizedCommunityIdsMock,
   redirectMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveCommunityContextMock: vi.fn(),
-  loadWizardStateMock: vi.fn(),
   getAuthorizedCommunityIdsMock: vi.fn(),
   redirectMock: vi.fn(),
 }));
@@ -62,10 +60,6 @@ vi.mock('@/lib/tenant/resolve-community-context', () => ({
 
 vi.mock('@/lib/tenant/community-resolution', () => ({
   toUrlSearchParams: vi.fn(() => new URLSearchParams()),
-}));
-
-vi.mock('@/lib/queries/wizard-state', () => ({
-  loadWizardState: loadWizardStateMock,
 }));
 
 vi.mock('@/lib/queries/cross-community', () => ({
@@ -123,15 +117,10 @@ describe('DashboardPage — Wave 3 C4 apartment routing', () => {
     ).rejects.toThrow('NEXT_REDIRECT');
 
     expect(redirectMock).toHaveBeenCalledWith('/dashboard/apartment?communityId=42');
-    // The apartment redirect fires before wizard/aha logic is consulted.
-    expect(loadWizardStateMock).not.toHaveBeenCalled();
   });
 
-  it('does NOT send a condo community to the apartment dashboard, or to onboarding', async () => {
+  it('does NOT send a condo community to the apartment dashboard', async () => {
     requireCommunityMembershipMock.mockResolvedValue(CONDO_MEMBERSHIP);
-    // A stale wizard row must no longer divert anyone: the post-billing wizard
-    // was removed, so a condo community renders the dashboard directly.
-    loadWizardStateMock.mockResolvedValue({ status: 'in_progress' });
 
     // This case is no longer redirect-only, so it enters the render path. The
     // assertions here are about routing, not output — swallow whatever the
@@ -143,10 +132,5 @@ describe('DashboardPage — Wave 3 C4 apartment routing', () => {
     expect(redirectMock).not.toHaveBeenCalledWith(
       '/dashboard/apartment?communityId=42',
     );
-    expect(redirectMock).not.toHaveBeenCalledWith(
-      '/onboarding/condo?communityId=42',
-    );
-    // The wizard is not consulted at all any more.
-    expect(loadWizardStateMock).not.toHaveBeenCalled();
   });
 });

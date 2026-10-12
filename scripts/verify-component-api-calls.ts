@@ -36,7 +36,6 @@ const SCAN_ROOTS: readonly string[] = [
   'apps/web/src/app/(authenticated)',
   'apps/web/src/app/(marketing)',
   'apps/web/src/app/(public)',
-  'apps/web/src/app/(onboarding)',
   'apps/web/src/app/(auth)',
   'apps/web/src/app/auth',
   'apps/web/src/app/sign',
