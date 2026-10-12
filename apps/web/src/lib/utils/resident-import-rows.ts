@@ -55,7 +55,10 @@ function groupRowErrors(errors: RowError[]): Map<number, string[]> {
   const byRow = new Map<number, string[]>();
   for (const err of errors) {
     if (err.rowNumber <= 1 || isAlreadyMember(err)) continue;
-    byRow.set(err.rowNumber, [...(byRow.get(err.rowNumber) ?? []), err.message]);
+    // Name the column, so the reader knows which field to fix (the results
+    // list already does). Errors about the row as a whole have no column.
+    const message = err.column ? `${err.column}: ${err.message}` : err.message;
+    byRow.set(err.rowNumber, [...(byRow.get(err.rowNumber) ?? []), message]);
   }
   return byRow;
 }

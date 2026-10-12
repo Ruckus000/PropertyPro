@@ -475,17 +475,33 @@ export async function softDeleteExpiredDemo(params: {
   communityId: number;
   demoInstanceId: number;
   now: Date;
-}): Promise<void> {
+}): Promise<boolean> {
   const { communityId, demoInstanceId, now } = params;
   const db = createUnscopedClient();
-  await db
+  // `isDemo` is re-checked HERE, not only when the cron found the row: a demo
+  // that converted in between is now a paying customer's community, and must
+  // keep both itself and its demo record (onboarding audit F9).
+  const softDeleted = await db
     .update(communities)
     .set({ deletedAt: now })
-    .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)));
+    .where(
+      and(eq(communities.id, communityId), isNull(communities.deletedAt), eq(communities.isDemo, true)),
+    )
+    .returning({ id: communities.id });
+  if (softDeleted.length === 0) {
+    const [current] = await db
+      .select({ isDemo: communities.isDemo })
+      .from(communities)
+      .where(eq(communities.id, communityId))
+      .limit(1);
+    // Converted: the caller must not ban, announce or count it as expired.
+    if (current && !current.isDemo) return false;
+  }
   await db
     .update(demoInstances)
     .set({ deletedAt: now })
     .where(and(eq(demoInstances.id, demoInstanceId), isNull(demoInstances.deletedAt)));
+  return true;
 }
 
 /**

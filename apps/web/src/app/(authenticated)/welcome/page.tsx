@@ -26,12 +26,14 @@ import {
 } from '@/lib/services/onboarding-checklist-service';
 import {
   announcements,
-  complianceChecklistItems,
   createScopedClient,
   units,
   type Announcement,
 } from '@propertypro/db';
-import { eq, isNull } from '@propertypro/db/filters';
+import { eq } from '@propertypro/db/filters';
+import { loadChecklistWithStatus } from '@/lib/compliance/load-checklist-with-status';
+import { buildComplianceSummary } from '@/lib/utils/compliance-calculator';
+import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import {
@@ -44,24 +46,6 @@ import { listActorUnitIds } from '@/lib/units/actor-units';
 
 interface WelcomePageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-/**
- * Compute a compliance score from checklist items.
- * Items marked not-applicable are excluded. Score = (satisfied / total) * 100.
- */
-function computeComplianceScore(
-  items: Array<{ documentId: unknown; isApplicable: unknown }>,
-): { score: number; totalItems: number; satisfiedItems: number } {
-  const applicable = items.filter((i) => i.isApplicable !== false);
-  const total = applicable.length;
-  if (total === 0) return { score: 0, totalItems: 0, satisfiedItems: 0 };
-  const satisfied = applicable.filter((i) => i.documentId != null).length;
-  return {
-    score: Math.round((satisfied / total) * 100),
-    totalItems: total,
-    satisfiedItems: satisfied,
-  };
 }
 
 /** The resident's unit: the role's assigned unit first, then any unit they own. */
@@ -125,16 +109,10 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
   const [announcementRows, complianceRows, unitRows, branding] = await Promise.all([
     scoped.query(announcements),
 
-    // Compliance checklist items for score computation
+    // The checklist with derived status — the compliance page's own loader,
+    // so this score always matches that page (audit F8).
     canReadCompliance
-      ? scoped.selectFrom(
-          complianceChecklistItems,
-          {
-            documentId: complianceChecklistItems.documentId,
-            isApplicable: complianceChecklistItems.isApplicable,
-          },
-          isNull(complianceChecklistItems.deletedAt),
-        )
+      ? loadChecklistWithStatus(communityId, membership.communityType)
       : Promise.resolve([]),
 
     // User's unit (for residents). The assigned unit lives on the role row
@@ -162,9 +140,14 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
       }
     : null;
 
-  const complianceScore = computeComplianceScore(
-    complianceRows as Array<{ documentId: unknown; isApplicable: unknown }>,
-  );
+  const { readiness } = buildComplianceSummary(complianceRows as unknown as ChecklistItemData[]);
+  const complianceScore = {
+    // No applicable items means nothing to score; the cards then say "not
+    // set up yet" (the summary's own 100% is for the compliance page header).
+    score: readiness.applicableTotal === 0 ? 0 : readiness.percentage,
+    totalItems: readiness.applicableTotal,
+    satisfiedItems: readiness.satisfied,
+  };
 
   const userUnit = unitRows[0]
     ? {

@@ -53,7 +53,7 @@ vi.mock('../../src/lib/services/conversion-events', () => ({
 }));
 
 // Imported after mocks so the mocked deps are picked up.
-import { handleDemoConversion } from '../../src/lib/services/demo-conversion';
+import { handleDemoConversion, softDeleteExpiredDemo } from '../../src/lib/services/demo-conversion';
 
 // ---------------------------------------------------------------------------
 // DB mock — records every userRoles insert payload
@@ -169,5 +169,55 @@ describe('demo-conversion prerequisites', () => {
       // No legacy pm_admin / manager founding rows survive.
       expect(rows.some((r) => r.role === 'pm_admin')).toBe(false);
     });
+  });
+});
+
+// Onboarding audit F9: the expiry cron finds expired demos, then deletes them.
+// A demo that converts in between is a paying customer's community.
+describe('softDeleteExpiredDemo', () => {
+  function mockDb(opts: { communityUpdated: boolean; currentIsDemo: boolean | null }) {
+    const updates: Array<{ table: unknown; where: unknown }> = [];
+    const db = {
+      update: (table: unknown) => ({
+        set: () => ({
+          where: (where: unknown) => {
+            updates.push({ table, where });
+            const rows = table === communitiesTable && opts.communityUpdated ? [{ id: 9 }] : [];
+            return Object.assign(Promise.resolve(rows), { returning: () => Promise.resolve(rows) });
+          },
+        }),
+      }),
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve(opts.currentIsDemo === null ? [] : [{ isDemo: opts.currentIsDemo }]),
+          }),
+        }),
+      }),
+    };
+    createUnscopedClientMock.mockReturnValue(db);
+    return updates;
+  }
+  const params = { communityId: 9, demoInstanceId: 3, now: new Date('2026-10-12T00:00:00Z') };
+
+  it('deletes a community that is still a demo, and its demo record', async () => {
+    const updates = mockDb({ communityUpdated: true, currentIsDemo: true });
+    await expect(softDeleteExpiredDemo(params)).resolves.toBe(true);
+    expect(updates.map((u) => u.table)).toEqual([communitiesTable, demoInstancesTable]);
+    // The demo check is part of the write itself, not only of the earlier find.
+    expect(JSON.stringify(updates[0]!.where)).toContain('["communities.is_demo",true]');
+  });
+
+  it('leaves a community that converted after the cron found it, and its demo record', async () => {
+    const updates = mockDb({ communityUpdated: false, currentIsDemo: false });
+    // false tells the cron to skip the ban, the event and the count too.
+    await expect(softDeleteExpiredDemo(params)).resolves.toBe(false);
+    expect(updates.map((u) => u.table)).toEqual([communitiesTable]);
+  });
+
+  it('still clears the demo record when the community was already deleted', async () => {
+    const updates = mockDb({ communityUpdated: false, currentIsDemo: true });
+    await expect(softDeleteExpiredDemo(params)).resolves.toBe(true);
+    expect(updates.map((u) => u.table)).toEqual([communitiesTable, demoInstancesTable]);
   });
 });
