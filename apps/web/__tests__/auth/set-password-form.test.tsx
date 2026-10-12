@@ -62,6 +62,30 @@ describe('SetPasswordForm', () => {
     expect(link).toHaveAttribute('href', '/welcome?communityId=7');
   });
 
+  it('offers sign-in, not an error, when the invitee already has an account (audit F5)', async () => {
+    acceptInvitationMutateAsyncMock.mockRejectedValueOnce(
+      Object.assign(new Error('You already have a PropertyPro account.'), { code: 'ACCOUNT_EXISTS' }),
+    );
+    render(
+      <Wrapper>
+        <SetPasswordForm token="invite-token" communityId={7} />
+      </Wrapper>,
+    );
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Abcdefg1!' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'Abcdefg1!' } });
+    fireEvent.click(screen.getByTestId('invite-terms-checkbox'));
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('set-password-form'));
+    });
+
+    const panel = await screen.findByTestId('invite-existing-account');
+    expect(panel.querySelector('a')).toHaveAttribute(
+      'href',
+      `/auth/login?returnTo=${encodeURIComponent('/dashboard?communityId=7')}`,
+    );
+    expect(screen.queryByTestId('set-password-error')).toBeNull();
+  });
+
   // ── Clickwrap ──────────────────────────────────────────────────────────────
   //
   // Invited residents reach the product ONLY through this form. Before this,

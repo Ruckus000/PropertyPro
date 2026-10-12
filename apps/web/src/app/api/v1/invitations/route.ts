@@ -30,6 +30,7 @@ import {
   recordTermsAcceptance,
 } from '@/lib/services/invitations-service';
 import { giveNoticeConsent } from '@/lib/services/notice-consent-service';
+import { findAuthAccount } from '@/lib/services/auth-user-binding';
 import {
   acceptInvitationContract,
   createInvitationContract,
@@ -126,6 +127,20 @@ export const PATCH = withErrorHandler(
     const user = await getUserForInvitation(communityId, userId);
     if (!user) {
       throw new NotFoundError(`User ${userId} not found`);
+    }
+
+    // Someone who can already sign in — an existing PropertyPro account, or an
+    // earlier acceptance that created the account and then failed — must not
+    // be asked to create one: that fails with "already registered" and left
+    // them stuck (onboarding audit F5). Their membership already exists, so
+    // signing in completes the handoff. Never set a password here and leave
+    // the token unconsumed. 'unknown' proceeds: creating fails safely anyway.
+    if ((await findAuthAccount(userId)) === 'exists') {
+      throw new AppError(
+        'You already have a PropertyPro account. Sign in to join this community.',
+        409,
+        'ACCOUNT_EXISTS',
+      );
     }
 
     const result = await createSupabaseAuthUserFromInvitation({

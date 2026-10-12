@@ -62,6 +62,16 @@ describe('useAdminJoinRequests', () => {
     );
   });
 
+  // Off a tenant subdomain the route answers 400 without the community.
+  it('names the community in the URL when given one', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: [] }));
+    const { result } = renderHook(() => useAdminJoinRequests({ communityId: 7 }), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/join-requests?communityId=7', expect.anything());
+  });
+
   it('surfaces a non-OK response as an error', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(500, { error: { message: 'boom' } }),
@@ -90,6 +100,14 @@ describe('useReviewJoinRequest', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes: 'no match' }),
     });
+  });
+
+  it('names the community in the action URL when given one', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: { ok: true } }));
+    const { result } = renderHook(() => useReviewJoinRequest(7), { wrapper: createWrapper() });
+    result.current.mutate({ id: 9, action: 'approve' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/join-requests/9/approve?communityId=7', expect.anything());
   });
 
   it('surfaces a failed action as an error', async () => {

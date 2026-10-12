@@ -27,12 +27,33 @@
  * This module owns the auth identity only. It performs no DB writes, no
  * authorization, and no HTTP — callers keep those.
  */
-// AUTHZ: GoTrue admin createUser/deleteUser when binding or rolling back an invited/provisioned identity; no scoped equivalent
+// AUTHZ: GoTrue admin createUser/deleteUser/getUserById when binding, rolling back or checking an invited/provisioned identity; no scoped equivalent
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
 export type AuthUserBindingResult =
   | { ok: true; userId: string }
   | { ok: false; error: string };
+
+/**
+ * Does this `users.id` already have an auth account a human can sign in to?
+ *
+ * An invitee's or approved requester's auth user adopts the pre-provisioned
+ * `users.id`, so a matching `auth.users` row means someone already claimed this
+ * identity. `'unknown'` when GoTrue cannot be read: each caller decides which
+ * way to fail (attaching to a community must fail closed; offering account
+ * creation may proceed, since creating fails safely if the account exists).
+ */
+export async function findAuthAccount(userId: string): Promise<'exists' | 'absent' | 'unknown'> {
+  try {
+    const { data, error } = await createAdminClient().auth.admin.getUserById(userId);
+    // Any error, including GoTrue's "not found", is 'unknown': only a clean
+    // empty answer is proof of absence. user-linking relies on that to refuse.
+    if (error) return 'unknown';
+    return data?.user ? 'exists' : 'absent';
+  } catch {
+    return 'unknown';
+  }
+}
 
 /**
  * Best-effort removal of an auth user, returning a human-readable status.

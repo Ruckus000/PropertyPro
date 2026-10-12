@@ -77,6 +77,8 @@ vi.mock('@/lib/api/user-communities', () => ({
 vi.mock('@/lib/services/user-linking', () => ({
   assertActorMayAttachExistingUser: vi.fn().mockResolvedValue(undefined),
   loadActorCommunitiesForLinking: vi.fn().mockResolvedValue([]),
+  EXISTING_ACCOUNT_REMEDY:
+    'Someone who shares a community with them can add them, or they can request access themselves.',
 }));
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));

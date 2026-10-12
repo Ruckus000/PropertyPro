@@ -89,21 +89,31 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: () => mockDb,
 }));
 
+const { createScopedClientMock } = vi.hoisted(() => ({ createScopedClientMock: vi.fn() }));
+
 vi.mock('@propertypro/db', () => ({
+  createScopedClient: createScopedClientMock,
   communityJoinRequests: { id: 'cjr.id' },
   userRoles: { id: 'ur.id' },
+  units: { id: 'units.id', unitNumber: 'units.unit_number', communityId: 'units.community_id', deletedAt: 'units.deleted_at' },
+  users: { id: 'users.id', fullName: 'users.full_name', email: 'users.email' },
   insertNotifications: insertNotificationsMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (a: unknown, b: unknown) => ({ eq: [a, b] }),
   and: (...parts: unknown[]) => ({ and: parts }),
+  isNull: (a: unknown) => ({ isNull: a }),
+  inArray: (a: unknown, b: unknown) => ({ inArray: [a, b] }),
+  desc: (a: unknown) => ({ desc: a }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ sql: strings.join('?'), values }),
 }));
 
 // Import after mocks
 import {
   approveJoinRequest,
   denyJoinRequest,
+  listPendingJoinRequestsForCommunity,
 } from '@/lib/join-requests/approve-request';
 
 // ---------------------------------------------------------------------------
@@ -136,10 +146,30 @@ function mockSelectReturnsRequest(req: (typeof dbState.joinRequests)[0] | null) 
   });
 }
 
+/** The unit lookup inside approval: resolves to these rows. */
+function mockSelectReturnsUnit(rows: Array<{ id: number }>) {
+  selectMock.mockReturnValueOnce({
+    from: () => ({
+      where: (condition: unknown) => ({
+        limit: () => {
+          lastUnitCondition = condition;
+          return Promise.resolve(rows);
+        },
+      }),
+    }),
+  });
+}
+let lastUnitCondition: unknown = null;
+
 beforeEach(() => {
   dbState.joinRequests.length = 0;
   dbState.userRoles.length = 0;
   selectMock.mockReset();
+  // Any read not queued by a test (the unit lookup) finds nothing.
+  selectMock.mockImplementation(() => ({
+    from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+  }));
+  lastUnitCondition = null;
   insertNotificationsMock.mockClear();
 });
 
@@ -184,6 +214,33 @@ describe('approveJoinRequest', () => {
     expect(role.role).toBe('resident');
     expect(role.isUnitOwner).toBe(true);
     expect(role.displayTitle).toBe('Owner');
+  });
+
+  // Onboarding audit F5: approval created the membership with no unit, so an
+  // approved resident had no unit-scoped access.
+  it('links the unit they claimed when it is on the roster, matching case-insensitively', async () => {
+    const req = seedRequest({ unitIdentifier: '  A-101 ' });
+    mockSelectReturnsRequest(req);
+    mockSelectReturnsUnit([{ id: 77 }]);
+
+    await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
+
+    expect((dbState.userRoles[0] as { unitId: number | null }).unitId).toBe(77);
+    // Scoped to the request's community, live units only, by lowercased number.
+    expect(JSON.stringify(lastUnitCondition)).toContain('"units.community_id",42');
+    expect(JSON.stringify(lastUnitCondition)).toContain('"isNull":"units.deleted_at"');
+    expect(JSON.stringify(lastUnitCondition)).toContain('"a-101"');
+  });
+
+  it('still approves, without a unit, when the claimed number is not on the roster', async () => {
+    const req = seedRequest({ unitIdentifier: 'Unit 999' });
+    mockSelectReturnsRequest(req);
+    mockSelectReturnsUnit([]);
+
+    await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
+
+    expect((dbState.userRoles[0] as { unitId: number | null }).unitId).toBeNull();
+    expect(dbState.joinRequests[0]!.status).toBe('approved');
   });
 
   it('maps residentType=tenant to isUnitOwner=false', async () => {
@@ -377,5 +434,45 @@ describe('denyJoinRequest', () => {
 
       expect(insertNotificationsMock).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('listPendingJoinRequestsForCommunity', () => {
+  it("flags each request whose claimed unit is on this community's roster", async () => {
+    const requests = [
+      { id: 1, userId: 'u-1', unitIdentifier: ' a-101 ' },
+      { id: 2, userId: 'u-2', unitIdentifier: 'Unit 999' },
+    ];
+    const selectFrom = vi
+      .fn()
+      .mockReturnValueOnce({ orderBy: () => Promise.resolve(requests) }) // requests
+      .mockResolvedValueOnce([{ unitNumber: 'A-101' }]) // units on the roster
+      .mockResolvedValueOnce([{ id: 'u-1', fullName: 'Ana Owner', email: 'ana@example.com' }]); // requesters
+    createScopedClientMock.mockReturnValue({ selectFrom });
+
+    const rows = await listPendingJoinRequestsForCommunity(42);
+
+    expect(createScopedClientMock).toHaveBeenCalledWith(42);
+    expect(rows.map((r) => [r.id, r.unitOnRoster])).toEqual([
+      [1, true],
+      [2, false],
+    ]);
+    // The reviewer sees who is asking (security review: approving a claimed
+    // owner of a real unit gives that unit's access).
+    expect(rows.map((r) => [r.requesterName, r.requesterEmail])).toEqual([
+      ['Ana Owner', 'ana@example.com'],
+      [null, null],
+    ]);
+    expect(JSON.stringify(selectFrom.mock.calls[2]![2])).toContain('["u-1","u-2"]');
+    // One lookup for every claimed number, lowercased and trimmed.
+    expect(JSON.stringify(selectFrom.mock.calls[1]![2])).toContain('["a-101","unit 999"]');
+  });
+
+  it('skips the unit lookup when nothing is pending', async () => {
+    const selectFrom = vi.fn().mockReturnValueOnce({ orderBy: () => Promise.resolve([]) });
+    createScopedClientMock.mockReturnValue({ selectFrom });
+
+    await expect(listPendingJoinRequestsForCommunity(42)).resolves.toEqual([]);
+    expect(selectFrom).toHaveBeenCalledTimes(1);
   });
 });

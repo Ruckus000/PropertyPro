@@ -83,6 +83,21 @@ describe('AdminReviewList', () => {
     );
   });
 
+  it('shows who is asking, so the reviewer can check them', () => {
+    setQuery({ data: [{ ...row, requesterName: 'Ana Owner', requesterEmail: 'ana@example.com' }] });
+    render(<AdminReviewList />);
+    expect(screen.getByText('Ana Owner · ana@example.com')).toBeDefined();
+  });
+
+  it('says whether approving will link the claimed unit (audit F5)', () => {
+    setQuery({ data: [{ ...row, unitOnRoster: true }, { ...row, id: 6, unitIdentifier: 'Unit 99', unitOnRoster: false }] });
+    render(<AdminReviewList />);
+    expect(screen.getByText('On your roster. Approving links them to this unit.')).toBeDefined();
+    expect(
+      screen.getByText('Not on your roster. Approving gives access without a unit; assign one in Directory.'),
+    ).toBeDefined();
+  });
+
   it('submits a denial with trimmed notes', () => {
     setQuery({ data: [row] });
     render(<AdminReviewList />);

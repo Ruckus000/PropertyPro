@@ -17,17 +17,20 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createAuthUserBoundToMock } = vi.hoisted(() => ({
+const { createAuthUserBoundToMock, findAuthAccountMock, createScopedClientMock } = vi.hoisted(() => ({
   createAuthUserBoundToMock: vi.fn(),
+  findAuthAccountMock: vi.fn(),
+  createScopedClientMock: vi.fn(),
 }));
 
 vi.mock('@/lib/services/auth-user-binding', () => ({
   createAuthUserBoundTo: createAuthUserBoundToMock,
+  findAuthAccount: findAuthAccountMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
   communities: {},
-  createScopedClient: vi.fn(),
+  createScopedClient: createScopedClientMock,
   invitations: {},
   userRoles: {},
   users: {},
@@ -37,7 +40,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
 }));
 
-import { createSupabaseAuthUserFromInvitation } from '@/lib/services/invitations-service';
+import { createSupabaseAuthUserFromInvitation, inviteeHasAccount } from '@/lib/services/invitations-service';
 
 const PROVISIONED_ID = 'cb16c090-fc25-4f26-8df9-3f24a9bf82bb';
 
@@ -96,5 +99,40 @@ describe('createSupabaseAuthUserFromInvitation', () => {
     });
 
     expect(result).toEqual({ ok: false, error: 'email already registered' });
+  });
+});
+
+// The accept page uses this to offer sign-in instead of a password form that
+// would fail (onboarding audit F5). Only a LIVE invitation may answer.
+describe('inviteeHasAccount', () => {
+  function invitationRow(row: Record<string, unknown> | null) {
+    createScopedClientMock.mockReturnValue({ selectFrom: vi.fn().mockResolvedValue(row ? [row] : []) });
+  }
+  const live = { userId: PROVISIONED_ID, expiresAt: new Date(Date.now() + 60_000), consumedAt: null };
+
+  it('true for a live invitation whose invitee can already sign in', async () => {
+    invitationRow(live);
+    findAuthAccountMock.mockResolvedValueOnce('exists');
+    await expect(inviteeHasAccount(7, 'tok')).resolves.toBe(true);
+    expect(findAuthAccountMock).toHaveBeenCalledWith(PROVISIONED_ID);
+  });
+
+  it("false when the account check is 'absent' or 'unknown' (the form then answers)", async () => {
+    invitationRow(live);
+    findAuthAccountMock.mockResolvedValueOnce('absent');
+    await expect(inviteeHasAccount(7, 'tok')).resolves.toBe(false);
+    invitationRow(live);
+    findAuthAccountMock.mockResolvedValueOnce('unknown');
+    await expect(inviteeHasAccount(7, 'tok')).resolves.toBe(false);
+  });
+
+  it('false, without asking, for a missing, used or expired invitation', async () => {
+    invitationRow(null);
+    await expect(inviteeHasAccount(7, 'tok')).resolves.toBe(false);
+    invitationRow({ ...live, consumedAt: new Date() });
+    await expect(inviteeHasAccount(7, 'tok')).resolves.toBe(false);
+    invitationRow({ ...live, expiresAt: new Date(Date.now() - 1) });
+    await expect(inviteeHasAccount(7, 'tok')).resolves.toBe(false);
+    expect(findAuthAccountMock).not.toHaveBeenCalled();
   });
 });

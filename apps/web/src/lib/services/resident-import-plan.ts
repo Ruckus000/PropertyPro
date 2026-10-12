@@ -25,6 +25,7 @@ import {
 } from '@/lib/services/import-residents-service';
 import {
   assertActorMayAttachExistingUser,
+  EXISTING_ACCOUNT_REMEDY,
   loadActorCommunitiesForLinking,
 } from '@/lib/services/user-linking';
 import {
@@ -173,7 +174,7 @@ export async function planResidentImport(params: {
       } catch {
         // Refuse the ROW, not the import: one stranger's address must not
         // abort an otherwise valid CSV.
-        refuse('email', `'${email}' belongs to an existing account you cannot already see`);
+        refuse('email', `'${email}' belongs to an existing account you cannot already see. ${EXISTING_ACCOUNT_REMEDY}`);
         continue;
       }
 
