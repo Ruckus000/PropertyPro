@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { captureMessage } from '@sentry/nextjs';
 import { X, Search, BookOpen, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -85,12 +84,15 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
         );
       }
       if (noMatchRunRef.current.length >= CONTEXTUAL_GAP_THRESHOLD) {
-        captureMessage('help_contextual_no_match', {
-          level: 'info',
-          extra: {
-            communityId,
-            paths: [...noMatchRunRef.current],
-          },
+        // Snapshot before the reset below: the SDK loads asynchronously.
+        const paths = [...noMatchRunRef.current];
+        // On demand, not a static import: this widget mounts with the shell, so
+        // a static import put the whole Sentry SDK in every signed-in first load.
+        void import('@sentry/nextjs').then(({ captureMessage }) => {
+          captureMessage('help_contextual_no_match', {
+            level: 'info',
+            extra: { communityId, paths },
+          });
         });
         noMatchRunRef.current = [];
       }

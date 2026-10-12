@@ -1,6 +1,5 @@
 'use client';
 
-import * as Sentry from '@sentry/nextjs';
 import { useEffect, useState } from 'react';
 import { resolveHomeDestination } from '@/lib/utils/home-destination';
 
@@ -17,7 +16,10 @@ export default function RootError({ error, reset }: RootErrorProps) {
   const [homeHref, setHomeHref] = useState('/');
 
   useEffect(() => {
-    Sentry.captureException(error);
+    // Loaded on demand, never statically: this module ships in every route's
+    // first load, and a static import put the whole Sentry SDK there, defeating
+    // the deferred load in instrumentation-client.ts.
+    void import('@sentry/nextjs').then((Sentry) => Sentry.captureException(error));
   }, [error]);
 
   useEffect(() => {
