@@ -1,18 +1,18 @@
 'use client';
 
 import { useConfetti } from '@/hooks/use-confetti';
-import { cn } from '@/lib/utils';
 
 interface ChecklistCelebrationProps {
   communityName: string;
   onDismiss: () => void;
-  onViewCompliance: () => void;
+  /** A next task this person may open; omitted when none is permitted. */
+  nextStep: { label: string; onSelect: () => void } | null;
 }
 
 export function ChecklistCelebration({
   communityName,
   onDismiss,
-  onViewCompliance,
+  nextStep,
 }: ChecklistCelebrationProps) {
   useConfetti({ enabled: true, duration: 3000 });
 
@@ -23,7 +23,7 @@ export function ChecklistCelebration({
         type="button"
         onClick={onDismiss}
         className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-md text-content-tertiary transition-colors hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
-        aria-label="Dismiss"
+        aria-label="Dismiss setup celebration"
       >
         <svg
           className="h-4 w-4"
@@ -79,13 +79,15 @@ export function ChecklistCelebration({
           Your dashboard has everything you need going forward.
         </p>
 
-        <button
-          type="button"
-          onClick={onViewCompliance}
-          className="mt-6 inline-flex h-10 items-center gap-2 rounded-md border border-edge bg-surface-card px-4 text-sm font-medium text-content transition-colors hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
-        >
-          View Compliance Dashboard
-        </button>
+        {nextStep && (
+          <button
+            type="button"
+            onClick={nextStep.onSelect}
+            className="mt-6 inline-flex h-10 items-center gap-2 rounded-md border border-edge bg-surface-card px-4 text-sm font-medium text-content transition-colors hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
+          >
+            {nextStep.label}
+          </button>
+        )}
       </div>
     </section>
   );

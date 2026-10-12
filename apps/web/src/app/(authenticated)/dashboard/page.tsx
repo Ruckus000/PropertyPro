@@ -16,6 +16,10 @@ import { getAuthorizedCommunityIds } from '@/lib/queries/cross-community';
 import { getSupportScope } from '@/lib/support/support-scope';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
+import {
+  celebrationNextStepFor,
+  type CelebrationNextStep,
+} from '@/lib/onboarding/celebration-next-step';
 import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announcements';
 import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
 import { DashboardViolations } from '@/components/dashboard/dashboard-violations';
@@ -78,6 +82,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     },
   );
 
+  const celebrationNextStep = celebrationNextStepFor({
+    communityId: context.communityId,
+    role: membership.role,
+    communityType: membership.communityType,
+    isUnitOwner: membership.isUnitOwner,
+  });
+
   const planId = resolvePlanId(membership.subscriptionPlan);
   const showFoundingAha =
     membership.role === 'root_manager' &&
@@ -105,6 +116,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             dataPromise={dataPromise}
             publicInfoPromise={publicInfoPromise}
             communityId={context.communityId}
+            userId={userId}
+            celebrationNextStep={celebrationNextStep}
             canReviewViolations={canActAsBoard(membership)}
             hasViolations={features.hasViolations}
             hasEsign={features.hasEsign}
@@ -121,6 +134,8 @@ interface DashboardPanelsProps {
   dataPromise: ReturnType<typeof loadDashboardData>;
   publicInfoPromise: Promise<Awaited<ReturnType<typeof getCommunityPublicInfo>> | null>;
   communityId: number;
+  userId: string;
+  celebrationNextStep: CelebrationNextStep | null;
   /** Managers and board seats: the community-wide card and the inbox link. */
   canReviewViolations: boolean;
   hasViolations: boolean;
@@ -133,6 +148,8 @@ async function DashboardPanels({
   dataPromise,
   publicInfoPromise,
   communityId,
+  userId,
+  celebrationNextStep,
   canReviewViolations,
   hasViolations,
   hasEsign,
@@ -153,6 +170,8 @@ async function DashboardPanels({
       <OnboardingChecklist
         communityId={communityId}
         communityName={data.communityName}
+        userId={userId}
+        nextStep={celebrationNextStep}
         variant={showFoundingAha ? 'secondary' : 'primary'}
       />
       <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />

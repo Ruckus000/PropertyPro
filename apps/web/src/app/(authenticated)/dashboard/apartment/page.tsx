@@ -18,6 +18,10 @@ import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-cont
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
+import {
+  celebrationNextStepFor,
+  type CelebrationNextStep,
+} from '@/lib/onboarding/celebration-next-step';
 import { ApartmentDashboard } from '@/components/dashboard/apartment-dashboard';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -58,6 +62,13 @@ export default async function ApartmentDashboardPage({
     },
   );
 
+  const celebrationNextStep = celebrationNextStepFor({
+    communityId: context.communityId,
+    role: membership.role,
+    communityType: membership.communityType,
+    isUnitOwner: membership.isUnitOwner,
+  });
+
   // Started (not awaited) so the metrics resolve inside the Suspense
   // boundary — the route shell flushes immediately and panels stream in.
   const metricsPromise = loadApartmentMetrics(context.communityId, userId, membership);
@@ -67,6 +78,8 @@ export default async function ApartmentDashboardPage({
       <ApartmentDashboardPanels
         metricsPromise={metricsPromise}
         communityId={context.communityId}
+        userId={userId}
+        celebrationNextStep={celebrationNextStep}
         canWriteAnnouncements={canWriteAnnouncements}
       />
     </Suspense>
@@ -89,19 +102,28 @@ function ApartmentDashboardSkeleton() {
 interface ApartmentDashboardPanelsProps {
   metricsPromise: ReturnType<typeof loadApartmentMetrics>;
   communityId: number;
+  userId: string;
+  celebrationNextStep: CelebrationNextStep | null;
   canWriteAnnouncements: boolean;
 }
 
 async function ApartmentDashboardPanels({
   metricsPromise,
   communityId,
+  userId,
+  celebrationNextStep,
   canWriteAnnouncements,
 }: ApartmentDashboardPanelsProps) {
   const metrics = await metricsPromise;
 
   return (
     <div className="space-y-6">
-      <OnboardingChecklist communityId={communityId} communityName={metrics.communityName} />
+      <OnboardingChecklist
+        communityId={communityId}
+        communityName={metrics.communityName}
+        userId={userId}
+        nextStep={celebrationNextStep}
+      />
       <DashboardWelcome firstName={metrics.firstName} communityName={metrics.communityName} />
       <ApartmentDashboard
         metrics={metrics}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOnboardingChecklist } from '@/hooks/use-onboarding-checklist';
 import { ChecklistCelebration } from './checklist-celebration';
@@ -8,6 +8,12 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { directoryHref } from '@/lib/directory/directory-href';
+import {
+  readChecklistDismissal,
+  writeChecklistDismissal,
+  type ChecklistDismissal,
+} from '@/lib/onboarding/checklist-dismissal';
+import type { CelebrationNextStep } from '@/lib/onboarding/celebration-next-step';
 
 type ChecklistAction = {
   label: string;
@@ -31,6 +37,13 @@ export const ACTION_ROUTES: Record<string, ChecklistAction> = {
 interface OnboardingChecklistProps {
   communityId: number;
   communityName: string;
+  /** The signed-in person. Dismissal is remembered per person AND community. */
+  userId: string;
+  /**
+   * The celebration's link, chosen server-side from what this person may open
+   * (`chooseCelebrationNextStep`). Null renders no link.
+   */
+  nextStep: CelebrationNextStep | null;
   /** Secondary variant demotes checklist below founding aha. */
   variant?: 'primary' | 'secondary';
 }
@@ -38,20 +51,29 @@ interface OnboardingChecklistProps {
 export function OnboardingChecklist({
   communityId,
   communityName,
+  userId,
+  nextStep,
   variant = 'primary',
 }: OnboardingChecklistProps) {
   const router = useRouter();
   const { data: items, isLoading, isError, refetch } = useOnboardingChecklist(communityId);
-  const storageKey = `onboarding-checklist-dismissed-${communityId}`;
-  const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(storageKey) === 'true';
+  // Read after mount, not in a useState initializer: the server cannot see
+  // browser storage, so reading it during the first render made the hydrated
+  // markup disagree with the server's.
+  const [closed, setClosed] = useState<Record<ChecklistDismissal, boolean>>({
+    dismissed: false,
+    celebrated: false,
   });
+  useEffect(() => {
+    setClosed(readChecklistDismissal(userId, communityId));
+  }, [userId, communityId]);
+  const { dismissed, celebrated } = closed;
 
-  const handleDismiss = () => {
-    setDismissed(true);
-    try { localStorage.setItem(storageKey, 'true'); } catch { /* quota */ }
+  const close = (kind: ChecklistDismissal) => {
+    setClosed((prev) => ({ ...prev, [kind]: true }));
+    writeChecklistDismissal(userId, communityId, kind);
   };
+  const handleDismiss = () => close('dismissed');
 
   // B3: distinct loading / error affordances (previously all collapsed to null).
   // A dismissed card stays hidden through loading/error — it only reappears for
@@ -103,18 +125,23 @@ export function OnboardingChecklist({
   const allComplete = completedCount === totalCount;
   const progressPct = (completedCount / totalCount) * 100;
 
-  // Show celebration even if previously dismissed — they earned it
+  // The celebration shows even if the unfinished checklist was dismissed (they
+  // earned it), and stays closed once they close it.
   if (allComplete) {
-    // Clear any stale dismissal so the celebration shows
-    try { localStorage.removeItem(storageKey); } catch { /* noop */ }
+    if (celebrated) return null;
     return (
       <ChecklistCelebration
         communityName={communityName}
-        onDismiss={handleDismiss}
-        onViewCompliance={() => {
-          handleDismiss();
-          router.push(`/communities/${communityId}/compliance`);
-        }}
+        onDismiss={() => close('celebrated')}
+        nextStep={
+          nextStep && {
+            label: nextStep.label,
+            onSelect: () => {
+              close('celebrated');
+              router.push(nextStep.href);
+            },
+          }
+        }
       />
     );
   }
