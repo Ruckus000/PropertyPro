@@ -37,6 +37,7 @@ const {
   sendDocumentPostedNotificationsMock,
   enforcePublishRedactionAttestationMock,
   tryAutoCompleteMock,
+  completeDocumentStepsMock,
   logAuditEventMock,
   createScopedClientMock,
   scopedUpdateMock,
@@ -62,6 +63,7 @@ const {
   sendDocumentPostedNotificationsMock: vi.fn(),
   enforcePublishRedactionAttestationMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
+  completeDocumentStepsMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   createScopedClientMock: vi.fn(),
   scopedUpdateMock: vi.fn(),
@@ -108,6 +110,7 @@ vi.mock('@/lib/documents/create-uploaded-document', () => ({
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
+  completeDocumentSteps: completeDocumentStepsMock,
 }));
 
 vi.mock('@/lib/services/documents-service', () => ({
@@ -411,6 +414,8 @@ describe('POST /api/v1/documents', () => {
     const json = (await res.json()) as { data: unknown; warnings?: unknown };
     expect(json.data).toEqual(DOCUMENT_ROW_JSON);
     expect('warnings' in json).toBe(false);
+    // Audit F6: the rules step is decided by category inside the shared helper.
+    expect(completeDocumentStepsMock).toHaveBeenCalledWith(42, 'user-admin', 3);
     expect(createUploadedDocumentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-admin',

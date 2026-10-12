@@ -2,11 +2,15 @@ import { createScopedClient } from '@propertypro/db';
 import { onboardingChecklistItems } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
+import { checkPermissionV2 } from '@/lib/db/access-control';
+import { getDocumentCategoryNames } from '@/lib/services/document-category-service';
 import {
   PM_SCOPE_DB_ROLES,
-  isBoardPresident,
+  getFeaturesForCommunity,
   hasBoardDesignation,
+  normalizeCategoryName,
   type BoardDesignation,
+  type CommunityRole,
 } from '@propertypro/shared';
 
 // ─── Item key definitions ────────────────────────────────────
@@ -63,40 +67,42 @@ export const CHECKLIST_DISPLAY: Record<ChecklistItemKey, string> = {
   update_preferences: 'Update your notification preferences',
 };
 
-// ─── Role → item keys resolver ───────────────────────────────
+// ─── Membership → item keys resolver ─────────────────────────
 type CommunityType = 'condo_718' | 'hoa_720' | 'apartment';
-type Role = string;
 
-export function getItemKeysForRole(
-  role: Role,
-  designation: BoardDesignation | null,
-  communityType: CommunityType,
-): readonly ChecklistItemKey[] {
-  // role-v3 (Phase 3.3): keyed on the v3 DB role + nullable board designation.
-  // Board membership is the designation column, independent of the base role.
-  // CORNER (0 prod rows today — root is vacant): a PM-scope role that ALSO holds a
-  // board designation (e.g. the model's self-managed root_manager + board_president)
-  // resolves designation-FIRST here, so it gets the board onboarding set rather than
-  // adminBase+customize_portal. Onboarding-only, no permission impact; revisit at
-  // Phase 4 if self-managed roots should keep the PM-admin onboarding nudge.
+/** The parts of a community membership that decide which tasks apply. */
+export interface ChecklistMember {
+  role: CommunityRole;
+  designation: BoardDesignation | null;
+  communityType: CommunityType;
+  isUnitOwner: boolean;
+}
+
+export function getItemKeysForRole(member: ChecklistMember): readonly ChecklistItemKey[] {
+  const can = (resource: 'residents' | 'documents' | 'compliance', action: 'read' | 'write') =>
+    checkPermissionV2(member.role, member.communityType, resource, action, {
+      isUnitOwner: member.isUnitOwner,
+    });
   const adminBase =
-    communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
+    member.communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
 
-  // board_president designation → admin base set.
-  if (isBoardPresident(designation)) {
-    return adminBase;
+  // Setup tasks go to people who can perform them. A board title grants no
+  // write permission (designation is read only by statutory features), so a
+  // resident board president handed "Add your units" hit a 403 on every setup
+  // task and could never finish the list (onboarding audit F6).
+  if (can('residents', 'write') && can('documents', 'write')) {
+    return (PM_SCOPE_DB_ROLES as readonly string[]).includes(member.role)
+      ? [...adminBase, ...PM_ADMIN_ITEMS]
+      : adminBase;
   }
-  // board_member designation → board-member checklist (regardless of base role).
-  if (hasBoardDesignation(designation)) {
-    return BOARD_MEMBER_ITEMS;
+  if (hasBoardDesignation(member.designation)) {
+    // Tenants cannot read compliance, and apartments have none.
+    const canSeeCompliance =
+      getFeaturesForCommunity(member.communityType).hasCompliance && can('compliance', 'read');
+    return canSeeCompliance
+      ? BOARD_MEMBER_ITEMS
+      : BOARD_MEMBER_ITEMS.filter((key) => key !== 'check_compliance');
   }
-  // PM-scope roles (property_manager / root_manager — the whole of
-  // PM_SCOPE_DB_ROLES) get the admin base set plus customize_portal, parity with
-  // the pre-3.3 PM_SCOPE branch. Any other value falls through to owner/tenant.
-  if ((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)) {
-    return [...adminBase, ...PM_ADMIN_ITEMS];
-  }
-  // resident (no board designation) → owner/tenant checklist.
   return OWNER_TENANT_ITEMS;
 }
 
@@ -104,11 +110,9 @@ export function getItemKeysForRole(
 export async function createChecklistItems(
   communityId: number,
   userId: string,
-  role: Role,
-  designation: BoardDesignation | null,
-  communityType: CommunityType,
+  member: ChecklistMember,
 ): Promise<void> {
-  const itemKeys = getItemKeysForRole(role, designation, communityType);
+  const itemKeys = getItemKeysForRole(member);
   const scoped = createScopedClient(communityId);
 
   // Insert each item; the unique constraint on (communityId, userId, itemKey) acts as the
@@ -201,6 +205,29 @@ export async function tryAutoComplete(
 ): Promise<void> {
   try {
     await markItemComplete(communityId, userId, itemKey);
+  } catch {
+    // Non-blocking: checklist failure must never break primary actions
+  }
+}
+
+// ─── Document steps (shared by library upload and authored publish) ──
+/**
+ * "Upload your first compliance document" completes on any document; "Upload
+ * your community rules" only on one filed under the rules category. Both are
+ * no-ops for people whose list lacks the key. Never throws.
+ */
+export async function completeDocumentSteps(
+  communityId: number,
+  userId: string,
+  categoryId: number | null,
+): Promise<void> {
+  await tryAutoComplete(communityId, userId, 'upload_first_document');
+  if (categoryId == null) return;
+  try {
+    const names = await getDocumentCategoryNames(communityId, [categoryId]);
+    if (normalizeCategoryName(names.get(categoryId)) === 'rules') {
+      await tryAutoComplete(communityId, userId, 'upload_community_rules');
+    }
   } catch {
     // Non-blocking: checklist failure must never break primary actions
   }

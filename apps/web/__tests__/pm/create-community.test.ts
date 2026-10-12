@@ -177,9 +177,12 @@ describe('createCommunityForPm', () => {
     expect(createChecklistItemsMock).toHaveBeenCalledWith(
       expect.any(Number),
       VALID_INPUT.userId,
-      'root_manager',
-      null,
-      VALID_INPUT.communityType,
+      {
+        role: 'root_manager',
+        designation: null,
+        communityType: VALID_INPUT.communityType,
+        isUnitOwner: false,
+      },
     );
   });
 

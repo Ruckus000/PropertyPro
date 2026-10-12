@@ -95,7 +95,12 @@ export async function createCommunityForPm(
   // already valid once its core transaction commits, so this must not make the
   // caller retry a creation that already succeeded.
   try {
-    await createChecklistItems(communityId, input.userId, 'root_manager', null, input.communityType);
+    await createChecklistItems(communityId, input.userId, {
+      role: 'root_manager',
+      designation: null,
+      communityType: input.communityType,
+      isUnitOwner: false,
+    });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('createChecklistItems failed', { communityId, err });
