@@ -434,6 +434,26 @@ describe('DirectoryPageClient — management (phase 2)', () => {
     );
   });
 
+  // Audit F4: past the 100-per-minute email budget a later chunk is refused.
+  // Clearing the selection lost track of exactly who still needed an invite.
+  it('keeps the residents not sent selected, and says so', async () => {
+    searchState.value = 'tab=residents';
+    batchInviteMock.mockResolvedValue([
+      { userId: 'Ivy Invited', status: 'failed', error: 'Email limit reached: 100 emails per minute. Try again in 42 seconds.' },
+    ]);
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all shown residents' }));
+    await user.click(screen.getByRole('button', { name: 'Resend invites' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Send 1 invitation?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Send invitations' }));
+
+    await waitFor(() =>
+      expect(toastMock.warning).toHaveBeenCalledWith(expect.stringContaining('The 1 not sent stay selected so you can retry.')),
+    );
+    expect(await screen.findByText('1 selected')).toBeInTheDocument();
+  });
+
   it('selection never includes residents a filter has hidden', async () => {
     searchState.value = 'tab=residents';
     const user = userEvent.setup();

@@ -480,8 +480,14 @@ export function DirectoryPageClient({
         if (failed) parts.push(`${failed} failed`);
         if (confirm.skippedActive) parts.push(`${confirm.skippedActive} skipped (already active)`);
         if (confirm.skippedHousehold) parts.push(`${confirm.skippedHousehold} skipped (no portal login)`);
-        (failed ? toast.warning : toast.success)(withLimitReason(`${parts.join(', ')}.`, results));
-        setSelection(new Set());
+        const summary = failed
+          ? `${parts.join(', ')}. The ${failed} not sent stay selected so you can retry.`
+          : `${parts.join(', ')}.`;
+        (failed ? toast.warning : toast.success)(withLimitReason(summary, results));
+        // Keep the people not sent selected: past the 100-per-minute email
+        // budget a later chunk is refused, and clearing the selection lost
+        // track of exactly who still needs an invitation (audit F4).
+        setSelection(new Set(results.filter((r) => r.status !== 'sent').map((r) => r.userId)));
       }
     } catch (err) {
       // The server's message says why (e.g. "its ledger balance is not zero").
