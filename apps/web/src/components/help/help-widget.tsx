@@ -63,11 +63,14 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
     searchQuery,
     communityId,
   );
+  // Only while the drawer is open, as the newer modal does: unconditionally,
+  // every navigation to a new path fired a contextual-help request that
+  // competed with the page's own data calls for nothing on screen.
   const {
     data: contextualArticles,
     isFetching: contextualFetching,
     isError: contextualHasError,
-  } = useContextualHelp(pathname, communityId, { applyTimeout: true });
+  } = useContextualHelp(pathname, communityId, { applyTimeout: true, enabled: isOpen });
 
   // Track consecutive routes with no contextual matches; surface a one-shot
   // Sentry signal when the threshold trips so the weekly content-gaps script
