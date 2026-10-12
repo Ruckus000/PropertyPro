@@ -11,8 +11,8 @@ import { ForbiddenError } from '@/lib/api/errors';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 // AUTHZ: cross-community unscoped read of both users' memberships, to answer whether the actor can already see the target (see the file-level rationale above); reads only, never writes, and never returns the target's profile.
 import { findUserCommunitiesUnscoped } from '@propertypro/db/unsafe';
-// AUTHZ: GoTrue admin getUserById to tell a claimed identity from an unclaimed stub; fails closed
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+// GoTrue lookup to tell a claimed identity from an unclaimed stub; fails closed below.
+import { findAuthAccount } from '@/lib/services/auth-user-binding';
 
 /** The subset of a membership row this guard reads. */
 export interface LinkingMembership {
@@ -22,9 +22,11 @@ export interface LinkingMembership {
   isUnitOwner: boolean;
 }
 
-const REFUSAL =
-  'That email belongs to an existing account you cannot already see. '
-  + 'Someone who shares a community with them can add them, or they can request access themselves.';
+/** What a manager refused here can do instead. Shared with the CSV import's row refusal. */
+export const EXISTING_ACCOUNT_REMEDY =
+  'Someone who shares a community with them can add them, or they can request access themselves.';
+
+const REFUSAL = `That email belongs to an existing account you cannot already see. ${EXISTING_ACCOUNT_REMEDY}`;
 
 /**
  * Load the actor's memberships once, for callers that guard many rows.
@@ -53,22 +55,11 @@ export async function loadActorCommunitiesForLinking(
 /**
  * Does this `users` row correspond to a real, activated account?
  *
- * Since the invite-accept fix, an invitee's auth user adopts the pre-provisioned
- * `users.id`, so a matching `auth.users` row is the signal that a human has
- * actually claimed this identity.
+ * Fail CLOSED: an unreadable auth state must not be read as "unclaimed stub,
+ * go ahead and take it".
  */
 async function hasActivatedAuthAccount(userId: string): Promise<boolean> {
-  try {
-    const { data, error } = await createAdminClient().auth.admin.getUserById(userId);
-    if (error) {
-      // Fail CLOSED: an unreadable auth state must not be read as "unclaimed
-      // stub, go ahead and take it".
-      return true;
-    }
-    return Boolean(data?.user);
-  } catch {
-    return true;
-  }
+  return (await findAuthAccount(userId)) !== 'absent';
 }
 
 /**

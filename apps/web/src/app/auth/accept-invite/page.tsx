@@ -1,7 +1,7 @@
 import { captureException } from '@sentry/nextjs';
-import { SetPasswordForm } from '@/components/auth/set-password-form';
+import { ExistingAccountSignIn, SetPasswordForm } from '@/components/auth/set-password-form';
 import { resolveAuthPageBranding } from '@/lib/auth/resolve-auth-page-branding';
-import { getNoticeConsentInviteContext } from '@/lib/services/invitations-service';
+import { getNoticeConsentInviteContext, inviteeHasAccount } from '@/lib/services/invitations-service';
 
 export const metadata = {
   title: 'Accept Invitation',
@@ -35,6 +35,14 @@ export default async function AcceptInvitePage({
     return null;
   });
 
+  // Someone who can already sign in gets a sign-in prompt, not a password form
+  // that would fail. A failed lookup falls back to the form, whose submit
+  // answers the same question.
+  const hasAccount = await inviteeHasAccount(communityId, token).catch((err: unknown) => {
+    captureException(err, { tags: { page: 'accept-invite', phase: 'existing_account' } });
+    return false;
+  });
+
   const heading = branding.communityName
     ? `Join ${branding.communityName}`
     : 'Set your password';
@@ -59,14 +67,20 @@ export default async function AcceptInvitePage({
           )}
         </div>
         <h1 className="mb-3 text-2xl font-semibold text-content">{heading}</h1>
-        <p className="mb-6 text-content-secondary">
-          Choose a password to activate your account.
-        </p>
-        <SetPasswordForm
-          token={token}
-          communityId={communityId}
-          noticeConsentEmail={noticeConsent?.email ?? null}
-        />
+        {hasAccount ? (
+          <ExistingAccountSignIn communityId={communityId} />
+        ) : (
+          <>
+            <p className="mb-6 text-content-secondary">
+              Choose a password to activate your account.
+            </p>
+            <SetPasswordForm
+              token={token}
+              communityId={communityId}
+              noticeConsentEmail={noticeConsent?.email ?? null}
+            />
+          </>
+        )}
       </div>
     </>
   );

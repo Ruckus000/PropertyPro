@@ -51,6 +51,11 @@ export function useAcceptInvitation() {
         if (json?.error?.code === 'TOKEN_EXPIRED') {
           throw new Error('This invitation link has expired.');
         }
+        if (json?.error?.code === 'ACCOUNT_EXISTS') {
+          throw Object.assign(new Error(json.error.message ?? 'You already have an account.'), {
+            code: 'ACCOUNT_EXISTS' as const,
+          });
+        }
         throw new Error(json?.error?.message ?? 'Failed to accept invitation.');
       }
 

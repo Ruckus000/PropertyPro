@@ -11,10 +11,12 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   communityJoinRequests,
   createScopedClient,
+  units,
+  users,
   userRoles,
   insertNotifications,
 } from '@propertypro/db';
-import { and, desc, eq } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 import { NotFoundError, ConflictError } from '@/lib/api/errors';
 
 export interface PendingJoinRequestRow {
@@ -29,7 +31,17 @@ export interface PendingJoinRequestRow {
   reviewNotes: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** The claimed unit number matches a unit on this community's roster. */
+  unitOnRoster?: boolean;
+  /** Who is asking — the reviewer checks this against ownership/lease records. */
+  requesterName?: string | null;
+  requesterEmail?: string | null;
   [key: string]: unknown;
+}
+
+/** Unit numbers are unique per community case-insensitively (units_community_unit_number_unique). */
+function unitKey(identifier: string): string {
+  return identifier.trim().toLowerCase();
 }
 
 /**
@@ -42,7 +54,7 @@ export async function listPendingJoinRequestsForCommunity(
   communityId: number,
 ): Promise<PendingJoinRequestRow[]> {
   const db = createScopedClient(communityId);
-  return await db
+  const rows = await db
     .selectFrom<PendingJoinRequestRow>(
       communityJoinRequests,
       {
@@ -61,6 +73,33 @@ export async function listPendingJoinRequestsForCommunity(
       and(eq(communityJoinRequests.status, 'pending')),
     )
     .orderBy(desc(communityJoinRequests.createdAt));
+  if (rows.length === 0) return rows;
+
+  // Tell the reviewer whether approving will link a unit (see approveJoinRequest),
+  // and who is asking: approving a claimed owner of a real unit gives that
+  // unit's access, so the reviewer must be able to check the person against
+  // ownership or lease records. The requester chose to ask this community.
+  const claimed = [...new Set(rows.map((row) => unitKey(row.unitIdentifier)))];
+  const [onRoster, requesters] = await Promise.all([
+    db.selectFrom<{ unitNumber: string }>(
+      units,
+      { unitNumber: units.unitNumber },
+      and(isNull(units.deletedAt), inArray(sql`lower(${units.unitNumber})`, claimed)),
+    ),
+    db.selectFrom<{ id: string; fullName: string | null; email: string }>(
+      users,
+      { id: users.id, fullName: users.fullName, email: users.email },
+      inArray(users.id, [...new Set(rows.map((row) => row.userId))]),
+    ),
+  ]);
+  const known = new Set(onRoster.map((unit) => unitKey(unit.unitNumber)));
+  const byId = new Map(requesters.map((user) => [user.id, user]));
+  return rows.map((row) => ({
+    ...row,
+    unitOnRoster: known.has(unitKey(row.unitIdentifier)),
+    requesterName: byId.get(row.userId)?.fullName ?? null,
+    requesterEmail: byId.get(row.userId)?.email ?? null,
+  }));
 }
 
 export interface CreateJoinRequestInput {
@@ -216,11 +255,28 @@ export async function approveJoinRequest(
       throw new ConflictError('Request is no longer pending');
     }
 
+    // Link the unit they claimed when it is on this community's roster. The
+    // membership used to be created with no unit at all, so an approved
+    // resident had no unit-scoped access (onboarding audit F5). An unknown
+    // number still approves without one; the review list says so first.
+    const [claimedUnit] = await tx
+      .select({ id: units.id })
+      .from(units)
+      .where(
+        and(
+          eq(units.communityId, req.communityId),
+          isNull(units.deletedAt),
+          sql`lower(${units.unitNumber}) = ${unitKey(req.unitIdentifier)}`,
+        ),
+      )
+      .limit(1);
+
     // Create user_roles row (v3: role='resident' + isUnitOwner flag)
     await tx.insert(userRoles).values({
       userId: req.userId,
       communityId: req.communityId,
       role: 'resident',
+      unitId: claimedUnit?.id ?? null,
       isUnitOwner: isOwner,
       displayTitle,
     });

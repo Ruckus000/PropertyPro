@@ -20,6 +20,7 @@ const {
   isUnitOwnerInviteeMock,
   giveNoticeConsentMock,
   captureExceptionMock,
+  findAuthAccountMock,
 } = vi.hoisted(() => ({
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   sendEmailMock: vi.fn().mockResolvedValue({ id: 'test_1' }),
@@ -38,6 +39,7 @@ const {
   isUnitOwnerInviteeMock: vi.fn(),
   giveNoticeConsentMock: vi.fn(),
   captureExceptionMock: vi.fn(),
+  findAuthAccountMock: vi.fn().mockResolvedValue('absent'),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -82,6 +84,7 @@ vi.mock('@/lib/services/notice-consent-service', () => ({
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureException: captureExceptionMock }));
+vi.mock('@/lib/services/auth-user-binding', () => ({ findAuthAccount: findAuthAccountMock }));
 
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { PATCH, POST } from '../../src/app/api/v1/invitations/route';
@@ -108,7 +111,66 @@ describe('p1-20 invitation auth flow', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('inviter-uuid');
     requireCommunityMembershipMock.mockResolvedValue(adminMembership);
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
+    findAuthAccountMock.mockResolvedValue('absent');
     resetGlobalRateLimiter();
+  });
+
+  // Onboarding audit F5: an invitee who can already sign in (an account from
+  // another community, or an earlier acceptance that created it) was told
+  // "Failed to create user" with no way forward.
+  it('PATCH answers 409 ACCOUNT_EXISTS for someone who can already sign in, and changes nothing', async () => {
+    const token = 'tok-existing';
+    findInvitationByTokenMock.mockResolvedValueOnce({
+      id: 1,
+      token,
+      userId: 'user-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+    });
+    getUserForInvitationMock.mockResolvedValueOnce({ id: 'user-1', email: 'resident@example.com', fullName: 'Jane' });
+    findAuthAccountMock.mockResolvedValueOnce('exists');
+
+    const res = await PATCH(
+      new NextRequest('http://localhost:3000/api/v1/invitations', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 55, token, password: 'Strongpass123!', termsAccepted: true }),
+      }),
+    );
+
+    expect(res.status).toBe(409);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('ACCOUNT_EXISTS');
+    expect(findAuthAccountMock).toHaveBeenCalledWith('user-1');
+    // No password set, token left live, nothing recorded.
+    expect(createSupabaseAuthUserFromInvitationMock).not.toHaveBeenCalled();
+    expect(markInvitationConsumedMock).not.toHaveBeenCalled();
+    expect(recordTermsAcceptanceMock).not.toHaveBeenCalled();
+  });
+
+  it('PATCH still creates the account when the account check cannot answer', async () => {
+    const token = 'tok-unknown';
+    findInvitationByTokenMock.mockResolvedValueOnce({
+      id: 1,
+      token,
+      userId: 'user-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+    });
+    getUserForInvitationMock.mockResolvedValueOnce({ id: 'user-1', email: 'resident@example.com', fullName: 'Jane' });
+    findAuthAccountMock.mockResolvedValueOnce('unknown');
+    createSupabaseAuthUserFromInvitationMock.mockResolvedValueOnce({ ok: true });
+
+    const res = await PATCH(
+      new NextRequest('http://localhost:3000/api/v1/invitations', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 55, token, password: 'Strongpass123!', termsAccepted: true }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(createSupabaseAuthUserFromInvitationMock).toHaveBeenCalled();
   });
 
   it('POST is refused (429) and sends nothing once the manager used their 100 emails this minute', async () => {

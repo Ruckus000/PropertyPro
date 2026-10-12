@@ -13,13 +13,13 @@ import {
   type ReviewJoinRequestInput,
 } from '@/hooks/use-admin-join-requests';
 
-export function AdminReviewList() {
+export function AdminReviewList({ communityId }: { communityId?: number } = {}) {
   const [actingId, setActingId] = useState<number | null>(null);
   const [denyDraftId, setDenyDraftId] = useState<number | null>(null);
   const [denyNotes, setDenyNotes] = useState('');
 
-  const { data, isLoading, isError } = useAdminJoinRequests();
-  const act = useReviewJoinRequest();
+  const { data, isLoading, isError } = useAdminJoinRequests({ communityId });
+  const act = useReviewJoinRequest(communityId);
 
   const runReview = (input: ReviewJoinRequestInput) => {
     setActingId(input.id);
@@ -76,6 +76,16 @@ export function AdminReviewList() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">
               <p className="font-medium">{r.unitIdentifier}</p>
+              {r.requesterName || r.requesterEmail ? (
+                <p className="mt-1 text-sm text-content">
+                  {[r.requesterName, r.requesterEmail].filter(Boolean).join(' · ')}
+                </p>
+              ) : null}
+              <p className="mt-1 text-sm text-content-secondary">
+                {r.unitOnRoster
+                  ? 'On your roster. Approving links them to this unit.'
+                  : 'Not on your roster. Approving gives access without a unit; assign one in Directory.'}
+              </p>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Badge variant="outline">{r.residentType}</Badge>
                 <span className="text-xs text-content-secondary">

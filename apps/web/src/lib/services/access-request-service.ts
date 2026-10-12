@@ -27,7 +27,7 @@ import {
   sendEmail,
 } from '@propertypro/email';
 import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
-import { createAuthUserBoundTo, rollBackAuthUser } from '@/lib/services/auth-user-binding';
+import { createAuthUserBoundTo, findAuthAccount, rollBackAuthUser } from '@/lib/services/auth-user-binding';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 import { getBaseUrl } from '@/lib/utils/url';
@@ -366,18 +366,29 @@ export async function approveAccessRequest(params: {
   );
   const existingUserId = existingUserRows[0]?.['id'] as string | undefined;
 
-  const authResult = await createAuthUserBoundTo({
-    email: requestEmail,
-    fullName: requestFullName,
-    ...(existingUserId ? { userId: existingUserId } : {}),
-  });
+  // Someone who already has an account (they proved this email with the
+  // one-time code before this request reached a manager) joins with it.
+  // Creating a second auth account fails "already registered", which left
+  // every such approval a 500 and the request pending forever (audit F5).
+  const joinsWithExistingAccount =
+    existingUserId !== undefined && (await findAuthAccount(existingUserId)) === 'exists';
 
-  if (!authResult.ok) {
-    // Do NOT update request status so admin can retry
-    throw new Error(`Failed to create auth user: ${authResult.error}`);
+  let userId: string;
+  if (joinsWithExistingAccount) {
+    userId = existingUserId;
+  } else {
+    const authResult = await createAuthUserBoundTo({
+      email: requestEmail,
+      fullName: requestFullName,
+      ...(existingUserId ? { userId: existingUserId } : {}),
+    });
+
+    if (!authResult.ok) {
+      // Do NOT update request status so admin can retry
+      throw new Error(`Failed to create auth user: ${authResult.error}`);
+    }
+    userId = authResult.userId;
   }
-
-  const userId = authResult.userId;
 
   // Everything below writes rows that the auth account depends on. If any of it
   // fails, the account is already loginable (`email_confirm: true`) and holds
@@ -410,11 +421,25 @@ export async function approveAccessRequest(params: {
       displayTitle: requestIsUnitOwner ? 'Owner' : 'Tenant',
     });
 
-    // Create notification preferences
-    await scoped.insert(notificationPreferences, {
-      userId,
-    });
+    // Create notification preferences — unless a row survives from an earlier
+    // membership here (removal leaves it), which would fail the unique key.
+    const existingPrefs = await scoped.selectFrom<Record<string, unknown>>(
+      notificationPreferences,
+      { id: notificationPreferences.id },
+      eq(notificationPreferences.userId, userId),
+    );
+    if (existingPrefs.length === 0) {
+      await scoped.insert(notificationPreferences, {
+        userId,
+      });
+    }
   } catch (err) {
+    if (joinsWithExistingAccount) {
+      // NEVER roll back here: the auth account is the person's real one,
+      // used in other communities. Nothing was created for it to undo.
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to attach approved access request ${requestId}: ${reason}`);
+    }
     const rollback = await rollBackAuthUser(userId);
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(

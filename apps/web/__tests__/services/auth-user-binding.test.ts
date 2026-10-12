@@ -12,18 +12,19 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createUserMock, deleteUserMock } = vi.hoisted(() => ({
+const { createUserMock, deleteUserMock, getUserByIdMock } = vi.hoisted(() => ({
   createUserMock: vi.fn(),
   deleteUserMock: vi.fn(),
+  getUserByIdMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: () => ({
-    auth: { admin: { createUser: createUserMock, deleteUser: deleteUserMock } },
+    auth: { admin: { createUser: createUserMock, deleteUser: deleteUserMock, getUserById: getUserByIdMock } },
   }),
 }));
 
-import { createAuthUserBoundTo, rollBackAuthUser } from '@/lib/services/auth-user-binding';
+import { createAuthUserBoundTo, findAuthAccount, rollBackAuthUser } from '@/lib/services/auth-user-binding';
 
 const EXISTING_ID = 'cb16c090-fc25-4f26-8df9-3f24a9bf82bb';
 const MINTED_ID = '11111111-2222-3333-4444-555555555555';
@@ -175,5 +176,28 @@ describe('rollBackAuthUser', () => {
     // replace the original error with one of its own.
     deleteUserMock.mockRejectedValue(new Error('socket hang up'));
     await expect(rollBackAuthUser(MINTED_ID)).resolves.toMatch(/rollback FAILED: socket hang up/);
+  });
+});
+
+// The invite and access-request paths act on 'exists'; user-linking refuses on
+// anything but 'absent'. So ONLY a clean empty answer may read as absent — an
+// error (GoTrue answers a missing id with one too) must stay 'unknown', or the
+// import guard would start attaching accounts it used to refuse.
+describe('findAuthAccount', () => {
+  it("'exists' when GoTrue returns the user", async () => {
+    getUserByIdMock.mockResolvedValueOnce({ data: { user: { id: EXISTING_ID } }, error: null });
+    await expect(findAuthAccount(EXISTING_ID)).resolves.toBe('exists');
+  });
+
+  it("'absent' only for a clean empty answer", async () => {
+    getUserByIdMock.mockResolvedValueOnce({ data: { user: null }, error: null });
+    await expect(findAuthAccount(EXISTING_ID)).resolves.toBe('absent');
+  });
+
+  it("'unknown' for any error, including not-found, and for a throw", async () => {
+    getUserByIdMock.mockResolvedValueOnce({ data: { user: null }, error: { message: 'User not found' } });
+    await expect(findAuthAccount(EXISTING_ID)).resolves.toBe('unknown');
+    getUserByIdMock.mockRejectedValueOnce(new Error('network'));
+    await expect(findAuthAccount(EXISTING_ID)).resolves.toBe('unknown');
   });
 });

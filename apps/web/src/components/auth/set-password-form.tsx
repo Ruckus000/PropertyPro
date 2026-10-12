@@ -17,6 +17,28 @@ interface Props {
   noticeConsentEmail?: string | null;
 }
 
+/**
+ * For an invitee who can already sign in. Their membership was created with
+ * the invitation, so signing in is the whole handoff (onboarding audit F5).
+ */
+export function ExistingAccountSignIn({ communityId }: { communityId: number }) {
+  const returnTo = `/dashboard?communityId=${communityId}`;
+  return (
+    <div className="text-center" data-testid="invite-existing-account">
+      <h2 className="mb-2 text-xl font-semibold text-content">You already have an account</h2>
+      <p className="mb-4 text-content-secondary">
+        Sign in with your existing PropertyPro password to join this community.
+      </p>
+      <Link
+        href={`/auth/login?returnTo=${encodeURIComponent(returnTo)}`}
+        className="inline-block text-content-link underline hover:text-content-link"
+      >
+        Sign in
+      </Link>
+    </div>
+  );
+}
+
 function validatePassword(pw: string): string | null {
   for (const rule of PASSWORD_POLICY.rules) {
     if (!rule.test(pw)) {
@@ -44,6 +66,7 @@ export function SetPasswordForm({ token, communityId, noticeConsentEmail = null 
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
   const [noticeConsentFailed, setNoticeConsentFailed] = useState(false);
+  const [accountExists, setAccountExists] = useState(false);
   const acceptInvitation = useAcceptInvitation();
 
   function handlePasswordChange(value: string): void {
@@ -100,6 +123,11 @@ export function SetPasswordForm({ token, communityId, noticeConsentEmail = null 
       email = accepted.email;
       setNoticeConsentFailed(accepted.noticeConsentRecorded === false);
     } catch (err) {
+      if ((err as { code?: string }).code === 'ACCOUNT_EXISTS') {
+        setAccountExists(true);
+        setLoading(false);
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to accept invitation.');
       setLoading(false);
       return;
@@ -126,6 +154,10 @@ export function SetPasswordForm({ token, communityId, noticeConsentEmail = null 
     } finally {
       setLoading(false);
     }
+  }
+
+  if (accountExists) {
+    return <ExistingAccountSignIn communityId={communityId} />;
   }
 
   if (success) {

@@ -21,7 +21,7 @@ import {
   users,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { createAuthUserBoundTo } from '@/lib/services/auth-user-binding';
+import { createAuthUserBoundTo, findAuthAccount } from '@/lib/services/auth-user-binding';
 
 export interface InvitationCommunityName {
   name: string;
@@ -185,6 +185,23 @@ export async function getNoticeConsentInviteContext(
   if (!(await isUnitOwnerInvitee(communityId, invitation.userId))) return null;
   const user = await getUserForInvitation(communityId, invitation.userId);
   return user ? { email: user.email } : null;
+}
+
+/**
+ * Whether a live invitation belongs to someone who can already sign in — an
+ * existing PropertyPro account, or an earlier acceptance that created the
+ * account before failing. They join by signing in (their membership already
+ * exists), so the page offers that instead of a password form.
+ *
+ * AUTHZ: token-authenticated, like `getNoticeConsentInviteContext`. Telling
+ * the holder of a valid link that an account exists reveals nothing the token
+ * does not already grant.
+ */
+export async function inviteeHasAccount(communityId: number, token: string): Promise<boolean> {
+  const invitation = await findInvitationByToken(communityId, token);
+  if (!invitation || invitation.consumedAt) return false;
+  if (Date.now() >= new Date(invitation.expiresAt).getTime()) return false;
+  return (await findAuthAccount(invitation.userId)) === 'exists';
 }
 
 /**

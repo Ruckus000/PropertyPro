@@ -120,6 +120,8 @@ vi.mock('@/lib/services/onboarding-service', () => ({
 vi.mock('@/lib/services/user-linking', () => ({
   assertActorMayAttachExistingUser: assertActorMayAttachExistingUserMock,
   loadActorCommunitiesForLinking: loadActorCommunitiesForLinkingMock,
+  EXISTING_ACCOUNT_REMEDY:
+    'Someone who shares a community with them can add them, or they can request access themselves.',
 }));
 
 vi.mock('@/lib/services/import-residents-service', () => ({
@@ -290,7 +292,9 @@ describe('POST /api/v1/import-residents', () => {
         error: {
           rowNumber: 2,
           column: 'email',
-          message: "'victim@other.example.com' belongs to an existing account you cannot already see",
+          message:
+            "'victim@other.example.com' belongs to an existing account you cannot already see. "
+            + 'Someone who shares a community with them can add them, or they can request access themselves.',
         },
       },
       {

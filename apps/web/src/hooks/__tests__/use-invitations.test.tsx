@@ -77,6 +77,18 @@ describe('useAcceptInvitation', () => {
     );
   });
 
+  it('marks ACCOUNT_EXISTS so the form can offer sign-in (audit F5)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(409, { error: { code: 'ACCOUNT_EXISTS', message: 'You already have a PropertyPro account.' } }),
+    );
+    const { result } = renderHook(() => useAcceptInvitation(), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate({ token: 't', communityId: 1, password: 'pw', termsAccepted: true });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect((result.current.error as Error & { code?: string }).code).toBe('ACCOUNT_EXISTS');
+  });
+
   it('passes through the route error message when present', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(400, { error: { message: 'Token required' } }),

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AccessRequestList } from '@/components/access-requests/access-request-list';
 import { accessRequestsQueryOptions } from '@/hooks/use-access-requests';
+import { useAdminJoinRequests } from '@/hooks/use-admin-join-requests';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { useDeleteUnit, useUnits } from '@/hooks/use-units';
 import { useDelinquency } from '@/hooks/use-finance';
@@ -242,7 +243,12 @@ export function DirectoryPageClient({
   const delinquencyQ = useDelinquency(communityId, { enabled: canSeeBalances });
   const ruleQ = usePastDueRule(communityId, { enabled: canSeeBalances });
   const requestsQ = useQuery({ ...accessRequestsQueryOptions(communityId), enabled: isAdmin });
-  const pendingRequests = requestsQ.data?.length ?? 0;
+  // People who already have an account ask through "Join another community";
+  // their requests live on /admin/join-requests, which nothing linked to, so
+  // they sat unseen (onboarding audit F5). Count them with access requests.
+  const joinRequestsQ = useAdminJoinRequests({ communityId, enabled: isAdmin });
+  const pendingJoinRequests = joinRequestsQ.data?.length ?? 0;
+  const pendingRequests = (requestsQ.data?.length ?? 0) + pendingJoinRequests;
   const exporter = useDirectoryExport(communityId);
   const runExport = useCallback(
     (input: DirectoryExportInput) =>
@@ -1029,6 +1035,19 @@ export function DirectoryPageClient({
             <p className="text-sm text-content-secondary">
               People who asked to join from the signup page. Approving gives them portal access and links them to a unit.
             </p>
+            {pendingJoinRequests > 0 ? (
+              <p className="text-sm text-content">
+                {pendingJoinRequests === 1
+                  ? '1 person who already has a PropertyPro account asked to join. '
+                  : `${pendingJoinRequests} people who already have a PropertyPro account asked to join. `}
+                <Link
+                  href={`/admin/join-requests?communityId=${communityId}`}
+                  className={cn('font-medium text-content-link underline', FOCUS)}
+                >
+                  Review join requests
+                </Link>
+              </p>
+            ) : null}
             <AccessRequestList communityId={communityId} unitOptions={unitOptions} />
           </TabsContent>
         ) : null}

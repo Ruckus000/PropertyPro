@@ -1013,6 +1013,79 @@ describe('access-request-service', () => {
         }),
       ).rejects.toThrow(/db exploded.*rollback FAILED: auth unreachable/);
     });
+
+    // Onboarding audit F5: someone who already has an account elsewhere (their
+    // email proved by the one-time code) was never approvable — creating a
+    // second auth account fails "already registered", so every approval 500'd.
+    describe('a requester who already has an account', () => {
+      const request = {
+        id: 10,
+        email: 'existing@example.com',
+        fullName: 'Existing Person',
+        phone: null,
+        status: 'pending',
+        isUnitOwner: true,
+      };
+
+      function existingAccountAdmin() {
+        const createUser = vi.fn();
+        const deleteUser = vi.fn().mockResolvedValue({ error: null });
+        const getUserById = vi
+          .fn()
+          .mockResolvedValue({ data: { user: { id: 'existing-user-uuid' } }, error: null });
+        createAdminClientMock.mockReturnValue({ auth: { admin: { createUser, deleteUser, getUserById } } });
+        return { createUser, deleteUser, getUserById };
+      }
+
+      it('joins with their account: no second auth account, membership and preferences created', async () => {
+        const scoped = setupScopedMock({ accessRequestRows: [request] });
+        scoped.selectFrom
+          .mockResolvedValueOnce([{ id: 'existing-user-uuid' }]) // users by email
+          .mockResolvedValueOnce([]); // no preferences row here yet
+        const { createUser, getUserById } = existingAccountAdmin();
+
+        const result = await approveAccessRequest({
+          requestId: 10,
+          communityId: COMMUNITY_ID,
+          reviewerId: 'reviewer-uuid',
+          unitId: 5,
+        });
+
+        expect(result.userId).toBe('existing-user-uuid');
+        expect(getUserById).toHaveBeenCalledWith('existing-user-uuid');
+        expect(createUser).not.toHaveBeenCalled();
+        const inserted = scoped.insert.mock.calls.map((call) => call[0]);
+        expect(inserted).toEqual([tables.userRoles, tables.notificationPreferences]);
+        expect((scoped.insert.mock.calls[0]![1] as Record<string, unknown>)['unitId']).toBe(5);
+        expect((scoped.update.mock.calls[0]![1] as Record<string, unknown>)['status']).toBe('approved');
+      });
+
+      it('keeps a preferences row left from an earlier membership instead of failing on it', async () => {
+        const scoped = setupScopedMock({ accessRequestRows: [request] });
+        scoped.selectFrom
+          .mockResolvedValueOnce([{ id: 'existing-user-uuid' }])
+          .mockResolvedValueOnce([{ id: 3 }]); // removal leaves this row behind
+        existingAccountAdmin();
+
+        await approveAccessRequest({ requestId: 10, communityId: COMMUNITY_ID, reviewerId: 'reviewer-uuid' });
+
+        const inserted = scoped.insert.mock.calls.map((call) => call[0]);
+        expect(inserted).toEqual([tables.userRoles]);
+      });
+
+      it('NEVER deletes their account when attaching fails', async () => {
+        const scoped = setupScopedMock({ accessRequestRows: [request] });
+        scoped.selectFrom.mockResolvedValueOnce([{ id: 'existing-user-uuid' }]).mockResolvedValueOnce([]);
+        scoped.insert.mockRejectedValueOnce(new Error('duplicate key value violates unique constraint'));
+        const { deleteUser } = existingAccountAdmin();
+
+        await expect(
+          approveAccessRequest({ requestId: 10, communityId: COMMUNITY_ID, reviewerId: 'reviewer-uuid' }),
+        ).rejects.toThrow(/Failed to attach approved access request 10: duplicate key/);
+        expect(deleteUser).not.toHaveBeenCalled();
+        expect(scoped.update).not.toHaveBeenCalled();
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
