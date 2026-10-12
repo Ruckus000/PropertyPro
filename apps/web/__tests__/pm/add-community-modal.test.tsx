@@ -167,6 +167,7 @@ describe('AddCommunityModal', () => {
       target: { value: 'sunset-condos' },
     });
     fireEvent.change(screen.getByLabelText('Unit count'), { target: { value: '40' } });
+    expect(screen.getByLabelText('Time zone').textContent).toContain('Eastern');
     fireEvent.click(screen.getByRole('button', { name: 'Continue to Payment' }));
 
     expect(mutateMock).toHaveBeenCalledTimes(1);
@@ -177,6 +178,8 @@ describe('AddCommunityModal', () => {
       communityType: 'condo_718',
       planId: 'essentials',
       unitCount: 40,
+      // Audit F7: the time zone is now a labelled choice; Eastern stays the default.
+      timezone: 'America/New_York',
     });
     expect(screen.getByTestId('embedded-checkout')).toBeDefined();
     expect(screen.queryByText('Add a Community')).toBeNull();

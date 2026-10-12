@@ -144,6 +144,22 @@ export function AddCommunityModal({
                 </Select>
               </div>
 
+              {/* Time zone — Florida spans two. It was hardcoded to Eastern, so a
+                  panhandle community showed meeting times and reminders an hour
+                  off (onboarding audit F7). Deadline math is timezone-independent. */}
+              <div className="space-y-2">
+                <Label htmlFor="add-community-timezone">Time zone</Label>
+                <Select value={form.timezone} onValueChange={(v) => setForm({ ...form, timezone: v })}>
+                  <SelectTrigger id="add-community-timezone">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="America/New_York">Eastern (most of Florida)</SelectItem>
+                    <SelectItem value="America/Chicago">Central (western panhandle)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Subdomain */}
               <div className="space-y-2">
                 <Label htmlFor="add-community-subdomain">Subdomain</Label>
