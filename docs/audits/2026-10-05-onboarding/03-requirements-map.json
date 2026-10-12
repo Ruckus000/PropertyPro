@@ -1,0 +1,271 @@
+{
+  "sources": [
+    {
+      "id": "founder",
+      "title": "Founder context",
+      "type": "stakeholder",
+      "locator": "Conversation, October 5 2026: all paths; no onboardings yet; founder will conduct first cohort",
+      "status": "stakeholder-provided",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "ponytail",
+      "title": "Ponytail full guidance",
+      "type": "document",
+      "locator": "https://github.com/DietrichGebert/ponytail/blob/main/skills/ponytail/SKILL.md",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "roster",
+      "title": "Resident import route",
+      "type": "repository",
+      "locator": "apps/web/src/app/api/v1/import-residents/route.ts",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "preview",
+      "title": "Resident preview implementation",
+      "type": "repository",
+      "locator": "apps/web/src/components/residents/import-residents-client.tsx",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "invites",
+      "title": "Batch invitation implementation",
+      "type": "repository",
+      "locator": "apps/web/src/app/api/v1/invitations/batch/route.ts",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "pipeline",
+      "title": "Operator pipeline derivation",
+      "type": "repository",
+      "locator": "apps/admin/src/lib/server/onboarding.ts",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "documents",
+      "title": "Document queue",
+      "type": "repository",
+      "locator": "apps/web/src/hooks/use-document-upload-queue.ts",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "coverage",
+      "title": "First-run test coverage gap",
+      "type": "repository",
+      "locator": "apps/web/e2e/onboarding-first-run.spec.ts",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    },
+    {
+      "id": "report",
+      "title": "Full evidence and limitations",
+      "type": "document",
+      "locator": "docs/audits/2026-10-05-onboarding/01-evidence-brief.md",
+      "status": "verified",
+      "confidence": "high",
+      "criticality": "high"
+    }
+  ],
+  "users": [
+    {
+      "id": "founder_operator",
+      "description": "Founder personally assists and observes initial onboardings.",
+      "evidenceRefs": [
+        "source:founder"
+      ],
+      "priority": "primary"
+    },
+    {
+      "id": "community_admin",
+      "description": "Customer administrator verifies data, access and operating readiness.",
+      "evidenceRefs": [
+        "source:report"
+      ],
+      "priority": "primary"
+    },
+    {
+      "id": "resident",
+      "description": "Invited resident reaches a useful task with correct community and unit access.",
+      "evidenceRefs": [
+        "source:report"
+      ],
+      "priority": "secondary"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "safe_migration",
+      "description": "Prepare existing data, preview truthfully, reconcile and recover failures before resident rollout.",
+      "evidenceRefs": [
+        "source:roster",
+        "source:preview",
+        "user:founder_operator"
+      ],
+      "priority": "primary"
+    },
+    {
+      "id": "pilot_activation",
+      "description": "Observe invitation through correct access and first useful task before broad rollout.",
+      "evidenceRefs": [
+        "source:invites",
+        "source:coverage",
+        "user:resident"
+      ],
+      "priority": "primary"
+    },
+    {
+      "id": "learn",
+      "description": "Measure founder effort and customer effort separately; automate recurring friction.",
+      "evidenceRefs": [
+        "source:founder",
+        "source:ponytail"
+      ],
+      "priority": "primary"
+    }
+  ],
+  "claims": [
+    {
+      "id": "no_customer_baseline",
+      "text": "No onboarding baseline exists; founder plans to run the first cohort personally.",
+      "status": "stakeholder",
+      "sourceRefs": [
+        "source:founder"
+      ],
+      "approvedUsage": []
+    },
+    {
+      "id": "preview_gap",
+      "text": "Resident dry run returns before live membership and unit eligibility checks; preview rebuilds filtered source row numbers.",
+      "status": "verified",
+      "sourceRefs": [
+        "source:roster",
+        "source:preview"
+      ],
+      "approvedUsage": []
+    },
+    {
+      "id": "reuse",
+      "text": "Batch invitations and multi-document uploads already exist.",
+      "status": "verified",
+      "sourceRefs": [
+        "source:invites",
+        "source:documents"
+      ],
+      "approvedUsage": []
+    },
+    {
+      "id": "readiness_gap",
+      "text": "Operator active stage derives from subscription state and creation time, not reconciled migration readiness.",
+      "status": "verified",
+      "sourceRefs": [
+        "source:pipeline"
+      ],
+      "approvedUsage": []
+    },
+    {
+      "id": "coverage_gap",
+      "text": "The first-run wizard spec contains obsolete fixme cases.",
+      "status": "verified",
+      "sourceRefs": [
+        "source:coverage"
+      ],
+      "approvedUsage": []
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "assisted_first",
+      "description": "A worksheet and existing tools can support the initial cohort after identified reliability defects and customer-specific blockers are resolved.",
+      "sourceRefs": [
+        "source:founder",
+        "source:report"
+      ],
+      "confidence": "medium",
+      "risk": "medium",
+      "affectedDecisions": [
+        "implementation",
+        "interaction-model"
+      ],
+      "validation": {
+        "requiredAt": "release",
+        "hypothesis": "Founder-assisted rehearsals complete the agreed first useful workflow with reconciled records and recoverable exceptions.",
+        "killCriteria": [
+          "A target customer requires unsupported relationships or historical financial migration on day one.",
+          "Measured batch performance or failure recovery prevents a reliable pilot with existing tools."
+        ]
+      }
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "source_formats",
+      "description": "Actual customer exports, relationship complexity and day-one history requirements are unknown.",
+      "risk": "high",
+      "blocking": false,
+      "rationale": "Does not block a bounded audit; resolve at intake before committing to a specific customer migration."
+    },
+    {
+      "id": "throughput",
+      "description": "Safe deployment-equivalent import and invite batch sizes are unmeasured.",
+      "risk": "high",
+      "blocking": false,
+      "rationale": "Does not block findings; prevents an unlimited-scale claim and requires rehearsal before large imports."
+    },
+    {
+      "id": "runtime",
+      "description": "Authenticated journey verification was unavailable: Docker stopped and dependencies absent.",
+      "risk": "high",
+      "blocking": false,
+      "rationale": "Audit is source-based; launch readiness remains unverified until an isolated sandbox rehearsal succeeds."
+    }
+  ],
+  "deliverables": [],
+  "directionCriteria": [
+    {
+      "id": "truthful_preview",
+      "description": "Preview results correspond to source rows and all eligibility conditions known before commit.",
+      "kind": "hard",
+      "evidenceRefs": [
+        "claim:preview_gap"
+      ],
+      "measurement": "Mixed-row rehearsal preserves source numbering and detects invalid units/membership before mutation; races are rechecked."
+    },
+    {
+      "id": "reconciled_launch",
+      "description": "Launch is based on verified records and successful user tasks rather than setup or billing status.",
+      "kind": "hard",
+      "evidenceRefs": [
+        "claim:readiness_gap",
+        "task:pilot_activation"
+      ],
+      "measurement": "Customer validates agreed counts/relationships and representative pilot users complete the chosen real task."
+    },
+    {
+      "id": "minimum_change",
+      "description": "Reuse existing import, document, invitation and operator tools before introducing additional systems.",
+      "kind": "comparative",
+      "evidenceRefs": [
+        "source:ponytail",
+        "claim:reuse"
+      ],
+      "measurement": "Every proposed addition names an observed limit or repeated customer problem and explains why an existing tool is insufficient."
+    }
+  ],
+  "auditOnlyException": "Source-bounded audit and founder operating plan only. No customer research, production performance, release certification, visual direction, or application implementation is claimed."
+}
