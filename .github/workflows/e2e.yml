@@ -55,6 +55,7 @@ on:
       - 'packages/**' # includes db/migrations
       - 'scripts/seed-demo.ts'
       - 'scripts/lib/**' # seed-safety.ts can abort the whole job
+      - 'scripts/agent-fixture.ts' # onboarding-first-run creates its community with it
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/e2e.yml'
