@@ -216,6 +216,7 @@ export function ProfileStep({ communityId, onNext, initialData }: ProfileStepPro
                     onChange={(event) => handleZipChange(event.target.value)}
                     onBlur={handleZipBlur}
                     aria-invalid={zipError || undefined}
+                    aria-describedby={zipError ? 'zipCode-error' : undefined}
                     className={cn(zipError && 'border-status-danger')}
                     placeholder="33139"
                     pattern="[0-9]{5}"
@@ -223,7 +224,7 @@ export function ProfileStep({ communityId, onNext, initialData }: ProfileStepPro
                     required
                   />
                   {zipError && (
-                    <p className="mt-1.5 flex items-center gap-1 text-xs text-status-danger">
+                    <p id="zipCode-error" className="mt-1.5 flex items-center gap-1 text-xs text-status-danger">
                       <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
                       Enter a 5-digit ZIP code.
                     </p>
@@ -263,7 +264,8 @@ export function ProfileStep({ communityId, onNext, initialData }: ProfileStepPro
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 className={cn(
-                  'flex cursor-pointer items-center gap-4 rounded-md border-2 border-dashed border-edge-strong bg-surface-subtle p-4 transition-colors hover:border-interactive hover:bg-interactive-subtle',
+                  // The file input is visually hidden, so the drop zone shows its focus ring.
+                  'flex cursor-pointer items-center gap-4 rounded-md border-2 border-dashed border-edge-strong bg-surface-subtle p-4 transition-colors hover:border-interactive hover:bg-interactive-subtle has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus has-[:focus-visible]:ring-offset-2',
                   isDragging && 'border-interactive bg-interactive-subtle',
                   logoFile && 'border-solid border-status-success-border bg-surface-card hover:border-status-success-border hover:bg-surface-card',
                 )}
@@ -323,7 +325,7 @@ export function ProfileStep({ communityId, onNext, initialData }: ProfileStepPro
         </div>
       </div>
 
-      <WizardFooter note="Progress saves automatically">
+      <WizardFooter note="Your details save when you select Next">
         <Button type="submit" size="lg" loading={isSubmitting}>
           Next
           <ArrowRight aria-hidden="true" />
