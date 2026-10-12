@@ -34,8 +34,17 @@ const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
 // page adds a byte; that is the lever for a future ratchet, not any one page.
 //
 // The aggregate is re-based the same way: 1453.4 KiB measured, 1490 ceiling.
-const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 1220 * 1024);
-const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1490 * 1024);
+//
+// Ratcheted 2026-10-12, 1220 -> 1210 and 1490 -> 1480, after #1358 took the
+// Sentry SDK out of the shell (five static `@sentry/nextjs` imports, the shell's
+// via lib/api/walk-paginated.ts; ~39 KiB off every route). Calibrated from the
+// numbers CI printed, not a local build (local reads ~3-4 KiB lower): CI run
+// 38302101722 on bed97f50 measured the largest route, now the unbudgeted
+// `/(authenticated)/settings/page`, at 1176.9 KiB and the aggregate at 1446.2.
+// That is ~33 KiB of headroom on each. The point of the ratchet: a static Sentry
+// import creeping back puts settings at ~1216, which 1220 would have passed.
+const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 1210 * 1024);
+const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1480 * 1024);
 
 interface AppSpec {
   app: string;
@@ -195,24 +204,27 @@ function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalByte
 }
 
 /**
- * Report-only sweep over every page route, not just the budgeted groups.
+ * Enforced sweep over every page route, not just the budgeted groups.
  *
- * `groups` is six hand-picked web routes and three admin ones, so a route
- * outside them can sit over the hard budget indefinitely without failing
- * anything. This pass exists so they stop being invisible.
+ * `groups` is six hand-picked web routes and three admin ones, so without this
+ * a route outside them could sit over the hard budget indefinitely without
+ * failing anything.
  *
- * This appends to `warnings` and never to `failures`. Enforcement is a ratchet
- * you install after making room, not to force the room to be made: flipping it
+ * It was report-only until 2026-10-12, deliberately: enforcement is a ratchet
+ * you install after making room, not to force the room to be made. Flipping it
  * with no margin fails first on work unrelated to performance, and the
  * predictable response — raising the ceiling — leaves the guard weaker than
- * report-only.
+ * report-only. The rule was to promote it once the largest unbudgeted route
+ * cleared the ceiling by ~30 KiB. On 2026-09-13 it did not:
+ * `/(authenticated)/settings/page` was 1201.1 KiB against 1220, with every
+ * contender carrying the `(authenticated)` shell, so the room had to come from
+ * the shell. It came on 2026-10-12, when #1358 took the Sentry SDK out of it:
+ * settings fell to 1176.9 KiB (CI-printed), and the ceiling was ratcheted to
+ * 1210 in the same change that promoted this sweep.
  *
- * Promote it when the largest unbudgeted route clears the ceiling by ~30 KiB,
- * the ratchet margin used above. Measured 2026-09-13 on the first-load measure
- * it does not: `/(authenticated)/settings/page` is 1201.1 KiB against 1220, an
- * 18.9 KiB margin, with `pm/onboarding/website` (1175.3) next. Every one of them
- * carries the 1017.2 KiB `(authenticated)` shell, so the room comes from the
- * shell, not from any one page.
+ * If a route now fails here for reasons unrelated to its own code, the cause is
+ * almost certainly the shell, which every signed-in route carries. Find what grew
+ * there rather than raising the ceiling.
  *
  * (An earlier version of this docblock, dated 2026-09-14, named
  * `settings/account` at 693.8 KiB and its 176.4 KiB Supabase chunk as the thing
@@ -234,10 +246,10 @@ function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalByte
  * said so, checked against Next's First Load JS column, which omits layouts too.
  * `firstLoadChunks` adds them to each page instead.
  */
-function reportUnbudgetedRoutes(
+function checkUnbudgetedRoutes(
   spec: AppSpec,
   pages: Record<string, string[]>,
-  warnings: string[],
+  failures: string[],
 ): void {
   // Every DECLARED candidate, not just the resolved one. A group lists fallbacks
   // (see `groups` above), and a fallback that did not win is still a route the
@@ -268,9 +280,9 @@ function reportUnbudgetedRoutes(
   }
 
   for (const route of over) {
-    warnings.push(
+    failures.push(
       `${spec.app} UNBUDGETED route ${route.key} exceeds the hard budget ` +
-        `(${formatKiB(route.totalBytes)} > ${formatKiB(HARD_ROUTE_BUDGET_BYTES)}) — reported, not enforced`,
+        `(${formatKiB(route.totalBytes)} > ${formatKiB(HARD_ROUTE_BUDGET_BYTES)})`,
     );
   }
 }
@@ -329,7 +341,7 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
     }
   }
 
-  reportUnbudgetedRoutes(spec, pages, warnings);
+  checkUnbudgetedRoutes(spec, pages, failures);
 
   if (spec.aggregateBudgetBytes !== null) {
     const totalUniqueBytes = [...uniqueFiles].reduce(
