@@ -66,10 +66,12 @@ const nextConfig: NextConfig = {
     // (lucide-react, date-fns, and recharts are already in Next 15.5's
     // built-in default list — do not re-add them here.)
     optimizePackageImports: ["@propertypro/ui", "@propertypro/shared"],
-    // Reuse a visited page's server payload for 30s on Back/forward and
-    // re-clicks. Next 15 defaults dynamic pages to 0s, so every click paid a
-    // fresh server render. router.refresh() and revalidatePath still clear it.
-    staleTimes: { dynamic: 30 },
+    // No `staleTimes.dynamic` on purpose. Back/forward is cached anyway; a
+    // stale time only adds reuse on re-click, and every domain mutation goes
+    // through an API route, which never clears the router cache. The dashboard
+    // (server-rendered meetings, announcements, signers, violations,
+    // maintenance) would show stale data for that window after any change.
+    // Add it only together with a router.refresh() after mutations.
   },
   env: {
     NEXT_PUBLIC_APP_ROLE: "web",
